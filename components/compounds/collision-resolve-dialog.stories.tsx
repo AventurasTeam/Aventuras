@@ -495,6 +495,15 @@ export const MergeFieldDivergesWhileOpen: Story = {
     const row = await screen.findByRole('group', { name: 'Priority' })
     expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'false')
+
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await waitFor(() =>
+      expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'false')
   },
 }
 
