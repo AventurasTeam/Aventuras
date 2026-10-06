@@ -74,8 +74,8 @@ but they live in a pack, so they call `resolveTemplate` directly rather than rei
 resolves to nothing. A second chain would drift, and did: skipping the code baseline meant a pack
 missing `image-style-photorealistic` silently rendered soft anime.
 
-The Vault assistant renders `interactive-lorebook` through `ContextBuilder.forPackId('default-pack')`;
-the Vault is global and has no story, so it resolves against `default-pack` by design. The system half
+The Vault assistant renders `interactive-lorebook` through `ContextBuilder.forPack(undefined)`; the
+Vault is global and has no story, so it resolves against `default-pack` by design. The system half
 is rendered once per conversation and carries the Active Context for the entity the assistant was
 opened from. The user half wraps each message and adds that entity's current record only on a turn
 where it changed, so the history the provider has cached is never rewritten.

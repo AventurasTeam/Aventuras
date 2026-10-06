@@ -254,22 +254,14 @@ export class InteractiveVaultService extends BaseAIService {
     })
   }
 
-  /**
-   * Render the system prompt from the stored summary and focus. The Vault has no story, so it
-   * always resolves against the default pack.
-   */
   private async renderSystemPrompt(): Promise<void> {
-    const summary = this.vaultSummary
     const focus = this.focusedEntity
-    const ctx = await ContextBuilder.forPackId('default-pack')
+    const ctx = await ContextBuilder.forPack(undefined)
     ctx.add({
-      characterCount: summary?.characterCount ?? 0,
-      lorebookCount: summary?.lorebookCount ?? 0,
-      totalEntryCount: summary?.totalEntryCount ?? 0,
-      scenarioCount: summary?.scenarioCount ?? 0,
-      focusedEntityType: focus?.entityType ?? '',
-      focusedEntityId: focus?.entityId ?? '',
-      focusedEntityName: focus?.entityName ?? '',
+      ...this.vaultSummary,
+      focusedEntityType: focus?.entityType,
+      focusedEntityId: focus?.entityId,
+      focusedEntityName: focus?.entityName,
     })
     this.systemPrompt = await ctx.renderTemplate('interactive-lorebook')
   }
@@ -307,7 +299,7 @@ export class InteractiveVaultService extends BaseAIService {
     const changed = record !== this.lastSentRecord
     this.lastSentRecord = record
 
-    const ctx = await ContextBuilder.forPackId('default-pack')
+    const ctx = await ContextBuilder.forPack(undefined)
     ctx.add({ userMessage, focusedEntityRecord: changed ? record : '' })
     return (await ctx.renderTemplate('interactive-lorebook-user')) || userMessage
   }
