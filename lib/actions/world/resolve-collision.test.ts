@@ -794,23 +794,31 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
     expect(await deltasOn('char_kael2')).toEqual([])
   })
 
-  it('tracks nothing when the canonical alone is in the tail scene', async () => {
+  it('neither promotes nor tracks a canonical in a tail that never named the loser', async () => {
     await setTail({ sceneEntities: ['char_a', 'char_o'], currentLocationId: 'loc_b', worldTime: 0 })
+    await setStatus('char_a', 'staged')
     await setState('char_a', characterState({ current_location_id: 'loc_a' }))
 
     expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
 
-    expect((await characterStateOf('char_a')).current_location_id).toBe('loc_a')
+    expect(await entityRow('char_a')).toMatchObject({
+      status: 'staged',
+      state: { current_location_id: 'loc_a' },
+    })
   })
 
-  it('promotes nothing when the tail does not name the loser', async () => {
+  it('promotes a staged canonical item the tail scene now holds, without tracking it', async () => {
+    await setTail({ sceneEntities: ['char_o', 'item_b'], currentLocationId: 'loc_b', worldTime: 0 })
     await setStatus('item_a', 'staged')
 
     expect(await resolveCollision('b1', mergeInto('item_a', 'item_b'), ctx)).toEqual({
       status: 'ok',
     })
 
-    expect((await entityRow('item_a'))?.status).toBe('staged')
+    expect((await tail()).sceneEntities).toEqual(['char_o', 'item_a'])
+    const item = await entityRow('item_a')
+    expect(item?.status).toBe('active')
+    expect(item?.state).toEqual(emptyEntityState('item'))
   })
 })
 

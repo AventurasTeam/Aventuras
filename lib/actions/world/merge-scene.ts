@@ -27,7 +27,6 @@ export function withMergeSceneEffects(input: {
   const location =
     metadata.currentLocationId === undefined ? tail.currentLocationId : metadata.currentLocationId
   const inScene = scene.includes(canonical.id)
-  if (!inScene && location !== canonical.id) return [...actions]
 
   const update = actions.find(
     (a): a is CanonicalUpdate => a.kind === 'updateEntity' && a.payload.id === canonical.id,
