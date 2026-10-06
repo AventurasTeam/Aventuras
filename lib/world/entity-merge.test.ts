@@ -288,6 +288,24 @@ describe('entityMergeActions — inverse refs', () => {
     expect(whilePlaced.dropped.holdersLosingItem).toBe(1)
   })
 
+  it('counts no holder as losing the item when it carries both copies', () => {
+    const placed = entity('item_a', 'item', {}, { at_location_id: 'loc_1' })
+    const twin = entity('item_b', 'item')
+    const both = entity('char_1', 'character', {}, { inventory: ['item_b', 'item_a'] })
+    const onlyTwin = entity('char_2', 'character', {}, { equipped_items: ['item_b'] })
+    const plan = merge({
+      canonical: placed,
+      loser: twin,
+      branchEntities: [placed, twin, both, onlyTwin],
+    })
+    // Both are rewritten, but char_1 still carries the merged item.
+    expect(ofKind(plan.actions, 'updateEntity').map((a) => a.payload.id)).toStrictEqual([
+      'char_1',
+      'char_2',
+    ])
+    expect(plan.dropped.holdersLosingItem).toBe(1)
+  })
+
   it('gives a canonical item with no position the loser’s placement', () => {
     const lantern = entity('item_a', 'item')
     const placedTwin = entity('item_b', 'item', {}, { at_location_id: 'loc_1' })

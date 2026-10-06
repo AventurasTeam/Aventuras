@@ -8,7 +8,7 @@ import type {
 } from '@/lib/db'
 import {
   entityLinkRows,
-  itemHasPosition,
+  holdersLosingItem,
   referencingEntities,
   stateOf,
   unheldItemsWithout,
@@ -16,7 +16,7 @@ import {
 
 export type CollisionSources = {
   branchId: string
-  /** The branch's rows: the entities, link rows and translations below aren't re-filtered. */
+  /** The branch's entities. Entities and translations aren't re-filtered; link rows are. */
   entities: readonly Entity[]
   awareness: readonly HappeningAwareness[]
   involvements: readonly HappeningInvolvement[]
@@ -90,9 +90,7 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
           .length,
         relationships: carried.filter((row) => partnerRelatesTo.has(otherEnd(row, entity.id)))
           .length,
-        // Holders of this item drop it when the partner already has a position, instead of moving.
-        holdersLosingItem:
-          entity.kind === 'item' && itemHasPosition(partner, sources.entities) ? inverseRefs : 0,
+        holdersLosingItem: holdersLosingItem(entity, partner, sources.entities),
       },
     },
   }

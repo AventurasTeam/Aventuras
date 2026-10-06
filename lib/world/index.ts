@@ -45,12 +45,14 @@ export { entityDeleteActions } from './entity-delete'
 export type { DeleteTail, EntityDeleteInput, EntityDeletePlan } from './entity-delete'
 export {
   entityLinkRows,
+  holdersLosingItem,
+  itemHasPosition,
   referencingEntities,
   stateWithRefRewritten,
   unheldItemsWithout,
 } from './entity-refs'
 export type { EntityLinkRows } from './entity-refs'
-export { entityMergeActions, itemHasPosition, MERGE_SCALARS } from './entity-merge'
+export { entityMergeActions, MERGE_SCALARS } from './entity-merge'
 export type { EntityMergeInput, EntityMergePlan, MergeScalar } from './entity-merge'
 export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
 export type { LoreDraft } from './lore-draft'

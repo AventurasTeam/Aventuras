@@ -11,8 +11,14 @@ import { dedupeTerms } from '@/lib/keyword-terms'
 
 import { cleanList, sameList } from './draft-text'
 import type { DeleteTail } from './entity-delete'
-import { heldItems, stateOf } from './entity-draft'
-import { entityLinkRows, stateWithRefRewritten, type EntityLinkRows } from './entity-refs'
+import { stateOf } from './entity-draft'
+import {
+  entityLinkRows,
+  holdersLosingItem,
+  itemHasPosition,
+  stateWithRefRewritten,
+  type EntityLinkRows,
+} from './entity-refs'
 
 export const MERGE_SCALARS = [
   'name',
@@ -101,16 +107,6 @@ function refTarget({ canonical, branchEntities }: EntityMergeInput): string | nu
   return canonical.kind === 'item' && itemHasPosition(canonical, branchEntities)
     ? null
     : canonical.id
-}
-
-/** An item is placed at a location or carried by some character in the branch. */
-export function itemHasPosition(item: Entity, branchEntities: readonly Entity[]): boolean {
-  return (
-    stateOf(item, 'item').at_location_id != null ||
-    branchEntities.some(
-      (e) => e.kind === 'character' && heldItems(stateOf(e, 'character')).includes(item.id),
-    )
-  )
 }
 
 /**
@@ -232,7 +228,12 @@ export function entityMergeActions(input: EntityMergeInput): EntityMergePlan {
   const loserLinks = linksOf(loser.id)
   const canonicalLinks = linksOf(canonical.id)
   const actions: PipelineAction[] = []
-  const dropped = { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 }
+  const dropped = {
+    awareness: 0,
+    involvements: 0,
+    relationships: 0,
+    holdersLosingItem: holdersLosingItem(loser, canonical, input.branchEntities),
+  }
 
   const patch = canonicalPatch(input)
   if (Object.keys(patch).length > 0) actions.push(updateEntity(branchId, canonical.id, patch))
@@ -241,9 +242,7 @@ export function entityMergeActions(input: EntityMergeInput): EntityMergePlan {
   for (const other of input.branchEntities) {
     if (other.id === canonical.id || other.id === loser.id) continue
     const state = stateWithRefRewritten(other, loser.id, target)
-    if (state == null) continue
-    actions.push(updateEntity(branchId, other.id, { state }))
-    if (target == null) dropped.holdersLosingItem += 1
+    if (state != null) actions.push(updateEntity(branchId, other.id, { state }))
   }
 
   const known = new Set(canonicalLinks.awareness.map((row) => row.happeningId))

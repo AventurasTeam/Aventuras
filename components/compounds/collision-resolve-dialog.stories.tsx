@@ -318,7 +318,7 @@ export const MergeHoldersFootnote: Story = {
   ),
   play: async () => {
     expect(
-      await screen.findByText('2 holders lose this item: Lantern already has a place.'),
+      await screen.findByText('2 holders lose this item: Lantern is already held or placed.'),
     ).toBeInTheDocument()
     // With the newer item canonical the shown side is the older, whose holders keep theirs.
     await userEvent.click(screen.getAllByRole('radio', { name: /^Lantern · / })[1])

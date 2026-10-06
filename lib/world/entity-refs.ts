@@ -119,6 +119,30 @@ function heldBy(entity: Entity): string[] {
   return entity.kind === 'character' ? heldItems(stateOf(entity, 'character')) : []
 }
 
+/** An item is placed at a location or carried by some character in the branch. */
+export function itemHasPosition(item: Entity, branchEntities: readonly Entity[]): boolean {
+  return (
+    stateOf(item, 'item').at_location_id != null ||
+    branchEntities.some((e) => heldBy(e).includes(item.id))
+  )
+}
+
+/**
+ * Holders of the `loser` item who end up without it when it merges into `canonical`: the canonical
+ * already has a position, so they don't move to it, and they don't carry it themselves. A holder
+ * of both copies keeps one.
+ */
+export function holdersLosingItem(
+  loser: Entity,
+  canonical: Entity,
+  branchEntities: readonly Entity[],
+): number {
+  if (!itemHasPosition(canonical, branchEntities)) return 0
+  return branchEntities.filter(
+    (e) => heldBy(e).includes(loser.id) && !heldBy(e).includes(canonical.id),
+  ).length
+}
+
 /** Items `holderId` carries that lie nowhere and that no other entity holds. */
 export function unheldItemsWithout(holderId: string, branchEntities: readonly Entity[]): number {
   const holder = branchEntities.find((e) => e.id === holderId)

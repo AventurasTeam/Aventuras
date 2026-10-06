@@ -163,6 +163,8 @@ beforeEach(async () => {
     entity('fac_a', 'faction', 'Guild', 1),
     entity('fac_b', 'faction', 'Guild', 2),
     entity('char_x', 'character', 'Xan', 1),
+    // Carries both Lanterns: a merge leaves them one, so they don't lose the item.
+    entity('char_k', 'character', 'Kes', 1, { inventory: ['item_a', 'item_b'] }),
     // A legacy row with no stored state, and its namesake carrying the empty defaults.
     { ...entity('char_n1', 'character', 'Nilsen', 1), state: null } as unknown as NewEntity,
     entity('char_n2', 'character', 'Nilsen', 2),
@@ -218,8 +220,8 @@ describe('collisionPair', () => {
     // current_location_id ×2, parent_location_id, at_location_id; the partner's parent excluded.
     expect(dbCount(SQL.inverseRefs, 'loc_a', 'loc_b')).toBe(4)
     expect(dbCount(SQL.inverseRefs, 'fac_a', 'fac_b')).toBe(2)
-    // equipped_items, inventory ×2.
-    expect(dbCount(SQL.inverseRefs, 'item_a', 'item_b')).toBe(3)
+    // equipped_items, inventory ×3 (one of them also carries item_b).
+    expect(dbCount(SQL.inverseRefs, 'item_a', 'item_b')).toBe(4)
     expect(dbCount(SQL.awarenessRows, 'char_a', 'char_b')).toBe(2)
     expect(dbCount(SQL.involvements, 'char_b', 'char_a')).toBe(3)
     // rel_ac only: rel_ab joins the pair.
@@ -275,10 +277,12 @@ describe('collisionPair', () => {
   })
 
   it('counts the holders who lose an item only when the partner item already has a position', () => {
-    // item_b is placed at loc_a, so the three holders of item_a lose it; item_a is held, but
-    // nothing carries item_b.
+    // item_b is placed at loc_a, so the holders of item_a lose it, but not char_k, who carries
+    // item_b too. item_a is held; the only holder of item_b also holds item_a.
     const [a, b] = collisionPair(['item_a', 'item_b'], sources())!
+    expect(a.relationCounts.inverseRefs).toBe(4)
     expect(a.relationCounts.overlap.holdersLosingItem).toBe(3)
+    expect(b.relationCounts.inverseRefs).toBe(1)
     expect(b.relationCounts.overlap.holdersLosingItem).toBe(0)
     // Neither Pebble has a position: char_h's hold on item_q moves to item_p, nobody loses it.
     const [p, q] = collisionPair(['item_p', 'item_q'], sources())!

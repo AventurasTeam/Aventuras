@@ -178,8 +178,8 @@
       "overlapInvolvements_other": "{{name}} already takes part in {{count}} of these happenings: it keeps its involvements, and the duplicates are dropped.",
       "overlapRelationships_one": "{{name}} already relates to 1 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
       "overlapRelationships_other": "{{name}} already relates to {{count}} of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
-      "holdersLosingItem_one": "1 holder loses this item: {{name}} already has a place.",
-      "holdersLosingItem_other": "{{count}} holders lose this item: {{name}} already has a place.",
+      "holdersLosingItem_one": "1 holder loses this item: {{name}} is already held or placed.",
+      "holdersLosingItem_other": "{{count}} holders lose this item: {{name}} is already held or placed.",
       "joiningRelationship": "The relationship between the two is dropped."
     },
     "mergeConfirm": "Merge into {{name}}",
