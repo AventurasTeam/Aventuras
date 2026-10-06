@@ -88,7 +88,8 @@ entities {
 ```
 
 Flag clears when the user resolves the collision (merge, rename, or
-explicit "keep as distinct").
+keep as distinct), or when a rename or delete leaves no same-kind
+namesake.
 
 ### Polymorphic naming — v1 limitation
 
