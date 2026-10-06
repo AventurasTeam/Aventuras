@@ -1131,9 +1131,9 @@ the canonical, unless a copy names a row that pass created
 (rollback and regenerate sweep the merge group too and take them).
 CTRL-Z restores the non-canonical as it was, with its original link
 rows and translations, the refs and the tail scene; puts the
-canonical's earlier columns back (scalars, tags, keywords, flag,
-status and location); and removes the rows the merge created on the
-canonical.
+canonical's earlier columns back (scalars, tags, keywords, flag and
+`state`, a tracked location included); and removes the rows the
+merge created on the canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
