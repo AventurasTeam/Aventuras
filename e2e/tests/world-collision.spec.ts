@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
 
+import { goToWorld, undoFromReader } from '../flows/navigation'
 import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -16,6 +17,8 @@ const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 // Fixed ids, so a restored original reads apart from a row the merge created on the older Brannoc.
 const LINK_IDS = ['e2e_haw_brannoc', 'e2e_hinv_brannoc', 'e2e_rel_brannoc_mira'] as const
+const FLAGGED_VIEW = 'owes a favor to'
+const MIRA_VIEW = 'buys from'
 
 // The seed gives neither Brannoc a link row or a scene place; the merge needs one of each to move.
 // See docs/implementation/lessons-learned/seed-tip-position-shifts-at-boot.md for the tail anchor.
@@ -45,12 +48,16 @@ function giveFlaggedBrannocLinks(dbPath: string): void {
       `INSERT INTO happening_involvements (id, branch_id, happening_id, entity_id, role)
        VALUES (?, ?, ?, ?, 'smuggler on the quay')`,
     ).run(LINK_IDS[1], branch, happening, flagged)
-    // CHECK a_id < b_id; both ids are ASCII, so JS and SQLite order them alike.
-    const [aId, bId] = flagged < mira ? [flagged, mira] : [mira, flagged]
+    // CHECK a_id < b_id; both ids are ASCII, so JS and SQLite order them alike. The views follow
+    // the characters, not the order: the flagged row owes Mira a favor whichever id sorts first.
+    const [aId, bId, kind, inverseKind] =
+      flagged < mira
+        ? [flagged, mira, FLAGGED_VIEW, MIRA_VIEW]
+        : [mira, flagged, MIRA_VIEW, FLAGGED_VIEW]
     db.prepare(
       `INSERT INTO character_relationships (id, branch_id, a_id, b_id, kind, inverse_kind, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'owes a favor to', 'buys from', 1, 1)`,
-    ).run(LINK_IDS[2], branch, aId, bId)
+       VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
+    ).run(LINK_IDS[2], branch, aId, bId, kind, inverseKind)
 
     const tail = db
       .prepare(
@@ -80,8 +87,9 @@ async function scalar(page: Page, sql: string, params: unknown[]): Promise<numbe
 async function brannocPair(page: Page): Promise<BrannocPair> {
   const branchId = await currentBranchId(page, HERO_STORY)
   const idOf = async (sql: string): Promise<string> => {
-    const [[id]] = await queryApp(page, sql, [branchId])
-    return id as string
+    const rows = await queryApp(page, sql, [branchId])
+    if (rows[0] == null) throw new Error(`no row for: ${sql}`)
+    return rows[0][0] as string
   }
   return {
     branchId,
@@ -106,6 +114,22 @@ async function flags(page: Page, pair: BrannocPair) {
   return { older: await flagOf(pair.older), flagged: await flagOf(pair.flagged) }
 }
 
+// Each relationship row between `id` and Mira as the two characters' views, so a merge that carries
+// the views onto the wrong end of the a_id < b_id order shows as a swap.
+async function relationshipViews(page: Page, pair: BrannocPair, id: string) {
+  const rows = await queryApp(
+    page,
+    `SELECT a_id, kind, inverse_kind FROM character_relationships
+      WHERE branch_id = ? AND ((a_id = ? AND b_id = ?) OR (a_id = ? AND b_id = ?)) ORDER BY id`,
+    [pair.branchId, id, pair.mira, pair.mira, id],
+  )
+  return rows.map(([aId, kind, inverseKind]) =>
+    aId === id
+      ? { self: kind as string, mira: inverseKind as string }
+      : { self: inverseKind as string, mira: kind as string },
+  )
+}
+
 async function linksOf(page: Page, pair: BrannocPair, id: string) {
   return {
     awareness: await scalar(
@@ -118,21 +142,18 @@ async function linksOf(page: Page, pair: BrannocPair, id: string) {
       `SELECT count(*) FROM happening_involvements WHERE branch_id = ? AND entity_id = ?`,
       [pair.branchId, id],
     ),
-    relationshipsWithMira: await scalar(
-      page,
-      `SELECT count(*) FROM character_relationships
-        WHERE branch_id = ? AND ((a_id = ? AND b_id = ?) OR (a_id = ? AND b_id = ?))`,
-      [pair.branchId, id, pair.mira, pair.mira, id],
-    ),
+    relationshipsWithMira: await relationshipViews(page, pair, id),
   }
 }
 
 async function pairSnapshot(page: Page, pair: BrannocPair) {
-  const [[tags, status, location]] = await queryApp(
+  const olderRows = await queryApp(
     page,
     `SELECT tags, status, json_extract(state, '$.current_location_id') FROM entities WHERE branch_id = ? AND id = ?`,
     [pair.branchId, pair.older],
   )
+  // A missing older row reads as null fields, so a poll's last diff names the loss.
+  const [tags, status, location] = olderRows[0] ?? [null, null, null]
   const scene = (await tailMetadata(page, pair.branchId))?.sceneEntities ?? []
   const b = pair.branchId
   const f = pair.flagged
@@ -143,8 +164,8 @@ async function pairSnapshot(page: Page, pair: BrannocPair) {
       `SELECT COALESCE((SELECT embedding_stale FROM entities WHERE branch_id = ? AND id = ?), -1)`,
       [b, f],
     ),
-    olderTags: (JSON.parse(tags as string) as string[]).sort(),
-    olderStatus: status as string,
+    olderTags: tags == null ? null : (JSON.parse(tags as string) as string[]).sort(),
+    olderStatus: status as string | null,
     olderLocation: location as string | null,
     originals: await scalar(
       page,
@@ -159,6 +180,8 @@ async function pairSnapshot(page: Page, pair: BrannocPair) {
   }
 }
 
+const VIEWS = { self: FLAGGED_VIEW, mira: MIRA_VIEW }
+
 function paired(flaggedStale: number) {
   return {
     flags: { older: 0, flagged: 1 },
@@ -168,8 +191,8 @@ function paired(flaggedStale: number) {
     olderStatus: 'staged',
     olderLocation: null,
     originals: 3,
-    older: { awareness: 0, involvements: 0, relationshipsWithMira: 0 },
-    flagged: { awareness: 1, involvements: 1, relationshipsWithMira: 1 },
+    older: { awareness: 0, involvements: 0, relationshipsWithMira: [] },
+    flagged: { awareness: 1, involvements: 1, relationshipsWithMira: [VIEWS] },
     scene: { older: false, flagged: true },
   }
 }
@@ -183,8 +206,8 @@ function merged(tailLocation: string) {
     olderStatus: 'active',
     olderLocation: tailLocation,
     originals: 0,
-    older: { awareness: 1, involvements: 1, relationshipsWithMira: 1 },
-    flagged: { awareness: 0, involvements: 0, relationshipsWithMira: 0 },
+    older: { awareness: 1, involvements: 1, relationshipsWithMira: [VIEWS] },
+    flagged: { awareness: 0, involvements: 0, relationshipsWithMira: [] },
     scene: { older: true, flagged: false },
   }
 }
@@ -211,20 +234,6 @@ async function brannocRows(page: Page, pair: BrannocPair): Promise<unknown[][]> 
     pair.older,
     pair.flagged,
   ])
-}
-
-async function goToWorld(page: Page): Promise<void> {
-  await chrome.actionsTrigger(page).click()
-  await chrome.goToWorldRow(page).click()
-  await page.waitForURL(/\/world\//)
-}
-
-async function undoFromReader(page: Page): Promise<void> {
-  await chrome.actionsTrigger(page).click()
-  await chrome.goToReaderRow(page).click()
-  await page.waitForURL(/\/reader-composer\//)
-  await chrome.actionsTrigger(page).click()
-  await reader.undoRow(page).click()
 }
 
 // Serial suite, one shared app, each test starting at the reader on the pair as seeded: the guard
@@ -325,6 +334,13 @@ test.describe.serial('World collision resolve', () => {
     // The seeded tail has a location, so the merge's promoted canonical takes it.
     const tailLocation = (await tailMetadata(page, pair.branchId))?.currentLocationId
     if (tailLocation == null) throw new Error('seeded tail entry has no currentLocationId')
+    // The merged row must take the tail's place, not the loser's: the two differ in the seed.
+    const [[loserLocation]] = await queryApp(
+      page,
+      `SELECT json_extract(state, '$.current_location_id') FROM entities WHERE branch_id = ? AND id = ?`,
+      [pair.branchId, pair.flagged],
+    )
+    expect(tailLocation).not.toBe(loserLocation)
     await queryApp(page, `UPDATE entities SET embedding_stale = 0 WHERE branch_id = ? AND id = ?`, [
       pair.branchId,
       pair.flagged,

@@ -34,18 +34,19 @@ export const world = {
 
   // The resolve dialog (collision-resolve-dialog.tsx). Its mode segment and the Keep footer button
   // share the "Keep as distinct" name, so each locator pins its role inside the dialog.
+  collisionDialog: (page: Page): Locator => page.getByRole('dialog'),
   collisionMode: (page: Page, mode: 'merge' | 'rename' | 'keep'): Locator =>
-    page
-      .getByRole('dialog')
+    world
+      .collisionDialog(page)
       .getByRole('radio', { name: t(`collisionDialog.mode.${mode}`), exact: true }),
   mergeConfirm: (page: Page, canonicalName: string): Locator =>
-    page.getByRole('dialog').getByRole('button', {
+    world.collisionDialog(page).getByRole('button', {
       name: t('collisionDialog.mergeConfirm', { name: canonicalName }),
       exact: true,
     }),
   keepConfirm: (page: Page): Locator =>
-    page
-      .getByRole('dialog')
+    world
+      .collisionDialog(page)
       .getByRole('button', { name: t('collisionDialog.keepConfirm'), exact: true }),
 
   // Select's trigger aria-label is fixed to "Category" (select.tsx: label always wins over text

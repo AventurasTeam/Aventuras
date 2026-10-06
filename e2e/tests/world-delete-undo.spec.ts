@@ -4,6 +4,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { EntryMetadata } from '@/lib/db'
 
+import { undoFromReader } from '../flows/navigation'
 import { currentBranchId, queryApp, seedVectors, tailMetadata } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -98,14 +99,6 @@ async function footprint(page: Page, branchId: string, id: string) {
 // catches a handler that touched a field the delete shouldn't (e.g. currentLocationId, worldTime).
 async function snapshot(page: Page, branchId: string, id: string) {
   return { ...(await footprint(page, branchId, id)), meta: await tailMetadata(page, branchId) }
-}
-
-async function undoFromReader(page: Page): Promise<void> {
-  await chrome.actionsTrigger(page).click()
-  await chrome.goToReaderRow(page).click()
-  await page.waitForURL(/\/reader-composer\//)
-  await chrome.actionsTrigger(page).click()
-  await reader.undoRow(page).click()
 }
 
 // Serial suite, one shared app: test 2 continues from test 1's navigation state (still on World,
