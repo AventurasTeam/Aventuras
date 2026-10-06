@@ -137,3 +137,9 @@ slice-planning gate forces its resolution before that slice is planned.
   scene edit, delete or merge sits between its tail read and its commit
   could have its restore overwritten. Unverified: it needs two user
   actions at once. Found in 4.2c's Task 8 review (2026-10-06).
+- **The entity update arm's missing-row refusal carries no code.**
+  `updateHandler` (`lib/actions/entities/register.ts`) refuses "update
+  target … not found" without `TARGET_NOT_FOUND`, which the delete arm
+  sets. Callers that map refusal codes (`resolveCollision`,
+  `commitRowSave`) therefore report a vanished row as `failed` instead
+  of `not-found`. Found in 4.2c's PR 1 final review (2026-10-06).
