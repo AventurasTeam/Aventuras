@@ -279,7 +279,8 @@ function MergeBody({
   error,
 }: MergeBodyProps) {
   // Web tiers above phone lay the choices out in columns; native stacks them at every tier.
-  const stacked = useTier() === 'phone' || Platform.OS !== 'web'
+  const phone = useTier() === 'phone'
+  const stacked = phone || Platform.OS !== 'web'
   const [state, dispatch] = useReducer(mergeReducer, undefined, () =>
     initMergeState(diff, entityA.id, entityA.id),
   )
@@ -372,7 +373,8 @@ function MergeBody({
           options={canonicalOptions}
           value={state.canonicalId}
           onValueChange={(id) => dispatch({ type: 'pick-canonical', id, entityAId: entityA.id })}
-          mode="segment"
+          // Segment options are one fixed-height row; a phone's half-width label wraps and clips.
+          mode={phone ? 'radio' : 'segment'}
           label={t('collisionDialog.canonicalLabel')}
           disabled={submitting}
         />
@@ -428,9 +430,7 @@ function MergeBody({
                 <Chip
                   key={keyword}
                   selected={!deselected}
-                  onPress={() =>
-                    dispatch({ type: 'toggle-keyword', keyword: normalizeTerm(keyword) })
-                  }
+                  onPress={() => dispatch({ type: 'toggle-keyword', keyword })}
                   disabled={submitting}
                 >
                   <Text className={cn(deselected && 'line-through')}>{keyword}</Text>
@@ -541,12 +541,12 @@ function FieldRow({
 }: FieldRowProps) {
   const label = t(`collisionDialog.field.${field}`)
   return (
-    <View role="group" accessibilityLabel={label} className="gap-1">
+    <View role={stacked ? 'radiogroup' : 'group'} accessibilityLabel={label} className="gap-1">
       <Text size="sm" variant="muted">
         {label}
       </Text>
       {stacked ? (
-        <View role="radiogroup" accessibilityLabel={label} className="gap-1">
+        <View className="gap-1">
           <PhoneChoice
             value={fieldValue(field, entityA)}
             caption={sideCaption('A', entityA, nowMs)}

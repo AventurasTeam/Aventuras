@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeDivergence, type EntitySummary } from './collision-resolve-diff'
+import { computeDivergence, keywordUnion, type EntitySummary } from './collision-resolve-diff'
 
 function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
   return {
@@ -283,5 +283,37 @@ describe('keywords', () => {
       onlyInB: ['banana', 'mango'],
       both: ['Cat', 'Yak'],
     })
+  })
+})
+
+describe('keywordUnion', () => {
+  const partition = {
+    onlyInA: ['the wanderer'],
+    onlyInB: ['the gate guard'],
+    both: ['the swordsman'],
+  }
+
+  it('spells a shared keyword as the canonical does', () => {
+    expect(keywordUnion(partition, ['The Swordsman', 'the gate guard'])).toContain('The Swordsman')
+    expect(keywordUnion(partition, ['The Swordsman', 'the gate guard'])).not.toContain(
+      'the swordsman',
+    )
+  })
+
+  it('keeps the first spelling when the canonical holds two case variants', () => {
+    expect(keywordUnion(partition, ['The Swordsman', 'THE SWORDSMAN'])).toContain('The Swordsman')
+    expect(keywordUnion(partition, ['THE SWORDSMAN', 'The Swordsman'])).toContain('THE SWORDSMAN')
+  })
+
+  it('returns the union sorted, with one-sided keywords as their side spells them', () => {
+    expect(keywordUnion(partition, ['The Swordsman'])).toEqual([
+      'The Swordsman',
+      'the gate guard',
+      'the wanderer',
+    ])
+  })
+
+  it('is empty when the two sides already agree', () => {
+    expect(keywordUnion(null, ['anything'])).toEqual([])
   })
 })

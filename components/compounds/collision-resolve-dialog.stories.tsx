@@ -212,6 +212,16 @@ export const PhoneLongDescriptions: Story = {
       within(screen.getByRole('radiogroup', { name: 'Description' })).getAllByRole('radio'),
     ).toHaveLength(2)
 
+    // Radio mode stacks the picker's options at full width; segment mode clips a wrapped label.
+    const [pickA, pickB] = screen.getAllByRole('radio', { name: /^Kael · / })
+    expect(pickB.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      pickA.getBoundingClientRect().bottom,
+    )
+    const pickAText = within(pickA).getByText(/ · Canonical$/)
+    expect(pickAText.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      pickA.getBoundingClientRect().bottom,
+    )
+
     // Stacked choices carry their own captions, so the column header row is absent.
     expect(screen.queryByText(/^Older · .+ · Canonical$/)).toBeNull()
 
@@ -456,6 +466,10 @@ export const Blocked: Story = {
   play: async () => {
     expect(await screen.findByRole('button', { name: /^Merge into / })).toBeDisabled()
     expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Merge into / }).closest('[title]')).toHaveAttribute(
+      'title',
+      GATE_REASON,
+    )
     expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled()
 
     await userEvent.click(screen.getByRole('radio', { name: 'Rename one' }))

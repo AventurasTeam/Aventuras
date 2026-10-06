@@ -228,6 +228,15 @@ describe('keyword deselection', () => {
     ).toEqual([])
   })
 
+  // A chip's spelling changes with the canonical; the deselect follows the keyword.
+  it('tracks a keyword under its normalized form, whatever the spelling toggled', () => {
+    const after = mergeReducer(start(), { type: 'toggle-keyword', keyword: ' The Grey Wolf ' })
+    expect(after.deselectedKeywords).toEqual(['the grey wolf'])
+    expect(
+      mergeReducer(after, { type: 'toggle-keyword', keyword: 'THE GREY WOLF' }).deselectedKeywords,
+    ).toEqual([])
+  })
+
   // Same contract deselectedTags has: keyword choices are independent of the pick.
   it('preserves deselected keywords across a canonical re-pick', () => {
     const deselected = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
