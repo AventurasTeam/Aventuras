@@ -883,7 +883,7 @@ more by default.
 Below the picker, a **per-field resolution table** lists fields
 that diverge between the two:
 
-| field        | side A (canonical)                                          | side B                      |
+| field        | Older · 3 days ago · Canonical                              | Newer · just now            |
 | ------------ | ----------------------------------------------------------- | --------------------------- |
 | description  | (•) wandering swordsman…                                    | ( ) guardsman at city gate… |
 | status       | (•) active                                                  | ( ) active                  |
@@ -1121,8 +1121,8 @@ Moved link rows are new rows with new ids, so their edits from
 before the merge stay with the originals in the delete's payload.
 They are user creates, though: a prose edit's sweep that reverses
 the classifier pass which made the originals leaves the copies on
-the canonical (rollback and regenerate sweep the merge group too and
-take them). CTRL-Z restores the non-canonical (still flagged), its
+the canonical, unless a copy names a row that pass created
+(rollback and regenerate sweep the merge group too and take them). CTRL-Z restores the non-canonical (still flagged), its
 original link rows and translations, the refs, the tail scene and
 the canonical's earlier status and location, and removes the rows
 the merge created on the canonical.

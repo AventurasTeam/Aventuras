@@ -504,7 +504,7 @@
        side B (radio + value + meta) as the only descendants. Long
        prose clamps to 3 lines with tap-to-expand. */
     .resolve-overlay { padding: 16px; align-items: center; overflow: visible; }
-    .resolve-modal { max-width: none; max-height: 100%; }
+    .resolve-modal { max-width: none; max-height: 90%; }
     .resolve-body.active { overflow: auto; flex: 1 1 auto; min-height: 0; }
     .canon-picker { flex-direction: column; }
     .field-grid { grid-template-columns: 1fr; gap: 0; }
@@ -1513,7 +1513,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <input type="text" value="Kael (the guardsman)">
       </div>
       <div class="state-note">
-        Names that still collide (letter case and spacing don&rsquo;t count as a difference) keep Save disabled. Both rows persist; each flagged row clears its <code>name_collision_flag</code>.
+        Save stays disabled until both trimmed names are non-empty and no longer collide &mdash; a change of letter case or spacing alone still collides. Both rows persist; each flagged row of the pair clears its <code>name_collision_flag</code>.
       </div>
     </div>
 
