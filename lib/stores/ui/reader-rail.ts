@@ -32,6 +32,14 @@ const INITIAL: ReaderRailState = {
 
 const store = createStore<ReaderRailState>()(() => INITIAL)
 
+/** Whether `view` is already the view a switch to its category lands on. */
+function isFreshView(view: RailView): boolean {
+  const fresh: Record<string, unknown> = railViewFor(view.category)
+  const current: Record<string, unknown> = view
+  const keys = Object.keys(fresh)
+  return keys.length === Object.keys(current).length && keys.every((k) => fresh[k] === current[k])
+}
+
 function seed(width: number): void {
   store.setState({ display: initialRailDisplay(width), seeded: true })
 }
@@ -45,14 +53,14 @@ export const readerRailStore = {
   setCategory: (category: RailCategory): void =>
     store.setState((s) => (s.view.category === category ? s : { view: railViewFor(category) })),
   setView: (view: RailView): void => store.setState({ view }),
-  /** A search or filter typed for one story shouldn't apply to another; the category carries over. */
+  /** A search or filter typed for one branch shouldn't apply to another; the category carries over. */
   enterBranch: (branchId: string): void =>
     store.setState((s) =>
       s.branchId === branchId
         ? s
         : {
             branchId,
-            view: railViewFor(s.view.category),
+            view: isFreshView(s.view) ? s.view : railViewFor(s.view.category),
             display: reduceRailDisplay(s.display, { type: 'closePeek' }),
           },
     ),

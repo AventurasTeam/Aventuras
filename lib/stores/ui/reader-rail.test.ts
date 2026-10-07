@@ -156,8 +156,18 @@ describe('readerRailStore enterBranch', () => {
 
   it('records the first branch and leaves a default view alone', () => {
     readerRailStore.enterBranch('br_1')
-    expect(readerRailStore.getView()).toEqual({ category: 'character', filter: 'all', search: '' })
+    expect(readerRailStore.getView()).toBe(DEFAULT_RAIL_VIEW)
     expect(readerRailStore.getDisplay().peek).toBeNull()
+  })
+
+  it('keeps a fresh lore view by reference on a new branch, and swaps a typed one', () => {
+    readerRailStore.setView({ category: 'lore', search: '' })
+    const fresh = readerRailStore.getView()
+    readerRailStore.enterBranch('br_1')
+    expect(readerRailStore.getView()).toBe(fresh)
+    readerRailStore.setView({ category: 'lore', search: 'oath' })
+    readerRailStore.enterBranch('br_2')
+    expect(readerRailStore.getView()).toEqual({ category: 'lore', search: '' })
   })
 
   it('keeps the view and display by reference when the same branch is entered again', () => {
