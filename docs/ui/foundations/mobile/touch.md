@@ -36,7 +36,9 @@ This file is session 5 of the mobile-foundations multi-session pass
   cancel.
 - **Chip strip safe zone** of ~16 px from the screen's left edge
   to accommodate the iOS swipe-back gesture.
-- **Tooltips and keyboard shortcuts are desktop-only.**
+- **Tooltips and keyboard shortcuts are desktop-only**, bar the one
+  long-press exception under
+  [Hover translation](#hover-translation).
 - **Breadcrumb tappability** is generalized in
   [`../../principles.md → Breadcrumb tappability`](../../principles.md#breadcrumb-tappability)
   alongside this session.
@@ -56,9 +58,9 @@ no hover state on touch) becomes the universal rule for any
 | Hover tooltips                        | desktop-only; touch has no tooltip mechanism   |
 | Hover-anywhere-else affordance reveal | always-visible-muted                           |
 
-One exception: the tablet Browse rail strip's cells. A tap is the
-cell's action (expand onto its category), so the tooltip text opens
-on a long press instead
+One exception: the tablet Browse rail strip's cells and chevron. A
+tap is the control's action (a cell expands onto its category, the
+chevron expands), so the tooltip text opens on a long press instead
 ([reader-composer.md → Collapsed state](../../screens/reader-composer/reader-composer.md#collapsed-state--compact-persistent-dashboard)).
 
 This generalizes the existing scattered "touch has no hover state"
@@ -293,7 +295,8 @@ here.
 ## Tooltip and keyboard-shortcut scope
 
 - **Tooltips are desktop-only.** Touch has no tooltip mechanism
-  beyond the tap-to-tooltip rule above. Touch users get visual
+  beyond the tap-to-tooltip rule above and the strip's long press
+  under [Hover translation](#hover-translation). Touch users get visual
   affordances (icons with adjacent labels where present) and
   short, legible icon vocabularies.
 - **Keyboard shortcuts are desktop-only** (`Cmd/Ctrl+\`, `Cmd-K`,

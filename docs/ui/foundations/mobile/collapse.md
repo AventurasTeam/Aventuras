@@ -144,7 +144,7 @@ Phone (< 640 px) — same collapse for all three surface families:
 
 - **List-first.** Surface entry shows the navigation list as the
   default visible state. World/Plot's list shows entity rows with
-  category dropdown / filter chips / search / footer "+ New".
+  category dropdown / search / filter chips / footer "+ New".
   Settings's list shows the section-grouped tabs as a vertical
   scroll list with uppercase section headers as non-tappable
   group separators.

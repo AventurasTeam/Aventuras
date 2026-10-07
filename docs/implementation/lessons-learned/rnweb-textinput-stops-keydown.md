@@ -16,8 +16,9 @@ handler isn't even called.
 - A hotkey that must fire from inside a field passes `capture: true`, so
   the listener runs on the way down, before the field sees the key. The
   save bar, the Actions menu and the rail's `Cmd/Ctrl+\` do.
-- Leave `capture` off for a hotkey a field should keep, a bare letter, say,
-  and combine it with `ignoreEditableTargets` for the cases where a field
-  must win.
+- Leave `capture` off for a hotkey a field should keep, a bare letter, say:
+  in the bubble phase an RN-Web `TextInput` already swallows the key.
+  `ignoreEditableTargets` matters only for editables that don't stop
+  propagation, and for capture-phase listeners that should yield to fields.
 - A story or E2E test that presses the shortcut with focus on the page body
   passes on the broken build. Press it from a focused field.

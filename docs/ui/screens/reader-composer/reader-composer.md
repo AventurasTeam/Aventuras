@@ -1151,10 +1151,12 @@ this is chrome state, not story content).
 The rail's **view state** (category, filter, search, peek) is
 session-scoped and never persisted. The category is kept app-wide
 for the session; filter, search and the peek slot reset when the
-reader's branch changes. Within a branch the view survives
-collapse and expand, a reflow between tiers, and a reader remount
-(per
-[`collapse.md → State preservation on reflow`](../../foundations/mobile/collapse.md#state-preservation-on-reflow)).
+reader's branch changes. Within a branch the category, filter and
+search survive collapse and expand, a reflow between tiers (per
+[`collapse.md → State preservation on reflow`](../../foundations/mobile/collapse.md#state-preservation-on-reflow))
+and a reader remount. The peek follows
+[peek implies rail open](#peek-drawer--peek-implies-rail-open):
+any collapse closes it.
 
 ### Peek drawer — peek implies rail open
 

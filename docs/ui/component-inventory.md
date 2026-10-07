@@ -46,7 +46,8 @@ which closes the Sheet on a tap outside unless `enablePanDownToClose` is
 false. It also provides `ScrollComponentContext`
 (`components/ui/scroll-component.tsx`): gorhom's `BottomSheetScrollView`
 on native and a plain `ScrollView` on web, so a `ModuleList` inside the
-Sheet scrolls without fighting drag-down.
+Sheet scrolls without fighting drag-down. Only fixed-detent Sheets provide
+it; an `auto`-size Sheet leaves the context's default `ScrollView`.
 
 ### Primitives — needs revision
 

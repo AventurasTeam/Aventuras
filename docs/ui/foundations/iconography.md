@@ -126,7 +126,10 @@ sidebar navigation (see
 which is what the Browse chip opens: the rail, as a Sheet. The
 rail's chevrons point the way it moves: `ChevronRight` in the
 rail header collapses it toward the right edge, `ChevronLeft` on
-the collapsed strip expands it.
+the collapsed strip expands it. That deliberately overrides the
+[Disclosure carets](#disclosure-carets) reading of `ChevronRight`
+as collapsed to expanded: these chevrons telegraph the column's
+motion, as the rail's collapse trigger specs.
 
 #### Story Settings glyph rationale
 
