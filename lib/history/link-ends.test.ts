@@ -283,6 +283,27 @@ describe('loadLinkEnds', () => {
     })
   })
 
+  it("names each other end from the tab's branch, though another branch names the same id", async () => {
+    await db.insert(characterRelationships).values(relationship('rel_1', 'char_aria', 'char_kael'))
+    await db.insert(happeningAwareness).values(awareness('haw_1', 'char_aria', 'hap_fire'))
+    await db.insert(deltas).values(
+      deleted('entities', 'char_zed', {
+        id: 'char_zed',
+        name: 'Zed',
+        relationships: [relationship('rel_5', 'char_aria', 'char_zed')],
+      }),
+    )
+    await db.insert(entities).values(character('char_kael', 'Kael of Alt', 'b2'))
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_fire', branchId: 'b2', title: 'Alt fire', createdAt: 1, updatedAt: 1 })
+    await db
+      .insert(deltas)
+      .values(deleted('entities', 'char_zed', { id: 'char_zed', name: 'Zed of Alt' }, 'b2'))
+    const ends = await loadLinkEnds(db, 'b1', 'entities', 'char_aria')
+    expect(ends.names).toEqual({ char_kael: 'Kael', hap_fire: 'The keep burns', char_zed: 'Zed' })
+  })
+
   it('finds nothing for lore and threads, which no link row names', async () => {
     const none = { links: [], removals: [], names: {} }
     expect(await loadLinkEnds(db, 'b1', 'lore', 'lore_1')).toEqual(none)
