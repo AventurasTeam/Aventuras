@@ -640,6 +640,19 @@ describe('upsertHappeningAwareness retrievalCount', () => {
     expect(row.retrievalCount).toBe(0)
   })
 
+  it('refuses an unsafe count on a classifier create, which would ignore it', async () => {
+    const { db, ctx } = await setup()
+
+    expect(
+      await applyDeltaAction(upsert('ai_classifier', { retrievalCount: 2 ** 53 }), ctx),
+    ).toEqual({
+      status: 'rejected',
+      reason: 'invalid awareness: retrievalCount must be a non-negative integer',
+    })
+    expect(await awarenessRows(db, 'char_a', 'hap_1')).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
   it('leaves the count alone on an update, which logs only the merged fields', async () => {
     const { db, ctx } = await setup([
       {
