@@ -726,10 +726,16 @@ describe('link-row union', () => {
     })
 
     it('matches a removal by its summary typed whole, or by a word of it', async () => {
+      await write(relate('char_aria', 'char_mira', 'mentor', null))
+      await write(removeEntity('char_mira'))
       expect(await tab('char_aria', { search: 'Removed when Zed was deleted' })).toEqual([
         'removed character_relationships char_zed',
       ])
+      expect(await tab('char_aria', { search: 'Removed when Ze' })).toEqual([
+        'removed character_relationships char_zed',
+      ])
       expect(await tab('char_aria', { search: 'removed' })).toEqual([
+        'removed character_relationships char_mira',
         'removed character_relationships char_zed',
       ])
     })
