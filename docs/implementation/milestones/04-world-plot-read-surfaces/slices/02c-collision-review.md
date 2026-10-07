@@ -16,11 +16,11 @@ The shipped `CollisionResolveDialog` gets real drivers. `Resolve →`
 on a flagged row opens the dialog with both rows projected to
 `EntitySummary`, and each resolution writes deltas under one
 `action_id`: **merge** (canonical update, loser delete through C3,
-awareness / involvement / relationship reattachment with the UNIQUE
-rule, inverse-ref rewrite, translations move, keyword and tag union),
-**rename** (both rows, flag clear), **keep as distinct** (flag clear
-only). The dialog's drifted `InjectionMode` and `ScalarField` unions
-are fixed first. The History tab also starts listing edits to the link
+awareness / involvement / relationship rows re-created on the
+canonical with duplicates dropped, inverse-ref rewrite, the loser's
+translations dropped, keyword and tag union), **rename** (both rows,
+flag clears), **keep as distinct** (flag clears only). The dialog's
+drifted `InjectionMode` and `ScalarField` unions are fixed first. The History tab also starts listing edits to the link
 rows that name its row: relationships, involvements, awareness.
 
 ## Background
@@ -82,14 +82,18 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   would collapse to self is dropped; a duplicate pair merges
   perspectives, canonical's non-null winning), inverse `state` refs on
   other entities rewritten to the canonical — one merged
-  `updateEntity` per affected row — translations re-targeted, the
-  loser deleted through the C3 entity arm (which sweeps its vectors,
-  drops it from the tail scene, and refuses if the loser is the lead),
-  and the flag cleared. The canonical re-embeds via `embedding_stale`
+  `updateEntity` per affected row — the tail scene rewritten to the
+  canonical, the loser deleted through the C3 entity arm (which sweeps
+  its vectors and translations, and refuses if the loser is the lead),
+  and the flag cleared. As shipped, link rows are re-created on the
+  canonical rather than re-keyed; see
+  [Implementation notes](#implementation-notes). The canonical re-embeds via `embedding_stale`
   if an embedded field changed (already the update arm's behavior).
 - **Rename driver:** two `updateEntity` deltas (sparse — only rows
-  whose name changed) plus the flag clear, one `action_id`.
-- **Keep driver:** the flag clear alone, one `action_id`.
+  whose name changed) plus a flag clear on each flagged row of the
+  pair, one `action_id`.
+- **Keep driver:** a flag clear on each flagged row of the pair, one
+  `action_id`.
 - **Flag clear as a delta.** Canon makes every path CTRL-Z
   reversible; keep-as-distinct's only write is the clear, so the
   clear must be delta-logged — this slice adds `nameCollisionFlag` to
@@ -100,7 +104,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   tier, as shipped — disabled while generation is in flight; a merge
   whose loser is the lead surfaces the `lead-entity` refusal inline;
   after a resolution the list re-derives (pill count drops, strip
-  disappears, a remaining pair re-surfaces for 3+ collisions).
+  disappears, a remaining pair re-surfaces for 3+ collisions while
+  its namesake is itself flagged).
 - **History shows link-row edits** (moved from `parked.md` on the 4.2b
   stack's manual review, 2026-09-30: the developer asked where a
   relationship edit went, the entry's revisit signal). A character's
@@ -114,7 +119,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   The fix unions deltas of link rows naming the target — live rows
   plus delete payloads — in C4's shared History module, so World's
   entity panes and Plot's happening pane both get it. It overlaps the
-  merge driver, which reattaches these same link rows (Open questions).
+  merge driver, which reattaches these same link rows
+  ([Implementation notes](#implementation-notes)).
 - **Storybook:** the dialog already has stories; add the `priority`
   radio row and the phone 3-line prose clamp state if the pattern's
   open item is picked up here.
@@ -134,7 +140,7 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   footnote fires; every other awareness / involvement / relationship
   row of B is on A afterwards; the two other entities holding B in
   `inventory[]` and `current_location_id` point at A through one
-  update each; B's translations target A; B is gone with zero vec0
+  update each; B's translations are dropped; B is gone with zero vec0
   rows; A's `name_collision_flag = 0` (vitest over fixtures).
 - CTRL-Z of the merge restores B with every row it held, restores
   the inverse refs, re-flags B, and B is `embedding_stale = 1`;
@@ -145,11 +151,11 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   across all six inverse-ref fields, awareness, involvements and
   translations (vitest on the projection builder).
 - Rename with only B's name changed writes one `updateEntity` delta
-  and the flag clear; Save is disabled while neither name changed
-  (vitest plus component test).
-- Keep-as-distinct writes exactly one delta (the flag clear), CTRL-Z
-  re-flags the row, and the History tab labels the field (vitest;
-  component test on the humanizer).
+  and the flag clear; Save is disabled while the trimmed names still
+  collide (vitest plus component test).
+- Keep-as-distinct writes one delta per flagged row of the pair (the
+  flag clear), CTRL-Z re-flags the row, and the History tab labels the
+  field (vitest; component test on the humanizer).
 - With three same-name rows, resolving one pair leaves the remaining
   pair flagged and visible on next open (vitest on the list
   derivation).
@@ -184,139 +190,89 @@ to clear before wiring: `collision-resolve-diff.ts` declares
 
 ## Open questions
 
-- **Delta-logging the flag clear.** Adding `nameCollisionFlag` to the
-  update arm's `UPDATABLE` set makes any future user-edit path able to
-  flip it; confirm no classifier path routes through the user-edit
-  arm so the M1.5 operational seam stays the only setter.
-- **Orphaned flags.** World derives each flagged row's "Collides
-  with" target from a same-kind namesake; a flagged row with no
-  namesake left (e.g. after a Merge that keeps the newer, flagged row
-  and deletes the older — canon never says the survivor's flag
-  clears — or after a rename or delete in 4.2a / 4.2b) gets no strip
-  and no pill count, so its flag can never be cleared. Decide: count
-  flagged rows directly and render a no-namesake strip, or have
-  merge / rename / delete clear the orphaned flag (and write that
-  into canon). Also canon drift: [world.md → Authorship and 3+
-  collisions](../../../../ui/screens/world/world.md#authorship-and-3-collisions)
-  says the remaining pair "re-surfaces in the filter view", but
-  [Surfacing](../../../../ui/screens/world/world.md#surfacing)
-  rejected the filter chip.
-- **`revealFirstFlagged()` handle.** The review pill's target
-  (`components/world/first-flagged-row.ts`) and the pane's list
-  signals are built separately, and the switch-plus-reveal "one
-  synchronous handler" contract is comment-only, not type-enforced. A
-  `revealFirstFlagged()` handle method would own both if this slice
-  touches the pill.
-- **Grouped relationship and parent writes read pre-group state.**
-  4.2a's handlers each read the state before the group, so (a) two
-  creates for the same character pair in one group throw on the
-  pair's unique index rather than rejecting cleanly — merge duplicate
-  pairs before emitting actions; (b) two `parent_location_id` writes
-  in one group can form a loop the cycle guard doesn't see, and a
-  valid reparent sequence (A.parent := null; B.parent := A while
-  A.parent = B) is refused. Does the merge rewrite need a group-aware
-  pass?
-- **Merge writes count as user edits for precedence.** The merge
-  driver's `updateEntity` and its re-keyed relationship writes are
-  `user_edit`, so they count toward
-  [user precedence](../../../../memory/cadence.md#user-edits-and-classifier-writes):
-  a classifier fact from older prose no longer overwrites a column or
-  view they wrote. `updateEntity` now drops unchanged columns, so only
-  the scalars the merge actually changes count. Decide whether a
-  re-keyed pair should read as a user-authored view: it is a user
-  create, so each view it carries over non-null blocks upserts from
-  older prose even though the classifier wrote it.
-- **The dialog's chrome isn't routed through `t()`.**
-  `components/compounds/collision-resolve-dialog.tsx` holds about twenty
-  raw English strings — mode labels, buttons, the field-label map, the
-  merge-count lines, the keep-as-distinct warning — and `formatAgo`
-  returns "just now", "N min ago", "N h ago" and "N d ago" as literals,
-  spliced into "Older · …" and "Newer · …", against
-  [`code-conventions.md → i18n discipline`](../../../../code-conventions.md#i18n-discipline).
-  The dialog has no live caller until this slice gives it drivers, so
-  route it through `t()` here (`relativeTimeLabel` in `lib/i18n` already
-  renders History's and the story card's "5m ago"); relative times want whole-sentence keys
-  (see [`parked.md → Sentence composition in World's copy`](../../../../parked.md#sentence-composition-in-worlds-copy)).
-  Found by the 2026-09-27 triage pass.
-- **How does the merge re-key the loser's link rows, given the entity
-  arm's constraints?** C3's `deleteEntity` cascade reads the loser's
-  involvement, awareness, relationship and translation rows pre-group
-  and deletes them by id, and the group runner rejects a group that
-  also targets one of those rows. The ref rewrite and tail-scene drop
-  live in `entityDeleteActions`, which nulls refs — the merge needs its
-  own rewrite-to-canonical, and one row can't carry both the rewrite
-  and the nulling patch in one group (the runner rejects a same-column
-  double write). Does the merge instead write new link rows for the
-  canonical entity and let the cascade remove the loser's originals, or
-  some other shape? Whatever 4.2c settles on,
-  [`world.md → Reversibility`](../../../../ui/screens/world/world.md#reversibility)'s
-  merge write list must be amended to match. New rows plus the cascade
-  means more rows a delete captures. Captured rows follow
-  [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay).
-- **Reuse the delete confirm's link counts** (4.2b):
-  `components/world/delete-impact.ts` repeats the entity cascade's
-  awareness / involvement / relationship predicates against the
-  stores; 4.2c's merge summary needs the same counts over the same
-  tables — move them into `lib/world` beside `entityDeleteActions`
-  rather than writing a third copy.
-- **Link-row History, open from the 4.2b stack's manual review
-  (2026-09-30).** The parked entry fixed the rule, not these:
-  - **Wording on each side.** The humanizer names every row after the
-    tab's own row and labels its paths from the tab's table
-    (`lib/history/humanize.ts`), and a create reads `Created`, so on
-    Aria's tab a relationship made with Kael would read as Aria being
-    created. Decide what a link-row delta names (the other end, or the
-    link, as in "relationship with Kael"), how it names an other end
-    that no longer exists, and how a relationship's two views label on
-    each character's tab: `kind` is a's view of b, `inverseKind` b's
-    view of a, and which one a tab's character holds follows the
-    `a_id < b_id` ordering, not the tab.
-  - **Both characters of a relationship.** Naming the target puts
-    every relationship edit on both characters' tabs, an edit to only
-    the other's view included. Keep that, or list a one-view edit only
-    on the tab of the character whose view changed? Involvement and
-    awareness rows have no such split.
-  - **Search, op filter and the field-path vocabulary.** The label
-    vocabulary (`lib/history/field-labels.ts`) is keyed by
-    `HistoryTable`, which lists no link table, so link-row paths would
-    render raw (`inverseKind`, `decayResistance`) and search would
-    reach them only by raw path: add their labels, and resolve each
-    term against the labels of the table a delta belongs to. The op
-    chips then count link rows too: `Created` on a character's tab
-    would also list the relationships made, and `Deleted` gets its
-    first per-row matches (pinned in
-    [Acceptance criteria](#acceptance-criteria)). The search bullet's "`target_table` is never matched,
-    since it's constant within a per-row tab" in
-    [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
-    and C4's single-target query stop holding; amend both with the
-    union.
-  - **Which delete payloads.** A link row removed on its own leaves a
-    `delete` delta whose payload names both ends. One that an entity or
-    happening delete cascaded has no delta of its own: it rides in that
-    delete's payload under `relationships`, `involvements` or
-    `awareness` (`lib/actions/delta/delete-cascade.ts`), and its create
-    payload is null and its updates carry only changed columns.
-    Deleting Kael leaves no live link row and no link delete delta
-    naming Aria, so the relationship's edits drop out of her tab
-    unless the union also reads cascade payloads. Decide whether it
-    does, and how the cascade reads on the surviving end.
-  - **The tab's refresh version.** `HistoryTab` refetches when its
-    target row or `settleCount` changes; a user edit to a link row
-    changes neither, so the union folds the link stores it reads into
-    that version (2026-10-04 triage pass). A reversal that edits a
-    delete's payload emits no store patch, so link rows the union reads
-    from payloads need a refresh signal of their own
-    ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)).
-  - **Overlap with the merge.** The merge reattaches the loser's link
-    rows to the canonical, in a shape the re-key question above leaves
-    open. Moved in place, a row names the canonical and brings its
-    earlier edits along; rewritten as new rows with the originals
-    cascaded, those edits sit in the loser's delete payload and reach
-    the canonical's tab only if the union reads cascade payloads.
-    Settle the two together, and give the union's fixtures a merged
-    pair.
+None open. Each question this slice carried was settled while
+planning it or during the run; the answers are in
+[Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Shipped as three stacked PRs (#578 `lib`, #579 dialog, wiring and
+collision canon, PR 3 History union). Developer decisions are marked.
+
+- **The merge creates link rows on the canonical** (developer,
+  planning). Awareness, involvements and one both-view relationship per
+  other character are re-created on the canonical, and
+  `deleteEntity(loser)`'s C3 cascade removes the originals. No arm
+  re-keys a link row in place. Moved rows get new ids, so their
+  pre-merge edits stay on the other end's History tab through the
+  union, not on the canonical's. Duplicates the canonical already holds
+  are dropped and footnoted: awareness and involvements in the same
+  happening, and relationships with a character the canonical already
+  relates to (the canonical's non-null views win).
+- **Merge copies across sweeps** (developer, during the run). The
+  copies are user creates with no entry anchor, so a prose-edit sweep
+  that reverses the classifier pass behind the originals leaves them,
+  unless a copy names a row that pass created. Rollback and regenerate
+  take the merge too. Pinned by
+  `lib/actions/world/resolve-collision-sweep.test.ts`.
+- **The merge's tail-scene effects cover the canonical only**
+  (developer, during the run). A merge that rewrites the tail promotes
+  the canonical if its merged status is `staged`, whatever its kind,
+  and a character canonical in the tail scene takes the tail's known
+  location, folded into the canonical's one update. No bystander is
+  written. The next turn's structural floor seats only active entities,
+  and its prompt is built before its piggyback fold.
+- **Planned inside the branch lock.** Every resolution commits through
+  `applyDeltaActionGroupBuilt`, so a no-gate classifier pass can't
+  stale the plan. 4.2b's entity delete stays on the plain group: it
+  now also plans from names and flags, which the classifier never
+  renames, deletes or clears.
+- **Grouped writes need no group-aware pass.** The merge writes one
+  both-view relationship per other character and one `updateEntity`
+  per row, so no row takes two writes. A ref to the loser on the
+  canonical collapses to null. A merge whose canonical descends from
+  the loser through another location is refused as `parent-cycle`,
+  because the pre-group reads see the cycle.
+- **Flag clears.** Every dialog path clears each flagged row of its
+  pair, not only the newer one: an older flagged row would otherwise
+  be unresolvable. 4.2a's rename save and 4.2b's delete clear any flag
+  their write leaves without a namesake. The clear folds into a row's
+  `updateEntity` only, so a row that also loses an item writes two
+  deltas. A reversal that orphans a flag is accepted; the next pairing
+  clears it.
+- **Other merge write-set choices** (developer, planning):
+  - The loser's translations are dropped, not moved.
+  - The tail scene is rewritten to the canonical, overturning 4.2b's
+    drop.
+  - A canonical item with no position takes the loser's placement.
+    When the canonical item is already held or placed, the loser's
+    holders drop it; one carrying both copies keeps one.
+  - Moved awareness keeps `retrieval_count`. A dropped duplicate's
+    count is lost.
+  - A merge-written relationship view counts as the user's.
+- **Rename validation.** Trimmed names must be non-empty and stop
+  colliding under the namesake rule, so a change of letter case or of
+  spaces at either end still collides. Interior spacing counts.
+- **Dialog choices beyond the brief.**
+  - Shared keywords show and submit in the canonical's spelling.
+  - The merge submits the canonical's lists in their stored order, so
+    it never writes an unchanged list.
+  - The phone canonical picker is radio rows, since segment labels
+    clip.
+  - Native tiers stack choices with Older / Newer captions.
+  - `Resolve →` goes through the pane's dirty guard.
+  - A refusal that lands after the dialog closed shows as a toast.
+- **History union** (developer, planning, U1–U4). A tab lists live
+  link rows naming its row, link rows deleted on their own, and link
+  rows held in the other end's delete payload. Relationship edits show
+  on both characters' tabs, labelled from the tab's side. An
+  unresolvable other end on a removal reads "Removed when its other end
+  was deleted". Retrieval bumps are left out.
+- **Union cost.** Measured on a 30k-delta branch, the link-end scan
+  takes 6–32 ms per page and per search keystroke, more on
+  delete-heavy branches. If History feels slow on a long story, cache
+  the link ends per tab, keyed on the tab's refresh version (not a DB
+  token: sweeps rewrite payloads in place). The missing table
+  statistics are in [triage](../../../triage.md).
+- **Not taken:** `revealFirstFlagged()`; the pill's handler is
+  untouched.

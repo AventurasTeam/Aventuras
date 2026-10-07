@@ -283,7 +283,7 @@ the handler, which is where the sweep must therefore live.
   commit and then fail undo forever on a UNIQUE re-insert — the same
   rule that rejects a merge re-keying the loser's links inside the
   delete's group; see
-  [`02c-collision-review.md → Open questions`](./02c-collision-review.md#open-questions).
+  [`02c-collision-review.md → Implementation notes`](./02c-collision-review.md#implementation-notes).
 - **History search matches `json_type`, not `json_extract`**, since
   the latter can't tell an absent path from a stored `null`; the
   field-path and free-text arms apply to `update` deltas only (a
