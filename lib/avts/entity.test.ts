@@ -31,6 +31,7 @@ const KAEL: Entity = {
   tags: ['protagonist'],
   keywords: ['Kael', 'swordsman'],
   priority: 40,
+  injectionMode: 'always',
   state: {
     visual: { hair: 'black, cropped', eyes: 'grey' },
     traits: ['stubborn'],
@@ -107,7 +108,7 @@ describe('entityExport', () => {
       description: 'A wandering swordsman.',
       status: 'active',
       retiredReason: null,
-      injectionMode: 'auto',
+      injectionMode: 'always',
       tags: ['protagonist'],
       keywords: ['Kael', 'swordsman'],
       priority: 40,
@@ -136,6 +137,21 @@ describe('entityExport', () => {
     expect(payload.kind).toBe(row.kind)
     expect(payload.state).toEqual(state)
     expect(entityExport(row, EXPORTED_AT).fileName).toBe(fileName)
+  })
+
+  it('writes a retired item with its status and reason', () => {
+    expect(payloadOf(SWORD)).toEqual({
+      kind: 'item',
+      name: 'Ashen Blade',
+      description: null,
+      status: 'retired',
+      retiredReason: 'Shattered at the gate.',
+      injectionMode: 'auto',
+      tags: [],
+      keywords: [],
+      priority: 0,
+      state: { condition: 'notched' },
+    })
   })
 
   it('writes the kind’s empty state for a row stored without one', () => {
@@ -259,6 +275,11 @@ describe('EntityImportSchema', () => {
       ['state', 'visual', 'hair'],
     ],
     ['a 2001-character voice', { state: { voice: 'x'.repeat(2001) } }, ['state', 'voice']],
+    [
+      'a fractional quantity',
+      { state: { stackables: { rope: 1.5 } } },
+      ['state', 'stackables', 'rope'],
+    ],
     [
       'a negative quantity',
       { state: { stackables: { rope: -1 } } },

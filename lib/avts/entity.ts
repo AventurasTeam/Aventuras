@@ -53,7 +53,7 @@ const factionState = entityStateSchemaForKind('faction') as StateSchemaWith<'sta
 
 // The pane draft refuses a blank or repeated quantity name; saving would drop or merge it silently.
 const stackablesField = z
-  .record(z.string().max(40), z.number().int().nonnegative())
+  .record(z.string().max(40), characterState.shape.stackables.unwrap().valueType)
   .superRefine((stackables, ctx) => {
     const seen = new Set<string>()
     for (const raw of Object.keys(stackables)) {
