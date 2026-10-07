@@ -103,6 +103,12 @@ const resolveCapturing = async (r: Resolution) => {
   lastResolution = r
 }
 const resolveLoading = () => new Promise<void>(() => {})
+// Settled by the play itself, so the dialog closes and releases the body scroll lock.
+let settleResolve: (() => void) | null = null
+const resolveDeferred = () =>
+  new Promise<void>((resolve) => {
+    settleResolve = resolve
+  })
 const resolveError = () => Promise.reject(new Error('Write failed (story stub)'))
 
 function ControlledDialog({
@@ -553,6 +559,28 @@ export const MergeNamesTheSide: Story = {
     ).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Kael · Older · just now' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge into the newer Kael' })).toBeInTheDocument()
+  },
+}
+
+export const MergeInFlightStaysOpen: Story = {
+  render: () => (
+    <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveDeferred} />
+  ),
+  play: async () => {
+    settleResolve = null
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+    await waitFor(() => expect(settleResolve).not.toBeNull())
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    // The choices are inert while the write is in flight, their contents too: a disabled
+    // Pressable alone is box-none on web, which leaves its children clickable.
+    const status = within(screen.getByRole('radiogroup', { name: 'Status' }))
+    for (const value of ['active', 'staged'])
+      expect(status.getByText(value)).toHaveStyle({ pointerEvents: 'none' })
+
+    settleResolve?.()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   },
 }
 
