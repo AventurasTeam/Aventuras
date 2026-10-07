@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { transformAsync } from '@babel/core'
 import type { StorybookConfig } from '@storybook/react-native-web-vite'
 
 const dirname =
@@ -50,6 +51,29 @@ const config: StorybookConfig = {
       // doesn't know that and pulls jsdom in anyway, crashing on
       // SharedArrayBuffer. Stub it out; see jsdom-stub.ts for the full story.
       { find: 'jsdom', replacement: path.resolve(dirname, 'jsdom-stub.ts') },
+    ]
+    // gorhom's prebuilt lib has no worklet closures and Vite prebundles it past the plugin, so its
+    // reactions never subscribe. See lessons-learned/vite-targets-dont-read-babel-config.md.
+    viteConfig.optimizeDeps ??= {}
+    viteConfig.optimizeDeps.rolldownOptions ??= {}
+    viteConfig.optimizeDeps.rolldownOptions.plugins = [
+      ...[viteConfig.optimizeDeps.rolldownOptions.plugins ?? []].flat(),
+      {
+        name: 'worklets-gorhom-bottom-sheet',
+        transform: {
+          filter: { id: /@gorhom[\\/]bottom-sheet[\\/]lib[\\/]module[\\/].*\.js$/ },
+          async handler(code: string, id: string) {
+            const result = await transformAsync(code, {
+              filename: id,
+              babelrc: false,
+              configFile: false,
+              sourceMaps: false,
+              plugins: ['react-native-worklets/plugin'],
+            })
+            return result?.code ?? null
+          },
+        },
+      },
     ]
     return viteConfig
   },

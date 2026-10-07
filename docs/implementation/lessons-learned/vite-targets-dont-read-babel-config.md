@@ -13,6 +13,17 @@ The preset spreads that object _after_ its own two flags, so it merges without
 ever re-opening `babel.config.js`. **A new Vite-built target starts from zero
 again and must do the same.**
 
+## Libraries in `node_modules` are prebundled without the plugin
+
+The `babel.config.js` wiring above reaches app source only. A dependency that relies on worklet
+autoworkletization (a prebuilt lib with no `__closure`) is prebundled by Vite's dependency
+optimizer past that plugin, so on web its `useAnimatedReaction` subscribes only to its deps array
+and never re-fires. `@gorhom/bottom-sheet`'s backdrop froze at `pointer-events: none`. Storybook
+now transforms `@gorhom/bottom-sheet` explicitly through a `rolldownOptions` plugin in
+`optimizeDeps` (`.storybook/main.ts`); Vite 8 prebundles with rolldown, so `esbuildOptions`
+plugins don't run. A new dependency with this shape needs the same entry. Metro compiles
+`node_modules` through `babel-preset-expo`, so the app is unaffected.
+
 ## Why it stayed hidden
 
 One defect, two failure modes, and the quiet one passes CI. The hook throws
