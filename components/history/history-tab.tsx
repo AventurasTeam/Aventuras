@@ -5,11 +5,12 @@ import { useEntryIndex } from '@/hooks/use-entry-index'
 import { formatEntryRef } from '@/lib/entry-refs'
 import { humanizeDelta, type HistoryOp, type HistorySort, type HistoryTable } from '@/lib/history'
 import { t } from '@/lib/i18n'
-import { generationStore } from '@/lib/stores'
+import { entitiesStore, generationStore, happeningsStore } from '@/lib/stores'
 
 import { HistoryTabView } from './history-tab-view'
 import { useHistoryChunks } from './use-history-chunks'
 import { historyTargetName, useHistoryTarget } from './use-history-target'
+import { useLinkVersion } from './use-link-version'
 
 const SEARCH_DEBOUNCE_MS = 250
 
@@ -27,13 +28,16 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
   const [sort, setSort] = useState<HistorySort>('newest')
   const row = useHistoryTarget(targetTable, targetId)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
-  // Fresh identity when the row is patched or a run/reversal settles: the log may have moved.
-  const version = useMemo(() => ({ row, settleCount }), [row, settleCount])
+  const links = useLinkVersion(targetTable, targetId)
+  // Fresh identity when the row or a link row naming it is patched, or a run/reversal settles.
+  const version = useMemo(() => ({ row, settleCount, links }), [row, settleCount, links])
   const chunks = useHistoryChunks(
     { branchId, targetTable, targetId, op: op ?? undefined, search, sort },
     version,
   )
   const entryIndex = useEntryIndex(branchId)
+  const entityRows = entitiesStore.useEntities((m) => m)
+  const happeningRows = happeningsStore.useHappenings((m) => m)
   const name = historyTargetName(row) ?? t('history:unknownTarget')
   const rows = useMemo(() => {
     const nowMs = Date.now()
@@ -41,11 +45,13 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
       const ref = entryIndex.index.get(entryId)
       return ref == null ? null : formatEntryRef(ref.position)
     }
-    const otherName = (id: string) => chunks.names[id] ?? null
+    // The working set first, so a renamed other end reads its new name.
+    const otherName = (id: string) =>
+      entityRows.get(id)?.name ?? happeningRows.get(id)?.title ?? chunks.names[id] ?? null
     return chunks.rows.map((historyRow) =>
       humanizeDelta(historyRow, { targetTable, targetName: name, otherName, entryLabel, nowMs }),
     )
-  }, [chunks.rows, chunks.names, entryIndex.index, targetTable, name])
+  }, [chunks.rows, chunks.names, entryIndex.index, targetTable, name, entityRows, happeningRows])
 
   return (
     <HistoryTabView

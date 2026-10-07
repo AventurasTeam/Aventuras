@@ -5,9 +5,9 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import type { Delta, Happening, Thread } from '@/lib/db'
+import type { Delta, Entity, Happening, Thread } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery, HistoryRow, HistoryTable } from '@/lib/history'
-import { generationStore, happeningsStore, threadsStore } from '@/lib/stores'
+import { entitiesStore, generationStore, happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
 import { HistoryTab } from './history-tab'
@@ -273,5 +273,64 @@ export const ReloadsOnRowPatchAndRunSettle: Story = {
     generationStore.finishRun(runId)
     await waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(3), WAIT)
     expect(reloadSpy.mock.calls[2][0]).toEqual(expect.objectContaining({ cursor: null }))
+  },
+}
+
+const KAEL: Entity = {
+  id: 'char_kael',
+  branchId: 'br_1',
+  kind: 'character',
+  name: 'Kael',
+  description: null,
+  status: 'active',
+  retiredReason: null,
+  injectionMode: 'auto',
+  nameCollisionFlag: 0,
+  state: null,
+  tags: [],
+  keywords: [],
+  priority: 0,
+  embeddingStale: 1,
+  createdAt: 1,
+  updatedAt: 1,
+}
+
+const awarenessCreate = (linkId: string, characterId: string): HistoryRow => ({
+  delta: { ...delta('happening_awareness', linkId, {}), op: 'create', undoPayload: null },
+  via: {
+    kind: 'link',
+    table: 'happening_awareness',
+    linkId,
+    otherId: characterId,
+    side: null,
+  },
+})
+
+const linkRowsLoad = async (): Promise<HistoryChunk> => ({
+  rows: [awarenessCreate('haw_kael', 'char_kael'), awarenessCreate('haw_mira', 'char_mira')],
+  nextCursor: null,
+  // Kael's chunk name is stale: the working set's must win. Mira is in the chunk only.
+  names: { char_kael: 'Kael (as deleted)', char_mira: 'Mira' },
+})
+
+/** The other end of a link row reads from the working set, else from the chunk's `names`. */
+export const NamesLinkRowsByOtherEnd: Story = {
+  args: { branchId: 'br_1', targetTable: 'happenings', targetId: 'hap_fire' },
+  beforeEach: () => {
+    entitiesStore.hydrate('br_1', [KAEL])
+    return () => entitiesStore.__reset()
+  },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={linkRowsLoad}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    const rows = await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('Awareness · Kael')).toBeVisible()
+    expect(within(rows[1]).getByText('Awareness · Mira')).toBeVisible()
   },
 }
