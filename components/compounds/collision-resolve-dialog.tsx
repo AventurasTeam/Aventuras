@@ -286,7 +286,6 @@ function MergeBody({
   error,
   onChoice,
 }: MergeBodyProps) {
-  // Web tiers above phone lay the choices out in columns; native stacks them at every tier.
   const phone = useTier() === 'phone'
   const stacked = phone || Platform.OS !== 'web'
   const [state, dispatch] = useReducer(mergeReducer, entityA.id, initMergeState)
