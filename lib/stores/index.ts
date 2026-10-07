@@ -20,6 +20,7 @@ import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overl
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { listCollapseStore } from './ui/list-collapse'
+import { readerRailStore } from './ui/reader-rail'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
 import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
@@ -47,6 +48,7 @@ export function resetAllStores(): void {
   embeddingStatusStore.__reset()
   blockingOverlaysStore.__reset()
   listCollapseStore.__reset()
+  readerRailStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.clear()
   wizardStore.reset()
@@ -73,6 +75,7 @@ export {
   listCollapseStore,
   loreStore,
   navigationStore,
+  readerRailStore,
   recoveryReportStore,
   rehydrateAppSettings,
   rehydrateStories,
