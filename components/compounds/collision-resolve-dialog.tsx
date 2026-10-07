@@ -16,21 +16,19 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { relativeTimeLabel, t } from '@/lib/i18n'
-import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
 import { RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
 
 import {
   computeDivergence,
-  keywordUnion,
-  selectedTerms,
+  mergeChips,
   type DiffPayload,
   type EntitySummary,
   type Resolution,
   type ScalarField,
-  type TermPartition,
 } from './collision-resolve-diff'
-import { initMergeState, mergeReducer } from './collision-resolve-machine'
+import { initMergeState, mergeReducer, mergeResolution } from './collision-resolve-machine'
 
 type Mode = 'merge' | 'rename' | 'keep'
 
@@ -97,12 +95,6 @@ function fieldValue(field: ScalarField, entity: EntitySummary): string {
     case 'priority':
       return String(entity.priority)
   }
-}
-
-function termUnion(partition: TermPartition): string[] {
-  return partition == null
-    ? []
-    : [...partition.both, ...partition.onlyInA, ...partition.onlyInB].sort()
 }
 
 export function CollisionResolveDialog({
@@ -313,40 +305,13 @@ function MergeBody({
     },
   ]
 
-  const allTags = useMemo(() => termUnion(diff.tags), [diff.tags])
-  const allKeywords = useMemo(
-    () => keywordUnion(diff.keywords, canonical.keywords),
-    [diff.keywords, canonical.keywords],
+  const chips = useMemo(
+    () => mergeChips(diff, canonical, nonCanonical),
+    [diff, canonical, nonCanonical],
   )
-  // A null partition means the two sides already agree: submit the canonical's own list, so the
-  // merge doesn't write a reordered or respelled copy of it.
-  const finalTags =
-    diff.tags == null
-      ? canonical.tags
-      : selectedTerms({
-          own: canonical.tags,
-          offered: allTags,
-          deselected: state.deselectedTags,
-          keyOf: (tag) => tag,
-        })
-  const finalKeywords =
-    diff.keywords == null
-      ? canonical.keywords
-      : selectedTerms({
-          own: dedupeTerms(canonical.keywords),
-          offered: allKeywords,
-          deselected: state.deselectedKeywords,
-          keyOf: normalizeTerm,
-        })
 
   function handleConfirm() {
-    onSubmit({
-      mode: 'merge',
-      canonicalId: state.canonicalId,
-      fromOther: diff.divergentScalars.filter((field) => state.fromOther.has(field)),
-      finalTags: [...finalTags],
-      finalKeywords: [...finalKeywords],
-    })
+    onSubmit(mergeResolution(state, diff, chips))
   }
 
   const counts = nonCanonical.relationCounts
@@ -427,51 +392,20 @@ function MergeBody({
         </View>
       )}
 
-      {diff.keywords != null && (
-        <View className="gap-2">
-          <Text size="sm" variant="muted">
-            {t('collisionDialog.keywords')}
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            {allKeywords.map((keyword) => {
-              const deselected = state.deselectedKeywords.includes(normalizeTerm(keyword))
-              return (
-                <Chip
-                  key={keyword}
-                  selected={!deselected}
-                  onPress={() => dispatch({ type: 'toggle-keyword', keyword })}
-                  disabled={submitting}
-                >
-                  <Text className={cn(deselected && 'line-through')}>{keyword}</Text>
-                </Chip>
-              )
-            })}
-          </View>
-        </View>
-      )}
-
-      {diff.tags != null && (
-        <View className="gap-2">
-          <Text size="sm" variant="muted">
-            {t('collisionDialog.tags')}
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            {allTags.map((tag) => {
-              const deselected = state.deselectedTags.includes(tag)
-              return (
-                <Chip
-                  key={tag}
-                  selected={!deselected}
-                  onPress={() => dispatch({ type: 'toggle-tag', tag })}
-                  disabled={submitting}
-                >
-                  <Text className={cn(deselected && 'line-through')}>{tag}</Text>
-                </Chip>
-              )
-            })}
-          </View>
-        </View>
-      )}
+      <TermChips
+        label={t('collisionDialog.keywords')}
+        terms={chips.keywords}
+        isDeselected={(keyword) => state.deselectedKeywords.includes(normalizeTerm(keyword))}
+        onToggle={(keyword) => dispatch({ type: 'toggle-keyword', keyword })}
+        disabled={submitting}
+      />
+      <TermChips
+        label={t('collisionDialog.tags')}
+        terms={chips.tags}
+        isDeselected={(tag) => state.deselectedTags.includes(tag)}
+        onToggle={(tag) => dispatch({ type: 'toggle-tag', tag })}
+        disabled={submitting}
+      />
 
       {diff.stateDivergent && (
         <Text size="sm" variant="muted">
@@ -545,6 +479,40 @@ function MergeBody({
 
       <ErrorLine error={error} />
     </ModeBody>
+  )
+}
+
+type TermChipsProps = {
+  label: string
+  terms: readonly string[]
+  isDeselected: (term: string) => boolean
+  onToggle: (term: string) => void
+  disabled: boolean
+}
+
+function TermChips({ label, terms, isDeselected, onToggle, disabled }: TermChipsProps) {
+  if (terms.length === 0) return null
+  return (
+    <View className="gap-2">
+      <Text size="sm" variant="muted">
+        {label}
+      </Text>
+      <View role="group" accessibilityLabel={label} className="flex-row flex-wrap gap-2">
+        {terms.map((term) => {
+          const deselected = isDeselected(term)
+          return (
+            <Chip
+              key={term}
+              selected={!deselected}
+              onPress={() => onToggle(term)}
+              disabled={disabled}
+            >
+              <Text className={cn(deselected && 'line-through')}>{term}</Text>
+            </Chip>
+          )
+        })}
+      </View>
+    </View>
   )
 }
 

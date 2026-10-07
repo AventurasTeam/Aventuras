@@ -11,7 +11,6 @@ import {
 } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { normalizeTerm } from '@/lib/keyword-terms'
 import {
   characterRelationshipsStore,
   entitiesStore,
@@ -35,33 +34,18 @@ function inBranch<Row extends { branchId: string }>(
   return [...rows.values()].filter((row) => row.branchId === branchId)
 }
 
-/** Each term of the pair whose key the dialog's final list lacks: the user deselected it. */
-function deselected(
-  terms: readonly string[],
-  final: readonly string[],
-  keyOf: (term: string) => string,
-): string[] {
-  const kept = new Set(final.map(keyOf))
-  return [...new Set(terms.map(keyOf))].filter((key) => key !== '' && !kept.has(key))
-}
-
 /** The dialog's resolution as the action takes it: the loser is the pair row that isn't canonical. */
 function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionResolution {
   switch (resolution.mode) {
     case 'merge': {
+      const { canonicalId, fromOther, deselectedTags, deselectedKeywords } = resolution
       return {
         mode: 'merge',
-        canonicalId: resolution.canonicalId,
-        loserId: resolution.canonicalId === a.id ? b.id : a.id,
-        fromLoser: resolution.fromOther,
-        deselectedTags: deselected([...a.tags, ...b.tags], resolution.finalTags, (tag) =>
-          tag.trim(),
-        ),
-        deselectedKeywords: deselected(
-          [...a.keywords, ...b.keywords],
-          resolution.finalKeywords,
-          normalizeTerm,
-        ),
+        canonicalId,
+        loserId: canonicalId === a.id ? b.id : a.id,
+        fromLoser: fromOther,
+        deselectedTags,
+        deselectedKeywords,
       }
     }
     case 'rename': {

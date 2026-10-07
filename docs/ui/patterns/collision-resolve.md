@@ -146,8 +146,8 @@ type Resolution =
       mode: 'merge'
       canonicalId: string
       fromOther: readonly ScalarField[]
-      finalTags: string[]
-      finalKeywords: string[]
+      deselectedTags: readonly string[] // as the chips show them, trimmed
+      deselectedKeywords: readonly string[] // normalizeTerm keys
     }
   | {
       mode: 'rename'
@@ -164,19 +164,22 @@ type ScalarField = MergeScalar
 the non-canonical row, in the fixed field order; every other field
 keeps the canonical's value, so nothing in the resolution depends on
 which column a side sat in. A field that stopped diverging while the
-dialog was open isn't sent. `finalKeywords` is the union of
-both sides' keywords, deduplicated under the normalization
+dialog was open isn't sent.
+
+The merge sends the terms the user dropped, never the final lists.
+The action builds those inside the branch lock from the rows as they
+are then (`mergedTerms`, lib/world): the union of both rows' terms
+minus the dropped, keywords de-duplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
-entry, a shared one in the canonical's spelling. `finalTags` is the
-union after the user's deselects are applied — empty array is
-allowed (entity becomes untagged). Both lists are ordered the same
-way: the canonical's own entries in their stored order (keywords
-trimmed and de-duplicated), minus the deselected, then the other
-side's remaining additions in the order the chips are offered
-(sorted). A selection equal to the canonical's set therefore submits
-its list exactly, and the merge writes no unchanged list. When the
-two sides agree on a list (its partition is `null`), the dialog
-submits the canonical's own list as it is.
+entry (a shared one in the canonical's spelling), tags trimmed and
+de-duplicated exactly. Each list keeps the canonical's own entries
+in their stored order, then the other row's remaining additions
+sorted, and a list that comes out equal to the canonical's isn't
+written. So a keyword the classifier adds to either row while the
+merge waits for the lock is kept. Dropping every term is allowed
+(the entity becomes untagged). Only drops among the chips still
+shown are sent: when the two sides come to agree on a list while
+the dialog is open, its chips go and so do its drops.
 
 The rename array is sparse: only entities whose name actually
 changed are included, trimmed. Validation: both trimmed names must be
@@ -205,8 +208,8 @@ type DiffPayload = {
   case variant on the other side is the same keyword, and the
   partition is `null` when both sides hold the same keywords under
   normalization. Blanks drop. A keyword only one side holds shows in
-  that side's first trimmed spelling; a shared one shows and is
-  submitted in the canonical's spelling. The deselect follows the
+  that side's first trimmed spelling; a shared one shows, and is
+  written, in the canonical's spelling. The deselect follows the
   keyword, not its spelling. Unioned by the same rule. Tags still
   compare exactly.
   They are retrieval-targeted rather than decorative, so
@@ -257,10 +260,9 @@ Transition rules:
   `deselectedKeywords`; the reducer normalizes the keyword to its
   key.
 - **`toggle-tag`** — adds or removes a tag from `deselectedTags`.
-  `finalTags` is derived in the view, not stored: the canonical's
-  own tags minus `deselectedTags`, then the other side's remaining
-  additions ([Resolution shape](#resolution-shape) gives the order);
-  `finalKeywords` likewise against `deselectedKeywords`.
+  The chips are derived in the view, not stored: `mergedTerms` of
+  the two rows with nothing dropped, so they show in the order the
+  merge writes ([Resolution shape](#resolution-shape)).
 - **`reset`** — re-initializes on entity-input change. Defensive;
   in practice the dialog is keyed by entity ids so unmount handles
   most cases.
@@ -306,8 +308,10 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    labeled "Keywords", identical in shape to the tag row below it and
    rendered directly above it.
 4. **Tag union** (when `diff.tags != null`) — single row labeled
-   "Tags". Renders all tags from the union as chips; each chip has
-   an inline `×` to deselect. Deselected chips render in a
+   "Tags". Renders all tags from the union as chips, in the order
+   the merge writes them (the canonical's in stored order, then the
+   other row's additions sorted), so the order follows a canonical
+   flip; each chip has an inline `×` to deselect. Deselected chips render in a
    strikethrough / dimmed variant and can be re-selected.
 5. **State JSON note** (when `stateDivergent` is true) — inline
    muted text: "`state` will follow the canonical row · edit on

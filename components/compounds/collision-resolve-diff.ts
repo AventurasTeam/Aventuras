@@ -1,6 +1,12 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
-import { MERGE_SCALARS, type MergeOverlap, type MergeScalar } from '@/lib/world'
+import {
+  MERGE_SCALARS,
+  mergedTerms,
+  type MergeDeselections,
+  type MergeOverlap,
+  type MergeScalar,
+} from '@/lib/world'
 
 export type ScalarField = MergeScalar
 
@@ -44,15 +50,15 @@ export type DiffPayload = {
   stateDivergent: boolean
 }
 
+export type MergeResolution = {
+  mode: 'merge'
+  canonicalId: string
+  /** Divergent fields the merged row takes from the non-canonical row, in `SCALAR_FIELDS` order. */
+  fromOther: readonly ScalarField[]
+} & MergeDeselections
+
 export type Resolution =
-  | {
-      mode: 'merge'
-      canonicalId: string
-      /** Divergent fields the merged row takes from the non-canonical row, in `SCALAR_FIELDS` order. */
-      fromOther: readonly ScalarField[]
-      finalTags: string[]
-      finalKeywords: string[]
-    }
+  | MergeResolution
   | {
       mode: 'rename'
       renames: { id: string; newName: string }[]
@@ -112,36 +118,21 @@ function keywordPartition(a: readonly string[], b: readonly string[]): TermParti
   return { onlyInA, onlyInB, both }
 }
 
-/** The keyword chips a merge offers, sorted; a shared keyword takes the canonical's spelling. */
-export function keywordUnion(
-  partition: TermPartition,
-  canonicalKeywords: readonly string[],
-): string[] {
-  if (partition == null) return []
-  const canonicalSpelling = firstSpellings(canonicalKeywords)
-  const shared = partition.both.map((term) => canonicalSpelling.get(normalizeTerm(term)) ?? term)
-  return [...shared, ...partition.onlyInA, ...partition.onlyInB].sort()
-}
+export type MergeChips = { tags: string[]; keywords: string[] }
 
-/**
- * What a merge submits for a term list: the canonical's own entries in stored order minus the
- * deselected, then the other side's additions in `offered` order, so an unchanged selection is the
- * canonical's list, which the planner doesn't write. `keyOf` is what a deselect is recorded under.
- */
-export function selectedTerms({
-  own,
-  offered,
-  deselected,
-  keyOf,
-}: {
-  own: readonly string[]
-  offered: readonly string[]
-  deselected: readonly string[]
-  keyOf: (term: string) => string
-}): string[] {
-  const ownKeys = new Set(own.map(keyOf))
-  const kept = (term: string) => !deselected.includes(keyOf(term))
-  return [...own.filter(kept), ...offered.filter((term) => !ownKeys.has(keyOf(term)) && kept(term))]
+const NO_DESELECTIONS: MergeDeselections = { deselectedTags: [], deselectedKeywords: [] }
+
+/** The chips a merge offers, in the order it writes them; a list the two rows agree on offers none. */
+export function mergeChips(
+  diff: DiffPayload,
+  canonical: EntitySummary,
+  other: EntitySummary,
+): MergeChips {
+  const all = mergedTerms({ canonical, other }, NO_DESELECTIONS)
+  return {
+    tags: diff.tags == null ? [] : all.tags,
+    keywords: diff.keywords == null ? [] : all.keywords,
+  }
 }
 
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {

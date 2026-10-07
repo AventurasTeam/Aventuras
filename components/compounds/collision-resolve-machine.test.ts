@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { initMergeState, mergeReducer, type MergeState } from './collision-resolve-machine'
+import type { DiffPayload, ScalarField } from './collision-resolve-diff'
+import {
+  initMergeState,
+  mergeReducer,
+  mergeResolution,
+  type MergeState,
+} from './collision-resolve-machine'
 
 describe('initMergeState', () => {
   it('starts on the default canonical, taking nothing from the other row and dropping no term', () => {
@@ -141,5 +147,50 @@ describe('keyword deselection', () => {
   it('keeps the tag and keyword deselect sets apart', () => {
     const after = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
     expect(after.deselectedTags).toEqual([])
+  })
+})
+
+describe('mergeResolution', () => {
+  const diff = (divergentScalars: ScalarField[]): DiffPayload => ({
+    divergentScalars,
+    tags: null,
+    keywords: null,
+    stateDivergent: false,
+  })
+  const picked: MergeState = {
+    canonicalId: 'ent_b',
+    fromOther: new Set(['priority', 'description']),
+    deselectedTags: ['guard', 'hero'],
+    deselectedKeywords: ['the swordsman', 'the gate guard'],
+  }
+
+  it('sends the picks among the fields and chips shown, in the fixed field order', () => {
+    expect(
+      mergeResolution(picked, diff(['name', 'description', 'priority']), {
+        tags: ['sword', 'guard', 'hero'],
+        keywords: ['The Swordsman', 'the gate guard'],
+      }),
+    ).toEqual({
+      mode: 'merge',
+      canonicalId: 'ent_b',
+      fromOther: ['description', 'priority'],
+      deselectedTags: ['guard', 'hero'],
+      deselectedKeywords: ['the swordsman', 'the gate guard'],
+    })
+  })
+
+  it('leaves out a pick whose field or chip no longer shows', () => {
+    expect(
+      mergeResolution(picked, diff(['description']), {
+        tags: ['sword', 'hero'],
+        keywords: ['the wanderer', 'THE SWORDSMAN'],
+      }),
+    ).toEqual({
+      mode: 'merge',
+      canonicalId: 'ent_b',
+      fromOther: ['description'],
+      deselectedTags: ['hero'],
+      deselectedKeywords: ['the swordsman'],
+    })
   })
 })

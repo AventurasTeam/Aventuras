@@ -976,7 +976,10 @@ Field-level rules:
 - **`tags[]`** — union by default with a per-tag deselect.
   Renders only when the two tag sets differ. The merged list, here
   and for keywords, keeps the canonical's entries in their order,
-  with the other row's additions after them.
+  with the other row's additions after them, the order the chips
+  show. The merge builds it from the rows as they are when it
+  writes, less the terms the user dropped, so a keyword the
+  classifier adds while the merge waits is kept.
 - **`state` JSON** — taken whole-side from canonical. Per-field
   diff inside `state` is out of scope for v1: schema shape
   varies per kind (character / location / item / faction),

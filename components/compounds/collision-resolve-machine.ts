@@ -1,6 +1,11 @@
 import { normalizeTerm } from '@/lib/keyword-terms'
 
-import type { ScalarField } from './collision-resolve-diff'
+import type {
+  DiffPayload,
+  MergeChips,
+  MergeResolution,
+  ScalarField,
+} from './collision-resolve-diff'
 
 export type MergeState = {
   canonicalId: string
@@ -63,5 +68,21 @@ export function mergeReducer(state: MergeState, action: MergeAction): MergeState
     case 'reset': {
       return initMergeState(action.defaultCanonicalId)
     }
+  }
+}
+
+/** What the merge submits: the user's choices among the fields and chips the dialog shows now. */
+export function mergeResolution(
+  state: MergeState,
+  diff: DiffPayload,
+  chips: MergeChips,
+): MergeResolution {
+  const keywordKeys = new Set(chips.keywords.map(normalizeTerm))
+  return {
+    mode: 'merge',
+    canonicalId: state.canonicalId,
+    fromOther: diff.divergentScalars.filter((field) => state.fromOther.has(field)),
+    deselectedTags: state.deselectedTags.filter((tag) => chips.tags.includes(tag)),
+    deselectedKeywords: state.deselectedKeywords.filter((key) => keywordKeys.has(key)),
   }
 }

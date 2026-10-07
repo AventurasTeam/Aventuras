@@ -84,6 +84,13 @@ const GATE_REASON = 'Generation is in flight. Cancel to edit.'
 const lineClamp = (node: HTMLElement) =>
   getComputedStyle(node).getPropertyValue('-webkit-line-clamp')
 
+const KEYWORD_CHIPS = 'Keywords (click to remove from merge)'
+const TAG_CHIPS = 'Tags (click to remove from merge)'
+const chipNames = (group: string) =>
+  within(screen.getByRole('group', { name: group }))
+    .getAllByRole('button')
+    .map((chip) => chip.textContent)
+
 const resolveOk = async (r: Resolution) => {
   console.log('[story] resolved:', r)
 }
@@ -376,16 +383,19 @@ export const MergeKeywordUnion: Story = {
     lastResolution = null
     // ControlledDialog opens by default; the Open button sits behind the overlay.
     await userEvent.click(await screen.findByRole('button', { name: 'the wanderer' }))
-    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+    // The write's order: the canonical's own in stored order, then the other row's additions; the
+    // case variant was one keyword all along.
+    expect(chipNames(KEYWORD_CHIPS)).toEqual(['the wanderer', 'the swordsman', 'the gate guard'])
+    expect(chipNames(TAG_CHIPS)).toEqual(['hero', 'sword', 'guard'])
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
 
-    const resolution = lastResolution as Resolution | null
-    expect(resolution).not.toBeNull()
-    expect(resolution).toMatchObject({
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
       mode: 'merge',
-      // The canonical's own entries keep their order and the losing side's additions follow; the
-      // deselected one is dropped, and the case variant was one keyword all along.
-      finalKeywords: ['the swordsman', 'the gate guard'],
-      finalTags: ['hero', 'sword', 'guard'],
+      canonicalId: entityA.id,
+      fromOther: [],
+      deselectedTags: [],
+      deselectedKeywords: ['the wanderer'],
     })
   },
 }
@@ -414,32 +424,34 @@ export const MergeFieldsFromOther: Story = {
   },
 }
 
-export const MergeAgreeingListsKeepCanonical: Story = {
+export const MergeChipsFollowCanonicalOrder: Story = {
   render: () => (
     <ControlledDialog
-      entityA={baseEntity({ tags: ['hero', 'sword'], keywords: ['the swordsman', 'the wanderer'] })}
-      entityB={baseEntity({
-        id: 'ent_kael_2',
-        tags: ['sword', 'hero'],
-        keywords: ['The Wanderer', 'the swordsman'],
-      })}
+      entityA={baseEntity({ tags: ['sword', 'hero'] })}
+      entityB={baseEntity({ id: 'ent_kael_2', tags: ['sword', 'guard', 'alpha'] })}
       onResolve={resolveCapturing}
     />
   ),
   play: async () => {
     lastResolution = null
-    // Both partitions are null, so no chips render: pick B canonical and submit.
-    await userEvent.click((await screen.findAllByRole('radio', { name: /^Kael · / }))[1])
-    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+    await screen.findByRole('group', { name: TAG_CHIPS })
+    expect(chipNames(TAG_CHIPS)).toEqual(['sword', 'hero', 'alpha', 'guard'])
+    await userEvent.click(screen.getByRole('button', { name: 'guard' }))
+    await userEvent.click(screen.getByRole('button', { name: 'hero' }))
 
-    const resolution = lastResolution as Resolution | null
-    expect(resolution).not.toBeNull()
-    // The canonical's own lists, in its own order and spelling; A's sorted copy would differ.
-    expect(resolution).toMatchObject({
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await waitFor(() => expect(chipNames(TAG_CHIPS)).toEqual(['sword', 'guard', 'alpha', 'hero']))
+    expect(screen.getByRole('button', { name: 'guard' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'hero' })).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
       mode: 'merge',
       canonicalId: 'ent_kael_2',
-      finalTags: ['sword', 'hero'],
-      finalKeywords: ['The Wanderer', 'the swordsman'],
+      fromOther: [],
+      deselectedTags: ['guard', 'hero'],
+      deselectedKeywords: [],
     })
   },
 }
@@ -449,21 +461,15 @@ export const MergeKeywordsInCanonicalSpelling: Story = {
     <ControlledDialog
       entityA={baseEntity({ keywords: ['the swordsman', 'the wanderer'] })}
       entityB={baseEntity({ id: 'ent_kael_2', keywords: ['The Swordsman', 'the gate guard'] })}
-      onResolve={resolveCapturing}
+      onResolve={resolveOk}
     />
   ),
   play: async () => {
-    lastResolution = null
     await userEvent.click((await screen.findAllByRole('radio', { name: /^Kael · / }))[1])
     // The shared keyword shows, and is written, as the canonical spells it.
-    expect(await screen.findByRole('button', { name: 'The Swordsman' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'the swordsman' })).toBeNull()
-    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
-
-    expect(lastResolution).toMatchObject({
-      canonicalId: 'ent_kael_2',
-      finalKeywords: ['The Swordsman', 'the gate guard', 'the wanderer'],
-    })
+    await waitFor(() =>
+      expect(chipNames(KEYWORD_CHIPS)).toEqual(['The Swordsman', 'the gate guard', 'the wanderer']),
+    )
   },
 }
 
@@ -486,35 +492,8 @@ export const MergeKeywordDeselectSurvivesFlip: Story = {
     )
     await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
 
-    expect(lastResolution).toMatchObject({
-      finalKeywords: ['the gate guard', 'the wanderer'],
-    })
-  },
-}
-
-export const MergeDeselectedAdditionsKeepCanonicalLists: Story = {
-  render: () => (
-    <ControlledDialog
-      entityA={baseEntity({ tags: ['sword', 'hero'], keywords: ['the wanderer', 'the swordsman'] })}
-      entityB={baseEntity({
-        id: 'ent_kael_2',
-        tags: ['sword', 'guard'],
-        keywords: ['the swordsman', 'the gate guard'],
-      })}
-      onResolve={resolveCapturing}
-    />
-  ),
-  play: async () => {
-    lastResolution = null
-    await userEvent.click(await screen.findByRole('button', { name: 'guard' }))
-    await userEvent.click(screen.getByRole('button', { name: 'the gate guard' }))
-    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
-
-    // The canonical's set came back unchanged, so it goes back in its stored order, not re-sorted.
-    expect(lastResolution).toMatchObject({
-      finalTags: ['sword', 'hero'],
-      finalKeywords: ['the wanderer', 'the swordsman'],
-    })
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toMatchObject({ deselectedKeywords: ['the swordsman'] })
   },
 }
 
@@ -555,7 +534,14 @@ export const MergeFieldDivergesWhileOpen: Story = {
 
 let convergeNow: (() => void) | null = null
 function ConvergesWhileOpen() {
-  const [b, setB] = useState(baseEntity({ id: 'ent_kael_2', priority: 5 }))
+  const [b, setB] = useState(
+    baseEntity({
+      id: 'ent_kael_2',
+      priority: 5,
+      tags: ['sword', 'guard'],
+      keywords: ['the swordsman', 'the gate guard'],
+    }),
+  )
   useEffect(() => {
     convergeNow = () => setB(baseEntity({ id: 'ent_kael_2' }))
     return () => {
@@ -565,19 +551,30 @@ function ConvergesWhileOpen() {
   return <ControlledDialog entityA={baseEntity()} entityB={b} onResolve={resolveCapturing} />
 }
 
-export const MergeFieldConvergesWhileOpen: Story = {
+export const MergeConvergesWhileOpen: Story = {
   render: () => <ConvergesWhileOpen />,
   play: async () => {
     lastResolution = null
     const row = await screen.findByRole('group', { name: 'Priority' })
     await userEvent.click(within(row).getByRole('button', { name: '5' }))
+    // Terms both rows keep after converging: a stale deselect would drop them from the canonical.
+    await userEvent.click(screen.getByRole('button', { name: 'sword' }))
+    await userEvent.click(screen.getByRole('button', { name: 'the swordsman' }))
     convergeNow?.()
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Priority' })).toBeNull())
+    expect(screen.queryByRole('group', { name: TAG_CHIPS })).toBeNull()
+    expect(screen.queryByRole('group', { name: KEYWORD_CHIPS })).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
 
-    // The pick no longer shows, so it isn't sent.
+    // None of the choices shows any more, so none is sent.
     await waitFor(() => expect(lastResolution).not.toBeNull())
-    expect(lastResolution).toMatchObject({ mode: 'merge', fromOther: [] })
+    expect(lastResolution).toEqual({
+      mode: 'merge',
+      canonicalId: 'ent_kael_1',
+      fromOther: [],
+      deselectedTags: [],
+      deselectedKeywords: [],
+    })
   },
 }
 

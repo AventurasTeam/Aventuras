@@ -269,8 +269,11 @@ collision canon, PR 3 History union). Developer decisions are marked.
   spaces at either end still collides. Interior spacing counts.
 - **Dialog choices beyond the brief.**
   - Shared keywords show and submit in the canonical's spelling.
-  - The merge submits the canonical's lists in their stored order, so
-    it never writes an unchanged list.
+  - The merge submits the terms the user dropped, not lists: the
+    action builds the lists from the live rows inside the branch lock
+    (the canonical's in stored order, then the other row's additions,
+    the order the chips show), so a keyword the classifier adds while
+    the merge waits is kept and an unchanged list isn't written.
   - The phone canonical picker is radio rows, since segment labels
     clip.
   - Native tiers stack choices with Older / Newer captions.

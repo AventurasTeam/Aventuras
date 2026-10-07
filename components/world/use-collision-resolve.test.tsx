@@ -60,8 +60,6 @@ const NEWER = makeEntity({
   state: emptyEntityState('character'),
   createdAt: 2_000,
 })
-const TAGS = ['smuggler', 'watch']
-const KEYWORDS = ['the river gate', 'the sergeant']
 const LEAD_TEXT =
   "The story's lead can't be the row a merge removes. Pick it as the row that survives, or use Set as lead on another character first."
 const IN_FLIGHT_TEXT = "Couldn't resolve while generation is in flight."
@@ -256,8 +254,8 @@ describe('useCollisionResolve → what resolve sends', () => {
       mode: 'merge',
       canonicalId: OLDER.id,
       fromOther: ['status'],
-      finalTags: TAGS,
-      finalKeywords: KEYWORDS,
+      deselectedTags: [],
+      deselectedKeywords: [],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -283,8 +281,8 @@ describe('useCollisionResolve → what resolve sends', () => {
       mode: 'merge',
       canonicalId: NEWER.id,
       fromOther: ['description'],
-      finalTags: TAGS,
-      finalKeywords: KEYWORDS,
+      deselectedTags: [],
+      deselectedKeywords: [],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -302,15 +300,15 @@ describe('useCollisionResolve → what resolve sends', () => {
     expect(toast.success).toHaveBeenCalledWith('Merged into BRANNOC.')
   })
 
-  it('sends each term missing from the final lists as deselected, keywords by their key', async () => {
+  it('passes the deselected terms through as the dialog sent them', async () => {
     const result = openPair()
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: OLDER.id,
       fromOther: [],
-      finalTags: ['watch'],
-      finalKeywords: ['The River Gate'],
+      deselectedTags: ['smuggler'],
+      deselectedKeywords: ['the sergeant'],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -331,8 +329,8 @@ describe('useCollisionResolve → what resolve sends', () => {
       mode: 'merge',
       canonicalId: NEWER.id,
       fromOther: ['name'],
-      finalTags: TAGS,
-      finalKeywords: KEYWORDS,
+      deselectedTags: [],
+      deselectedKeywords: [],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -402,8 +400,8 @@ describe('useCollisionResolve → outcomes', () => {
         mode: 'merge',
         canonicalId: NEWER.id,
         fromOther: [],
-        finalTags: TAGS,
-        finalKeywords: KEYWORDS,
+        deselectedTags: [],
+        deselectedKeywords: [],
       }),
     ).rejects.toThrow(LEAD_TEXT)
     expect(toast.success).not.toHaveBeenCalled()
