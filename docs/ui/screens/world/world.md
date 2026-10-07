@@ -616,20 +616,21 @@ prose, then hands pre-formatted strings to the compound.
 - **Link-row wording** — a link delta's target line names the link and
   its other end, `Relationship · Kael` (or `Involvement`,
   `Awareness`). The other end's name is read live, the working set
-  first, then its stored row, else from the latest delete payload
-  that held it, always within the tab's branch, else "Unknown row";
+  first, then its stored row, else from the other end's own latest
+  delete payload, always within the tab's branch, else "Unknown row";
   a rename shows without a reload. Summaries read `Created`,
   `Modified <fields>` and `Deleted`. An other end's delete reads
   "Removed when Kael was deleted" under the link label alone, `Links`
   when it removed more than one kind; with no name to read, "Removed
   when its other end was deleted". A relationship's `kind` and
-  `inverse_kind` read "Your view" and "Their view" by the tab's side:
+  `inverseKind` read "Your view" and "Their view" by the tab's side:
   `kind` is `a`'s view of `b`, with `a_id < b_id`, so the tab's
   character holds `kind` when it is `a`. An involvement's `role` reads
   "Role"; awareness columns read "Source", "Decay resistance" and
-  "Learned at". The muted path stays the raw column.
-- **Refresh** — the tab refetches when its row or a link row naming
-  it changes in the working set (in a column the tab shows, so a
+  "Learned at". The muted path stays the payload's raw key
+  (`inverseKind`, not the column's snake case).
+- **Refresh** — the tab refetches when its row changes in the working
+  set, when a link row naming it changes in a column the tab shows (a
   retrieval bump doesn't), and when a run or reversal settles, which
   covers a reversal that only edits a delete's payload.
 - **Rows aren't pressable.** `entry #n` is meta text; see
