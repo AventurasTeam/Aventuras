@@ -7,7 +7,6 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { CollisionResolveDialog } from '@/components/compounds/collision-resolve-dialog'
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
-import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { distinctCategories } from '@/components/plot/plot-route-data'
@@ -28,6 +27,7 @@ import type { EntityPaneData } from '@/components/world/detail/entity-pane-props
 import { entityTabOf } from '@/components/world/detail/entity-tabs'
 import { LoreDetailPane } from '@/components/world/detail/lore-detail-pane'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
+import { useCollisionGate } from '@/components/world/use-collision-gate'
 import { collisionResolveProp, useCollisionResolve } from '@/components/world/use-collision-resolve'
 import { useWorldDelete } from '@/components/world/use-world-delete'
 import {
@@ -218,6 +218,7 @@ export default function WorldRoute() {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
   const collision = useCollisionResolve(branchId, ctx, guard)
+  const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
   // The dialog is portaled: left open, it would paint over the screen pushed on top.
   useEffect(() => {
@@ -231,8 +232,8 @@ export default function WorldRoute() {
     [collisions, requestCollision],
   )
   const resolveCollisionProp = useMemo(
-    () => collisionResolveProp(editBlocked, gateReason, openCollision),
-    [editBlocked, gateReason, openCollision],
+    () => collisionResolveProp(collisionBlocked, openCollision),
+    [collisionBlocked, openCollision],
   )
 
   const switchCategory = useCallback(
@@ -602,7 +603,7 @@ export default function WorldRoute() {
           entityA={collision.pair[0]}
           entityB={collision.pair[1]}
           onResolve={collision.resolve}
-          blockedReason={gateDisabledReason(editBlocked, gateReason)}
+          blockedReason={collisionBlocked}
         />
       ) : null}
     </ScreenShell>

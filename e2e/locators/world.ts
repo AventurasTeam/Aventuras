@@ -39,9 +39,9 @@ export const world = {
     world
       .collisionDialog(page)
       .getByRole('radio', { name: t(`collisionDialog.mode.${mode}`), exact: true }),
-  mergeConfirm: (page: Page, canonicalName: string): Locator =>
+  mergeConfirm: (page: Page, canonical: 'older' | 'newer', canonicalName: string): Locator =>
     world.collisionDialog(page).getByRole('button', {
-      name: t('collisionDialog.mergeConfirm', { name: canonicalName }),
+      name: t(`collisionDialog.mergeConfirm.${canonical}`, { name: canonicalName }),
       exact: true,
     }),
   keepConfirm: (page: Page): Locator =>

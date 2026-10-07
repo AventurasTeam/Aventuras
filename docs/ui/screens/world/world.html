@@ -319,7 +319,6 @@
   .canon-picker { display: flex; gap: 6px; padding: 6px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; margin-bottom: 14px; }
   .canon-picker .seg { flex: 1; padding: 8px 10px; text-align: center; cursor: pointer; border-radius: 2px; font-size: 12px; color: var(--ink-muted); border: 1px solid transparent; }
   .canon-picker .seg.active { background: var(--bg-region); color: var(--ink); border-color: var(--line); }
-  .canon-picker .seg .meta { display: block; font-size: 9px; color: var(--ink-faint); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
   .field-grid { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 0 14px; font-size: 12px; }
   .field-grid .h { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); padding: 0 0 6px; border-bottom: 1px solid var(--line-soft); }
   .field-grid .row-l { color: var(--ink-muted); padding: 8px 0; border-bottom: 1px dotted var(--line-soft); }
@@ -1342,6 +1341,16 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <span><code>tags</code> &mdash; added "chapter-2-introduced" (chapter close)</span>
       </div>
       <div class="history-row">
+        <span class="history-ts">2026-04-24 15:48</span>
+        <span class="history-op update">update</span>
+        <span><b>Relationship &middot; Aria</b> &middot; <code>kind</code> &mdash; Modified Their view</span>
+      </div>
+      <div class="history-row">
+        <span class="history-ts">2026-04-24 15:40</span>
+        <span class="history-op delete">delete</span>
+        <span><b>Relationship</b> &mdash; Removed when Tavin was deleted</span>
+      </div>
+      <div class="history-row">
         <span class="history-ts">2026-04-24 15:33</span>
         <span class="history-op update">update</span>
         <span><code>state.equipped_items</code> &mdash; added "silver coin on cord"</span>
@@ -1439,32 +1448,30 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <!-- MERGE body — canonical picker + per-field grid + relations summary -->
     <div class="resolve-body active" data-path="merge">
       <div class="canon-picker" id="canon-picker">
-        <div class="seg active" data-canon="A">
-          Kael &middot; 3 days ago &middot; Canonical
-          <span class="meta">older</span>
+        <div class="seg active" data-canon="A" data-name="Kael" data-word="older">
+          Kael &middot; Older &middot; 3 days ago
         </div>
-        <div class="seg" data-canon="B">
-          Kael &middot; just now
-          <span class="meta">newer</span>
+        <div class="seg" data-canon="B" data-name="Kael" data-word="newer">
+          Kael &middot; Newer &middot; just now
         </div>
       </div>
       <!-- Only fields that diverge between the two rows render here.
            Identical values aren't surfaced (no decision to make). -->
       <div class="field-grid">
         <span class="h">field</span>
-        <span class="h">Older &middot; 3 days ago &middot; Canonical</span>
-        <span class="h">Newer &middot; just now</span>
+        <span class="h">Older &middot; 3 days ago<span class="canon-suffix" data-side="A"> &middot; Canonical</span></span>
+        <span class="h">Newer &middot; just now<span class="canon-suffix" data-side="B" hidden> &middot; Canonical</span></span>
 
         <span class="row-l">description</span>
         <span class="row-v">
-          <input type="radio" name="f-desc" checked>
+          <input type="radio" name="f-desc" data-side="A" checked>
           <span class="row-prose" data-expandable>
             <span class="prose-body">wandering swordsman, weathered jaw, ice-blue eyes; raised in the southern marshes by rebels who taught him to track and to harbor a deep distrust of authority despite his privileged origins; carries a worn signet ring he refuses to explain.</span>
             <span class="side-meta">Older &middot; 3 days ago</span>
           </span>
         </span>
         <span class="row-v">
-          <input type="radio" name="f-desc">
+          <input type="radio" name="f-desc" data-side="B">
           <span class="row-prose" data-expandable>
             <span class="prose-body">guardsman at the city gate, recently posted</span>
             <span class="side-meta">Newer &middot; just now</span>
@@ -1497,7 +1504,10 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           <li>Translation rows dropped: 0</li>
         </ul>
         <div class="footnote">
-          Kael already has 1 of these awareness rows (&ldquo;tavern brawl&rdquo;) and takes part in 1 of these happenings: it keeps its own, and the duplicates are dropped.
+          Kael already has 1 of these awareness rows (&ldquo;tavern brawl&rdquo;): it keeps its own, and the duplicate is dropped.
+        </div>
+        <div class="footnote">
+          1 of these involvements is a duplicate (Kael already takes part in its happening, or it repeats one) and is dropped.
         </div>
       </div>
     </div>
@@ -1529,7 +1539,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
 
     <div class="resolve-foot">
       <button class="ghost" id="resolve-cancel">Cancel</button>
-      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into Kael (older)</span></button>
+      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into the older Kael</span></button>
     </div>
   </div>
 </div>
@@ -1728,7 +1738,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     const lbl = document.getElementById('resolve-primary-label');
     const primary = document.getElementById('resolve-primary');
     if (!lbl || !primary) return;
-    if (p === 'merge') { lbl.textContent = 'Merge into Kael (older)'; primary.classList.add('danger'); }
+    if (p === 'merge') { lbl.textContent = mergeLabel(); primary.classList.add('danger'); }
     else if (p === 'rename') { lbl.textContent = 'Save renames'; primary.classList.remove('danger'); }
     else if (p === 'keep') { lbl.textContent = 'Keep as distinct'; primary.classList.remove('danger'); }
   }
@@ -1765,16 +1775,22 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     });
   });
 
-  // canon-picker segment — flips primary button label so destructive direction stays obvious
+  // canon-picker segment — the header row's "· Canonical" suffix, the divergent radios and the primary
+  // button's "Merge into the <older|newer> <canonical-name>" follow the pick, so destructive
+  // direction stays obvious
+  function mergeLabel() {
+    const seg = document.querySelector('.canon-picker .seg.active');
+    return 'Merge into the ' + (seg?.dataset.word ?? '') + ' ' + (seg?.dataset.name ?? '');
+  }
+  function setCanonical(side) {
+    document.querySelectorAll('.canon-picker .seg').forEach(x => x.classList.toggle('active', x.dataset.canon === side));
+    document.querySelectorAll('.canon-suffix').forEach(x => { x.hidden = x.dataset.side !== side; });
+    document.querySelectorAll('.field-grid input[type="radio"][data-side]').forEach(r => { r.checked = r.dataset.side === side; });
+    const lbl = document.getElementById('resolve-primary-label');
+    if (lbl) lbl.textContent = mergeLabel();
+  }
   document.querySelectorAll('.canon-picker .seg').forEach(s => {
-    s.addEventListener('click', () => {
-      document.querySelectorAll('.canon-picker .seg').forEach(x => x.classList.remove('active'));
-      s.classList.add('active');
-      const lbl = document.getElementById('resolve-primary-label');
-      if (lbl) {
-        lbl.textContent = s.dataset.canon === 'A' ? 'Merge into Kael (older)' : 'Merge into Kael (newer)';
-      }
-    });
+    s.addEventListener('click', () => setCanonical(s.dataset.canon));
   });
 
   document.addEventListener('keydown', e => {

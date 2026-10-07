@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  computeDivergence,
-  keywordUnion,
-  selectedTerms,
-  type EntitySummary,
-} from './collision-resolve-diff'
+import { computeDivergence, mergeChips, type EntitySummary } from './collision-resolve-diff'
 
 function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
   return {
@@ -30,7 +25,13 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
       embeddings: 1,
       translationRows: 0,
       unheldItems: 0,
-      overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
+      overlap: {
+        awareness: 0,
+        involvements: 0,
+        relationships: 0,
+        holdersLosingItem: 0,
+        canonicalRefs: 0,
+      },
     },
     ...overrides,
   }
@@ -292,82 +293,42 @@ describe('keywords', () => {
   })
 })
 
-describe('keywordUnion', () => {
-  const partition = {
-    onlyInA: ['the wanderer'],
-    onlyInB: ['the gate guard'],
-    both: ['the swordsman'],
-  }
+describe('mergeChips', () => {
+  const chipsFor = (a: EntitySummary, b: EntitySummary, canonical: EntitySummary) =>
+    mergeChips(computeDivergence(a, b), canonical, canonical === a ? b : a)
 
-  it('spells a shared keyword as the canonical does', () => {
-    expect(keywordUnion(partition, ['The Swordsman', 'the gate guard'])).toContain('The Swordsman')
-    expect(keywordUnion(partition, ['The Swordsman', 'the gate guard'])).not.toContain(
-      'the swordsman',
-    )
+  it("offers the canonical's terms in stored order, then the other row's additions sorted", () => {
+    const a = baseEntity({ tags: ['sword', 'hero'], keywords: ['the wanderer', 'Kael'] })
+    const b = baseEntity({
+      id: 'ent_b',
+      tags: ['zeta', 'hero', 'alpha'],
+      keywords: ['the gate guard', 'Amber'],
+    })
+    expect(chipsFor(a, b, a)).toEqual({
+      tags: ['sword', 'hero', 'alpha', 'zeta'],
+      keywords: ['the wanderer', 'Kael', 'Amber', 'the gate guard'],
+    })
+    expect(chipsFor(a, b, b)).toEqual({
+      tags: ['zeta', 'hero', 'alpha', 'sword'],
+      keywords: ['the gate guard', 'Amber', 'Kael', 'the wanderer'],
+    })
   })
 
-  it('keeps the first spelling when the canonical holds two case variants', () => {
-    expect(keywordUnion(partition, ['The Swordsman', 'THE SWORDSMAN'])).toContain('The Swordsman')
-    expect(keywordUnion(partition, ['THE SWORDSMAN', 'The Swordsman'])).toContain('THE SWORDSMAN')
+  it("offers a shared keyword once, in the canonical's spelling", () => {
+    const a = baseEntity({ keywords: ['The Swordsman', 'the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', keywords: ['THE SWORDSMAN', 'the gate guard'] })
+    expect(chipsFor(a, b, b).keywords).toEqual(['THE SWORDSMAN', 'the gate guard', 'the wanderer'])
   })
 
-  it('returns the union sorted, with one-sided keywords as their side spells them', () => {
-    expect(keywordUnion(partition, ['The Swordsman'])).toEqual([
-      'The Swordsman',
-      'the gate guard',
-      'the wanderer',
-    ])
+  it('offers no chips for a list the two rows agree on', () => {
+    const a = baseEntity({ tags: ['hero', 'sword'], keywords: ['the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', tags: ['sword', 'hero'], keywords: ['The Wanderer'] })
+    expect(chipsFor(a, b, a)).toEqual({ tags: [], keywords: [] })
   })
 
-  it('is empty when the two sides already agree', () => {
-    expect(keywordUnion(null, ['anything'])).toEqual([])
-  })
-})
-
-describe('selectedTerms', () => {
-  const identity = (term: string) => term
-
-  it('returns the canonical list as stored when every addition is deselected', () => {
-    expect(
-      selectedTerms({
-        own: ['sword', 'hero'],
-        offered: ['guard', 'hero', 'sword'],
-        deselected: ['guard'],
-        keyOf: identity,
-      }),
-    ).toEqual(['sword', 'hero'])
-  })
-
-  it('puts the additions after the canonical entries, in offered order', () => {
-    expect(
-      selectedTerms({
-        own: ['sword', 'hero'],
-        offered: ['alpha', 'hero', 'sword', 'zeta'],
-        deselected: [],
-        keyOf: identity,
-      }),
-    ).toEqual(['sword', 'hero', 'alpha', 'zeta'])
-  })
-
-  it('drops a deselected canonical entry too', () => {
-    expect(
-      selectedTerms({
-        own: ['sword', 'hero'],
-        offered: ['guard', 'hero', 'sword'],
-        deselected: ['sword'],
-        keyOf: identity,
-      }),
-    ).toEqual(['hero', 'guard'])
-  })
-
-  it('matches by the key, so a differently spelled addition is not a second entry', () => {
-    expect(
-      selectedTerms({
-        own: ['The Swordsman'],
-        offered: ['the swordsman', 'the wanderer'],
-        deselected: ['the wanderer'],
-        keyOf: (term) => term.toLowerCase(),
-      }),
-    ).toEqual(['The Swordsman'])
+  it('judges each list on its own', () => {
+    const a = baseEntity({ tags: ['hero'], keywords: ['the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', tags: ['hero'], keywords: ['the gate guard'] })
+    expect(chipsFor(a, b, a)).toEqual({ tags: [], keywords: ['the wanderer', 'the gate guard'] })
   })
 })

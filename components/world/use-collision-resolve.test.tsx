@@ -2,17 +2,12 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  computeDivergence,
-  type EntitySummary,
-  type Resolution,
-  type ScalarField,
-} from '@/components/compounds/collision-resolve-diff'
-import { initMergeState, mergeReducer } from '@/components/compounds/collision-resolve-machine'
+import { type EntitySummary, type Resolution } from '@/components/compounds/collision-resolve-diff'
 import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
 import {
   emptyEntityState,
   type CharacterRelationship,
+  type Happening,
   type HappeningAwareness,
   type HappeningInvolvement,
   type Translation,
@@ -24,6 +19,7 @@ import {
   entitiesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
@@ -64,8 +60,6 @@ const NEWER = makeEntity({
   state: emptyEntityState('character'),
   createdAt: 2_000,
 })
-const TAGS = ['smuggler', 'watch']
-const KEYWORDS = ['the river gate', 'the sergeant']
 const LEAD_TEXT =
   "The story's lead can't be the row a merge removes. Pick it as the row that survives, or use Set as lead on another character first."
 const IN_FLIGHT_TEXT = "Couldn't resolve while generation is in flight."
@@ -132,20 +126,24 @@ function openedPair(result: { current: ReturnType<typeof useCollisionResolve> })
   return pair
 }
 
-/** The `fieldChoices` the dialog's reducer holds for this canonical after `picks`. */
-function fieldChoices(
-  pair: Pair,
-  canonicalId: string,
-  picks: readonly (readonly [ScalarField, 'A' | 'B'])[],
-) {
-  let state = initMergeState(computeDivergence(pair[0], pair[1]), canonicalId, pair[0].id)
-  for (const [field, side] of picks)
-    state = mergeReducer(state, { type: 'pick-field', field, side })
-  return state.fieldChoices
+const HAPPENING: Happening = {
+  id: 'hap_1',
+  branchId: BRANCH,
+  title: 'Fire',
+  description: null,
+  category: null,
+  icon: null,
+  temporal: null,
+  occurredAtEntryId: null,
+  commonKnowledge: 1,
+  embeddingStale: 0,
+  createdAt: 1,
+  updatedAt: 1,
 }
 
 beforeEach(() => {
   entitiesStore.hydrate(BRANCH, [OLDER, NEWER])
+  happeningsStore.hydrate(BRANCH, [HAPPENING])
   happeningAwarenessStore.hydrate(BRANCH, [])
   happeningInvolvementsStore.hydrate(BRANCH, [])
   characterRelationshipsStore.hydrate(BRANCH, [])
@@ -160,6 +158,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   entitiesStore.__reset()
+  happeningsStore.__reset()
   happeningAwarenessStore.__reset()
   happeningInvolvementsStore.__reset()
   characterRelationshipsStore.__reset()
@@ -250,14 +249,13 @@ describe('useCollisionResolve → what resolve sends', () => {
 
   it('maps a merge into the older row: the newer row loses, and only its picked scalars come over', async () => {
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: OLDER.id,
-      fieldChoices: fieldChoices(pair, OLDER.id, [['status', 'B']]),
-      finalTags: TAGS,
-      finalKeywords: KEYWORDS,
+      fromOther: ['status'],
+      deselectedTags: [],
+      deselectedKeywords: [],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -267,25 +265,24 @@ describe('useCollisionResolve → what resolve sends', () => {
         canonicalId: OLDER.id,
         loserId: NEWER.id,
         fromLoser: ['status'],
-        tags: TAGS,
-        keywords: KEYWORDS,
+        deselectedTags: [],
+        deselectedKeywords: [],
       },
       ctx,
     )
     expect(toast.success).toHaveBeenCalledWith('Merged into Brannoc.')
   })
 
-  it('maps a merge into the newer row: the older row loses, and its side is A', async () => {
+  it('maps a merge into the newer row: the older row loses, and its picked scalars come over', async () => {
     entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }])
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: NEWER.id,
-      fieldChoices: fieldChoices(pair, NEWER.id, [['description', 'A']]),
-      finalTags: TAGS,
-      finalKeywords: KEYWORDS,
+      fromOther: ['description'],
+      deselectedTags: [],
+      deselectedKeywords: [],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -295,25 +292,45 @@ describe('useCollisionResolve → what resolve sends', () => {
         canonicalId: NEWER.id,
         loserId: OLDER.id,
         fromLoser: ['description'],
-        tags: TAGS,
-        keywords: KEYWORDS,
+        deselectedTags: [],
+        deselectedKeywords: [],
       },
       ctx,
     )
     expect(toast.success).toHaveBeenCalledWith('Merged into BRANNOC.')
   })
 
+  it('passes the deselected terms through as the dialog sent them', async () => {
+    const result = openPair()
+
+    await result.current.resolve({
+      mode: 'merge',
+      canonicalId: OLDER.id,
+      fromOther: [],
+      deselectedTags: ['smuggler'],
+      deselectedKeywords: ['the sergeant'],
+    })
+
+    expect(resolveCollision).toHaveBeenCalledWith(
+      BRANCH,
+      expect.objectContaining({
+        deselectedTags: ['smuggler'],
+        deselectedKeywords: ['the sergeant'],
+      }),
+      ctx,
+    )
+  })
+
   it("names the merged row by the loser's name when the merge takes it", async () => {
     entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }])
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: NEWER.id,
-      fieldChoices: fieldChoices(pair, NEWER.id, [['name', 'A']]),
-      finalTags: TAGS,
-      finalKeywords: KEYWORDS,
+      fromOther: ['name'],
+      deselectedTags: [],
+      deselectedKeywords: [],
     })
 
     expect(resolveCollision).toHaveBeenCalledWith(
@@ -337,8 +354,10 @@ describe('useCollisionResolve → what resolve sends', () => {
       BRANCH,
       {
         mode: 'rename',
-        ids: [OLDER.id, NEWER.id],
-        names: ['Brannoc', 'Brannoc of the river gate'],
+        renames: [
+          { id: OLDER.id, name: 'Brannoc' },
+          { id: NEWER.id, name: 'Brannoc of the river gate' },
+        ],
       },
       ctx,
     )
@@ -375,15 +394,14 @@ describe('useCollisionResolve → outcomes', () => {
       code: COLLISION_REJECTION.leadEntity,
     })
     const result = openPair()
-    const pair = openedPair(result)
 
     await expect(
       result.current.resolve({
         mode: 'merge',
         canonicalId: NEWER.id,
-        fieldChoices: fieldChoices(pair, NEWER.id, []),
-        finalTags: TAGS,
-        finalKeywords: KEYWORDS,
+        fromOther: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
       }),
     ).rejects.toThrow(LEAD_TEXT)
     expect(toast.success).not.toHaveBeenCalled()
@@ -457,8 +475,44 @@ describe('useCollisionResolve → outcomes', () => {
     settle({ status: 'rejected', reason: 'not found', code: COLLISION_REJECTION.notFound })
 
     await expect(pending).rejects.toThrow(NOT_FOUND_TEXT)
-    expect(toast.error).toHaveBeenCalledWith(NOT_FOUND_TEXT)
+    // The dialog's copy says to close it and recheck; the toast can't point at a closed dialog.
+    expect(toast.error).toHaveBeenCalledWith(
+      "Couldn't resolve the collision: the rows changed or no longer collide.",
+    )
   })
+
+  it.each([
+    [
+      COLLISION_REJECTION.leadEntity,
+      LEAD_TEXT,
+      "Couldn't merge: the story's lead can't be the row a merge removes.",
+    ],
+    [
+      COLLISION_REJECTION.parentCycle,
+      'Merging these would make a location part of itself. Pick the other row to survive.',
+      "Couldn't merge: it would make a location part of itself.",
+    ],
+  ])(
+    "toasts a %s refusal after close without the dialog's instruction",
+    async (code, dialogText, toastText) => {
+      let settle: (result: unknown) => void = () => {}
+      resolveCollision.mockReturnValue(new Promise((resolve) => (settle = resolve)))
+      const result = openPair()
+
+      const pending = result.current.resolve({
+        mode: 'merge',
+        canonicalId: OLDER.id,
+        fromOther: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
+      })
+      act(() => result.current.close())
+      settle({ status: 'rejected', reason: code, code })
+
+      await expect(pending).rejects.toThrow(dialogText)
+      expect(toast.error).toHaveBeenCalledWith(toastText)
+    },
+  )
 
   it('leaves a refusal to the open dialog, without a toast', async () => {
     resolveCollision.mockResolvedValue({
@@ -485,18 +539,12 @@ describe('collisionResolveProp', () => {
   const onResolve = () => {}
 
   it('passes the handler through while writes are open', () => {
-    expect(collisionResolveProp(false, undefined, onResolve)).toStrictEqual({ onResolve })
+    expect(collisionResolveProp(undefined, onResolve)).toStrictEqual({ onResolve })
   })
 
-  it("disables Resolve with the gate's own reason during a turn", () => {
+  it("disables Resolve with the gate's reason during a turn", () => {
     expect(
-      collisionResolveProp(true, 'Chapter close in progress. Cancel to edit.', onResolve),
+      collisionResolveProp('Chapter close in progress. Cancel to edit.', onResolve),
     ).toStrictEqual({ disabledReason: 'Chapter close in progress. Cancel to edit.' })
-  })
-
-  it('falls back to the in-flight text when the gate gives no reason', () => {
-    expect(collisionResolveProp(true, undefined, onResolve)).toStrictEqual({
-      disabledReason: 'Generation is in flight. Cancel to edit.',
-    })
   })
 })

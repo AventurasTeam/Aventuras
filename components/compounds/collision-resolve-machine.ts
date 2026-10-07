@@ -1,49 +1,34 @@
 import { normalizeTerm } from '@/lib/keyword-terms'
 
-import type { DiffPayload, ScalarField } from './collision-resolve-diff'
+import type {
+  DiffPayload,
+  MergeChips,
+  MergeResolution,
+  ScalarField,
+} from './collision-resolve-diff'
 
 export type MergeState = {
   canonicalId: string
-  fieldChoices: Record<ScalarField, 'A' | 'B'>
+  /** Fields the merged row takes from the non-canonical; every other one keeps the canonical's. */
+  fromOther: ReadonlySet<ScalarField>
   deselectedTags: string[]
   /** `normalizeTerm` keys: a chip's spelling follows the canonical, the deselect follows the keyword. */
   deselectedKeywords: string[]
 }
 
 export type MergeAction =
-  | { type: 'pick-canonical'; id: string; entityAId: string }
-  | { type: 'pick-field'; field: ScalarField; side: 'A' | 'B' }
+  | { type: 'pick-canonical'; id: string }
+  | { type: 'pick-field'; field: ScalarField; fromOther: boolean }
   | { type: 'toggle-tag'; tag: string }
   | { type: 'toggle-keyword'; keyword: string }
-  | {
-      type: 'reset'
-      diff: DiffPayload
-      defaultCanonicalId: string
-      entityAId: string
-    }
+  | { type: 'reset'; defaultCanonicalId: string }
 
-function sideForCanonical(canonicalId: string, entityAId: string): 'A' | 'B' {
-  return canonicalId === entityAId ? 'A' : 'B'
-}
+const NONE: ReadonlySet<ScalarField> = new Set()
 
-function fieldChoicesForCanonical(
-  fields: readonly ScalarField[],
-  side: 'A' | 'B',
-): Record<ScalarField, 'A' | 'B'> {
-  const result: Partial<Record<ScalarField, 'A' | 'B'>> = {}
-  for (const f of fields) result[f] = side
-  return result as Record<ScalarField, 'A' | 'B'>
-}
-
-export function initMergeState(
-  diff: DiffPayload,
-  defaultCanonicalId: string,
-  entityAId: string,
-): MergeState {
-  const side = sideForCanonical(defaultCanonicalId, entityAId)
+export function initMergeState(defaultCanonicalId: string): MergeState {
   return {
     canonicalId: defaultCanonicalId,
-    fieldChoices: fieldChoicesForCanonical(diff.divergentScalars, side),
+    fromOther: NONE,
     deselectedTags: [],
     deselectedKeywords: [],
   }
@@ -52,20 +37,14 @@ export function initMergeState(
 export function mergeReducer(state: MergeState, action: MergeAction): MergeState {
   switch (action.type) {
     case 'pick-canonical': {
-      const newSide = sideForCanonical(action.id, action.entityAId)
-      const fields = Object.keys(state.fieldChoices) as ScalarField[]
-      return {
-        ...state,
-        canonicalId: action.id,
-        fieldChoices: fieldChoicesForCanonical(fields, newSide),
-        // Both deselect sets preserved — chip choices are independent of the pick.
-      }
+      // Both deselect sets are kept: chip choices are independent of the pick.
+      return { ...state, canonicalId: action.id, fromOther: NONE }
     }
     case 'pick-field': {
-      return {
-        ...state,
-        fieldChoices: { ...state.fieldChoices, [action.field]: action.side },
-      }
+      const fromOther = new Set(state.fromOther)
+      if (action.fromOther) fromOther.add(action.field)
+      else fromOther.delete(action.field)
+      return { ...state, fromOther }
     }
     case 'toggle-tag': {
       const has = state.deselectedTags.includes(action.tag)
@@ -87,7 +66,23 @@ export function mergeReducer(state: MergeState, action: MergeAction): MergeState
       }
     }
     case 'reset': {
-      return initMergeState(action.diff, action.defaultCanonicalId, action.entityAId)
+      return initMergeState(action.defaultCanonicalId)
     }
+  }
+}
+
+/** What the merge submits: the user's choices among the fields and chips the dialog shows now. */
+export function mergeResolution(
+  state: MergeState,
+  diff: DiffPayload,
+  chips: MergeChips,
+): MergeResolution {
+  const keywordKeys = new Set(chips.keywords.map(normalizeTerm))
+  return {
+    mode: 'merge',
+    canonicalId: state.canonicalId,
+    fromOther: diff.divergentScalars.filter((field) => state.fromOther.has(field)),
+    deselectedTags: state.deselectedTags.filter((tag) => chips.tags.includes(tag)),
+    deselectedKeywords: state.deselectedKeywords.filter((key) => keywordKeys.has(key)),
   }
 }

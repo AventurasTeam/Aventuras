@@ -106,6 +106,12 @@ The host encodes table type into `targetDisplayName` when needed
 the cross-cutting global surface, the host can supply
 "Entity · Kael" or "Thread · Iron Pact" prefixed strings.
 
+A per-row History tab names a link row's delta by the link and its
+other end, "Relationship · Kael", since the tab's own row is
+implied; an other end's delete that removed link rows reads under
+the link label alone ("Relationship"). See
+[World → History tab](../screens/world/world.md#history-tab).
+
 ### Summary
 
 The host's pre-rendered diff prose. 2-line ellipsis bound.

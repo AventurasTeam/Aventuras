@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { emptyEntityState, type Entity } from '@/lib/db'
 
+import { collisionPairOf, type CollisionPair } from './collision-pair'
 import {
   entityKeepActions,
   entityRenameActions,
   RENAME_ISSUE,
   renameIssue,
-  type CollisionPair,
+  type EntityRename,
 } from './collision-resolve'
 
 function character(id: string, name: string, flag = 0): Entity {
@@ -37,6 +38,12 @@ const clear = (id: string) => ({
   payload: { branchId: 'b1', id, patch: { nameCollisionFlag: 0 } },
 })
 
+function pairOf(first: Entity, second: Entity): CollisionPair {
+  const lookup = collisionPairOf([first, second], [first.id, second.id])
+  if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+  return lookup.pair
+}
+
 const A = character('char_a', 'Kael')
 const B = character('char_b', 'Kael', 1)
 
@@ -62,11 +69,70 @@ describe('renameIssue', () => {
 })
 
 describe('entityRenameActions', () => {
-  const rename = (pair: CollisionPair, names: readonly [string, string], others: Entity[] = []) =>
-    entityRenameActions({ branchId: 'b1', pair, names, branchEntities: [...pair, ...others] })
+  const plan = (
+    [first, second]: readonly [Entity, Entity],
+    renames: readonly EntityRename[],
+    others: Entity[] = [],
+  ) =>
+    entityRenameActions({
+      branchId: 'b1',
+      pair: pairOf(first, second),
+      renames,
+      branchEntities: [first, second, ...others],
+    })
+  const rename = (
+    pair: readonly [Entity, Entity],
+    [nameA, nameB]: readonly [string, string],
+    others: Entity[] = [],
+  ) => {
+    const result = plan(
+      pair,
+      [
+        { id: pair[0].id, name: nameA },
+        { id: pair[1].id, name: nameB },
+      ],
+      others,
+    )
+    if ('issue' in result) throw new Error(`unexpected rename issue: ${result.issue}`)
+    return result.actions
+  }
 
-  it('throws on a rename issue', () => {
-    expect(() => rename([A, B], ['Kael', 'kael'])).toThrow(RENAME_ISSUE.stillColliding)
+  it('returns the rename issue instead of a plan', () => {
+    expect(
+      plan(
+        [A, B],
+        [
+          { id: 'char_a', name: 'Kael' },
+          { id: 'char_b', name: 'kael' },
+        ],
+      ),
+    ).toStrictEqual({ issue: RENAME_ISSUE.stillColliding })
+  })
+
+  it('names each row by its id, and keeps the name of a row with no entry', () => {
+    const renamedB = {
+      actions: [
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'b1',
+            id: 'char_b',
+            patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+          },
+        },
+      ],
+    }
+    expect(
+      plan(
+        [A, B],
+        [
+          { id: 'char_b', name: 'Kael the guard' },
+          { id: 'char_a', name: 'Kael' },
+        ],
+      ),
+    ).toStrictEqual(renamedB)
+    expect(plan([A, B], [{ id: 'char_b', name: 'Kael the guard' }])).toStrictEqual(renamedB)
   })
 
   it('renames the flagged row and clears its flag in one update', () => {
@@ -168,12 +234,13 @@ describe('entityRenameActions', () => {
 
 describe('entityKeepActions', () => {
   it('clears each flagged row of the pair and nothing else', () => {
-    expect(entityKeepActions({ branchId: 'b1', pair: [A, B] })).toStrictEqual([clear('char_b')])
-    expect(
-      entityKeepActions({ branchId: 'b1', pair: [character('char_a', 'Kael', 1), B] }),
-    ).toStrictEqual([clear('char_a'), clear('char_b')])
-    expect(
-      entityKeepActions({ branchId: 'b1', pair: [A, character('char_b', 'Kael')] }),
-    ).toStrictEqual([])
+    const keep = (first: Entity, second: Entity) =>
+      entityKeepActions({ branchId: 'b1', pair: pairOf(first, second) })
+    expect(keep(A, B)).toStrictEqual([clear('char_b')])
+    expect(keep(character('char_a', 'Kael', 1), B)).toStrictEqual([
+      clear('char_a'),
+      clear('char_b'),
+    ])
+    expect(keep(A, character('char_b', 'Kael'))).toStrictEqual([])
   })
 })

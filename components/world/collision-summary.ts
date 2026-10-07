@@ -2,13 +2,14 @@ import type { EntitySummary } from '@/components/compounds/collision-resolve-dif
 import type {
   CharacterRelationship,
   Entity,
+  Happening,
   HappeningAwareness,
   HappeningInvolvement,
   Translation,
 } from '@/lib/db'
 import {
   entityLinkRows,
-  holdersLosingItem,
+  mergeLinks,
   referencingEntities,
   stateOf,
   unheldItemsWithout,
@@ -18,6 +19,7 @@ export type CollisionSources = {
   branchId: string
   /** The branch's entities. Entities and translations aren't re-filtered; link rows are. */
   entities: readonly Entity[]
+  happenings: readonly Happening[]
   awareness: readonly HappeningAwareness[]
   involvements: readonly HappeningInvolvement[]
   relationships: readonly CharacterRelationship[]
@@ -38,20 +40,22 @@ function linksOf(id: string, sources: CollisionSources) {
   })
 }
 
-const otherEnd = (row: CharacterRelationship, id: string) => (row.aId === id ? row.bId : row.aId)
 const joins = (row: CharacterRelationship, id: string) => row.aId === id || row.bId === id
 
-/** The merge drops the relationship joining the pair and collapses `partner`'s ref to this row. */
+/** What merging this row into `partner` does: `partner` is the canonical. */
 function summarize(entity: Entity, partner: Entity, sources: CollisionSources): EntitySummary {
   const links = linksOf(entity.id, sources)
-  const partnerLinks = linksOf(partner.id, sources)
-  const partnerKnows = new Set(partnerLinks.awareness.map((row) => row.happeningId))
-  const partnerTakesPart = new Set(partnerLinks.involvements.map((row) => row.happeningId))
-  const partnerRelatesTo = new Set(
-    partnerLinks.relationships.map((row) => otherEnd(row, partner.id)),
-  )
+  const merge = mergeLinks({
+    branchId: sources.branchId,
+    canonical: partner,
+    loser: entity,
+    branchEntities: sources.entities,
+    happenings: sources.happenings,
+    awareness: sources.awareness,
+    involvements: sources.involvements,
+    relationships: sources.relationships,
+  })
   const relationshipIds = new Set(links.relationships.map((row) => row.id))
-  const carried = links.relationships.filter((row) => !joins(row, partner.id))
   const inverseRefs = referencingEntities(entity.id, sources.entities).filter(
     (other) => other.id !== partner.id,
   ).length
@@ -69,9 +73,9 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
     keywords: [...entity.keywords],
     state: stateOf(entity, entity.kind),
     relationCounts: {
-      awarenessRows: links.awareness.length,
-      involvements: links.involvements.length,
-      relationships: carried.length,
+      awarenessRows: merge.rows.awareness.length,
+      involvements: merge.rows.involvements.length,
+      relationships: merge.rows.relationships.length,
       joiningRelationship: links.relationships.some((row) => joins(row, partner.id)),
       inverseRefs,
       embeddings: entity.embeddingStale === 0 ? 1 : 0,
@@ -81,14 +85,7 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
           (row.targetKind === 'character_relationship' && relationshipIds.has(row.targetId)),
       ).length,
       unheldItems: unheldItemsWithout(entity.id, sources.entities),
-      overlap: {
-        awareness: links.awareness.filter((row) => partnerKnows.has(row.happeningId)).length,
-        involvements: links.involvements.filter((row) => partnerTakesPart.has(row.happeningId))
-          .length,
-        relationships: carried.filter((row) => partnerRelatesTo.has(otherEnd(row, entity.id)))
-          .length,
-        holdersLosingItem: holdersLosingItem(entity, partner, sources.entities),
-      },
+      overlap: merge.overlap,
     },
   }
 }

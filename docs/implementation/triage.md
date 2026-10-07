@@ -105,7 +105,11 @@ slice-planning gate forces its resolution before that slice is planned.
   cross-cutting (desktop main process and the mobile expo-sqlite
   connection), so it's routed here rather than into the slice. Revisit
   if History or another log-shaped query feels slow on a long story,
-  Android first. Found during 4.2c planning (2026-10-06).
+  Android first. Found during 4.2c planning (2026-10-06). Once the
+  History tab reused its link-end scan (#581), this is most of what is
+  left: on a 30k-delta branch whose tab row has only old deltas, a
+  first chunk or search keystroke still takes about 9 ms while the
+  next chunk takes under 1 ms (`pnpm bench:history`).
 - **The entity update arm accepts a present-but-`undefined` column.**
   `updateHandler` (`lib/actions/entities/register.ts`) treats a key as
   written whenever `col in patch`, so `{ name: undefined, priority: 7 }`
@@ -136,7 +140,11 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/actions/delta/redo.ts`) take no lock. A CTRL-Z landing while a
   scene edit, delete or merge sits between its tail read and its commit
   could have its restore overwritten. Unverified: it needs two user
-  actions at once. Found in 4.2c's Task 8 review (2026-10-06).
+  actions at once. Found in 4.2c's Task 8 review (2026-10-06). The fix
+  can't take the metadata lock inside the branch lock's exclusive hold:
+  the merge holds the tail's metadata lock while it waits for the shared
+  branch lock, so that order deadlocks. Take the metadata lock first, as
+  the four callers do (4.2c's slice review, 2026-10-07).
 - **The entity update arm's missing-row refusal carries no code.**
   `updateHandler` (`lib/actions/entities/register.ts`) refuses "update
   target … not found" without `TARGET_NOT_FOUND`, which the delete arm
@@ -181,7 +189,25 @@ slice-planning gate forces its resolution before that slice is planned.
   segment whose labels carry user data clips once a label wraps. 4.2c's
   collision dialog moved its phone picker to radio rows to avoid it; the
   component itself still needs a line limit or a growing row. Found in
-  4.2c's PR 2 review (2026-10-06).
+  4.2c's PR 2 review (2026-10-06). The desktop canonical picker is still
+  a segment, and its options now carry the side word as well ("Kael,
+  Older, 3 days ago"), so a long name reaches the clip sooner (4.2c's
+  slice review, 2026-10-07). The dialog's mode picker clips too, on web
+  in a window narrower than 330 px: "Keep as distinct", then "Merge into
+  one", wrap to three lines (text 192–252 px in a 201–243 px row at 320
+  px). It fit while the dialog lacked the primitive's side margin, which
+  4.2c's developer review restored. Native keeps no such margin and is
+  unaffected (2026-10-07).
+- **Select's radio groups don't follow the keyboard on web.**
+  `components/ui/select.tsx` builds its segment and radio-row branches on
+  `@rn-primitives/radio-group`, whose web side relies on Radix's roving
+  focus. RN-Web drops the `data-radix-collection-item` attribute Radix
+  finds its items by. Probed on the collision dialog's mode picker (a
+  segment): the group is a stray tab stop and an arrow key moves focus
+  without checking anything. The radio-row branch uses the same
+  primitive and wasn't probed. 4.2c's collision dialog handles Space,
+  the arrows and the single tab stop itself for its stacked radios.
+  Found in 4.2c's slice review (2026-10-07).
 - **`Dialog` doesn't register as a blocking overlay.**
   `components/ui/dialog.tsx` never calls `useRegisteredOverlay`, while
   `alert-dialog.tsx`, `sheet.tsx` and `select.tsx` do, and
@@ -208,3 +234,74 @@ slice-planning gate forces its resolution before that slice is planned.
   `userData` directory. The harness needs a fallback that exits the app
   from main or kills it after a timeout. Found in 4.2c's PR 2 review
   (2026-10-06).
+- **Link update arms log unchanged values.** The involvement update arm
+  (`lib/actions/happenings/register-involvements.ts`) and the awareness
+  upsert (`register-awareness.ts`) write a delta even when the value
+  doesn't change, where the relationship arm refuses it as a `noop`. A
+  caller sending the same role writes a "Modified Role" History row
+  with no change. The Plot draft compares before writing, so no shipped
+  path does this today. Found in 4.2c's PR 3 review (2026-10-07).
+- **The History tab reads its own row without a branch check.**
+  `components/history/use-history-target.ts` looks the tab's row up in
+  the stores by id alone; ids repeat across branches (composite primary
+  key), and 4.2c added branch guards to the other-end name lookups and
+  the link version beside it. Unreachable while panes render only
+  branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07).
+- **The authorship contract table doesn't list the collision flag.**
+  `docs/data-model.md → Authorship contract` has no row for
+  `name_collision_flag`, though the World screen's authorship section
+  (3+ collisions) cites the contract for who sets and clears it: the
+  classifier at create, user paths only clearing it since 4.2c. Found
+  in 4.2c's PR 2 review (2026-10-06).
+- **Row-save and row-delete map refusal codes from a plain string.**
+  `rejectionCode` in `lib/actions/row-save/commit-row-save.ts` and
+  `lib/actions/row-delete/delete-row.ts` switches over the runner's
+  untyped `code: string`, defaulting to `failed`, so a new arm refusal
+  code compiles and is silently reported as `failed`. 4.2c made its own
+  collision mapping exhaustive; these two predate it. Found in 4.2c's
+  slice review (2026-10-07).
+- **The tail-lock sequence is written twice.** The collision merge
+  (`lib/actions/world/resolve-collision.ts`) copies the entity delete's
+  steps (`lib/actions/row-delete/delete-entity.ts`): read the head's
+  tail, take its metadata lock, re-read the head, refuse if the tail
+  moved, then build the tail value. `components/world/delete-impact.ts`
+  builds the same tail value a third time. A shared helper in
+  `lib/actions/story-entries` would keep the lock order in one place.
+  Found in 4.2c's slice review (2026-10-07).
+- **No shared branch filter for store rows.** About twenty call sites
+  in `lib`, `components` and `app` filter a store's rows by
+  `branchId` inline; 4.2c added two more (`branchRows` in
+  `resolve-collision.ts`, `inBranch` in
+  `components/world/use-collision-resolve.ts`). A store-level accessor
+  would replace them. Found in 4.2c's slice review (2026-10-07).
+- **A `DialogContent` width override silently loses to
+  `sm:max-w-lg`.** The primitive (`components/ui/dialog.tsx`) sets
+  `max-w-[calc(100%-2rem)] sm:max-w-lg`, and tailwind-merge only
+  replaces a class with the same variant. An unprefixed `max-w-2xl`
+  therefore leaves the dialog at 32rem (512 px on web) from `sm` up,
+  and below `sm` it drops the side margin on web. The collision dialog shipped like this until
+  4.2c's visual review. A width prop, or a documented `sm:` override,
+  would stop the next dialog from repeating it. Found in 4.2c's
+  developer review (2026-10-07).
+- **The desktop window has no minimum width.** `createWindow` in
+  `electron/main.ts` sets `width` and `height` but no `minWidth`, so the
+  window can shrink to widths no desktop user works at, and layouts get
+  exercised there that only phones should reach. Example: below 330 px
+  the collision dialog's mode segment clips (see the segment-clip entry
+  above). Developer-requested: set `minWidth` around 360 px, which still
+  lets the window narrow into the phone tier to check phone layouts.
+  Found in 4.2c's developer review (2026-10-07).
+- **Rename fields don't say when a name is taken.** The collision
+  dialog's Rename (`renameIssue`, `lib/world/collision-resolve.ts`)
+  checks the two names only against each other, and 4.2a's detail-pane
+  rename checks the name against no other row, so either can land on
+  another row's name without a word and leave two namesakes nothing
+  flagged (the dialog clears the pair's flags as it saves; #578's
+  observations). Developer-requested: under each rename
+  field, run the namesake rule collision detection uses (`namesakeKey`:
+  same kind, `normalizeTerm` name, staged and retired rows included)
+  against the branch's other rows and, on a match, show only that
+  another row already has that name. It's a hint, not a block: the
+  user may keep the name, as with Keep as distinct. Canon to touch:
+  `world.md → Rename` and the detail pane's name field. Found in
+  4.2c's developer review (2026-10-07).

@@ -39,6 +39,7 @@ export {
   type CollisionResolveResult,
 } from './world/resolve-collision'
 export { deleteEntityRow } from './row-delete/delete-entity'
+export type { EntityCascadeLinkTable } from './entities/entity-cascade'
 export {
   deleteRow,
   ROW_DELETE_REJECTION,

@@ -326,8 +326,8 @@ the asset gallery pass` / `lands in Slice 4.2b`).
   walks to null and passes. World surfaces the refusal only on Save,
   as a field error on the parent picker; the walker is pure, so an
   inline resolver check is possible later. The handler reads pre-group
-  state; the grouped-writes question now sits in
-  [4.2c's Open questions](./02c-collision-review.md#open-questions).
+  state; 4.2c's merge answers the grouped-writes question in its
+  [Implementation notes](./02c-collision-review.md#implementation-notes).
 - **Contradictory item positions are shown, not cascaded**; the
   user-edit transfer rule is in [`triage.md`](../../../triage.md).
 - **Relationships now load at story open**; nothing loaded them

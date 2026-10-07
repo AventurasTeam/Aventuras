@@ -101,11 +101,10 @@ describe('applyDeltaActionGroupBuilt', () => {
 
   it("builds only after a no-gate pass releases, so the plan reads the pass's write", async () => {
     await holdBranchWriteExclusive('b1', 'act_pass')
-    const seen: { db?: string | null; store?: string | null } = {}
-    const build = vi.fn(async (): Promise<BuiltGroup> => {
-      seen.db = await ariaDescription()
-      seen.store = entitiesStore.getById('char_a')?.description
-      return { status: 'ok', actions: [describeAria(`${seen.store}, then the user`, 'user_edit')] }
+    let seen: string | null | undefined
+    const build = vi.fn((): BuiltGroup => {
+      seen = entitiesStore.getById('char_a')?.description
+      return { status: 'ok', actions: [describeAria(`${seen}, then the user`, 'user_edit')] }
     })
 
     const write = applyDeltaActionGroupBuilt(build, { actionId: 'act_user', branchId: 'b1' }, ctx)
@@ -126,7 +125,7 @@ describe('applyDeltaActionGroupBuilt', () => {
 
     expect(await write).toEqual({ status: 'ok' })
     expect(build).toHaveBeenCalledTimes(1)
-    expect(seen).toEqual({ db: 'from the pass', store: 'from the pass' })
+    expect(seen).toBe('from the pass')
     expect(await ariaDescription()).toBe('from the pass, then the user')
     const [delta] = await actionDeltas('act_user')
     expect(delta.undoPayload).toEqual({ description: 'from the pass' })
@@ -153,21 +152,12 @@ describe('applyDeltaActionGroupBuilt', () => {
     await expect(
       applyDeltaActionGroupBuilt(
         () => {
-          throw new Error('sync build failure')
+          throw new Error('build failure')
         },
-        { actionId: 'act_sync', branchId: 'b1' },
+        { actionId: 'act_user', branchId: 'b1' },
         ctx,
       ),
-    ).rejects.toThrow('sync build failure')
-    await expect(
-      applyDeltaActionGroupBuilt(
-        async () => {
-          throw new Error('async build failure')
-        },
-        { actionId: 'act_async', branchId: 'b1' },
-        ctx,
-      ),
-    ).rejects.toThrow('async build failure')
+    ).rejects.toThrow('build failure')
 
     expect(await ctx.db.select().from(deltas)).toEqual([])
     expect(await isSettled(holdBranchWriteExclusive('b1', 'act_next'))).toBe(true)
@@ -265,18 +255,18 @@ describe('applyDeltaActionGroupBuilt', () => {
     })
   })
 
-  it('keeps the hold from the build through the commit, so a pass waits for both', async () => {
-    const planned = deferred()
+  it('keeps the hold from the build through the commit, so a pass asked for meanwhile waits', async () => {
+    let pass: Promise<void> | undefined
     const write = applyDeltaActionGroupBuilt(
-      async () => {
-        await planned.promise
+      () => {
+        pass = holdBranchWriteExclusive('b1', 'act_pass')
         return { status: 'ok', actions: [describeAria('from the group', 'user_edit')] }
       },
       { actionId: 'act_user', branchId: 'b1' },
       ctx,
     )
-    const pass = holdBranchWriteExclusive('b1', 'act_pass')
-    planned.resolve()
+    await flush()
+    if (pass == null) throw new Error('expected the build to have run')
 
     await pass
     expect(await actionDeltas('act_user')).toHaveLength(1)

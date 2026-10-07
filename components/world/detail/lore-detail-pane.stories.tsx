@@ -145,7 +145,7 @@ const meta: Meta<typeof Harness> = {
   // overrides this with its own provider nested closer to the tree.
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null, names: {} })}>
         <Story />
       </HistoryLoaderProvider>
     ),
@@ -297,7 +297,9 @@ export const CreateWithoutTitle: Story = {
   },
 }
 
-const loreHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+const loreHistoryLoader = fn(
+  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null, names: {} }),
+)
 
 /** History reads this lore row's deltas. */
 export const HistoryReadsTheRow: Story = {
@@ -320,6 +322,7 @@ export const HistoryReadsTheRow: Story = {
             targetTable: 'lore',
             targetId: AETHERIUM.id,
           }),
+          expect.any(Function),
         ),
       WAIT,
     )
@@ -358,6 +361,7 @@ export const CreateThenHistoryTargetsTheSavedRow: Story = {
       () =>
         expect(loreHistoryLoader).toHaveBeenCalledWith(
           expect.objectContaining({ branchId: 'br_1', targetTable: 'lore', targetId: NEW_ID }),
+          expect.any(Function),
         ),
       WAIT,
     )

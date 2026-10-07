@@ -94,6 +94,11 @@
       "parentCycle": "Merging these would make a location part of itself. Pick the other row to survive.",
       "parentChainBroken": "A parent chain this merge touches loops back or runs too deep. Fix that chain first.",
       "invalidRename": "Both rows need a name, and the names must differ by more than letter case or spaces at either end."
+    },
+    "closedRejection": {
+      "notFound": "Couldn't resolve the collision: the rows changed or no longer collide.",
+      "leadEntity": "Couldn't merge: the story's lead can't be the row a merge removes.",
+      "parentCycle": "Couldn't merge: it would make a location part of itself."
     }
   },
   "detail": {

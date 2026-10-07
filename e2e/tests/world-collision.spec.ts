@@ -349,7 +349,7 @@ test.describe.serial('World collision resolve', () => {
     const head = await logHead(page, pair.branchId)
 
     await world.resolveButton(page).click()
-    await world.mergeConfirm(page, 'Brannoc').click()
+    await world.mergeConfirm(page, 'older', 'Brannoc').click()
 
     await expect
       .poll(() => pairSnapshot(page, pair), { timeout: 15_000 })

@@ -93,3 +93,6 @@ export const entityCascade = defineCascade(
     }
   },
 )
+
+/** The link tables `entityCascade` removes with an entity, translations aside. */
+export type EntityCascadeLinkTable = Exclude<(typeof entityCascade.tables)[number], 'translations'>

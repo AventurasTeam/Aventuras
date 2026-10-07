@@ -1,13 +1,14 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
+import {
+  MERGE_SCALARS,
+  mergedTerms,
+  type MergeDeselections,
+  type MergeOverlap,
+  type MergeScalar,
+} from '@/lib/world'
 
-export type ScalarField =
-  | 'name'
-  | 'description'
-  | 'status'
-  | 'retiredReason'
-  | 'injectionMode'
-  | 'priority'
+export type ScalarField = MergeScalar
 
 export type TermPartition = { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
 
@@ -37,17 +38,8 @@ export type EntitySummary = {
     translationRows: number
     /** Items this side carries that nothing else holds or places; a merge leaves them unheld. */
     unheldItems: number
-    /**
-     * What gives way when this side loses because the partner already has it: awareness and
-     * involvement rows, relationships to an end the partner already relates to, and item holders
-     * when the partner item has a position. Mirrors `EntityMergePlan.dropped`.
-     */
-    overlap: {
-      awareness: number
-      involvements: number
-      relationships: number
-      holdersLosingItem: number
-    }
+    /** What gives way when this side merges into the partner. */
+    overlap: MergeOverlap
   }
 }
 
@@ -58,30 +50,22 @@ export type DiffPayload = {
   stateDivergent: boolean
 }
 
+export type MergeResolution = {
+  mode: 'merge'
+  canonicalId: string
+  /** Divergent fields the merged row takes from the non-canonical row, in `SCALAR_FIELDS` order. */
+  fromOther: readonly ScalarField[]
+} & MergeDeselections
+
 export type Resolution =
-  | {
-      mode: 'merge'
-      canonicalId: string
-      fieldChoices: Record<ScalarField, 'A' | 'B'>
-      finalTags: string[]
-      finalKeywords: string[]
-    }
+  | MergeResolution
   | {
       mode: 'rename'
       renames: { id: string; newName: string }[]
     }
   | { mode: 'keep' }
 
-// Fixed scalar order for stable rendering. Matches the spec's
-// table column order in world.md → Merge.
-export const SCALAR_FIELDS: readonly ScalarField[] = [
-  'name',
-  'description',
-  'status',
-  'retiredReason',
-  'injectionMode',
-  'priority',
-]
+export const SCALAR_FIELDS = MERGE_SCALARS
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
@@ -134,36 +118,21 @@ function keywordPartition(a: readonly string[], b: readonly string[]): TermParti
   return { onlyInA, onlyInB, both }
 }
 
-/** The keyword chips a merge offers, sorted; a shared keyword takes the canonical's spelling. */
-export function keywordUnion(
-  partition: TermPartition,
-  canonicalKeywords: readonly string[],
-): string[] {
-  if (partition == null) return []
-  const canonicalSpelling = firstSpellings(canonicalKeywords)
-  const shared = partition.both.map((term) => canonicalSpelling.get(normalizeTerm(term)) ?? term)
-  return [...shared, ...partition.onlyInA, ...partition.onlyInB].sort()
-}
+export type MergeChips = { tags: string[]; keywords: string[] }
 
-/**
- * What a merge submits for a term list: the canonical's own entries in stored order minus the
- * deselected, then the other side's additions in `offered` order, so an unchanged selection is the
- * canonical's list, which the planner doesn't write. `keyOf` is what a deselect is recorded under.
- */
-export function selectedTerms({
-  own,
-  offered,
-  deselected,
-  keyOf,
-}: {
-  own: readonly string[]
-  offered: readonly string[]
-  deselected: readonly string[]
-  keyOf: (term: string) => string
-}): string[] {
-  const ownKeys = new Set(own.map(keyOf))
-  const kept = (term: string) => !deselected.includes(keyOf(term))
-  return [...own.filter(kept), ...offered.filter((term) => !ownKeys.has(keyOf(term)) && kept(term))]
+const NO_DESELECTIONS: MergeDeselections = { deselectedTags: [], deselectedKeywords: [] }
+
+/** The chips a merge offers, in write order; a list the two rows agree on offers none. */
+export function mergeChips(
+  diff: DiffPayload,
+  canonical: EntitySummary,
+  other: EntitySummary,
+): MergeChips {
+  const all = mergedTerms({ canonical, other }, NO_DESELECTIONS)
+  return {
+    tags: diff.tags == null ? [] : all.tags,
+    keywords: diff.keywords == null ? [] : all.keywords,
+  }
 }
 
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {

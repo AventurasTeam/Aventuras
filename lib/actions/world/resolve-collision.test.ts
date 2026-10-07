@@ -36,6 +36,7 @@ import {
   generationStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
 } from '@/lib/stores'
 import { entityLinkRows } from '@/lib/world'
 
@@ -103,12 +104,31 @@ const characterState = (state: Partial<CharacterState>): CharacterState => ({
   ...state,
 })
 
-function mergeInto(canonicalId: string, loserId: string): CollisionResolution {
-  return { mode: 'merge', canonicalId, loserId, fromLoser: [], tags: [], keywords: [] }
+type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
+
+function mergeInto(canonicalId: string, loserId: string): MergeResolution {
+  return {
+    mode: 'merge',
+    canonicalId,
+    loserId,
+    fromLoser: [],
+    deselectedTags: [],
+    deselectedKeywords: [],
+  }
 }
 
 const MERGE_B_INTO_A = mergeInto('char_a', 'char_b')
 const KEEP_A_B: CollisionResolution = { mode: 'keep', ids: ['char_a', 'char_b'] }
+
+function renameTo(nameA: string, nameB: string): CollisionResolution {
+  return {
+    mode: 'rename',
+    renames: [
+      { id: 'char_a', name: nameA },
+      { id: 'char_b', name: nameB },
+    ],
+  }
+}
 
 function plantVectors(id: string): void {
   for (const dim of [384, 8]) {
@@ -135,6 +155,7 @@ function vectorCount(id: string): number {
 
 async function hydrateStores(): Promise<void> {
   entitiesStore.hydrate('b1', (await ctx.db.select().from(entities)) as never)
+  happeningsStore.hydrate('b1', await ctx.db.select().from(happenings))
   happeningAwarenessStore.hydrate('b1', await ctx.db.select().from(happeningAwareness))
   happeningInvolvementsStore.hydrate('b1', await ctx.db.select().from(happeningInvolvements))
   characterRelationshipsStore.hydrate('b1', await ctx.db.select().from(characterRelationships))
@@ -178,10 +199,36 @@ async function deltaRows(): Promise<Delta[]> {
 }
 
 async function undoAll() {
-  const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows() })
+  return undoAllBut(null)
+}
+
+async function undoAllBut(keptActionId: string | null) {
+  const target = (await deltaRows()).filter((r) => r.actionId !== keptActionId)
+  const set = await selectReversalSet(ctx, { branchId: 'b1', target })
   const { group, reverse } = await prepareUndo(set, ctx)
   await reverse()
   return group
+}
+
+async function setTerms(id: string, terms: Partial<Pick<Entity, 'tags' | 'keywords'>>) {
+  await ctx.db.update(entities).set(terms).where(eq(entities.id, id))
+  await hydrateStores()
+}
+
+async function passAppendsKeyword(id: string, keyword: string) {
+  const written = await applyDeltaAction(
+    {
+      action: {
+        kind: 'appendEntityKeywords',
+        source: 'periodic_classifier',
+        payload: { branchId: 'b1', id, keywords: [keyword], proseEntryId: null },
+      },
+      actionId: 'act_pass',
+      branchId: 'b1',
+    },
+    ctx,
+  )
+  return written.status
 }
 
 async function awarenessIds(): Promise<string[]> {
@@ -580,6 +627,17 @@ describe('resolveCollision — merge', () => {
     expect(await deltaRows()).toEqual([])
   })
 
+  it('merges a namesake into the lead: the loser goes, the lead stays and loses its flag', async () => {
+    await setFlag('char_lead', 1)
+
+    expect(await resolveCollision('b1', mergeInto('char_lead', 'char_kael2'), ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await entityRow('char_kael2')).toBeUndefined()
+    expect(await entityRow('char_lead')).toMatchObject({ name: 'Kael', nameCollisionFlag: 0 })
+  })
+
   it('refuses parent-cycle when the canonical descends from the loser', async () => {
     await ctx.db.insert(entities).values(
       row('loc_m', 'location', 'Dock', 1, {
@@ -665,6 +723,74 @@ describe('resolveCollision — merge', () => {
       .from(happeningAwareness)
       .where(eq(happeningAwareness.characterId, 'char_a'))
     expect(onA.map((r) => r.happeningId).sort()).toEqual(['hap_1', 'hap_2', 'hap_3'])
+  })
+
+  it.each([
+    ['the canonical', 'char_a'],
+    ['the loser', 'char_b'],
+  ])(
+    'keeps a keyword a pass appends to %s while the merge waits; CTRL-Z and redo are exact',
+    async (_, appendedTo) => {
+      await setTerms('char_a', { keywords: ['the guard'] })
+      await setTerms('char_b', { keywords: ['Captain Brannoc'] })
+      await holdBranchWriteExclusive('b1', 'act_pass')
+      const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx)
+      await flush()
+      await flush()
+
+      expect(await passAppendsKeyword(appendedTo, 'the smith')).toBe('ok')
+      const before = await worldSnapshot()
+      releaseBranchWriteExclusive('b1', 'act_pass')
+
+      expect(await merging).toEqual({ status: 'ok' })
+      expect((await entityRow('char_a'))?.keywords).toEqual(
+        appendedTo === 'char_a'
+          ? ['the guard', 'the smith', 'Captain Brannoc']
+          : ['the guard', 'Captain Brannoc', 'the smith'],
+      )
+      const merged = await worldSnapshot()
+
+      const group = await undoAllBut('act_pass')
+      expect(await worldSnapshot()).toEqual(before)
+
+      await applyRedo(group, ctx)
+      expect(await worldSnapshot()).toEqual(merged)
+    },
+  )
+})
+
+describe('resolveCollision — merge tags and keywords', () => {
+  beforeEach(async () => {
+    await setTerms('char_a', { tags: ['guard'], keywords: ['the guard'] })
+    await setTerms('char_b', { tags: ['captain'], keywords: ['Captain Brannoc'] })
+  })
+
+  it("adds B's tags and keywords after A's own; CTRL-Z puts A's lists back", async () => {
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      tags: ['guard', 'captain'],
+      keywords: ['the guard', 'Captain Brannoc'],
+    })
+
+    await undoAll()
+
+    expect(await entityRow('char_a')).toMatchObject({ tags: ['guard'], keywords: ['the guard'] })
+  })
+
+  it('leaves out a deselected tag and keyword, whichever row held it', async () => {
+    const resolution: MergeResolution = {
+      ...MERGE_B_INTO_A,
+      deselectedTags: ['captain'],
+      deselectedKeywords: ['THE GUARD'],
+    }
+
+    expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      tags: ['guard'],
+      keywords: ['Captain Brannoc'],
+    })
   })
 })
 
@@ -764,6 +890,24 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
     expect(await deltasOn('char_b')).toEqual(['delete'])
   })
 
+  it('keeps the location of a canonical the scene already held, and still promotes it', async () => {
+    await setTail({
+      sceneEntities: ['char_a', 'char_b', 'char_o'],
+      currentLocationId: 'loc_b',
+      worldTime: 0,
+    })
+    await setStatus('char_a', 'staged')
+    await setState('char_a', characterState({ current_location_id: 'loc_a' }))
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+
+    expect((await tail()).sceneEntities).toEqual(['char_a', 'char_o'])
+    expect(await entityRow('char_a')).toMatchObject({
+      status: 'active',
+      state: { current_location_id: 'loc_a' },
+    })
+  })
+
   it("leaves the canonical's location alone when the tail has none", async () => {
     await setTail({ sceneEntities: ['char_b', 'char_o'], currentLocationId: null, worldTime: 0 })
     await setState('char_a', characterState({ current_location_id: 'loc_a' }))
@@ -845,13 +989,9 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
 
 describe('resolveCollision — rename', () => {
   it('renames only B and clears its flag in that same delta', async () => {
-    expect(
-      await resolveCollision(
-        'b1',
-        { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', ' Brannoc the Younger '] },
-        ctx,
-      ),
-    ).toEqual({ status: 'ok' })
+    expect(await resolveCollision('b1', renameTo('Brannoc', ' Brannoc the Younger '), ctx)).toEqual(
+      { status: 'ok' },
+    )
 
     expect(await entityRow('char_b')).toMatchObject({
       name: 'Brannoc the Younger',
@@ -867,14 +1007,26 @@ describe('resolveCollision — rename', () => {
     })
   })
 
+  it('matches each name to its row by id, in either order', async () => {
+    const resolution: CollisionResolution = {
+      mode: 'rename',
+      renames: [
+        { id: 'char_b', name: 'Brannoc the Younger' },
+        { id: 'char_a', name: 'Brannoc' },
+      ],
+    }
+
+    expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
+
+    expect((await entityRow('char_a'))?.name).toBe('Brannoc')
+    expect((await entityRow('char_b'))?.name).toBe('Brannoc the Younger')
+    expect((await deltaRows()).map((r) => r.targetId)).toEqual(['char_b'])
+  })
+
   it('CTRL-Z restores both names and flags; redo renames and clears again', async () => {
     await setFlag('char_a', 1)
     const before = await worldSnapshot()
-    await resolveCollision(
-      'b1',
-      { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', 'Brannoc the Younger'] },
-      ctx,
-    )
+    await resolveCollision('b1', renameTo('Brannoc', 'Brannoc the Younger'), ctx)
     const renamed = await worldSnapshot()
     expect(await entityRow('char_a')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 0 })
     expect(await entityRow('char_b')).toMatchObject({
@@ -897,13 +1049,10 @@ describe('resolveCollision — rename', () => {
     ['a case-only rename', 'BRANNOC'],
     ['an empty name', '   '],
   ])('refuses %s with invalid-rename and writes nothing', async (_, name) => {
-    expect(
-      await resolveCollision(
-        'b1',
-        { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', name] },
-        ctx,
-      ),
-    ).toMatchObject({ status: 'rejected', code: 'invalid-rename' })
+    expect(await resolveCollision('b1', renameTo('Brannoc', name), ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'invalid-rename',
+    })
     expect(await deltaRows()).toEqual([])
   })
 })

@@ -419,8 +419,9 @@ Unchanged from prior design.
 - **Involvements** — `happening_involvements` table for this
   entity. Rows are read-only here and open the happening in Plot, on
   its Involvements tab.
-- **History** — delta log filtered to this entity. See
-  [History tab](#history-tab) section below.
+- **History** — delta log filtered to this entity, and the deltas of
+  the link rows naming it. See [History tab](#history-tab) section
+  below.
 
 ## List pane — search scope
 
@@ -538,7 +539,8 @@ configured for the active kind:
 ## History tab
 
 History is the delta log filtered to this row: every delta keyed
-to this row (`op=create / update / delete`). Never editable —
+to this row (`op=create / update / delete`), and the deltas of the
+link rows that name it (see **Link rows** below). Never editable —
 rollback happens in the reader. Row rendering follows the
 [DeltaLogRow pattern](../../patterns/delta-log-row.md); host
 resolves target display names and renders the diff summary
@@ -560,10 +562,28 @@ prose, then hands pre-formatted strings to the compound.
   `json_extract` (which misses a `null` pre-change value); a search
   term also resolves against the field-path label vocabulary, so
   typing a rendered label (not just its raw path) matches the paths
-  it names. `target_table` is never matched, since it's constant
-  within a per-row tab. SQLite filters server-side; lazy-loaded delta
-  log doesn't need to be fully in memory.
-- **Op filter** — all / create / update / delete
+  it names. A term resolves against the labels of the table each
+  delta belongs to, so a link row's paths match its own labels, a
+  relationship's by the tab's side of the pair: "Modified Your view"
+  lists each side's edits against that side's labels, never across
+  sides. A link row's target line is searchable too: a term starting
+  a word of its link label (`Relationship`, `Involvement`,
+  `Awareness`) or of its other end's name lists that link row's
+  deltas and the other-end deletes that removed it. A removal also
+  matches a term starting a word of its target label (`Links` when it
+  held several kinds, else that kind's label) or of the label of any
+  kind it held. Its summary is searchable too: a term that starts a
+  word run of the named wording, typed whole or partway, matches
+  every removal, and the wording plus a partial name matches the
+  removals whose other end has a name word starting with it. The
+  unknown-end wording, typed whole, matches only the removals that
+  read it, those whose other end has no name. The row's own
+  target line is constant within the tab, so it is never matched.
+  SQLite filters server-side; lazy-loaded delta log doesn't need to
+  be fully in memory.
+- **Op filter** — all / create / update / delete. Link deltas count
+  too: `Created` also lists the link rows made, and `Deleted` a
+  link row removed on its own and an other end's delete.
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — log-shaped data, 50-row chunks; uses the
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)
@@ -576,9 +596,55 @@ prose, then hands pre-formatted strings to the compound.
   starts at the first save" instead of an empty log.
 - **Resets on row change** — search, op filter and sort return to
   their defaults when the tab is keyed to a new row.
-- **Reads the row's own deltas.** Relationship, awareness and
-  involvement edits are their link rows' deltas and don't show here yet
-  ([Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in)).
+- **Link rows** — the tab also lists the edits of the link rows that
+  name its row, in log order among its own deltas: a character's
+  relationships and awareness rows, any entity's involvements, and a
+  happening's involvements and awareness rows. A relationship edit
+  lists on both characters' tabs, whichever view it changed. Three
+  sources feed it: live link rows; link rows deleted on their own,
+  whose delete delta's payload names both ends; and link rows removed
+  with the other end's delete, which log no delta of their own and
+  ride in that delete's payload under `relationships`, `involvements`
+  or `awareness`
+  ([Reverse-replay](../../../generation-pipeline.md#reverse-replay)).
+  That delete lists once on the surviving tab, under `Deleted`; a
+  reversal that takes a link row strips it out of a later delete's
+  payload, so no removal lists for a row the reversal took.
+  Retrieval-count bumps, awareness updates whose undo payload holds
+  only `retrievalCount`, are left out; an update that also changed
+  another column is listed. A merge re-creates the loser's link rows
+  on the canonical under new ids, so their earlier edits stay with
+  the originals and list on the other end's tab, not the canonical's
+  ([Reversibility](#reversibility)).
+- **Link-row wording** — a link delta's target line names the link and
+  its other end, `Relationship · Kael` (or `Involvement`,
+  `Awareness`). The other end's name is read live, the working set
+  first, then its stored row, else from the other end's own latest
+  delete payload, always within the tab's branch, else "Unknown row";
+  a rename shows without a reload. Summaries read `Created`,
+  `Modified <fields>` and `Deleted`. An other end's delete reads
+  "Removed when Kael was deleted" under the link label alone, `Links`
+  when it removed more than one kind; with no name to read, "Removed
+  when its other end was deleted". A relationship's `kind` and
+  `inverseKind` read "Your view" and "Their view" by the tab's side:
+  `kind` is `a`'s view of `b`, with `a_id < b_id`, so the tab's
+  character holds `kind` when it is `a`. An involvement's `role` reads
+  "Role"; awareness columns read "Source", "Decay resistance",
+  "Learned at" and "Retrieval count". The muted path stays the payload's raw key
+  (`inverseKind`, not the column's snake case).
+- **Refresh** — the tab refetches when its row changes in the working
+  set, when a link row naming it is added, removed, or changes in a
+  column whose edit it lists (a retrieval bump doesn't), when an other
+  end it shows leaves the working set, so its name reads from its
+  delete payload, when any other end is renamed while a search is set,
+  shown or not, since the name match runs in SQLite, and when a run or
+  reversal settles, which covers a reversal that only edits a delete's
+  payload. Triggers that land close together, like the separate
+  commits of one classifier pass, refetch once, shortly after the last.
+  Between triggers, a search, filter or next chunk reuses the link rows
+  found at the last one, since finding them reads every delete on the
+  branch; other ends' names are read on every load.
+  A `Load older` pressed while a refetch runs loads after it lands.
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 
@@ -866,7 +932,8 @@ another surface), and when the screen loses focus. A refusal shows
 inline in the dialog, which stays open. A resolution that lands
 closes it and toasts the result ("Merged into <name>.", "Names
 saved.", "Kept as distinct."); a refusal that arrives after the
-dialog has closed shows as an error toast instead. After a
+dialog has closed shows as an error toast instead, worded without
+the dialog's advice (no row to pick any more). After a
 resolution the list re-derives — the pill count drops and the strip
 goes; with 3+ namesakes, another flagged row keeps its strip
 ([Authorship and 3+ collisions](#authorship-and-3-collisions)).
@@ -875,9 +942,13 @@ goes; with 3+ namesakes, another flagged row keeps its strip
 
 The body renders the two rows side-by-side with a **canonical
 picker** at the top: a segment toggle picking which row's `id`
-survives, the selected side marked `· Canonical` (full-width radio
-rows on phone, where a half-width segment would clip). The
-non-canonical row is deleted at end-of-merge.
+survives, each option naming its side (`Kael · Older · 3 days ago`)
+since namesakes created close together read alike otherwise
+(full-width radio rows on phone, where a half-width segment would
+clip). The selection alone marks the surviving side, under the label
+"Canonical (this row survives)"; an option's text stays the same
+whichever side is picked. The non-canonical row is deleted at
+end-of-merge.
 Default selection is the older row by `created_at` — the older
 row tends to have more accumulated state (relations, lore
 links, history), so absorbing the newer one into it preserves
@@ -913,7 +984,10 @@ Field-level rules:
 - **`tags[]`** — union by default with a per-tag deselect.
   Renders only when the two tag sets differ. The merged list, here
   and for keywords, keeps the canonical's entries in their order,
-  with the other row's additions after them.
+  with the other row's additions after them, the order the chips
+  show. The merge builds it from the rows as they are when it
+  writes, less the terms the user dropped, so a keyword the
+  classifier adds while the merge waits is kept.
 - **`state` JSON** — taken whole-side from canonical. Per-field
   diff inside `state` is out of scope for v1: schema shape
   varies per kind (character / location / item / faction),
@@ -926,19 +1000,23 @@ Field-level rules:
   fields wrap freely where the choices sit in columns (modal
   scrolls). On stacked tiers (phone, and every native tier), a
   3-line clamp applies with a "..." trailing truncation; tap
-  the prose body to expand the row in place. Radios stay tappable
+  the prose body to expand the row in place (prose that fits in
+  three lines offers no tap). Radios stay tappable
   independently — the tap zone splits between the radio circle
   and the prose body. Keeps comparison glance-able when prose
   diverges in length.
 - **Side identification.** On web above phone, a header row above
   the columns names each side (`Older · 3 days ago`,
-  `Newer · just now`), the canonical's with a `· Canonical` suffix.
+  `Newer · just now`), the canonical's with a `· Canonical` suffix,
+  since nothing else marks the surviving column there.
   Stacked tiers (phone, and every native tier) have no header row,
   so each radio's value carries an inline age caption underneath
-  the prose — the wall-clock relative time the canonical picker
+  the prose, without the suffix — the wall-clock relative time the canonical picker
   shows, since an entity records when it was created, not the turn.
   Each stacked field is one radio group named by the field. Each
-  radio is self-describing without relying on column position.
+  radio is self-describing without relying on column position: its
+  accessible name is the caption and the value
+  (`Older · 3 days ago: active`).
 
 A **relations summary** below the field table tells the user
 what the merge carries over and what it drops (read-only —
@@ -958,7 +1036,9 @@ non-canonical's counts:
   `inventory[]`, `equipped_items[]`, `current_location_id`,
   `parent_location_id`, `at_location_id`, or `faction_id` —
   rewritten to canonical. A ref between the two rows doesn't
-  count: it collapses rather than moves. A holder of a
+  count: it collapses rather than moves, and when it is the
+  canonical's (a location parented under the non-canonical) a
+  footnote says the canonical loses it. A holder of a
   non-canonical item drops it instead when the canonical item
   already has a position ([Reversibility](#reversibility)), and
   still counts here.
@@ -977,22 +1057,31 @@ canonical row, the canonical's row stays and the loser's row is
 dropped. An involvement in a happening the canonical already takes
 part in is dropped the same way: the table has no UNIQUE, but two
 involvements of one entity in one happening say nothing one row
-doesn't, and the canonical's `role` stays. A relationship the
-canonical already has with the same character is the UNIQUE
+doesn't, and the canonical's `role` stays. For the same reason, of
+the non-canonical's own involvements in one happening only the first
+moves, with its `role`. A relationship the canonical already has
+with the same character is the UNIQUE
 `(branch_id, a_id, b_id)` case, handled as the list says. A
 footnote under the relations summary counts each of these when the
 case fires, and says when a holder loses an item because the
-canonical item is already held or placed, or that the relationship
-between the two is dropped.
+canonical item is already held or placed, that the relationship
+between the two is dropped, or that the canonical's own ref to the
+non-canonical is cleared.
+
+A link row whose other end the branch no longer has (a happening or
+character a reversed create removed) isn't counted or moved: a copy
+would name a missing row, so the non-canonical's delete removes it
+with the rest.
 
 Footer:
 
 ```
-[ Cancel ]                  [ Merge into <canonical-name> ]
+[ Cancel ]        [ Merge into the <older|newer> <canonical-name> ]
 ```
 
-The primary button echoes the canonical pick to keep the
-destructive direction obvious.
+The primary button echoes the canonical pick, its side as well as
+its name, to keep the destructive direction obvious: the two names
+match by construction.
 
 The merge refuses, with the reason inline and nothing written, when
 the non-canonical is the story's lead (`lead-entity`: the lead
@@ -1003,7 +1092,7 @@ that location's parent to the canonical would make the canonical its
 own ancestor — picking the other row as canonical merges cleanly).
 A parent chain the merge touches that already loops or runs past
 the depth cap refuses as `parent-chain-broken`; fix that chain
-first.
+first. The reason clears once the user changes a merge choice.
 
 **The tail scene.** The tail entry's scene is the next turn's
 retrieval floor, and the newer row a default merge deletes is the one
@@ -1014,13 +1103,14 @@ when the canonical is already there), and a `currentLocationId`
 naming the non-canonical becomes the canonical's. The floor seats
 only active rows, so the canonical is also promoted when its merged
 status is `staged`, whatever its kind, even if the status choice was
-left on staged; and a character canonical in the scene takes the
-tail's location when that location is known. No other row is
-written: the scene isn't re-folded and bystanders aren't
-re-anchored. A location merge tracks no characters, since the ref
-rewrite already moves those at the loser. When the tail already
-held the canonical beside the non-canonical, the canonical is still
-tracked to the tail's location, overwriting a manual location edit.
+left on staged; and a character canonical that takes the
+non-canonical's place in the scene takes the tail's location when
+that location is known. A canonical the scene already held beside
+the non-canonical keeps its own location, which may be a manual
+edit; it is still promoted. No other row is written: the scene isn't
+re-folded and bystanders aren't re-anchored. A location merge tracks
+no characters, since the ref rewrite already moves those at the
+loser.
 
 #### Rename
 
@@ -1082,9 +1172,9 @@ Merge writes, in order:
   ref to the non-canonical (the ref collapses — a scalar nulls, an
   array drops it — since a location can't parent itself), the
   non-canonical's `at_location_id` when the canonical item has no
-  position of its own (no holder, no placement), so a merged item is
-  never left nowhere, and the flag clear when the canonical is
-  flagged.
+  position of its own (no holder, no placement), so the merged item
+  keeps whichever position either side had, and the flag clear when
+  the canonical is flagged.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
   one patch per entity. An item has at most one position
@@ -1097,17 +1187,19 @@ Merge writes, in order:
   winning.
 - `happening_awareness` op=`create` per moved row, on the
   canonical, carrying the row's `retrieval_count`. A row for a
-  happening the canonical already knows isn't moved.
+  happening the canonical already knows, or one gone from the branch,
+  isn't moved.
 - `happening_involvements` op=`create` per moved row, on the
   canonical. One in a happening the canonical already takes part in
-  isn't moved.
+  or one gone from the branch isn't moved, nor one after the
+  non-canonical's first in the same happening.
 - `character_relationships` op=`create` (op=`update` when the
   canonical already has a row with that character) per character
   the non-canonical relates to, the views merged with the
   canonical's non-null view winning; no write when the canonical's
   row already holds them. The row keeps `a_id < b_id`, so a view
   changes column when the order flips. A relationship between the
-  two rows isn't moved.
+  two rows, or with a character gone from the branch, isn't moved.
 - `story_entries` metadata update on the tail entry when its scene
   names the non-canonical, or it is the tail's location
   ([Merge](#merge), the tail scene).
@@ -1120,8 +1212,9 @@ Merge writes, in order:
 - When the tail was rewritten, the canonical's scene effects: a
   promotion to `active` when its merged status is `staged` (folded
   into the canonical's update above when that already writes
-  `status`, else its own `op=update`), and, for a character, the
-  tail's location as its `current_location_id` (folded into the
+  `status`, else its own `op=update`), and, for a character the
+  merge brings into the scene, the tail's location as its
+  `current_location_id` (folded into the
   canonical's `state` patch when it has one, else its own
   `op=update`).
 
@@ -1169,11 +1262,13 @@ Resolution writes deltas with `source = user_edit`. The classifier
 sets the flag at create
 ([authorship contract](../../../data-model.md#authorship-contract));
 clearing it is always a user write, delta-logged, so CTRL-Z
-re-flags the row. What a resolution writes counts as the user's
-for [user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes):
-a classifier fact from prose older than the resolution doesn't
-overwrite it. That includes a relationship view the merge carries
-over from the non-canonical, though the classifier first wrote it.
+re-flags the row. Where
+[user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes)
+applies (status, keywords, relationship views), what a resolution
+writes counts as the user's: a classifier fact from prose older than
+the resolution doesn't overwrite it. That includes a relationship
+view the merge carries over from the non-canonical, though the
+classifier first wrote it.
 Only what the resolution changes counts — an unchanged column isn't
 written.
 

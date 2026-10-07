@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import type { PipelineAction } from '@/lib/actions'
 import {
   branches,
   characterRelationships,
@@ -21,9 +22,10 @@ import {
   entitiesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
   translationsStore,
 } from '@/lib/stores'
-import { entityMergeActions } from '@/lib/world'
+import { collisionPairOf, entityMergeActions } from '@/lib/world'
 
 import { collisionPair, type CollisionSources } from './collision-summary'
 
@@ -79,30 +81,61 @@ const relationship = (id: string, aId: string, bId: string) => ({
   updatedAt: 1,
 })
 
+// Link rows count only while their other end is still on the branch.
+const LIVE_HAPPENING =
+  'EXISTS (SELECT 1 FROM happenings h WHERE h.branch_id = ?1 AND h.id = happening_id)'
+const LIVE_OTHER_END = `EXISTS (SELECT 1 FROM entities e WHERE e.branch_id = ?1
+  AND e.id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)`
+
+// Entity `e`'s state names this side in one of its six ref fields.
+const NAMES_THIS_SIDE = `(
+  json_extract(e.state, '$.current_location_id') = ?2
+  OR json_extract(e.state, '$.faction_id') = ?2
+  OR json_extract(e.state, '$.parent_location_id') = ?2
+  OR json_extract(e.state, '$.at_location_id') = ?2
+  OR EXISTS (SELECT 1 FROM json_each(e.state, '$.equipped_items') WHERE value = ?2)
+  OR EXISTS (SELECT 1 FROM json_each(e.state, '$.inventory') WHERE value = ?2))`
+
 const SQL = {
-  awarenessRows:
-    'SELECT count(*) AS n FROM happening_awareness WHERE branch_id = ?1 AND character_id = ?2',
-  involvements:
-    'SELECT count(*) AS n FROM happening_involvements WHERE branch_id = ?1 AND entity_id = ?2',
+  awarenessRows: `SELECT count(*) AS n FROM happening_awareness
+    WHERE branch_id = ?1 AND character_id = ?2 AND ${LIVE_HAPPENING}`,
+  involvements: `SELECT count(*) AS n FROM happening_involvements
+    WHERE branch_id = ?1 AND entity_id = ?2 AND ${LIVE_HAPPENING}`,
   // The pair's own relationship is dropped by the merge, not moved, so it isn't counted.
-  relationships:
-    'SELECT count(*) AS n FROM character_relationships WHERE branch_id = ?1 AND (a_id = ?2 OR b_id = ?2) AND NOT (a_id = ?3 OR b_id = ?3)',
+  relationships: `SELECT count(*) AS n FROM character_relationships r
+    WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT (r.a_id = ?3 OR r.b_id = ?3)
+      AND ${LIVE_OTHER_END}`,
   // Rows of this side whose other end the partner already relates to (the joining row excluded).
   overlapRelationships: `SELECT count(*) AS n FROM character_relationships r
     WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT (r.a_id = ?3 OR r.b_id = ?3)
+      AND ${LIVE_OTHER_END}
       AND EXISTS (SELECT 1 FROM character_relationships p WHERE p.branch_id = ?1 AND (
         (p.a_id = ?3 AND p.b_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)
         OR (p.b_id = ?3 AND p.a_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)))`,
+  // Every involvement but one per happening the partner isn't in: the rest give way.
+  overlapInvolvements: `SELECT
+    (SELECT count(*) FROM happening_involvements
+      WHERE branch_id = ?1 AND entity_id = ?2 AND ${LIVE_HAPPENING})
+    - (SELECT count(DISTINCT i.happening_id) FROM happening_involvements i
+        WHERE i.branch_id = ?1 AND i.entity_id = ?2
+          AND EXISTS (SELECT 1 FROM happenings h WHERE h.branch_id = ?1 AND h.id = i.happening_id)
+          AND NOT EXISTS (
+            SELECT 1 FROM happening_involvements p
+            WHERE p.branch_id = ?1 AND p.entity_id = ?3 AND p.happening_id = i.happening_id)) AS n`,
+  danglingLinks: `SELECT
+    (SELECT count(*) FROM happening_awareness WHERE branch_id = ?1 AND character_id = ?2
+      AND NOT ${LIVE_HAPPENING})
+    + (SELECT count(*) FROM happening_involvements WHERE branch_id = ?1 AND entity_id = ?2
+      AND NOT ${LIVE_HAPPENING})
+    + (SELECT count(*) FROM character_relationships r
+      WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT ${LIVE_OTHER_END}) AS n`,
   joiningRelationships: `SELECT count(*) AS n FROM character_relationships
     WHERE branch_id = ?1 AND ((a_id = ?2 AND b_id = ?3) OR (a_id = ?3 AND b_id = ?2))`,
   inverseRefs: `SELECT count(*) AS n FROM entities e
-    WHERE e.branch_id = ?1 AND e.id NOT IN (?2, ?3) AND (
-      json_extract(e.state, '$.current_location_id') = ?2
-      OR json_extract(e.state, '$.faction_id') = ?2
-      OR json_extract(e.state, '$.parent_location_id') = ?2
-      OR json_extract(e.state, '$.at_location_id') = ?2
-      OR EXISTS (SELECT 1 FROM json_each(e.state, '$.equipped_items') WHERE value = ?2)
-      OR EXISTS (SELECT 1 FROM json_each(e.state, '$.inventory') WHERE value = ?2))`,
+    WHERE e.branch_id = ?1 AND e.id NOT IN (?2, ?3) AND ${NAMES_THIS_SIDE}`,
+  // The partner's own ref to this side, which a merge into the partner clears.
+  partnerRefs: `SELECT count(*) AS n FROM entities e
+    WHERE e.branch_id = ?1 AND e.id = ?3 AND ${NAMES_THIS_SIDE}`,
   translationRows: `SELECT count(*) AS n FROM translations
     WHERE branch_id = ?1 AND (
       (target_kind = 'entity' AND target_id = ?2)
@@ -119,6 +152,7 @@ function sources(): CollisionSources {
   return {
     branchId: 'b1',
     entities: [...entitiesStore.getEntities().values()],
+    happenings: [...happeningsStore.getHappenings().values()],
     awareness: [...happeningAwarenessStore.getAwareness().values()],
     involvements: [...happeningInvolvementsStore.getInvolvements().values()],
     relationships: [...characterRelationshipsStore.getRelationshipRows().values()],
@@ -177,18 +211,25 @@ beforeEach(async () => {
     { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
     { id: 'hap_2', branchId: 'b1', title: 'Flood', createdAt: 1, updatedAt: 1 },
     { id: 'hap_3', branchId: 'b1', title: 'Feast', createdAt: 1, updatedAt: 1 },
+    { id: 'hap_4', branchId: 'b1', title: 'Duel', createdAt: 1, updatedAt: 1 },
   ])
   await db.insert(happeningAwareness).values([
     { id: 'haw_a1', branchId: 'b1', happeningId: 'hap_1', characterId: 'char_a' },
     { id: 'haw_a2', branchId: 'b1', happeningId: 'hap_2', characterId: 'char_a' },
+    // One more than char_b's live rows, so neither side's count can stand in for the other's.
+    { id: 'haw_a4', branchId: 'b1', happeningId: 'hap_4', characterId: 'char_a' },
     { id: 'haw_b1', branchId: 'b1', happeningId: 'hap_1', characterId: 'char_b' },
     { id: 'haw_b3', branchId: 'b1', happeningId: 'hap_3', characterId: 'char_b' },
+    // Its happening is gone: a create's reversal can leave a link row naming nothing.
+    { id: 'haw_bg', branchId: 'b1', happeningId: 'hap_gone', characterId: 'char_b' },
   ])
   await db.insert(happeningInvolvements).values([
     { id: 'hinv_a1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_a', role: 'host' },
     { id: 'hinv_b1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_b', role: 'witness' },
     { id: 'hinv_b1x', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_b', role: 'thief' },
     { id: 'hinv_b2', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_b', role: null },
+    { id: 'hinv_b2x', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_b', role: 'guard' },
+    { id: 'hinv_bg', branchId: 'b1', happeningId: 'hap_gone', entityId: 'char_b', role: null },
   ])
   await db
     .insert(characterRelationships)
@@ -197,6 +238,7 @@ beforeEach(async () => {
       relationship('rel_ac', 'char_a', 'char_c'),
       relationship('rel_bc', 'char_b', 'char_c'),
       relationship('rel_bx', 'char_b', 'char_x'),
+      relationship('rel_bg', 'char_b', 'char_gone'),
     ])
   await db
     .insert(translations)
@@ -206,9 +248,11 @@ beforeEach(async () => {
       translation('tr_ab', 'character_relationship', 'rel_ab'),
       translation('tr_ac', 'character_relationship', 'rel_ac'),
       translation('tr_bc', 'character_relationship', 'rel_bc'),
+      translation('tr_bg', 'character_relationship', 'rel_bg'),
     ])
 
   entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+  happeningsStore.hydrate('b1', await db.select().from(happenings))
   happeningAwarenessStore.hydrate('b1', await db.select().from(happeningAwareness))
   happeningInvolvementsStore.hydrate('b1', await db.select().from(happeningInvolvements))
   characterRelationshipsStore.hydrate('b1', await db.select().from(characterRelationships))
@@ -219,11 +263,15 @@ describe('collisionPair', () => {
   it('builds a fixture that reaches every inverse-ref field and link table', () => {
     // current_location_id ×2, parent_location_id, at_location_id; the partner's parent excluded.
     expect(dbCount(SQL.inverseRefs, 'loc_a', 'loc_b')).toBe(4)
+    expect(dbCount(SQL.partnerRefs, 'loc_a', 'loc_b')).toBe(1)
     expect(dbCount(SQL.inverseRefs, 'fac_a', 'fac_b')).toBe(2)
     // equipped_items, inventory ×3 (one of them also carries item_b).
     expect(dbCount(SQL.inverseRefs, 'item_a', 'item_b')).toBe(4)
-    expect(dbCount(SQL.awarenessRows, 'char_a', 'char_b')).toBe(2)
-    expect(dbCount(SQL.involvements, 'char_b', 'char_a')).toBe(3)
+    expect(dbCount(SQL.awarenessRows, 'char_a', 'char_b')).toBe(3)
+    expect(dbCount(SQL.awarenessRows, 'char_b', 'char_a')).toBe(2)
+    expect(dbCount(SQL.involvements, 'char_b', 'char_a')).toBe(4)
+    // Both in hap_1, which char_a is in, and the second in hap_2.
+    expect(dbCount(SQL.overlapInvolvements, 'char_b', 'char_a')).toBe(3)
     // rel_ac only: rel_ab joins the pair.
     expect(dbCount(SQL.relationships, 'char_a', 'char_b')).toBe(1)
     expect(dbCount(SQL.translationRows, 'char_a', 'char_b')).toBe(3)
@@ -232,6 +280,8 @@ describe('collisionPair', () => {
     expect(dbCount(SQL.overlapRelationships, 'char_b', 'char_a')).toBe(1)
     expect(dbCount(SQL.relationships, 'char_b', 'char_a')).toBe(2)
     expect(dbCount(SQL.joiningRelationships, 'char_a', 'char_b')).toBe(1)
+    // An awareness row, an involvement and a relationship whose other end is gone.
+    expect(dbCount(SQL.danglingLinks, 'char_b', 'char_a')).toBe(3)
   })
 
   it.each([
@@ -256,6 +306,8 @@ describe('collisionPair', () => {
         translationRows: dbCount(SQL.translationRows, side.id, partner.id),
         joiningRelationship: dbCount(SQL.joiningRelationships, side.id, partner.id) > 0,
         overlap: {
+          canonicalRefs: dbCount(SQL.partnerRefs, side.id, partner.id),
+          involvements: dbCount(SQL.overlapInvolvements, side.id, partner.id),
           relationships: dbCount(SQL.overlapRelationships, side.id, partner.id),
         },
       })
@@ -272,7 +324,7 @@ describe('collisionPair', () => {
     expect(b.relationCounts).toMatchObject({
       embeddings: 0,
       unheldItems: 2,
-      overlap: { awareness: 1, involvements: 2, relationships: 1 },
+      overlap: { awareness: 1, involvements: 3, relationships: 1 },
     })
   })
 
@@ -306,32 +358,40 @@ describe('collisionPair', () => {
     ['item_p', 'item_q'],
     ['item_q', 'item_p'],
   ] as const)(
-    'overlap and inverse refs on the loser of %s <- %s match what the merge planner does',
+    'the counts on the loser of %s <- %s add up to what the merge planner writes',
     (canonicalId, loserId) => {
       const src = sources()
       const pair = collisionPair([canonicalId, loserId], src)!
-      const loserSummary = pair.find((side) => side.id === loserId)!
-      const byId = new Map(src.entities.map((e) => [e.id, e]))
-      const plan = entityMergeActions({
+      const { relationCounts: counts } = pair.find((side) => side.id === loserId)!
+      const lookup = collisionPairOf(src.entities, [canonicalId, loserId])
+      if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+      const actions = entityMergeActions({
         branchId: 'b1',
-        canonical: byId.get(canonicalId)!,
-        loser: byId.get(loserId)!,
+        pair: lookup.pair,
+        canonicalId,
         fromLoser: [],
-        tags: [],
-        keywords: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
         branchEntities: src.entities,
+        happenings: src.happenings,
         awareness: src.awareness,
         involvements: src.involvements,
         relationships: src.relationships,
         tail: null,
         newId: (prefix) => `${prefix}_new`,
       })
-      expect(plan.dropped).toEqual(loserSummary.relationCounts.overlap)
-      const rewrittenOthers = plan.actions.filter(
-        (a) =>
-          a.kind === 'updateEntity' && a.payload.id !== canonicalId && a.payload.id !== loserId,
+      const written = <K extends PipelineAction['kind']>(kind: K) =>
+        actions.filter((a): a is Extract<PipelineAction, { kind: K }> => a.kind === kind)
+      expect(written('upsertHappeningAwareness')).toHaveLength(
+        counts.awarenessRows - counts.overlap.awareness,
       )
-      expect(rewrittenOthers).toHaveLength(loserSummary.relationCounts.inverseRefs)
+      expect(written('createHappeningInvolvement')).toHaveLength(
+        counts.involvements - counts.overlap.involvements,
+      )
+      const rewrittenOthers = written('updateEntity').filter(
+        (a) => a.payload.id !== canonicalId && a.payload.id !== loserId,
+      )
+      expect(rewrittenOthers).toHaveLength(counts.inverseRefs)
     },
   )
 

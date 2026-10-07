@@ -70,6 +70,15 @@ The caller sorts by `createdAt` before passing, matching the spec's
 "older = default canonical" rule. The dialog never reorders
 internally — caller data is the source of truth.
 
+A refusal shows inline until the user answers it: the next submit,
+a mode switch, or any merge choice changed (canonical, field or
+chip) clears it.
+
+The dialog is 42rem wide from `sm` and 56rem from `lg`, so the merge
+table's columns have room: 672 and 896 px on web, 588 and 784 dp on
+native, where NativeWind's rem is 14. Below `sm` (the phone tier) it
+keeps the `Dialog` primitive's side margin.
+
 ### Entity projection
 
 ```ts
@@ -100,12 +109,14 @@ type EntitySummary = {
     translationRows: number
     /** Items this side carries that nothing else holds or places. */
     unheldItems: number
-    /** What gives way when this side loses: the other side already has it. */
+    /** What gives way when this side loses (`MergeOverlap`, lib/world). */
     overlap: {
       awareness: number
       involvements: number
       relationships: number
       holdersLosingItem: number
+      /** 1 when the other side's state names this side; the merge clears that ref. */
+      canonicalRefs: number
     }
   }
 }
@@ -116,14 +127,18 @@ relations-summary block shows the **non-canonical**'s counts (what
 the merge carries over or drops), so toggling canonical flips the
 displayed counts to the other side. The World consumer builds both
 sides from the stores: link counts with the entity cascade's own
-predicates, inverse refs across the six ref fields without the
-pair partner (a ref between the two collapses rather than moves),
-`embeddings` as 1 when the row isn't `embedding_stale`, and
-`overlap` as the rows of this side the other side already has: its
-awareness rows and involvements in a happening the other side is
-in, its relationships with a character the other side relates to,
-and, for an item, its holders who lose it because the other item
-already has a position.
+predicates, less the rows whose other end the branch no longer has
+(the merge doesn't move them), inverse refs across the six ref
+fields without the pair partner (a ref between the two collapses
+rather than moves), `embeddings` as 1 when the row isn't
+`embedding_stale`, and `overlap` as what gives way rather than
+moves: this side's awareness rows and involvements in a happening
+the other side is in, each of its involvements after its first in
+one happening, its relationships with a character the other side
+relates to, for an item its holders who lose it because the other
+item already has a position, and in `canonicalRefs` the other
+side's own ref to this side (a location parented under it), which
+the merge clears since the merged row can't point at itself.
 
 `state` is opaque (`Record<string, unknown>`). The dialog only
 deep-equals it to decide whether to render the inline note
@@ -139,9 +154,9 @@ type Resolution =
   | {
       mode: 'merge'
       canonicalId: string
-      fieldChoices: Record<ScalarField, 'A' | 'B'>
-      finalTags: string[]
-      finalKeywords: string[]
+      fromOther: readonly ScalarField[]
+      deselectedTags: readonly string[] // as the chips show them, trimmed
+      deselectedKeywords: readonly string[] // normalizeTerm keys
     }
   | {
       mode: 'rename'
@@ -149,30 +164,31 @@ type Resolution =
     }
   | { mode: 'keep' }
 
-type ScalarField =
-  | 'name'
-  | 'description'
-  | 'status'
-  | 'retiredReason'
-  | 'injectionMode'
-  | 'priority'
+// lib/world's MERGE_SCALARS: name, description, status,
+// retiredReason, injectionMode, priority
+type ScalarField = MergeScalar
 ```
 
-`fieldChoices` only carries entries for fields that diverge.
-Identical-on-both-sides fields stay implicit (caller writes
-canonical's value unconditionally). `finalKeywords` is the union of
-both sides' keywords, deduplicated under the normalization
+`fromOther` names the divergent fields the merged row takes from
+the non-canonical row, in the fixed field order; every other field
+keeps the canonical's value, so nothing in the resolution depends on
+which column a side sat in. A field that stopped diverging while the
+dialog was open isn't sent.
+
+The merge sends the terms the user dropped, never the final lists.
+The action builds those inside the branch lock from the rows as they
+are then (`mergedTerms`, lib/world): the union of both rows' terms
+minus the dropped, keywords de-duplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
-entry, a shared one in the canonical's spelling. `finalTags` is the
-union after the user's deselects are applied — empty array is
-allowed (entity becomes untagged). Both lists are ordered the same
-way: the canonical's own entries in their stored order (keywords
-trimmed and de-duplicated), minus the deselected, then the other
-side's remaining additions in the order the chips are offered
-(sorted). A selection equal to the canonical's set therefore submits
-its list exactly, and the merge writes no unchanged list. When the
-two sides agree on a list (its partition is `null`), the dialog
-submits the canonical's own list as it is.
+entry (a shared one in the canonical's spelling), tags trimmed and
+de-duplicated exactly. Each list keeps the canonical's own entries
+in their stored order, then the other row's remaining additions
+sorted, and a list that comes out equal to the canonical's isn't
+written. So a keyword the classifier adds to either row while the
+merge waits for the lock is kept. Dropping every term is allowed
+(the entity becomes untagged). Only drops among the chips still
+shown are sent: when the two sides come to agree on a list while
+the dialog is open, its chips go and so do its drops.
 
 The rename array is sparse: only entities whose name actually
 changed are included, trimmed. Validation: both trimmed names must be
@@ -201,8 +217,8 @@ type DiffPayload = {
   case variant on the other side is the same keyword, and the
   partition is `null` when both sides hold the same keywords under
   normalization. Blanks drop. A keyword only one side holds shows in
-  that side's first trimmed spelling; a shared one shows and is
-  submitted in the canonical's spelling. The deselect follows the
+  that side's first trimmed spelling; a shared one shows, and is
+  written, in the canonical's spelling. The deselect follows the
   keyword, not its spelling. Unioned by the same rule. Tags still
   compare exactly.
   They are retrieval-targeted rather than decorative, so
@@ -223,51 +239,45 @@ for stable rendering — order isn't data-dependent.
 ```ts
 type MergeState = {
   canonicalId: string
-  fieldChoices: Record<ScalarField, 'A' | 'B'>
+  /** Fields taken from the non-canonical row. */
+  fromOther: ReadonlySet<ScalarField>
   deselectedTags: string[]
   /** `normalizeTerm` keys, so a deselect follows the keyword across spellings. */
   deselectedKeywords: string[]
 }
 
 type MergeAction =
-  | { type: 'pick-canonical'; id: string; entityAId: string }
-  | { type: 'pick-field'; field: ScalarField; side: 'A' | 'B' }
+  | { type: 'pick-canonical'; id: string }
+  | { type: 'pick-field'; field: ScalarField; fromOther: boolean }
   | { type: 'toggle-tag'; tag: string }
   | { type: 'toggle-keyword'; keyword: string }
-  | {
-      type: 'reset'
-      diff: DiffPayload
-      defaultCanonicalId: string
-      entityAId: string
-    }
+  | { type: 'reset'; defaultCanonicalId: string }
 ```
 
 Transition rules:
 
-- **`pick-canonical`** — rebases `fieldChoices`: every divergent
-  scalar resets to the new canonical's side. Matches user
+- **`pick-canonical`** — empties `fromOther`: every divergent
+  scalar resets to the new canonical's value. Matches user
   expectation ("this side wins by default; override per field"),
   and keeps the relations-summary's "loser → canonical" framing
   consistent.
-- **`pick-field`** — overrides a single scalar without touching the
-  canonical or other choices.
+- **`pick-field`** — takes a single scalar from the non-canonical
+  row, or gives it back to the canonical's value, without touching
+  the canonical or other choices. The view says which: a pick of the
+  canonical's column is `fromOther: false`.
 - **`toggle-keyword`** — same shape as `toggle-tag`, against
   `deselectedKeywords`; the reducer normalizes the keyword to its
   key.
 - **`toggle-tag`** — adds or removes a tag from `deselectedTags`.
-  `finalTags` is derived in the view, not stored: the canonical's
-  own tags minus `deselectedTags`, then the other side's remaining
-  additions ([Resolution shape](#resolution-shape) gives the order);
-  `finalKeywords` likewise against `deselectedKeywords`.
+  The chips are derived in the view, not stored: `mergedTerms` of
+  the two rows with nothing dropped, so they show in the order the
+  merge writes ([Resolution shape](#resolution-shape)).
 - **`reset`** — re-initializes on entity-input change. Defensive;
   in practice the dialog is keyed by entity ids so unmount handles
   most cases.
 
-`pick-canonical` and `reset` carry `entityAId` so the reducer can
-tell which side the canonical is. Initial state: `canonicalId` =
-`defaultCanonicalId`, `fieldChoices` sets each field to whichever
-side matches the canonical, and `deselectedTags = []` and
-`deselectedKeywords = []`.
+Initial state: `canonicalId` = `defaultCanonicalId`, `fromOther`
+empty, and `deselectedTags = []` and `deselectedKeywords = []`.
 
 ### Submit-enabled rules
 
@@ -289,26 +299,34 @@ side matches the canonical, and `deselectedTags = []` and
 
 1. **Canonical picker** — segment toggle (Select primitive in
    segment mode) with two options:
-   `<A.name> · <relative time>` /
-   `<B.name> · <relative time>`, the wall-clock relative time
-   History renders (`relativeTimeLabel`). A `· Canonical` suffix
-   appears on the selected side. On phone the picker renders as
-   full-width radio rows, since a half-width segment label clips.
-2. **Divergent-field table** — one row per divergent scalar.
-   Each row: field label · radio for A's value · radio for B's
+   `<A.name> · Older · <relative time>` /
+   `<B.name> · Newer · <relative time>`, the wall-clock relative time
+   History renders (`relativeTimeLabel`). The side word tells apart
+   two rows created within one relative-time bucket. The options carry
+   no canonical marker and keep their text on a flip: the selection,
+   under the label "Canonical (this row survives)", marks the surviving
+   row. On phone the picker renders as full-width radio rows, since a
+   half-width segment label clips.
+2. **Divergent-field table** — one row per divergent scalar, a
+   `radiogroup` named by the field label with a radio for A's value
+   and one for B's, each radio named by its side caption and its
    value. Identical fields are omitted entirely. Empty when no
    scalars diverge. Where the choices sit side by side (web above
-   phone), a header row names the sides `Older · <relative time>` /
+   phone), each is a bordered card that grows with its value, and a
+   header row names the sides `Older · <relative time>` /
    `Newer · <relative time>`, the canonical's with the `· Canonical`
    suffix; on stacked tiers (phone, or any native tier) each choice
-   carries that caption itself instead, and each field is one
-   `radiogroup` named by the field label.
+   carries its side's caption itself instead, without the suffix. From the keyboard a field is
+   one tab stop, on its checked radio: Space checks the focused radio
+   and the arrow keys move the check.
 3. **Keyword union** (when `diff.keywords != null`) — single row
    labeled "Keywords", identical in shape to the tag row below it and
    rendered directly above it.
 4. **Tag union** (when `diff.tags != null`) — single row labeled
-   "Tags". Renders all tags from the union as chips; each chip has
-   an inline `×` to deselect. Deselected chips render in a
+   "Tags". Renders all tags from the union as chips, in the order
+   the merge writes them (the canonical's in stored order, then the
+   other row's additions sorted), so the order follows a canonical
+   flip; each chip has an inline `×` to deselect. Deselected chips render in a
    strikethrough / dimmed variant and can be re-selected.
 5. **State JSON note** (when `stateDivergent` is true) — inline
    muted text: "`state` will follow the canonical row · edit on
@@ -317,16 +335,21 @@ side matches the canonical, and `deselectedTags = []` and
    counts: awareness rows, involvements, relationships, inverse
    refs, embeddings, items left unheld, and translation rows as
    dropped. Footnotes, each shown only when its count is non-zero:
-   awareness rows and involvements the canonical already has (it
-   keeps its own, the duplicates drop), relationships with a
-   character the canonical already relates to (it keeps its own
-   views, taking the duplicate's only where blank), holders who lose
-   an item because the canonical item is already held or placed, and
-   the relationship between the two being dropped. Counts re-derive
-   when canonical flips.
-7. **Footer** — `[ Cancel ]` · `[ Merge into <canonical-name> ]`.
-   The primary button echoes the canonical pick so the destructive
-   direction is obvious.
+   awareness rows the canonical already has (it keeps its own, the
+   duplicates drop), involvements that are duplicates because the
+   canonical already takes part in their happening or because they
+   repeat one of the non-canonical's own (the first moves),
+   relationships with a character the canonical already relates to
+   (it keeps its own views, taking the duplicate's only where blank),
+   holders who lose an item because the canonical item is already
+   held or placed, the relationship between the two being dropped,
+   and the canonical sitting under the non-canonical location, a
+   parent the merge clears since a place can't contain itself.
+   Counts re-derive when canonical flips.
+7. **Footer** — `[ Cancel ]` ·
+   `[ Merge into the <older|newer> <canonical-name> ]`. The primary
+   button echoes the canonical pick, side and name, so the
+   destructive direction is obvious.
 
 **Rename** — two stacked text inputs, one per entity, labeled
 `Older · <relative time>` / `Newer · <relative time>`. Each input
@@ -343,9 +366,11 @@ footer: `[ Cancel ]` · `[ Keep as distinct ]`.
 **Phone tier and native tiers** — the dialog stays a Modal on
 phone. In the merge table, which stacks on these tiers, prose
 values (`description`, `retiredReason`) clamp to 3 lines, and
-tapping the prose expands that value in place, apart from its
-radio's tap target. Each radio shows an inline age caption under
-its value.
+tapping prose the clamp cuts expands that value in place, apart from
+its radio's tap target; prose that fits offers no tap. An invisible
+unclamped copy measures the full height, the same way on web and
+native. Each radio shows an inline age caption under
+its value, and is named by both (`Older · 3 days ago: active`).
 
 ## `CollisionListRow`
 

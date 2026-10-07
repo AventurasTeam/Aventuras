@@ -11,7 +11,9 @@ import {
   type HappeningInvolvement,
 } from '@/lib/db'
 
+import { collisionPairOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
+import { mergeLinks } from './merge-links'
 
 function entity(
   id: string,
@@ -91,25 +93,45 @@ function sequentialIds(): (prefix: string) => string {
 
 const A = entity('char_a', 'character')
 const B = entity('char_b', 'character', { nameCollisionFlag: 1 })
+// Bystanders the link rows name.
+const M = entity('char_m', 'character', { name: 'Mira' })
+const N = entity('char_n', 'character', { name: 'Nell' })
 
-function merge(overrides: Partial<EntityMergeInput> = {}) {
-  const canonical = overrides.canonical ?? A
-  const loser = overrides.loser ?? B
-  return entityMergeActions({
+function pairOf(first: Entity, second: Entity): CollisionPair {
+  const lookup = collisionPairOf([first, second], [first.id, second.id])
+  if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+  return lookup.pair
+}
+
+type MergeOverrides = Partial<Omit<EntityMergeInput, 'pair' | 'canonicalId'>> & {
+  canonical?: Entity
+  loser?: Entity
+}
+
+/** The planner's actions, and what `mergeLinks` counts as giving way for the same input. */
+function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) {
+  const input = {
     branchId: 'b1',
-    canonical,
-    loser,
     fromLoser: [],
-    tags: canonical.tags,
-    keywords: canonical.keywords,
-    branchEntities: [canonical, loser],
+    deselectedTags: [],
+    deselectedKeywords: [],
+    branchEntities: [canonical, loser, M, N],
+    happenings: ['hap_1', 'hap_2', 'hap_3'].map((id) => ({ id, branchId: 'b1' })),
     awareness: [],
     involvements: [],
     relationships: [],
     tail: null,
     newId: sequentialIds(),
     ...overrides,
-  })
+  }
+  return {
+    actions: entityMergeActions({
+      ...input,
+      pair: pairOf(canonical, loser),
+      canonicalId: canonical.id,
+    }),
+    overlap: mergeLinks({ ...input, canonical, loser }).overlap,
+  }
 }
 
 const ofKind = <K extends PipelineAction['kind']>(actions: readonly PipelineAction[], kind: K) =>
@@ -123,18 +145,53 @@ const deleteLoser = {
 
 describe('entityMergeActions — refusals', () => {
   it('throws for a pair it cannot merge', () => {
-    expect(() => merge({ loser: A })).toThrow(/char_a merged into itself/)
-    expect(() => merge({ loser: entity('loc_b', 'location') })).toThrow(
-      /location merged into character/,
-    )
-    expect(() => merge({ loser: entity('char_b', 'character', { branchId: 'b2' }) })).toThrow(
-      /not both on b1/,
-    )
-    expect(() => merge({ canonical: entity('char_a', 'character', { branchId: 'b2' }) })).toThrow(
-      /not both on b1/,
-    )
+    expect(() =>
+      merge({
+        canonical: entity('char_a', 'character', { branchId: 'b2' }),
+        loser: entity('char_b', 'character', { branchId: 'b2' }),
+      }),
+    ).toThrow(/not both on b1/)
     expect(() => merge({ branchEntities: [A] })).toThrow(/not among the branch entities/)
     expect(() => merge({ branchEntities: [B] })).toThrow(/not among the branch entities/)
+  })
+
+  it('throws for a canonical id outside the pair', () => {
+    expect(() =>
+      entityMergeActions({
+        branchId: 'b1',
+        pair: pairOf(A, B),
+        canonicalId: 'char_z',
+        fromLoser: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
+        branchEntities: [A, B],
+        happenings: [],
+        awareness: [],
+        involvements: [],
+        relationships: [],
+        tail: null,
+        newId: sequentialIds(),
+      }),
+    ).toThrow(/char_z is not in the pair/)
+  })
+
+  it('merges into the second row of the pair as readily as the first', () => {
+    const actions = entityMergeActions({
+      branchId: 'b1',
+      pair: pairOf(B, A),
+      canonicalId: 'char_a',
+      fromLoser: [],
+      deselectedTags: [],
+      deselectedKeywords: [],
+      branchEntities: [A, B],
+      happenings: [],
+      awareness: [],
+      involvements: [],
+      relationships: [],
+      tail: null,
+      newId: sequentialIds(),
+    })
+    expect(actions).toStrictEqual([deleteLoser])
   })
 })
 
@@ -166,18 +223,39 @@ describe('entityMergeActions — the canonical', () => {
     })
   })
 
-  it('collapses keyword case variants and trims and de-duplicates tags', () => {
+  it("unions the loser's terms after the canonical's, collapsing keyword case variants", () => {
     const canonical = entity('char_a', 'character', {
       keywords: ['the courier'],
       tags: ['courier'],
     })
-    const { actions } = merge({
-      canonical,
-      keywords: ['the courier', 'The Courier', ' Grey Wolf ', 'grey wolf'],
+    const loser = entity('char_b', 'character', {
+      keywords: ['The Courier', ' Grey Wolf ', 'grey wolf'],
       tags: [' courier', 'courier', '', 'fugitive'],
     })
+    const { actions } = merge({ canonical, loser })
     expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
       keywords: ['the courier', 'Grey Wolf'],
+      tags: ['courier', 'fugitive'],
+    })
+  })
+
+  it('drops the deselected terms of either row', () => {
+    const canonical = entity('char_a', 'character', {
+      keywords: ['the courier', 'the rider'],
+      tags: ['courier', 'rider'],
+    })
+    const loser = entity('char_b', 'character', {
+      keywords: ['Grey Wolf', 'the fugitive'],
+      tags: ['fugitive', 'wolf'],
+    })
+    const { actions } = merge({
+      canonical,
+      loser,
+      deselectedTags: ['rider', 'wolf'],
+      deselectedKeywords: ['THE RIDER', 'grey wolf'],
+    })
+    expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
+      keywords: ['the courier', 'the fugitive'],
       tags: ['courier', 'fugitive'],
     })
   })
@@ -187,13 +265,11 @@ describe('entityMergeActions — the canonical', () => {
       keywords: ['The Courier'],
       tags: ['courier'],
     })
-    const { actions } = merge({
-      canonical,
-      loser: entity('char_b', 'character'),
-      keywords: ['The Courier', 'the courier'],
-      tags: ['courier', ' courier '],
+    const loser = entity('char_b', 'character', {
+      keywords: ['the courier'],
+      tags: [' courier '],
     })
-    expect(actions).toStrictEqual([deleteLoser])
+    expect(merge({ canonical, loser }).actions).toStrictEqual([deleteLoser])
   })
 
   it('writes a stored list back normalized when it was not', () => {
@@ -201,12 +277,7 @@ describe('entityMergeActions — the canonical', () => {
       keywords: ['the courier', 'The Courier'],
       tags: [' courier'],
     })
-    const { actions } = merge({
-      canonical,
-      loser: entity('char_b', 'character'),
-      keywords: canonical.keywords,
-      tags: canonical.tags,
-    })
+    const { actions } = merge({ canonical, loser: entity('char_b', 'character') })
     expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
       tags: ['courier'],
       keywords: ['the courier'],
@@ -256,7 +327,7 @@ describe('entityMergeActions — inverse refs', () => {
       equipped_items: ['item_a'],
       inventory: ['item_x'],
     })
-    expect(plan.dropped.holdersLosingItem).toBe(0)
+    expect(plan.overlap.holdersLosingItem).toBe(0)
   })
 
   it('takes the loser off its holders when the canonical item is already held or placed', () => {
@@ -275,7 +346,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(
       ofKind(whileHeld.actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
     ).toStrictEqual([['char_1', dropped]])
-    expect(whileHeld.dropped.holdersLosingItem).toBe(1)
+    expect(whileHeld.overlap.holdersLosingItem).toBe(1)
 
     const whilePlaced = merge({
       canonical: placed,
@@ -285,7 +356,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(
       ofKind(whilePlaced.actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
     ).toStrictEqual([['char_1', dropped]])
-    expect(whilePlaced.dropped.holdersLosingItem).toBe(1)
+    expect(whilePlaced.overlap.holdersLosingItem).toBe(1)
   })
 
   it('counts no holder as losing the item when it carries both copies', () => {
@@ -303,7 +374,7 @@ describe('entityMergeActions — inverse refs', () => {
       'char_1',
       'char_2',
     ])
-    expect(plan.dropped.holdersLosingItem).toBe(1)
+    expect(plan.overlap.holdersLosingItem).toBe(1)
   })
 
   it('gives a canonical item with no position the loser’s placement', () => {
@@ -328,16 +399,24 @@ describe('entityMergeActions — inverse refs', () => {
     expect(ofKind(kept.actions, 'updateEntity')).toStrictEqual([])
   })
 
-  it('nulls the canonical’s parent when it was the loser', () => {
+  it('nulls the canonical’s parent when it was the loser, and counts the cleared ref', () => {
     const cellar = entity('loc_a', 'location', {}, { parent_location_id: 'loc_b' })
     const hall = entity('loc_b', 'location')
-    const { actions } = merge({ canonical: cellar, loser: hall, branchEntities: [cellar, hall] })
+    const { actions, overlap } = merge({
+      canonical: cellar,
+      loser: hall,
+      branchEntities: [cellar, hall],
+    })
     expect(actions).toHaveLength(2)
     expect(actions[0]).toStrictEqual({
       kind: 'updateEntity',
       source: 'user_edit',
       payload: { branchId: 'b1', id: 'loc_a', patch: { state: { parent_location_id: null } } },
     })
+    expect(overlap.canonicalRefs).toBe(1)
+    // The other way round the loser's own parent goes with it: nothing on the canonical clears.
+    const reversed = merge({ canonical: hall, loser: cellar, branchEntities: [cellar, hall] })
+    expect(reversed.overlap.canonicalRefs).toBe(0)
   })
 })
 
@@ -371,7 +450,7 @@ describe('entityMergeActions — link rows', () => {
         },
       },
     ])
-    expect(plan.dropped.awareness).toBe(1)
+    expect(plan.overlap.awareness).toBe(1)
   })
 
   it('re-creates an involvement under an injected id, dropping one in a happening the canonical is in', () => {
@@ -397,20 +476,85 @@ describe('entityMergeActions — link rows', () => {
         },
       },
     ])
-    expect(plan.dropped.involvements).toBe(1)
+    expect(plan.overlap.involvements).toBe(1)
+  })
+
+  it('moves one of the loser’s involvements per happening, the first with its role', () => {
+    const plan = merge({
+      involvements: [
+        involved('hinv_1', 'char_b', 'hap_2', 'victim'),
+        involved('hinv_2', 'char_b', 'hap_3', null),
+        involved('hinv_3', 'char_b', 'hap_2', 'witness'),
+      ],
+    })
+    expect(
+      ofKind(plan.actions, 'createHappeningInvolvement').map((a) => [
+        a.payload.entry.happeningId,
+        a.payload.entry.role,
+      ]),
+    ).toStrictEqual([
+      ['hap_2', 'victim'],
+      ['hap_3', null],
+    ])
+    expect(plan.overlap.involvements).toBe(1)
+  })
+
+  it('copies a link row whose other end the branch has, and leaves one whose end is gone', () => {
+    const plan = merge({
+      branchEntities: [A, B, M, entity('char_g', 'character', { branchId: 'b2' })],
+      // hap_g survives on another branch only.
+      happenings: [
+        { id: 'hap_1', branchId: 'b1' },
+        { id: 'hap_g', branchId: 'b2' },
+      ],
+      awareness: [aware('haw_1', 'char_b', 'hap_1'), aware('haw_2', 'char_b', 'hap_g')],
+      involvements: [
+        involved('hinv_1', 'char_b', 'hap_g', null),
+        involved('hinv_2', 'char_b', 'hap_1', 'witness'),
+      ],
+      relationships: [
+        rel('rel_1', 'char_b', 'char_g', 'friend', null),
+        rel('rel_2', 'char_b', 'char_m', 'mentor', null),
+      ],
+    })
+    const ends = plan.actions.map((a) => {
+      switch (a.kind) {
+        case 'upsertHappeningAwareness':
+          return `${a.kind}:${a.payload.happeningId}`
+        case 'createHappeningInvolvement':
+          return `${a.kind}:${a.payload.entry.happeningId}`
+        case 'upsertCharacterRelationship':
+          return `${a.kind}:${a.payload.objectId}`
+        default:
+          return a.kind
+      }
+    })
+    expect(ends).toStrictEqual([
+      'upsertHappeningAwareness:hap_1',
+      'createHappeningInvolvement:hap_1',
+      'upsertCharacterRelationship:char_m',
+      'deleteEntity',
+    ])
+    expect(plan.overlap).toStrictEqual({
+      awareness: 0,
+      involvements: 0,
+      relationships: 0,
+      holdersLosingItem: 0,
+      canonicalRefs: 0,
+    })
   })
 
   it('drops the relationship between the pair', () => {
     const plan = merge({ relationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
-    expect(plan.dropped.relationships).toBe(0)
+    expect(plan.overlap.relationships).toBe(0)
   })
 
   it('carries each view to the right side when the a/b order flips', () => {
     const canonical = entity('char_z', 'character')
     const plan = merge({
       canonical,
-      branchEntities: [canonical, B],
+      branchEntities: [canonical, B, A, M],
       relationships: [
         rel('rel_1', 'char_b', 'char_m', 'mentor', 'pupil'),
         rel('rel_2', 'char_a', 'char_b', 'ally', 'rival'),
@@ -454,7 +598,7 @@ describe('entityMergeActions — link rows', () => {
         },
       ],
     )
-    expect(plan.dropped.relationships).toBe(1)
+    expect(plan.overlap.relationships).toBe(1)
   })
 
   it('writes no relationship when the canonical’s views already cover the pair', () => {
@@ -465,7 +609,7 @@ describe('entityMergeActions — link rows', () => {
       ],
     })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
-    expect(plan.dropped.relationships).toBe(1)
+    expect(plan.overlap.relationships).toBe(1)
   })
 
   it('counts only the loser’s relationships whose other end the canonical already has', () => {
@@ -477,7 +621,7 @@ describe('entityMergeActions — link rows', () => {
         rel('rel_4', 'char_a', 'char_b', 'twin', 'twin'),
       ],
     })
-    expect(plan.dropped.relationships).toBe(1)
+    expect(plan.overlap.relationships).toBe(1)
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toHaveLength(1)
   })
 })
@@ -528,6 +672,74 @@ describe('entityMergeActions — tail scene', () => {
       tail: { id: 'entry_9', sceneEntities: ['char_a'], currentLocationId: null },
     })
     expect(ofKind(plan.actions, 'updateStoryEntryMetadata')).toStrictEqual([])
+  })
+})
+
+describe('entityMergeActions — scene effects', () => {
+  const tail = { id: 'entry_9', sceneEntities: ['char_b'], currentLocationId: 'loc_t' }
+  const promote = {
+    kind: 'promoteStagedEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id: 'char_a', proseEntryId: null },
+  }
+  const track = {
+    kind: 'updateEntityLocationTracking',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id: 'char_a', currentLocationId: 'loc_t' },
+  }
+
+  it('promotes a staged canonical it seats and tracks it to the tail, after the delete', () => {
+    const canonical = entity('char_a', 'character', { status: 'staged' })
+    const { actions } = merge({ canonical, branchEntities: [canonical, B], tail })
+    expect(actions.slice(-3)).toStrictEqual([deleteLoser, promote, track])
+    expect(ofKind(actions, 'updateEntity')).toStrictEqual([])
+  })
+
+  it('folds the promotion into a staged status the canonical takes from the loser', () => {
+    const loser = entity('char_b', 'character', { status: 'staged' })
+    const { actions } = merge({ loser, branchEntities: [A, loser], tail, fromLoser: ['status'] })
+    expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({ status: 'active' })
+    expect(ofKind(actions, 'promoteStagedEntity')).toStrictEqual([])
+  })
+
+  it("folds the tail's location into a state patch the canonical already writes", () => {
+    // No well-formed character merge writes the canonical's state: a ref to the loser forces one.
+    const canonical = entity('char_a', 'character', {}, { faction_id: 'char_b' })
+    const { actions } = merge({ canonical, branchEntities: [canonical, B], tail })
+    expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
+      state: { ...emptyEntityState('character'), current_location_id: 'loc_t' },
+    })
+    expect(ofKind(actions, 'updateEntityLocationTracking')).toStrictEqual([])
+  })
+
+  it('promotes a canonical the scene already held, but keeps its own location', () => {
+    const canonical = entity('char_a', 'character', { status: 'staged' })
+    const sharedTail = { ...tail, sceneEntities: ['char_a', 'char_b'] }
+    const { actions } = merge({ canonical, branchEntities: [canonical, B], tail: sharedTail })
+    expect(actions.slice(-2)).toStrictEqual([deleteLoser, promote])
+    expect(ofKind(actions, 'updateEntityLocationTracking')).toStrictEqual([])
+
+    const writing = entity('char_a', 'character', {}, { faction_id: 'char_b' })
+    const folded = merge({ canonical: writing, branchEntities: [writing, B], tail: sharedTail })
+    expect(ofKind(folded.actions, 'updateEntity')[0].payload.patch).toStrictEqual({
+      state: emptyEntityState('character'),
+    })
+  })
+
+  it('tracks nothing to a tail with no location, and seats nothing the tail never named', () => {
+    const staged = entity('char_a', 'character', { status: 'staged' })
+    const unlocated = merge({
+      canonical: staged,
+      branchEntities: [staged, B],
+      tail: { ...tail, currentLocationId: null },
+    })
+    expect(unlocated.actions.slice(-2)).toStrictEqual([deleteLoser, promote])
+    const elsewhere = merge({
+      canonical: staged,
+      branchEntities: [staged, B],
+      tail: { ...tail, sceneEntities: ['char_m'] },
+    })
+    expect(elsewhere.actions).toStrictEqual([deleteLoser])
   })
 })
 

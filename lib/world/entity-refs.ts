@@ -1,3 +1,4 @@
+import type { EntityCascadeLinkTable } from '@/lib/actions'
 import type {
   CharacterRelationship,
   CharacterState,
@@ -92,10 +93,16 @@ export type EntityLinkRows = {
   relationships: CharacterRelationship[]
 }
 
-/**
- * The link rows the entity arm's cascade removes with `id`, by `entityCascade`'s predicates
- * (lib/actions/entities/entity-cascade.ts): a new cascade link table needs a list here.
- */
+// A link table the cascade gains fails to compile here until it has a list: a merge moves only
+// the listed rows, and the loser's delete takes the rest.
+const CASCADE_LISTS: Record<EntityCascadeLinkTable, keyof EntityLinkRows> = {
+  happening_involvements: 'involvements',
+  happening_awareness: 'awareness',
+  character_relationships: 'relationships',
+}
+void CASCADE_LISTS
+
+/** The link rows the entity arm's cascade removes with `id`, by `entityCascade`'s predicates. */
 export function entityLinkRows(input: {
   branchId: string
   id: string
@@ -117,6 +124,11 @@ export function entityLinkRows(input: {
 
 function heldBy(entity: Entity): string[] {
   return entity.kind === 'character' ? heldItems(stateOf(entity, 'character')) : []
+}
+
+/** The items some entity other than `holderId` holds. */
+export function heldElsewhere(holderId: string, branchEntities: readonly Entity[]): Set<string> {
+  return new Set(branchEntities.filter((e) => e.id !== holderId).flatMap((e) => heldBy(e)))
 }
 
 /** An item is placed at a location or carried by some character in the branch. */
@@ -147,14 +159,12 @@ export function unheldItemsWithout(holderId: string, branchEntities: readonly En
   const holder = branchEntities.find((e) => e.id === holderId)
   if (holder == null) return 0
   const carried = new Set(heldBy(holder))
-  const heldElsewhere = new Set(
-    branchEntities.filter((e) => e.id !== holderId).flatMap((e) => heldBy(e)),
-  )
+  const othersHold = heldElsewhere(holderId, branchEntities)
   return branchEntities.filter(
     (item) =>
       item.kind === 'item' &&
       carried.has(item.id) &&
-      !heldElsewhere.has(item.id) &&
+      !othersHold.has(item.id) &&
       stateOf(item, 'item').at_location_id == null,
   ).length
 }

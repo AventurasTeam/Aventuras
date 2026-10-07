@@ -1,11 +1,17 @@
 import { createContext, useContext } from 'react'
 
 import { db } from '@/lib/db'
-import { loadHistoryChunk, type HistoryChunk, type HistoryQuery } from '@/lib/history'
+import {
+  loadHistoryChunk,
+  type HistoryChunk,
+  type HistoryQuery,
+  type ScanLinkEnds,
+} from '@/lib/history'
 
-export type HistoryLoader = (query: HistoryQuery) => Promise<HistoryChunk>
+/** `scan` is the tab's link-end scan for its current refresh version, shared by its chunks. */
+export type HistoryLoader = (query: HistoryQuery, scan: ScanLinkEnds) => Promise<HistoryChunk>
 
-const loadFromDb: HistoryLoader = (query) => loadHistoryChunk(db, query)
+const loadFromDb: HistoryLoader = (query, scan) => loadHistoryChunk(db, query, scan)
 
 const HistoryLoaderContext = createContext<HistoryLoader>(loadFromDb)
 

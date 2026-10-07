@@ -33,11 +33,20 @@
   },
   "rowLabel": "{{op}} {{name}}",
   "unknownTarget": "Unknown row",
+  "linkLabel": {
+    "character_relationships": "Relationship",
+    "happening_involvements": "Involvement",
+    "happening_awareness": "Awareness",
+    "links": "Links"
+  },
+  "link": { "target": "{{label}} · {{name}}" },
   "summary": {
     "created": "Created",
     "deleted": "Deleted",
     "modified": "Modified {{fields}}",
-    "modifiedUnknown": "Modified"
+    "modifiedUnknown": "Modified",
+    "removedWith": "Removed when {{name}} was deleted",
+    "removedWithUnknown": "Removed when its other end was deleted"
   },
   "field": {
     "name": "Name",
@@ -79,6 +88,13 @@
     "resolvedAt": "Resolved at",
     "temporal": "Time",
     "occurredAt": "Occurred at",
-    "commonKnowledge": "Common knowledge"
+    "commonKnowledge": "Common knowledge",
+    "yourView": "Your view",
+    "theirView": "Their view",
+    "role": "Role",
+    "source": "Source",
+    "decayResistance": "Decay resistance",
+    "learnedAt": "Learned at",
+    "retrievalCount": "Retrieval count"
   }
 }
