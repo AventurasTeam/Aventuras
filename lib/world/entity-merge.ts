@@ -3,7 +3,7 @@ import type { Entity, EntityState, ItemState } from '@/lib/db'
 
 import type { CollisionPair } from './collision-pair'
 import { sameList } from './draft-text'
-import type { DeleteTail } from './entity-delete'
+import { tailSceneActions, type DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
 import { itemHasPosition, stateWithRefRewritten } from './entity-refs'
 import { canonicalRefsCleared, mergeLinks, type MergeLinkInput } from './merge-links'
@@ -91,34 +91,6 @@ function adoptedPlacement(input: MergeContext, rewritten: EntityState | null): E
   return { ...base, at_location_id: at }
 }
 
-/** The loser replaced by the canonical in place, the canonical kept once. */
-function sceneWithCanonical(scene: readonly string[], loserId: string, canonicalId: string) {
-  const out: string[] = []
-  for (const id of scene) {
-    const next = id === loserId ? canonicalId : id
-    if (next === canonicalId && out.includes(canonicalId)) continue
-    out.push(next)
-  }
-  return out
-}
-
-function tailActions(input: MergeContext): PipelineAction[] {
-  const { branchId, tail, loser, canonical } = input
-  if (tail == null) return []
-  const metadata: { sceneEntities?: string[]; currentLocationId?: string } = {}
-  if (tail.sceneEntities.includes(loser.id))
-    metadata.sceneEntities = sceneWithCanonical(tail.sceneEntities, loser.id, canonical.id)
-  if (tail.currentLocationId === loser.id) metadata.currentLocationId = canonical.id
-  if (Object.keys(metadata).length === 0) return []
-  return [
-    {
-      kind: 'updateStoryEntryMetadata',
-      source: 'user_edit',
-      payload: { branchId, id: tail.id, metadata },
-    },
-  ]
-}
-
 /**
  * world.md → Merge, the tail scene: a canonical the merge seats in the tail is promoted when its
  * merged status is staged and, for a character, tracked to the tail's location. Each folds into the
@@ -183,7 +155,7 @@ export function entityMergeActions(request: EntityMergeInput): PipelineAction[] 
   const input = mergeContext(request)
   const { branchId, canonical, loser, newId } = input
   const { moved } = mergeLinks(input)
-  const tail = tailActions(input)
+  const tail = tailSceneActions(branchId, input.tail, loser.id, canonical.id)
   const scene = withSceneEffects(input, canonicalPatch(input), tail.length > 0)
   const actions: PipelineAction[] = []
 

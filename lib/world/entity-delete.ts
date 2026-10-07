@@ -41,12 +41,29 @@ function unplacedItems(target: Entity, branchEntities: readonly Entity[]): numbe
   return unheldItemsWithout(target.id, branchEntities) + atTarget
 }
 
-function tailActions(branchId: string, tail: DeleteTail | null, id: string): PipelineAction[] {
+/** `fromId` replaced by `toId` in place with `toId` kept once, or dropped when `toId` is null. */
+function sceneRewritten(scene: readonly string[], fromId: string, toId: string | null): string[] {
+  const out: string[] = []
+  for (const id of scene) {
+    const next = id === fromId ? toId : id
+    if (next == null || (next === toId && out.includes(next))) continue
+    out.push(next)
+  }
+  return out
+}
+
+/** The tail's scene fields with `fromId` pointed at `toId`, or dropped when `toId` is null. */
+export function tailSceneActions(
+  branchId: string,
+  tail: DeleteTail | null,
+  fromId: string,
+  toId: string | null,
+): PipelineAction[] {
   if (tail == null) return []
-  const metadata: { sceneEntities?: string[]; currentLocationId?: null } = {}
-  if (tail.sceneEntities.includes(id))
-    metadata.sceneEntities = tail.sceneEntities.filter((other) => other !== id)
-  if (tail.currentLocationId === id) metadata.currentLocationId = null
+  const metadata: { sceneEntities?: string[]; currentLocationId?: string | null } = {}
+  if (tail.sceneEntities.includes(fromId))
+    metadata.sceneEntities = sceneRewritten(tail.sceneEntities, fromId, toId)
+  if (tail.currentLocationId === fromId) metadata.currentLocationId = toId
   if (Object.keys(metadata).length === 0) return []
   return [
     {
@@ -79,7 +96,7 @@ export function entityDeleteActions({
       payload: { branchId, id: other.id, patch: { state } },
     })
   }
-  const tailDrop = tailActions(branchId, tail, target.id)
+  const tailDrop = tailSceneActions(branchId, tail, target.id, null)
   const orphans = orphanedFlags({ entities: branchEntities, removed: new Set([target.id]) })
   return {
     actions: [
