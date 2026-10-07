@@ -29,7 +29,7 @@ type HarnessProps = {
   /** Starts on this exact view instead of `railViewFor(category)`. */
   initialView?: RailView
   data?: RailData
-  /** Starts with the entry index unread and lands it (`data`) after this many milliseconds. */
+  /** Lands the unread entry index (`data`) this long after the view first shows Happenings. */
   landIndexAfterMs?: number
   onRowPress: (category: RailCategory, id: string) => void
   onCollapse: () => void
@@ -45,11 +45,13 @@ function Harness({
 }: HarnessProps) {
   const [view, setView] = useState<RailView>(() => initialView ?? railViewFor(category))
   const [landed, setLanded] = useState(landIndexAfterMs == null)
+  // Counted from the switch to Happenings, so a slow runner still sees the loading state.
+  const happeningShown = view.category === 'happening'
   useEffect(() => {
-    if (landIndexAfterMs == null) return
+    if (landIndexAfterMs == null || !happeningShown) return
     const id = setTimeout(() => setLanded(true), landIndexAfterMs)
     return () => clearTimeout(id)
-  }, [landIndexAfterMs])
+  }, [happeningShown, landIndexAfterMs])
   return (
     <View style={{ width: 300, height: 640 }} className="border-l border-border">
       <BrowseRail
