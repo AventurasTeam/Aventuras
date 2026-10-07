@@ -32,7 +32,7 @@ const FAILED = { ...EMPTY, failed: true }
  * settleCount + tailId together cover every story_entries write: a new write path must settle
  * a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
  * falsely live/dangling — never re-pointed to a different entry.
- * `enabled: false` skips the read, leaving the not-ready snapshot.
+ * `enabled: false` skips the read and reads not ready (still `failed` if the last read errored).
  */
 export function useEntryIndex(
   branchId: string,
@@ -51,9 +51,10 @@ export function useEntryIndex(
     return last
   })
 
+  const disabled = options?.enabled === false
   const { data, error, refetch } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
-    enabled: branchId !== '' && options?.enabled !== false,
+    enabled: branchId !== '' && !disabled,
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
     // A revisited key (branch switch back, tailId walking backward) is rare but still
@@ -66,7 +67,6 @@ export function useEntryIndex(
   // successful window, tagged by branch so a fork never shows another branch's index.
   const [lastGood, setLastGood] = useState<{ branchId: string; window: LoadedWindow } | null>(null)
   // A disabled hook drops the window (the query keeps its cached data), so it reads not-ready.
-  const disabled = options?.enabled === false
   let good = lastGood
   if (disabled || good?.branchId !== branchId) good = null
   // Compare against the wrapped window's rows (not a fresh wrapper) to avoid re-rendering.
