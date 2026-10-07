@@ -280,6 +280,28 @@ describe('useEntryIndex', () => {
       expect(latest?.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
     })
 
+    it('shows the failure, not the seed, once a seeded re-read fails', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, true)
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      reads.index.mockRejectedValueOnce(new Error('boom'))
+
+      renderProbe({ client, seed: true })
+      expect(latest?.ready).toBe(true)
+      await waitFor(() => expect(latest?.failed).toBe(true))
+      expect(latest?.ready).toBe(false)
+      expect(latest?.updating).toBe(false)
+      expect(latest?.entries).toEqual([])
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+
+      reads.index.mockResolvedValueOnce([ref('e2', 2), ref('e1', 1)])
+      act(() => latest?.retry())
+      await waitFor(() => expect(latest?.ready).toBe(true))
+      expect(latest?.failed).toBe(false)
+      expect(latest?.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
+      warnSpy.mockRestore()
+    })
+
     it('takes no seed from a hook without the option', async () => {
       const client = createQueryClient()
       await readThenLeave(client, false)

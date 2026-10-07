@@ -29,6 +29,8 @@ export type EntryIndexSnapshot = {
 }
 
 type LoadedWindow = { entries: readonly EntryRef[]; index: EntryIndex }
+/** `seeded`: a seed standing in for the read in flight, not a read this hook made. */
+type ShownWindow = { branchId: string; window: LoadedWindow; seeded: boolean }
 
 /** Newest first, as `readEntryIndex` returns them. */
 export type EntryIndexRead = (branchId: string) => Promise<readonly EntryRef[]>
@@ -107,16 +109,16 @@ export function useEntryIndex(
 
   // data is undefined during a pending refetch and after an error; keep the last
   // successful window, tagged by branch so a fork never shows another branch's index.
-  const [lastGood, setLastGood] = useState<{ branchId: string; window: LoadedWindow } | null>(null)
+  const [lastGood, setLastGood] = useState<ShownWindow | null>(null)
   // A disabled hook drops the window (the query keeps its cached data), so it reads not-ready.
   let good = lastGood
   if (disabled || good?.branchId !== branchId) good = null
   // Compare against the wrapped window's rows (not a fresh wrapper) to avoid re-rendering.
   if (!disabled && data != null && data !== good?.window.entries) {
-    good = { branchId, window: { entries: data, index: indexEntryRefs(data) } }
+    good = { branchId, window: { entries: data, index: indexEntryRefs(data) }, seeded: false }
   }
   if (good == null && !disabled && seed != null) {
-    good = { branchId, window: { entries: seed, index: indexEntryRefs(seed) } }
+    good = { branchId, window: { entries: seed, index: indexEntryRefs(seed) }, seeded: true }
   }
   if (good !== lastGood) setLastGood(good)
 
@@ -134,7 +136,8 @@ export function useEntryIndex(
 
   return useMemo(() => {
     const retry = () => void refetch()
-    if (good != null) {
+    // A seed only stands in while its read runs; a failed read shows as one, Retry included.
+    if (good != null && !(good.seeded && error != null)) {
       const { entries, index } = good.window
       return { entries, index, ready: true, failed: false, updating: isFetching, retry }
     }

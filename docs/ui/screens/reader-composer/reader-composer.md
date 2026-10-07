@@ -72,7 +72,10 @@ last read's rows visible and usable, with a small muted `Spinner`
 (`Updating happenings…` to screen readers) at the end of the list
 head, beside the collapse chevron on desktop and tablet, until it
 lands. Until then a happening anchored to an entry newer than the
-last read can read as dangling.
+last read can read as dangling. If the re-read of a list just shown
+again fails, the list shows the error and Retry, as a first read
+does; a list already open keeps its rows until the next turn reads
+again.
 
 ## Top-bar — chapter navigation
 
