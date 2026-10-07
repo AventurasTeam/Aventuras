@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react-native'
 import { useEffect, useState, type ReactNode } from 'react'
 import { View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
@@ -57,6 +58,7 @@ export function RailSheet({
   onRowPress,
   renderPeek,
 }: RailSheetProps) {
+  const insets = useSafeAreaInsets()
   const [sheet, setSheet] = useState<RailSheetState>(RAIL_SHEET_OPENED)
   const send = (event: RailSheetEvent) => setSheet((current) => reduceRailSheet(current, event))
 
@@ -75,7 +77,13 @@ export function RailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={t('reader:rail.label')}>
-      <SheetContent anchor="bottom" size={sheet.size} className="p-0">
+      <SheetContent
+        anchor="bottom"
+        size={sheet.size}
+        className="p-0"
+        // The primitive pads the inset plus p-6's 24px inline, which p-0 can't override.
+        style={{ paddingBottom: insets.bottom }}
+      >
         {sheet.content === 'categories' ? (
           <RailSheetCategories
             value={view.category}

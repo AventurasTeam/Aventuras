@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { ArrowLeft } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
 import { useWindowDimensions, View } from 'react-native'
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
@@ -234,6 +235,22 @@ export const NavigatesThroughCategories: Story = {
     await expect(
       screen.queryByRole('button', { name: railCategoryLabel('lore') }),
     ).not.toBeInTheDocument()
+  },
+}
+
+/** Above a nav bar the rail pads by the inset alone, not the primitive's p-6 allowance too. */
+export const NavBarInset: Story = {
+  globals: PHONE,
+  decorators: [
+    (Story) => (
+      <SafeAreaInsetsContext.Provider value={{ top: 0, right: 0, bottom: 48, left: 0 }}>
+        <Story />
+      </SafeAreaInsetsContext.Provider>
+    ),
+  ],
+  play: async () => {
+    await waitFor(() => expect(railDialog()).toBeVisible())
+    await expect(getComputedStyle(railDialog()).paddingBottom).toBe('48px')
   },
 }
 
