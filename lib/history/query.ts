@@ -36,7 +36,7 @@ export type HistoryQuery = {
 export type HistoryChunk = {
   rows: HistoryRow[]
   nextCursor: number | null
-  /** The link rows' other ends' names, for an end the working set no longer holds. */
+  /** Every link end's name: live row first, else its latest delete payload. */
   names: Readonly<Record<string, string>>
 }
 
