@@ -435,7 +435,7 @@ export class STImportWizardStore {
             'A character from the imported card.',
           role: 'primary',
           relationship: '',
-          traits: sanitized?.traits?.slice(0, 8) || [],
+          traits: uniqueTerms(sanitized?.traits ?? []).slice(0, 8),
         }
         this.cardCharacterName = cardChar.name
         // Attach card portrait to the primary character

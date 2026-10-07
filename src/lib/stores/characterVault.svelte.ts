@@ -196,7 +196,7 @@ class CharacterVaultStore {
     return this.add({
       name: sanitized.name,
       description: sanitized.description,
-      traits: sanitized.traits || [],
+      traits: uniqueTerms(sanitized.traits || []),
       visualDescriptors: sanitized.visualDescriptors || {},
       portrait: null,
       tags: originalCard.tags || ['imported', 'sanitized'],
@@ -394,7 +394,7 @@ class CharacterVaultStore {
         name: sanitized?.name || parsed.name,
         description: sanitized?.description || parsed.description || parsed.creator_notes || null,
         traits:
-          sanitized?.traits ||
+          (sanitized?.traits && uniqueTerms(sanitized.traits)) ||
           (parsed.personality ? uniqueTerms(parsed.personality.split(/[,;]/)).slice(0, 10) : []),
         visualDescriptors: sanitized?.visualDescriptors || {},
         portrait: portrait || null,
