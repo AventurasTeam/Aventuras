@@ -40,6 +40,7 @@ export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
           label={t(`reader:rail.strip.${cell.category}`, { count: cell.count })}
           tint={cell.tint}
           tintTestID={`rail-strip-tint-${cell.category}`}
+          hoverTestID={`rail-strip-hover-${cell.category}`}
           onPress={() => onExpandTo(cell.category)}
         >
           <Icon as={KIND_GLYPHS[cell.category]} size="sm" />
@@ -55,6 +56,7 @@ export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
           label={t(`reader:rail.strip.${cell.category}`)}
           tint={cell.tint}
           tintTestID={`rail-strip-tint-${cell.category}`}
+          hoverTestID={`rail-strip-hover-${cell.category}`}
           onPress={() => onExpandTo(cell.category)}
         >
           <Icon as={KIND_GLYPHS[cell.category]} size="sm" />
@@ -80,6 +82,7 @@ type StripCellProps = {
   onPress: () => void
   tint?: RecentlyClassified
   tintTestID?: string
+  hoverTestID?: string
   children: ReactNode
 }
 
@@ -124,6 +127,7 @@ function CellPressable({
   onLongPress,
   tint,
   tintTestID,
+  hoverTestID,
   children,
 }: StripCellProps & { onLongPress?: () => void }) {
   return (
@@ -140,17 +144,18 @@ function CellPressable({
       )}
     >
       <TintLayer tint={tint} testID={tintTestID} />
-      <HoverLayer />
+      <HoverLayer testID={hoverTestID} />
       {children}
     </Pressable>
   )
 }
 
 // Over the tint, never instead of it: hover is feedback, the tint is information.
-function HoverLayer() {
+function HoverLayer({ testID }: { testID?: string }) {
   if (Platform.OS !== 'web') return null
   return (
     <View
+      testID={testID}
       aria-hidden
       className="absolute inset-0 group-hover:bg-tint-hover"
       style={POINTER_EVENTS_NONE}
