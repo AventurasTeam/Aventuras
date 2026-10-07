@@ -13,8 +13,8 @@ import {
   type RailView,
 } from '@/lib/reader-rail'
 
-// Session-scoped, never persisted (collapse.md → State preservation on reflow): the view and
-// display survive a collapse, a reader remount and a phone ↔ tablet reflow.
+// Session-scoped, never persisted (collapse.md → State preservation on reflow): within a branch
+// the view survives a collapse, a reader remount and a phone ↔ tablet reflow.
 type ReaderRailState = {
   view: RailView
   display: RailDisplayState
