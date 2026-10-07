@@ -71,8 +71,8 @@ every turn and whenever the list is shown again. A re-read keeps the
 last read's rows visible and usable, with a small muted `Spinner`
 (`Updating happenings…` to screen readers) at the end of the list
 head, beside the collapse chevron on desktop and tablet, until it
-lands. Until then a happening anchored to the newest entry can read
-as dangling.
+lands. Until then a happening anchored to an entry newer than the
+last read can read as dangling.
 
 ## Top-bar — chapter navigation
 
