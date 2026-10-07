@@ -2,7 +2,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { CharacterRelationship, Delta, HappeningAwareness } from '@/lib/db'
+import type { CharacterRelationship, Delta, Happening, HappeningAwareness } from '@/lib/db'
 import type { HistoryChunk, HistoryQuery, HistoryRow, HistoryTable } from '@/lib/history'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import {
@@ -17,10 +17,11 @@ import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { HistoryTab } from './history-tab'
 import type { HistoryTabViewProps } from './history-tab-view'
 
-const view = vi.hoisted(() => ({ props: null as HistoryTabViewProps | null }))
+const view = vi.hoisted(() => ({ props: null as HistoryTabViewProps | null, renders: 0 }))
 vi.mock('./history-tab-view', () => ({
   HistoryTabView: (props: HistoryTabViewProps) => {
     view.props = props
+    view.renders += 1
     return null
   },
 }))
@@ -64,6 +65,38 @@ const ON_ARIAS_TAB: HistoryRow = {
   },
 }
 
+const INVOLVES_FIRE: HistoryRow = {
+  delta: {
+    ...VIEW_EDIT,
+    targetTable: 'happening_involvements',
+    targetId: 'inv_1',
+    op: 'create',
+    undoPayload: null,
+  },
+  via: {
+    kind: 'link',
+    table: 'happening_involvements',
+    linkId: 'inv_1',
+    otherId: 'hap_fire',
+    side: null,
+  },
+}
+
+const fire = (branchId: string, title: string): Happening => ({
+  id: 'hap_fire',
+  branchId,
+  title,
+  description: null,
+  category: null,
+  icon: null,
+  temporal: null,
+  occurredAtEntryId: null,
+  commonKnowledge: 1,
+  embeddingStale: 0,
+  createdAt: 1,
+  updatedAt: 1,
+})
+
 function relationship(id: string, aId: string, bId: string): CharacterRelationship {
   return {
     id,
@@ -102,6 +135,7 @@ function loader(rows: (query: HistoryQuery) => HistoryRow[], names: Record<strin
 
 function renderTab(load: HistoryLoader, targetId: string, targetTable: HistoryTable = 'entities') {
   view.props = null
+  view.renders = 0
   return render(
     <HistoryLoaderProvider value={load}>
       <HistoryTab branchId={BRANCH} targetTable={targetTable} targetId={targetId} />
@@ -201,6 +235,48 @@ describe('HistoryTab over the link-row union', () => {
       expect(view.props?.rows[0]?.targetDisplayName).toBe('Relationship · Kael the Elder'),
     )
     expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it("prefers a happening's working-set title over the chunk's name", async () => {
+    happeningsStore.hydrate(BRANCH, [fire(BRANCH, 'The keep burns')])
+    renderTab(
+      loader(() => [INVOLVES_FIRE], { hap_fire: 'The keep (old)' }),
+      'char_aria',
+    )
+    expect((await firstRow())?.targetDisplayName).toBe('Involvement · The keep burns')
+  })
+
+  it('ignores a working-set row of another branch that shares the other end id', async () => {
+    entitiesStore.hydrate('br_other', [
+      makeEntity({ id: 'char_kael', branchId: 'br_other', kind: 'character', name: 'Imposter' }),
+    ])
+    const load = loader(() => [ON_ARIAS_TAB], { char_kael: 'Kael' })
+    renderTab(load, 'char_aria')
+    expect((await firstRow())?.targetDisplayName).toBe('Relationship · Kael')
+    cleanup()
+    happeningsStore.hydrate('br_other', [fire('br_other', 'Imposter keep')])
+    renderTab(
+      loader(() => [INVOLVES_FIRE], { hap_fire: 'The keep' }),
+      'char_aria',
+    )
+    expect((await firstRow())?.targetDisplayName).toBe('Involvement · The keep')
+  })
+
+  it('re-renders for a rename of a shown other end, not of an unrelated row', async () => {
+    const load = loader(() => [ON_ARIAS_TAB])
+    renderTab(load, 'char_aria')
+    await firstRow()
+    await act(async () => {})
+    const settled = view.renders
+    act(() =>
+      entitiesStore.patch(BRANCH, { op: 'update', id: 'char_mira', columns: { name: 'Mira II' } }),
+    )
+    expect(view.renders).toBe(settled)
+    act(() =>
+      entitiesStore.patch(BRANCH, { op: 'update', id: 'char_kael', columns: { name: 'Kael II' } }),
+    )
+    expect(view.props?.rows[0]?.targetDisplayName).toBe('Relationship · Kael II')
+    expect(view.renders).toBeGreaterThan(settled)
   })
 
   it("names a happening's awareness row by its character", async () => {
