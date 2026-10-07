@@ -1955,11 +1955,16 @@ its actions under the shared hold, so the plan can't predate a
 rows, `status`, tags and keywords included; the user's choice travels
 as the scalars to take and the tags and keywords to drop, never as
 final lists, so a keyword a pass appends to either row while the
-merge waits is kept. It can still
-run while another user write holds a row key mid-commit, since
-handlers re-read under the key. The build is synchronous, writes
-nothing and takes no lock, since the hold isn't reentrant. A
-`no-gate` run takes
+merge waits is kept. The build can still run while another user
+write holds a row key mid-commit. Handlers re-read under the key,
+but a row that write adds is one the plan never saw: a link row it
+creates on the merge's non-canonical is cascaded with it rather
+than copied, held in the delete's `undo_payload` for CTRL-Z to
+restore. No path reaches that today: the resolve dialog is modal
+and opens only after the detail pane's dirty guard has awaited its
+Save, and Reader undo needs the Reader's focus. The build is
+synchronous, writes nothing and takes no lock, since the hold isn't
+reentrant. A `no-gate` run takes
 the lock exclusive at its first emitted write — after its model
 call, embedding and reconciliation, so World stays editable through
 those — and waits for every shared holder, so a write already in
