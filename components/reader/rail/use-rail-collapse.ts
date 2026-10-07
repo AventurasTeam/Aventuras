@@ -3,7 +3,6 @@ import { useCallback, useEffect } from 'react'
 import { setReaderRailCollapsed } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { isRailCollapsed } from '@/lib/reader-rail'
 import { appSettingsStore, readerRailStore } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
@@ -15,7 +14,7 @@ export function useRailCollapse(): {
 } {
   const stored = appSettingsStore.useAppSettings((s) => s.appearance.readerRailCollapsed)
   const settledPending = readerRailStore.useSettledPending()
-  const collapsed = readerRailStore.useDisplay((display) => isRailCollapsed(display, stored))
+  const collapsed = readerRailStore.useCollapsed(stored)
 
   // Retire once the store matches with every write settled: a resolved write may not have
   // re-hydrated (failed reads report config-corrupt), and an earlier write can match by chance.

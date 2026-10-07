@@ -29,3 +29,38 @@ describe('readerRailStore.useCategory', () => {
     expect(renders).toBeGreaterThan(before)
   })
 })
+
+describe('readerRailStore.useCollapsed', () => {
+  beforeEach(() => {
+    readerRailStore.__reset()
+  })
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('follows the stored preference, a pending toggle and a forced collapse', () => {
+    let renders = 0
+    const { result, rerender } = renderHook(
+      ({ stored }: { stored: boolean }) => {
+        renders += 1
+        return readerRailStore.useCollapsed(stored)
+      },
+      { initialProps: { stored: false } },
+    )
+    expect(result.current).toBe(false)
+    rerender({ stored: true })
+    expect(result.current).toBe(true)
+    rerender({ stored: false })
+
+    const before = renders
+    act(() => readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 }))
+    expect(renders).toBe(before)
+
+    act(() => readerRailStore.dispatchDisplay({ type: 'resize', width: 850 }))
+    expect(result.current).toBe(true)
+    act(() => readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: false }))
+    expect(result.current).toBe(false)
+    act(() => readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true }))
+    expect(result.current).toBe(true)
+  })
+})

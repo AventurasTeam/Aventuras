@@ -4,6 +4,7 @@ import { createStore } from 'zustand/vanilla'
 import {
   DEFAULT_RAIL_VIEW,
   initialRailDisplay,
+  isRailCollapsed,
   railViewFor,
   reduceRailDisplay,
   type RailCategory,
@@ -60,9 +61,9 @@ export const readerRailStore = {
             display: reduceRailDisplay(s.display, { type: 'closePeek' }),
           },
     ),
-  /** `selector` must return a stable value (a field or a primitive), as zustand requires. */
-  useDisplay: <T>(selector: (display: RailDisplayState) => T): T =>
-    useStore(store, (s) => selector(s.display)),
+  /** The shown collapse: a forced collapse wins, then a pending toggle, then `stored`. */
+  useCollapsed: (stored: boolean): boolean =>
+    useStore(store, (s) => isRailCollapsed(s.display, stored)),
   getDisplay: (): RailDisplayState => store.getState().display,
   /** The pending toggle once every preference write has settled; `null` while one is in flight. */
   useSettledPending: (): boolean | null =>
