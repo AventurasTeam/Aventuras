@@ -168,7 +168,7 @@ export function linkTableLabel(table: HistoryLinkTable): string {
   return LINK_LABELS[table]()
 }
 
-/** The target line of a removal row: its one link's label, or "Links" when the delete held several. */
+/** A removal row's target line: its one link's label, or "Links" when the delete held several. */
 export function removalTargetLabel(
   tables: readonly [HistoryLinkTable, ...HistoryLinkTable[]],
 ): string {
@@ -255,9 +255,8 @@ function startsWordRun(wording: string, needle: string): boolean {
   return ` ${collapse(wording)}`.includes(` ${needle}`)
 }
 
-// The name typed between the lead and the tail, which may be partly typed or not yet started:
-// "Removed when Ka" names Ka, "Removed when Kael w" names Kael. Without a lead, only a started
-// tail makes a name, or any word typed would read as one.
+// The name between lead and tail, maybe partial ("Removed when Ka" names Ka, "…Kael w" names Kael).
+// With no lead, only a started tail makes a name, or any typed word would read as one.
 function typedName(lead: string, tail: string, term: string): string | null {
   const before = lead === '' ? '' : `${escapeRegExp(lead)}\\s+`
   const partials = Array.from({ length: tail.length }, (_, i) => escapeRegExp(tail.slice(0, i + 1)))

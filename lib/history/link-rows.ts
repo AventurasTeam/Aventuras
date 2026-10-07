@@ -7,7 +7,7 @@ export const HISTORY_LINK_TABLES = [
 ] as const
 export type HistoryLinkTable = (typeof HISTORY_LINK_TABLES)[number]
 
-/** Which end of a relationship row the tab's row is ('a' holds `kind`); null for the other link tables. */
+/** Which end of a relationship row the tab's row is ('a' holds `kind`); null for other links. */
 export type LinkSide = 'a' | 'b' | null
 
 /**

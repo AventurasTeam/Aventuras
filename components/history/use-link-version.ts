@@ -5,8 +5,7 @@ import {
   happeningInvolvementsStore,
 } from '@/lib/stores'
 
-// The rows of the branch naming the target, by id and the columns History shows; a retrieval bump
-// changes none.
+// Only id + the columns History shows, so a retrieval bump leaves the signature unchanged.
 function signature<Row extends { id: string; branchId: string }>(
   rows: ReadonlyMap<string, Row>,
   branchId: string,

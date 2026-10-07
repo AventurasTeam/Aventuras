@@ -73,7 +73,7 @@ const ENDS: Record<HistoryTable, readonly End[]> = {
   threads: [],
 }
 
-// Where a delete's payload holds the link rows its cascade removed (delete-cascade.ts → PAYLOAD_KEY).
+// Where a delete's payload holds its cascade-removed link rows (delete-cascade.ts → PAYLOAD_KEY).
 const HELD_KEY: Record<HistoryLinkTable, string> = {
   character_relationships: 'relationships',
   happening_involvements: 'involvements',
@@ -268,7 +268,7 @@ async function namesOf(
   return Object.fromEntries(names)
 }
 
-/** The link rows naming a History tab's row, live or in a delete's payload (world.md → History tab). */
+/** Link rows naming a History tab's row, live or in a delete's payload (world.md → History tab). */
 export async function loadLinkEnds(
   db: Db,
   branchId: string,

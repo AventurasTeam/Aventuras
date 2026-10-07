@@ -201,7 +201,7 @@ function viaOf(query: HistoryQuery, ends: LinkEnds): (delta: Delta) => HistoryVi
   }
 }
 
-/** One chunk of a row's delta log and its link rows', paged in sort order (C4). */
+/** One chunk of a row's delta log and its link rows', paged in sort order. */
 export async function loadHistoryChunk(
   db: DbCtx['db'],
   query: HistoryQuery,

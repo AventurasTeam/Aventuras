@@ -27,10 +27,8 @@ export function HistoryTab(props: HistoryTabProps) {
   return <HistoryTabForTarget key={`${props.targetTable}:${props.targetId}`} {...props} />
 }
 
-/**
- * The working set's display names for the other ends the rows show. The selectors return a string,
- * so a patch to any other row leaves the tab alone.
- */
+// Working-set names for the rows' other ends. Selectors return a string, so a patch to any
+// other row leaves the tab alone.
 function useStoreNames(branchId: string, rows: readonly HistoryRow[]): ReadonlyMap<string, string> {
   const ids = useMemo(
     () => [...new Set(rows.flatMap((row) => (row.via.kind === 'own' ? [] : [row.via.otherId])))],

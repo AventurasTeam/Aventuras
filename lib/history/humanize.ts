@@ -116,7 +116,7 @@ function summary({ delta, via }: HistoryRow, context: HumanizeContext): string {
   }
 }
 
-/** Humanizes a union row to a display row, from `undo_payload` keys (C4). */
+/** Humanizes a union row to a display row, from `undo_payload` keys. */
 export function humanizeDelta(row: HistoryRow, context: HumanizeContext): HistoryRowView {
   const { delta } = row
   const paths = changedPaths(delta)
