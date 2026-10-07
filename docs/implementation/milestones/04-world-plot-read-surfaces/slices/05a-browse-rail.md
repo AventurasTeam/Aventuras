@@ -255,25 +255,34 @@ Canon carries the detail; each line points to it.
   and tap-outside while holding unsaved input; canon's Save / Discard /
   Cancel guard is still open, in
   [`triage.md`](../../../triage.md).
+- **The Happenings list reads the entry index itself** (developer,
+  slice review D1, 2026-10-07). The read covers the whole branch and
+  re-runs every turn, and the list waits for it, since an unread index
+  shows every anchored happening as dangling. `RailList` reads it only
+  while it shows Happenings, so the read stops when the rail collapses
+  or the phone Sheet closes. The gate is the view the list renders,
+  not `readerRailStore`, so a host that keeps its own view can't leave
+  the list loading; `RailData` carries no index. See
+  [`component-inventory.md`](../../../../ui/component-inventory.md)
+  (BrowseRail).
+- **The tablet strip's tooltips open on a long press** (developer,
+  slice review D2, 2026-10-07), as the brief asked. A tap is each
+  cell's and the chevron's action, so the tap-to-tooltip rule can't
+  apply; this is the one exception to `touch.md`'s no-long-press rule.
+  See
+  [`reader-composer.md → Collapsed state`](../../../../ui/screens/reader-composer/reader-composer.md#collapsed-state--compact-persistent-dashboard)
+  and
+  [`touch.md → Hover translation`](../../../../ui/foundations/mobile/touch.md#hover-translation).
 
-Controller decisions, reversible and listed in the PR as pending:
+One controller decision awaits the developer's ruling in the PR:
 
 - **Storybook runs `react-native-worklets/plugin` over
   `@gorhom/bottom-sheet`**, instead of a web-only scrim. The real
   Metro-web app's scrim works; only Vite's prebundle lacked the worklet
   closures.
-- **`RailData.entryIndex { ready, failed, retry }`, and the entry-index
-  read runs only while the rail's category is Happenings.** The first
-  shape marked every anchored happening dangling until the index
-  loaded, and put a full-branch read on every turn. The read still runs
-  every turn while the category is Happenings even with the rail
-  hidden; full gating needs the phone Sheet's open state in the store.
 
-Fixes worth remembering: `RailColumn` guards its strip swap with a ref,
-because a stale zero-distance slide completion re-showed the strip in an
-expanded column after a phone to desktop tier switch; the rail shortcut
-listens in the capture phase, since RN-Web's `TextInput` stops keydown
-([lesson](../../../lessons-learned/rnweb-textinput-stops-keydown.md)).
+The rail shortcut listens in the capture phase; see the
+[lesson](../../../lessons-learned/rnweb-textinput-stops-keydown.md).
 
 For [Slice 4.5b](./05b-peek-drawer.md), whose Open questions carry the
 detail: the desktop peek's branch reset, rendering the drawer only under
