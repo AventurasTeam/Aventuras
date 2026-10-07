@@ -1,4 +1,5 @@
 import * as RadioGroupBase from '@rn-primitives/radio-group'
+import { X } from 'lucide-react-native'
 import { useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import { Platform, Pressable, ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
@@ -12,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
@@ -513,6 +515,7 @@ function TermChips({ label, terms, isDeselected, onToggle, disabled }: TermChips
               disabled={disabled}
             >
               <Text className={cn(deselected && 'line-through')}>{term}</Text>
+              {deselected ? null : <Icon as={X} size={12} aria-hidden className="ml-1" />}
             </Chip>
           )
         })}

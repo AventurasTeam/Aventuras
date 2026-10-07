@@ -92,6 +92,8 @@ const chipNames = (group: string) =>
   within(screen.getByRole('group', { name: group }))
     .getAllByRole('button')
     .map((chip) => chip.textContent)
+// The inline × is a decorative glyph (the whole chip toggles), so it has no role to query by.
+const removeGlyph = (chip: HTMLElement) => chip.querySelector('svg')
 
 const resolveOk = async (r: Resolution) => {
   console.log('[story] resolved:', r)
@@ -621,6 +623,24 @@ export const MergeKeywordUnion: Story = {
       deselectedTags: [],
       deselectedKeywords: ['the wanderer'],
     })
+  },
+}
+
+export const MergeChipRemoveGlyph: Story = {
+  render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+  play: async () => {
+    const chip = () => screen.getByRole('button', { name: 'hero' })
+    await screen.findByRole('group', { name: TAG_CHIPS })
+    expect(chip()).toHaveAttribute('aria-pressed', 'true')
+    expect(removeGlyph(chip())).not.toBeNull()
+
+    await userEvent.click(chip())
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'false'))
+    expect(removeGlyph(chip())).toBeNull()
+
+    await userEvent.click(chip())
+    await waitFor(() => expect(chip()).toHaveAttribute('aria-pressed', 'true'))
+    expect(removeGlyph(chip())).not.toBeNull()
   },
 }
 
