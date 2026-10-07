@@ -221,17 +221,21 @@ collision canon, PR 3 History union). Developer decisions are marked.
   (developer, during the run). A merge that rewrites the tail promotes
   the canonical if its merged status is `staged`, whatever its kind,
   and a character canonical in the tail scene takes the tail's known
-  location, folded into the canonical's one update. No bystander is
-  written. The next turn's structural floor seats only active entities,
-  and its prompt is built before its piggyback fold.
+  location. Each folds into the canonical's update when that already
+  writes the column (`status`, `state`), else is its own write
+  (`promoteStagedEntity`, `updateEntityLocationTracking`). No bystander
+  is written. The next turn's structural floor seats only active
+  entities, and its prompt is built before its piggyback fold.
 - **Planned inside the branch lock.** Every resolution commits through
   `applyDeltaActionGroupBuilt`, so a no-gate classifier pass can't
   stale the plan. 4.2b's entity delete stays on the plain group: it
   now also plans from names and flags, which the classifier never
   renames, deletes or clears.
-- **Grouped writes need no group-aware pass.** The merge writes one
-  both-view relationship per other character and one `updateEntity`
-  per row, so no row takes two writes. A ref to the loser on the
+- **Grouped writes need no group-aware pass.** The runner refuses two
+  writes to one column of a row, and the merge makes none: one
+  both-view relationship per other character, one `updateEntity` per
+  entity row, and the canonical's scene effects on the columns its
+  update leaves unwritten. A ref to the loser on the
   canonical collapses to null. A merge whose canonical descends from
   the loser through another location is refused as `parent-cycle`,
   because the pre-group reads see the cycle.
