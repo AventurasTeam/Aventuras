@@ -66,9 +66,9 @@ function topmostAt(
 const overGlyph = (r: DOMRect): [number, number] => [r.left + r.width / 2, r.top + r.height / 2]
 const besideGlyph = (r: DOMRect): [number, number] => [r.left - 2, r.top + r.height / 2]
 
-/** Over the glyph the svg itself must be hit, so the tint never washes it out. */
-function glyphIsTopmost(category: StripCategory): boolean {
-  const { hit, glyph } = topmostAt([`rail-strip-tint-${category}`], overGlyph)
+/** Over the glyph the svg itself must be hit, so no probed layer washes it out. */
+function glyphIsTopmost(...testIDs: string[]): boolean {
+  const { hit, glyph } = topmostAt(testIDs, overGlyph)
   return hit != null && glyph.contains(hit)
 }
 
@@ -112,7 +112,7 @@ export const TintStates: Story = {
 
     // Full contrast: the glyph draws over the tint, never under it.
     for (const category of ['character', 'item', 'location'] as const) {
-      await expect(glyphIsTopmost(category)).toBe(true)
+      await expect(glyphIsTopmost(`rail-strip-tint-${category}`)).toBe(true)
     }
     // Beside the glyph the tint shows: it sits above the strip's own background.
     await expect(topLayerBesideGlyph('rail-strip-tint-character')).toBe(
@@ -196,9 +196,12 @@ export const HoverPerZone: Story = {
     await expect(hoverBg('character')).not.toBe(idle)
     await expect(hoverBg('item')).toBe(idle)
     await expect(tintBg()).toBe(tintBefore)
-    // Over the tint, never instead of it.
+    // Over the tint, never instead of it, and under the glyph like the tint.
     await expect(
       topLayerBesideGlyph('rail-strip-hover-character', 'rail-strip-tint-character'),
     ).toBe(screen.getByTestId('rail-strip-hover-character'))
+    await expect(glyphIsTopmost('rail-strip-hover-character', 'rail-strip-tint-character')).toBe(
+      true,
+    )
   },
 }

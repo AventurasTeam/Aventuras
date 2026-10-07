@@ -14,12 +14,10 @@ import { formatStripCount, type RailStripModel, type StripCategory } from '@/lib
 import type { RecentlyClassified } from '@/lib/row-signals'
 import { cn } from '@/lib/utils'
 
-import { TintLayer } from './tint-layer'
+import { TintLayer, UNDER_CONTENT_STYLE } from './tint-layer'
 
 export const RAIL_STRIP_WIDTH_PX = 32
 
-// Like the tint layer: under the glyph, and later in the DOM, so above the tint.
-const HOVER_STYLE = { ...POINTER_EVENTS_NONE, zIndex: -1 } satisfies ViewStyle
 const STRIP_WIDTH_STYLE = { width: RAIL_STRIP_WIDTH_PX } satisfies ViewStyle
 
 export type RailStripProps = {
@@ -152,7 +150,8 @@ function CellPressable({
   )
 }
 
-// Over the tint, never instead of it: hover is feedback, the tint is information.
+// Over the tint, never instead of it: hover is feedback, the tint is information. Same z as the
+// tint and later in the DOM, so above it and still under the glyph.
 function HoverLayer({ testID }: { testID?: string }) {
   if (Platform.OS !== 'web') return null
   return (
@@ -160,7 +159,7 @@ function HoverLayer({ testID }: { testID?: string }) {
       testID={testID}
       aria-hidden
       className="absolute inset-0 group-hover:bg-tint-hover"
-      style={HOVER_STYLE}
+      style={UNDER_CONTENT_STYLE}
     />
   )
 }
