@@ -135,9 +135,12 @@ Layout: `[Chapter ▾] [<time chip>] [⎇N] ··· [☰ Browse]`.
   padding doubles as gesture safe-zone. Exact pixel offset is
   session 5 (touch grammar) territory.
 - **Empty state.** If the story has no chapters yet (or the
-  chapter / time chips would render empty), the strip is hidden
-  entirely. The Browse chip is also hidden in this state since
-  the rail has nothing to surface on a brand-new story.
+  chapter / time chips would render empty), those chips are
+  hidden. The Browse chip always renders on the reader, so the
+  strip shows whenever it holds any chip — on a brand-new story,
+  Browse alone. A story with nothing to browse opens the Sheet
+  onto the per-category empty state per
+  [`lists.md → Empty list / table state`](../../patterns/lists.md#empty-list--table-state).
 
 The desktop equivalent — chips inline in the top bar plus the
 right-edge rail strip — is unchanged. Tablet inherits the desktop

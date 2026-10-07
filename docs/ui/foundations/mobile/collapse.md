@@ -78,10 +78,16 @@ Phone (< 640 px):
   matches.
 - **Tap the Browse chip on phone → opens the rail's content as
   a bottom Sheet** (per [layout primitives → Sheet](./layout.md#sheet)).
-  Initial Sheet height: medium (~50–60% per layout.md). Sheet
-  contains the rail's full vocabulary — category dropdown, filter
-  chips, search, row list, Import affordance — same content as
-  desktop rail.
+  Initial Sheet height: medium (~50–60% per layout.md). The
+  Sheet opens on the row list of the last category browsed —
+  search, filter chips, row list, Import affordance, the same
+  content as the desktop rail — under a head of an icon-only `←`
+  and the category name. The `←` goes up to a **category level**
+  listing the seven categories grouped World / Plot, each row
+  tinted by its kind's aggregate classifier signal; picking one
+  returns to its list. The category level replaces the desktop
+  category dropdown, which on phone would open a second Sheet.
+  Both levels stay at medium.
 - **Tap a row inside the sheet → sheet swaps to peek view.**
   Same internal navigation as the desktop peek drawer, but a
   single sheet element morphs content (not Sheet over Sheet,
@@ -103,9 +109,9 @@ Phone (< 640 px):
   the row pre-selected (skipping the list-first state on first
   mount).
 - **Drag-down handle and backdrop tap** dismiss the whole sheet
-  regardless of state (row-list or peek). The sheet's `←`
-  internal back is for going from peek back to row-list, not for
-  staged dismissal.
+  regardless of state (category level, row-list or peek). The
+  sheet's `←` is internal navigation — row-list up to the
+  category level, peek back to row-list — not staged dismissal.
 - **Save-session quick-edit exception** carries through — in-sheet
   peek edits commit on field blur per
   [`patterns/save-sessions.md → Quick-edit exception — peek drawer`](../../patterns/save-sessions.md#quick-edit-exception--peek-drawer).

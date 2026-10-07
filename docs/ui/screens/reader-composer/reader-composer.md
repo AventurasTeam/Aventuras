@@ -45,8 +45,8 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 │                                       │ Browse rail            │
 │   entries scroll                      │ (scope chip if active) │
 │                                       │ category dropdown      │
-│                                       │ filter chips           │
 │                                       │ search                 │
+│                                       │ filter chips           │
 │                                       │ list (sorted, grouped) │
 │                                       │ + Import from Vault    │
 │   suggestions panel (after AI reply)  │                        │
@@ -56,6 +56,12 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 
 (Right-side peek drawer slides in over the rail + narrative when an
 entity row is clicked.)
+
+Rail rows carry no collision strip and no collapsed-group `⚠ N`
+badge: the World panel is the only surface that resolves a name
+collision (per
+[`world.md → Collision review and entity merge`](../world/world.md#collision-review-and-entity-merge)),
+so a flagged row reads as an ordinary row in the rail.
 
 ## Top-bar — chapter navigation
 
@@ -1072,16 +1078,24 @@ brightened by hovering empty area, and vice versa. Cell tints
 from classifier activity remain stable on hover (tint is
 information; hover is interaction feedback — distinct
 primitives). The existing `Cmd/Ctrl+\` shortcut continues to
-toggle expand / collapse without strip-internal keyboard
-traversal.
+toggle expand / collapse from anywhere, with no need to tab into
+the strip. On web the strip itself holds five Tab stops, the
+chevron and the four cells, each a named button; the empty
+region is pointer-only, since it repeats the chevron's action.
 
 On tablet (inheriting desktop), the same hit zones become tap
-targets. Tooltip disclosure surfaces via tap per the
+targets. A tap on a cell is its action, so
 [touch.md → Tap-to-tooltip on inert chrome text](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)
-pattern. Cells fall under the 44-px iOS recommended hit-target;
-a tap-miss lands on the chevron or empty region (both also
-expand) — worst case is "expand without category-switch," no
-destructive cost.
+doesn't apply: a cell's tooltip text opens on a **long press**, in
+a transient popover, as does the chevron's. The chevron and the
+empty region keep a tap as expand. Cells fall under the 44-px iOS
+recommended hit-target. A tap that misses a cell lands on the
+chevron or the empty region (both also expand) only at the strip's
+top and bottom edges; between adjacent cells (character and item,
+location and faction) a miss switches to the neighbouring
+category, and the gap between the two groups is inert. Neither
+case is destructive: worst case is an expand onto the wrong
+category.
 
 ### Open state — collapse trigger
 
@@ -1133,6 +1147,14 @@ underneath — is what's locked here.
 First-launch default: **open**. Storage venue is implementation
 detail (an ergonomic UI-state surface, not `stories.settings` —
 this is chrome state, not story content).
+
+The rail's **view state** (category, filter, search, peek) is
+session-scoped and never persisted. The category is kept app-wide
+for the session; filter, search and the peek slot reset when the
+reader's branch changes. Within a branch the view survives
+collapse and expand, a reflow between tiers, and a reader remount
+(per
+[`collapse.md → State preservation on reflow`](../../foundations/mobile/collapse.md#state-preservation-on-reflow)).
 
 ### Peek drawer — peek implies rail open
 
@@ -1317,15 +1339,26 @@ specifics below.
   full strength on the turn of write, 50% strength on the
   following turn, gone after. Single aggregate signal — no
   per-kind disambiguation on phone (the chip is too small;
-  per-kind discovery surfaces inside the rail-as-Sheet via the
-  existing row tint once the user taps in). The chip's tap
+  per-kind discovery surfaces inside the rail-as-Sheet once the
+  user taps in: each categories-level row carries its kind's
+  aggregate tint, and list rows their own row tint). The chip's tap
   behavior, label, and the rail-as-Sheet flow are unchanged;
   tint is purely informational, no tooltip or long-press
   disclosure added.
-- **Rail-as-sheet contents.** Full rail vocabulary — category
-  dropdown, filter chips, search, row list, Import affordance.
-  Tap a row inside the sheet → sheet swaps to peek view (height
-  may grow to tall ~85–95 % per the
+- **Rail-as-sheet contents — three levels, one Sheet.** The
+  sheet opens on the **list** level of the last category
+  browsed (Characters the first time): a flex-start head of an
+  icon-only `←` and the category name, then the rail's search,
+  filter chips, row list and Import affordance. The `←` goes up
+  to the **categories** level — the seven categories grouped
+  World / Plot, one text row each, tinted by its kind's
+  aggregate classifier signal (tint only, no counts), the
+  current category marked; picking one returns to its list. The
+  categories level stands in for the desktop category dropdown,
+  which on phone presents as a bottom Sheet of its own. List and
+  categories sit at the medium detent. Tap a row inside the
+  sheet → sheet swaps to the **peek** level (height grows to
+  tall ~85–95 % per the
   [Peek drawer mapping](../../foundations/mobile/layout.md#mapping--desktop-to-mobile)).
   Single sheet, content state-swap; not Sheet over Sheet (which
   is disallowed per
@@ -1335,10 +1368,11 @@ specifics below.
   is desktop chrome; sheets dismiss via handle / backdrop, not
   an X). The arrow is the universal back affordance, no text
   label needed; the head uses flex-start so entity meta sits
-  close after the arrow. Tap returns to row-list state. Peek's `Open in panel →` link dismisses the
-  sheet and routes to World / Plot per the cross-surface nav
-  model. Drag-down on the handle, or backdrop tap, dismisses the
-  whole sheet regardless of state.
+  close after the arrow. Tap returns to the list level. Peek's
+  `Open in panel →` link dismisses the sheet and routes to
+  World / Plot per the cross-surface nav model. Drag-down on the
+  handle, or backdrop tap, dismisses the whole sheet from any
+  level.
 - **Peek-rail mutual exclusion** (per
   [Peek drawer — peek implies rail open](#peek-drawer--peek-implies-rail-open))
   holds on phone — peek is reachable only via row-tap inside the

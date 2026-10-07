@@ -56,6 +56,11 @@ no hover state on touch) becomes the universal rule for any
 | Hover tooltips                        | desktop-only; touch has no tooltip mechanism   |
 | Hover-anywhere-else affordance reveal | always-visible-muted                           |
 
+One exception: the tablet Browse rail strip's cells. A tap is the
+cell's action (expand onto its category), so the tooltip text opens
+on a long press instead
+([reader-composer.md → Collapsed state](../../screens/reader-composer/reader-composer.md#collapsed-state--compact-persistent-dashboard)).
+
 This generalizes the existing scattered "touch has no hover state"
 rules into one place and applies them uniformly. Per-surface docs
 that reference the pattern continue to reference
@@ -81,7 +86,9 @@ What we use:
 What we don't use in v1:
 
 - **Long-press for actions.** No long-press-to-show-context-menu,
-  no long-press-to-grab, no long-press-for-tooltip. The OS
+  no long-press-to-grab, no long-press-for-tooltip (bar the one
+  strip exception under
+  [Hover translation](#hover-translation)). The OS
   reserves long-press for selection / accessibility; using it for
   app actions creates conflicts. Right-click on desktop maps to
   the existing `⋯` overflow menu; touch users tap the `⋯`.

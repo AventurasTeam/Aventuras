@@ -517,13 +517,27 @@
   .viewport.rail-sheet-open .rail-sheet-backdrop { display: block; }
   .viewport.rail-sheet-open .rail-sheet { display: flex; }
   .rail-sheet .sheet-handle { width: 36px; height: 4px; background: var(--line); border-radius: 2px; margin: 8px auto 8px; flex-shrink: 0; cursor: pointer; }
-  .rail-sheet .sheet-head { padding: 4px 16px 10px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+  /* One sheet, three levels (reader-composer.md → Mobile expression): the list of the last
+     category browsed, ← up to the categories root, a category row back down to its list.
+     The third level, peek, is the peek overlay's phone expression above. */
+  .rail-sheet .sheet-level { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .rail-sheet[data-level="list"] .sheet-level-list,
+  .rail-sheet[data-level="categories"] .sheet-level-categories { display: flex; }
+  .rail-sheet .sheet-head { padding: 4px 16px 10px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-shrink: 0; }
+  .rail-sheet .sheet-back { font-size: 16px; line-height: 1; color: var(--ink); cursor: pointer; padding: 2px 4px; }
   .rail-sheet .sheet-title { font-size: 13px; font-weight: 600; color: var(--ink); }
-  .rail-sheet .sheet-cat { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .rail-sheet .sheet-group { padding: 12px 16px 4px; font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+  .rail-sheet .sheet-cat-row { min-height: 44px; padding: 0 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; font-size: 13px; color: var(--ink); cursor: pointer; }
+  /* The current category: sunken background plus a 3px right edge. A tint replaces the
+     background below, so the edge is what keeps the mark. */
+  .rail-sheet .sheet-cat-row.current { background: var(--bg); box-shadow: inset -3px 0 0 var(--ink); }
+  .rail-sheet .sheet-cat-row.recent-1 { background: rgba(85,136,170,0.08); }
+  .rail-sheet .sheet-cat-row.recent-2 { background: rgba(85,136,170,0.04); }
   .rail-sheet .sheet-controls { padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-bottom: 1px solid var(--line-soft); }
   .rail-sheet .sheet-search { padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; color: var(--ink-faint); background: var(--bg); font-style: italic; }
   .rail-sheet .sheet-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .rail-sheet .sheet-chip { padding: 3px 10px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 11px; color: var(--ink-muted); }
+  .rail-sheet .sheet-chips:empty { display: none; }
+  .rail-sheet .sheet-chip { padding: 3px 10px; border: 1px solid var(--line-soft); border-radius: 3px; font-size: 11px; color: var(--ink-muted); }
   .rail-sheet .sheet-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
   .rail-sheet .sheet-list { flex: 1; overflow-y: auto; padding: 4px 0; }
   .rail-sheet .sheet-row { padding: 10px 16px; border-bottom: 1px solid var(--line-soft); display: flex; gap: 8px; align-items: center; cursor: pointer; }
@@ -1369,35 +1383,44 @@
 
 </div>
 
-  <!-- Rail-as-Sheet preview (phone-tier only). The strip-tap-opens-as-Sheet
-       behavior per collapse.md; this placeholder mirrors the rail's vocabulary
-       (category dropdown / filter chips / search / row list / Import footer)
-       so reviewers can see the phone-tier expression directly. -->
+  <!-- Rail-as-Sheet preview (phone-tier only), opened by the Browse chip. One
+       sheet, two of its three levels mocked: the list of the last category
+       browsed (← and the category in the head, the category's filter chips,
+       search, rows, Import footer) and the categories root the ← goes up to,
+       its rows tinted by their kind's classifier aggregate. A category row
+       returns to its list. Both levels sit at the medium detent. -->
   <div class="rail-sheet-backdrop" id="rail-sheet-backdrop"></div>
-  <div class="rail-sheet" id="rail-sheet" role="dialog" aria-label="Browse rail (Sheet)">
+  <div class="rail-sheet" id="rail-sheet" data-level="list" role="dialog" aria-label="Browse rail (Sheet)">
     <div class="sheet-handle" id="rail-sheet-handle" title="Drag down to dismiss"></div>
-    <div class="sheet-head">
-      <span class="sheet-cat">Browse &middot;</span>
-      <span class="sheet-title">Characters</span>
+    <div class="sheet-level sheet-level-list">
+      <div class="sheet-head">
+        <span class="sheet-back" id="rail-sheet-up" role="button" aria-label="Back to categories" title="Back to categories">&larr;</span>
+        <span class="sheet-title" id="rail-sheet-title">Characters</span>
+      </div>
+      <div class="sheet-controls">
+        <div class="sheet-search" id="rail-sheet-search">&#9906; Search characters&hellip;</div>
+        <div class="sheet-chips" id="rail-sheet-chips"><span class="sheet-chip active">All</span><span class="sheet-chip">In scene</span><span class="sheet-chip">Active</span><span class="sheet-chip">Staged</span><span class="sheet-chip">Retired</span></div>
+      </div>
+      <div class="sheet-list" id="rail-sheet-rows">
+        <div class="sheet-row"><span class="kind">&#9786;</span><span class="name">Aria Stoneheart</span></div>
+        <div class="sheet-row"><span class="kind">&#9786;</span><span class="name">Iron Cross</span></div>
+        <div class="sheet-row"><span class="kind">&#9786;</span><span class="name">Old Jorin</span></div>
+      </div>
+      <div class="sheet-foot">+ Import from Vault</div>
     </div>
-    <div class="sheet-controls">
-      <div class="sheet-search">&#9906; Search characters&hellip;</div>
-      <div class="sheet-chips">
-        <span class="sheet-chip active">All</span>
-        <span class="sheet-chip">Lead</span>
-        <span class="sheet-chip">Recent</span>
-        <span class="sheet-chip">Pinned</span>
+    <div class="sheet-level sheet-level-categories">
+      <div class="sheet-list">
+        <div class="sheet-group">World</div>
+        <div class="sheet-cat-row current recent-1" data-cat="Characters">Characters</div>
+        <div class="sheet-cat-row" data-cat="Places">Places</div>
+        <div class="sheet-cat-row recent-2" data-cat="Items">Items</div>
+        <div class="sheet-cat-row" data-cat="Factions">Factions</div>
+        <div class="sheet-cat-row" data-cat="Lore">Lore</div>
+        <div class="sheet-group">Plot</div>
+        <div class="sheet-cat-row recent-2" data-cat="Threads">Threads</div>
+        <div class="sheet-cat-row" data-cat="Happenings">Happenings</div>
       </div>
     </div>
-    <div class="sheet-list">
-      <div class="sheet-row"><span class="kind">&#128100;</span><span class="name">Aria Stoneheart</span></div>
-      <div class="sheet-row"><span class="kind">&#128100;</span><span class="name">Iron Cross</span></div>
-      <div class="sheet-row"><span class="kind">&#128100;</span><span class="name">Old Jorin</span></div>
-      <div class="sheet-row"><span class="kind">&#128205;</span><span class="name">Mornstone Keep</span></div>
-      <div class="sheet-row"><span class="kind">&#128205;</span><span class="name">The Iron Tankard</span></div>
-      <div class="sheet-row"><span class="kind">&#127963;</span><span class="name">The Iron Brotherhood</span></div>
-    </div>
-    <div class="sheet-foot">+ Import from Vault</div>
   </div>
 
     </div><!-- /.viewport -->
@@ -2106,9 +2129,46 @@
   function isPhoneTier() {
     return viewportEl.getBoundingClientRect().width < 640;
   }
+  // One sheet, three levels; opening always lands on the list of the last category browsed.
+  const railSheetEl = document.getElementById('rail-sheet');
+  const ENTITY_CHIPS = ['All', 'In scene', 'Active', 'Staged', 'Retired'];
+  const RAIL_SHEET_CATEGORIES = {
+    Characters: { glyph: '&#9786;', chips: ENTITY_CHIPS, rows: ['Aria Stoneheart', 'Iron Cross', 'Old Jorin'] },
+    Places: { glyph: '&#8962;', chips: ENTITY_CHIPS, rows: ['Mornstone Keep', 'The Iron Tankard'] },
+    Items: { glyph: '&#9670;', chips: ENTITY_CHIPS, rows: ['Ashen Signet', 'Signal Lantern'] },
+    Factions: { glyph: '&#9873;', chips: ENTITY_CHIPS, rows: ['The Iron Brotherhood'] },
+    Lore: { glyph: '&#128220;', chips: [], rows: ['The Sundering', 'Oaths of the Keep'] },
+    Threads: { glyph: '', chips: ['All', 'Active', 'Pending', 'Resolved', 'Failed'], rows: ['Who sent the courier', 'Reclaim the keep'] },
+    Happenings: { glyph: '', chips: ['All', 'This chapter', 'Common knowledge', 'Out-of-narrative'], rows: ['The ambush at the ford', 'The keep changes hands'] },
+  };
+  function setRailSheetLevel(level) {
+    railSheetEl.dataset.level = level;
+  }
+  function showRailSheetCategory(name) {
+    const cat = RAIL_SHEET_CATEGORIES[name];
+    document.getElementById('rail-sheet-title').textContent = name;
+    document.getElementById('rail-sheet-search').innerHTML = '&#9906; Search ' + name.toLowerCase() + '&hellip;';
+    document.getElementById('rail-sheet-chips').innerHTML = cat.chips
+      .map((chip, i) => '<span class="sheet-chip' + (i === 0 ? ' active' : '') + '">' + chip + '</span>')
+      .join('');
+    document.getElementById('rail-sheet-rows').innerHTML = cat.rows
+      .map(row => '<div class="sheet-row"><span class="kind">' + cat.glyph + '</span><span class="name">' + row + '</span></div>')
+      .join('');
+    document.querySelectorAll('.sheet-cat-row').forEach(row => {
+      row.classList.toggle('current', row.dataset.cat === name);
+    });
+  }
   function setRailSheet(open) {
+    if (open) setRailSheetLevel('list');
     viewportEl.classList.toggle('rail-sheet-open', open);
   }
+  document.getElementById('rail-sheet-up').addEventListener('click', () => setRailSheetLevel('categories'));
+  document.querySelectorAll('.sheet-cat-row').forEach(row => {
+    row.addEventListener('click', () => {
+      showRailSheetCategory(row.dataset.cat);
+      setRailSheetLevel('list');
+    });
+  });
   // Desktop / tablet: aside click expands collapsed rail (existing behavior).
   // Phone has aside hidden via @container; this handler is a no-op there.
   aside.addEventListener('click', () => {
