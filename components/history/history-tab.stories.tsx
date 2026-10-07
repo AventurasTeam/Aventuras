@@ -11,7 +11,6 @@ import { generationStore, happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
 import { HistoryTab } from './history-tab'
-import { withQueryClient } from './with-query-client'
 
 const delta = (
   targetTable: string,
@@ -106,7 +105,6 @@ const meta: Meta<typeof HistoryTab> = {
         <Story />
       </HistoryLoaderProvider>
     ),
-    withQueryClient,
   ],
 }
 export default meta

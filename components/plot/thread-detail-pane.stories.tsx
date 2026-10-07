@@ -4,7 +4,6 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
-import { withQueryClient } from '@/components/history/with-query-client'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
@@ -212,7 +211,6 @@ const meta: Meta<typeof Harness> = {
         <Story />
       </HistoryLoaderProvider>
     ),
-    withQueryClient,
   ],
 }
 export default meta
