@@ -54,8 +54,13 @@ type EntityListPaneProps = {
    */
   isEmpty: boolean
 
+  /** `transparent` paints no background, for a pane hosted on another surface (a Sheet). */
+  surface?: EntityListPaneSurface
+
   className?: string
 }
+
+type EntityListPaneSurface = 'base' | 'transparent'
 
 export function EntityListPane({
   kindSelector,
@@ -67,10 +72,17 @@ export function EntityListPane({
   emptyState,
   isEmpty,
   body,
+  surface = 'base',
   className,
 }: EntityListPaneProps) {
   return (
-    <View className={cn('w-full flex-1 flex-col gap-3 bg-bg-base p-3', className)}>
+    <View
+      className={cn(
+        'w-full flex-1 flex-col gap-3 p-3',
+        surface === 'base' && 'bg-bg-base',
+        className,
+      )}
+    >
       <View className="flex-row items-center gap-2">
         <View className="min-w-0 flex-1">{kindSelector}</View>
         {addSlot != null ? <View className="shrink-0">{addSlot}</View> : null}
@@ -88,4 +100,4 @@ export function EntityListPane({
   )
 }
 
-export type { EntityListPaneProps }
+export type { EntityListPaneProps, EntityListPaneSurface }

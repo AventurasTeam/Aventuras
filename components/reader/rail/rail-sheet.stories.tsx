@@ -131,6 +131,17 @@ async function waitForMediumDetent() {
   }, ANIMATION)
 }
 
+/** Elements from `from` up to the dialog that paint a background over the Sheet's surface. */
+function paintedUpToDialog(from: HTMLElement): HTMLElement[] {
+  const dialog = railDialog()
+  const painted: HTMLElement[] = []
+  for (let node = from.parentElement; node != null; node = node.parentElement) {
+    if (getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)') painted.push(node)
+    if (node === dialog) break
+  }
+  return painted
+}
+
 function tintOpacity(category: RailCategory): string | null {
   const layer = screen.queryByTestId(`rail-sheet-tint-${category}`)
   return layer == null ? null : getComputedStyle(layer).opacity
@@ -178,6 +189,12 @@ export const ListLevel: Story = {
     await expect(backToCategories()).toBeVisible()
     await expect(screen.getByRole('button', { name: leadOf(DATA).name })).toBeVisible()
     await expect(screen.getByText(t('reader:rail.importFromVault'))).toBeVisible()
+
+    // Every level sits on the Sheet's own surface, so a level switch never changes the background.
+    await expect(
+      paintedUpToDialog(screen.getByRole('button', { name: leadOf(DATA).name })),
+    ).toEqual([])
+    await expect(paintedUpToDialog(screen.getByText(t('reader:rail.importFromVault')))).toEqual([])
   },
 }
 
@@ -198,6 +215,9 @@ export const CategoriesWithTints: Story = {
     }
     await expect(screen.getByRole('heading', { name: t('reader:rail.groups.world') })).toBeVisible()
     await expect(screen.getByRole('heading', { name: t('reader:rail.groups.plot') })).toBeVisible()
+    await expect(
+      paintedUpToDialog(screen.getByRole('heading', { name: t('reader:rail.groups.world') })),
+    ).toEqual([])
 
     await expect(tintOpacity('character')).toBe('1')
     await expect(tintOpacity('lore')).toBe('0.5')

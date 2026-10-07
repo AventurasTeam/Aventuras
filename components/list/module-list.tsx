@@ -1,7 +1,7 @@
 import { useContext, useMemo, type ReactNode } from 'react'
 import { View, type ViewStyle } from 'react-native'
 
-import { EntityListPane } from '@/components/shells/entity-list-pane'
+import { EntityListPane, type EntityListPaneSurface } from '@/components/shells/entity-list-pane'
 import {
   Accordion,
   AccordionContent,
@@ -57,6 +57,8 @@ export type ModuleListProps<
   emptySubtext?: string
   /** Replaces the list and its empty state; the header and toolbar stay mounted. */
   body?: ReactNode
+  /** Forwarded to the pane; `transparent` inside a Sheet. */
+  surface?: EntityListPaneSurface
 }
 
 // Style, not `className`: NativeWind drops classes on a component it doesn't register, and the
@@ -92,6 +94,7 @@ export function ModuleList<
   density = 'default',
   emptySubtext,
   body,
+  surface,
 }: ModuleListProps<Row, Filter, Key, Signals>) {
   const { scrollRef, contentRef, rowRef, focusRef } = useRevealScroll(reveal, resetKey)
   const Scroll = useContext(ScrollComponentContext)
@@ -192,6 +195,7 @@ export function ModuleList<
       }
       isEmpty={rows.length === 0}
       body={body}
+      surface={surface}
       emptyState={
         <EmptyState title={copy.emptyTitle} subtext={emptySubtext ?? copy.emptySubtext} />
       }

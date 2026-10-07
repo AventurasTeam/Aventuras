@@ -92,6 +92,7 @@ export function RailSheet({
                 </View>
               }
               onRowPress={handleRowPress}
+              surface="transparent"
             />
             <View className="px-3 pb-3">
               <RailImportFooter />

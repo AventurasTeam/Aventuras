@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { LORE_FILTER } from '@/components/entity/lore-list-module'
 import { ModuleList } from '@/components/list/module-list'
 import { plotCollapseDefaults } from '@/components/plot/plot-list-pane'
+import type { EntityListPaneSurface } from '@/components/shells/entity-list-pane'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
@@ -23,6 +24,8 @@ export type RailListProps = {
   header: ReactNode
   headerAction?: ReactNode
   onRowPress: (category: RailCategory, id: string) => void
+  /** `transparent` on the Sheet, whose surface every level shares. */
+  surface?: EntityListPaneSurface
 }
 
 // The panels' own defaults under the panels' own keys, so the rail and World / Plot share one
@@ -59,6 +62,7 @@ export function RailList({
   header,
   headerAction,
   onRowPress,
+  surface,
 }: RailListProps): ReactNode {
   const { category } = view
   const defaults = railCollapseDefaults(category)
@@ -92,6 +96,7 @@ export function RailList({
     resetKey: category,
     density: 'compact' as const,
     emptySubtext: railEmptySubtext(category),
+    surface,
   }
 
   switch (view.category) {
