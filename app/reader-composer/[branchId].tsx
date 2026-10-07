@@ -12,6 +12,10 @@ import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { railRowHref } from '@/components/reader/rail/rail-modules'
+import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
+import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
+import { useRailData } from '@/components/reader/rail/use-rail-data'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import { type ReaderSurfaceHandle } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
@@ -44,7 +48,6 @@ import {
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
-import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
@@ -95,6 +98,7 @@ import {
   SUGGESTION_REFRESH_KIND,
   type PipelineError,
 } from '@/lib/pipeline'
+import { type RailCategory } from '@/lib/reader-rail'
 import {
   appSettingsStore,
   awaitRunTerminal,
@@ -1197,6 +1201,13 @@ export default function ReaderComposerRoute() {
     readerRailStore.enterBranch(branchId)
   }, [branchId])
 
+  // One read for whichever tier's rail mounts: the column on tablet / desktop, the chip on phone.
+  const railData = useRailData(branchId)
+  const handleRailRowPress = useCallback(
+    (category: RailCategory, id: string) => surfaceNavigate(railRowHref(branchId, category, id)),
+    [surfaceNavigate, branchId],
+  )
+
   const placeholder = readerPlaceholder({
     hydrationSucceeded,
     isEmpty: entries.length === 0,
@@ -1237,6 +1248,11 @@ export default function ReaderComposerRoute() {
         </TruncatedText>
       }
       chapterProgress={openRegionPct}
+      mobileChipAction={
+        tier === 'phone' ? (
+          <ReaderBrowseChip data={railData} onRowPress={handleRailRowPress} />
+        ) : undefined
+      }
       onBack={() => router.back()}
       onOpenStorySettings={() => {
         if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
@@ -1346,11 +1362,7 @@ export default function ReaderComposerRoute() {
           </View>
         </KeyboardInsetColumn>
         {showRail ? (
-          <View className="w-[260px] border-l border-border bg-bg-sunken p-3">
-            <Text variant="muted" size="sm">
-              {t('reader:railPlaceholder')}
-            </Text>
-          </View>
+          <ReaderRailColumn data={railData} isFocused={isFocused} onRowPress={handleRailRowPress} />
         ) : null}
       </View>
       {rollback ? (
