@@ -946,7 +946,7 @@ class DatabaseService {
         character.name,
         character.description,
         character.relationship,
-        JSON.stringify(character.traits),
+        JSON.stringify(uniqueTerms(character.traits)),
         JSON.stringify(character.visualDescriptors || {}),
         character.portrait || null,
         character.status,
@@ -957,7 +957,9 @@ class DatabaseService {
         character.translatedName || null,
         character.translatedDescription || null,
         character.translatedRelationship || null,
-        character.translatedTraits ? JSON.stringify(character.translatedTraits) : null,
+        Array.isArray(character.translatedTraits)
+          ? JSON.stringify(uniqueTerms(character.translatedTraits))
+          : null,
         character.translatedVisualDescriptors
           ? JSON.stringify(character.translatedVisualDescriptors)
           : null,
@@ -985,7 +987,7 @@ class DatabaseService {
     }
     if (updates.traits !== undefined) {
       setClauses.push('traits = ?')
-      values.push(JSON.stringify(updates.traits))
+      values.push(JSON.stringify(uniqueTerms(updates.traits)))
     }
     if (updates.visualDescriptors !== undefined) {
       setClauses.push('visual_descriptors = ?')
@@ -1018,7 +1020,11 @@ class DatabaseService {
     }
     if (updates.translatedTraits !== undefined) {
       setClauses.push('translated_traits = ?')
-      values.push(updates.translatedTraits ? JSON.stringify(updates.translatedTraits) : null)
+      values.push(
+        Array.isArray(updates.translatedTraits)
+          ? JSON.stringify(uniqueTerms(updates.translatedTraits))
+          : null,
+      )
     }
     if (updates.translatedVisualDescriptors !== undefined) {
       setClauses.push('translated_visual_descriptors = ?')
@@ -2970,7 +2976,7 @@ class DatabaseService {
         character.id,
         character.name,
         character.description,
-        JSON.stringify(character.traits),
+        JSON.stringify(uniqueTerms(character.traits)),
         JSON.stringify(character.visualDescriptors),
         character.portrait,
         JSON.stringify(character.tags),
@@ -2999,7 +3005,7 @@ class DatabaseService {
     }
     if (updates.traits !== undefined) {
       setClauses.push('traits = ?')
-      values.push(JSON.stringify(updates.traits))
+      values.push(JSON.stringify(uniqueTerms(updates.traits)))
     }
     if (updates.visualDescriptors !== undefined) {
       setClauses.push('visual_descriptors = ?')

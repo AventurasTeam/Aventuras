@@ -2155,13 +2155,19 @@ class StoryStore {
   // that branch and the in-memory list is only touched while it is still the open one.
   async updateCharacter(
     id: string,
-    updates: Partial<Character>,
+    changes: Partial<Character>,
     expected?: BranchScope,
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.characters.find((c) => c.id === id)
     if (!existing) throw new Error('Character not found')
+
+    const updates: Partial<Character> = { ...changes }
+    if (Array.isArray(changes.traits)) updates.traits = uniqueTerms(changes.traits)
+    if (Array.isArray(changes.translatedTraits)) {
+      updates.translatedTraits = uniqueTerms(changes.translatedTraits)
+    }
 
     if (updates.relationship !== undefined) {
       if (updates.relationship === 'self' && existing.relationship !== 'self') {
@@ -5184,7 +5190,7 @@ class StoryStore {
 
       return {
         ...character,
-        traits: snapshot.traits ?? character.traits,
+        traits: snapshot.traits ? uniqueTerms(snapshot.traits) : character.traits,
         status: snapshot.status ?? character.status,
         relationship,
         visualDescriptors: snapshot.visualDescriptors ?? character.visualDescriptors,

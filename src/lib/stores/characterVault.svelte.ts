@@ -60,6 +60,7 @@ class CharacterVaultStore {
     const now = Date.now()
     const character: VaultCharacter = {
       ...input,
+      traits: uniqueTerms(input.traits),
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -74,7 +75,10 @@ class CharacterVaultStore {
   /**
    * Update an existing vault character.
    */
-  async update(id: string, updates: Partial<VaultCharacter>): Promise<void> {
+  async update(id: string, changes: Partial<VaultCharacter>): Promise<void> {
+    const updates = Array.isArray(changes.traits)
+      ? { ...changes, traits: uniqueTerms(changes.traits) }
+      : changes
     await database.updateVaultCharacter(id, updates)
     this.characters = this.characters.map((c) =>
       c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c,
@@ -348,10 +352,11 @@ class CharacterVaultStore {
       const exchange = parseExchange(jsonString, 'character')
       if (exchange.kind === 'invalid') throw new Error(exchange.error)
       if (exchange.kind === 'exchange') {
-        const finalData = exchangeToCharacter(exchange.document.data, {
+        const converted = exchangeToCharacter(exchange.document.data, {
           id: tempId,
           originalFilename: file.name,
         })
+        const finalData = { ...converted, traits: uniqueTerms(converted.traits) }
         await database.addVaultCharacter(finalData)
         this.characters = this.characters.map((c) => (c.id === tempId ? finalData : c))
         for (const warning of exchange.warnings) ui.showToast(warning, 'warning', 8000)
@@ -442,6 +447,7 @@ class CharacterVaultStore {
       }
 
       // Save to DB
+      finalData = { ...finalData, traits: uniqueTerms(finalData.traits) }
       await database.addVaultCharacter(finalData)
 
       // Update store

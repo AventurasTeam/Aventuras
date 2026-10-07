@@ -32,6 +32,8 @@ The database, the native layer that moves bytes around it, and the settings blob
   between kept a variable the pack no longer had. `deleteBranch` does the same for the checkpoints
   the branch owns, and its subquery reads `story_entries`, which a later statement in the same batch
   deletes — so that statement's position in the list is load-bearing, not cosmetic.
+- **Trait lists are normalized by `termKey`** (`uniqueTerms`) on write and on load: the `characters` and
+  `character_vault` writers in `database.ts` dedupe, and the row mappers dedupe legacy rows.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
   `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way.
   `branchId` names the branch the snapshot was taken on, and a restore onto any other branch is
