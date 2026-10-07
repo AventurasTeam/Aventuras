@@ -4,7 +4,7 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/lib/cache'
-import type { Entity, Lore, StoryEntry, Thread } from '@/lib/db'
+import type { Entity, Happening, Lore, StoryEntry, Thread } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { SignalDelta } from '@/lib/row-signals'
 import {
@@ -108,6 +108,23 @@ function threadRow(id: string, branchId = 'br_1'): Thread {
     injectionMode: 'auto',
     triggeredAtEntryId: null,
     resolvedAtEntryId: null,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
+function happeningRow(id: string, branchId = 'br_1'): Happening {
+  return {
+    id,
+    branchId,
+    title: id,
+    description: null,
+    category: null,
+    icon: null,
+    temporal: null,
+    occurredAtEntryId: null,
+    commonKnowledge: 0,
     embeddingStale: 1,
     createdAt: 1,
     updatedAt: 1,
@@ -637,11 +654,12 @@ describe('useRowSignals', () => {
     seedOneReply()
     loreStore.hydrate('br_1', [loreRow('lore_1')])
     threadsStore.hydrate('br_1', [threadRow('thr_1')])
-    happeningsStore.hydrate('br_1', [])
+    happeningsStore.hydrate('br_1', [happeningRow('hap_1')])
     reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
     reads.deltas.mockResolvedValue([
       delta('lore_1', 2, 'lore'),
       delta('thr_1', 2, 'threads'),
+      delta('hap_1', 2, 'happenings'),
       delta('hap_gone', 2, 'happenings'),
     ])
 
@@ -650,8 +668,9 @@ describe('useRowSignals', () => {
     await waitFor(() => expect(latest?.recentlyClassified.byCategory.get('thread')).toBe('fresh'))
     expect(latest?.recentlyClassified.rows.get('thr_1')).toBe('fresh')
     expect(latest?.recentlyClassified.byCategory.get('lore')).toBe('fresh')
+    expect(latest?.recentlyClassified.rows.get('hap_1')).toBe('fresh')
+    expect(latest?.recentlyClassified.byCategory.get('happening')).toBe('fresh')
     expect(latest?.recentlyClassified.rows.has('hap_gone')).toBe(false)
-    expect(latest?.recentlyClassified.byCategory.has('happening')).toBe(false)
 
     // The store change alone untints: nothing settled, so the window is not re-read.
     act(() => {
