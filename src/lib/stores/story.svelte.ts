@@ -90,7 +90,7 @@ import {
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
-import { sameEntityName } from '$lib/utils/text'
+import { sameEntityName, uniqueStrings } from '$lib/utils/text'
 import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
@@ -2866,7 +2866,7 @@ class StoryStore {
             name: newCharData?.name ?? update.name,
             description: newCharData?.description ?? null,
             relationship: newCharData?.relationship ?? null,
-            traits: newCharData?.traits ?? [],
+            traits: uniqueStrings(newCharData?.traits ?? []),
             visualDescriptors: newCharData?.visualDescriptors ?? {},
             status: (newCharData?.status as Character['status']) ?? 'active',
             metadata: charMetadata,
@@ -3181,7 +3181,7 @@ class StoryStore {
             name: newChar.name,
             description: newChar.description ?? null,
             relationship: newChar.relationship ?? null,
-            traits: newChar.traits ?? [],
+            traits: uniqueStrings(newChar.traits ?? []),
             visualDescriptors: newChar.visualDescriptors ?? {},
             status: 'active',
             metadata: charMetadata,
