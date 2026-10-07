@@ -25,6 +25,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Separator } from '$lib/components/ui/separator'
   import { Badge } from '$lib/components/ui/badge'
+  import { uniqueStrings } from '$lib/utils/text'
 
   interface Props {
     selectedMode: StoryMode
@@ -511,7 +512,7 @@
             {#if protagonist.traits && (Array.isArray(protagonist.traits) ? protagonist.traits.length > 0 : typeof protagonist.traits === 'string')}
               <div class="flex flex-wrap gap-1.5 pt-0.5">
                 {#if Array.isArray(protagonist.traits)}
-                  {#each protagonist.traits as trait (trait)}
+                  {#each uniqueStrings(protagonist.traits) as trait (trait)}
                     <Badge variant="secondary" class="h-5 px-1.5 text-[10px] font-normal"
                       >{trait}</Badge
                     >

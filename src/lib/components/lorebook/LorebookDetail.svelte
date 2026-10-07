@@ -14,6 +14,7 @@
     Trash2,
     ArrowLeft,
   } from '@lucide/svelte'
+  import { uniqueStrings } from '$lib/utils/text'
   import LorebookEntryForm from './LorebookEntryForm.svelte'
 
   interface Props {
@@ -191,7 +192,7 @@
           <div>
             <h3 class="text-surface-400 mb-2 text-sm font-medium">Aliases</h3>
             <div class="flex flex-wrap gap-2">
-              {#each entry.aliases as alias (alias)}
+              {#each uniqueStrings(entry.aliases) as alias (alias)}
                 <span class="bg-surface-700 text-surface-300 rounded-full px-2 py-1 text-sm">
                   {alias}
                 </span>
@@ -205,7 +206,7 @@
           <div>
             <h3 class="text-surface-400 mb-2 text-sm font-medium">Keywords</h3>
             <div class="flex flex-wrap gap-2">
-              {#each entry.injection.keywords as keyword (keyword)}
+              {#each uniqueStrings(entry.injection.keywords) as keyword (keyword)}
                 <span class="bg-accent-500/20 text-accent-300 rounded-full px-2 py-1 text-sm">
                   {keyword}
                 </span>
