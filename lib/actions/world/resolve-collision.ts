@@ -132,7 +132,7 @@ function missRefusal(lookup: CollisionPairMiss): Refusal {
 }
 
 // For a merge, the first check predates the tail-lock awaits; a hard-gate run started since has
-// settled user writes without this one. The store read and the plan follow with no await between.
+// settled user writes without this one.
 function gateRefusal(): Refusal | null {
   return generationStore.isUserEditBlocked()
     ? refusal(COLLISION_REJECTION.inFlight, 'generation in flight')

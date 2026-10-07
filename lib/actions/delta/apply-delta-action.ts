@@ -216,7 +216,7 @@ export type DeltaGroupResult =
   | { status: 'ok' }
   | { status: 'rejected'; reason: string; code?: string }
 
-export type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
+type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
  * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
@@ -276,17 +276,18 @@ export type BuiltGroup =
   | { status: 'rejected'; reason: string; code: string }
 
 /**
- * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold, so its plan can't
- * predate a no-gate pass's writes. `build` takes no lock and should not await long: the hold isn't
- * reentrant. Its refusal returns as is; a throw rejects the call. Tracked as a user write.
+ * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold, through the commit:
+ * the store state it reads holds every no-gate pass's writes so far, and no pass writes before the
+ * commit. `build` is synchronous and takes no lock, since the hold isn't reentrant. Its refusal
+ * returns as is; a throw rejects the call. Tracked as a user write.
  */
 export function applyDeltaActionGroupBuilt(
-  build: () => BuiltGroup | Promise<BuiltGroup>,
+  build: () => BuiltGroup,
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   const write = withBranchWriteShared(args.branchId, args.actionId, async () => {
-    const built = await build()
+    const built = build()
     if (built.status === 'rejected') return built
     const { actions } = built
     // Row keys come from the plan, so they follow the build, still inside the branch lock.

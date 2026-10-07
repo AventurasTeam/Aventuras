@@ -1957,9 +1957,9 @@ as the scalars to take and the tags and keywords to drop, never as
 final lists, so a keyword a pass appends to either row while the
 merge waits is kept. It can still
 run while another user write holds a row key mid-commit, since
-handlers re-read under the key. The build must not write, takes no
-lock and should not await long: the hold isn't reentrant, and a pass
-queued for the exclusive lock waits behind it. A `no-gate` run takes
+handlers re-read under the key. The build is synchronous, writes
+nothing and takes no lock, since the hold isn't reentrant. A
+`no-gate` run takes
 the lock exclusive at its first emitted write — after its model
 call, embedding and reconciliation, so World stays editable through
 those — and waits for every shared holder, so a write already in
