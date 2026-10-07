@@ -105,6 +105,7 @@ import {
   generationStore,
   isBackgroundKind,
   isUserEditBlocked,
+  readerRailStore,
   rehydrateStories,
   storiesStore,
   type TxState,
@@ -1191,6 +1192,10 @@ export default function ReaderComposerRoute() {
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
   const openRegionPct = useOpenRegionTokens(openForBranch?.storyId)
   const { theme } = useTheme()
+
+  useLayoutEffect(() => {
+    readerRailStore.enterBranch(branchId)
+  }, [branchId])
 
   const placeholder = readerPlaceholder({
     hydrationSucceeded,

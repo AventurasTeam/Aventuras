@@ -19,12 +19,15 @@ type ReaderRailState = {
   display: RailDisplayState
   /** False until the first real window width lands; until then nothing is forced. */
   seeded: boolean
+  /** The branch the reader last entered; `null` until the first. */
+  branchId: string | null
 }
 
 const INITIAL: ReaderRailState = {
   view: DEFAULT_RAIL_VIEW,
   display: initialRailDisplay(Number.POSITIVE_INFINITY),
   seeded: false,
+  branchId: null,
 }
 
 const store = createStore<ReaderRailState>()(() => INITIAL)
@@ -42,6 +45,17 @@ export const readerRailStore = {
   setCategory: (category: RailCategory): void =>
     store.setState((s) => (s.view.category === category ? s : { view: railViewFor(category) })),
   setView: (view: RailView): void => store.setState({ view }),
+  /** A search or filter typed for one story shouldn't apply to another; the category carries over. */
+  enterBranch: (branchId: string): void =>
+    store.setState((s) =>
+      s.branchId === branchId
+        ? s
+        : {
+            branchId,
+            view: railViewFor(s.view.category),
+            display: reduceRailDisplay(s.display, { type: 'closePeek' }),
+          },
+    ),
   /** `selector` must return a stable value (a field or a primitive), as zustand requires. */
   useDisplay: <T>(selector: (display: RailDisplayState) => T): T =>
     useStore(store, (s) => selector(s.display)),

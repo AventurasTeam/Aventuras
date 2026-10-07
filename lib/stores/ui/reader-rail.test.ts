@@ -146,3 +146,47 @@ describe('readerRailStore display', () => {
     expect(readerRailStore.getDisplay().forced).toBe(false)
   })
 })
+
+describe('readerRailStore enterBranch', () => {
+  const PEEK = { category: 'thread', id: 'thr_1' } as const
+
+  beforeEach(() => {
+    readerRailStore.__reset()
+  })
+
+  it('records the first branch and leaves a default view alone', () => {
+    readerRailStore.enterBranch('br_1')
+    expect(readerRailStore.getView()).toEqual({ category: 'character', filter: 'all', search: '' })
+    expect(readerRailStore.getDisplay().peek).toBeNull()
+  })
+
+  it('keeps the view and display by reference when the same branch is entered again', () => {
+    readerRailStore.enterBranch('br_1')
+    readerRailStore.setView({ category: 'character', filter: 'staged', search: 'Mira' })
+    readerRailStore.dispatchDisplay({ type: 'openPeek', peek: PEEK, storedCollapsed: false })
+    const view = readerRailStore.getView()
+    const display = readerRailStore.getDisplay()
+    readerRailStore.enterBranch('br_1')
+    expect(readerRailStore.getView()).toBe(view)
+    expect(readerRailStore.getDisplay()).toBe(display)
+    expect(display.peek).toEqual(PEEK)
+  })
+
+  it('on a different branch keeps the category, resets filter and search, and clears the peek', () => {
+    readerRailStore.enterBranch('br_1')
+    readerRailStore.setView({ category: 'thread', filter: 'pending', search: 'amulet' })
+    readerRailStore.dispatchDisplay({ type: 'openPeek', peek: PEEK, storedCollapsed: false })
+    expect(readerRailStore.getDisplay().peek).toEqual(PEEK)
+    readerRailStore.enterBranch('br_2')
+    expect(readerRailStore.getView()).toEqual({ category: 'thread', filter: 'all', search: '' })
+    expect(readerRailStore.getDisplay().peek).toBeNull()
+  })
+
+  it('__reset forgets the recorded branch', () => {
+    readerRailStore.enterBranch('br_1')
+    readerRailStore.__reset()
+    readerRailStore.setView({ category: 'character', filter: 'staged', search: 'Mira' })
+    readerRailStore.enterBranch('br_1')
+    expect(readerRailStore.getView()).toEqual({ category: 'character', filter: 'all', search: '' })
+  })
+})
