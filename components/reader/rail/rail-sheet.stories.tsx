@@ -148,7 +148,7 @@ function tintOpacity(category: RailCategory): string | null {
 }
 
 /**
- * Presses the scrim over `under`'s centre through Task 6's shared probe, after also asserting the
+ * Presses the scrim over `under`'s centre through `components/ui/sheet-scrim-probe.ts`, after also asserting the
  * point isn't inside the rail Sheet itself.
  */
 async function pressBackdropOver(under: HTMLElement) {
