@@ -77,6 +77,22 @@ describe('reduceRailDisplay — viewport', () => {
     expect(shown(run(initialRailDisplay(600), resize(1300)))).toBe('open')
   })
 
+  it('keeps a pending toggle underneath a viewport collapse', () => {
+    const state = run(initialRailDisplay(1200), setCollapsed(false), resize(850), resize(1000))
+    expect(shown(state, true)).toBe('open')
+  })
+
+  it('keeps an open peek through an upward cross', () => {
+    const state = run(
+      initialRailDisplay(1200),
+      resize(850),
+      setCollapsed(false),
+      openPeek(false),
+      resize(1000),
+    )
+    expect(state.peek).toEqual(PEEK)
+  })
+
   it('records every width', () => {
     expect(run(initialRailDisplay(1200), resize(950), resize(1100)).lastWidth).toBe(1100)
   })
@@ -151,6 +167,11 @@ describe('reduceRailDisplay — peek', () => {
 
   it('closes an open peek on a manual collapse', () => {
     expect(run(initialRailDisplay(1200), openPeek(false), setCollapsed(true)).peek).toBeNull()
+  })
+
+  it('returns the same state when there is no peek to close', () => {
+    const state = initialRailDisplay(1200)
+    expect(reduceRailDisplay(state, { type: 'closePeek' })).toBe(state)
   })
 
   it('closes the peek on closePeek', () => {
