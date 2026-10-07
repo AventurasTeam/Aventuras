@@ -90,7 +90,7 @@ import {
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
-import { sameEntityName, termKey, uniqueTerms } from '$lib/utils/text'
+import { applyTermChanges, sameEntityName, uniqueTerms } from '$lib/utils/text'
 import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
@@ -2897,15 +2897,11 @@ class StoryStore {
             }
           }
           if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
-            let traits = [...existing.traits]
-            if (update.changes.removeTraits?.length) {
-              const toRemove = new Set(update.changes.removeTraits.map(termKey))
-              traits = traits.filter((t) => !toRemove.has(termKey(t)))
-            }
-            if (update.changes.newTraits?.length) {
-              traits = [...traits, ...update.changes.newTraits]
-            }
-            changes.traits = uniqueTerms(traits)
+            changes.traits = applyTermChanges(
+              existing.traits,
+              update.changes.newTraits ?? [],
+              update.changes.removeTraits ?? [],
+            )
           }
           // Handle visual descriptor updates for image generation
           // New format: visualDescriptors is a structured object that replaces entirely

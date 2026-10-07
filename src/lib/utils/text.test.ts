@@ -5,6 +5,7 @@ import {
   foldName,
   findTextMatches,
   paragraphMatches,
+  applyTermChanges,
   parseTerms,
   sameEntityName,
   truncateAroundMatch,
@@ -477,6 +478,27 @@ describe('uniqueTerms', () => {
 
   it('returns an empty list for an empty list', () => {
     expect(uniqueTerms([])).toEqual([])
+  })
+})
+
+describe('applyTermChanges', () => {
+  it('removes ignoring case and padding', () => {
+    expect(applyTermChanges(['Brave', 'curious'], [], [' brave'])).toEqual(['curious'])
+  })
+
+  it('keeps the first spelling of an added repeat', () => {
+    expect(applyTermChanges(['Brave'], ['brave', 'kind', 'Kind'], [])).toEqual(['Brave', 'kind'])
+  })
+
+  it('drops blanks', () => {
+    expect(applyTermChanges(['brave', ''], ['  ', 'kind'], [])).toEqual(['brave', 'kind'])
+  })
+
+  it('keeps a term that is both removed and added, with the added spelling', () => {
+    expect(applyTermChanges(['brave', 'curious'], ['Brave'], ['Brave'])).toEqual([
+      'curious',
+      'Brave',
+    ])
   })
 })
 
