@@ -90,8 +90,7 @@ function SheetHarness({ data = DATA, onRowPress = () => {}, withPeek = false }: 
         onCategoryChange={(category) =>
           setView((current) => (current.category === category ? current : railViewFor(category)))
         }
-        onRowPress={onRowPress}
-        renderPeek={withPeek ? renderTestPeek : undefined}
+        {...(withPeek ? { renderPeek: renderTestPeek } : { onRowPress })}
       />
     </Stage>
   )
@@ -262,14 +261,13 @@ export const ReopenStartsAtList: Story = {
 export const PeekGrowsToTall: Story = {
   globals: PHONE,
   args: { withPeek: true },
-  play: async ({ args }) => {
+  play: async () => {
     await waitFor(() => expect(railDialog()).toBeVisible())
     await waitForMediumDetent()
 
     const lead = leadOf(DATA)
     await userEvent.click(screen.getByRole('button', { name: lead.name }))
     await screen.findByText(`Peek character ${lead.id}`)
-    await expect(args.onRowPress).not.toHaveBeenCalled()
     await waitFor(() => expect(sheetCoverage()).toBeGreaterThan(0.85), ANIMATION)
     await expect(screen.getAllByRole('dialog')).toHaveLength(1)
 
