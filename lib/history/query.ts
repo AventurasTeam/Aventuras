@@ -162,7 +162,8 @@ function targetLineCondition(ends: LinkEnds, term: string): SQL | null {
       removal?.kind === 'any' ||
       removedNamed.has(row.otherId) ||
       named.has(row.otherId) ||
-      startsAWord(removalTargetLabel(row.tables), needle),
+      startsAWord(removalTargetLabel(row.tables), needle) ||
+      row.tables.some((table) => tables.has(table)),
   )
   const conditions = [
     ...linkMembers(links),

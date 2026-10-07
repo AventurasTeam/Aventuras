@@ -570,8 +570,9 @@ describe('link-row union', () => {
     expect(await tab('hap_fire', { targetTable: 'happenings', search: 'links' })).toEqual([
       'removed happening_involvements+happening_awareness char_zed',
     ])
-    // The removal's target line reads "Links", so one link kind's label doesn't find it.
+    // A removal reading "Links" is still found by the label of any link kind it held.
     expect(await tab('hap_fire', { targetTable: 'happenings', search: 'involvement' })).toEqual([
+      'removed happening_involvements+happening_awareness char_zed',
       'happening_involvements create char_zed',
       'happening_involvements delete char_mira',
       'happening_involvements create char_mira',
