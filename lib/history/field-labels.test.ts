@@ -198,6 +198,14 @@ describe('removalSummaryTerm', () => {
     expect(removalSummaryTerm('Removed whenever')).toBeNull()
   })
 
+  it('reads a name typed with runs of spaces, as every other search arm collapses them', () => {
+    expect(removalSummaryTerm('Removed  when Zed')).toEqual({ kind: 'named', name: 'Zed' })
+    expect(removalSummaryTerm('Removed when  old   tom  was\tdel')).toEqual({
+      kind: 'named',
+      name: 'old tom',
+    })
+  })
+
   it('reads the unknown-other-end wording whole as the removals that render it', () => {
     expect(removalSummaryTerm('Removed when its other end was deleted')).toEqual({
       kind: 'unknown',

@@ -252,11 +252,17 @@ export type RemovalSummaryTerm =
   | { kind: 'unknown' }
   | { kind: 'named'; name: string }
 
-const collapse = (text: string) => text.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+const collapseSpaces = (text: string) => text.trim().replace(/\s+/g, ' ')
 
-// Whether `needle` begins at a word of `wording` ("when" and "removed when", not "moved").
-function startsWordRun(wording: string, needle: string): boolean {
-  return ` ${collapse(wording)}`.includes(` ${needle}`)
+/** `text` as a search compares it: trimmed, lower-cased, each whitespace run one space. */
+export const searchText = (text: string) => collapseSpaces(text).toLocaleLowerCase()
+
+/**
+ * Whether `needle`, as `searchText` gives it, begins at a word of `text` and may run across
+ * words: "when" and "removed when" start words of "Removed when", "moved" doesn't.
+ */
+export function startsAWord(text: string, needle: string): boolean {
+  return needle !== '' && ` ${searchText(text)}`.includes(` ${needle}`)
 }
 
 // The name between lead and tail, maybe partial ("Removed when Ka" names Ka, "…Kael w" names Kael).
@@ -266,7 +272,7 @@ function typedName(lead: string, tail: string, term: string): string | null {
   const partials = Array.from({ length: tail.length }, (_, i) => escapeRegExp(tail.slice(0, i + 1)))
   const started = tail === '' ? '' : `\\s+(?:${partials.reverse().join('|')})`
   const after = lead === '' || started === '' ? started : `(?:${started})?`
-  return new RegExp(`^${before}(.+?)${after}$`, 'iu').exec(term.trim())?.[1] ?? null
+  return new RegExp(`^${before}(.+?)${after}$`, 'iu').exec(collapseSpaces(term))?.[1] ?? null
 }
 
 /**
@@ -275,14 +281,14 @@ function typedName(lead: string, tail: string, term: string): string | null {
  * unknown-end wording typed whole matches the removals that render it.
  */
 export function removalSummaryTerm(term: string): RemovalSummaryTerm | null {
-  const needle = collapse(term)
+  const needle = searchText(term)
   if (needle === '') return null
-  if (needle === collapse(t('history:summary.removedWithUnknown'))) return { kind: 'unknown' }
+  if (needle === searchText(t('history:summary.removedWithUnknown'))) return { kind: 'unknown' }
   const summary = slotPattern(t('history:summary.removedWith', { name: SLOT }))
   if (summary == null) return null
   const name = typedName(summary.lead, summary.tail, term)
   if (name != null) return { kind: 'named', name }
-  return startsWordRun(summary.lead, needle) || startsWordRun(summary.tail, needle)
+  return startsAWord(summary.lead, needle) || startsAWord(summary.tail, needle)
     ? { kind: 'any' }
     : null
 }

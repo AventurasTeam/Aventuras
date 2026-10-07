@@ -743,6 +743,9 @@ describe('link-row union', () => {
       expect(await tab('char_aria', { search: 'Removed when Ze' })).toEqual([
         'removed character_relationships char_zed',
       ])
+      expect(await tab('char_aria', { search: 'Removed  when Zed' })).toEqual([
+        'removed character_relationships char_zed',
+      ])
       expect(await tab('char_aria', { search: 'removed' })).toEqual([
         'removed character_relationships char_mira',
         'removed character_relationships char_zed',

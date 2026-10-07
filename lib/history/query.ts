@@ -10,6 +10,8 @@ import {
   pathsMatchingLabel,
   removalSummaryTerm,
   removalTargetLabel,
+  searchText,
+  startsAWord,
   summaryFieldTerms,
   type HistoryTable,
 } from './field-labels'
@@ -135,24 +137,15 @@ function summarySearchCondition(scope: Scope, fields: readonly string[]): SQL {
   return and(scope.member, eq(deltas.op, 'update'), ...perField) as SQL
 }
 
-function normalized(text: string): string {
-  return text.trim().toLocaleLowerCase().split(/\s+/).join(' ')
-}
-
-// Word-start across spaces, so a multi-word name typed whole ("the keep") still matches.
-function startsAWord(text: string, needle: string): boolean {
-  return needle !== '' && ` ${normalized(text)}`.includes(` ${needle}`)
-}
-
 function namedEnds(ends: LinkEnds, term: string): ReadonlySet<string> {
-  const needle = normalized(term)
+  const needle = searchText(term)
   return new Set(Object.keys(ends.names).filter((id) => startsAWord(ends.names[id], needle)))
 }
 
 // world.md → History tab: a link row's target line is its link label and its other end's name.
 function targetLineCondition(ends: LinkEnds, term: string): SQL | null {
   const tables = new Set(linkLabelsMatching(term))
-  const needle = normalized(term)
+  const needle = searchText(term)
   const named = namedEnds(ends, term)
   const removal = removalSummaryTerm(term)
   const removedNamed = removal?.kind === 'named' ? namedEnds(ends, removal.name) : new Set<string>()
