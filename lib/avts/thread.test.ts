@@ -51,6 +51,17 @@ describe('threadExport', () => {
     expect(file.fileName).toBe('thread-find-the-heir.avts')
   })
 
+  it('writes absent optional text as null', () => {
+    expect(payloadOf({ ...HEIR, description: null, category: null, icon: null })).toEqual({
+      title: 'Find the Heir',
+      description: null,
+      category: null,
+      icon: null,
+      status: 'active',
+      injectionMode: 'always',
+    })
+  })
+
   it('re-imports its export unchanged', () => {
     const payload = payloadOf(HEIR)
     expect(ThreadImportSchema.parse(payload)).toEqual(payload)
@@ -59,7 +70,8 @@ describe('threadExport', () => {
 
 describe('ThreadImportSchema', () => {
   it('reads a minimal file with blank optional text as null', () => {
-    expect(ThreadImportSchema.parse({ ...MINIMAL, description: ' ', icon: '' })).toEqual({
+    const blank = { description: ' ', category: '  ', icon: '' }
+    expect(ThreadImportSchema.parse({ ...MINIMAL, ...blank })).toEqual({
       ...MINIMAL,
       description: null,
       category: null,

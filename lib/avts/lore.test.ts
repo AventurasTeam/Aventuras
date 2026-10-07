@@ -51,6 +51,10 @@ describe('loreExport', () => {
     expect(file.fileName).toBe('lore-the-aetherium.avts')
   })
 
+  it('writes an absent category as null', () => {
+    expect(payloadOf({ ...AETHERIUM, category: null }).category).toBeNull()
+  })
+
   it('re-imports its export unchanged', () => {
     const payload = payloadOf(AETHERIUM)
     expect(LoreImportSchema.parse(payload)).toEqual(payload)
