@@ -49,7 +49,7 @@
         </p>
         <ScrollArea class="max-h-48">
           <ul class="text-destructive list-disc pl-5 text-sm">
-            {#each removals as path (path)}
+            {#each removals as path, i (i)}
               <li class="font-mono text-xs">{path}</li>
             {/each}
           </ul>

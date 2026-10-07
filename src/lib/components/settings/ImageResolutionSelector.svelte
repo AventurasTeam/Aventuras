@@ -65,7 +65,7 @@
   {/if}
 
   <div class="grid grid-cols-3 gap-1.5">
-    {#each IMAGE_ORIENTATIONS as orientation (orientation)}
+    {#each IMAGE_ORIENTATIONS as orientation, i (i)}
       {@const meta = ORIENTATION_META[orientation]}
       {@const Icon = meta.icon}
       <button

@@ -406,7 +406,7 @@
       <!-- Themes -->
       {#if expandedSetting.themes.length > 0}
         <div class="flex flex-wrap gap-1.5">
-          {#each expandedSetting.themes as theme (theme)}
+          {#each expandedSetting.themes as theme, i (i)}
             <Badge variant="outline" class="text-[10px]">{theme}</Badge>
           {/each}
         </div>

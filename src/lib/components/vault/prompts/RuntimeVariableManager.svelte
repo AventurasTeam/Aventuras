@@ -224,7 +224,7 @@
       </div>
     {:else}
       <div class="space-y-5">
-        {#each activeEntityTypes as entityType (entityType)}
+        {#each activeEntityTypes as entityType, typeIndex (typeIndex)}
           <!-- Entity type section -->
           <div>
             <div class="mb-2 flex items-center gap-2">

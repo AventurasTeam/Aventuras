@@ -111,7 +111,7 @@
         <p class="text-muted-foreground text-sm">{expandedSetting.description}</p>
         {#if expandedSetting.themes.length > 0}
           <div class="mt-2 flex flex-wrap gap-1">
-            {#each expandedSetting.themes as theme (theme)}
+            {#each expandedSetting.themes as theme, i (i)}
               <Badge variant="outline" class="text-xs">{theme}</Badge>
             {/each}
           </div>

@@ -172,7 +172,7 @@
         class="grid grid-cols-3 gap-2"
         disabled={disabledFields?.pov}
       >
-        {#each ['first', 'second', 'third'] as pov (pov)}
+        {#each ['first', 'second', 'third'] as pov, i (i)}
           <Label
             for={`pov-${pov}`}
             class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2"
@@ -217,7 +217,7 @@
         class="grid grid-cols-2 gap-2"
         disabled={disabledFields?.tense}
       >
-        {#each ['present', 'past'] as tense (tense)}
+        {#each ['present', 'past'] as tense, i (i)}
           <Label
             for={`tense-${tense}`}
             class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2"
@@ -257,7 +257,7 @@
       />
     </div>
     <div class="flex flex-wrap gap-2">
-      {#each ['Dark Fantasy', 'High Adventure', 'Cozy', 'Horror', 'Cyberpunk', 'Mystery'] as t (t)}
+      {#each ['Dark Fantasy', 'High Adventure', 'Cozy', 'Horror', 'Cyberpunk', 'Mystery'] as t, i (i)}
         <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => onToneChange(t)}>
           {t}
         </Button>

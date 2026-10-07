@@ -99,7 +99,7 @@
   </Popover.Trigger>
   <Popover.Content class="w-auto p-3" align="start">
     <div class="grid grid-cols-6 gap-1.5">
-      {#each COLORS as color (color)}
+      {#each COLORS as color, i (i)}
         <button
           type="button"
           class={cn(

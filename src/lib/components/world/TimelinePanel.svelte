@@ -316,7 +316,7 @@
               </span>
             {/if}
             <!-- The fork reads as a wall, like the anchor: both are why a range stops here. -->
-            {#each row.roles as role (role)}
+            {#each row.roles as role, i (i)}
               <span
                 class="rounded px-1 text-[10px] tracking-wide uppercase {role === 'Fork point'
                   ? 'bg-amber-500/15 text-amber-700 dark:text-amber-500'

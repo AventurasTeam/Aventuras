@@ -457,7 +457,7 @@
             {ENTITY_TYPE_LABELS[editEntityType]}
           </Select.Trigger>
           <Select.Content>
-            {#each ENTITY_TYPES as etype (etype)}
+            {#each ENTITY_TYPES as etype, i (i)}
               <Select.Item value={etype} label={ENTITY_TYPE_LABELS[etype]}>
                 {ENTITY_TYPE_LABELS[etype]}
               </Select.Item>
@@ -474,7 +474,7 @@
             {TYPE_LABELS[editType]}
           </Select.Trigger>
           <Select.Content>
-            {#each VARIABLE_TYPES as vtype (vtype)}
+            {#each VARIABLE_TYPES as vtype, i (i)}
               <Select.Item value={vtype} label={TYPE_LABELS[vtype]}>
                 {TYPE_LABELS[vtype]}
               </Select.Item>
