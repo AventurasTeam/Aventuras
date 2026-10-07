@@ -659,12 +659,12 @@ export function foldName(raw: string): string {
 }
 
 /**
- * The identity of a trait or keyword: trimmed, compatibility-normalised and lowercased, so
- * `Brave`, ` brave ` and fullwidth `ｂｒａｖｅ` are one term. Accents, punctuation and kana
- * voicing stay distinct (`Élan`/`Elan`, `Kaelen's`/`Kaelens`), as they do when retrieval matches.
+ * The identity of a trait or keyword: trimmed, NFC-normalised and lowercased, so case, padding and
+ * composed/decomposed forms of one glyph merge; width forms, accents and punctuation stay distinct.
+ * Retrieval does not normalise yet, so lorebook terms wait for matching to apply NFC.
  */
 export function termKey(term: string): string {
-  return term.trim().normalize('NFKC').toLowerCase()
+  return term.trim().normalize('NFC').toLowerCase()
 }
 
 /** Trimmed terms without blanks or repeats by `termKey`; the first spelling is kept. */

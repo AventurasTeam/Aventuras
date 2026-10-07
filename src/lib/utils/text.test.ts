@@ -431,16 +431,18 @@ describe('foldName — the apostrophe', () => {
 })
 
 describe('termKey', () => {
-  it('ignores case, padding, width and compatibility forms', () => {
+  it('ignores case, padding and canonically equivalent forms', () => {
     expect(termKey(' Brave ')).toBe('brave')
-    expect(termKey('ｂｒａｖｅ')).toBe('brave')
-    expect(termKey('ﬁre')).toBe('fire')
-    expect(termKey('a ')).toBe('a')
-    expect(termKey('ｶﾞ')).toBe(termKey('ガ'))
+    expect(termKey('a ')).toBe('a')
+    expect(termKey('\u00a0brave\u00a0')).toBe('brave')
+    expect(termKey('e\u0301')).toBe(termKey('\u00e9'))
   })
 
-  it('keeps accents, punctuation and kana voicing distinct', () => {
+  it('keeps width forms, accents, punctuation and kana voicing distinct', () => {
     const pairs = [
+      ['ｂｒａｖｅ', 'brave'],
+      ['ﬁre', 'fire'],
+      ['ｶﾞ', 'ガ'],
       ['Élan', 'Elan'],
       ["Kaelen's", 'Kaelens'],
       ['ハート', 'ハード'],
@@ -453,10 +455,10 @@ describe('termKey', () => {
 describe('uniqueTerms', () => {
   it('drops a repeat and keeps the first spelling and position', () => {
     expect(uniqueTerms(['a', 'b', 'A', 'c', 'a'])).toEqual(['a', 'b', 'c'])
-    expect(uniqueTerms(['Brave', 'brave', 'ｂｒａｖｅ'])).toEqual(['Brave'])
+    expect(uniqueTerms(['Brave', 'brave', 'ｂｒａｖｅ'])).toEqual(['Brave', 'ｂｒａｖｅ'])
   })
 
-  it('keeps terms that differ beyond case and width', () => {
+  it('keeps terms that differ beyond case and canonical form', () => {
     const terms = ['Élan', 'Elan', "Kaelen's", 'Kaelens', 'ハート', 'ハード', 'कम', 'काम']
     expect(uniqueTerms(terms)).toEqual(terms)
   })
