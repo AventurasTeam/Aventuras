@@ -151,7 +151,7 @@ describe('useHistoryChunks', () => {
     expect(error).toHaveBeenCalledWith('app.history_load_failed', expect.anything())
   })
 
-  it('ignores loadMore while a version refresh is in flight', async () => {
+  it('runs a loadMore pressed during a version refresh once the refresh lands, from its cursor', async () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
@@ -163,9 +163,61 @@ describe('useHistoryChunks', () => {
     expect(calls).toHaveLength(2)
 
     await act(async () => calls[1].resolve(chunk([row(5), row(4)], 4)))
-    act(() => hook.result.current.loadMore())
     expect(calls).toHaveLength(3)
     expect(calls[2].query).toEqual(expect.objectContaining({ cursor: 4 }))
+    expect(hook.result.current.status).toBe('loading-more')
+    await act(async () => calls[2].resolve(chunk([row(3)], null)))
+    expect(positions(hook.result.current.rows)).toEqual([5, 4, 3])
+    expect(hook.result.current.status).toBe('ready')
+  })
+
+  it('reruns a loadMore that a version refresh orphaned, after the refresh lands', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(2)
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(3))
+    await act(async () => calls[1].resolve(chunk([row(2)], null)))
+    await act(async () => calls[2].resolve(chunk([row(5), row(4)], 4)))
+    expect(calls).toHaveLength(4)
+    expect(calls[3].query).toEqual(expect.objectContaining({ cursor: 4 }))
+  })
+
+  it('runs a queued loadMore from the kept rows when the refresh fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    act(() => hook.result.current.loadMore())
+    await act(async () => calls[1].reject(new Error('busy')))
+    expect(calls).toHaveLength(3)
+    expect(calls[2].query).toEqual(expect.objectContaining({ cursor: 3 }))
+  })
+
+  it('drops a queued loadMore when the query changes before the refresh lands', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
+
+    const refreshed = {}
+    hook.rerender({ search: '', version: refreshed })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    act(() => hook.result.current.loadMore())
+    hook.rerender({ search: 'traits', version: refreshed })
+    await waitFor(() => expect(calls).toHaveLength(3))
+    await act(async () => calls[1].resolve(chunk([row(5), row(4)], 4)))
+    await act(async () => calls[2].resolve(chunk([row(8)], 8)))
+    expect(calls).toHaveLength(3)
+    expect(hook.result.current.status).toBe('ready')
   })
 
   it('shows loading with no rows while a changed query reloads (same-commit reset: ClearingASearch story)', async () => {

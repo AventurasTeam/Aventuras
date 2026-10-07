@@ -44,8 +44,9 @@ function message(error: unknown): string {
 
 /**
  * patterns/lists.md → Load-older: a query change reloads from the first chunk. A `version` identity
- * change refetches as many rows as are loaded and swaps them in, keeping the shown rows meanwhile,
- * so `version` must be memoized; a fresh one per render never settles.
+ * change refetches as many rows as are loaded and swaps them in, keeping the shown rows meanwhile
+ * and running a `loadMore` pressed meanwhile once it lands. `version` must be memoized; a fresh
+ * one per render never settles.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,
@@ -57,6 +58,9 @@ export function useHistoryChunks(
   const generation = useRef(0)
   // Two loadMore calls before a re-render share one closure's state; this stops the second.
   const loadingMore = useRef(false)
+  // A refresh replaces the rows, so a loadMore meanwhile would append to stale ones: it waits.
+  const refreshing = useRef(false)
+  const queuedMore = useRef(false)
   const { branchId, targetTable, targetId, op, search, sort } = query
   const request = useMemo<Request>(
     () => ({
@@ -74,55 +78,11 @@ export function useHistoryChunks(
     appliedRef.current = applied
   }, [applied])
 
-  // Read the query only through `request`: its identity is what resets the rows.
-  useEffect(() => {
-    const mine = ++generation.current
-    // Same request, so only `version` moved: the rows stay up until the refetch replaces them.
-    const kept = appliedRef.current?.for === request ? appliedRef.current : null
-    const refreshing = kept != null && kept.status !== 'failed'
-    // A refresh replaces the rows, so a loadMore landing meanwhile would append to stale ones.
-    loadingMore.current = refreshing
-    const limit = refreshing ? Math.max(HISTORY_CHUNK_SIZE, kept.rows.length) : undefined
-    request.load({ ...request.query, cursor: null, ...(limit != null ? { limit } : {}) }).then(
-      (chunk) => {
-        if (generation.current !== mine) return
-        loadingMore.current = false
-        setApplied({
-          for: request,
-          rows: chunk.rows,
-          names: chunk.names,
-          nextCursor: chunk.nextCursor,
-          status: 'ready',
-        })
-      },
-      (error: unknown) => {
-        if (generation.current !== mine) return
-        loadingMore.current = false
-        logger.error('app.history_load_failed', {
-          targetTable: request.query.targetTable,
-          targetId: request.query.targetId,
-          error: message(error),
-        })
-        setApplied(
-          refreshing
-            ? { ...kept, status: 'ready' }
-            : { for: request, rows: [], names: NO_NAMES, nextCursor: null, status: 'failed' },
-        )
-      },
-    )
-    // Unmount and every reload orphan whatever is still in flight.
-    return () => {
-      generation.current += 1
-    }
-  }, [request, version])
-
-  const loadMore = useCallback(() => {
-    if (loadingMore.current || state.status !== 'ready' || state.nextCursor == null) return
+  const more = useCallback((from: Request, cursor: number) => {
     loadingMore.current = true
     const mine = generation.current
-    const cursor = state.nextCursor
     setApplied((current) => current && { ...current, status: 'loading-more' })
-    request.load({ ...request.query, cursor }).then(
+    from.load({ ...from.query, cursor }).then(
       (chunk) => {
         if (generation.current !== mine) return
         loadingMore.current = false
@@ -141,15 +101,76 @@ export function useHistoryChunks(
         if (generation.current !== mine) return
         loadingMore.current = false
         logger.error('app.history_load_more_failed', {
-          targetTable: request.query.targetTable,
-          targetId: request.query.targetId,
+          targetTable: from.query.targetTable,
+          targetId: from.query.targetId,
           error: message(error),
         })
         setApplied((current) => current && { ...current, status: 'ready' })
         toast.error(t('history:tab.failed'))
       },
     )
-  }, [state, request])
+  }, [])
+
+  // Read the query only through `request`: its identity is what resets the rows.
+  useEffect(() => {
+    const mine = ++generation.current
+    // Same request, so only `version` moved: the rows stay up until the refetch replaces them.
+    const kept = appliedRef.current?.for === request ? appliedRef.current : null
+    const refresh = kept != null && kept.status !== 'failed'
+    // The cleanup orphaned any loadMore in flight; under a refresh it runs again once it lands.
+    queuedMore.current = refresh && (queuedMore.current || kept.status === 'loading-more')
+    refreshing.current = refresh
+    loadingMore.current = false
+    const settle = (cursor: number | null) => {
+      refreshing.current = false
+      const queued = queuedMore.current
+      queuedMore.current = false
+      if (queued && cursor != null) more(request, cursor)
+    }
+    const limit = refresh ? Math.max(HISTORY_CHUNK_SIZE, kept.rows.length) : undefined
+    request.load({ ...request.query, cursor: null, ...(limit != null ? { limit } : {}) }).then(
+      (chunk) => {
+        if (generation.current !== mine) return
+        setApplied({
+          for: request,
+          rows: chunk.rows,
+          names: chunk.names,
+          nextCursor: chunk.nextCursor,
+          status: 'ready',
+        })
+        settle(chunk.nextCursor)
+      },
+      (error: unknown) => {
+        if (generation.current !== mine) return
+        logger.error('app.history_load_failed', {
+          targetTable: request.query.targetTable,
+          targetId: request.query.targetId,
+          error: message(error),
+        })
+        setApplied(
+          refresh
+            ? { ...kept, status: 'ready' }
+            : { for: request, rows: [], names: NO_NAMES, nextCursor: null, status: 'failed' },
+        )
+        settle(refresh ? kept.nextCursor : null)
+      },
+    )
+    // Unmount and every reload orphan whatever is still in flight.
+    return () => {
+      generation.current += 1
+    }
+  }, [request, version, more])
+
+  const loadMore = useCallback(() => {
+    if (state.nextCursor == null) return
+    if (refreshing.current) {
+      queuedMore.current = true
+      setApplied((current) => current && { ...current, status: 'loading-more' })
+      return
+    }
+    if (loadingMore.current || state.status !== 'ready') return
+    more(request, state.nextCursor)
+  }, [state, request, more])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
