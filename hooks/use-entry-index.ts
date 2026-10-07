@@ -65,10 +65,12 @@ export function useEntryIndex(
   // data is undefined during a pending refetch and after an error; keep the last
   // successful window, tagged by branch so a fork never shows another branch's index.
   const [lastGood, setLastGood] = useState<{ branchId: string; window: LoadedWindow } | null>(null)
+  // A disabled hook drops the window (the query keeps its cached data), so it reads not-ready.
+  const disabled = options?.enabled === false
   let good = lastGood
-  if (good?.branchId !== branchId) good = null
+  if (disabled || good?.branchId !== branchId) good = null
   // Compare against the wrapped window's rows (not a fresh wrapper) to avoid re-rendering.
-  if (data != null && data !== good?.window.entries) {
+  if (!disabled && data != null && data !== good?.window.entries) {
     good = { branchId, window: { entries: data, index: indexEntryRefs(data) } }
   }
   if (good !== lastGood) setLastGood(good)

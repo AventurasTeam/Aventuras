@@ -115,6 +115,25 @@ describe('useEntryIndex', () => {
     expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
   })
 
+  it('reads as not ready again once disabled after a load', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    reads.index.mockResolvedValue([ref('e1', 1)])
+
+    const client = createQueryClient()
+    const { rerender } = renderProbe({ client, enabled: true })
+    await waitFor(() => expect(latest?.ready).toBe(true))
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <Probe enabled={false} />
+      </QueryClientProvider>,
+    )
+    expect(latest?.ready).toBe(false)
+    expect(latest?.failed).toBe(false)
+    expect(latest?.entries).toEqual([])
+    expect(latest?.index.size).toBe(0)
+  })
+
   it('re-reads when the generation store settles', async () => {
     entriesStore.hydrate('br_1', [entry('e1', 1)])
     reads.index.mockResolvedValue([ref('e1', 1)])
