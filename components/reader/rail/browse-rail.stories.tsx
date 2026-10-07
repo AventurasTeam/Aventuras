@@ -209,10 +209,7 @@ export const HappeningFilterReset: Story = {
 
 /** An unread entry index would mark every anchored happening dangling, so the list waits. */
 export const HappeningsLoading: Story = {
-  args: {
-    category: 'happening',
-    data: railDataFixture({ entryIndex: { ready: false, failed: false, retry: () => {} } }),
-  },
+  args: { category: 'happening', data: INDEX_PENDING },
   play: async () => {
     expect(await screen.findByText('Loading happenings…', {}, WAIT)).toBeVisible()
     expect(screen.queryByRole('button', { name: "Vorne's pact" })).toBeNull()

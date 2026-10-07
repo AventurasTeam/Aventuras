@@ -98,7 +98,7 @@ import {
   SUGGESTION_REFRESH_KIND,
   type PipelineError,
 } from '@/lib/pipeline'
-import { type RailCategory } from '@/lib/reader-rail'
+import type { RailCategory } from '@/lib/reader-rail'
 import {
   appSettingsStore,
   awaitRunTerminal,

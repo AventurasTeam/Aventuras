@@ -10,7 +10,7 @@ import { worldHref } from '@/components/world/world-selection'
 import { t } from '@/lib/i18n'
 import type { RailCategory } from '@/lib/reader-rail'
 
-export type RailModuleMap = {
+type RailModuleMap = {
   character: EntityListModule
   location: EntityListModule
   item: EntityListModule

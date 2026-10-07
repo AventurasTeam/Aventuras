@@ -21,7 +21,7 @@ export const RAIL_GROUPS = {
 export type RailGroup = keyof typeof RAIL_GROUPS
 
 export function railGroupOf(category: RailCategory): RailGroup {
-  return (RAIL_GROUPS.plot as readonly RailCategory[]).includes(category) ? 'plot' : 'world'
+  return isPlotKind(category) ? 'plot' : 'world'
 }
 
 export function isRailCategory(value: unknown): value is RailCategory {

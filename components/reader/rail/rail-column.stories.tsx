@@ -123,17 +123,13 @@ export const Collapsed: Story = {
 export const Toggle: Story = {
   play: async () => {
     await waitFor(() => expect(columnWidth()).toBeGreaterThanOrEqual(300), ANIMATION)
-    await userEvent.click(
-      within(screen.getByTestId('reader-rail')).getByRole('button', {
-        name: t('reader:rail.collapse'),
-      }),
-    )
+    await userEvent.click(collapseChevron(screen.getByTestId('reader-rail')))
     const strip = await screen.findByTestId('rail-strip', {}, ANIMATION)
     // Measured the moment the strip appears: the column has already narrowed to it.
     await expect(columnWidth()).toBeLessThanOrEqual(33)
     await expect(screen.queryByTestId('reader-rail')).toBeNull()
 
-    await userEvent.click(within(strip).getByRole('button', { name: t('reader:rail.expand') }))
+    await userEvent.click(stripChevron(strip))
     // No wait: the rail mounts with the click, before the slide has run.
     await expect(screen.queryByTestId('reader-rail')).not.toBeNull()
     await expect(screen.queryByTestId('rail-strip')).toBeNull()
@@ -158,16 +154,11 @@ export const ConnectedStripExpands: Story = {
     readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true })
   },
   play: async () => {
-    const strip = await screen.findByTestId('rail-strip')
-    await userEvent.click(within(strip).getByRole('button', { name: t('reader:rail.expand') }))
+    await userEvent.click(stripChevron(await screen.findByTestId('rail-strip')))
     await screen.findByTestId('reader-rail')
     await expect(readerRailStore.getView().category).toBe('character')
 
-    await userEvent.click(
-      within(screen.getByTestId('reader-rail')).getByRole('button', {
-        name: t('reader:rail.collapse'),
-      }),
-    )
+    await userEvent.click(collapseChevron(screen.getByTestId('reader-rail')))
     const stripAgain = await screen.findByTestId('rail-strip', {}, ANIMATION)
     const items = STRIP.counted[1]
     await userEvent.click(

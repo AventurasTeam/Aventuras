@@ -10,8 +10,8 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { RAIL_STRIP_WIDTH_PX } from './rail-strip'
 
-export const RAIL_WIDTH_PX = 300
-export const RAIL_SLIDE_MS = 150
+const RAIL_WIDTH_PX = 300
+const RAIL_SLIDE_MS = 150
 
 export type RailColumnProps = {
   collapsed: boolean
