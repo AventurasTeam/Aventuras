@@ -324,7 +324,7 @@ export const BackdropBlockedMidOpen: Story = {
   render: () => <BackdropHarness />,
   play: async () => {
     const trigger = await openSheet()
-    await userEvent.click(await screen.findByRole('button', { name: 'Start save' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Start save' }, BACKDROP_WAIT))
     await pressSheetScrim(screen.getByText(LANDMARK))
     await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
     expect(trigger).toHaveAttribute('aria-expanded', 'true')

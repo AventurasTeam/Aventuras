@@ -12,17 +12,20 @@ import { WorldTimeEditSheet } from './worldtime-edit-sheet'
 // WorldTimeEditForm's tuple memo keys on their identity.
 const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
 
+// CI runs plays several times slower than local; every post-interaction wait uses this.
+const WAIT = { timeout: 3000 }
+
 // gorhom registers the modal with the provider stack in its own mount effects,
 // so `present()` is deferred a tick — every play function waits for a field.
 const secondField = () => screen.getByRole('textbox', { name: 'Second' })
 async function openSheet() {
-  await waitFor(() => expect(secondField()).toBeVisible())
+  await waitFor(() => expect(secondField()).toBeVisible(), WAIT)
 }
 
 async function typeSecond(value: string) {
   await userEvent.clear(secondField())
   await userEvent.type(secondField(), value)
-  await waitFor(() => expect(secondField()).toHaveValue(value))
+  await waitFor(() => expect(secondField()).toHaveValue(value), WAIT)
 }
 
 const meta: Meta<typeof WorldTimeEditSheet> = {
@@ -53,7 +56,7 @@ export const SaveReportsSeconds: Story = {
     await typeSecond('45')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     // 00:01:45 past the origin.
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105), WAIT)
   },
 }
 
@@ -61,7 +64,7 @@ export const CancelCloses: Story = {
   play: async ({ args }) => {
     await openSheet()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
     expect(args.onSave).not.toHaveBeenCalled()
   },
 }
@@ -73,7 +76,7 @@ export const SaveFailureStaysOpen: Story = {
     await openSheet()
     await typeSecond('45')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105), WAIT)
 
     expect(args.onClose).not.toHaveBeenCalled()
     expect(secondField()).toHaveValue('45')
@@ -97,7 +100,7 @@ export const SavingLocksTheSheet: Story = {
     await openSheet()
     await typeSecond('45')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105), WAIT)
 
     expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -105,7 +108,7 @@ export const SavingLocksTheSheet: Story = {
     expect(args.onClose).not.toHaveBeenCalled()
 
     pendingSheetSave.finish?.(true)
-    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
   },
 }
 
@@ -117,13 +120,10 @@ export const UntouchedSaveClosesWithoutWriting: Story = {
   play: async ({ args }) => {
     await openSheet()
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
     expect(args.onSave).not.toHaveBeenCalled()
   },
 }
-
-// CI runs plays several times slower than local; every post-interaction wait uses this.
-const WAIT = { timeout: 3000 }
 
 const LANDMARK = 'Reader behind the editor'
 
