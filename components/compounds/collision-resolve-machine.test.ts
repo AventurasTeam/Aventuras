@@ -1,196 +1,95 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeDivergence, type EntitySummary } from './collision-resolve-diff'
 import { initMergeState, mergeReducer, type MergeState } from './collision-resolve-machine'
 
-function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
-  return {
-    id: 'ent_a',
-    kind: 'character',
-    createdAt: '2026-05-01T00:00:00Z',
-    name: 'Kael',
-    description: 'A wandering swordsman.',
-    status: 'active',
-    retiredReason: undefined,
-    injectionMode: 'auto',
-    priority: 0,
-    tags: ['hero', 'sword'],
-    keywords: [],
-    state: { hp: 100 },
-    relationCounts: {
-      awarenessRows: 0,
-      involvements: 0,
-      relationships: 0,
-      joiningRelationship: false,
-      inverseRefs: 0,
-      embeddings: 1,
-      translationRows: 0,
-      unheldItems: 0,
-      overlap: {
-        awareness: 0,
-        involvements: 0,
-        relationships: 0,
-        holdersLosingItem: 0,
-        canonicalRefs: 0,
-      },
-    },
-    ...overrides,
-  }
-}
-
 describe('initMergeState', () => {
-  it('sets canonicalId to defaultCanonicalId', () => {
-    const a = baseEntity()
-    const b = baseEntity({ id: 'ent_b', description: 'Different' })
-    const state = initMergeState(computeDivergence(a, b), a.id, a.id)
-    expect(state.canonicalId).toBe('ent_a')
-  })
-
-  it('initializes deselectedTags as empty', () => {
-    const a = baseEntity()
-    const b = baseEntity({ id: 'ent_b', tags: ['guard'] })
-    const state = initMergeState(computeDivergence(a, b), a.id, a.id)
-    expect(state.deselectedTags).toEqual([])
-  })
-
-  it('initializes fieldChoices to A for each divergent scalar when canonical=A', () => {
-    const a = baseEntity({ description: 'A desc', status: 'active' })
-    const b = baseEntity({ id: 'ent_b', description: 'B desc', status: 'retired' })
-    const state = initMergeState(computeDivergence(a, b), a.id, a.id)
-    expect(state.fieldChoices.description).toBe('A')
-    expect(state.fieldChoices.status).toBe('A')
-  })
-
-  it('initializes fieldChoices to B for each divergent scalar when canonical=B', () => {
-    const a = baseEntity({ description: 'A desc', status: 'active' })
-    const b = baseEntity({ id: 'ent_b', description: 'B desc', status: 'retired' })
-    const state = initMergeState(computeDivergence(a, b), b.id, a.id)
-    expect(state.fieldChoices.description).toBe('B')
-    expect(state.fieldChoices.status).toBe('B')
-  })
-
-  it('omits non-divergent fields from fieldChoices', () => {
-    const a = baseEntity({ description: 'same', status: 'active' })
-    const b = baseEntity({ id: 'ent_b', description: 'same', status: 'retired' })
-    const state = initMergeState(computeDivergence(a, b), a.id, a.id)
-    expect(state.fieldChoices).toEqual({ status: 'A' })
+  it('starts on the default canonical, taking nothing from the other row and dropping no term', () => {
+    expect(initMergeState('ent_a')).toEqual({
+      canonicalId: 'ent_a',
+      fromOther: new Set(),
+      deselectedTags: [],
+      deselectedKeywords: [],
+    })
   })
 })
 
 describe('mergeReducer', () => {
-  function setup() {
-    const a = baseEntity({ description: 'A desc', status: 'active' })
-    const b = baseEntity({
-      id: 'ent_b',
-      description: 'B desc',
-      status: 'retired',
-      tags: ['guard', 'sword'],
-    })
-    const diff = computeDivergence(a, b)
-    const initial = initMergeState(diff, a.id, a.id)
-    return { a, b, diff, initial }
-  }
+  const initial = () => initMergeState('ent_a')
 
   describe('pick-canonical', () => {
     it('updates canonicalId', () => {
-      const { initial, a } = setup()
-      const next = mergeReducer(initial, { type: 'pick-canonical', id: 'ent_b', entityAId: a.id })
+      const next = mergeReducer(initial(), { type: 'pick-canonical', id: 'ent_b' })
       expect(next.canonicalId).toBe('ent_b')
     })
 
-    it('rebases all fieldChoices to the new canonical side', () => {
-      const { initial, a } = setup()
-      const next = mergeReducer(initial, { type: 'pick-canonical', id: 'ent_b', entityAId: a.id })
-      expect(next.fieldChoices.description).toBe('B')
-      expect(next.fieldChoices.status).toBe('B')
-    })
-
-    it('rebases ALL fields even when one was overridden first', () => {
-      // Regression: a previous draft derived "new side" from the
-      // first field's current choice, which is wrong once
-      // pick-field has overridden a field independently.
-      const { initial, a } = setup()
-      const overridden = mergeReducer(initial, {
+    it('takes every field from the new canonical again, whatever was picked before', () => {
+      const picked = mergeReducer(initial(), {
         type: 'pick-field',
         field: 'description',
-        side: 'B',
+        fromOther: true,
       })
-      // Now choices = { description: 'B', status: 'A' }, canonical still 'A'
-      const next = mergeReducer(overridden, {
-        type: 'pick-canonical',
-        id: 'ent_b',
-        entityAId: a.id,
-      })
-      // After flipping canonical to B, both must be 'B' — the
-      // canonical-pick is destructive to prior pick-field choices.
-      expect(next.fieldChoices.description).toBe('B')
-      expect(next.fieldChoices.status).toBe('B')
+      const next = mergeReducer(picked, { type: 'pick-canonical', id: 'ent_b' })
+      expect(next.fromOther).toEqual(new Set())
     })
 
     it('preserves deselectedTags through a canonical flip', () => {
-      const { initial, a } = setup()
-      const withDeselect = mergeReducer(initial, { type: 'toggle-tag', tag: 'guard' })
-      const next = mergeReducer(withDeselect, {
-        type: 'pick-canonical',
-        id: 'ent_b',
-        entityAId: a.id,
-      })
+      const withDeselect = mergeReducer(initial(), { type: 'toggle-tag', tag: 'guard' })
+      const next = mergeReducer(withDeselect, { type: 'pick-canonical', id: 'ent_b' })
       expect(next.deselectedTags).toEqual(['guard'])
-    })
-
-    it('rebases priority with the other divergent scalars', () => {
-      const a = baseEntity({ priority: 20, description: 'A desc' })
-      const b = baseEntity({ id: 'ent_b', priority: 5, description: 'B desc' })
-      const initial = initMergeState(computeDivergence(a, b), a.id, a.id)
-      expect(initial.fieldChoices).toEqual({ description: 'A', priority: 'A' })
-
-      const next = mergeReducer(initial, { type: 'pick-canonical', id: b.id, entityAId: a.id })
-
-      expect(next.fieldChoices).toEqual({ description: 'B', priority: 'B' })
     })
   })
 
   describe('pick-field', () => {
-    it('overrides one field without touching others', () => {
-      const { initial } = setup()
-      // canonical is A so both choices init to 'A'
-      const next = mergeReducer(initial, {
+    it('takes one field from the other row without touching the others', () => {
+      const status = mergeReducer(initial(), {
         type: 'pick-field',
-        field: 'description',
-        side: 'B',
+        field: 'status',
+        fromOther: true,
       })
-      expect(next.fieldChoices.description).toBe('B')
-      expect(next.fieldChoices.status).toBe('A')
+      const next = mergeReducer(status, { type: 'pick-field', field: 'priority', fromOther: true })
+      expect(next.fromOther).toEqual(new Set(['status', 'priority']))
+    })
+
+    it("gives a field back to the canonical's value", () => {
+      const status = mergeReducer(initial(), {
+        type: 'pick-field',
+        field: 'status',
+        fromOther: true,
+      })
+      const next = mergeReducer(status, { type: 'pick-field', field: 'status', fromOther: false })
+      expect(next.fromOther).toEqual(new Set())
+    })
+
+    it('leaves the state it was given unchanged', () => {
+      const status = mergeReducer(initial(), {
+        type: 'pick-field',
+        field: 'status',
+        fromOther: true,
+      })
+      mergeReducer(status, { type: 'pick-field', field: 'priority', fromOther: true })
+      expect(status.fromOther).toEqual(new Set(['status']))
     })
 
     it('preserves canonicalId', () => {
-      const { initial } = setup()
-      const next = mergeReducer(initial, {
-        type: 'pick-field',
-        field: 'status',
-        side: 'B',
-      })
-      expect(next.canonicalId).toBe(initial.canonicalId)
+      const next = mergeReducer(initial(), { type: 'pick-field', field: 'status', fromOther: true })
+      expect(next.canonicalId).toBe('ent_a')
     })
   })
 
   describe('toggle-tag', () => {
     it('adds a tag to deselectedTags', () => {
-      const { initial } = setup()
-      const next = mergeReducer(initial, { type: 'toggle-tag', tag: 'sword' })
+      const next = mergeReducer(initial(), { type: 'toggle-tag', tag: 'sword' })
       expect(next.deselectedTags).toEqual(['sword'])
     })
 
     it('removes a previously-deselected tag', () => {
-      const { initial } = setup()
-      const after1 = mergeReducer(initial, { type: 'toggle-tag', tag: 'sword' })
+      const after1 = mergeReducer(initial(), { type: 'toggle-tag', tag: 'sword' })
       const after2 = mergeReducer(after1, { type: 'toggle-tag', tag: 'sword' })
       expect(after2.deselectedTags).toEqual([])
     })
 
     it('accumulates multiple deselects', () => {
-      const { initial } = setup()
-      const s1 = mergeReducer(initial, { type: 'toggle-tag', tag: 'sword' })
+      const s1 = mergeReducer(initial(), { type: 'toggle-tag', tag: 'sword' })
       const s2 = mergeReducer(s1, { type: 'toggle-tag', tag: 'guard' })
       expect(new Set(s2.deselectedTags)).toEqual(new Set(['sword', 'guard']))
     })
@@ -198,34 +97,21 @@ describe('mergeReducer', () => {
 
   describe('reset', () => {
     it('re-initializes state for new entities', () => {
-      const { initial } = setup()
       const dirty: MergeState = {
-        ...initial,
         canonicalId: 'ent_b',
+        fromOther: new Set(['description']),
         deselectedTags: ['sword'],
+        deselectedKeywords: ['the wanderer'],
       }
-      const newA = baseEntity({ id: 'ent_c', description: 'C' })
-      const newB = baseEntity({ id: 'ent_d', description: 'D' })
-      const newDiff = computeDivergence(newA, newB)
-      const next = mergeReducer(dirty, {
-        type: 'reset',
-        diff: newDiff,
-        defaultCanonicalId: newA.id,
-        entityAId: newA.id,
-      })
-      expect(next.canonicalId).toBe('ent_c')
-      expect(next.deselectedTags).toEqual([])
-      expect(next.fieldChoices.description).toBe('A')
+      expect(mergeReducer(dirty, { type: 'reset', defaultCanonicalId: 'ent_c' })).toEqual(
+        initMergeState('ent_c'),
+      )
     })
   })
 })
 
 describe('keyword deselection', () => {
-  const start = (): MergeState => {
-    const a = baseEntity({ keywords: ['the grey wolf'] })
-    const b = baseEntity({ id: 'ent_b', keywords: ['the innkeeper'] })
-    return initMergeState(computeDivergence(a, b), a.id, a.id)
-  }
+  const start = (): MergeState => initMergeState('ent_a')
 
   it('toggles a keyword in and out of the deselected set', () => {
     const after = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
@@ -247,11 +133,7 @@ describe('keyword deselection', () => {
   // Same contract deselectedTags has: keyword choices are independent of the pick.
   it('preserves deselected keywords across a canonical re-pick', () => {
     const deselected = mergeReducer(start(), { type: 'toggle-keyword', keyword: 'the grey wolf' })
-    const after = mergeReducer(deselected, {
-      type: 'pick-canonical',
-      id: 'ent_b',
-      entityAId: 'ent_a',
-    })
+    const after = mergeReducer(deselected, { type: 'pick-canonical', id: 'ent_b' })
     expect(after.deselectedKeywords).toEqual(['the grey wolf'])
   })
 

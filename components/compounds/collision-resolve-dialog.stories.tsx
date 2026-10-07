@@ -390,6 +390,30 @@ export const MergeKeywordUnion: Story = {
   },
 }
 
+export const MergeFieldsFromOther: Story = {
+  render: () => (
+    <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveCapturing} />
+  ),
+  play: async () => {
+    lastResolution = null
+    const description = await screen.findByRole('group', { name: 'Description' })
+    await userEvent.click(within(description).getByRole('button', { name: entityB.description }))
+    // A canonical pick takes every field from the new canonical again.
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    const status = screen.getByRole('group', { name: 'Status' })
+    await userEvent.click(within(status).getByRole('button', { name: 'active' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    // toMatchObject compares arrays whole, so a stale 'description' fails it too.
+    expect(lastResolution).toMatchObject({
+      mode: 'merge',
+      canonicalId: entityB.id,
+      fromOther: ['status'],
+    })
+  },
+}
+
 export const MergeAgreeingListsKeepCanonical: Story = {
   render: () => (
     <ControlledDialog
@@ -526,6 +550,34 @@ export const MergeFieldDivergesWhileOpen: Story = {
       ),
     )
     expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'false')
+  },
+}
+
+let convergeNow: (() => void) | null = null
+function ConvergesWhileOpen() {
+  const [b, setB] = useState(baseEntity({ id: 'ent_kael_2', priority: 5 }))
+  useEffect(() => {
+    convergeNow = () => setB(baseEntity({ id: 'ent_kael_2' }))
+    return () => {
+      convergeNow = null
+    }
+  }, [])
+  return <ControlledDialog entityA={baseEntity()} entityB={b} onResolve={resolveCapturing} />
+}
+
+export const MergeFieldConvergesWhileOpen: Story = {
+  render: () => <ConvergesWhileOpen />,
+  play: async () => {
+    lastResolution = null
+    const row = await screen.findByRole('group', { name: 'Priority' })
+    await userEvent.click(within(row).getByRole('button', { name: '5' }))
+    convergeNow?.()
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Priority' })).toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+
+    // The pick no longer shows, so it isn't sent.
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toMatchObject({ mode: 'merge', fromOther: [] })
   },
 }
 

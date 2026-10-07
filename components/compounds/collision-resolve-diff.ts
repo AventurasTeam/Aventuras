@@ -48,7 +48,8 @@ export type Resolution =
   | {
       mode: 'merge'
       canonicalId: string
-      fieldChoices: Record<ScalarField, 'A' | 'B'>
+      /** Divergent fields the merged row takes from the non-canonical row, in `SCALAR_FIELDS` order. */
+      fromOther: readonly ScalarField[]
       finalTags: string[]
       finalKeywords: string[]
     }

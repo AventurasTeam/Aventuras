@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import {
-  SCALAR_FIELDS,
-  type EntitySummary,
-  type Resolution,
-} from '@/components/compounds/collision-resolve-diff'
+import { type EntitySummary, type Resolution } from '@/components/compounds/collision-resolve-diff'
 import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import {
   COLLISION_REJECTION,
@@ -49,17 +45,15 @@ function deselected(
   return [...new Set(terms.map(keyOf))].filter((key) => key !== '' && !kept.has(key))
 }
 
-/** The dialog's resolution as the action takes it; `pair` is older first, as the dialog got it. */
+/** The dialog's resolution as the action takes it: the loser is the pair row that isn't canonical. */
 function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionResolution {
   switch (resolution.mode) {
     case 'merge': {
-      const canonicalIsA = resolution.canonicalId === a.id
-      const loserSide = canonicalIsA ? 'B' : 'A'
       return {
         mode: 'merge',
         canonicalId: resolution.canonicalId,
-        loserId: canonicalIsA ? b.id : a.id,
-        fromLoser: SCALAR_FIELDS.filter((field) => resolution.fieldChoices[field] === loserSide),
+        loserId: resolution.canonicalId === a.id ? b.id : a.id,
+        fromLoser: resolution.fromOther,
         deselectedTags: deselected([...a.tags, ...b.tags], resolution.finalTags, (tag) =>
           tag.trim(),
         ),

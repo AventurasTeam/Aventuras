@@ -2,13 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  computeDivergence,
-  type EntitySummary,
-  type Resolution,
-  type ScalarField,
-} from '@/components/compounds/collision-resolve-diff'
-import { initMergeState, mergeReducer } from '@/components/compounds/collision-resolve-machine'
+import { type EntitySummary, type Resolution } from '@/components/compounds/collision-resolve-diff'
 import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
 import {
   emptyEntityState,
@@ -134,18 +128,6 @@ function openedPair(result: { current: ReturnType<typeof useCollisionResolve> })
   return pair
 }
 
-/** The `fieldChoices` the dialog's reducer holds for this canonical after `picks`. */
-function fieldChoices(
-  pair: Pair,
-  canonicalId: string,
-  picks: readonly (readonly [ScalarField, 'A' | 'B'])[],
-) {
-  let state = initMergeState(computeDivergence(pair[0], pair[1]), canonicalId, pair[0].id)
-  for (const [field, side] of picks)
-    state = mergeReducer(state, { type: 'pick-field', field, side })
-  return state.fieldChoices
-}
-
 const HAPPENING: Happening = {
   id: 'hap_1',
   branchId: BRANCH,
@@ -269,12 +251,11 @@ describe('useCollisionResolve → what resolve sends', () => {
 
   it('maps a merge into the older row: the newer row loses, and only its picked scalars come over', async () => {
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: OLDER.id,
-      fieldChoices: fieldChoices(pair, OLDER.id, [['status', 'B']]),
+      fromOther: ['status'],
       finalTags: TAGS,
       finalKeywords: KEYWORDS,
     })
@@ -294,15 +275,14 @@ describe('useCollisionResolve → what resolve sends', () => {
     expect(toast.success).toHaveBeenCalledWith('Merged into Brannoc.')
   })
 
-  it('maps a merge into the newer row: the older row loses, and its side is A', async () => {
+  it('maps a merge into the newer row: the older row loses, and its picked scalars come over', async () => {
     entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }])
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: NEWER.id,
-      fieldChoices: fieldChoices(pair, NEWER.id, [['description', 'A']]),
+      fromOther: ['description'],
       finalTags: TAGS,
       finalKeywords: KEYWORDS,
     })
@@ -324,12 +304,11 @@ describe('useCollisionResolve → what resolve sends', () => {
 
   it('sends each term missing from the final lists as deselected, keywords by their key', async () => {
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: OLDER.id,
-      fieldChoices: fieldChoices(pair, OLDER.id, []),
+      fromOther: [],
       finalTags: ['watch'],
       finalKeywords: ['The River Gate'],
     })
@@ -347,12 +326,11 @@ describe('useCollisionResolve → what resolve sends', () => {
   it("names the merged row by the loser's name when the merge takes it", async () => {
     entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }])
     const result = openPair()
-    const pair = openedPair(result)
 
     await result.current.resolve({
       mode: 'merge',
       canonicalId: NEWER.id,
-      fieldChoices: fieldChoices(pair, NEWER.id, [['name', 'A']]),
+      fromOther: ['name'],
       finalTags: TAGS,
       finalKeywords: KEYWORDS,
     })
@@ -418,13 +396,12 @@ describe('useCollisionResolve → outcomes', () => {
       code: COLLISION_REJECTION.leadEntity,
     })
     const result = openPair()
-    const pair = openedPair(result)
 
     await expect(
       result.current.resolve({
         mode: 'merge',
         canonicalId: NEWER.id,
-        fieldChoices: fieldChoices(pair, NEWER.id, []),
+        fromOther: [],
         finalTags: TAGS,
         finalKeywords: KEYWORDS,
       }),

@@ -282,9 +282,7 @@ function MergeBody({
   // Web tiers above phone lay the choices out in columns; native stacks them at every tier.
   const phone = useTier() === 'phone'
   const stacked = phone || Platform.OS !== 'web'
-  const [state, dispatch] = useReducer(mergeReducer, undefined, () =>
-    initMergeState(diff, entityA.id, entityA.id),
-  )
+  const [state, dispatch] = useReducer(mergeReducer, entityA.id, initMergeState)
 
   // Reset reducer state when entities change. Same render-cycle
   // ref-check pattern as embedder-download-dialog.tsx.
@@ -292,12 +290,7 @@ function MergeBody({
   const lastPairRef = useRef(pairKey)
   if (lastPairRef.current !== pairKey) {
     lastPairRef.current = pairKey
-    dispatch({
-      type: 'reset',
-      diff,
-      defaultCanonicalId: entityA.id,
-      entityAId: entityA.id,
-    })
+    dispatch({ type: 'reset', defaultCanonicalId: entityA.id })
   }
 
   const canonical = state.canonicalId === entityA.id ? entityA : entityB
@@ -350,7 +343,7 @@ function MergeBody({
     onSubmit({
       mode: 'merge',
       canonicalId: state.canonicalId,
-      fieldChoices: state.fieldChoices,
+      fromOther: diff.divergentScalars.filter((field) => state.fromOther.has(field)),
       finalTags: [...finalTags],
       finalKeywords: [...finalKeywords],
     })
@@ -383,7 +376,7 @@ function MergeBody({
         <Select
           options={canonicalOptions}
           value={state.canonicalId}
-          onValueChange={(id) => dispatch({ type: 'pick-canonical', id, entityAId: entityA.id })}
+          onValueChange={(id) => dispatch({ type: 'pick-canonical', id })}
           // Segment options are one fixed-height row; a phone's half-width label wraps and clips.
           mode={phone ? 'radio' : 'segment'}
           label={t('collisionDialog.canonicalLabel')}
@@ -420,8 +413,14 @@ function MergeBody({
               entityB={entityB}
               nowMs={nowMs}
               stacked={stacked}
-              pick={state.fieldChoices[field] ?? (canonical === entityA ? 'A' : 'B')}
-              onPick={(side) => dispatch({ type: 'pick-field', field, side })}
+              pick={(state.fromOther.has(field) ? nonCanonical : canonical) === entityA ? 'A' : 'B'}
+              onPick={(side) =>
+                dispatch({
+                  type: 'pick-field',
+                  field,
+                  fromOther: (side === 'A' ? entityA : entityB).id !== state.canonicalId,
+                })
+              }
               disabled={submitting}
             />
           ))}

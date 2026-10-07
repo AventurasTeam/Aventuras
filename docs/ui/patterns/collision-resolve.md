@@ -145,7 +145,7 @@ type Resolution =
   | {
       mode: 'merge'
       canonicalId: string
-      fieldChoices: Record<ScalarField, 'A' | 'B'>
+      fromOther: readonly ScalarField[]
       finalTags: string[]
       finalKeywords: string[]
     }
@@ -160,9 +160,11 @@ type Resolution =
 type ScalarField = MergeScalar
 ```
 
-`fieldChoices` only carries entries for fields that diverge.
-Identical-on-both-sides fields stay implicit (caller writes
-canonical's value unconditionally). `finalKeywords` is the union of
+`fromOther` names the divergent fields the merged row takes from
+the non-canonical row, in the fixed field order; every other field
+keeps the canonical's value, so nothing in the resolution depends on
+which column a side sat in. A field that stopped diverging while the
+dialog was open isn't sent. `finalKeywords` is the union of
 both sides' keywords, deduplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
 entry, a shared one in the canonical's spelling. `finalTags` is the
@@ -225,34 +227,32 @@ for stable rendering — order isn't data-dependent.
 ```ts
 type MergeState = {
   canonicalId: string
-  fieldChoices: Record<ScalarField, 'A' | 'B'>
+  /** Fields taken from the non-canonical row. */
+  fromOther: ReadonlySet<ScalarField>
   deselectedTags: string[]
   /** `normalizeTerm` keys, so a deselect follows the keyword across spellings. */
   deselectedKeywords: string[]
 }
 
 type MergeAction =
-  | { type: 'pick-canonical'; id: string; entityAId: string }
-  | { type: 'pick-field'; field: ScalarField; side: 'A' | 'B' }
+  | { type: 'pick-canonical'; id: string }
+  | { type: 'pick-field'; field: ScalarField; fromOther: boolean }
   | { type: 'toggle-tag'; tag: string }
   | { type: 'toggle-keyword'; keyword: string }
-  | {
-      type: 'reset'
-      diff: DiffPayload
-      defaultCanonicalId: string
-      entityAId: string
-    }
+  | { type: 'reset'; defaultCanonicalId: string }
 ```
 
 Transition rules:
 
-- **`pick-canonical`** — rebases `fieldChoices`: every divergent
-  scalar resets to the new canonical's side. Matches user
+- **`pick-canonical`** — empties `fromOther`: every divergent
+  scalar resets to the new canonical's value. Matches user
   expectation ("this side wins by default; override per field"),
   and keeps the relations-summary's "loser → canonical" framing
   consistent.
-- **`pick-field`** — overrides a single scalar without touching the
-  canonical or other choices.
+- **`pick-field`** — takes a single scalar from the non-canonical
+  row, or gives it back to the canonical's value, without touching
+  the canonical or other choices. The view says which: a pick of the
+  canonical's column is `fromOther: false`.
 - **`toggle-keyword`** — same shape as `toggle-tag`, against
   `deselectedKeywords`; the reducer normalizes the keyword to its
   key.
@@ -265,11 +265,8 @@ Transition rules:
   in practice the dialog is keyed by entity ids so unmount handles
   most cases.
 
-`pick-canonical` and `reset` carry `entityAId` so the reducer can
-tell which side the canonical is. Initial state: `canonicalId` =
-`defaultCanonicalId`, `fieldChoices` sets each field to whichever
-side matches the canonical, and `deselectedTags = []` and
-`deselectedKeywords = []`.
+Initial state: `canonicalId` = `defaultCanonicalId`, `fromOther`
+empty, and `deselectedTags = []` and `deselectedKeywords = []`.
 
 ### Submit-enabled rules
 
