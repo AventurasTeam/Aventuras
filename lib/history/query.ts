@@ -121,7 +121,7 @@ function linkMembers(links: readonly LinkEnd[]): SQL[] {
   return grouped(links).map(({ first, ids }) => linkMember(first.table, ids))
 }
 
-// world.md → History tab: a retrieval-count bump changes nothing the user wrote or sees.
+// world.md → History tab: a retrieval bump is the ranker's bookkeeping, not an edit.
 const NOT_RETRIEVAL_BUMP = sql`NOT (${deltas.targetTable} = 'happening_awareness'
   AND ${deltas.op} = 'update'
   AND (SELECT count(*) FROM json_each(${deltas.undoPayload})) = 1

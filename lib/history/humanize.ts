@@ -63,7 +63,7 @@ export type HumanizeContext = {
 
 type LinkVia = Extract<HistoryVia, { kind: 'link' }>
 
-// A relationship's labels follow the tab's side; the other link tables have none.
+// A relationship's labels follow the tab's side; the other link tables have no side.
 function linkPathLabel(via: LinkVia, path: string): string {
   return via.table === 'character_relationships'
     ? fieldPathLabel(via.table, path, via.side)

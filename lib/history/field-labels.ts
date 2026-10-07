@@ -179,7 +179,7 @@ export function linkTableLabel(table: HistoryLinkTable): string {
   return LINK_LABELS[table]()
 }
 
-/** A removal row's target line: its one link's label, or "Links" when the delete held several. */
+/** A removal row's target line: the label of the one link kind it held, or "Links" for several. */
 export function removalTargetLabel(
   tables: readonly [HistoryLinkTable, ...HistoryLinkTable[]],
 ): string {

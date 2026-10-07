@@ -105,7 +105,10 @@ const HELD_KEY: Record<HistoryLinkTable, string> = {
 
 const HOLDING_TABLES = ['entities', 'happenings']
 
-/** `column IN (ids)`, the ids bound as one JSON array rather than one parameter each. */
+/**
+ * `column IN (ids)`, bound as one JSON array: the union binds every unbounded id list in one
+ * statement, which `chunked` can't split under the bind cap (lib/db/bind-limit.ts).
+ */
 export function inJsonList(column: SQLWrapper, ids: readonly string[]): SQL {
   return sql`${column} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`
 }
