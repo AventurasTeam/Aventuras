@@ -14,6 +14,7 @@ import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { VaultScenario } from '$lib/types'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { stringToDescriptors } from '$lib/utils/visualDescriptors'
+import { uniqueTerms } from '$lib/utils/text'
 import { packService } from '$lib/services/packs/pack-service'
 import { database } from '$lib/services/database'
 import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
@@ -160,7 +161,7 @@ export class WizardStore {
       // Type assertion needed as Character type doesn't have background/motivation directly
       this.character.manualCharacterBackground = (proto as any).background ?? ''
       this.character.manualCharacterMotivation = (proto as any).motivation ?? ''
-      this.character.manualCharacterTraits = proto.traits?.join(', ') ?? ''
+      this.character.manualCharacterTraits = uniqueTerms(proto.traits ?? [])
       this.character.showManualInput = true
       this.character.useManualCharacter()
     }

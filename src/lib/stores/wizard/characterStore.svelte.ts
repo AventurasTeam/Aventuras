@@ -5,6 +5,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import { characterVault } from '$lib/stores/characterVault.svelte'
 import type { StoryMode, POV, TimeTracker, VaultCharacter } from '$lib/types'
 import { descriptorsToString, stringToDescriptors } from '$lib/utils/visualDescriptors'
+import { parseTerms, uniqueTerms } from '$lib/utils/text'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
 import type {
   ExpandedSetting,
@@ -34,7 +35,7 @@ export class CharacterStore {
   manualCharacterDescription = $state('')
   manualCharacterBackground = $state('')
   manualCharacterMotivation = $state('')
-  manualCharacterTraits = $state('')
+  manualCharacterTraits = $state<string[]>([])
   showManualInput = $state(true)
   characterElaborationGuidance = $state('')
 
@@ -50,7 +51,7 @@ export class CharacterStore {
   supportingCharacterRole = $state('')
   supportingCharacterDescription = $state('')
   supportingCharacterRelationship = $state('')
-  supportingCharacterTraits = $state('')
+  supportingCharacterTraits = $state<string[]>([])
   isElaboratingSupportingCharacter = $state(false)
   supportingCharacterGuidance = $state('')
   supportingCharacterVaultId = $state<string | null>(null)
@@ -126,12 +127,7 @@ export class CharacterStore {
       description: this.manualCharacterDescription.trim() || 'A mysterious figure.',
       background: this.manualCharacterBackground.trim() || '',
       motivation: this.manualCharacterMotivation.trim() || '',
-      traits: this.manualCharacterTraits.trim()
-        ? this.manualCharacterTraits
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : [],
+      traits: [...this.manualCharacterTraits],
     }
     this.showManualInput = false
   }
@@ -142,7 +138,7 @@ export class CharacterStore {
       this.manualCharacterDescription = this.protagonist.description || ''
       this.manualCharacterBackground = this.protagonist.background || ''
       this.manualCharacterMotivation = this.protagonist.motivation || ''
-      this.manualCharacterTraits = this.protagonist.traits?.join(', ') || ''
+      this.manualCharacterTraits = uniqueTerms(this.protagonist.traits ?? [])
     }
     this.showManualInput = true
     this.protagonist = null
@@ -175,11 +171,8 @@ export class CharacterStore {
     const sourceTraits =
       useCurrentProtagonist && this.protagonist
         ? this.protagonist.traits
-        : this.manualCharacterTraits.trim()
-          ? this.manualCharacterTraits
-              .split(',')
-              .map((t) => t.trim())
-              .filter(Boolean)
+        : this.manualCharacterTraits.length
+          ? [...this.manualCharacterTraits]
           : undefined
 
     const hasInput = sourceName || sourceDescription || sourceBackground || sourceMotivation
@@ -287,7 +280,7 @@ export class CharacterStore {
     this.supportingCharacterRole = ''
     this.supportingCharacterDescription = ''
     this.supportingCharacterRelationship = ''
-    this.supportingCharacterTraits = ''
+    this.supportingCharacterTraits = []
     this.showSupportingCharacterForm = true
     this.supportingCharacterVaultId = null
   }
@@ -299,7 +292,7 @@ export class CharacterStore {
     this.supportingCharacterRole = char.role || ''
     this.supportingCharacterDescription = char.description
     this.supportingCharacterRelationship = char.relationship || ''
-    this.supportingCharacterTraits = char.traits?.join(', ') || ''
+    this.supportingCharacterTraits = uniqueTerms(char.traits ?? [])
     this.showSupportingCharacterForm = true
   }
 
@@ -310,7 +303,7 @@ export class CharacterStore {
     this.supportingCharacterRole = ''
     this.supportingCharacterDescription = ''
     this.supportingCharacterRelationship = ''
-    this.supportingCharacterTraits = ''
+    this.supportingCharacterTraits = []
     this.supportingCharacterGuidance = ''
     this.supportingCharacterVaultId = null
   }
@@ -323,12 +316,7 @@ export class CharacterStore {
       role: this.supportingCharacterRole.trim() || 'supporting',
       description: this.supportingCharacterDescription.trim() || '',
       relationship: this.supportingCharacterRelationship.trim() || '',
-      traits: this.supportingCharacterTraits.trim()
-        ? this.supportingCharacterTraits
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : [],
+      traits: [...this.supportingCharacterTraits],
       vaultId: this.supportingCharacterVaultId ?? undefined,
     }
 
@@ -371,11 +359,8 @@ export class CharacterStore {
           description: this.supportingCharacterDescription.trim() || undefined,
           background: this.supportingCharacterRelationship.trim() || undefined,
           motivation: this.supportingCharacterRole.trim() || undefined,
-          traits: this.supportingCharacterTraits.trim()
-            ? this.supportingCharacterTraits
-                .split(',')
-                .map((t) => t.trim())
-                .filter(Boolean)
+          traits: this.supportingCharacterTraits.length
+            ? [...this.supportingCharacterTraits]
             : undefined,
         },
         expandedSetting,
@@ -420,7 +405,7 @@ export class CharacterStore {
     const metadata = (vaultCharacter.metadata as Record<string, any>) || {}
     this.manualCharacterBackground = (metadata.background as string) || ''
     this.manualCharacterMotivation = (metadata.motivation as string) || ''
-    this.manualCharacterTraits = vaultCharacter.traits.join(', ')
+    this.manualCharacterTraits = uniqueTerms(vaultCharacter.traits)
     visualDescriptorsSetter(descriptorsToString(vaultCharacter.visualDescriptors))
     portraitSetter(vaultCharacter.portrait)
 
@@ -439,10 +424,7 @@ export class CharacterStore {
     await characterVault.add({
       name: this.manualCharacterName.trim(),
       description: this.manualCharacterDescription.trim() || null,
-      traits: this.manualCharacterTraits
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
+      traits: [...this.manualCharacterTraits],
       visualDescriptors: stringToDescriptors(visualDescriptors),
       portrait: portrait,
       tags: [],
@@ -470,7 +452,7 @@ export class CharacterStore {
     this.supportingCharacterRole = (metadata.role as string) || ''
     this.supportingCharacterDescription = vaultCharacter.description || ''
     this.supportingCharacterRelationship = (metadata.relationshipTemplate as string) || ''
-    this.supportingCharacterTraits = vaultCharacter.traits.join(', ')
+    this.supportingCharacterTraits = uniqueTerms(vaultCharacter.traits)
 
     visualDescriptorsSetter(
       vaultCharacter.name,
@@ -511,12 +493,7 @@ export class CharacterStore {
           description: translated.description || this.protagonist.description,
           background: translated.background || this.protagonist.background,
           motivation: translated.motivation || this.protagonist.motivation,
-          traits: translated.traits
-            ? translated.traits
-                .split(',')
-                .map((t) => t.trim())
-                .filter(Boolean)
-            : this.protagonist.traits,
+          traits: translated.traits ? parseTerms(translated.traits) : this.protagonist.traits,
         }
       } catch (translationError) {
         console.error('Protagonist translation failed (non-fatal):', translationError)
@@ -569,12 +546,7 @@ export class CharacterStore {
       description: translated.description || char.description,
       role: translated.role || char.role,
       relationship: translated.relationship || char.relationship,
-      traits: translated.traits
-        ? translated.traits
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : char.traits,
+      traits: translated.traits ? parseTerms(translated.traits) : char.traits,
     }
   }
 

@@ -28,6 +28,7 @@ import type {
 } from '$lib/services/ai/sdk'
 import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
+import { uniqueTerms } from '$lib/utils/text'
 import { database } from '$lib/services/database'
 import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
 import { SvelteMap } from 'svelte/reactivity'
@@ -107,7 +108,7 @@ export class STImportWizardStore {
   manualCharacterDescription = $state('')
   manualCharacterBackground = $state('')
   manualCharacterMotivation = $state('')
-  manualCharacterTraits = $state('')
+  manualCharacterTraits = $state<string[]>([])
   showManualInput = $state(true)
   showVaultPicker = $state(false)
   supportingCharacters = $state<GeneratedCharacter[]>([])
@@ -500,7 +501,7 @@ export class STImportWizardStore {
       (character.metadata as Record<string, string>)?.background || ''
     this.manualCharacterMotivation =
       (character.metadata as Record<string, string>)?.motivation || ''
-    this.manualCharacterTraits = (character.traits || []).join(', ')
+    this.manualCharacterTraits = uniqueTerms(character.traits || [])
     this.showManualInput = false
     this.showVaultPicker = false
   }
@@ -513,12 +514,7 @@ export class STImportWizardStore {
       description: this.manualCharacterDescription.trim() || 'A mysterious figure.',
       background: this.manualCharacterBackground.trim() || '',
       motivation: this.manualCharacterMotivation.trim() || '',
-      traits: this.manualCharacterTraits.trim()
-        ? this.manualCharacterTraits
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : [],
+      traits: [...this.manualCharacterTraits],
     }
     this.showManualInput = false
   }

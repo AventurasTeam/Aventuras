@@ -14,6 +14,7 @@
   import type { GeneratedProtagonist, GeneratedCharacter } from '$lib/services/ai/sdk'
   import type { VaultCharacterInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { VaultCharacter } from '$lib/types'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
 
   interface Props {
     protagonist: GeneratedProtagonist | null
@@ -22,7 +23,7 @@
     manualCharacterDescription: string
     manualCharacterBackground: string
     manualCharacterMotivation: string
-    manualCharacterTraits: string
+    manualCharacterTraits: string[]
     showManualInput: boolean
     showVaultPicker: boolean
     supportingCharacters: GeneratedCharacter[]
@@ -32,7 +33,7 @@
     onManualDescriptionChange: (v: string) => void
     onManualBackgroundChange: (v: string) => void
     onManualMotivationChange: (v: string) => void
-    onManualTraitsChange: (v: string) => void
+    onManualTraitsChange: (v: string[]) => void
     onUseManualCharacter: () => void
     onUpdateProtagonist: (protagonist: GeneratedProtagonist, portrait: string | null) => void
     onSelectFromVault: (character: VaultCharacter) => void
@@ -308,11 +309,11 @@
           </div>
           <div>
             <Label for="protagonist-traits">Traits (comma-separated)</Label>
-            <Input
+            <TermsInput
               id="protagonist-traits"
               placeholder="brave, curious, witty"
               value={manualCharacterTraits}
-              oninput={(e) => onManualTraitsChange(e.currentTarget.value)}
+              onChange={onManualTraitsChange}
             />
           </div>
           <Button

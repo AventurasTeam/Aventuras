@@ -25,6 +25,8 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Separator } from '$lib/components/ui/separator'
   import { Badge } from '$lib/components/ui/badge'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
+  import { parseTerms, uniqueTerms } from '$lib/utils/text'
 
   interface Props {
     selectedMode: StoryMode
@@ -36,7 +38,7 @@
     manualCharacterDescription: string
     manualCharacterBackground: string
     manualCharacterMotivation: string
-    manualCharacterTraits: string
+    manualCharacterTraits: string[]
     characterElaborationGuidance: string
 
     // Loading states
@@ -53,7 +55,7 @@
     onManualDescriptionChange: (value: string) => void
     onManualBackgroundChange: (value: string) => void
     onManualMotivationChange: (value: string) => void
-    onManualTraitsChange: (value: string) => void
+    onManualTraitsChange: (value: string[]) => void
     onCharacterGuidanceChange: (value: string) => void
 
     // Action handlers
@@ -107,7 +109,7 @@
   let editDescription = $state('')
   let editBackground = $state('')
   let editMotivation = $state('')
-  let editTraits = $state('')
+  let editTraits = $state<string[]>([])
   let activeElaborationSource = $state<'expand' | 'refine' | null>(null)
 
   $effect(() => {
@@ -131,11 +133,11 @@
       editMotivation = protagonist.motivation ?? ''
 
       // Failsafe for traits
-      let safeTraits = ''
+      let safeTraits: string[] = []
       if (Array.isArray(protagonist.traits)) {
-        safeTraits = protagonist.traits.join(', ')
+        safeTraits = uniqueTerms(protagonist.traits)
       } else if (typeof protagonist.traits === 'string') {
-        safeTraits = protagonist.traits
+        safeTraits = parseTerms(protagonist.traits)
       }
       editTraits = safeTraits
 
@@ -326,13 +328,12 @@
           </div>
           <div class="space-y-2">
             <Label for="char-traits">Traits (comma-separated)</Label>
-            <Textarea
+            <TermsInput
+              multiline
               id="char-traits"
               value={isEditingProtagonist ? editTraits : manualCharacterTraits}
-              oninput={(e) =>
-                isEditingProtagonist
-                  ? (editTraits = e.currentTarget.value)
-                  : onManualTraitsChange(e.currentTarget.value)}
+              onChange={(terms) =>
+                isEditingProtagonist ? (editTraits = terms) : onManualTraitsChange(terms)}
               placeholder="e.g., brave, curious..."
               class="min-h-20 resize-none"
             />

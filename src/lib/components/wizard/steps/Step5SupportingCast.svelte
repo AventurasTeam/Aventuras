@@ -28,6 +28,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Separator } from '$lib/components/ui/separator'
   import { Badge } from '$lib/components/ui/badge'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
 
   interface Props {
     protagonist: GeneratedProtagonist | null
@@ -40,7 +41,7 @@
     supportingCharacterRole: string
     supportingCharacterDescription: string
     supportingCharacterRelationship: string
-    supportingCharacterTraits: string
+    supportingCharacterTraits: string[]
     supportingCharacterGuidance: string
 
     // Loading states
@@ -52,7 +53,7 @@
     onSupportingRoleChange: (value: string) => void
     onSupportingDescriptionChange: (value: string) => void
     onSupportingRelationshipChange: (value: string) => void
-    onSupportingTraitsChange: (value: string) => void
+    onSupportingTraitsChange: (value: string[]) => void
     onSupportingGuidanceChange: (value: string) => void
 
     // Action handlers
@@ -283,11 +284,11 @@
             oninput={(e) => onSupportingRelationshipChange(e.currentTarget.value)}
             placeholder="e.g., Childhood friend..."
           />
-          <Input
+          <TermsInput
             label="Traits"
             id="supp-traits"
             value={supportingCharacterTraits}
-            oninput={(e) => onSupportingTraitsChange(e.currentTarget.value)}
+            onChange={onSupportingTraitsChange}
             placeholder="e.g., cunning, loyal..."
           />
         </div>
