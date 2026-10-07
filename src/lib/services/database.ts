@@ -46,6 +46,7 @@ import {
 } from '$lib/services/packs/replace-statements'
 import type { PackExport } from '$lib/services/packs/validation'
 import { readStorySettings } from '$lib/utils/storySettings'
+import { uniqueTerms } from '$lib/utils/text'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -2753,7 +2754,7 @@ class DatabaseService {
       name: row.name,
       description: row.description,
       relationship: row.relationship,
-      traits: row.traits ? JSON.parse(row.traits) : [],
+      traits: row.traits ? uniqueTerms(JSON.parse(row.traits)) : [],
       visualDescriptors: migrateVisualDescriptors(rawDescriptors),
       portrait: row.portrait || null,
       status: row.status,
@@ -2765,7 +2766,9 @@ class DatabaseService {
       translatedName: row.translated_name || null,
       translatedDescription: row.translated_description || null,
       translatedRelationship: row.translated_relationship || null,
-      translatedTraits: row.translated_traits ? JSON.parse(row.translated_traits) : null,
+      translatedTraits: row.translated_traits
+        ? uniqueTerms(JSON.parse(row.translated_traits))
+        : null,
       translatedVisualDescriptors: rawTranslatedDescriptors
         ? migrateVisualDescriptors(rawTranslatedDescriptors)
         : null,
@@ -3047,7 +3050,7 @@ class DatabaseService {
       id: row.id,
       name: row.name,
       description: row.description,
-      traits: row.traits ? JSON.parse(row.traits) : [],
+      traits: row.traits ? uniqueTerms(JSON.parse(row.traits)) : [],
       visualDescriptors: migrateVisualDescriptors(rawDescriptors),
       portrait: row.portrait,
       tags: row.tags ? JSON.parse(row.tags) : [],
