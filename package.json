@@ -109,7 +109,7 @@
     "liquidjs": "^10.27.0",
     "lucide-react-native": "^0.577.0",
     "marked": "^18.0.5",
-    "nativewind": "^4.2.3",
+    "nativewind": "^4.2.7",
     "onnxruntime-react-native": "^1.24.3",
     "postcss": "^8.5.10",
     "postcss-safe-parser": "^7.0.1",
