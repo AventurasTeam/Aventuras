@@ -1,6 +1,6 @@
 import type { RowSignals } from '@/components/list/list-module'
 import type { EntryIndexRead } from '@/hooks/use-entry-index'
-import type { Entity, Happening, Lore, Thread } from '@/lib/db'
+import type { Entity, Happening, Lore, StoryEntry, Thread } from '@/lib/db'
 import type { EntryRef } from '@/lib/entry-refs'
 import type { EntityListSignals } from '@/lib/list-modules'
 import type { RecentlyClassified, RowCategory } from '@/lib/row-signals'
@@ -119,6 +119,20 @@ const ENTRIES: readonly EntryRef[] = Array.from({ length: 60 }, (_, i): EntryRef
     excerpt: `Entry ${position}`,
   }
 })
+
+/** A new tail entry on the fixture branch: hydrating it keys a fresh entry-index read. */
+export function railFixtureTurn(position: number): StoryEntry {
+  return {
+    id: `e_${position}`,
+    branchId: BRANCH,
+    position,
+    kind: 'ai_reply',
+    content: '',
+    chapterId: null,
+    metadata: null,
+    createdAt: position,
+  }
+}
 
 /** The fixture branch's entry read, for `EntryIndexReadProvider`. */
 export const readRailFixtureEntries: EntryIndexRead = async () => ENTRIES

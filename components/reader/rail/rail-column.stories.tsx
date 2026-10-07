@@ -5,14 +5,13 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { EntryIndexReadProvider, type EntryIndexRead } from '@/hooks/use-entry-index'
-import type { StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { DEFAULT_RAIL_VIEW, railViewFor, type RailView } from '@/lib/reader-rail'
 import { appSettingsStore, entriesStore, listCollapseStore, readerRailStore } from '@/lib/stores'
 
 import { BrowseRail } from './browse-rail'
 import { RailColumn } from './rail-column'
-import { railDataFixture, readRailFixtureEntries } from './rail-story-fixtures'
+import { railDataFixture, railFixtureTurn, readRailFixtureEntries } from './rail-story-fixtures'
 import { RailStrip } from './rail-strip'
 import { ReaderRailColumn } from './reader-rail-column'
 import { railStripOf } from './use-rail-data'
@@ -96,19 +95,8 @@ function ConnectedStage({
   )
 }
 
-// A turn moves the branch's tail, which keys a fresh entry-index read.
 function takeTurn(position: number) {
-  const entry: StoryEntry = {
-    id: `e_${position}`,
-    branchId: DATA.branchId,
-    position,
-    kind: 'ai_reply',
-    content: '',
-    chapterId: null,
-    metadata: null,
-    createdAt: position,
-  }
-  entriesStore.hydrate(DATA.branchId, [entry])
+  entriesStore.hydrate(DATA.branchId, [railFixtureTurn(position)])
 }
 
 const columnWidth = () => screen.getByTestId('rail-column').getBoundingClientRect().width

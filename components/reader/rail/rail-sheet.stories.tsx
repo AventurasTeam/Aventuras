@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react-native'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
@@ -19,11 +20,11 @@ import {
   type RailView,
 } from '@/lib/reader-rail'
 import type { RecentlyClassified, RowCategory } from '@/lib/row-signals'
-import { listCollapseStore, readerRailStore } from '@/lib/stores'
+import { entriesStore, listCollapseStore, readerRailStore } from '@/lib/stores'
 
 import { RAIL_MODULES, railCategoryLabel } from './rail-modules'
 import { RailSheet } from './rail-sheet'
-import { railDataFixture } from './rail-story-fixtures'
+import { railDataFixture, railFixtureTurn } from './rail-story-fixtures'
 import { ReaderBrowseChip } from './reader-browse-chip'
 import type { RailData } from './use-rail-data'
 
@@ -343,7 +344,7 @@ export const ReaderChipOpensOnLastCategory: Story = {
   },
 }
 
-/** A pick goes through the store; the rail data reads it (entry index loads for happenings). */
+/** A pick goes through the store. */
 export const ReaderChipPickSetsStoreCategory: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
@@ -435,18 +436,46 @@ export const ReaderChipBackdropClosesCategories: Story = {
   },
 }
 
-/** A closed Sheet unmounts its list, so the happening list's per-turn entry read stops with it. */
-export const ReaderChipCloseUnmountsList: Story = {
+// The preview's client: the Sheet's content shares it, so its entry-index reads show in the cache.
+const probe: { client: QueryClient | null } = { client: null }
+
+function QueryClientProbe() {
+  const client = useQueryClient()
+  useEffect(() => {
+    probe.client = client
+  }, [client])
+  return null
+}
+
+const entryIndexQueries = () =>
+  probe.client?.getQueryCache().findAll({ queryKey: ['entry-index', DATA.branchId] }) ?? []
+const readsAtTail = (tailId: string) =>
+  entryIndexQueries().filter((query) => query.queryKey[3] === tailId)
+
+function takeTurn(position: number) {
+  entriesStore.hydrate(DATA.branchId, [railFixtureTurn(position)])
+}
+
+/** The happening list reads per turn only while the Sheet is open; closing it unmounts the list. */
+export const ReaderChipClosedSheetReadsNothing: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => (
+    <>
+      <QueryClientProbe />
+      <ChipHarness onRowPress={args.onRowPress} />
+    </>
+  ),
   beforeEach: () => {
     readerRailStore.setCategory('happening')
+    return () => entriesStore.__reset()
   },
   play: async () => {
     const chip = await screen.findByTestId('browse-chip')
     await userEvent.click(chip)
     await waitFor(() => expect(railDialog()).toBeVisible())
     await headIs('happening')
+    takeTurn(61)
+    await waitFor(() => expect(readsAtTail('e_61')).toHaveLength(1), ANIMATION)
     const search = RAIL_MODULES.happening.copy(railCategoryLabel('happening')).searchPlaceholder
     await expect(screen.getByPlaceholderText(search)).toBeInTheDocument()
 
@@ -454,5 +483,15 @@ export const ReaderChipCloseUnmountsList: Story = {
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
     // Gone from the DOM, not just hidden: the role query above skips hidden elements.
     await expect(screen.queryByPlaceholderText(search)).toBeNull()
+    // The observer leaves in the unmount's passive-effect cleanup, just after the DOM.
+    await waitFor(
+      () =>
+        expect(entryIndexQueries().every((query) => query.getObserversCount() === 0)).toBe(true),
+      ANIMATION,
+    )
+    takeTurn(62)
+    // A negative check: a mounted list keys the new read within a frame of the turn.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await expect(readsAtTail('e_62')).toHaveLength(0)
   },
 }
