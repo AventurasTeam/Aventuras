@@ -1232,11 +1232,13 @@ Resolution writes deltas with `source = user_edit`. The classifier
 sets the flag at create
 ([authorship contract](../../../data-model.md#authorship-contract));
 clearing it is always a user write, delta-logged, so CTRL-Z
-re-flags the row. What a resolution writes counts as the user's
-for [user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes):
-a classifier fact from prose older than the resolution doesn't
-overwrite it. That includes a relationship view the merge carries
-over from the non-canonical, though the classifier first wrote it.
+re-flags the row. Where
+[user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes)
+applies (status, keywords, relationship views), what a resolution
+writes counts as the user's: a classifier fact from prose older than
+the resolution doesn't overwrite it. That includes a relationship
+view the merge carries over from the non-canonical, though the
+classifier first wrote it.
 Only what the resolution changes counts — an unchanged column isn't
 written.
 
