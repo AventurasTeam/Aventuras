@@ -1,5 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
-import { AccessibilityInfo, Platform, type ScrollView, type View } from 'react-native'
+import { AccessibilityInfo, Platform, type View } from 'react-native'
+
+import type { ScrollComponentHandle } from '@/components/ui/scroll-component'
 
 /** A fresh object per request, so revealing the same row twice scrolls twice. */
 export type RevealRequest = { id: string }
@@ -66,7 +68,7 @@ function useNodeRefs() {
  * Caller must mount the row in the same update (e.g. expand its group) and wire `focusRef` to it.
  */
 export function useRevealScroll(reveal: RevealRequest | null, resetKey: string) {
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<ScrollComponentHandle>(null)
   const contentRef = useRef<View>(null)
   const { nodes: rowNodes, refFor: rowRef } = useNodeRefs()
   const { nodes: focusNodes, refFor: focusRef } = useNodeRefs()

@@ -146,7 +146,7 @@ export function useSheetDismissal(dismissible: boolean): SheetDismissal {
 }
 
 // Native-only swap, as for the input: gorhom's scroll view hands the gesture to the sheet's
-// drag-down at list top. Cast: its ref type `BottomSheetScrollViewMethods` carries `scrollTo`.
+// drag-down at list top. Cast: its ref type covers `ScrollComponentHandle`.
 const SheetScrollComponent = (
   Platform.OS === 'web' ? ScrollView : BottomSheetScrollView
 ) as ScrollComponent

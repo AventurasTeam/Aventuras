@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState, type ReactElement, type Ref } from 'react'
-import { ScrollView, View, type ScrollViewProps } from 'react-native'
+import { useState, type ComponentProps, type ReactElement, type Ref } from 'react'
+import { ScrollView, View } from 'react-native'
 import { expect, fn, screen, userEvent } from 'storybook/test'
 
 import { entityListModule } from '@/components/entity/entity-list-module'
 import { LORE_FILTER, loreListModule } from '@/components/entity/lore-list-module'
-import { ScrollComponentContext } from '@/components/ui/scroll-component'
+import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { Text } from '@/components/ui/text'
 import type { Entity, Lore } from '@/lib/db'
 import type { EntityFilter, EntityListSignals } from '@/lib/list-modules'
@@ -131,8 +131,9 @@ function CharacterHarness({ onReveal }: { onReveal?: (id: string) => void }) {
   )
 }
 
-function TaggedScroll(props: ScrollViewProps & { ref?: Ref<ScrollView> }) {
-  return <ScrollView {...props} testID="injected-scroll" />
+// ScrollView's instance carries every method the handle names.
+function TaggedScroll({ ref, ...props }: ComponentProps<ScrollComponent>) {
+  return <ScrollView {...props} ref={ref as Ref<ScrollView>} testID="injected-scroll" />
 }
 
 type StoryArgs = {
