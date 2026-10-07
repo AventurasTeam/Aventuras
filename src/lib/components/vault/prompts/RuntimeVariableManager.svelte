@@ -64,9 +64,6 @@
     return counts
   })
 
-  // Active entity types (those with at least one variable)
-  let activeEntityTypes = $derived(ENTITY_TYPE_ORDER.filter((et) => grouped[et].length > 0))
-
   function nextVariableName(): string {
     let max = 0
     for (const v of runtimeVariables) {
@@ -224,50 +221,52 @@
       </div>
     {:else}
       <div class="space-y-5">
-        {#each activeEntityTypes as entityType, typeIndex (typeIndex)}
-          <!-- Entity type section -->
-          <div>
-            <div class="mb-2 flex items-center gap-2">
-              <h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                {ENTITY_TYPE_LABELS[entityType]}
-              </h4>
-              <span class="text-muted-foreground text-xs">
-                ({grouped[entityType].length})
-              </span>
-            </div>
-
-            <!-- Soft warning for 10+ variables -->
-            {#if entityTypeCounts[entityType] >= 10}
-              <div
-                class="text-muted-foreground mb-2 flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs"
-              >
-                <AlertTriangle class="h-3 w-3 shrink-0" />
-                <span>
-                  10+ variables for {ENTITY_TYPE_LABELS[entityType].toLowerCase()} may increase extraction
-                  cost and reduce accuracy.
+        {#each ENTITY_TYPE_ORDER as entityType, typeIndex (typeIndex)}
+          {#if grouped[entityType].length > 0}
+            <!-- Entity type section -->
+            <div>
+              <div class="mb-2 flex items-center gap-2">
+                <h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                  {ENTITY_TYPE_LABELS[entityType]}
+                </h4>
+                <span class="text-muted-foreground text-xs">
+                  ({grouped[entityType].length})
                 </span>
               </div>
-            {/if}
 
-            <div class="space-y-2">
-              {#each grouped[entityType] as variable, i (variable.id)}
-                <RuntimeVariableCard
-                  {variable}
-                  onUpdate={handleUpdateVariable}
-                  onDelete={() => handleDeleteVariable(variable)}
-                  onRename={(oldName, newName) =>
-                    handleRenameVariable(variable.id, oldName, newName)}
-                  onTypeChange={handleTypeChange}
-                  initialExpanded={variable.id === newlyCreatedId}
-                  entityTypeWarningCount={entityCounts[variable.id] ?? 0}
-                  onMoveUp={i > 0 ? () => moveVariable(entityType, i, 'up') : undefined}
-                  onMoveDown={i < grouped[entityType].length - 1
-                    ? () => moveVariable(entityType, i, 'down')
-                    : undefined}
-                />
-              {/each}
+              <!-- Soft warning for 10+ variables -->
+              {#if entityTypeCounts[entityType] >= 10}
+                <div
+                  class="text-muted-foreground mb-2 flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs"
+                >
+                  <AlertTriangle class="h-3 w-3 shrink-0" />
+                  <span>
+                    10+ variables for {ENTITY_TYPE_LABELS[entityType].toLowerCase()} may increase extraction
+                    cost and reduce accuracy.
+                  </span>
+                </div>
+              {/if}
+
+              <div class="space-y-2">
+                {#each grouped[entityType] as variable, i (variable.id)}
+                  <RuntimeVariableCard
+                    {variable}
+                    onUpdate={handleUpdateVariable}
+                    onDelete={() => handleDeleteVariable(variable)}
+                    onRename={(oldName, newName) =>
+                      handleRenameVariable(variable.id, oldName, newName)}
+                    onTypeChange={handleTypeChange}
+                    initialExpanded={variable.id === newlyCreatedId}
+                    entityTypeWarningCount={entityCounts[variable.id] ?? 0}
+                    onMoveUp={i > 0 ? () => moveVariable(entityType, i, 'up') : undefined}
+                    onMoveDown={i < grouped[entityType].length - 1
+                      ? () => moveVariable(entityType, i, 'down')
+                      : undefined}
+                  />
+                {/each}
+              </div>
             </div>
-          </div>
+          {/if}
         {/each}
       </div>
     {/if}
