@@ -50,20 +50,6 @@
     return groups
   })
 
-  // Compute entity type counts for soft warning
-  let entityTypeCounts = $derived.by(() => {
-    const counts: Record<RuntimeEntityType, number> = {
-      character: 0,
-      location: 0,
-      item: 0,
-      story_beat: 0,
-    }
-    for (const v of runtimeVariables) {
-      counts[v.entityType]++
-    }
-    return counts
-  })
-
   function nextVariableName(): string {
     let max = 0
     for (const v of runtimeVariables) {
@@ -235,7 +221,7 @@
               </div>
 
               <!-- Soft warning for 10+ variables -->
-              {#if entityTypeCounts[entityType] >= 10}
+              {#if grouped[entityType].length >= 10}
                 <div
                   class="text-muted-foreground mb-2 flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs"
                 >
