@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import type { EntityKind } from '@/lib/db'
 import type { RailCategory } from '@/lib/reader-rail'
 
 import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
@@ -14,7 +15,8 @@ import { reader } from '../locators/reader'
 
 // reader-composer.md → Browse rail at the seams only a running app reaches: rows from the real
 // stores, a row press landing Plot, the preference written to app_settings and read back after a
-// relaunch, the global shortcut over a focused composer, and real window resizes. The display
+// relaunch, the global shortcut over a focused composer, real window resizes, and the filter and
+// search reset on a story switch (the store's half: lib/stores/ui/reader-rail.test.ts). The display
 // reducer: lib/reader-rail/display.test.ts; hit zones and tints: rail-strip.stories.tsx; category
 // switching and search copy: browse-rail.stories.tsx. See docs/testing.md → Coverage.
 
@@ -24,7 +26,7 @@ const SEEDED_CHARACTER = 'Mira'
 const SEEDED_THREAD = 'What the amulet wants'
 // An active filler story in adventure mode; its branch has no threads.
 const OTHER_TITLE = 'Sable and the Redrawn Coast'
-// Matches the hero's one pending thread, so the typed search is a real narrowing.
+// Matches the hero's one pending thread, so the list keeps a row under both filter and search.
 const SEARCH_TEXT = 'Syndicate'
 
 // Literal rather than RAIL_CATEGORIES, so the expectation isn't the constant the rail renders.
@@ -51,12 +53,12 @@ async function storedRailCollapsed(page: Page): Promise<unknown> {
 
 // tailMetadata reads the last ai_reply. On the seeded hero branch only a system banner follows
 // it, so it is the head turn's tail, whose scene the strip counts.
-async function charactersInScene(page: Page, branchId: string): Promise<number> {
+async function inSceneCount(page: Page, branchId: string, kind: EntityKind): Promise<number> {
   const ids = (await tailMetadata(page, branchId))?.sceneEntities ?? []
   const [[count]] = await queryApp(
     page,
-    `SELECT count(*) FROM entities WHERE branch_id = ? AND kind = 'character' AND id IN (SELECT value FROM json_each(?))`,
-    [branchId, JSON.stringify(ids)],
+    `SELECT count(*) FROM entities WHERE branch_id = ? AND kind = ? AND id IN (SELECT value FROM json_each(?))`,
+    [branchId, kind, JSON.stringify(ids)],
   )
   return Number(count)
 }
@@ -126,14 +128,24 @@ test.describe.serial('Browse rail', () => {
 
   test('the chevron collapses to the strip, which counts the scene, and stores the preference', async () => {
     const page = app.window
-    const characters = await charactersInScene(page, branchId)
+    const characters = await inSceneCount(page, branchId, 'character')
     // Zero would also match a strip that never read the scene.
     expect(characters).toBeGreaterThan(0)
+    // The tail scene holds no item, but the branch has some: a strip that counted every item of
+    // the branch, or every in-scene entity, would read more than zero here.
+    const itemsInScene = await inSceneCount(page, branchId, 'item')
+    const [[branchItems]] = await queryApp(
+      page,
+      `SELECT count(*) FROM entities WHERE branch_id = ? AND kind = 'item'`,
+      [branchId],
+    )
+    expect(Number(branchItems)).toBeGreaterThan(itemsInScene)
 
     await rail.collapse(page).click()
     await expect(rail.strip(page)).toBeVisible()
     await expect(rail.column(page)).toHaveCount(0)
     await expect(rail.stripCell(page, 'character', characters)).toBeVisible()
+    await expect(rail.stripCell(page, 'item', itemsInScene)).toBeVisible()
     await expect.poll(() => storedRailCollapsed(page)).toBe(1)
   })
 
