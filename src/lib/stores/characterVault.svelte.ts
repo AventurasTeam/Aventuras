@@ -15,6 +15,10 @@ import { uniqueTerms } from '$lib/utils/text'
 
 const log = createLogger('CharacterVault')
 
+// Card personality fields separate traits with commas or semicolons.
+const personalityTraits = (text?: string): string[] =>
+  uniqueTerms((text ?? '').split(/[,;]/)).slice(0, 10)
+
 /**
  * Store for managing the global Character Vault.
  * Characters in the vault are templates that can be copied to stories.
@@ -225,7 +229,7 @@ class CharacterVaultStore {
     tags?: string[]
     version?: string
   }): Promise<VaultCharacter> {
-    const traits = card.personality ? uniqueTerms(card.personality.split(/[,;]/)).slice(0, 10) : []
+    const traits = personalityTraits(card.personality)
 
     return this.add({
       name: card.name,
@@ -398,9 +402,7 @@ class CharacterVaultStore {
         id: tempId,
         name: sanitized?.name || parsed.name,
         description: sanitized?.description || parsed.description || parsed.creator_notes || null,
-        traits:
-          (sanitized?.traits && uniqueTerms(sanitized.traits)) ||
-          (parsed.personality ? uniqueTerms(parsed.personality.split(/[,;]/)).slice(0, 10) : []),
+        traits: sanitized?.traits ?? personalityTraits(parsed.personality),
         visualDescriptors: sanitized?.visualDescriptors || {},
         portrait: portrait || null,
         tags: extraMetadata.tags || parsed.tags || ['imported'],
