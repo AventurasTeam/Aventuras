@@ -52,6 +52,25 @@ const STACKED_CLAMP_LINES = 3
 const GATED: ViewStyle = { pointerEvents: 'none' }
 const ARROW_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 
+type RelationCounts = EntitySummary['relationCounts']
+
+const SUMMARY_COUNTS = [
+  ['awareness', 'awarenessRows'],
+  ['involvements', 'involvements'],
+  ['relationships', 'relationships'],
+  ['inverseRefs', 'inverseRefs'],
+  ['embeddings', 'embeddings'],
+  ['unheldItems', 'unheldItems'],
+  ['translations', 'translationRows'],
+] as const satisfies readonly (readonly [string, keyof RelationCounts])[]
+
+const OVERLAP_NOTES = [
+  ['overlapAwareness', 'awareness'],
+  ['overlapInvolvements', 'involvements'],
+  ['overlapRelationships', 'relationships'],
+  ['holdersLosingItem', 'holdersLosingItem'],
+] as const satisfies readonly (readonly [string, keyof RelationCounts['overlap']])[]
+
 const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
   [RENAME_ISSUE.stillColliding]: () => t('collisionDialog.renameIssue.stillColliding'),
@@ -438,59 +457,21 @@ function MergeBody({
         <Text size="sm" variant="muted">
           {t('collisionDialog.summary.heading', { from: nonCanonical.name, to: canonical.name })}
         </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.awareness', { value: counts.awarenessRows })}
-        </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.involvements', { value: counts.involvements })}
-        </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.relationships', { value: counts.relationships })}
-        </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.inverseRefs', { value: counts.inverseRefs })}
-        </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.embeddings', { value: counts.embeddings })}
-        </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.unheldItems', { value: counts.unheldItems })}
-        </Text>
-        <Text size="sm">
-          {t('collisionDialog.summary.translations', { value: counts.translationRows })}
-        </Text>
-        {counts.overlap.awareness > 0 ? (
-          <Text size="xs" variant="muted">
-            {t('collisionDialog.summary.overlapAwareness', {
-              count: counts.overlap.awareness,
-              name: canonical.name,
-            })}
+        {SUMMARY_COUNTS.map(([key, count]) => (
+          <Text key={key} size="sm">
+            {t(`collisionDialog.summary.${key}`, { value: counts[count] })}
           </Text>
-        ) : null}
-        {counts.overlap.involvements > 0 ? (
-          <Text size="xs" variant="muted">
-            {t('collisionDialog.summary.overlapInvolvements', {
-              count: counts.overlap.involvements,
-              name: canonical.name,
-            })}
-          </Text>
-        ) : null}
-        {counts.overlap.relationships > 0 ? (
-          <Text size="xs" variant="muted">
-            {t('collisionDialog.summary.overlapRelationships', {
-              count: counts.overlap.relationships,
-              name: canonical.name,
-            })}
-          </Text>
-        ) : null}
-        {counts.overlap.holdersLosingItem > 0 ? (
-          <Text size="xs" variant="muted">
-            {t('collisionDialog.summary.holdersLosingItem', {
-              count: counts.overlap.holdersLosingItem,
-              name: canonical.name,
-            })}
-          </Text>
-        ) : null}
+        ))}
+        {OVERLAP_NOTES.map(([key, count]) =>
+          counts.overlap[count] > 0 ? (
+            <Text key={key} size="xs" variant="muted">
+              {t(`collisionDialog.summary.${key}`, {
+                count: counts.overlap[count],
+                name: canonical.name,
+              })}
+            </Text>
+          ) : null,
+        )}
         {counts.joiningRelationship ? (
           <Text size="xs" variant="muted">
             {t('collisionDialog.summary.joiningRelationship')}
