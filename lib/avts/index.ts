@@ -9,3 +9,7 @@ export type {
   ItemImportState,
   LocationImportState,
 } from './entity'
+export { LoreImportSchema, loreExport } from './lore'
+export type { LoreImport } from './lore'
+export { ThreadImportSchema, threadExport } from './thread'
+export type { ThreadImport } from './thread'
