@@ -74,31 +74,23 @@ export type CollisionResolveResult =
 
 type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
 type PairResolution = Exclude<CollisionResolution, { mode: 'merge' }>
-type Refusal = Extract<BuiltGroup, { status: 'rejected' }>
+type Built = BuiltGroup<CollisionRejectionCode>
+type Refusal = Extract<Built, { status: 'rejected' }>
 
 function refusal(code: CollisionRejectionCode, reason: string): Refusal {
   return { status: 'rejected', reason, code }
 }
 
+const COLLISION_CODES: ReadonlySet<string> = new Set(Object.values(COLLISION_REJECTION))
+
+function isCollisionCode(code: string): code is CollisionRejectionCode {
+  return COLLISION_CODES.has(code)
+}
+
 // A reversal raised while the write awaited its locks reports as in-flight, like the entry gate.
 function rejectionCode(code: string | undefined): CollisionRejectionCode {
-  switch (code) {
-    case DELTA_REJECTION.reversalInProgress:
-    case COLLISION_REJECTION.inFlight:
-      return COLLISION_REJECTION.inFlight
-    case COLLISION_REJECTION.notFound:
-      return COLLISION_REJECTION.notFound
-    case COLLISION_REJECTION.leadEntity:
-      return COLLISION_REJECTION.leadEntity
-    case COLLISION_REJECTION.parentCycle:
-      return COLLISION_REJECTION.parentCycle
-    case COLLISION_REJECTION.parentChainBroken:
-      return COLLISION_REJECTION.parentChainBroken
-    case COLLISION_REJECTION.invalidRename:
-      return COLLISION_REJECTION.invalidRename
-    default:
-      return COLLISION_REJECTION.failed
-  }
+  if (code === DELTA_REJECTION.reversalInProgress) return COLLISION_REJECTION.inFlight
+  return code != null && isCollisionCode(code) ? code : COLLISION_REJECTION.failed
 }
 
 function pairIds(resolution: CollisionResolution): readonly [string, string] {
@@ -139,11 +131,7 @@ function gateRefusal(): Refusal | null {
     : null
 }
 
-function buildMerge(
-  branchId: string,
-  resolution: MergeResolution,
-  tail: DeleteTail | null,
-): BuiltGroup {
+function buildMerge(branchId: string, resolution: MergeResolution, tail: DeleteTail | null): Built {
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
@@ -171,7 +159,7 @@ function buildMerge(
   }
 }
 
-function buildPairResolution(branchId: string, resolution: PairResolution): BuiltGroup {
+function buildPairResolution(branchId: string, resolution: PairResolution): Built {
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
@@ -186,7 +174,7 @@ function buildPairResolution(branchId: string, resolution: PairResolution): Buil
     : { status: 'ok', actions: plan.actions }
 }
 
-function commit(branchId: string, build: () => BuiltGroup, ctx: DbCtx): Promise<DeltaGroupResult> {
+function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<DeltaGroupResult> {
   return applyDeltaActionGroupBuilt(build, { actionId: generateId('act'), branchId }, ctx)
 }
 

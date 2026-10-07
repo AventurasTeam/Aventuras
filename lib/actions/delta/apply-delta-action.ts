@@ -271,9 +271,9 @@ export async function applyDeltaActionGroup(
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
-export type BuiltGroup =
+export type BuiltGroup<Code extends string = string> =
   | { status: 'ok'; actions: readonly PipelineAction[] }
-  | { status: 'rejected'; reason: string; code: string }
+  | { status: 'rejected'; reason: string; code: Code }
 
 /**
  * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold, through the commit:
