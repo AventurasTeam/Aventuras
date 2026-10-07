@@ -15,7 +15,7 @@ import {
 } from '@/lib/stores'
 
 import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
-import { HistoryTab } from './history-tab'
+import { HistoryTab, REFRESH_COALESCE_MS } from './history-tab'
 import type { HistoryTabViewProps } from './history-tab-view'
 
 const view = vi.hoisted(() => ({ props: null as HistoryTabViewProps | null, renders: 0 }))
@@ -144,6 +144,10 @@ function renderTab(load: HistoryLoader, targetId: string, targetTable: HistoryTa
   )
 }
 
+// A refetch waits for its triggers to hold still, so "no refetch" holds only once that has passed.
+const pastCoalescing = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, REFRESH_COALESCE_MS * 2)))
+
 async function firstRow() {
   await waitFor(() => expect(view.props?.rows).toHaveLength(1))
   return view.props?.rows[0]
@@ -221,7 +225,7 @@ describe('HistoryTab over the link-row union', () => {
       fieldPath: null,
     })
     // An other end the working set never held hasn't left it, so it doesn't refetch.
-    await act(async () => {})
+    await pastCoalescing()
     expect(load).toHaveBeenCalledTimes(1)
   })
 
@@ -239,6 +243,7 @@ describe('HistoryTab over the link-row union', () => {
     await waitFor(() =>
       expect(view.props?.rows[0]?.targetDisplayName).toBe('Relationship · Kael the Elder'),
     )
+    await pastCoalescing()
     expect(load).toHaveBeenCalledTimes(1)
   })
 
@@ -394,7 +399,7 @@ describe('HistoryTab over the link-row union', () => {
         columns: { retrievalCount: 4 },
       })
     })
-    await act(async () => {})
+    await pastCoalescing()
     expect(load).toHaveBeenCalledTimes(1)
 
     act(() =>
@@ -417,5 +422,23 @@ describe('HistoryTab over the link-row union', () => {
       }),
     )
     await waitFor(() => expect(load).toHaveBeenCalledTimes(3))
+  })
+
+  it('refetches once for a burst of link writes naming the row, as a classifier pass commits them', async () => {
+    happeningAwarenessStore.hydrate(BRANCH, [])
+    const load = loader(() => [])
+    renderTab(load, 'char_aria')
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1))
+    for (let i = 0; i < 10; i += 1)
+      await act(async () =>
+        happeningAwarenessStore.patch(BRANCH, {
+          op: 'create',
+          id: `haw_${i}`,
+          row: awareness(`haw_${i}`, 'char_aria'),
+        }),
+      )
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    await pastCoalescing()
+    expect(load).toHaveBeenCalledTimes(2)
   })
 })

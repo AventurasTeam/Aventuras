@@ -639,7 +639,9 @@ prose, then hands pre-formatted strings to the compound.
   delete payload, when an other end it shows is renamed while a search
   is set, since the name match runs in SQLite, and when a run or
   reversal settles, which covers a reversal that only edits a delete's
-  payload.
+  payload. Triggers that land close together, like the separate
+  commits of one classifier pass, refetch once, shortly after the last.
+  A `Load older` pressed while a refetch runs loads after it lands.
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 

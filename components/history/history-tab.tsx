@@ -20,6 +20,9 @@ import { useLinkVersion } from './use-link-version'
 
 const SEARCH_DEBOUNCE_MS = 250
 
+/** How long refresh triggers must hold still before the tab refetches once for all of them. */
+export const REFRESH_COALESCE_MS = 150
+
 export type HistoryTabProps = { branchId: string; targetTable: HistoryTable; targetId: string }
 
 /** C4: one row's delta log; keyed by target so switching rows remounts and resets it. */
@@ -88,9 +91,11 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
     () => ({ row, settleCount, links, otherEnds }),
     [row, settleCount, links, otherEnds],
   )
+  // A classifier pass commits each write on its own; the burst gets one refetch, after it.
+  const settledVersion = useDebouncedValue(version, REFRESH_COALESCE_MS)
   const chunks = useHistoryChunks(
     { branchId, targetTable, targetId, op: op ?? undefined, search, sort },
-    version,
+    settledVersion,
   )
   const entryIndex = useEntryIndex(branchId)
   const otherIds = useMemo(() => otherEndIds(chunks.rows), [chunks.rows])
