@@ -3,10 +3,10 @@ import { z } from 'zod'
 import { t } from '@/lib/i18n'
 import { blankToNull } from '@/lib/text'
 
-/** Trimmed, non-blank text; missing, empty or whitespace-only fails with `message`. */
+/** Trimmed, non-blank text; missing, null, empty or whitespace-only fails with `message`. */
 export function requiredText(message: () => string) {
   return z
-    .string({ error: (issue) => (issue.input === undefined ? message() : undefined) })
+    .string({ error: (issue) => (issue.input == null ? message() : undefined) })
     .trim()
     .min(1, { error: message })
 }

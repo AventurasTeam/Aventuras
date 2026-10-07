@@ -4,7 +4,7 @@ import type { z } from 'zod'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 
-import { optionalText, priorityField, requiredText } from './fields'
+import { optionalText, priorityField, requiredText, termList } from './fields'
 
 function messages(schema: z.ZodType, value: unknown): string[] {
   const result = schema.safeParse(value)
@@ -18,7 +18,7 @@ describe('requiredText', () => {
     expect(field.parse('  Kael ')).toBe('Kael')
   })
 
-  it.each([undefined, '', '  \n '])('refuses %j with its own message', (value) => {
+  it.each([undefined, null, '', '  \n '])('refuses %j with its own message', (value) => {
     expect(messages(field, value)).toEqual(['Needs text.'])
   })
 
@@ -50,6 +50,16 @@ describe('priorityField', () => {
 
   it.each([-1, 101, 2.5, '5', null])('refuses %j with the range copy', (value) => {
     expect(messages(priorityField, value)).toEqual(['Enter a whole number from 0 to 100.'])
+  })
+})
+
+describe('termList', () => {
+  it('defaults to an empty list', () => {
+    expect(termList.parse(undefined)).toEqual([])
+  })
+
+  it('keeps the terms in order', () => {
+    expect(termList.parse(['a', 'b'])).toEqual(['a', 'b'])
   })
 })
 

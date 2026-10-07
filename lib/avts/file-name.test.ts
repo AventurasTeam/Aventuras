@@ -14,6 +14,11 @@ describe('avtsFileName', () => {
     ['character', 'カエル', 'character.avts'],
     ['character', '', 'character.avts'],
     ['happening', '!!!', 'happening.avts'],
+    ['character', 'Øystein', 'character-oystein.avts'],
+    ['character', 'Æsir', 'character-aesir.avts'],
+    ['character', 'Łukasz', 'character-lukasz.avts'],
+    ['location', 'Straße', 'location-strasse.avts'],
+    ['character', 'Þórr', 'character-thorr.avts'],
   ])('%s %j → %s', (prefix, name, expected) => {
     expect(avtsFileName(prefix, name)).toBe(expected)
   })
