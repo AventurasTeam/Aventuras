@@ -73,7 +73,6 @@ export type CollisionResolveResult =
   | { status: 'rejected'; reason: string; code: CollisionRejectionCode }
 
 type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
-type PairResolution = Exclude<CollisionResolution, { mode: 'merge' }>
 type Built = BuiltGroup<CollisionRejectionCode>
 type Refusal = Extract<Built, { status: 'rejected' }>
 
@@ -131,44 +130,46 @@ function gateRefusal(): Refusal | null {
     : null
 }
 
-function buildMerge(branchId: string, resolution: MergeResolution, tail: DeleteTail | null): Built {
+function buildResolution(
+  branchId: string,
+  resolution: CollisionResolution,
+  tail: DeleteTail | null,
+): Built {
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
   const lookup = collisionPairOf(branchEntities, pairIds(resolution))
   if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
-  const actions = entityMergeActions({
-    branchId,
-    pair,
-    canonicalId: resolution.canonicalId,
-    fromLoser: resolution.fromLoser,
-    deselectedTags: resolution.deselectedTags,
-    deselectedKeywords: resolution.deselectedKeywords,
-    branchEntities,
-    happenings: branchRows(happeningsStore.getHappenings(), branchId),
-    awareness: branchRows(happeningAwarenessStore.getAwareness(), branchId),
-    involvements: branchRows(happeningInvolvementsStore.getInvolvements(), branchId),
-    relationships: branchRows(characterRelationshipsStore.getRelationshipRows(), branchId),
-    tail,
-    newId: generateId,
-  })
-  return { status: 'ok', actions }
-}
-
-function buildPairResolution(branchId: string, resolution: PairResolution): Built {
-  const gated = gateRefusal()
-  if (gated) return gated
-  const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
-  const lookup = collisionPairOf(branchEntities, pairIds(resolution))
-  if ('miss' in lookup) return missRefusal(lookup)
-  const { pair } = lookup
-  if (resolution.mode === 'keep')
-    return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }
-  const plan = entityRenameActions({ branchId, pair, renames: resolution.renames, branchEntities })
-  return 'issue' in plan
-    ? refusal(COLLISION_REJECTION.invalidRename, plan.issue)
-    : { status: 'ok', actions: plan.actions }
+  switch (resolution.mode) {
+    case 'merge': {
+      const actions = entityMergeActions({
+        branchId,
+        pair,
+        canonicalId: resolution.canonicalId,
+        fromLoser: resolution.fromLoser,
+        deselectedTags: resolution.deselectedTags,
+        deselectedKeywords: resolution.deselectedKeywords,
+        branchEntities,
+        happenings: branchRows(happeningsStore.getHappenings(), branchId),
+        awareness: branchRows(happeningAwarenessStore.getAwareness(), branchId),
+        involvements: branchRows(happeningInvolvementsStore.getInvolvements(), branchId),
+        relationships: branchRows(characterRelationshipsStore.getRelationshipRows(), branchId),
+        tail,
+        newId: generateId,
+      })
+      return { status: 'ok', actions }
+    }
+    case 'rename': {
+      const { renames } = resolution
+      const plan = entityRenameActions({ branchId, pair, renames, branchEntities })
+      return 'issue' in plan
+        ? refusal(COLLISION_REJECTION.invalidRename, plan.issue)
+        : { status: 'ok', actions: plan.actions }
+    }
+    case 'keep':
+      return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }
+  }
 }
 
 function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<DeltaGroupResult> {
@@ -201,7 +202,7 @@ async function commitMerge(
     if ((head?.tail.id ?? null) !== lockedTail)
       return refusal(COLLISION_REJECTION.inFlight, 'tail moved')
     const tail = tailOf(head)
-    return commit(branchId, () => buildMerge(branchId, resolution, tail), ctx)
+    return commit(branchId, () => buildResolution(branchId, resolution, tail), ctx)
   }
   return lockedTail == null ? run() : withEntryMetadataLock(branchId, lockedTail, run)
 }
@@ -212,8 +213,7 @@ function dispatch(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   if (resolution.mode === 'merge') return commitMerge(branchId, resolution, ctx)
-  const pairResolution: PairResolution = resolution
-  return commit(branchId, () => buildPairResolution(branchId, pairResolution), ctx)
+  return commit(branchId, () => buildResolution(branchId, resolution, null), ctx)
 }
 
 function rejected(
