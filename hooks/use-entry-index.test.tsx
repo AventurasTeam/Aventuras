@@ -9,7 +9,7 @@ import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import { entriesStore, generationStore, resetAllStores, type RunState } from '@/lib/stores'
 
-import { useEntryIndex, type EntryIndexSnapshot } from './use-entry-index'
+import { EntryIndexReadProvider, useEntryIndex, type EntryIndexSnapshot } from './use-entry-index'
 
 const reads = vi.hoisted(() => ({ index: vi.fn() }))
 
@@ -92,6 +92,22 @@ describe('useEntryIndex', () => {
     expect(latest?.index.get('e1')?.position).toBe(1)
     expect(latest?.failed).toBe(false)
     expect(reads.index).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads through a provided read instead of the database', async () => {
+    const read = vi.fn(async () => [ref('e9', 9)])
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <EntryIndexReadProvider value={read}>
+          <Probe />
+        </EntryIndexReadProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(read).toHaveBeenCalledWith('br_1')
+    expect(latest?.entries.map((e) => e.id)).toEqual(['e9'])
+    expect(reads.index).not.toHaveBeenCalled()
   })
 
   it('reads nothing while disabled, then reads once enabled', async () => {

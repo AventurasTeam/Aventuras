@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 import { db } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -21,6 +21,16 @@ export type EntryIndexSnapshot = {
 }
 
 type LoadedWindow = { entries: readonly EntryRef[]; index: EntryIndex }
+
+/** Newest first, as `readEntryIndex` returns them. */
+export type EntryIndexRead = (branchId: string) => Promise<readonly EntryRef[]>
+
+const readFromDb: EntryIndexRead = (branchId) => readEntryIndex(branchId, db)
+
+const EntryIndexReadContext = createContext<EntryIndexRead>(readFromDb)
+
+/** Swaps the entry read for stories, which have no app database. */
+export const EntryIndexReadProvider = EntryIndexReadContext.Provider
 
 const EMPTY_ENTRIES: readonly EntryRef[] = []
 const EMPTY_INDEX: EntryIndex = new Map()
@@ -51,6 +61,7 @@ export function useEntryIndex(
     return last
   })
 
+  const read = useContext(EntryIndexReadContext)
   const disabled = options?.enabled === false
   const { data, error, refetch } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
@@ -60,7 +71,7 @@ export function useEntryIndex(
     // A revisited key (branch switch back, tailId walking backward) is rare but still
     // correct — no reason to hold a whole branch's rows for the default 5-minute gc.
     gcTime: 30_000,
-    queryFn: () => readEntryIndex(branchId, db),
+    queryFn: () => read(branchId),
   })
 
   // data is undefined during a pending refetch and after an error; keep the last
