@@ -319,7 +319,6 @@
   .canon-picker { display: flex; gap: 6px; padding: 6px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; margin-bottom: 14px; }
   .canon-picker .seg { flex: 1; padding: 8px 10px; text-align: center; cursor: pointer; border-radius: 2px; font-size: 12px; color: var(--ink-muted); border: 1px solid transparent; }
   .canon-picker .seg.active { background: var(--bg-region); color: var(--ink); border-color: var(--line); }
-  .canon-picker .seg .meta { display: block; font-size: 9px; color: var(--ink-faint); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
   .field-grid { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 0 14px; font-size: 12px; }
   .field-grid .h { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); padding: 0 0 6px; border-bottom: 1px solid var(--line-soft); }
   .field-grid .row-l { color: var(--ink-muted); padding: 8px 0; border-bottom: 1px dotted var(--line-soft); }
@@ -1449,13 +1448,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <!-- MERGE body — canonical picker + per-field grid + relations summary -->
     <div class="resolve-body active" data-path="merge">
       <div class="canon-picker" id="canon-picker">
-        <div class="seg active" data-canon="A" data-name="Kael">
-          Kael &middot; 3 days ago<span class="canon-suffix" data-side="A"> &middot; Canonical</span>
-          <span class="meta">older</span>
+        <div class="seg active" data-canon="A" data-name="Kael" data-word="older">
+          Kael &middot; Older &middot; 3 days ago<span class="canon-suffix" data-side="A"> &middot; Canonical</span>
         </div>
-        <div class="seg" data-canon="B" data-name="Kael">
-          Kael &middot; just now<span class="canon-suffix" data-side="B" hidden> &middot; Canonical</span>
-          <span class="meta">newer</span>
+        <div class="seg" data-canon="B" data-name="Kael" data-word="newer">
+          Kael &middot; Newer &middot; just now<span class="canon-suffix" data-side="B" hidden> &middot; Canonical</span>
         </div>
       </div>
       <!-- Only fields that diverge between the two rows render here.
@@ -1539,7 +1536,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
 
     <div class="resolve-foot">
       <button class="ghost" id="resolve-cancel">Cancel</button>
-      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into Kael</span></button>
+      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into the older Kael</span></button>
     </div>
   </div>
 </div>
@@ -1776,10 +1773,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   });
 
   // canon-picker segment — the "· Canonical" suffix, the divergent radios and the primary
-  // button's "Merge into <canonical-name>" follow the pick, so destructive direction stays obvious
+  // button's "Merge into the <older|newer> <canonical-name>" follow the pick, so destructive
+  // direction stays obvious
   function mergeLabel() {
     const seg = document.querySelector('.canon-picker .seg.active');
-    return 'Merge into ' + (seg?.dataset.name ?? '');
+    return 'Merge into the ' + (seg?.dataset.word ?? '') + ' ' + (seg?.dataset.name ?? '');
   }
   function setCanonical(side) {
     document.querySelectorAll('.canon-picker .seg').forEach(x => x.classList.toggle('active', x.dataset.canon === side));

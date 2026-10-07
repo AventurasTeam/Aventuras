@@ -355,8 +355,10 @@ export const MergeOverlapFootnote: Story = {
     // Side identification and the canonical marker: column headers and the picker agree.
     expect(await screen.findByText(/^Older · .+ · Canonical$/)).toBeInTheDocument()
     expect(screen.getByText(/^Newer · [^·]+$/)).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /^Kael · .+ · Canonical$/ })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /^KAEL · [^·]+$/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('radio', { name: /^Kael · Older · .+ · Canonical$/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^KAEL · Newer · [^·]+$/ })).toBeInTheDocument()
     expect(screen.getByText('Moves on merge (KAEL → Kael)')).toBeInTheDocument()
 
     expect(
@@ -386,7 +388,9 @@ export const MergeOverlapFootnote: Story = {
     expect(screen.getByText('The relationship between the two is dropped.')).toBeInTheDocument()
     expect(screen.getByText('Moves on merge (Kael → KAEL)')).toBeInTheDocument()
     expect(screen.getByText(/^Newer · .+ · Canonical$/)).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /^KAEL · .+ · Canonical$/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('radio', { name: /^KAEL · Newer · .+ · Canonical$/ }),
+    ).toBeInTheDocument()
   },
 }
 
@@ -425,6 +429,32 @@ export const MergeHoldersFootnote: Story = {
 
 export const MergeCanonicalFlip: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+}
+
+// Namesakes created within one relative-time bucket: only the side tells them apart.
+const SAME_BUCKET = new Date().toISOString()
+
+export const MergeNamesTheSide: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ createdAt: SAME_BUCKET })}
+      entityB={baseEntity({ id: 'ent_kael_2', createdAt: SAME_BUCKET, priority: 5 })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(
+      await screen.findByRole('radio', { name: 'Kael · Older · just now · Canonical' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Merge into the older Kael' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Kael · Newer · just now' }))
+    expect(
+      await screen.findByRole('radio', { name: 'Kael · Newer · just now · Canonical' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Kael · Older · just now' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Merge into the newer Kael' })).toBeInTheDocument()
+  },
 }
 
 export const MergeLoading: Story = {

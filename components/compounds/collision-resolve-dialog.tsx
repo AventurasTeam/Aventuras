@@ -40,6 +40,8 @@ type Mode = 'merge' | 'rename' | 'keep'
 
 type Side = 'A' | 'B'
 
+const SIDE_WORD = { A: 'older', B: 'newer' } as const satisfies Record<Side, string>
+
 // world.md → Merge: stacked choices clamp prose values and expand them in place.
 const PROSE_FIELDS: ReadonlySet<ScalarField> = new Set<ScalarField>([
   'description',
@@ -305,22 +307,19 @@ function MergeBody({
   const canonical = state.canonicalId === entityA.id ? entityA : entityB
   const nonCanonical = state.canonicalId === entityA.id ? entityB : entityA
 
-  const canonicalOptions: SelectOption[] = [
-    {
-      value: entityA.id,
+  const canonicalOptions: SelectOption[] = (['A', 'B'] as const).map((side) => {
+    const entity = side === 'A' ? entityA : entityB
+    return {
+      value: entity.id,
       label: markCanonical(
-        t('collisionDialog.canonicalOption', { name: entityA.name, when: ageOf(entityA, nowMs) }),
-        canonical === entityA,
+        t(`collisionDialog.canonicalOption.${SIDE_WORD[side]}`, {
+          name: entity.name,
+          when: ageOf(entity, nowMs),
+        }),
+        canonical === entity,
       ),
-    },
-    {
-      value: entityB.id,
-      label: markCanonical(
-        t('collisionDialog.canonicalOption', { name: entityB.name, when: ageOf(entityB, nowMs) }),
-        canonical === entityB,
-      ),
-    },
-  ]
+    }
+  })
 
   const chips = useMemo(
     () => mergeChips(diff, canonical, nonCanonical),
@@ -346,7 +345,11 @@ function MergeBody({
             disabled={blockedReason != null}
             disabledReason={blockedReason}
           >
-            <Text>{t('collisionDialog.mergeConfirm', { name: canonical.name })}</Text>
+            <Text>
+              {t(`collisionDialog.mergeConfirm.${SIDE_WORD[canonical === entityA ? 'A' : 'B']}`, {
+                name: canonical.name,
+              })}
+            </Text>
           </Button>
         </>
       }

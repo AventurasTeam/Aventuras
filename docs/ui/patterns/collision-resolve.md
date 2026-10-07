@@ -294,9 +294,10 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
 
 1. **Canonical picker** — segment toggle (Select primitive in
    segment mode) with two options:
-   `<A.name> · <relative time>` /
-   `<B.name> · <relative time>`, the wall-clock relative time
-   History renders (`relativeTimeLabel`). A `· Canonical` suffix
+   `<A.name> · Older · <relative time>` /
+   `<B.name> · Newer · <relative time>`, the wall-clock relative time
+   History renders (`relativeTimeLabel`). The side word tells apart
+   two rows created within one relative-time bucket. A `· Canonical` suffix
    appears on the selected side. On phone the picker renders as
    full-width radio rows, since a half-width segment label clips.
 2. **Divergent-field table** — one row per divergent scalar, a
@@ -336,9 +337,10 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    relationship between the two being dropped, and the canonical's
    own ref to the non-canonical (its parent location) being cleared.
    Counts re-derive when canonical flips.
-7. **Footer** — `[ Cancel ]` · `[ Merge into <canonical-name> ]`.
-   The primary button echoes the canonical pick so the destructive
-   direction is obvious.
+7. **Footer** — `[ Cancel ]` ·
+   `[ Merge into the <older|newer> <canonical-name> ]`. The primary
+   button echoes the canonical pick, side and name, so the
+   destructive direction is obvious.
 
 **Rename** — two stacked text inputs, one per entity, labeled
 `Older · <relative time>` / `Newer · <relative time>`. Each input

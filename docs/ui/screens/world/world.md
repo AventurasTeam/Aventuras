@@ -938,9 +938,11 @@ goes; with 3+ namesakes, another flagged row keeps its strip
 
 The body renders the two rows side-by-side with a **canonical
 picker** at the top: a segment toggle picking which row's `id`
-survives, the selected side marked `· Canonical` (full-width radio
-rows on phone, where a half-width segment would clip). The
-non-canonical row is deleted at end-of-merge.
+survives, each option naming its side (`Kael · Older · 3 days ago`)
+since namesakes created close together read alike otherwise, the
+selected side marked `· Canonical` (full-width radio rows on phone,
+where a half-width segment would clip). The non-canonical row is
+deleted at end-of-merge.
 Default selection is the older row by `created_at` — the older
 row tends to have more accumulated state (relations, lore
 links, history), so absorbing the newer one into it preserves
@@ -1067,11 +1069,12 @@ with the rest.
 Footer:
 
 ```
-[ Cancel ]                  [ Merge into <canonical-name> ]
+[ Cancel ]        [ Merge into the <older|newer> <canonical-name> ]
 ```
 
-The primary button echoes the canonical pick to keep the
-destructive direction obvious.
+The primary button echoes the canonical pick, its side as well as
+its name, to keep the destructive direction obvious: the two names
+match by construction.
 
 The merge refuses, with the reason inline and nothing written, when
 the non-canonical is the story's lead (`lead-entity`: the lead

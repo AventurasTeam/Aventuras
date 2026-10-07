@@ -146,7 +146,10 @@
     },
     "canonicalHint": "Canonical (this row survives)",
     "canonicalLabel": "Canonical",
-    "canonicalOption": "{{name}} · {{when}}",
+    "canonicalOption": {
+      "older": "{{name}} · Older · {{when}}",
+      "newer": "{{name}} · Newer · {{when}}"
+    },
     "canonicalSuffix": "{{label}} · Canonical",
     "olderSide": "Older · {{when}}",
     "newerSide": "Newer · {{when}}",
@@ -183,7 +186,10 @@
       "holdersLosingItem_other": "{{count}} holders lose this item: {{name}} is already held or placed.",
       "joiningRelationship": "The relationship between the two is dropped."
     },
-    "mergeConfirm": "Merge into {{name}}",
+    "mergeConfirm": {
+      "older": "Merge into the older {{name}}",
+      "newer": "Merge into the newer {{name}}"
+    },
     "renameConfirm": "Save renames",
     "renameHelp": "Change at least one name to clear the collision.",
     "renameIssue": {
