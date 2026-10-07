@@ -11,6 +11,9 @@ export const ROW_CATEGORIES = [
 ] as const
 export type RowCategory = (typeof ROW_CATEGORIES)[number]
 
+/** Categories whose deltas name the row itself; the selector asks whether it still exists. */
+export type LiveRowCategory = 'lore' | 'thread' | 'happening'
+
 /** Same literal union as `ListRowProps.recentlyClassified` (components/compounds/list-row.tsx). */
 export type RecentlyClassified = 'fresh' | 'fading'
 
@@ -36,7 +39,7 @@ export type SignalEntity = { id: string; kind: EntityKind }
  * `deltas.target_table` keys the bounded delta read filters on, mapped to the row
  * category. A `Map`, not a plain object — a free-text table name can't resolve an inherited member.
  */
-export const SIGNAL_TARGET_TABLES: ReadonlyMap<string, RowCategory | 'entity'> = new Map([
+export const SIGNAL_TARGET_TABLES: ReadonlyMap<string, LiveRowCategory | 'entity'> = new Map([
   ['entities', 'entity'],
   ['lore', 'lore'],
   ['threads', 'thread'],
