@@ -129,9 +129,8 @@ type SheetDismissal = {
 }
 
 /**
- * Spread onto a gorhom sheet: drag-down and a press on the scrim (over the whole sheet host, the
- * window) close it together while `dismissible`, and neither does otherwise. A flip while open
- * takes effect at once.
+ * Spread onto a gorhom sheet: while `dismissible`, drag-down and a scrim press (the scrim spans
+ * the window) both close it; otherwise neither does. A flip while open takes effect at once.
  */
 export function useSheetDismissal(dismissible: boolean): SheetDismissal {
   const { theme } = useTheme()

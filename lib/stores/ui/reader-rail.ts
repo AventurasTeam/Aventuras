@@ -68,10 +68,7 @@ export const readerRailStore = {
   /** The pending toggle once every preference write has settled; `null` while one is in flight. */
   useSettledPending: (): boolean | null =>
     useStore(store, (s) => (s.writes.size === 0 ? s.display.pendingCollapsed : null)),
-  /**
-   * Shows `collapsed` at once and holds it pending until `write` and every other write settle,
-   * across every reader mounted. Settles as `write` does.
-   */
+  /** Shows `collapsed` now, pending until all in-flight writes settle; settles as `write` does. */
   writeCollapsed: (collapsed: boolean, write: () => Promise<void>): Promise<void> => {
     const token = Symbol('rail-collapse-write')
     store.setState((s) => ({

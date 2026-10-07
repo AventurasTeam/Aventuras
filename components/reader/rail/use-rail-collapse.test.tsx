@@ -32,7 +32,6 @@ function deferred() {
   return { promise, resolve }
 }
 
-// Records every collapsed value the instance renders.
 function renderRecording(seen: boolean[]) {
   return renderHook(() => {
     const rail = useRailCollapse()

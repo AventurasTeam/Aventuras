@@ -31,10 +31,7 @@ type RailSheetRowPress =
       renderPeek?: never
     }
   | {
-      /**
-       * Peek slot: a row press swaps the list for the peek at the tall detent. Called inline at the
-       * peek level only, so it returns an element and must not call hooks.
-       */
+      /** Peek slot, shown at the tall detent. Called inline only while peeking, so no hooks. */
       renderPeek: (peek: RailPeek, back: () => void) => ReactNode
       onRowPress?: never
     }

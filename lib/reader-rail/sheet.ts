@@ -1,7 +1,6 @@
 import type { RailPeek } from './categories'
 
-// reader-composer.md → Mobile expression: one Sheet whose content swaps in place; the detent
-// follows the content.
+// reader-composer.md → Mobile expression: one Sheet; content swaps in place, the detent follows.
 export type RailSheetState =
   | { readonly content: 'categories'; readonly size: 'medium' }
   | { readonly content: 'list'; readonly size: 'medium' }

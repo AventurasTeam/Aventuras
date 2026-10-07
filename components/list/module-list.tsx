@@ -37,9 +37,8 @@ export type ModuleListProps<
   listSignals: Signals
   rowSignals: (id: string) => RowSignals
   /**
-   * A collapsed group's `⚠ N` badge counts its `flagged` rows; a press hands `onReveal` the first,
-   * and the owner widens the view, expands the group and sends `reveal`. Omit for a kind with no
-   * flagged rows.
+   * A collapsed group's `⚠ N` badge counts its `flagged` rows; a press hands `onReveal` the first
+   * (the owner widens the view, expands the group, sends `reveal`). Omit for a kind with none.
    */
   badge?: { flagged: { has: (id: string) => boolean }; onReveal: (id: string) => void }
   selectedId: string | null
