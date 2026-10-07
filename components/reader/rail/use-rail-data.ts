@@ -13,6 +13,7 @@ import {
   entitiesStore,
   happeningsStore,
   loreStore,
+  readerRailStore,
   threadsStore,
 } from '@/lib/stores'
 import { resolveLead } from '@/lib/world'
@@ -25,8 +26,10 @@ export type RailData = {
   happenings: readonly Happening[]
   entityListSignals: EntityListSignals
   plotListSignals: PlotListSignals
+  /** The happening list waits on this: an unread index would mark every anchored happening dangling. */
+  entryIndex: { ready: boolean; failed: boolean; retry: () => void }
   /** Lead, in-scene and recently-classified; never `collision` (World resolves collisions). */
-  rowSignals: (id: string) => RowSignals
+  rowSignals: (id: string) => Omit<RowSignals, 'collision'>
   strip: RailStripModel
   categoryTint: ReadonlyMap<RowCategory, RecentlyClassified>
   chipTint: RecentlyClassified | undefined
@@ -61,7 +64,11 @@ export function useRailData(branchId: string): RailData {
     () => [...chapterRows.values()].some((c) => c.branchId === branchId),
     [chapterRows, branchId],
   )
-  const entries = useEntryIndex(branchId).index
+  // Only the happening list reads the index, and it is a full-branch read after every turn.
+  const happeningsShown = readerRailStore.useCategory() === 'happening'
+  const entryIndex = useEntryIndex(branchId, { enabled: happeningsShown })
+  const { ready, failed, retry } = entryIndex
+  const entryIndexState = useMemo(() => ({ ready, failed, retry }), [ready, failed, retry])
   const { inScene, recentlyClassified } = useRowSignals(branchId)
   const rowTints = recentlyClassified.rows
   const byCategory = recentlyClassified.byCategory
@@ -86,11 +93,11 @@ export function useRailData(branchId: string): RailData {
     [leadId, inScene],
   )
   const plotListSignals = useMemo<PlotListSignals>(
-    () => ({ entries, hasClosedChapters }),
-    [entries, hasClosedChapters],
+    () => ({ entries: entryIndex.index, hasClosedChapters }),
+    [entryIndex.index, hasClosedChapters],
   )
   const rowSignals = useCallback(
-    (id: string): RowSignals => ({
+    (id: string): Omit<RowSignals, 'collision'> => ({
       lead: id === leadId ? leadLabel : null,
       inScene: inScene.has(id),
       recentlyClassified: rowTints.get(id),
@@ -111,6 +118,7 @@ export function useRailData(branchId: string): RailData {
       happenings,
       entityListSignals,
       plotListSignals,
+      entryIndex: entryIndexState,
       rowSignals,
       strip,
       categoryTint: byCategory,
@@ -123,6 +131,7 @@ export function useRailData(branchId: string): RailData {
       happenings,
       entityListSignals,
       plotListSignals,
+      entryIndexState,
       rowSignals,
       strip,
       byCategory,

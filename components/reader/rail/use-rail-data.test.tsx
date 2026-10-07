@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
@@ -19,6 +19,7 @@ import {
   entitiesStore,
   happeningsStore,
   loreStore,
+  readerRailStore,
   resetAllStores,
   threadsStore,
 } from '@/lib/stores'
@@ -28,18 +29,25 @@ import { useRailData } from './use-rail-data'
 const harness = vi.hoisted(() => ({
   signals: null as RowSignalsSnapshot | null,
   index: new Map() as EntryIndex,
+  ready: true,
+  failed: false,
+  retry: vi.fn(),
+  indexOptions: vi.fn(),
 }))
 
 // C1 and the entry index read the DB; the hook only composes them.
 vi.mock('@/hooks/use-row-signals', () => ({ useRowSignals: () => harness.signals }))
 vi.mock('@/hooks/use-entry-index', () => ({
-  useEntryIndex: () => ({
-    entries: [],
-    index: harness.index,
-    ready: true,
-    failed: false,
-    retry: () => {},
-  }),
+  useEntryIndex: (branchId: string, options?: { enabled?: boolean }) => {
+    harness.indexOptions(branchId, options)
+    return {
+      entries: [],
+      index: harness.index,
+      ready: harness.ready,
+      failed: harness.failed,
+      retry: harness.retry,
+    }
+  },
 }))
 
 function entity(id: string, kind: Entity['kind'], extra: Partial<Entity> = {}): Entity {
@@ -164,6 +172,10 @@ const ENTITIES = [
 
 beforeEach(() => {
   resetAllStores()
+  harness.ready = true
+  harness.failed = false
+  harness.retry.mockReset()
+  harness.indexOptions.mockReset()
   harness.signals = {
     inScene: new Set(['char_kael', 'char_mira', 'item_blade', 'loc_hollow']),
     recentlyClassified: {
@@ -200,7 +212,10 @@ describe('useRailData', () => {
   it('labels the lead `you` in adventure and `protagonist` in creative', () => {
     openStory({ mode: 'adventure' })
     const adventure = renderHook(() => useRailData('br_1'))
-    expect(adventure.result.current.entityListSignals.leadId).toBe('char_kael')
+    expect(adventure.result.current.entityListSignals).toEqual({
+      leadId: 'char_kael',
+      inScene: harness.signals?.inScene,
+    })
     expect(adventure.result.current.rowSignals('char_kael').lead).toBe('you')
     expect(adventure.result.current.rowSignals('char_mira').lead).toBeNull()
     adventure.unmount()
@@ -277,5 +292,23 @@ describe('useRailData', () => {
     const after = renderHook(() => useRailData('br_1'))
     expect(after.result.current.plotListSignals.hasClosedChapters).toBe(true)
     expect(after.result.current.plotListSignals.entries).toBe(harness.index)
+  })
+
+  it('reads the entry index only while the happening list is the rail’s category', () => {
+    const { result } = renderHook(() => useRailData('br_1'))
+    expect(harness.indexOptions).toHaveBeenLastCalledWith('br_1', { enabled: false })
+    act(() => readerRailStore.setCategory('happening'))
+    expect(harness.indexOptions).toHaveBeenLastCalledWith('br_1', { enabled: true })
+    expect(result.current.entryIndex.ready).toBe(true)
+  })
+
+  it('passes the entry index’s ready, failed and retry through', () => {
+    harness.ready = false
+    harness.failed = true
+    const { result } = renderHook(() => useRailData('br_1'))
+    expect(result.current.entryIndex.ready).toBe(false)
+    expect(result.current.entryIndex.failed).toBe(true)
+    result.current.entryIndex.retry()
+    expect(harness.retry).toHaveBeenCalledTimes(1)
   })
 })

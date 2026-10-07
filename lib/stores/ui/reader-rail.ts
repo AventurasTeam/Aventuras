@@ -35,6 +35,8 @@ function seed(width: number): void {
 
 export const readerRailStore = {
   useView: (): RailView => useStore(store, (s) => s.view),
+  /** A primitive, so a filter or search edit doesn't re-render the caller. */
+  useCategory: (): RailCategory => useStore(store, (s) => s.view.category),
   getView: (): RailView => store.getState().view,
   /** A switch resets filter and search, as World and Plot do; the current category is a no-op. */
   setCategory: (category: RailCategory): void =>

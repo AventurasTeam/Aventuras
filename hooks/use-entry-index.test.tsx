@@ -57,16 +57,16 @@ function run(id: string): RunState {
 }
 
 let latest: EntryIndexSnapshot | null = null
-function Probe({ branchId = 'br_1' }: { branchId?: string }) {
-  latest = useEntryIndex(branchId)
+function Probe({ branchId = 'br_1', enabled }: { branchId?: string; enabled?: boolean }) {
+  latest = useEntryIndex(branchId, enabled === undefined ? undefined : { enabled })
   return null
 }
 
-function renderProbe(props: { branchId?: string; client?: QueryClient } = {}) {
+function renderProbe(props: { branchId?: string; client?: QueryClient; enabled?: boolean } = {}) {
   const client = props.client ?? createQueryClient()
   return render(
     <QueryClientProvider client={client}>
-      <Probe branchId={props.branchId} />
+      <Probe branchId={props.branchId} enabled={props.enabled} />
     </QueryClientProvider>,
   )
 }
@@ -92,6 +92,27 @@ describe('useEntryIndex', () => {
     expect(latest?.index.get('e1')?.position).toBe(1)
     expect(latest?.failed).toBe(false)
     expect(reads.index).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads nothing while disabled, then reads once enabled', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    reads.index.mockResolvedValue([ref('e1', 1)])
+
+    const client = createQueryClient()
+    const { rerender } = renderProbe({ client, enabled: false })
+    await act(async () => {})
+    expect(reads.index).not.toHaveBeenCalled()
+    expect(latest?.ready).toBe(false)
+    expect(latest?.failed).toBe(false)
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <Probe enabled />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(reads.index).toHaveBeenCalledTimes(1)
+    expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
   })
 
   it('re-reads when the generation store settles', async () => {

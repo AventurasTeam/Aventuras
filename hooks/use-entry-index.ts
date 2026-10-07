@@ -32,8 +32,12 @@ const FAILED = { ...EMPTY, failed: true }
  * settleCount + tailId together cover every story_entries write: a new write path must settle
  * a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
  * falsely live/dangling — never re-pointed to a different entry.
+ * `enabled: false` skips the read, leaving the not-ready snapshot.
  */
-export function useEntryIndex(branchId: string): EntryIndexSnapshot {
+export function useEntryIndex(
+  branchId: string,
+  options?: { enabled?: boolean },
+): EntryIndexSnapshot {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const tailId = entriesStore.useEntries((m) => {
     let last: string | null = null
@@ -49,7 +53,7 @@ export function useEntryIndex(branchId: string): EntryIndexSnapshot {
 
   const { data, error, refetch } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
-    enabled: branchId !== '',
+    enabled: branchId !== '' && options?.enabled !== false,
     // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
     retry: false,
     // A revisited key (branch switch back, tailId walking backward) is rare but still
