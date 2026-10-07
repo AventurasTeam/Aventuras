@@ -3,6 +3,7 @@ import { inheritedEntryMetadata, type EntityKind, type EntryMetadata } from '@/l
 import { lastTwoReplies } from './replies'
 import {
   SIGNAL_TARGET_TABLES,
+  type LiveRowCategory,
   type RecentlyClassified,
   type RecentlyClassifiedSignals,
   type ReplyEdit,
@@ -23,6 +24,8 @@ type Input = {
   entries: readonly SignalEntry[]
   boundaries: TurnBoundaries | null
   categoryOf: (entityId: string) => EntityKind | null
+  /** Whether a lore, thread or happening row is still on the branch; a gone one is dropped. */
+  isLive: (category: LiveRowCategory, id: string) => boolean
 }
 
 type SceneSource = Parameters<typeof inheritedEntryMetadata>[0]
@@ -107,14 +110,25 @@ function classifierScene(reply: SignalEntry, edits: readonly ReplyEdit[]): Scene
   return { ...inheritedEntryMetadata(reply.metadata), ...prior }
 }
 
+// reader-composer.md → Collapsed state: a deleted row contributes nothing; its deltas remain.
+function deltaCategory(
+  table: LiveRowCategory | 'entity',
+  id: string,
+  input: Pick<Input, 'categoryOf' | 'isLive'>,
+): RowCategory | null {
+  if (table === 'entity') return input.categoryOf(id)
+  return input.isLive(table, id) ? table : null
+}
+
 export function selectRecentlyClassified(input: Input): RecentlyClassifiedSignals {
   const rows = new Map<string, RecentlyClassified>()
   const byCategory = new Map<RowCategory, RecentlyClassified>()
   if (input.boundaries == null) return { rows, byCategory }
 
   const mark = (id: string, category: RowCategory | null, tier: RecentlyClassified) => {
+    if (category == null) return
     rows.set(id, stronger(rows.get(id), tier))
-    if (category != null) byCategory.set(category, stronger(byCategory.get(category), tier))
+    byCategory.set(category, stronger(byCategory.get(category), tier))
   }
 
   for (const d of input.deltas) {
@@ -123,7 +137,7 @@ export function selectRecentlyClassified(input: Input): RecentlyClassifiedSignal
     if (table == null) continue
     const tier = tierFor(d.logPosition, input.boundaries)
     if (tier == null) continue
-    mark(d.targetId, table === 'entity' ? input.categoryOf(d.targetId) : table, tier)
+    mark(d.targetId, deltaCategory(table, d.targetId, input), tier)
   }
 
   lastTwoReplies(input.entries).forEach(({ reply, before }, i) => {

@@ -166,6 +166,11 @@ tier defaults expanded):
   `Resolved` / `Failed`).
 - **Plot happenings** → chapter bucket (`Current chapter` /
   `Earlier chapters` / `Out of narrative`).
+- **Reader Browse rail** → the active category's panel key
+  (World's status tier for the four entity kinds, Plot's thread
+  tier or happening bucket), sharing that panel's session
+  collapse state: a group collapsed in the rail is collapsed in
+  the panel too.
 
 The shared shape is "default-expand the working tier, collapse the
 rest, session-scoped (not persisted), flatten to a single implicit

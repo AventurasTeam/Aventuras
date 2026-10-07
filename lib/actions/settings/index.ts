@@ -1,4 +1,4 @@
-export { setAppearanceThemeId } from './appearance'
+export { setAppearanceThemeId, setReaderRailCollapsed } from './appearance'
 export { setDebugLevelEnabled, setDiagnosticsEnabled } from './diagnostics'
 export {
   ensureProviderEmbeddingDim,

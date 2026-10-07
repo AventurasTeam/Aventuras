@@ -100,8 +100,8 @@ chip, whose tint is the aggregate classifier signal.
   tinted by C1's aggregate across every rail-surfaceable category; tap
   opens the rail content as a Sheet (bottom, medium initial).
 - **C10 morph seam:** the Sheet host holding `{ content, size }`,
-  rendering the rail vocabulary for `list`, an empty slot for `peek`,
-  and changing the Sheet's detent on a content swap; a criterion below
+  rendering the category root for `categories`, the rail vocabulary
+  for `list`, an empty slot for `peek`, and changing the Sheet's detent on a content swap; a criterion below
   exercises the size change so 4.5b inherits a working morph.
 - **Placeholder removal:** the `railPlaceholder` string and column go.
 - **Storybook:** rail per category, collapsed strip tint states,
@@ -169,19 +169,32 @@ chip, whose tint is the aggregate classifier signal.
   `app_settings.appearance.readerRailCollapsed` boolean with a Zod
   default (the `showJumpToBottom` precedent). Alternative: device
   storage outside the DB. Canon calls this an implementation detail.
+  Resolved in planning (2026-10-07): the additive key as assumed,
+  default `false` (first launch open), applied optimistically — see
+  the `appearance` line in
+  [`data-model.md → Diagram`](../../../../data-model.md#diagram).
 - **Chapterless phone strip.** Canon hides the whole strip — Browse
   chip included — until the story has a chapter, which makes the rail
   unreachable on phone for every story before M5. Default: show the
   strip with the Browse chip whenever the branch has any browsable
   row, and amend `navigation.md`'s empty-state rule in this PR.
+  Resolved in planning (2026-10-07), wider than the default: the chip
+  renders on every phone reader, browsable rows or not, so the strip
+  never pops in mid-session; an empty story opens the Sheet onto the
+  per-category empty state — see
+  [`navigation.md → Reader chip strip`](../../../../ui/foundations/mobile/navigation.md#reader-chip-strip-phone-only).
 - **Rail width.** Canon says ~300 px; the placeholder is 260 px. Pick
-  at planning against the reader's narrow-window behavior.
+  at planning against the reader's narrow-window behavior. Resolved
+  in planning (2026-10-07): 300 px, per canon.
 - **Empty-state copy mismatch.** `world:empty.classifierBody` says
   "+ New", which the rail doesn't have — needs per-surface empty
   subtext. More broadly, `EntityRow` and list-module copy read the
   `world:` i18n namespace, so the rail pulls World's namespace into
   the reader — decide whether to move the shared C2 copy to a neutral
-  namespace.
+  namespace. Resolved in planning (2026-10-07): the rail passes its own
+  empty subtext (`reader:rail.empty.*`, no `+ New` clause, lore
+  pointing to the World panel); the shared C2 copy stays in `world:`
+  and `plot:`, since every namespace is bundled at init.
 - **World's category-label lowercasing is English-only.**
   (2026-09-11) The search placeholder and the empty-list title
   lowercase the category label in code, in the app language, so a
@@ -193,12 +206,77 @@ chip, whose tint is the aggregate classifier signal.
   surface-owned per C2 (World's `Locations`, the rail's `Places`), so
   the rail inherits the same lowercasing; the likelier fix is the
   surface passing finished copy strings, which pairs with the question
-  above. Only `en` ships today.
+  above. Only `en` ships today. Resolved in planning (2026-10-07):
+  parked until a second UI language ships — see
+  [`parked.md → Category-label lowercasing`](../../../../parked.md#category-label-lowercasing).
 - **Read the lead through `resolveLead`** (4.2b): a reversal can leave
   `leadEntityId` dangling, and the You badge / peek `Set as lead` must
-  treat it as absent.
+  treat it as absent. Resolved in planning (2026-10-07): the rail's
+  lead comes from `resolveLead`, labelled `you` in adventure and
+  `protagonist` in creative; the peek's `Set as lead` is 4.5b's.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Developer decisions that deviate from the brief or bind a later slice.
+Canon carries the detail; each line points to it.
+
+- **Rail view state reaches app-wide for the category only**
+  (developer, 2026-10-07). Filter, search and the peek slot reset when
+  the reader's branch changes, through `readerRailStore.enterBranch`,
+  which the reader route calls. Within a branch the category, filter
+  and search survive collapse and expand, a reflow and a reader
+  remount. This overrides the planning default that the whole view
+  survives any remount; see
+  [`reader-composer.md → State model`](../../../../ui/screens/reader-composer/reader-composer.md#state-model--manual--viewport-decoupled).
+- **The phone Sheet has three levels** (categories, list, peek), not a
+  dropdown inside the Sheet: `Select` presents as a bottom Sheet on
+  phone, which would be Sheet over Sheet. C10's union changed with it;
+  see
+  [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
+- **The Browse chip is always present on the phone reader**, so the
+  chapterless-story rule narrowed to the chapter and time chips; see
+  [`navigation.md → Reader chip strip`](../../../../ui/foundations/mobile/navigation.md#reader-chip-strip-phone-only).
+- **The preference is `appearance.readerRailCollapsed`**, default
+  `false`, applied optimistically; see
+  [`data-model.md → Diagram`](../../../../data-model.md#diagram).
+- **The rail owns its empty copy** (`reader:rail.empty.*`); the shared
+  C2 copy stays in `world:` and `plot:`. The states themselves follow
+  [`lists.md → Empty list / table state`](../../../../ui/patterns/lists.md#empty-list--table-state).
+- **Rail rows carry no collision strip**; World stays the only place a
+  collision is resolved; see
+  [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout).
+- **Category-label lowercasing** is parked, not fixed; see
+  [`parked.md → Category-label lowercasing`](../../../../parked.md#category-label-lowercasing).
+- **The bottom `Sheet` primitive gained its scrim** (gorhom's
+  `BottomSheetBackdrop`, a tap outside closes) because canon already
+  specced it and the Browse chip stayed tappable over another Sheet
+  without one. The world-time and scene editor sheets pass
+  `enablePanDownToClose={!saving && !dirty}`, so they refuse drag-down
+  and tap-outside while holding unsaved input; canon's Save / Discard /
+  Cancel guard is still open, in
+  [`triage.md`](../../../triage.md).
+
+Controller decisions, reversible and listed in the PR as pending:
+
+- **Storybook runs `react-native-worklets/plugin` over
+  `@gorhom/bottom-sheet`**, instead of a web-only scrim. The real
+  Metro-web app's scrim works; only Vite's prebundle lacked the worklet
+  closures.
+- **`RailData.entryIndex { ready, failed, retry }`, and the entry-index
+  read runs only while the rail's category is Happenings.** The first
+  shape marked every anchored happening dangling until the index
+  loaded, and put a full-branch read on every turn. The read still runs
+  every turn while the category is Happenings even with the rail
+  hidden; full gating needs the phone Sheet's open state in the store.
+
+Fixes worth remembering: `RailColumn` guards its strip swap with a ref,
+because a stale zero-distance slide completion re-showed the strip in an
+expanded column after a phone to desktop tier switch; the rail shortcut
+listens in the capture phase, since RN-Web's `TextInput` stops keydown
+([lesson](../../../lessons-learned/rnweb-textinput-stops-keydown.md)).
+
+For [Slice 4.5b](./05b-peek-drawer.md), whose Open questions carry the
+detail: the desktop peek's branch reset, rendering the drawer only under
+an expanded rail, the deleted-row case and the lead-label helper. Keying
+`enterBranch` on focus is M6's, in
+[`triage.md`](../../../triage.md).

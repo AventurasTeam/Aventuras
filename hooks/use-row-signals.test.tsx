@@ -4,14 +4,17 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/lib/cache'
-import type { Entity, StoryEntry } from '@/lib/db'
+import type { Entity, Happening, Lore, StoryEntry, Thread } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { SignalDelta } from '@/lib/row-signals'
 import {
   entitiesStore,
   entriesStore,
   generationStore,
+  happeningsStore,
+  loreStore,
   resetAllStores,
+  threadsStore,
   type RunState,
 } from '@/lib/stores'
 
@@ -70,6 +73,58 @@ function entity(id: string, kind: Entity['kind'], branchId = 'br_1'): Entity {
     tags: [],
     keywords: [],
     priority: 0,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
+function loreRow(id: string, branchId = 'br_1'): Lore {
+  return {
+    id,
+    branchId,
+    title: id,
+    body: null,
+    category: null,
+    tags: [],
+    keywords: [],
+    injectionMode: 'auto',
+    priority: 0,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
+function threadRow(id: string, branchId = 'br_1'): Thread {
+  return {
+    id,
+    branchId,
+    title: id,
+    description: null,
+    category: null,
+    icon: null,
+    status: 'active',
+    injectionMode: 'auto',
+    triggeredAtEntryId: null,
+    resolvedAtEntryId: null,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
+function happeningRow(id: string, branchId = 'br_1'): Happening {
+  return {
+    id,
+    branchId,
+    title: id,
+    description: null,
+    category: null,
+    icon: null,
+    temporal: null,
+    occurredAtEntryId: null,
+    commonKnowledge: 0,
     embeddingStale: 1,
     createdAt: 1,
     updatedAt: 1,
@@ -160,6 +215,7 @@ describe('useRowSignals', () => {
     entitiesStore.hydrate('br_1', [
       entity('char_a', 'character'),
       entity('char_b', 'character'),
+      entity('char_c', 'character'),
       entity('loc_1', 'location'),
     ])
     reads.boundaries.mockResolvedValue({ fresh: 6, fading: 3 })
@@ -463,7 +519,7 @@ describe('useRowSignals', () => {
   })
 
   it('shares one read across two instances on the same branch after a settle', async () => {
-    seedOneReply()
+    seedOneReply('br_1', [], [entity('char_a', 'character')])
     reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
     let currentDeltas: SignalDelta[] = []
     reads.deltas.mockImplementation(async () => currentDeltas)
@@ -576,7 +632,11 @@ describe('useRowSignals', () => {
       entry('e1', 'opening', 1, ['char_a']),
       entry('e2', 'ai_reply', 2, ['char_a', 'char_b']),
     ])
-    entitiesStore.hydrate('br_1', [entity('char_a', 'character'), entity('char_b', 'character')])
+    entitiesStore.hydrate('br_1', [
+      entity('char_a', 'character'),
+      entity('char_b', 'character'),
+      entity('char_c', 'character'),
+    ])
     reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
     reads.deltas.mockResolvedValue([delta('char_c', 2)])
     // char_b was added by hand before this read; the edit's undo payload holds the prior scene.
@@ -588,5 +648,52 @@ describe('useRowSignals', () => {
     // Positive control: the window has landed, so the absence below means something.
     await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_c')).toBe('fresh'))
     expect(latest?.recentlyClassified.rows.has('char_b')).toBe(false)
+  })
+
+  it('tints a lore, thread or happening delta only while its row is on the branch', async () => {
+    seedOneReply()
+    loreStore.hydrate('br_1', [loreRow('lore_1')])
+    threadsStore.hydrate('br_1', [threadRow('thr_1')])
+    happeningsStore.hydrate('br_1', [happeningRow('hap_1')])
+    reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
+    reads.deltas.mockResolvedValue([
+      delta('lore_1', 2, 'lore'),
+      delta('thr_1', 2, 'threads'),
+      delta('hap_1', 2, 'happenings'),
+      delta('hap_gone', 2, 'happenings'),
+    ])
+
+    renderProbe()
+
+    await waitFor(() => expect(latest?.recentlyClassified.byCategory.get('thread')).toBe('fresh'))
+    expect(latest?.recentlyClassified.rows.get('thr_1')).toBe('fresh')
+    expect(latest?.recentlyClassified.byCategory.get('lore')).toBe('fresh')
+    expect(latest?.recentlyClassified.rows.get('hap_1')).toBe('fresh')
+    expect(latest?.recentlyClassified.byCategory.get('happening')).toBe('fresh')
+    expect(latest?.recentlyClassified.rows.has('hap_gone')).toBe(false)
+
+    // The store change alone untints: nothing settled, so the window is not re-read.
+    act(() => {
+      threadsStore.patch('br_1', { op: 'delete', id: 'thr_1' })
+    })
+    expect(reads.boundaries).toHaveBeenCalledTimes(1)
+    expect(latest?.recentlyClassified.rows.has('thr_1')).toBe(false)
+    expect(latest?.recentlyClassified.byCategory.has('thread')).toBe(false)
+    expect(latest?.recentlyClassified.byCategory.get('lore')).toBe('fresh')
+  })
+
+  it('does not count a row the store holds for another branch', async () => {
+    seedOneReply()
+    loreStore.hydrate('br_1', [loreRow('lore_1')])
+    threadsStore.hydrate('br_2', [threadRow('thr_1', 'br_2')])
+    reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
+    reads.deltas.mockResolvedValue([delta('lore_1', 2, 'lore'), delta('thr_1', 2, 'threads')])
+
+    renderProbe()
+
+    // Positive control: the window has landed, so the absence below means something.
+    await waitFor(() => expect(latest?.recentlyClassified.byCategory.get('lore')).toBe('fresh'))
+    expect(latest?.recentlyClassified.rows.has('thr_1')).toBe(false)
+    expect(latest?.recentlyClassified.byCategory.has('thread')).toBe(false)
   })
 })

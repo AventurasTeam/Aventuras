@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from './button'
 import { Heading } from './heading'
 import { Input } from './input'
 import { Sheet, SheetContent, SheetTrigger } from './sheet'
+import { findSheetScrim, pressSheetScrim, SHEET_NO_CLOSE_MS } from './sheet-scrim-probe'
 import { Text } from './text'
 
 const meta: Meta<typeof Sheet> = {
@@ -255,6 +256,90 @@ export const WithInputInside: Story = {
         </Sheet>
       </View>
     )
+  },
+}
+
+// CI runs plays several times slower than local; every post-interaction wait uses this.
+const BACKDROP_WAIT = { timeout: 3000 }
+
+const LANDMARK = 'Canvas below the sheet'
+
+/** `pending` stands in for a save in flight, which blocks swipe-dismiss. */
+function BackdropHarness({ initiallyPending = false }: { initiallyPending?: boolean }) {
+  const [pending, setPending] = useState(initiallyPending)
+  return (
+    <View className="items-start gap-4 p-4" style={{ minHeight: 640 }}>
+      <Text>{LANDMARK}</Text>
+      <Sheet ariaLabel="Backdrop sheet">
+        <SheetTrigger asChild>
+          <Button>
+            <Text>Open sheet</Text>
+          </Button>
+        </SheetTrigger>
+        <SheetContent anchor="bottom" size="short" enablePanDownToClose={!pending}>
+          <Button variant="secondary" onPress={() => setPending(true)}>
+            <Text>Start save</Text>
+          </Button>
+        </SheetContent>
+      </Sheet>
+    </View>
+  )
+}
+
+async function openSheet(): Promise<HTMLElement> {
+  const trigger = screen.getByRole('button', { name: 'Open sheet' })
+  await userEvent.click(trigger)
+  await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'), BACKDROP_WAIT)
+  return trigger
+}
+
+/** A press on the scrim closes a dismissible bottom Sheet; light themes take the 0.4 scrim. */
+export const BackdropPressCloses: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness />,
+  play: async () => {
+    const trigger = await openSheet()
+    const { scrim, coords } = await findSheetScrim(screen.getByText(LANDMARK))
+    await waitFor(() => expect(getComputedStyle(scrim).opacity).toBe('0.4'), BACKDROP_WAIT)
+    await userEvent.pointer([{ keys: '[MouseLeft]', target: scrim, coords }])
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'), BACKDROP_WAIT)
+  },
+}
+
+/** A pending action blocks tap-outside too: the scrim stays up and a press on it does nothing. */
+export const BackdropPressBlocked: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness initiallyPending />,
+  play: async () => {
+    const trigger = await openSheet()
+    await pressSheetScrim(screen.getByText(LANDMARK))
+    await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  },
+}
+
+/** The flag can flip while the sheet is open; the scrim follows it. */
+export const BackdropBlockedMidOpen: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness />,
+  play: async () => {
+    const trigger = await openSheet()
+    await userEvent.click(await screen.findByRole('button', { name: 'Start save' }))
+    await pressSheetScrim(screen.getByText(LANDMARK))
+    await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  },
+}
+
+/** Dark themes take the heavier scrim (spacing.md → Depth metaphor). */
+export const BackdropDarkScrim: Story = {
+  globals: { theme: 'default-dark' },
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness />,
+  play: async () => {
+    await openSheet()
+    const { scrim } = await findSheetScrim(screen.getByText(LANDMARK))
+    await waitFor(() => expect(getComputedStyle(scrim).opacity).toBe('0.6'), BACKDROP_WAIT)
   },
 }
 

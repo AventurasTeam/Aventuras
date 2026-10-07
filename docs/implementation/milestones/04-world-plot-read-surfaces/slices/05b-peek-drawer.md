@@ -80,7 +80,7 @@ Sheet.
 - **Phone content:** fills C10's `peek` slot — row tap inside the
   rail Sheet swaps content and grows to the tall detent; icon-only `←`
   returns to the list; drag-down and backdrop dismiss the whole Sheet
-  from either state.
+  from any level.
 - **Reader hooks:** the `You` anchor and narration re-anchor after
   `Set as lead` (already store-driven; assert it).
 - **Storybook:** peek per kind at 440 px, lead / not-lead heads,
@@ -149,6 +149,24 @@ Sheet.
 - **Read the lead through `resolveLead`** (4.2b): a reversal can leave
   `leadEntityId` dangling, and the You badge / peek `Set as lead` must
   treat it as absent.
+- **The branch-change reset is inherited.** The drawer reads
+  `display.peek`, which `readerRailStore.enterBranch` clears on a branch
+  change. The phone Sheet needs nothing: `RailSheet` resets to its opened
+  state on every open, and a modal Sheet can't stay open across a branch
+  change ([4.5a's notes](./05a-browse-rail.md#implementation-notes)).
+- **The desktop drawer renders only under an expanded rail.** Render it
+  when `!isRailCollapsed && peek`: a peek can survive under a collapsed
+  rail if the stored preference flips another way, such as a settings
+  import.
+- **A peek whose row is deleted while it is open.** Decide what the
+  drawer does; nothing in 4.5a covers it.
+- **`Open in panel →` needs `ReaderBrowseChip`'s `setOpen`**, so
+  `renderPeek` stays owned by `ReaderBrowseChip` rather than moving into
+  `RailSheet`, which holds the peek state.
+- **The lead label is derived in three places.** The mode to `LeadLabel`
+  ternary lives in `app/world/[branchId].tsx:152-153` and
+  `components/reader/rail/use-rail-data.ts`; the peek head would be a
+  third copy. Add a `leadLabelFor(mode)` helper as part of this slice.
 
 ## Implementation notes
 

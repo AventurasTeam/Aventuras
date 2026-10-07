@@ -1,6 +1,5 @@
-// Web-only global keydown shortcut. Centralizes the addEventListener/cleanup
-// scaffold and the repeat/editable-target guards previously duplicated across
-// save-bar, actions-menu, and the reader composer's undo/redo shortcut.
+// Web-only global keydown shortcut. RN-Web's TextInput stops keydown propagation, so a hotkey
+// that must fire from a field needs `capture` (lessons-learned/rnweb-textinput-stops-keydown.md).
 import { useEffect } from 'react'
 import { Platform } from 'react-native'
 

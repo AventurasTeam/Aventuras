@@ -12,6 +12,8 @@ export const appearanceSchema = z.object({
   readerFontScale: z.number().default(1),
   // DB-only until the M7.1 appearance tab exposes it (reader note 2026-07-19).
   showJumpToBottom: z.boolean().default(true),
+  // reader-composer.md → State model: the Browse rail's manual preference, app-global.
+  readerRailCollapsed: z.boolean().default(false),
   accentOverride: z.string().optional(),
   density: z.enum(['default', 'compact', 'regular', 'comfortable']).default('default'),
 })

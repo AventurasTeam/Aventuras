@@ -61,13 +61,12 @@ inner `View` isn't an option either.
 
 ## Verifying
 
-The standard Storybook harness cannot see this: `wrapJSX` skips
-`require('./components')` when `NODE_ENV === 'test'`, so the vitest browser
-run registers no interop at all and every element renders unstyled — a
-computed-style assertion reports `normal` for working and broken markup
-alike. To measure, register the interop by hand in the story
-(`cssInterop(View, { className: 'style' })`) and read `getComputedStyle`.
-Doing that side-by-side is what established the asymmetry:
+`wrapJSX` skips `require('./components')` when `NODE_ENV === 'test'`, but
+`.storybook/vitest.setup.ts` imports that registration module directly, so
+class names do reach the DOM in a Storybook play and a computed-style
+assertion reads real values for working markup. Reading `getComputedStyle`
+on a plain `View` and on an `Animated.View` side by side is what
+established the asymmetry:
 
 ```
 plainRowGap=16px  | plainClass=css-view-g5y9jx gap-4
@@ -75,4 +74,4 @@ animatedRowGap=normal | animatedClass=css-view-g5y9jx
 ```
 
 Related: [the `unit` project cannot render RN-Web chrome](./unit-project-no-rn-web-chrome.md)
-— between the two, a NativeWind layout regression has no automated net.
+— a NativeWind layout assertion belongs in a Storybook play.

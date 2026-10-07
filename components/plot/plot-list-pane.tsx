@@ -70,7 +70,7 @@ const HAPPENING_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<HappeningBucke
   'out-of-narrative',
 ])
 
-function collapseDefaults(kind: PlotKind): ReadonlySet<string> {
+export function plotCollapseDefaults(kind: PlotKind): ReadonlySet<string> {
   return kind === 'thread' ? THREAD_COLLAPSED_DEFAULTS : HAPPENING_COLLAPSED_DEFAULTS
 }
 
@@ -92,7 +92,7 @@ export function PlotListPane({
   addSlot,
   ref,
 }: PlotListPaneProps) {
-  const collapsed = listCollapseStore.useCollapsed(kind, collapseDefaults(kind))
+  const collapsed = listCollapseStore.useCollapsed(kind, plotCollapseDefaults(kind))
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
 
   // Filter-set shrinkage: `This chapter` leaves the vocabulary when no chapter is closed.
@@ -199,7 +199,7 @@ export function PlotListPane({
     onSelect,
     collapsed,
     onCollapsedChange: (key: string, value: boolean) =>
-      listCollapseStore.setCollapsed(kind, key, value, collapseDefaults(kind)),
+      listCollapseStore.setCollapsed(kind, key, value, plotCollapseDefaults(kind)),
     onReveal: (id: string) => revealRow(kind, id),
     reveal,
     resetKey: kind,

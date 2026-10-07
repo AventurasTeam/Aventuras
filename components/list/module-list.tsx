@@ -1,7 +1,7 @@
-import { useMemo, type ReactNode } from 'react'
-import { ScrollView, View } from 'react-native'
+import { useContext, useMemo, type ReactNode } from 'react'
+import { View, type ViewStyle } from 'react-native'
 
-import { EntityListPane } from '@/components/shells/entity-list-pane'
+import { EntityListPane, type EntityListPaneSurface } from '@/components/shells/entity-list-pane'
 import {
   Accordion,
   AccordionContent,
@@ -10,11 +10,12 @@ import {
 } from '@/components/ui/accordion'
 import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ScrollComponentContext } from '@/components/ui/scroll-component'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
-import { arrangeRows, type ListModule, type RowSignals } from './list-module'
+import { arrangeRows, type ListModule, type RowDensity, type RowSignals } from './list-module'
 import { useRevealScroll, type RevealRequest } from './use-reveal-scroll'
 
 export type ModuleListProps<
@@ -42,12 +43,27 @@ export type ModuleListProps<
   /** Group keys the All view shows collapsed; the owner persists changes. */
   collapsed: ReadonlySet<string>
   onCollapsedChange: (key: Key, collapsed: boolean) => void
-  /** A badge press; the owner widens the view, expands the group and sends `reveal`. */
-  onReveal: (id: string) => void
-  reveal: RevealRequest | null
+  /**
+   * A badge press; the owner widens the view, expands the group and sends `reveal`. Without it
+   * no `⚠ N` badge renders, whatever `flagged` holds.
+   */
+  onReveal?: (id: string) => void
+  reveal?: RevealRequest | null
   /** A change scrolls the list back to the top, unless a reveal lands with it. */
   resetKey: string
+  /** Forwarded to every row; `compact` is the rail's narrower column. */
+  density?: RowDensity
+  /** Replaces the module's empty-state subtext, for a surface whose add affordance differs. */
+  emptySubtext?: string
+  /** Replaces the list and its empty state; the header and toolbar stay mounted. */
+  body?: ReactNode
+  /** Forwarded to the pane; `transparent` inside a Sheet. */
+  surface?: EntityListPaneSurface
 }
+
+// Style, not `className`: NativeWind drops classes on a component it doesn't register, and the
+// injected scroll component may be gorhom's.
+const SCROLL_FILL: ViewStyle = { flex: 1 }
 
 /** List-pane shell's row list: chips, search, All view's grouped accordion with `⚠ N` badges. */
 export function ModuleList<
@@ -73,10 +89,16 @@ export function ModuleList<
   collapsed,
   onCollapsedChange,
   onReveal,
-  reveal,
+  reveal = null,
   resetKey,
+  density = 'default',
+  emptySubtext,
+  body,
+  surface,
 }: ModuleListProps<Row, Filter, Key, Signals>) {
   const { scrollRef, contentRef, rowRef, focusRef } = useRevealScroll(reveal, resetKey)
+  const Scroll = useContext(ScrollComponentContext)
+  const badge = flagged != null && onReveal != null ? { flagged, onReveal } : null
 
   const { visible, grouped } = useMemo(
     () => arrangeRows(listModule, rows, { search, filter }, listSignals),
@@ -95,6 +117,7 @@ export function ModuleList<
         onPress={() => onSelect(row.id)}
         signals={rowSignals(row.id)}
         listSignals={listSignals}
+        density={density}
         focusRef={focusRef(row.id)}
       />
     </View>
@@ -115,7 +138,8 @@ export function ModuleList<
           }}
         >
           {grouped.groups.map((group) => {
-            const flaggedRows = flagged == null ? [] : group.rows.filter((r) => flagged.has(r.id))
+            const flaggedRows =
+              badge == null ? [] : group.rows.filter((r) => badge.flagged.has(r.id))
             return (
               <AccordionItem key={group.key} value={group.key}>
                 <View className="flex-row items-center gap-2 px-row-x-md">
@@ -129,14 +153,14 @@ export function ModuleList<
                       </View>
                     </AccordionTrigger>
                   </View>
-                  {collapsed.has(group.key) && flaggedRows.length > 0 ? (
+                  {badge != null && collapsed.has(group.key) && flaggedRows.length > 0 ? (
                     <Tag
                       tone="warning"
                       accessibilityLabel={t('list.groupNeedReview', {
                         count: flaggedRows.length,
                         group: grouped.label(group.key),
                       })}
-                      onPress={() => onReveal(flaggedRows[0].id)}
+                      onPress={() => badge.onReveal(flaggedRows[0].id)}
                     >
                       {`⚠ ${flaggedRows.length}`}
                     </Tag>
@@ -170,7 +194,11 @@ export function ModuleList<
             ))
       }
       isEmpty={rows.length === 0}
-      emptyState={<EmptyState title={copy.emptyTitle} subtext={copy.emptySubtext} />}
+      body={body}
+      surface={surface}
+      emptyState={
+        <EmptyState title={copy.emptyTitle} subtext={emptySubtext ?? copy.emptySubtext} />
+      }
     >
       {visible.length === 0 ? (
         <View className="px-row-x-md py-row-y-lg">
@@ -182,9 +210,9 @@ export function ModuleList<
           </Text>
         </View>
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" ref={scrollRef} className="flex-1">
+        <Scroll keyboardShouldPersistTaps="handled" ref={scrollRef} style={SCROLL_FILL}>
           <View ref={contentRef}>{list}</View>
-        </ScrollView>
+        </Scroll>
       )}
     </EntityListPane>
   )

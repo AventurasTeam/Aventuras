@@ -73,6 +73,9 @@ slice plans when relevant.
 - [A `group` or pseudo-class on a native `View` turns it into a `Pressable`](./nativewind-group-view-becomes-pressable.md)
   — css-interop upgrades the host silently and its no-op `onPress`
   eats the parent row's tap; gate the class on the interactive branch.
+- [A bubble-phase global hotkey never sees a key pressed in a field](./rnweb-textinput-stops-keydown.md)
+  — RN-Web's `TextInput` stops keydown propagation, so a shortcut that
+  must fire from a field passes `capture: true` to `useGlobalHotkey`.
 
 ### rn-primitives substrate
 
@@ -210,7 +213,8 @@ slice plans when relevant.
   the viewport tier in any play story below 640 px.
 - [Vite-built targets never read `babel.config.js` — wire worklets yourself](./vite-targets-dont-read-babel-config.md)
   — the rnw preset hardcodes `babelrc: false`; Storybook now declares the
-  plugin itself, and any new Vite target must too.
+  plugin itself, and any new Vite target must too. Prebundled
+  `node_modules` libs (gorhom) need an explicit transform as well.
 - [One `exhaustive-deps` suppression opts the whole component out of React Compiler](./exhaustive-deps-suppression-disables-the-compiler.md)
   — the compiler skips the entire component, silently, and lint has no
   rule for it; `pnpm compiler:check` ratchets every bail-out in CI.

@@ -534,17 +534,20 @@ commit; the host menu entries ship disabled until then.
 ### C10 — Rail Sheet morph seam
 
 [Slice 4.5a](./slices/05a-browse-rail.md) owns the phone rail Sheet
-and builds it to morph: its host holds `{ content: 'list' | 'peek',
-size }` state, renders the rail vocabulary or a peek body from that
-state inside **one** `Sheet`, and changes the Sheet's size between the
-medium and tall detents on a content swap — never a second Sheet, per
+and builds it to morph: its host holds
+`{ content: 'categories' | 'list' | 'peek', size }` state, renders the
+category root, the rail vocabulary or a peek body from that state
+inside **one** `Sheet`, and changes the Sheet's size between the
+medium detent (categories, list) and the tall one (peek) on a content
+swap — never a second Sheet, per
 [`layout.md → Stacking`](../../../ui/foundations/mobile/layout.md#stacking).
 Pinned because the shipped `Sheet` primitive maps each `size` to one
 snap point and derives its keyboard behavior from it, so a runtime
 size change is primitive work 4.5b would otherwise discover after
 4.5a merged. 4.5a ships the seam with the `peek` content slot empty
 and a criterion exercising the size change; [Slice 4.5b](./slices/05b-peek-drawer.md)
-fills the slot and wires the icon-only `←`. Names fixed in 4.5a's
+fills the slot and wires the peek head's icon-only `←` (the list
+head's `←` up to the categories is 4.5a's). Names fixed in 4.5a's
 first commit.
 
 ### C11 — Detail-head overflow menu
@@ -712,13 +715,22 @@ use.
   implementation detail. Default assumption: an additive
   `app_settings.appearance.readerRailCollapsed` key, mirroring how
   `showJumpToBottom` landed. Resolve in
-  [Slice 4.5a](./slices/05a-browse-rail.md).
+  [Slice 4.5a](./slices/05a-browse-rail.md). Resolved in 4.5a
+  planning (2026-10-07): that key, Zod default `false` so first
+  launch is open; a toggle applies at once and the write follows —
+  see the `appearance` line in
+  [`data-model.md → Diagram`](../../../data-model.md#diagram).
 - **Phone Browse chip on a chapterless story.**
   [`navigation.md → Reader chip strip`](../../../ui/foundations/mobile/navigation.md#reader-chip-strip-phone-only)
   hides the whole strip, Browse chip included, until the story has a
   chapter — which makes the rail unreachable on phone for every M4
   story, since chapters close in M5 and the wizard-authored cast is
   browsable from turn one. Resolve in 4.5a; likely a canon amendment.
+  Resolved in 4.5a planning (2026-10-07): the Browse chip renders on
+  every phone reader, browsable rows or not, and an empty story
+  opens the Sheet onto the per-category empty state; the empty-state
+  rule now hides only the chapter and time chips — see
+  [`navigation.md → Reader chip strip`](../../../ui/foundations/mobile/navigation.md#reader-chip-strip-phone-only).
 - **Peek quick-edits.**
   [`save-sessions.md → Quick-edit exception`](../../../ui/patterns/save-sessions.md#quick-edit-exception--peek-drawer)
   and [`collapse.md → Reader / composer`](../../../ui/foundations/mobile/collapse.md#reader--composer-narrative--rail--narrative--rail-strip)

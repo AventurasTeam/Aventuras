@@ -36,7 +36,9 @@ This file is session 5 of the mobile-foundations multi-session pass
   cancel.
 - **Chip strip safe zone** of ~16 px from the screen's left edge
   to accommodate the iOS swipe-back gesture.
-- **Tooltips and keyboard shortcuts are desktop-only.**
+- **Tooltips and keyboard shortcuts are desktop-only**, bar the one
+  long-press exception under
+  [Hover translation](#hover-translation).
 - **Breadcrumb tappability** is generalized in
   [`../../principles.md → Breadcrumb tappability`](../../principles.md#breadcrumb-tappability)
   alongside this session.
@@ -55,6 +57,11 @@ no hover state on touch) becomes the universal rule for any
 | Hover-preview on rollback rows        | desktop-only; no touch fallback (taps trigger) |
 | Hover tooltips                        | desktop-only; touch has no tooltip mechanism   |
 | Hover-anywhere-else affordance reveal | always-visible-muted                           |
+
+One exception: the tablet Browse rail strip's cells and chevron. A
+tap is the control's action (a cell expands onto its category, the
+chevron expands), so the tooltip text opens on a long press instead
+([reader-composer.md → Collapsed state](../../screens/reader-composer/reader-composer.md#collapsed-state--compact-persistent-dashboard)).
 
 This generalizes the existing scattered "touch has no hover state"
 rules into one place and applies them uniformly. Per-surface docs
@@ -81,7 +88,9 @@ What we use:
 What we don't use in v1:
 
 - **Long-press for actions.** No long-press-to-show-context-menu,
-  no long-press-to-grab, no long-press-for-tooltip. The OS
+  no long-press-to-grab, no long-press-for-tooltip (bar the one
+  strip exception under
+  [Hover translation](#hover-translation)). The OS
   reserves long-press for selection / accessibility; using it for
   app actions creates conflicts. Right-click on desktop maps to
   the existing `⋯` overflow menu; touch users tap the `⋯`.
@@ -286,7 +295,8 @@ here.
 ## Tooltip and keyboard-shortcut scope
 
 - **Tooltips are desktop-only.** Touch has no tooltip mechanism
-  beyond the tap-to-tooltip rule above. Touch users get visual
+  beyond the tap-to-tooltip rule above and the strip's long press
+  under [Hover translation](#hover-translation). Touch users get visual
   affordances (icons with adjacent labels where present) and
   short, legible icon vocabularies.
 - **Keyboard shortcuts are desktop-only** (`Cmd/Ctrl+\`, `Cmd-K`,

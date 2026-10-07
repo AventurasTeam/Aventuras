@@ -46,6 +46,9 @@ slice-planning gate forces its resolution before that slice is planned.
     pointer-events or portal state rather than `data-density`, which
     every file sets for itself through the global decorator in
     `.storybook/preview.tsx`.
+  - 2026-10-07, 4.5a: `Trigger Opens Overlay`
+    (`preset-browser.stories.tsx:49`) failed once in a 27-file parallel
+    run, on `findByText`'s 1 s default, and passed 3 of 3 alone.
 
   **Revisit trigger.** A browser-project regression that a parallel run
   cannot localise. That is the moment the missing debugging move costs
@@ -305,3 +308,122 @@ slice-planning gate forces its resolution before that slice is planned.
   user may keep the name, as with Keep as distinct. Canon to touch:
   `world.md → Rename` and the detail pane's name field. Found in
   4.2c's developer review (2026-10-07).
+- **Editor overlays skip canon's in-edit dismissal guard.**
+  [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) wants an
+  in-edit dismissal to raise the save-session navigate-away guard (Save /
+  Discard / Cancel) and Esc to dismiss on desktop. On phone, the world-time
+  and scene editors are bottom Sheets: gorhom reports a dismissal only after
+  it happens, so 4.5a blocks drag-down and tap-outside while they hold
+  unsaved input, but Android back still closes them through the primitive's
+  `BackHandler` and discards it, and bottom Sheets bind no Esc on web. On
+  desktop and tablet the same edits run in `EntryCard`'s Radix Dialogs, which
+  drop the input on an outside click. Raised in 4.5a planning, 2026-10-07.
+- **Narrative reflow on Browse rail toggle jumps the reading position.**
+  Measured by hand on desktop at a 1050 px window, hero story scrolled to
+  about 45% (`scrollTop` 3548, unchanged by the toggle): the narrative
+  scroller's width goes 739 px to 1007 px as the rail collapses, and the
+  paragraph at the top of the viewport moves +72 px on expand and -72 px on
+  collapse, so the reader loses a few lines of place. The Android tablet
+  expand shows the same. Canon's anchor rule
+  ([`reader-composer.md → Anchor preservation under shifts`](../ui/screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts))
+  names no rail-toggle scenario. Raised in 4.5a, 2026-10-07.
+- **A `Sheet` dismiss sent right after `present()` is dropped.** In
+  `components/ui/sheet.tsx`, a dismiss that lands while gorhom's modal status
+  is still INITIAL (within about 60 ms of `present()`) is silently ignored, so
+  the Sheet stays open while the host holds `open=false`. Fix idea: hold the
+  dismiss until gorhom reports the opening animation (`onAnimate` or
+  `onChange`). Raised in 4.5a review, 2026-10-07.
+- **Bottom Sheets on web move no focus in and return none on close.**
+  [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
+  trap Tab focus; the primitive neither focuses into the Sheet nor restores
+  focus to the trigger. Raised in 4.5a review, 2026-10-07.
+- **Bottom Sheets aren't modal for screen readers on Android.** The scrim is
+  `accessible={false}` and nothing hides the content beneath, so TalkBack can
+  likely reach the controls under it, the Browse chip included. Inferred from
+  the code, not checked with TalkBack. Raised in 4.5a review, 2026-10-07.
+- **Overlay scrims are off canon (0.4 light, 0.6 dark).**
+  `components/ui/dialog.tsx:31` and `alert-dialog.tsx:37` use `bg-black/50`,
+  and the right-anchored Sheet (`sheet.tsx` near line 444) uses `bg-black/40`
+  in both modes; `SCRIM_OPACITY` could be the single source. Raised in 4.5a
+  review, 2026-10-07.
+- **`aria-selected` on `role="button"` is invalid ARIA on web.**
+  `components/compounds/list-row.tsx:85` and
+  `components/reader/rail/rail-sheet-categories.tsx` set it; native maps it to
+  `accessibilityState.selected` correctly. Raised in 4.5a review, 2026-10-07.
+- **`MultiSelect` nests a checkbox role inside a checkbox role.**
+  `components/ui/multi-select.tsx:388-401`: the outer one shows no checked
+  state on web. Raised in 4.5a review, 2026-10-07.
+- **A fresh-tinted row probably loses its tint on web hover.**
+  `components/compounds/list-row.tsx:89-91` sets the fresh tint and
+  `hover:bg-tint-hover` as backgrounds on the same element, so hover likely
+  replaces the tint. Reasoned from the classes, not rendered. Raised in 4.5a
+  review, 2026-10-07.
+- **`.storybook/*.ts` is never typechecked.** `tsc`'s `**/*.ts` include skips
+  dot-directories. Raised in 4.5a review, 2026-10-07.
+- **Three explicit gorhom scroll views should use `ScrollComponentContext`.**
+  `SceneEditForm`'s inside-sheet `Body`, `AiAssist`'s `Scroller` and
+  `MultiSelect`'s phone list pick their scroll host by hand; moving them onto
+  the context leaves one way to choose a Sheet's scroll component. Raised in
+  4.5a review, 2026-10-07.
+- **The rail's happening list and the Plot pane duplicate the entry-index
+  status block.** A shared `EntryIndexStatus` (title, body, retry) would
+  replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in
+  4.5a review, 2026-10-07.
+- **Collapse defaults belong to the C2 modules.**
+  [`entity.md → Accordion grouping`](../ui/patterns/entity.md#accordion-grouping-on-all-view)
+  makes the grouping a module concern, yet the rail keeps its own
+  `railCollapseDefaults` and imports two pane modules to build it. A
+  `defaultCollapsed` on `ListModule` would remove both. Raised in 4.5a review,
+  2026-10-07.
+- **`useRowSignals` returns new `rowTints` and `inScene` identities on
+  unrelated writes.** `hooks/use-row-signals.ts:107-131` changes them on lore,
+  thread and entry writes, so rail lists re-render through a classifier
+  burst; keep the old value when the contents are equal. Raised in 4.5a
+  review, 2026-10-07.
+- **`readerRailStore.enterBranch` is keyed on `branchId` only.** Once M6 adds
+  branch switching, key it on focus too: a pushed reader for another branch,
+  popped back, would otherwise keep the other branch's view. Raised in 4.5a
+  review, 2026-10-07.
+- **The World and Plot `search` locators match the hidden reader rail's search
+  box.** `e2e/locators/world.ts:60` and `e2e/locators/plot.ts:28` match the
+  rail's identical placeholder whenever the rail shows the same category
+  (World's default `Characters`), a latent strict-mode trap. Scope them like
+  `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
+  2026-10-07.
+- **`useRailData` runs in the uncompiled reader route.** The route
+  re-renders on lore, thread, happening and chapter writes, and
+  `useEntryIndex`'s `tailId` selector loops all entries on every render, each
+  stream chunk. Unmeasured. Options: each connected rail component calls
+  `useRailData` itself, memoized, or a `useReaderRail(branchId)` hook. Raised
+  in 4.5a review, 2026-10-07.
+- **`ROW_CATEGORIES` duplicates a list `lib/list-modules` already has.**
+  `lib/row-signals/types.ts:3-11` spells out what
+  `[...WORLD_CATEGORIES, ...PLOT_KINDS]` gives. Raised in 4.5a review,
+  2026-10-07.
+- **`chrome.back` matches its name as a substring.** `e2e/locators/chrome.ts:8`
+  has no `exact: true`, so the phone rail Sheet's "Back to categories"
+  (`reader:rail.backToCategories`) would collide if that button ever rendered
+  in a desktop E2E DOM. Latent: the Sheet is phone-only and E2E is
+  desktop-only. Raised in 4.5a's final review, 2026-10-07.
+- **The rail likely flashes expanded, then slides closed, on a narrow reader
+  mount.** When the reader route mounts in the same commit as
+  `RailViewportWatcher` under 900 px (a web or dev reload of the reader route),
+  `ReaderRailColumn` first renders from an unseeded store, so `RailColumn`
+  starts at 300 px and the watcher's seed then forces a collapse. Reasoned, not
+  observed; normal launches reach the reader after home, so the store is
+  already seeded. Fix idea: set the width without `withTiming` for a
+  `collapsed` change before first layout, or have `ReaderRailColumn` wait for
+  the seed. Raised in 4.5a's final review, 2026-10-07.
+- **The happening filter-reset layout effect is duplicated.**
+  `components/reader/rail/rail-list.tsx:75-82` repeats
+  `components/plot/plot-list-pane.tsx:98-103`, same comment and same reset. A
+  small shared hook (e.g. `useOfferedFilterReset`) would remove the copy; it
+  fits the same pass as the filed `EntryIndexStatus` and collapse-defaults
+  extractions. Raised in 4.5a's final review, 2026-10-07.
+- **A medium Sheet can be lifted under the status bar by a tall keyboard.**
+  `components/ui/sheet.tsx:322` gives Sheets smaller than `tall`
+  `keyboardBehavior='interactive'` with no `topInset`, so on a small phone a
+  medium (60 %) Sheet can rise until its head sits under the status bar.
+  Inferred from the code, not observed; the rail Sheet (medium, a search field
+  right under its head) is the likeliest place to see it. Raised in 4.5a's
+  final review, 2026-10-07.

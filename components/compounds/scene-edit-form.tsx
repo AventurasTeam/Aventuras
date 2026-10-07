@@ -1,5 +1,5 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -68,6 +68,8 @@ export type SceneEditFormProps = {
   onSave: (next: SceneEdit) => void
   /** Close the overlay. Also fires in place of `onSave` on a no-change save. */
   onCancel: () => void
+  /** Whether the draft differs from the opening scene; fires on mount and on every change. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /** Sentinel for "no location", since Select's value is a plain string. */
@@ -120,6 +122,7 @@ export function SceneEditForm({
   saveError,
   onSave,
   onCancel,
+  onDirtyChange,
 }: SceneEditFormProps) {
   const [scene, setScene] = useState<string[]>([...sceneEntities])
   const [locationId, setLocationId] = useState<string>(currentLocationId ?? NO_LOCATION)
@@ -141,6 +144,9 @@ export function SceneEditForm({
 
   const nextLocationId = locationId === NO_LOCATION ? null : locationId
   const unchanged = sameMembers(scene, sceneEntities) && nextLocationId === currentLocationId
+  useEffect(() => {
+    onDirtyChange?.(!unchanged)
+  }, [unchanged, onDirtyChange])
 
   function handleSave() {
     // A Save with nothing changed takes the cancel route: no delta, no write, and

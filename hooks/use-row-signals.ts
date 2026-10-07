@@ -10,13 +10,21 @@ import {
   readTurnBoundaries,
   selectInScene,
   selectRecentlyClassified,
+  type LiveRowCategory,
   type RecentlyClassifiedSignals,
   type ReplyEdit,
   type SignalDelta,
   type SignalEntry,
   type TurnBoundaries,
 } from '@/lib/row-signals'
-import { entitiesStore, entriesStore, generationStore } from '@/lib/stores'
+import {
+  entitiesStore,
+  entriesStore,
+  generationStore,
+  happeningsStore,
+  loreStore,
+  threadsStore,
+} from '@/lib/stores'
 
 export type RowSignalsSnapshot = {
   recentlyClassified: RecentlyClassifiedSignals
@@ -49,6 +57,9 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
     () => [...entityRows.values()].filter((e) => e.branchId === branchId),
     [entityRows, branchId],
   )
+  const loreRows = loreStore.useLore((m) => m)
+  const threadRows = threadsStore.useThreads((m) => m)
+  const happeningRows = happeningsStore.useHappenings((m) => m)
   const [latestReplyId = null, fadingReplyId = null] = latestReplyIds(entries)
   // settleCount marks the moment a run's writes are final; shared across every mounted instance.
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
@@ -93,6 +104,16 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
     return (id: string): EntityKind | null => kinds.get(id) ?? null
   }, [entities])
 
+  const isLive = useMemo(() => {
+    const rowsOf: Record<LiveRowCategory, ReadonlyMap<string, { branchId: string }>> = {
+      lore: loreRows,
+      thread: threadRows,
+      happening: happeningRows,
+    }
+    return (category: LiveRowCategory, id: string): boolean =>
+      rowsOf[category].get(id)?.branchId === branchId
+  }, [loreRows, threadRows, happeningRows, branchId])
+
   const recentlyClassified = useMemo(
     () =>
       signalWindow.boundaries == null
@@ -103,8 +124,9 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
             entries: signalWindow.entries,
             boundaries: signalWindow.boundaries,
             categoryOf,
+            isLive,
           }),
-    [signalWindow, categoryOf],
+    [signalWindow, categoryOf, isLive],
   )
   const inScene = useMemo(() => selectInScene(entries, entities), [entries, entities])
 

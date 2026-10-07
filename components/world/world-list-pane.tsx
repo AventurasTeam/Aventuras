@@ -63,7 +63,10 @@ export type WorldListPaneProps = {
 }
 
 // patterns/entity.md → Accordion grouping: the working tier starts open, the rest closed.
-const WORLD_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<EntityTier>(['staged', 'retired'])
+export const WORLD_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<EntityTier>([
+  'staged',
+  'retired',
+])
 
 export function WorldListPane({
   category,

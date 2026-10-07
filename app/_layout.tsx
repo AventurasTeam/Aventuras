@@ -10,6 +10,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 
 import { EmbeddingUpgradeHost } from '@/components/embedder/embedding-upgrade-host'
 import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
+import { RailViewportWatcher } from '@/components/reader/rail/rail-viewport-watcher'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
 import { Toaster } from '@/components/ui/toast'
@@ -98,6 +99,7 @@ export default function RootLayout() {
               <DensityProvider>
                 <I18nextProvider i18n={i18n}>
                   <BottomSheetModalProvider>
+                    <RailViewportWatcher />
                     <Stack screenOptions={{ headerShown: false }} />
                     <CrashRecoveryModalHost />
                     <SwapResumeHost />

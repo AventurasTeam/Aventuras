@@ -1,8 +1,11 @@
 import {
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
   type BottomSheetBackgroundProps,
   BottomSheetHandle,
   type BottomSheetHandleProps,
   BottomSheetModal,
+  BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
 } from '@gorhom/bottom-sheet'
@@ -10,15 +13,18 @@ import * as DialogPrimitive from '@rn-primitives/dialog'
 import {
   createContext,
   Fragment,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   type ComponentProps,
+  type FC,
 } from 'react'
 import {
   BackHandler,
   Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   useWindowDimensions,
@@ -31,11 +37,12 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useRegisteredOverlay } from '@/lib/stores'
-import { useTheme } from '@/lib/themes'
+import { useTheme, type Theme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 type AutoFocusHandler = (event: Event) => void
@@ -94,6 +101,48 @@ export function QuietSheetHandle(props: BottomSheetHandleProps) {
 const SheetInputComponent = (
   Platform.OS === 'web' ? TextInput : BottomSheetTextInput
 ) as InputComponent
+
+// spacing.md → Depth metaphor: the modal scrim is fixed per mode, not a theme color.
+const SCRIM_OPACITY: Record<Theme['mode'], number> = { light: 0.4, dark: 0.6 }
+
+type SheetBackdropProps = BottomSheetBackdropProps & { dismissible: boolean; opacity: number }
+
+// Out of the a11y tree (assistive tech uses back); null role/label drop gorhom's English button.
+function SheetBackdrop({ dismissible, opacity, ...props }: SheetBackdropProps) {
+  return (
+    <BottomSheetBackdrop
+      {...props}
+      appearsOnIndex={0}
+      disappearsOnIndex={-1}
+      opacity={opacity}
+      pressBehavior={dismissible ? 'close' : 'none'}
+      accessible={false}
+      accessibilityRole={null}
+      accessibilityLabel={null}
+    />
+  )
+}
+
+/**
+ * The scrim behind a gorhom sheet, over the whole sheet host (the window). A press closes the
+ * sheet only while `dismissible`; a flag change swaps the component, so it holds while open.
+ */
+export function useSheetBackdrop(dismissible: boolean): FC<BottomSheetBackdropProps> {
+  const { theme } = useTheme()
+  const opacity = SCRIM_OPACITY[theme.mode]
+  return useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <SheetBackdrop {...props} dismissible={dismissible} opacity={opacity} />
+    ),
+    [dismissible, opacity],
+  )
+}
+
+// Native-only swap, as for the input: gorhom's scroll view hands the gesture to the sheet's
+// drag-down at list top. Cast: its ref type `BottomSheetScrollViewMethods` carries `scrollTo`.
+const SheetScrollComponent = (
+  Platform.OS === 'web' ? ScrollView : BottomSheetScrollView
+) as ScrollComponent
 
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
@@ -155,6 +204,8 @@ function BottomSheetContent({
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
+  // Tap-outside follows swipe-dismiss: a sheet whose pending action blocks one blocks both.
+  const backdrop = useSheetBackdrop(enablePanDownToClose)
 
   const sheetRef = useRef<BottomSheetModal>(null)
   // gorhom's dismiss() on an already-dismissed modal corrupts internal state
@@ -261,6 +312,7 @@ function BottomSheetContent({
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
+      backdropComponent={backdrop}
       // 'extend' resolves to the sheet's own tallest detent. Every size here has
       // exactly one ('auto' has none), so it never grows anything — it earns its
       // keep only on 'tall', which at 95% already clears the keyboard and just
@@ -312,14 +364,17 @@ function BottomSheetContent({
               </View>
             </BottomSheetView>
           ) : (
-            <View
-              className={cn('flex-1 p-6', className)}
-              {...webDialog}
-              {...(contentProps as ComponentProps<typeof View>)}
-              style={[safeBottomStyle(insets.bottom), style]}
-            >
-              {children}
-            </View>
+            // Fixed detents only: a flex-1 scroll view can't size inside auto's BottomSheetView.
+            <ScrollComponentContext.Provider value={SheetScrollComponent}>
+              <View
+                className={cn('flex-1 p-6', className)}
+                {...webDialog}
+                {...(contentProps as ComponentProps<typeof View>)}
+                style={[safeBottomStyle(insets.bottom), style]}
+              >
+                {children}
+              </View>
+            </ScrollComponentContext.Provider>
           )}
         </InputComponentContext.Provider>
       </TextClassContext.Provider>

@@ -43,13 +43,24 @@ type EntityListPaneProps = {
   emptyState: ReactNode
 
   /**
+   * Replaces the list and its empty state; the header and toolbar stay mounted. Omit for the
+   * list or, when `isEmpty`, the empty state.
+   */
+  body?: ReactNode
+
+  /**
    * Consumer derives. Shell uses this to switch list vs empty
    * rendering.
    */
   isEmpty: boolean
 
+  /** `transparent` paints no background, for a pane hosted on another surface (a Sheet). */
+  surface?: EntityListPaneSurface
+
   className?: string
 }
+
+type EntityListPaneSurface = 'base' | 'transparent'
 
 export function EntityListPane({
   kindSelector,
@@ -60,10 +71,18 @@ export function EntityListPane({
   children,
   emptyState,
   isEmpty,
+  body,
+  surface = 'base',
   className,
 }: EntityListPaneProps) {
   return (
-    <View className={cn('w-full flex-1 flex-col gap-3 bg-bg-base p-3', className)}>
+    <View
+      className={cn(
+        'w-full flex-1 flex-col gap-3 p-3',
+        surface === 'base' && 'bg-bg-base',
+        className,
+      )}
+    >
       <View className="flex-row items-center gap-2">
         <View className="min-w-0 flex-1">{kindSelector}</View>
         {addSlot != null ? <View className="shrink-0">{addSlot}</View> : null}
@@ -76,9 +95,9 @@ export function EntityListPane({
         {sortControl}
       </Toolbar>
 
-      <View className="min-h-0 flex-1">{isEmpty ? emptyState : children}</View>
+      <View className="min-h-0 flex-1">{body ?? (isEmpty ? emptyState : children)}</View>
     </View>
   )
 }
 
-export type { EntityListPaneProps }
+export type { EntityListPaneProps, EntityListPaneSurface }

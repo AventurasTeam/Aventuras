@@ -31,6 +31,9 @@ export function SceneEditSheet({
 }: SceneEditSheetProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
+  // Unsaved input holds the sheet: drag-down and tap-outside wait for Save or Cancel. Android
+  // back still closes it through the primitive's BackHandler.
+  const [dirty, setDirty] = useState(false)
 
   async function save(next: SceneEdit) {
     if (saving) return
@@ -61,7 +64,7 @@ export function SceneEditSheet({
       {/* Fixed detent, not `auto`: the scene list needs its own BottomSheetScrollView,
           and `auto` wraps content in a BottomSheetView that captures vertical pan and
           starves nested scrollables (sheet.tsx). */}
-      <SheetContent anchor="bottom" size="tall" enablePanDownToClose={!saving}>
+      <SheetContent anchor="bottom" size="tall" enablePanDownToClose={!saving && !dirty}>
         {/* Keyed so an external scene change (undo, classifier write) reseeds the
             form, which only reads its props on mount. */}
         <SceneEditForm
@@ -74,6 +77,7 @@ export function SceneEditSheet({
           saveError={saveError}
           onSave={(next) => void save(next)}
           onCancel={onClose}
+          onDirtyChange={setDirty}
         />
       </SheetContent>
     </Sheet>

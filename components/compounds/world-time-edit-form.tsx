@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,8 @@ type WorldTimeEditFormProps = {
   onSave: (next: number) => void
   /** Close the overlay. Also fires in place of `onSave` on a no-change save. */
   onCancel: () => void
+  /** Whether the tuple differs from the opening one; fires on mount and on every change. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 // The conversion walks the top tier, and only units past the seed are uncached
@@ -51,6 +53,7 @@ export function WorldTimeEditForm({
   saveError,
   onSave,
   onCancel,
+  onDirtyChange,
 }: WorldTimeEditFormProps) {
   const { calendar, origin } = frame
   const seedTuple = useMemo(
@@ -58,6 +61,12 @@ export function WorldTimeEditForm({
     [worldTimeRaw, calendar, origin],
   )
   const [tuple, setTuple] = useState<TierTuple>(seedTuple)
+  // Tuple-level, not seconds: a coarse calendar's tuple can't hold a sub-base-unit
+  // remainder, so an untouched save compared in seconds would truncate worldTime.
+  const dirty = !tuplesEqual(tuple, seedTuple, calendar)
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
 
   // Two independent gates run before the conversion: validity keeps a cleared
   // (NaN) or out-of-range tier out of a function that does not bounds-check,
@@ -99,10 +108,7 @@ export function WorldTimeEditForm({
   const handleSave = () => {
     // Redundant behind the disabled Save; kept because `next` needs the narrowing.
     if (blockReason != null || next == null) return
-    // Tuple-level equality, not seconds-level: on a coarse-grain calendar the
-    // tuple cannot express a sub-base-unit remainder, so an untouched save
-    // compared in seconds would silently truncate the stored worldTime.
-    if (tuplesEqual(tuple, seedTuple, calendar)) {
+    if (!dirty) {
       onCancel()
       return
     }

@@ -1,13 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { EntityKind, EntryMetadata } from '@/lib/db'
 
 import { sceneTransitionIds, selectRecentlyClassified } from './recently-classified'
-import type { ReplyEdit, SignalDelta, SignalEntry } from './types'
+import type { LiveRowCategory, ReplyEdit, SignalDelta, SignalEntry } from './types'
 
 const KINDS: Record<string, EntityKind> = {
   char_a: 'character',
   char_b: 'character',
+  char_x: 'character',
   item_1: 'item',
   loc_1: 'location',
   loc_2: 'location',
@@ -16,6 +17,7 @@ const KINDS: Record<string, EntityKind> = {
   mid_char: 'character',
 }
 const categoryOf = (id: string): EntityKind | null => KINDS[id] ?? null
+const allLive = (): boolean => true
 
 function meta(sceneEntities: string[], currentLocationId: string | null): EntryMetadata {
   return { sceneEntities, currentLocationId, worldTime: 0 }
@@ -55,6 +57,7 @@ describe('selectRecentlyClassified', () => {
       entries: [],
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('char_x')).toBe('fresh')
     expect(rows.get('hap_1')).toBe('fresh')
@@ -73,6 +76,7 @@ describe('selectRecentlyClassified', () => {
       entries: [],
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.size).toBe(0)
   })
@@ -84,6 +88,7 @@ describe('selectRecentlyClassified', () => {
       entries: [],
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.size).toBe(0)
   })
@@ -102,6 +107,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     // e5 vs e4: char_a left, char_b arrived, loc_1 → loc_2 — all fresh.
     expect(rows.get('char_a')).toBe('fresh')
@@ -117,6 +123,7 @@ describe('selectRecentlyClassified', () => {
       entries: ENTRIES,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     // e5 vs e4: char_a is present in both and doesn't transition; char_b, loc_1, loc_2 do.
     expect(rows.get('char_b')).toBe('fresh')
@@ -136,6 +143,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('item_1')).toBe('fresh')
   })
@@ -151,6 +159,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('item_1')).toBe('fresh')
   })
@@ -169,6 +178,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     // e5 vs e4 has no transition (nothing fresh); e3 vs e2 introduced char_a + loc_1 → fading.
     expect(rows.get('char_a')).toBe('fading')
@@ -201,6 +211,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('mid_char')).toBe('fading')
     expect(rows.has('old_char')).toBe(false)
@@ -217,6 +228,7 @@ describe('selectRecentlyClassified', () => {
       entries: [],
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('char_a')).toBe('fresh')
     expect(byCategory.get('character')).toBe('fresh')
@@ -231,6 +243,7 @@ describe('selectRecentlyClassified', () => {
       entries: [],
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(byCategory.get('character')).toBe('fresh')
   })
@@ -242,6 +255,7 @@ describe('selectRecentlyClassified', () => {
       entries: [],
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(byCategory.get('thread')).toBe('fresh')
     expect(byCategory.get('happening')).toBe('fresh')
@@ -258,6 +272,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.has('mystery_1')).toBe(false)
     expect(byCategory.size).toBe(0)
@@ -274,6 +289,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.has('fac_1')).toBe(false)
     expect(byCategory.has('faction')).toBe(false)
@@ -290,6 +306,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.has('loc_1')).toBe(false)
   })
@@ -305,6 +322,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.has('char_a')).toBe(false)
   })
@@ -320,6 +338,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.has('fac_1')).toBe(false)
     expect(byCategory.has('faction')).toBe(false)
@@ -336,6 +355,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('loc_1')).toBe('fresh')
     expect(rows.has('char_a')).toBe(false)
@@ -348,6 +368,7 @@ describe('selectRecentlyClassified', () => {
       entries: ENTRIES,
       boundaries: null,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.size).toBe(0)
     expect(byCategory.size).toBe(0)
@@ -364,6 +385,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     expect(rows.get('char_b')).toBe('fresh')
   })
@@ -380,6 +402,7 @@ describe('selectRecentlyClassified', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     })
     // "before" e3 is e1 (unchanged char_a), not the system row (would read as no prior scene).
     expect(rows.get('char_b')).toBe('fresh')
@@ -431,6 +454,7 @@ describe('selectRecentlyClassified — manual scene edits', () => {
       entries,
       boundaries: BOUNDARIES,
       categoryOf,
+      isLive: allLive,
     }).rows
   }
 
@@ -511,5 +535,78 @@ describe('selectRecentlyClassified — manual scene edits', () => {
     const rows = rowsFor([edit(11, 'e5', { sceneEntities: null })])
     expect(rows.get('char_a')).toBe('fresh')
     expect(rows.has('char_b')).toBe(false)
+  })
+})
+
+describe('selectRecentlyClassified — rows no longer on the branch', () => {
+  function select(
+    deltas: SignalDelta[],
+    isLive: (category: LiveRowCategory, id: string) => boolean,
+    entries: SignalEntry[] = [],
+  ) {
+    return selectRecentlyClassified({
+      replyEdits: [],
+      deltas,
+      entries,
+      boundaries: BOUNDARIES,
+      categoryOf,
+      isLive,
+    })
+  }
+
+  it('does not put a thread isLive reports gone into byCategory or rows', () => {
+    const { rows, byCategory } = select(
+      [delta(10, 'threads', 'thr_gone'), delta(10, 'lore', 'lore_1')],
+      (_category, id) => id !== 'thr_gone',
+    )
+    expect(byCategory.has('thread')).toBe(false)
+    expect(rows.has('thr_gone')).toBe(false)
+    // Positive control: a live row in the same pass still tints.
+    expect(byCategory.get('lore')).toBe('fresh')
+    expect(rows.get('lore_1')).toBe('fresh')
+  })
+
+  it.each([
+    ['lore', 'lore'],
+    ['threads', 'thread'],
+    ['happenings', 'happening'],
+  ] as const)('asks isLive about a %s delta as %s and drops a gone row', (table, category) => {
+    const isLive = vi.fn<(category: LiveRowCategory, id: string) => boolean>(() => false)
+    const { rows, byCategory } = select([delta(11, table, 'row_1')], isLive)
+    expect(isLive).toHaveBeenCalledWith(category, 'row_1')
+    expect(rows.size).toBe(0)
+    expect(byCategory.size).toBe(0)
+  })
+
+  it('does not let a gone fresh row lift a live fading row’s category', () => {
+    const { rows, byCategory } = select(
+      [delta(8, 'threads', 'thr_live'), delta(11, 'threads', 'thr_gone')],
+      (_category, id) => id === 'thr_live',
+    )
+    expect(byCategory.get('thread')).toBe('fading')
+    expect(rows.get('thr_live')).toBe('fading')
+    expect(rows.has('thr_gone')).toBe(false)
+  })
+
+  it('tints nothing for an entity delta whose id no longer resolves', () => {
+    const { rows, byCategory } = select([delta(10, 'entities', 'char_deleted')], allLive)
+    expect(rows.has('char_deleted')).toBe(false)
+    expect(byCategory.size).toBe(0)
+  })
+
+  it('resolves entity deltas through categoryOf, never isLive', () => {
+    const isLive = vi.fn<(category: LiveRowCategory, id: string) => boolean>(() => false)
+    const { rows, byCategory } = select([delta(10, 'entities', 'char_a')], isLive)
+    expect(rows.get('char_a')).toBe('fresh')
+    expect(byCategory.get('character')).toBe('fresh')
+    expect(isLive).not.toHaveBeenCalled()
+  })
+
+  it('leaves scene transitions to categoryOf, so isLive never untints them', () => {
+    // ENTRIES: the latest reply brings char_b in and moves loc_1 → loc_2.
+    const { rows, byCategory } = select([], () => false, ENTRIES)
+    expect(rows.get('char_b')).toBe('fresh')
+    expect(byCategory.get('character')).toBe('fresh')
+    expect(byCategory.get('location')).toBe('fresh')
   })
 })

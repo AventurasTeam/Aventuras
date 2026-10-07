@@ -109,14 +109,27 @@ single canonical reference for them.
 
 ### Top-bar / chrome
 
-| Concern                                                  | Scratch | Lucide name       |
-| -------------------------------------------------------- | ------- | ----------------- |
-| App Settings                                             | `⚙`     | `Settings`        |
-| Story Settings                                           | `⛭`     | `SlidersVertical` |
-| Actions menu (chrome overflow + Cmd-K palette)           | `⚲`     | `MoreVertical`    |
-| Return / back                                            | `←`     | `ArrowLeft`       |
-| Branch (chip + per-entry; reserved for branch semantics) | `⎇`     | `GitBranch`       |
-| Row-level overflow                                       | `⋯`     | `MoreHorizontal`  |
+| Concern                                                  | Scratch   | Lucide name                    |
+| -------------------------------------------------------- | --------- | ------------------------------ |
+| App Settings                                             | `⚙`       | `Settings`                     |
+| Story Settings                                           | `⛭`       | `SlidersVertical`              |
+| Actions menu (chrome overflow + Cmd-K palette)           | `⚲`       | `MoreVertical`                 |
+| Return / back                                            | `←`       | `ArrowLeft`                    |
+| Branch (chip + per-entry; reserved for branch semantics) | `⎇`       | `GitBranch`                    |
+| Row-level overflow                                       | `⋯`       | `MoreHorizontal`               |
+| Browse chip (phone reader chip strip)                    | `☰`      | `Menu`                         |
+| Browse rail collapse / expand                            | `›` / `‹` | `ChevronRight` / `ChevronLeft` |
+
+`Menu` is the glyph the Actions menu turned down for reading as
+sidebar navigation (see
+[Actions menu glyph rationale](#actions-menu-glyph-rationale)) —
+which is what the Browse chip opens: the rail, as a Sheet. The
+rail's chevrons point the way it moves: `ChevronRight` in the
+rail header collapses it toward the right edge, `ChevronLeft` on
+the collapsed strip expands it. That deliberately overrides the
+[Disclosure carets](#disclosure-carets) reading of `ChevronRight`
+as collapsed to expanded: these chevrons telegraph the column's
+motion, as [the rail's collapse trigger](../screens/reader-composer/reader-composer.md#open-state--collapse-trigger) specs.
 
 #### Story Settings glyph rationale
 
