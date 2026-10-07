@@ -217,5 +217,62 @@ chip, whose tint is the aggregate classifier signal.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Developer decisions that deviate from the brief or bind a later slice.
+Canon carries the detail; each line points to it.
+
+- **Rail view state reaches app-wide for the category only**
+  (developer, 2026-10-07). Filter, search and the peek slot reset when
+  the reader's branch changes, through `readerRailStore.enterBranch`,
+  which the reader route calls. Within a branch the view survives
+  collapse and expand, a reflow and a reader remount. This overrides
+  the planning default that the whole view survives any remount; see
+  [`reader-composer.md → State model`](../../../../ui/screens/reader-composer/reader-composer.md#state-model--manual--viewport-decoupled).
+- **The phone Sheet has three levels** (categories, list, peek), not a
+  dropdown inside the Sheet: `Select` presents as a bottom Sheet on
+  phone, which would be Sheet over Sheet. C10's union changed with it;
+  see
+  [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
+- **The Browse chip is always present on the phone reader**, so the
+  chapterless-story rule in `navigation.md` narrowed to the chapter and
+  time chips.
+- **The preference is `appearance.readerRailCollapsed`**, default
+  `false`, applied optimistically; see
+  [`data-model.md → Diagram`](../../../../data-model.md#diagram).
+- **The rail owns its empty copy** (`reader:rail.empty.*`); the shared
+  C2 copy stays in `world:` and `plot:`.
+- **Rail rows carry no collision strip**; World stays the only place a
+  collision is resolved.
+- **Category-label lowercasing** is parked, not fixed; see
+  [`parked.md → Category-label lowercasing`](../../../../parked.md#category-label-lowercasing).
+- **The bottom `Sheet` primitive gained its scrim** (gorhom's
+  `BottomSheetBackdrop`, a tap outside closes) because canon already
+  specced it and the Browse chip stayed tappable over another Sheet
+  without one. The world-time and scene editor sheets pass
+  `enablePanDownToClose={!saving && !dirty}`, so they refuse drag-down
+  and tap-outside while holding unsaved input; canon's Save / Discard /
+  Cancel guard is still open, in
+  [`triage.md`](../../../triage.md).
+
+Controller decisions, reversible and listed in the PR as pending:
+
+- **Storybook runs `react-native-worklets/plugin` over
+  `@gorhom/bottom-sheet`**, instead of a web-only scrim. The real
+  Metro-web app's scrim works; only Vite's prebundle lacked the worklet
+  closures.
+- **`RailData.entryIndex { ready, failed, retry }`, and the entry-index
+  read runs only while the rail's category is Happenings.** The first
+  shape marked every anchored happening dangling until the index
+  loaded, and put a full-branch read on every turn. The read still runs
+  every turn while the category is Happenings even with the rail
+  hidden; full gating needs the phone Sheet's open state in the store.
+
+Fixes worth remembering: `RailColumn` guards its strip swap with a ref,
+because a stale zero-distance slide completion re-showed the strip in an
+expanded column after a phone to desktop tier switch; the rail shortcut
+listens in the capture phase, since RN-Web's `TextInput` stops keydown
+([lesson](../../../lessons-learned/rnweb-textinput-stops-keydown.md)).
+
+For [Slice 4.5b](./05b-peek-drawer.md), whose Open questions carry the
+detail: reset both peeks on a branch change, render the desktop drawer
+only under an expanded rail, and key `enterBranch` on focus once M6 adds
+branch switching.

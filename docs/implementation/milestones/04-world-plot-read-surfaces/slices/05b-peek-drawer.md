@@ -149,6 +149,21 @@ Sheet.
 - **Read the lead through `resolveLead`** (4.2b): a reversal can leave
   `leadEntityId` dangling, and the You badge / peek `Set as lead` must
   treat it as absent.
+- **Both peeks reset on a branch change.** `readerRailStore.enterBranch`
+  clears only `display.peek`; the phone Sheet's peek is local state in
+  the host, so it needs its own reset
+  ([4.5a's notes](./05a-browse-rail.md#implementation-notes)).
+- **The desktop drawer renders only under an expanded rail.** Render it
+  when `!isRailCollapsed && peek`: a peek can survive under a collapsed
+  rail if the stored preference flips another way, such as a settings
+  import.
+- **A peek whose row is deleted while it is open.** Decide what the
+  drawer does; nothing in 4.5a covers it.
+- **`Open in panel →` needs the host's `setOpen`**, so `renderPeek` stays
+  owned by `ReaderBrowseChip` rather than moving into the Sheet.
+- **`enterBranch` is keyed on `branchId` only.** Once M6 adds branch
+  switching, key it on focus too, or a pushed reader for another branch
+  popping back would keep the other branch's view.
 
 ## Implementation notes
 
