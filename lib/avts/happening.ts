@@ -16,10 +16,7 @@ export type HappeningImport = {
   commonKnowledge: 0 | 1
 }
 
-const isSet = (value: string | null | undefined) => value != null && value.trim() !== ''
-
-// occurredAtEntryId is read only for data-model.md's time-anchor exclusivity, then dropped:
-// an entry id never resolves on the story the file lands on.
+// Read only for data-model.md's time-anchor exclusivity, then dropped: entry ids are branch-local.
 export const HappeningImportSchema: z.ZodType<HappeningImport> = z
   .object({
     title: requiredText(() => t('common:avts.issue.titleRequired')),
@@ -31,9 +28,9 @@ export const HappeningImportSchema: z.ZodType<HappeningImport> = z
       .union([z.literal(0), z.literal(1), z.boolean()])
       .default(0)
       .transform((value): 0 | 1 => (value === 1 || value === true ? 1 : 0)),
-    occurredAtEntryId: z.string().nullish(),
+    occurredAtEntryId: optionalText,
   })
-  .refine((happening) => !(isSet(happening.occurredAtEntryId) && happening.temporal != null), {
+  .refine((happening) => !(happening.occurredAtEntryId != null && happening.temporal != null), {
     path: ['occurredAtEntryId'],
     error: () => t('common:avts.issue.timeAnchorExclusive'),
   })
