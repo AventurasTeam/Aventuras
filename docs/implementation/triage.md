@@ -291,3 +291,17 @@ slice-planning gate forces its resolution before that slice is planned.
   above). Developer-requested: set `minWidth` around 360 px, which still
   lets the window narrow into the phone tier to check phone layouts.
   Found in 4.2c's developer review (2026-10-07).
+- **Rename fields don't say when a name is taken.** The collision
+  dialog's Rename (`renameIssue`, `lib/world/collision-resolve.ts`)
+  checks the two names only against each other, and 4.2a's detail-pane
+  rename checks the name against no other row, so either can land on
+  another row's name without a word and leave two namesakes nothing
+  flagged (the dialog clears the pair's flags as it saves; #578's
+  observations). Developer-requested: under each rename
+  field, run the namesake rule collision detection uses (`namesakeKey`:
+  same kind, `normalizeTerm` name, staged and retired rows included)
+  against the branch's other rows and, on a match, show only that
+  another row already has that name. It's a hint, not a block: the
+  user may keep the name, as with Keep as distinct. Canon to touch:
+  `world.md → Rename` and the detail pane's name field. Found in
+  4.2c's developer review (2026-10-07).
