@@ -501,7 +501,7 @@ export class STImportWizardStore {
       (character.metadata as Record<string, string>)?.background || ''
     this.manualCharacterMotivation =
       (character.metadata as Record<string, string>)?.motivation || ''
-    this.manualCharacterTraits = uniqueTerms(character.traits || [])
+    this.manualCharacterTraits = [...(character.traits || [])]
     this.showManualInput = false
     this.showVaultPicker = false
   }

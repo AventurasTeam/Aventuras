@@ -124,7 +124,6 @@
     hasDescriptors as hasVisualDescriptors,
   } from '$lib/utils/visualDescriptors'
   import { SvelteSet } from 'svelte/reactivity'
-  import { uniqueTerms } from '$lib/utils/text'
   import TermsInput from '$lib/components/shared/TermsInput.svelte'
 
   // Color palette for descriptor categories
@@ -211,7 +210,7 @@
     editDescription = character.description ?? ''
     editRelationship = character.relationship ?? ''
     editStatus = character.status
-    editTraits = uniqueTerms(character.traits)
+    editTraits = [...character.traits]
     editVisualDescriptors = descriptorsToString(character.visualDescriptors)
     editPortrait = character.portrait
     portraitError = null

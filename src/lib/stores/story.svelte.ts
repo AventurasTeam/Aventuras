@@ -5330,7 +5330,7 @@ class StoryStore {
         name: data.protagonist.name,
         description: data.protagonist.description ?? null,
         relationship: 'self',
-        traits: uniqueTerms(data.protagonist.traits ?? []),
+        traits: data.protagonist.traits ?? [],
         status: 'active',
         metadata: { source: 'wizard' },
         visualDescriptors: data.protagonist.visualDescriptors ?? {},
@@ -5338,9 +5338,7 @@ class StoryStore {
         branchId: null, // New stories start on main branch
         translatedName: protagonistTranslation?.name ?? null,
         translatedDescription: protagonistTranslation?.description ?? null,
-        translatedTraits: protagonistTranslation?.traits
-          ? uniqueTerms(protagonistTranslation.traits)
-          : null,
+        translatedTraits: protagonistTranslation?.traits ?? null,
         translatedVisualDescriptors: undefined, // Translations not supported for structured visual descriptors yet
         translationLanguage: protagonistTranslation ? (data.translations?.language ?? null) : null,
       }
@@ -5413,7 +5411,7 @@ class StoryStore {
         name: charData.name,
         description: charData.description ?? null,
         relationship: charData.relationship ?? null,
-        traits: uniqueTerms(charData.traits ?? []),
+        traits: charData.traits ?? [],
         status: 'active',
         metadata: { source: 'wizard' },
         visualDescriptors: charData.visualDescriptors ?? {},
@@ -5422,7 +5420,7 @@ class StoryStore {
         translatedName: charTranslation?.name ?? null,
         translatedDescription: charTranslation?.description ?? null,
         translatedRelationship: charTranslation?.relationship ?? null,
-        translatedTraits: charTranslation?.traits ? uniqueTerms(charTranslation.traits) : null,
+        translatedTraits: charTranslation?.traits ?? null,
         translatedVisualDescriptors: undefined, // Translations not supported for structured visual descriptors yet
         translationLanguage: charTranslation ? (data.translations?.language ?? null) : null,
       }

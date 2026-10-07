@@ -200,7 +200,7 @@ class CharacterVaultStore {
     return this.add({
       name: sanitized.name,
       description: sanitized.description,
-      traits: uniqueTerms(sanitized.traits || []),
+      traits: sanitized.traits || [],
       visualDescriptors: sanitized.visualDescriptors || {},
       portrait: null,
       tags: originalCard.tags || ['imported', 'sanitized'],

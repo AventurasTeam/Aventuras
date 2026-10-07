@@ -405,7 +405,7 @@ export class CharacterStore {
     const metadata = (vaultCharacter.metadata as Record<string, any>) || {}
     this.manualCharacterBackground = (metadata.background as string) || ''
     this.manualCharacterMotivation = (metadata.motivation as string) || ''
-    this.manualCharacterTraits = uniqueTerms(vaultCharacter.traits)
+    this.manualCharacterTraits = [...vaultCharacter.traits]
     visualDescriptorsSetter(descriptorsToString(vaultCharacter.visualDescriptors))
     portraitSetter(vaultCharacter.portrait)
 
@@ -452,7 +452,7 @@ export class CharacterStore {
     this.supportingCharacterRole = (metadata.role as string) || ''
     this.supportingCharacterDescription = vaultCharacter.description || ''
     this.supportingCharacterRelationship = (metadata.relationshipTemplate as string) || ''
-    this.supportingCharacterTraits = uniqueTerms(vaultCharacter.traits)
+    this.supportingCharacterTraits = [...vaultCharacter.traits]
 
     visualDescriptorsSetter(
       vaultCharacter.name,
