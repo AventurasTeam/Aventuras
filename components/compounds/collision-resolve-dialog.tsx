@@ -495,6 +495,11 @@ function MergeBody({
             {t('collisionDialog.summary.joiningRelationship')}
           </Text>
         ) : null}
+        {counts.overlap.canonicalRefs > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.canonicalRefs', { name: canonical.name })}
+          </Text>
+        ) : null}
       </View>
 
       <ErrorLine error={error} />

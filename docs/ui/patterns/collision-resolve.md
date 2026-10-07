@@ -328,14 +328,16 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    counts: awareness rows, involvements, relationships, inverse
    refs, embeddings, items left unheld, and translation rows as
    dropped. Footnotes, each shown only when its count is non-zero:
-   awareness rows and involvements the canonical already has (it
-   keeps its own, the duplicates drop) or that repeat a happening
-   the non-canonical is already in (the first moves), relationships
-   with a character the canonical already relates to (it keeps its own
-   views, taking the duplicate's only where blank), holders who lose
-   an item because the canonical item is already held or placed, the
-   relationship between the two being dropped, and the canonical's
-   own ref to the non-canonical (its parent location) being cleared.
+   awareness rows the canonical already has (it keeps its own, the
+   duplicates drop), involvements that are duplicates because the
+   canonical already takes part in their happening or because they
+   repeat one of the non-canonical's own (the first moves),
+   relationships with a character the canonical already relates to
+   (it keeps its own views, taking the duplicate's only where blank),
+   holders who lose an item because the canonical item is already
+   held or placed, the relationship between the two being dropped,
+   and the canonical sitting under the non-canonical location, a
+   parent the merge clears since a place can't contain itself.
    Counts re-derive when canonical flips.
 7. **Footer** — `[ Cancel ]` ·
    `[ Merge into the <older|newer> <canonical-name> ]`. The primary

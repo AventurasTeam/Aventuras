@@ -178,13 +178,14 @@
       "translations": "Translation rows dropped: {{value}}",
       "overlapAwareness_one": "{{name}} already has 1 of these awareness rows: it keeps its own, and the duplicate is dropped.",
       "overlapAwareness_other": "{{name}} already has {{count}} of these awareness rows: it keeps its own, and the duplicates are dropped.",
-      "overlapInvolvements_one": "{{name}} already takes part in 1 of these happenings: it keeps its involvement, and the duplicate is dropped.",
-      "overlapInvolvements_other": "{{name}} already takes part in {{count}} of these happenings: it keeps its involvements, and the duplicates are dropped.",
+      "overlapInvolvements_one": "1 of these involvements is a duplicate ({{name}} already takes part in its happening, or it repeats one) and is dropped.",
+      "overlapInvolvements_other": "{{count}} of these involvements are duplicates ({{name}} already takes part in their happening, or they repeat one) and are dropped.",
       "overlapRelationships_one": "{{name}} already relates to 1 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
       "overlapRelationships_other": "{{name}} already relates to {{count}} of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
       "holdersLosingItem_one": "1 holder loses this item: {{name}} is already held or placed.",
       "holdersLosingItem_other": "{{count}} holders lose this item: {{name}} is already held or placed.",
-      "joiningRelationship": "The relationship between the two is dropped."
+      "joiningRelationship": "The relationship between the two is dropped.",
+      "canonicalRefs": "{{name}} sits under this location: the merge clears that parent, since a place can't contain itself."
     },
     "mergeConfirm": {
       "older": "Merge into the older {{name}}",

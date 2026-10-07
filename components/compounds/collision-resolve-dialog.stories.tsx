@@ -368,7 +368,7 @@ export const MergeOverlapFootnote: Story = {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Kael already takes part in 1 of these happenings: it keeps its involvement, and the duplicate is dropped.',
+        '1 of these involvements is a duplicate (Kael already takes part in its happening, or it repeats one) and is dropped.',
       ),
     ).toBeInTheDocument()
 
@@ -391,6 +391,105 @@ export const MergeOverlapFootnote: Story = {
     expect(
       screen.getByRole('radio', { name: /^KAEL · Newer · .+ · Canonical$/ }),
     ).toBeInTheDocument()
+  },
+}
+
+type Counts = EntitySummary['relationCounts']
+
+// Every count distinct on both sides, so a line showing the wrong count, or the wrong side's, fails.
+const OLDER_COUNTS: Counts = {
+  awarenessRows: 11,
+  involvements: 12,
+  relationships: 13,
+  joiningRelationship: false,
+  inverseRefs: 14,
+  embeddings: 1,
+  translationRows: 15,
+  unheldItems: 16,
+  overlap: {
+    awareness: 2,
+    involvements: 3,
+    relationships: 4,
+    holdersLosingItem: 5,
+    canonicalRefs: 1,
+  },
+}
+const NEWER_COUNTS: Counts = {
+  awarenessRows: 21,
+  involvements: 22,
+  relationships: 23,
+  joiningRelationship: false,
+  inverseRefs: 24,
+  embeddings: 0,
+  translationRows: 25,
+  unheldItems: 26,
+  overlap: {
+    awareness: 6,
+    involvements: 7,
+    relationships: 8,
+    holdersLosingItem: 9,
+    canonicalRefs: 0,
+  },
+}
+
+export const MergeSummaryCounts: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({
+        id: 'ent_harbor_1',
+        kind: 'location',
+        name: 'Harbor',
+        relationCounts: OLDER_COUNTS,
+      })}
+      entityB={baseEntity({
+        id: 'ent_harbor_2',
+        kind: 'location',
+        // A case variant, so a footnote naming the wrong row is visible.
+        name: 'HARBOR',
+        createdAt: new Date().toISOString(),
+        relationCounts: NEWER_COUNTS,
+      })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    const shows = async (lines: string[]) => {
+      for (const line of lines) expect(await screen.findByText(line)).toBeInTheDocument()
+    }
+
+    // The older row survives by default, so the summary shows what the newer one brings.
+    await shows([
+      'Moves on merge (HARBOR → Harbor)',
+      'Awareness rows: 21',
+      'Involvements: 22',
+      'Relationships: 23',
+      'Inverse refs: 24',
+      'Embeddings: 0',
+      'Items left unheld: 26',
+      'Translation rows dropped: 25',
+      'Harbor already has 6 of these awareness rows: it keeps its own, and the duplicates are dropped.',
+      '7 of these involvements are duplicates (Harbor already takes part in their happening, or they repeat one) and are dropped.',
+      "Harbor already relates to 8 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
+      '9 holders lose this item: Harbor is already held or placed.',
+    ])
+    expect(screen.queryByText(/sits under this location/)).toBeNull()
+
+    await userEvent.click(screen.getByRole('radio', { name: /^HARBOR · Newer · / }))
+    await shows([
+      'Moves on merge (Harbor → HARBOR)',
+      'Awareness rows: 11',
+      'Involvements: 12',
+      'Relationships: 13',
+      'Inverse refs: 14',
+      'Embeddings: 1',
+      'Items left unheld: 16',
+      'Translation rows dropped: 15',
+      'HARBOR already has 2 of these awareness rows: it keeps its own, and the duplicates are dropped.',
+      '3 of these involvements are duplicates (HARBOR already takes part in their happening, or they repeat one) and are dropped.',
+      "HARBOR already relates to 4 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
+      '5 holders lose this item: HARBOR is already held or placed.',
+      "HARBOR sits under this location: the merge clears that parent, since a place can't contain itself.",
+    ])
   },
 }
 
