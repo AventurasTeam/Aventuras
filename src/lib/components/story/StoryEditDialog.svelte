@@ -267,7 +267,7 @@
                 >
                   Default
                 </button>
-                {#each GENRE_COLOR_KEYS as key (key)}
+                {#each GENRE_COLOR_KEYS as key, i (i)}
                   <button
                     type="button"
                     role="radio"

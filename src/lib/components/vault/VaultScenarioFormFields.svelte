@@ -13,6 +13,7 @@
     User,
   } from '@lucide/svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
   import { normalizeImageDataUrl } from '$lib/utils/image'
   import {
     formatStoryTime,
@@ -309,13 +310,10 @@
                         </div>
                         <div class="space-y-2">
                           <Label class="text-xs">Traits</Label>
-                          <Input
-                            value={npc.traits.join(', ')}
-                            oninput={(e) => {
-                              npc.traits = e.currentTarget.value
-                                .split(',')
-                                .map((t) => t.trim())
-                                .filter(Boolean)
+                          <TermsInput
+                            value={npc.traits}
+                            onChange={(terms) => {
+                              npc.traits = terms
                               handleInput()
                             }}
                             class="h-8"

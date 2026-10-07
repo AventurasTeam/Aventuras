@@ -659,6 +659,49 @@ export function foldName(raw: string): string {
 }
 
 /**
+ * The identity of a trait or keyword: trimmed, NFC-normalised and lowercased, so case, padding and
+ * composed/decomposed forms of one glyph merge; width forms, accents and punctuation stay distinct.
+ */
+export function termKey(term: string): string {
+  return term.trim().normalize('NFC').toLowerCase()
+}
+
+/**
+ * Trimmed terms without blanks or repeats by `termKey`; the first spelling is kept. Stored and
+ * imported data is not type-checked, so anything but an array yields `[]`.
+ */
+export function uniqueTerms(list: readonly string[]): string[] {
+  if (!Array.isArray(list)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of list) {
+    if (typeof raw !== 'string') continue
+    const term = raw.trim()
+    if (!term) continue
+    const key = termKey(term)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(term)
+  }
+  return out
+}
+
+/** Comma-separated text as a term list: blanks dropped, repeats by `termKey` merged. */
+export function parseTerms(text: string): string[] {
+  return uniqueTerms(text.split(','))
+}
+
+/** `existing` minus `remove`, then plus `add`, by `termKey`; a term in both is kept. */
+export function applyTermChanges(
+  existing: readonly string[],
+  add: readonly string[] = [],
+  remove: readonly string[] = [],
+): string[] {
+  const removed = new Set(remove.map(termKey))
+  return uniqueTerms([...existing.filter((t) => !removed.has(termKey(t))), ...add])
+}
+
+/**
  * Whether two names refer to the same entity as far as spelling can tell.
  *
  * Replaces `a.toLowerCase() === b.toLowerCase()` across the world-state pipeline, adding

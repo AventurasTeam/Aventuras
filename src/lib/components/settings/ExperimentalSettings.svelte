@@ -664,7 +664,7 @@
           <table class="w-full text-xs">
             <thead class="bg-surface-800 sticky top-0">
               <tr>
-                {#each queryResult.columns as col (col)}
+                {#each queryResult.columns as col, ci (ci)}
                   <th
                     class="border-surface-700 text-muted-foreground border-b px-3 py-2 text-left font-medium"
                   >
@@ -674,9 +674,9 @@
               </tr>
             </thead>
             <tbody>
-              {#each queryResult.rows as row (JSON.stringify(row))}
+              {#each queryResult.rows as row, i (i)}
                 <tr class="border-surface-700/50 hover:bg-surface-800/50 border-b last:border-b-0">
-                  {#each queryResult.columns as col (col)}
+                  {#each queryResult.columns as col, ci (ci)}
                     <td
                       class="text-foreground max-w-xs truncate px-3 py-1.5 font-mono"
                       title={String(row[col] ?? '')}

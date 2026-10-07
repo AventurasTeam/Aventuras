@@ -7,6 +7,7 @@ import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { UITranslationItem } from '$lib/services/ai/utils/TranslationService'
 import { hasDescriptors, descriptorsToString } from '$lib/utils/visualDescriptors'
 import { createLogger } from '$lib/log'
+import { parseTerms } from '$lib/utils/text'
 
 const log = createLogger('WorldStateTranslationService')
 
@@ -203,12 +204,7 @@ export class WorldStateTranslationService {
       const orig = items.find((i) => i.id === t.id)
       if (!orig) continue
 
-      const value = orig.isArray
-        ? t.text
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : t.text
+      const value = orig.isArray ? parseTerms(t.text) : t.text
       const data: Record<string, string | string[] | null> = {
         [orig.field]: value,
         translationLanguage: targetLanguage,

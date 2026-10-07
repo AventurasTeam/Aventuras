@@ -297,7 +297,7 @@
                     <Alert.Description class="text-xs">
                       {lorebook.result.warnings.length} warning(s) occurred during import.
                       <ul class="mt-1 list-inside list-disc">
-                        {#each lorebook.result.warnings.slice(0, 3) as warning (warning)}
+                        {#each lorebook.result.warnings.slice(0, 3) as warning, i (i)}
                           <li>{warning}</li>
                         {/each}
                       </ul>

@@ -1534,7 +1534,7 @@
         <div
           class="border-surface-700/30 flex items-center gap-1 px-1 pt-0 pb-0 sm:border-b sm:px-2 sm:py-1"
         >
-          {#each actionTypes as type (type)}{@const Icon = actionIcons[type]}<button
+          {#each actionTypes as type, i (i)}{@const Icon = actionIcons[type]}<button
               class="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1 text-[10px] font-medium transition-all duration-150 sm:flex-none sm:px-3 sm:py-1 sm:text-xs {actionType ===
               type
                 ? actionActiveStyles[type]

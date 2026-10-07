@@ -9,6 +9,7 @@ import { tool } from 'ai'
 import * as z from 'zod'
 import type { VaultCharacter } from '$lib/types'
 import type { VaultPendingChange } from '../schemas/vault'
+import { applyTermChanges, uniqueTerms } from '$lib/utils/text'
 import { vaultCharacterInputSchema, visualDescriptorsSchema } from '../schemas'
 
 /**
@@ -252,13 +253,10 @@ export function createCharacterTools(context: CharacterToolContext) {
         // Resolve traits: same logic
         let resolvedTraits = character.traits
         if (updates.replaceTraits !== undefined) {
-          resolvedTraits = updates.replaceTraits
+          resolvedTraits = uniqueTerms(updates.replaceTraits)
         } else {
-          if (addTraits?.length) {
-            resolvedTraits = [...new Set([...resolvedTraits, ...addTraits])]
-          }
-          if (removeTraits?.length) {
-            resolvedTraits = resolvedTraits.filter((t) => !removeTraits.includes(t))
+          if (addTraits?.length || removeTraits?.length) {
+            resolvedTraits = applyTermChanges(resolvedTraits, addTraits, removeTraits)
           }
         }
 

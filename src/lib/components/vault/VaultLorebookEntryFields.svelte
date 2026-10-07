@@ -59,7 +59,7 @@
         {`${data.type.charAt(0).toUpperCase() + data.type.slice(1)}` || 'Select type'}
       </SelectTrigger>
       <SelectContent>
-        {#each entryTypes as option (option)}
+        {#each entryTypes as option, i (i)}
           <SelectItem value={option}>{option.charAt(0).toUpperCase() + option.slice(1)}</SelectItem>
         {/each}
       </SelectContent>

@@ -347,7 +347,7 @@
         {#if unknownVars.length > 0}
           <p class="text-xs text-amber-600 dark:text-amber-400">
             ⚠ Unknown variables (will render empty):
-            {#each unknownVars as v, i (v)}
+            {#each unknownVars as v, i (i)}
               <code class="font-mono">{v}</code>{i < unknownVars.length - 1 ? ', ' : ''}
             {/each}
             — these may be custom pack variables.

@@ -53,7 +53,7 @@
   let editDescription = $state('')
   let editRelationship = $state('')
   let editStatus = $state<Character['status']>('active')
-  let editTraits = $state('')
+  let editTraits = $state<string[]>([])
   let editVisualDescriptors = $state('')
   let pendingProtagonistId = $state<string | null>(null)
   let previousRelationshipLabel = $state('')
@@ -124,6 +124,7 @@
     hasDescriptors as hasVisualDescriptors,
   } from '$lib/utils/visualDescriptors'
   import { SvelteSet } from 'svelte/reactivity'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
 
   // Color palette for descriptor categories
   const CATEGORY_COLORS: Record<keyof VisualDescriptors, string> = {
@@ -209,7 +210,7 @@
     editDescription = character.description ?? ''
     editRelationship = character.relationship ?? ''
     editStatus = character.status
-    editTraits = character.traits.join(', ')
+    editTraits = [...character.traits]
     editVisualDescriptors = descriptorsToString(character.visualDescriptors)
     editPortrait = character.portrait
     portraitError = null
@@ -223,7 +224,7 @@
     editName = ''
     editDescription = ''
     editRelationship = ''
-    editTraits = ''
+    editTraits = []
     editVisualDescriptors = ''
     editStatus = 'active'
     editPortrait = null
@@ -236,10 +237,6 @@
     if (!name) return
 
     const relationship = editRelationship.trim()
-    const traits = editTraits
-      .split(',')
-      .map((trait) => trait.trim())
-      .filter(Boolean)
     const visualDescriptors = stringToDescriptors(editVisualDescriptors)
 
     // Merge runtime vars into metadata
@@ -260,7 +257,7 @@
       description: editDescription.trim() || null,
       relationship: character.relationship === 'self' ? 'self' : relationship || null,
       status: editStatus,
-      traits,
+      traits: editTraits,
       visualDescriptors,
       portrait: editPortrait,
       metadata: updatedMetadata,
@@ -618,9 +615,9 @@
 
               <div class="space-y-1">
                 <Label class="text-xs">Traits & Appearance</Label>
-                <Input
-                  type="text"
-                  bind:value={editTraits}
+                <TermsInput
+                  value={editTraits}
+                  onChange={(terms) => (editTraits = terms)}
                   placeholder="Traits (comma separated)"
                   class="mb-2 h-8 text-xs"
                 />
@@ -887,7 +884,7 @@
               <div class="mt-2 flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-0.5">
                 {#if hasTraits}
                   <div class="flex flex-wrap gap-1">
-                    {#each character.translatedTraits ?? character.traits as trait (trait)}
+                    {#each character.translatedTraits ?? character.traits as trait, i (i)}
                       <span
                         class="bg-muted text-muted-foreground inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium"
                       >

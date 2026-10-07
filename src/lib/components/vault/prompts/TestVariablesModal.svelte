@@ -261,7 +261,7 @@
             {draft[name] || ''}
           </Select.Trigger>
           <Select.Content>
-            {#each enumValues as opt (opt)}
+            {#each enumValues as opt, i (i)}
               <Select.Item value={opt} label={opt}>{opt}</Select.Item>
             {/each}
           </Select.Content>

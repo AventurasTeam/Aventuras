@@ -297,7 +297,7 @@
       {#if selectedCategories.length > 0}
         <Separator orientation="vertical" class="mx-1 h-4" />
         <div class="flex flex-wrap items-center gap-1.5">
-          {#each selectedCategories as cat (cat)}
+          {#each selectedCategories as cat, i (i)}
             <Badge
               variant="secondary"
               class="hover:bg-secondary/80 flex cursor-pointer items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-normal transition-colors"

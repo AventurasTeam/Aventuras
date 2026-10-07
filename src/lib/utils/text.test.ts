@@ -5,8 +5,12 @@ import {
   foldName,
   findTextMatches,
   paragraphMatches,
+  applyTermChanges,
+  parseTerms,
   sameEntityName,
   truncateAroundMatch,
+  termKey,
+  uniqueTerms,
 } from './text'
 
 describe('entityNameMatches — word boundaries', () => {
@@ -424,6 +428,98 @@ describe('foldName — the apostrophe', () => {
   it('still folds the separators that are separators', () => {
     expect(foldName('Kaelen, the Bold')).toBe('kaelen the bold')
     expect(foldName('Ash-ford  Keep')).toBe('ash ford keep')
+  })
+})
+
+describe('termKey', () => {
+  it('ignores case, padding and canonically equivalent forms', () => {
+    expect(termKey(' Brave ')).toBe('brave')
+    expect(termKey('a ')).toBe('a')
+    expect(termKey('\u00a0brave\u00a0')).toBe('brave')
+    expect(termKey('e\u0301')).toBe(termKey('\u00e9'))
+  })
+
+  it('keeps width forms, accents, punctuation and kana voicing distinct', () => {
+    const pairs = [
+      ['ｂｒａｖｅ', 'brave'],
+      ['ﬁre', 'fire'],
+      ['ｶﾞ', 'ガ'],
+      ['Élan', 'Elan'],
+      ["Kaelen's", 'Kaelens'],
+      ['ハート', 'ハード'],
+      ['कम', 'काम'],
+    ]
+    for (const [a, b] of pairs) expect(termKey(a)).not.toBe(termKey(b))
+  })
+})
+
+describe('uniqueTerms', () => {
+  it('drops a repeat and keeps the first spelling and position', () => {
+    expect(uniqueTerms(['a', 'b', 'A', 'c', 'a'])).toEqual(['a', 'b', 'c'])
+    expect(uniqueTerms(['Brave', 'brave', 'ｂｒａｖｅ'])).toEqual(['Brave', 'ｂｒａｖｅ'])
+  })
+
+  it('keeps terms that differ beyond case and canonical form', () => {
+    const terms = ['Élan', 'Elan', "Kaelen's", 'Kaelens', 'ハート', 'ハード', 'कम', 'काम']
+    expect(uniqueTerms(terms)).toEqual(terms)
+  })
+
+  it('returns trimmed terms', () => {
+    expect(uniqueTerms([' a', 'b '])).toEqual(['a', 'b'])
+  })
+
+  it('keeps emoji and symbol terms', () => {
+    expect(uniqueTerms(['🔥', '★', '🔥'])).toEqual(['🔥', '★'])
+  })
+
+  it('drops empty and whitespace-only entries', () => {
+    expect(uniqueTerms(['brave', '', '   ', 'brave'])).toEqual(['brave'])
+  })
+
+  it('returns an empty list for an empty list', () => {
+    expect(uniqueTerms([])).toEqual([])
+  })
+
+  it('returns an empty list for a value that is not a list', () => {
+    for (const bad of [null, undefined, 'brave', {}, 3]) {
+      expect(uniqueTerms(bad as any)).toEqual([])
+    }
+  })
+})
+
+describe('applyTermChanges', () => {
+  it('removes ignoring case and padding', () => {
+    expect(applyTermChanges(['Brave', 'curious'], [], [' brave'])).toEqual(['curious'])
+  })
+
+  it('keeps the first spelling of an added repeat', () => {
+    expect(applyTermChanges(['Brave'], ['brave', 'kind', 'Kind'], [])).toEqual(['Brave', 'kind'])
+  })
+
+  it('drops blanks', () => {
+    expect(applyTermChanges(['brave', ''], ['  ', 'kind'], [])).toEqual(['brave', 'kind'])
+  })
+
+  it('keeps a term that is both removed and added, with the added spelling', () => {
+    expect(applyTermChanges(['brave', 'curious'], ['Brave'], ['Brave'])).toEqual([
+      'curious',
+      'Brave',
+    ])
+  })
+})
+
+describe('parseTerms', () => {
+  it('splits on commas and trims', () => {
+    expect(parseTerms('brave,  curious ,stubborn')).toEqual(['brave', 'curious', 'stubborn'])
+  })
+
+  it('drops blanks and a trailing comma', () => {
+    expect(parseTerms('brave, , ,')).toEqual(['brave'])
+    expect(parseTerms('')).toEqual([])
+  })
+
+  it('merges terms that differ only in case', () => {
+    expect(parseTerms('brave, Brave,')).toEqual(['brave'])
   })
 })
 

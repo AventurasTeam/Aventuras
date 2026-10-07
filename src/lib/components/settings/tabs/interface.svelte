@@ -411,7 +411,7 @@
     {:else}
       <ScrollArea class="h-24 w-full rounded-md border">
         <div class="flex flex-wrap gap-1 p-2">
-          {#each customDictionaryWords as word (word)}
+          {#each customDictionaryWords as word, i (i)}
             <Badge variant="secondary" class="gap-1 pr-1">
               <span class="max-w-36 truncate">{word}</span>
               <button

@@ -6,6 +6,34 @@ import eslintPluginPrettier from 'eslint-plugin-prettier'
 import unusedImports from 'eslint-plugin-unused-imports'
 import boundaries from 'eslint-plugin-boundaries'
 
+const localPlugin = {
+  rules: {
+    'no-self-keyed-each': {
+      meta: {
+        type: 'problem',
+        schema: [],
+        messages: {
+          selfKeyed: 'Key by a stable id, or by index when items hold no state.',
+        },
+      },
+      create(context) {
+        return {
+          SvelteEachBlock(node) {
+            const { context: item, key } = node
+            if (
+              item?.type === 'Identifier' &&
+              key?.type === 'Identifier' &&
+              item.name === key.name
+            ) {
+              context.report({ node: key, messageId: 'selfKeyed' })
+            }
+          },
+        }
+      },
+    },
+  },
+}
+
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   ...tseslint.configs.recommended,
@@ -37,6 +65,11 @@ export default [
         extraFileExtensions: ['.svelte'],
       },
     },
+  },
+  {
+    files: ['**/*.svelte'],
+    plugins: { local: localPlugin },
+    rules: { 'local/no-self-keyed-each': 'error' },
   },
   {
     ignores: [

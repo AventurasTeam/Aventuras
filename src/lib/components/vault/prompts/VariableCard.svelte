@@ -216,7 +216,7 @@
             {TYPE_LABELS[editType]}
           </Select.Trigger>
           <Select.Content>
-            {#each VARIABLE_TYPES as vtype (vtype)}
+            {#each VARIABLE_TYPES as vtype, i (i)}
               <Select.Item value={vtype} label={TYPE_LABELS[vtype]}>
                 {TYPE_LABELS[vtype]}
               </Select.Item>

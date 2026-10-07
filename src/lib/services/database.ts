@@ -46,6 +46,7 @@ import {
 } from '$lib/services/packs/replace-statements'
 import type { PackExport } from '$lib/services/packs/validation'
 import { readStorySettings } from '$lib/utils/storySettings'
+import { uniqueTerms } from '$lib/utils/text'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -945,7 +946,7 @@ class DatabaseService {
         character.name,
         character.description,
         character.relationship,
-        JSON.stringify(character.traits),
+        JSON.stringify(uniqueTerms(character.traits)),
         JSON.stringify(character.visualDescriptors || {}),
         character.portrait || null,
         character.status,
@@ -956,7 +957,9 @@ class DatabaseService {
         character.translatedName || null,
         character.translatedDescription || null,
         character.translatedRelationship || null,
-        character.translatedTraits ? JSON.stringify(character.translatedTraits) : null,
+        Array.isArray(character.translatedTraits)
+          ? JSON.stringify(uniqueTerms(character.translatedTraits))
+          : null,
         character.translatedVisualDescriptors
           ? JSON.stringify(character.translatedVisualDescriptors)
           : null,
@@ -984,7 +987,7 @@ class DatabaseService {
     }
     if (updates.traits !== undefined) {
       setClauses.push('traits = ?')
-      values.push(JSON.stringify(updates.traits))
+      values.push(JSON.stringify(uniqueTerms(updates.traits)))
     }
     if (updates.visualDescriptors !== undefined) {
       setClauses.push('visual_descriptors = ?')
@@ -1017,7 +1020,11 @@ class DatabaseService {
     }
     if (updates.translatedTraits !== undefined) {
       setClauses.push('translated_traits = ?')
-      values.push(updates.translatedTraits ? JSON.stringify(updates.translatedTraits) : null)
+      values.push(
+        Array.isArray(updates.translatedTraits)
+          ? JSON.stringify(uniqueTerms(updates.translatedTraits))
+          : null,
+      )
     }
     if (updates.translatedVisualDescriptors !== undefined) {
       setClauses.push('translated_visual_descriptors = ?')
@@ -2746,6 +2753,7 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
+    const rawTranslatedTraits = row.translated_traits ? JSON.parse(row.translated_traits) : null
 
     return {
       id: row.id,
@@ -2753,7 +2761,7 @@ class DatabaseService {
       name: row.name,
       description: row.description,
       relationship: row.relationship,
-      traits: row.traits ? JSON.parse(row.traits) : [],
+      traits: row.traits ? uniqueTerms(JSON.parse(row.traits)) : [],
       visualDescriptors: migrateVisualDescriptors(rawDescriptors),
       portrait: row.portrait || null,
       status: row.status,
@@ -2765,7 +2773,9 @@ class DatabaseService {
       translatedName: row.translated_name || null,
       translatedDescription: row.translated_description || null,
       translatedRelationship: row.translated_relationship || null,
-      translatedTraits: row.translated_traits ? JSON.parse(row.translated_traits) : null,
+      translatedTraits: Array.isArray(rawTranslatedTraits)
+        ? uniqueTerms(rawTranslatedTraits)
+        : null,
       translatedVisualDescriptors: rawTranslatedDescriptors
         ? migrateVisualDescriptors(rawTranslatedDescriptors)
         : null,
@@ -2967,7 +2977,7 @@ class DatabaseService {
         character.id,
         character.name,
         character.description,
-        JSON.stringify(character.traits),
+        JSON.stringify(uniqueTerms(character.traits)),
         JSON.stringify(character.visualDescriptors),
         character.portrait,
         JSON.stringify(character.tags),
@@ -2996,7 +3006,7 @@ class DatabaseService {
     }
     if (updates.traits !== undefined) {
       setClauses.push('traits = ?')
-      values.push(JSON.stringify(updates.traits))
+      values.push(JSON.stringify(uniqueTerms(updates.traits)))
     }
     if (updates.visualDescriptors !== undefined) {
       setClauses.push('visual_descriptors = ?')
@@ -3047,7 +3057,7 @@ class DatabaseService {
       id: row.id,
       name: row.name,
       description: row.description,
-      traits: row.traits ? JSON.parse(row.traits) : [],
+      traits: row.traits ? uniqueTerms(JSON.parse(row.traits)) : [],
       visualDescriptors: migrateVisualDescriptors(rawDescriptors),
       portrait: row.portrait,
       tags: row.tags ? JSON.parse(row.tags) : [],

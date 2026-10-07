@@ -120,7 +120,7 @@
           value={selectedFormat}
           onValueChange={(v) => (selectedFormat = v as LorebookImportExport.ExportFormat)}
         >
-          {#each formats as format (format)}
+          {#each formats as format, i (i)}
             {@const info = LorebookImportExport.getFormatInfo(format)}
             <div
               class={cn(

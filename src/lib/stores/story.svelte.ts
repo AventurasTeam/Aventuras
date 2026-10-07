@@ -90,7 +90,7 @@ import {
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
-import { sameEntityName } from '$lib/utils/text'
+import { applyTermChanges, sameEntityName, uniqueTerms } from '$lib/utils/text'
 import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
@@ -2155,13 +2155,19 @@ class StoryStore {
   // that branch and the in-memory list is only touched while it is still the open one.
   async updateCharacter(
     id: string,
-    updates: Partial<Character>,
+    changes: Partial<Character>,
     expected?: BranchScope,
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.characters.find((c) => c.id === id)
     if (!existing) throw new Error('Character not found')
+
+    const updates: Partial<Character> = { ...changes }
+    if (Array.isArray(changes.traits)) updates.traits = uniqueTerms(changes.traits)
+    if (Array.isArray(changes.translatedTraits)) {
+      updates.translatedTraits = uniqueTerms(changes.translatedTraits)
+    }
 
     if (updates.relationship !== undefined) {
       if (updates.relationship === 'self' && existing.relationship !== 'self') {
@@ -2866,7 +2872,7 @@ class StoryStore {
             name: newCharData?.name ?? update.name,
             description: newCharData?.description ?? null,
             relationship: newCharData?.relationship ?? null,
-            traits: newCharData?.traits ?? [],
+            traits: uniqueTerms(newCharData?.traits ?? []),
             visualDescriptors: newCharData?.visualDescriptors ?? {},
             status: (newCharData?.status as Character['status']) ?? 'active',
             metadata: charMetadata,
@@ -2891,16 +2897,11 @@ class StoryStore {
             }
           }
           if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
-            let traits = [...existing.traits]
-            if (update.changes.removeTraits?.length) {
-              const toRemove = new Set(update.changes.removeTraits.map((t) => t.toLowerCase()))
-              traits = traits.filter((t) => !toRemove.has(t.toLowerCase()))
-            }
-            if (update.changes.newTraits?.length) {
-              traits = [...traits, ...update.changes.newTraits]
-            }
-            const traitMap = new Map(traits.map((t) => [t.toLowerCase(), t]))
-            changes.traits = Array.from(traitMap.values())
+            changes.traits = applyTermChanges(
+              existing.traits,
+              update.changes.newTraits,
+              update.changes.removeTraits,
+            )
           }
           // Handle visual descriptor updates for image generation
           // New format: visualDescriptors is a structured object that replaces entirely
@@ -3181,7 +3182,7 @@ class StoryStore {
             name: newChar.name,
             description: newChar.description ?? null,
             relationship: newChar.relationship ?? null,
-            traits: newChar.traits ?? [],
+            traits: uniqueTerms(newChar.traits ?? []),
             visualDescriptors: newChar.visualDescriptors ?? {},
             status: 'active',
             metadata: charMetadata,
@@ -5185,7 +5186,7 @@ class StoryStore {
 
       return {
         ...character,
-        traits: snapshot.traits ?? character.traits,
+        traits: snapshot.traits ? uniqueTerms(snapshot.traits) : character.traits,
         status: snapshot.status ?? character.status,
         relationship,
         visualDescriptors: snapshot.visualDescriptors ?? character.visualDescriptors,

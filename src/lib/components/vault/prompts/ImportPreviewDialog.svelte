@@ -67,7 +67,7 @@
           <div class="flex flex-col gap-1">
             <p class="text-sm font-medium">Structural errors:</p>
             <ul class="text-destructive list-disc pl-5 text-sm">
-              {#each validationResult.structuralErrors as error (error)}
+              {#each validationResult.structuralErrors as error, i (i)}
                 <li>{error}</li>
               {/each}
             </ul>

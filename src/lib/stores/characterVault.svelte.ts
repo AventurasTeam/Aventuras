@@ -11,8 +11,13 @@ import { exchangeToCharacter, parseExchange } from '$lib/services/exchange'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
+import { uniqueTerms } from '$lib/utils/text'
 
 const log = createLogger('CharacterVault')
+
+// Card personality fields separate traits with commas or semicolons.
+const personalityTraits = (text?: string): string[] =>
+  uniqueTerms((text ?? '').split(/[,;]/)).slice(0, 10)
 
 /**
  * Store for managing the global Character Vault.
@@ -59,6 +64,7 @@ class CharacterVaultStore {
     const now = Date.now()
     const character: VaultCharacter = {
       ...input,
+      traits: uniqueTerms(input.traits),
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -73,7 +79,10 @@ class CharacterVaultStore {
   /**
    * Update an existing vault character.
    */
-  async update(id: string, updates: Partial<VaultCharacter>): Promise<void> {
+  async update(id: string, changes: Partial<VaultCharacter>): Promise<void> {
+    const updates = Array.isArray(changes.traits)
+      ? { ...changes, traits: uniqueTerms(changes.traits) }
+      : changes
     await database.updateVaultCharacter(id, updates)
     this.characters = this.characters.map((c) =>
       c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c,
@@ -220,13 +229,7 @@ class CharacterVaultStore {
     tags?: string[]
     version?: string
   }): Promise<VaultCharacter> {
-    const traits = card.personality
-      ? card.personality
-          .split(/[,;]/)
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .slice(0, 10)
-      : []
+    const traits = personalityTraits(card.personality)
 
     return this.add({
       name: card.name,
@@ -353,10 +356,11 @@ class CharacterVaultStore {
       const exchange = parseExchange(jsonString, 'character')
       if (exchange.kind === 'invalid') throw new Error(exchange.error)
       if (exchange.kind === 'exchange') {
-        const finalData = exchangeToCharacter(exchange.document.data, {
+        const converted = exchangeToCharacter(exchange.document.data, {
           id: tempId,
           originalFilename: file.name,
         })
+        const finalData = { ...converted, traits: uniqueTerms(converted.traits) }
         await database.addVaultCharacter(finalData)
         this.characters = this.characters.map((c) => (c.id === tempId ? finalData : c))
         for (const warning of exchange.warnings) ui.showToast(warning, 'warning', 8000)
@@ -398,15 +402,7 @@ class CharacterVaultStore {
         id: tempId,
         name: sanitized?.name || parsed.name,
         description: sanitized?.description || parsed.description || parsed.creator_notes || null,
-        traits:
-          sanitized?.traits ||
-          (parsed.personality
-            ? parsed.personality
-                .split(/[,;]/)
-                .map((t) => t.trim())
-                .filter(Boolean)
-                .slice(0, 10)
-            : []),
+        traits: sanitized?.traits ?? personalityTraits(parsed.personality),
         visualDescriptors: sanitized?.visualDescriptors || {},
         portrait: portrait || null,
         tags: extraMetadata.tags || parsed.tags || ['imported'],
@@ -453,6 +449,7 @@ class CharacterVaultStore {
       }
 
       // Save to DB
+      finalData = { ...finalData, traits: uniqueTerms(finalData.traits) }
       await database.addVaultCharacter(finalData)
 
       // Update store

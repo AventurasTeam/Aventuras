@@ -352,7 +352,7 @@
           onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
         />
         <div class="text-muted-foreground flex justify-between text-xs">
-          {#each REASONING_LEVELS.slice(reasoningSliderMin) as level (level)}
+          {#each REASONING_LEVELS.slice(reasoningSliderMin) as level, i (i)}
             <span>{REASONING_SHORT_LABELS[level]}</span>
           {/each}
         </div>
