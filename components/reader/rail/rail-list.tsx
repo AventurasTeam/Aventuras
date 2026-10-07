@@ -20,7 +20,7 @@ export type RailListProps = {
   data: RailData
   view: RailView
   onViewChange: (view: RailView) => void
-  /** The kind-selector slot: the category Select on desktop, the `← <Category>` head on phone. */
+  /** Kind-selector slot: category Select on desktop / tablet, `← <Category>` head on phone. */
   header: ReactNode
   headerAction?: ReactNode
   onRowPress: (category: RailCategory, id: string) => void

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
-/** Inert until vault import lands (M8.3). */
+/** Disabled: vault import isn't built. */
 export function RailImportFooter(): ReactNode {
   return (
     <View className="border-t border-border p-2">
