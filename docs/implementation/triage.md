@@ -385,7 +385,7 @@ slice-planning gate forces its resolution before that slice is planned.
   popped back, would otherwise keep the other branch's view. Raised in 4.5a
   review, 2026-10-07.
 - **The World and Plot `search` locators match the hidden reader rail's search
-  box.** `e2e/locators/world.ts:41` and `e2e/locators/plot.ts:28` match the
+  box.** `e2e/locators/world.ts:60` and `e2e/locators/plot.ts:28` match the
   rail's identical placeholder whenever the rail shows the same category
   (World's default `Characters`), a latent strict-mode trap. Scope them like
   `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
