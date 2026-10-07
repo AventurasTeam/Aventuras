@@ -17,8 +17,6 @@ import {
 type ReaderRailState = {
   view: RailView
   display: RailDisplayState
-  /** False until the first real window width lands; until then nothing is forced. */
-  seeded: boolean
   /** A token per preference write in flight; one settling after a reset finds nothing to drop. */
   writes: ReadonlySet<symbol>
   /** The branch the reader last entered; `null` until the first. */
@@ -27,8 +25,8 @@ type ReaderRailState = {
 
 const INITIAL: ReaderRailState = {
   view: DEFAULT_RAIL_VIEW,
+  // From +Infinity the first real width is a downward cross when narrow, so it forces a collapse.
   display: initialRailDisplay(Number.POSITIVE_INFINITY),
-  seeded: false,
   writes: new Set(),
   branchId: null,
 }
@@ -40,10 +38,6 @@ function isFreshView(view: RailView): boolean {
   const fresh: Record<string, unknown> = railViewFor(view.category)
   const current: Record<string, unknown> = view
   return Object.keys(fresh).every((k) => fresh[k] === current[k])
-}
-
-function seed(width: number): void {
-  store.setState({ display: initialRailDisplay(width), seeded: true })
 }
 
 export const readerRailStore = {
@@ -70,10 +64,6 @@ export const readerRailStore = {
   useDisplay: <T>(selector: (display: RailDisplayState) => T): T =>
     useStore(store, (s) => selector(s.display)),
   getDisplay: (): RailDisplayState => store.getState().display,
-  /** Seeds the display from the window width once per app session; later calls are no-ops. */
-  seedViewport: (width: number): void => {
-    if (!store.getState().seeded) seed(width)
-  },
   /** The pending toggle once every preference write has settled; `null` while one is in flight. */
   useSettledPending: (): boolean | null =>
     useStore(store, (s) => (s.writes.size === 0 ? s.display.pendingCollapsed : null)),
@@ -96,20 +86,12 @@ export const readerRailStore = {
       }),
     )
   },
-  /**
-   * A resize before any seed seeds instead: a width with no prior one is not a cross. A
-   * `persisted` is dropped while a write is in flight, since that write may still override it.
-   */
-  dispatchDisplay: (event: RailDisplayEvent): void => {
-    if (event.type === 'resize' && !store.getState().seeded) {
-      seed(event.width)
-      return
-    }
+  /** Drops a `persisted` while a write is in flight: that write may still override it. */
+  dispatchDisplay: (event: RailDisplayEvent): void =>
     store.setState((s) => {
       if (event.type === 'persisted' && s.writes.size > 0) return s
       const display = reduceRailDisplay(s.display, event)
       return display === s.display ? s : { display }
-    })
-  },
+    }),
   __reset: (): void => store.setState(INITIAL),
 }

@@ -219,7 +219,7 @@ describe('useRailCollapse', () => {
 
   it('lets a manual expand beat a viewport-forced collapse', async () => {
     writeRailPreference.mockResolvedValue(undefined)
-    readerRailStore.seedViewport(850)
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
     const { result } = renderHook(() => useRailCollapse())
     expect(result.current.collapsed).toBe(true)
 

@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe('RailViewportWatcher', () => {
-  it('seeds the display from the first width, so a narrow window starts forced-collapsed', () => {
+  it('forces a collapse when the first width is narrow', () => {
     win.width = 850
     render(<RailViewportWatcher />)
     expect(readerRailStore.getDisplay()).toMatchObject({ forced: true, lastWidth: 850 })
@@ -42,13 +42,15 @@ describe('RailViewportWatcher', () => {
     expect(readerRailStore.getDisplay()).toMatchObject({ forced: false, lastWidth: 1000 })
   })
 
-  it('does not reseed on a remount, so a manual expand in a narrow window survives it', () => {
+  it('changes nothing on a remount at the same width, so a manual expand survives it', () => {
     win.width = 850
     const first = render(<RailViewportWatcher />)
     readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: false })
+    const expanded = readerRailStore.getDisplay()
+    expect(expanded.forced).toBe(false)
     first.unmount()
 
     render(<RailViewportWatcher />)
-    expect(readerRailStore.getDisplay().forced).toBe(false)
+    expect(readerRailStore.getDisplay()).toEqual(expanded)
   })
 })
