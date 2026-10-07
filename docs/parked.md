@@ -2614,6 +2614,16 @@ report from real TalkBack use, or when a phone sheet whose plain text
 carries meaning ships. Raised 2026-09-24 by a code review of the
 2026-09-23 triage-pass branch.
 
+Since 4.5a (2026-10-07) every bottom Sheet has a scrim, gorhom's
+`BottomSheetBackdrop`, rendered `accessible={false}`. It hides nothing
+from TalkBack, so the page underneath, the reader's Browse chip
+included, stays reachable while a sheet is open. Not checked with
+TalkBack. The scrim also keeps gorhom's default accessibility hint
+("Tap to close the bottom sheet") even when a pending edit blocks the
+tap; `null` or `''` fall back to a template that reads "Tap to none
+the Bottom Sheet" there, so only a non-empty string replaces it. That matters once the scrim joins the
+accessibility tree as part of the dialog fix.
+
 #### Unset affordance for optional story-settings keys
 
 **Story settings has no unset affordance for optional keys.**

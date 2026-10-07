@@ -22,12 +22,13 @@ This file is session 4 of the mobile-foundations multi-session pass
   all three; desktop visual primitive differs (separate panes for
   World/Plot, left rail for Settings) but the phone collapse
   mechanism is identical.
-- **Reader collapses to narrative-only on phone** — the rail is
-  forced-collapsed to its edge strip (per the existing
-  [side-rail collapse spec](../../screens/reader-composer/reader-composer.md#browse-rail--collapse--expand)),
-  and **strip-tap on phone opens the rail's content as a bottom
-  Sheet** rather than expanding the rail in place (which would
-  squeeze the narrative to nothing).
+- **Reader collapses to narrative-only on phone** — the rail
+  column hides (the
+  [side-rail collapse spec](../../screens/reader-composer/reader-composer.md#browse-rail--collapse--expand)
+  covers tablet and desktop), and **the chip strip's `[☰ Browse]`
+  chip opens the rail's content as a bottom Sheet** rather than
+  expanding the rail in place (which would squeeze the narrative to
+  nothing).
 - **Phone landscape uses tablet-tier 2-pane** per the width-only
   responsive contract. The existing rail-collapse threshold
   (~900 px viewport) means the rail is forced-collapsed in
@@ -92,7 +93,7 @@ Phone (< 640 px):
   Same internal navigation as the desktop peek drawer, but a
   single sheet element morphs content (not Sheet over Sheet,
   which is disallowed per [`./layout.md → Stacking`](./layout.md#stacking)).
-  Sheet height may grow to tall (~85–95%) when peek loads.
+  Sheet height grows to tall (~85–95%) when peek loads.
 - **In peek state, sheet head shows an icon-only `←` back
   affordance at the top-left** in place of the desktop `×`. Tap
   returns to row-list state. Icon-only — the arrow is the
@@ -231,8 +232,8 @@ Reflow events covered:
 - **Galaxy Fold unfold** (phone → tablet): state survives.
 - **Galaxy Fold fold** (tablet → phone): state survives. The
   rail's tablet "collapsed-strip" state translates to phone's
-  "rail-as-sheet-on-tap" state — tap-to-expand on tablet
-  re-expands the rail; tap-to-expand on phone opens the sheet.
+  "rail-as-sheet-on-tap" state — on tablet the strip re-expands the
+  rail; on phone the Browse chip opens the sheet.
 - **Browser window resize** (desktop → tablet → phone): same
   reflow behavior; state survives.
 - **Orientation change** (portrait ↔ landscape on phone or
