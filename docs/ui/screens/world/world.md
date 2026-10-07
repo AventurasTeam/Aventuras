@@ -419,8 +419,9 @@ Unchanged from prior design.
 - **Involvements** — `happening_involvements` table for this
   entity. Rows are read-only here and open the happening in Plot, on
   its Involvements tab.
-- **History** — delta log filtered to this entity. See
-  [History tab](#history-tab) section below.
+- **History** — delta log filtered to this entity, and the deltas of
+  the link rows naming it. See [History tab](#history-tab) section
+  below.
 
 ## List pane — search scope
 
@@ -571,15 +572,16 @@ prose, then hands pre-formatted strings to the compound.
   deltas and the other-end deletes that removed it. A removal also
   matches a term starting a word of its target label (`Links` when it
   held several kinds, else that kind's label) or of the label of any
-  kind it held. Its summary is searchable whole or typed partway: a
-  term that starts a word run of its fixed wording matches every
-  removal, and the wording plus a partial name matches the removals
-  whose other end's name starts with it. The row's own target line
-  is constant within the tab, so it is never matched. SQLite filters
-  server-side; lazy-loaded delta log doesn't need to be fully in
-  memory.
+  kind it held. Its summary is searchable too: a term that starts a
+  word run of the named wording, typed whole or partway, matches
+  every removal, and the wording plus a partial name matches the
+  removals whose other end has a name word starting with it. The
+  unknown-end wording matches only when typed whole. The row's own
+  target line is constant within the tab, so it is never matched.
+  SQLite filters server-side; lazy-loaded delta log doesn't need to
+  be fully in memory.
 - **Op filter** — all / create / update / delete. Link deltas count
-  too: `Created` also lists the relationships made, and `Deleted` a
+  too: `Created` also lists the link rows made, and `Deleted` a
   link row removed on its own and an other end's delete.
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — log-shaped data, 50-row chunks; uses the
@@ -605,7 +607,7 @@ prose, then hands pre-formatted strings to the compound.
   or `awareness`
   ([Reverse-replay](../../../generation-pipeline.md#reverse-replay)).
   That delete lists once on the surviving tab, under `Deleted`; a
-  reversal that takes a link row prunes it out of a later delete's
+  reversal that takes a link row strips it out of a later delete's
   payload, so no removal lists for a row the reversal took.
   Retrieval-count bumps, awareness updates whose undo payload holds
   only `retrievalCount`, are left out; an update that also changed
@@ -630,9 +632,10 @@ prose, then hands pre-formatted strings to the compound.
   "Learned at". The muted path stays the payload's raw key
   (`inverseKind`, not the column's snake case).
 - **Refresh** — the tab refetches when its row changes in the working
-  set, when a link row naming it changes in a column the tab shows (a
-  retrieval bump doesn't), and when a run or reversal settles, which
-  covers a reversal that only edits a delete's payload.
+  set, when a link row naming it is added, removed, or changes in a
+  column the tab shows (a retrieval bump doesn't), and when a run or
+  reversal settles, which covers a reversal that only edits a delete's
+  payload.
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 

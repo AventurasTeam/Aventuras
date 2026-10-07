@@ -1095,8 +1095,9 @@ overdesign until the failure mode proves common.
 
 Search uses SQL over persistent deltas; the cache is not
 queryable from search. Per-surface scope is preserved as
-written: the World History tab matches `op` labels, and on update
-deltas also `LIKE` plus `json_type` field paths over `undo_payload`
+written: the World History tab matches `op` labels and link-row
+target names, and on update deltas also `LIKE` plus `json_type` field
+paths over `undo_payload`
 ([`world.md → History tab`](./ui/screens/world/world.md#history-tab));
 Diagnostics Hub Delta log narrows further to target names and
 field paths only

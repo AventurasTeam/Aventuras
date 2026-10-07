@@ -353,8 +353,8 @@ mechanism where the shipped runner forces it:
   embed racing a delete writes nothing.
 - The group runner rejects a group that both deletes a row and writes
   a link naming it, or that targets a child row a delete's cascade
-  removes — 4.2c's merge must re-key the loser's links another way
-  (4.2c Open questions).
+  removes — so 4.2c's merge creates the loser's links on the canonical
+  and lets the cascade remove the originals.
 
 Consumers: 4.2b itself (thread and happening delete surfaces, wiring
 4.3's disabled entries), 4.2c (the merge's losing row goes through the
@@ -365,14 +365,15 @@ delete that bypasses the arm is a contract violation.
 
 [Slice 4.2b](./slices/02b-lore-history-delete.md) owns the delta-log
 History tab every detail pane shares. Pinned surface: a branch-scoped
-**query** taking `{ targetTable, targetId, op?, search?, sort, cursor }`
+**query** taking `{ targetTable, targetId, op?, search?, sort, cursor, limit? }`
 and returning one load-older chunk of the row's own deltas and, since
 [4.2c](./slices/02c-collision-review.md), the deltas of the link rows
-naming it, each tagged with how it reaches the row, with the link rows'
-other-end names (search matches `op` by its rendered label, word-start,
-or the raw enum; the field-path and free-text arms apply to `update`
-deltas only, since a delete's undo payload is the full row and would
-match every path; a field path tests via
+naming it and the other ends' deletes that removed them, each tagged
+with how it reaches the row, with the link rows' other-end names
+(search matches `op` by its rendered label, word-start, or the raw
+enum; the field-path and free-text arms apply to `update` deltas only,
+since a delete's undo payload is the full row and would match every
+path; a field path tests via
 `json_type(undo_payload, '$.<path>') IS NOT NULL`, not `json_extract`,
 so a null pre-change value still matches; a field term resolves against
 the labels of the delta's own table; a link row's target line matches
@@ -382,9 +383,10 @@ own target line, constant within the tab, is not matched — per
 a **host humanizer** mapping a union row to the
 [`DeltaLogRow` props](../../../ui/patterns/delta-log-row.md#compound-api)
 — target display name resolved from the working-set stores (a link
-row's names the link and its other end), field path, a summary derived from `undo_payload` keys (the M4 interim;
-M6.4's diff cache upgrades the prose without changing this contract),
-source, relative time, `entry #n`; and a **`HistoryTab` component**
+row's names the link and its other end), field path, a summary
+derived from `undo_payload` keys (the M4 interim; M6.4's diff cache
+upgrades the prose without changing this contract), source, relative
+time, `entry #n`; and a **`HistoryTab` component**
 taking `{ branchId, targetTable, targetId }` that composes search,
 op-filter chips, sort, the load-older list and the read-only empty
 state. The humanizer owns the field-path label vocabulary: a later

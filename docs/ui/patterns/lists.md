@@ -151,7 +151,7 @@ this is the cross-cutting summary:
 | Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                                                                                          |
 | Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                                                                                          |
 | Vault calendars         | `name`                                                                                                                                                                                              |
-| History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                                                                                          |
+| History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text, link-row target line (link label, other end's name)                                     |
 
 ---
 
