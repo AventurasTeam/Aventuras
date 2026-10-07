@@ -305,3 +305,27 @@ slice-planning gate forces its resolution before that slice is planned.
   user may keep the name, as with Keep as distinct. Canon to touch:
   `world.md → Rename` and the detail pane's name field. Found in
   4.2c's developer review (2026-10-07).
+- **A Tailwind class new to the session crashes Metro in dev.** With
+  Metro running (`pnpm web`, `pnpm desktop`, `pnpm start`), an edit
+  that makes Tailwind emit CSS it hasn't emitted yet this session (a
+  utility class used nowhere before, or a `global.css` or Tailwind
+  config edit) kills Metro with a `TypeError` reading `addedFiles` of
+  undefined. Edits that leave the CSS as it was don't, so it looks
+  intermittent. Cause: on new CSS,
+  `react-native-css-interop` 0.2.3 (from nativewind 4.2.3, the
+  lockfile's version) re-announces its virtual stylesheet by emitting
+  `change` on Metro's file map with the old `{ eventsQueue }` payload,
+  while Metro 0.83 listeners read `{ changes, rootDir }`. The first
+  listener throws (Expo CLI's `observeFileChanges` in the repro,
+  Metro's `DependencyGraph._onHasteChange` in the review's crash)
+  inside a child-process message handler, and the process exits.
+  Repro (2026-10-07, slot 1): `BROWSER=none pnpm web`, fetch the web
+  bundle once, add `mt-[17px]` to a component's `className`; Metro
+  exits within seconds. Adding the new payload's fields to the
+  installed emit (a local experiment, reverted) stopped the crash
+  across four edits, and the new rule reached the bundle. Fix:
+  css-interop 0.2.6 emits both shapes, and nativewind 4.2.6+ pins it;
+  `package.json` already allows `^4.2.3`, so it's a lockfile bump,
+  then a Storybook and Android check of the runtime changes since
+  0.2.3. Dev only: the emit never runs in a production build or E2E.
+  Found in 4.2c's developer review (2026-10-07).
