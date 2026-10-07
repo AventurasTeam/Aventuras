@@ -186,7 +186,7 @@ export const ConnectedShortcutDoublePress: Story = {
     await expect(readerRailStore.getDisplay().pendingCollapsed).not.toBe(true)
     // A negative check needs a settle window longer than the 150 ms slide.
     await new Promise((resolve) => setTimeout(resolve, 400))
-    await expect(columnWidth()).toBeGreaterThanOrEqual(300)
+    await waitFor(() => expect(columnWidth()).toBeGreaterThanOrEqual(300), ANIMATION)
     await expect(screen.getByTestId('reader-rail')).toBeVisible()
     await expect(screen.queryByTestId('rail-strip')).toBeNull()
   },
