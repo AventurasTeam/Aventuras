@@ -103,7 +103,9 @@ const characterState = (state: Partial<CharacterState>): CharacterState => ({
   ...state,
 })
 
-function mergeInto(canonicalId: string, loserId: string): CollisionResolution {
+type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
+
+function mergeInto(canonicalId: string, loserId: string): MergeResolution {
   return {
     mode: 'merge',
     canonicalId,
@@ -754,7 +756,7 @@ describe('resolveCollision — merge tags and keywords', () => {
   })
 
   it('leaves out a deselected tag and keyword, whichever row held it', async () => {
-    const resolution: CollisionResolution = {
+    const resolution: MergeResolution = {
       ...MERGE_B_INTO_A,
       deselectedTags: ['captain'],
       deselectedKeywords: ['THE GUARD'],
