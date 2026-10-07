@@ -683,6 +683,11 @@ export function uniqueTerms(list: readonly string[]): string[] {
   return out
 }
 
+/** Comma-separated text as a term list: blanks dropped, repeats by `termKey` merged. */
+export function parseTerms(text: string): string[] {
+  return uniqueTerms(text.split(','))
+}
+
 /**
  * Whether two names refer to the same entity as far as spelling can tell.
  *

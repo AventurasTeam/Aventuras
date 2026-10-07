@@ -4,6 +4,7 @@
   import { X, User, ImageUp, Loader2 } from '@lucide/svelte'
   import { normalizeImageDataUrl } from '$lib/utils/image'
   import TagInput from '$lib/components/tags/TagInput.svelte'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
@@ -26,7 +27,6 @@
 
   // Local state for complex string-to-object conversions
   let visualDescriptorsStr = $state(untrack(() => descriptorsToString(data.visualDescriptors)))
-  let traitsStr = $state(untrack(() => data.traits.join(', ')))
 
   let uploadingPortrait = $state(false)
   let error = $state<string | null>(null)
@@ -41,20 +41,9 @@
   // but don't overwrite the user's in-progress input when the change came from handleInput itself.
   $effect(() => {
     const externalStr = descriptorsToString(data.visualDescriptors)
-    const externalTraitsStr = data.traits.join(', ')
     untrack(() => {
       if (externalStr !== descriptorsToString(stringToDescriptors(visualDescriptorsStr))) {
         visualDescriptorsStr = externalStr
-      }
-      if (
-        externalTraitsStr !==
-        traitsStr
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .join(', ')
-      ) {
-        traitsStr = externalTraitsStr
       }
     })
   })
@@ -62,10 +51,6 @@
   function handleInput() {
     onUpdate({
       ...data,
-      traits: traitsStr
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
       visualDescriptors: stringToDescriptors(visualDescriptorsStr),
     })
   }
@@ -143,11 +128,10 @@
   <!-- Traits -->
   <div class="space-y-2 {changed('traits')}">
     <Label for="traits">Traits</Label>
-    <Input
+    <TermsInput
       id="traits"
-      type="text"
-      bind:value={traitsStr}
-      oninput={handleInput}
+      value={data.traits}
+      onChange={(terms) => onUpdate({ ...data, traits: terms })}
       placeholder="Brave, Curious, Stubborn (comma-separated)"
     />
     <p class="text-muted-foreground text-[0.8rem]">Comma-separated personality traits</p>

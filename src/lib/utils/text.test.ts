@@ -5,6 +5,7 @@ import {
   foldName,
   findTextMatches,
   paragraphMatches,
+  parseTerms,
   sameEntityName,
   truncateAroundMatch,
   termKey,
@@ -474,6 +475,21 @@ describe('uniqueTerms', () => {
 
   it('returns an empty list for an empty list', () => {
     expect(uniqueTerms([])).toEqual([])
+  })
+})
+
+describe('parseTerms', () => {
+  it('splits on commas and trims', () => {
+    expect(parseTerms('brave,  curious ,stubborn')).toEqual(['brave', 'curious', 'stubborn'])
+  })
+
+  it('drops blanks and a trailing comma', () => {
+    expect(parseTerms('brave, , ,')).toEqual(['brave'])
+    expect(parseTerms('')).toEqual([])
+  })
+
+  it('merges terms that differ only in case', () => {
+    expect(parseTerms('brave, Brave,')).toEqual(['brave'])
   })
 })
 
