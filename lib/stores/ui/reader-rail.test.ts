@@ -147,6 +147,61 @@ describe('readerRailStore display', () => {
   })
 })
 
+describe('readerRailStore writeCollapsed', () => {
+  function deferred() {
+    let resolve!: () => void
+    let reject!: (error: Error) => void
+    const promise = new Promise<void>((settle, fail) => {
+      resolve = settle
+      reject = fail
+    })
+    return { promise, resolve, reject }
+  }
+
+  beforeEach(() => {
+    readerRailStore.__reset()
+  })
+
+  it('shows the toggle at once and holds a persisted until every write settles', async () => {
+    const first = deferred()
+    const second = deferred()
+    const firstWrite = readerRailStore.writeCollapsed(true, () => first.promise)
+    const secondWrite = readerRailStore.writeCollapsed(true, () => second.promise)
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    first.resolve()
+    await firstWrite
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    second.reject(new Error('disk full'))
+    await expect(secondWrite).rejects.toThrow('disk full')
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull()
+  })
+
+  it('ignores a write that settles after a reset', async () => {
+    const before = deferred()
+    const after = deferred()
+    const beforeWrite = readerRailStore.writeCollapsed(true, () => before.promise)
+    readerRailStore.__reset()
+    const afterWrite = readerRailStore.writeCollapsed(false, () => after.promise)
+
+    before.resolve()
+    await beforeWrite
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: false })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(false)
+
+    after.resolve()
+    await afterWrite
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: false })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull()
+  })
+})
+
 describe('readerRailStore enterBranch', () => {
   const PEEK = { category: 'thread', id: 'thr_1' } as const
 

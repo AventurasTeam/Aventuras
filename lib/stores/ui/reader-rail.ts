@@ -19,6 +19,8 @@ type ReaderRailState = {
   display: RailDisplayState
   /** False until the first real window width lands; until then nothing is forced. */
   seeded: boolean
+  /** A token per preference write in flight; one settling after a reset finds nothing to drop. */
+  writes: ReadonlySet<symbol>
   /** The branch the reader last entered; `null` until the first. */
   branchId: string | null
 }
@@ -27,6 +29,7 @@ const INITIAL: ReaderRailState = {
   view: DEFAULT_RAIL_VIEW,
   display: initialRailDisplay(Number.POSITIVE_INFINITY),
   seeded: false,
+  writes: new Set(),
   branchId: null,
 }
 
@@ -71,13 +74,39 @@ export const readerRailStore = {
   seedViewport: (width: number): void => {
     if (!store.getState().seeded) seed(width)
   },
-  /** A resize before any seed seeds instead: a width with no prior one is not a cross. */
+  /** The pending toggle once every preference write has settled; `null` while one is in flight. */
+  useSettledPending: (): boolean | null =>
+    useStore(store, (s) => (s.writes.size === 0 ? s.display.pendingCollapsed : null)),
+  /**
+   * Shows `collapsed` at once and holds it pending until `write` and every other write settle,
+   * across every reader mounted. Settles as `write` does.
+   */
+  writeCollapsed: (collapsed: boolean, write: () => Promise<void>): Promise<void> => {
+    const token = Symbol('rail-collapse-write')
+    store.setState((s) => ({
+      display: reduceRailDisplay(s.display, { type: 'setCollapsed', collapsed }),
+      writes: new Set(s.writes).add(token),
+    }))
+    return write().finally(() =>
+      store.setState((s) => {
+        if (!s.writes.has(token)) return s
+        const writes = new Set(s.writes)
+        writes.delete(token)
+        return { writes }
+      }),
+    )
+  },
+  /**
+   * A resize before any seed seeds instead: a width with no prior one is not a cross. A
+   * `persisted` is dropped while a write is in flight, since that write may still override it.
+   */
   dispatchDisplay: (event: RailDisplayEvent): void => {
     if (event.type === 'resize' && !store.getState().seeded) {
       seed(event.width)
       return
     }
     store.setState((s) => {
+      if (event.type === 'persisted' && s.writes.size > 0) return s
       const display = reduceRailDisplay(s.display, event)
       return display === s.display ? s : { display }
     })
