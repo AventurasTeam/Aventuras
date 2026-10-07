@@ -7,10 +7,10 @@ import { plotCollapseDefaults } from '@/components/plot/plot-list-pane'
 import { WORLD_COLLAPSED_DEFAULTS } from '@/components/world/world-list-pane'
 import { EntryIndexReadProvider, type EntryIndexRead } from '@/hooks/use-entry-index'
 import { railViewFor, type RailCategory, type RailView } from '@/lib/reader-rail'
-import { listCollapseStore, readerRailStore } from '@/lib/stores'
+import { entriesStore, listCollapseStore, readerRailStore } from '@/lib/stores'
 
 import { BrowseRail } from './browse-rail'
-import { railDataFixture, readRailFixtureEntries } from './rail-story-fixtures'
+import { railDataFixture, railFixtureTurn, readRailFixtureEntries } from './rail-story-fixtures'
 import type { RailData } from './use-rail-data'
 
 const DATA = railDataFixture()
@@ -262,6 +262,48 @@ export const HappeningsIndexLands: Story = {
     expect(trigger).toBeInTheDocument()
     expect(trigger).toHaveFocus()
     expect(args.readEntries).toHaveBeenCalledTimes(1)
+  },
+}
+
+let readsSoFar = 0
+
+/**
+ * Shown again after a turn, the list starts from its last read, rows usable, with a muted spinner
+ * in its head until the re-read lands; `Loading happenings…` is for a first read only.
+ */
+export const HappeningsUpdating: Story = {
+  args: {
+    category: 'happening',
+    readEntries: async (branchId) => {
+      readsSoFar += 1
+      if (readsSoFar > 1) await new Promise((resolve) => setTimeout(resolve, INDEX_LANDS_MS))
+      return readRailFixtureEntries(branchId)
+    },
+  },
+  beforeEach: () => {
+    readsSoFar = 0
+    return () => entriesStore.__reset()
+  },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: "Vorne's pact" }, WAIT)).toBeVisible()
+    const trigger = screen.getByLabelText('Browse category')
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Characters' }, WAIT))
+    await screen.findByPlaceholderText('Search characters…', {}, WAIT)
+    entriesStore.hydrate(DATA.branchId, [railFixtureTurn(61)])
+
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Happenings' }, WAIT))
+    const updating = await screen.findByRole('progressbar', { name: 'Updating happenings…' }, WAIT)
+    expect(updating).toBeVisible()
+    expect(screen.getByRole('button', { name: "Vorne's pact" })).toBeVisible()
+    expect(screen.queryByText('Loading happenings…')).toBeNull()
+    await waitFor(
+      () => expect(screen.queryByRole('progressbar', { name: 'Updating happenings…' })).toBeNull(),
+      WAIT,
+    )
+    expect(screen.getByRole('button', { name: "Vorne's pact" })).toBeVisible()
+    expect(readsSoFar).toBe(2)
   },
 }
 

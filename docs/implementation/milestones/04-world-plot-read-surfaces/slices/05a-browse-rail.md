@@ -262,7 +262,13 @@ Canon carries the detail; each line points to it.
   while it shows Happenings, so the read stops when the rail collapses
   or the phone Sheet closes. The gate is the view the list renders,
   not `readerRailStore`, so a host that keeps its own view can't leave
-  the list loading; `RailData` carries no index. See
+  the list loading; `RailData` carries no index. Shown again, the list
+  starts from its last read and shows a muted spinner until the
+  re-read lands, so only a first read shows `Loading happenings…`
+  (developer, same review). That seed is `useEntryIndex`'s opt-in
+  `seedFromLastRead`, which Plot doesn't take. See
+  [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout)
+  and
   [`component-inventory.md`](../../../../ui/component-inventory.md)
   (BrowseRail).
 - **The tablet strip's tooltips open on a long press** (developer,

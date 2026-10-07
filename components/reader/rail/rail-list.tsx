@@ -7,6 +7,7 @@ import { plotCollapseDefaults } from '@/components/plot/plot-list-pane'
 import type { EntityListPaneSurface } from '@/components/shells/entity-list-pane'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import { WORLD_COLLAPSED_DEFAULTS } from '@/components/world/world-list-pane'
 import { useEntryIndex, type EntryIndexSnapshot } from '@/hooks/use-entry-index'
@@ -79,7 +80,10 @@ export function RailList({
   )
   // A full-branch read per turn, so enabled for happenings only; called for every category, since
   // a happenings-only wrapper would remount the list's header and drop its focus on a switch.
-  const entryIndex = useEntryIndex(data.branchId, { enabled: category === 'happening' })
+  const entryIndex = useEntryIndex(data.branchId, {
+    enabled: category === 'happening',
+    seedFromLastRead: true,
+  })
   const plotListSignals = useMemo<PlotListSignals>(
     () => ({ entries: entryIndex.index, hasClosedChapters: data.hasClosedChapters }),
     [entryIndex.index, data.hasClosedChapters],
@@ -94,12 +98,29 @@ export function RailList({
     }
   }, [view, offeredHappeningFilters, onViewChange])
 
+  const updatingIndicator = entryIndex.updating ? (
+    <Spinner
+      size="sm"
+      colorSlot="--fg-muted"
+      accessibilityLabel={t('reader:rail.happeningsUpdating')}
+    />
+  ) : null
+
   const shared = {
     search: view.search,
     onSearchChange: (search: string) => onViewChange({ ...view, search }),
     categoryLabel: railCategoryLabel(category),
     kindSelector: header,
-    addSlot: headerAction ?? null,
+    // A host's action keeps one parent whether or not the spinner shows, so it never remounts.
+    addSlot:
+      headerAction == null ? (
+        updatingIndicator
+      ) : (
+        <View className="flex-row items-center gap-2">
+          {updatingIndicator}
+          {headerAction}
+        </View>
+      ),
     rowSignals: data.rowSignals,
     selectedId: null,
     onSelect: (id: string) => onRowPress(category, id),

@@ -63,6 +63,17 @@ collision (per
 [`world.md → Collision review and entity merge`](../world/world.md#collision-review-and-entity-merge)),
 so a flagged row reads as an ordinary row in the rail.
 
+The Happenings list waits on the branch's entry index, which tells a
+happening whose anchor entry still exists from one whose entry was
+deleted. Its first read shows `Loading happenings…` in place of the
+rows, or the read's error with a Retry. The index is read again after
+every turn and whenever the list is shown again. A re-read keeps the
+last read's rows visible and usable, with a small muted `Spinner`
+(`Updating happenings…` to screen readers) at the end of the list
+head, beside the collapse chevron on desktop and tablet, until it
+lands. Until then a happening anchored to the newest entry can read
+as dangling.
+
 ## Top-bar — chapter navigation
 
 Lean breadcrumb:
