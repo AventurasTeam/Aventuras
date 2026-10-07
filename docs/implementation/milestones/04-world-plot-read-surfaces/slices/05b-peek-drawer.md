@@ -149,11 +149,11 @@ Sheet.
 - **Read the lead through `resolveLead`** (4.2b): a reversal can leave
   `leadEntityId` dangling, and the You badge / peek `Set as lead` must
   treat it as absent.
-- **The desktop drawer's peek resets on a branch change.**
-  `readerRailStore.enterBranch` clears `display.peek`. The phone Sheet
-  needs nothing: `RailSheet` resets to its opened state on every open,
-  and a modal Sheet can't stay open across a branch change
-  ([4.5a's notes](./05a-browse-rail.md#implementation-notes)).
+- **The branch-change reset is inherited.** The drawer reads
+  `display.peek`, which `readerRailStore.enterBranch` clears on a branch
+  change. The phone Sheet needs nothing: `RailSheet` resets to its opened
+  state on every open, and a modal Sheet can't stay open across a branch
+  change ([4.5a's notes](./05a-browse-rail.md#implementation-notes)).
 - **The desktop drawer renders only under an expanded rail.** Render it
   when `!isRailCollapsed && peek`: a peek can survive under a collapsed
   rail if the stored preference flips another way, such as a settings

@@ -129,7 +129,7 @@ rail header collapses it toward the right edge, `ChevronLeft` on
 the collapsed strip expands it. That deliberately overrides the
 [Disclosure carets](#disclosure-carets) reading of `ChevronRight`
 as collapsed to expanded: these chevrons telegraph the column's
-motion, as the rail's collapse trigger specs.
+motion, as [the rail's collapse trigger](../screens/reader-composer/reader-composer.md#open-state--collapse-trigger) specs.
 
 #### Story Settings glyph rationale
 

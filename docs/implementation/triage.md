@@ -201,3 +201,30 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/row-signals/types.ts:3-11` spells out what
   `[...WORLD_CATEGORIES, ...PLOT_KINDS]` gives. Raised in 4.5a review,
   2026-10-07.
+- **`chrome.back` matches its name as a substring.** `e2e/locators/chrome.ts:8`
+  has no `exact: true`, so the phone rail Sheet's "Back to categories"
+  (`reader:rail.backToCategories`) would collide if that button ever rendered
+  in a desktop E2E DOM. Latent: the Sheet is phone-only and E2E is
+  desktop-only. Raised in 4.5a's final review, 2026-10-07.
+- **The rail likely flashes expanded, then slides closed, on a narrow reader
+  mount.** When the reader route mounts in the same commit as
+  `RailViewportWatcher` under 900 px (a web or dev reload of the reader route),
+  `ReaderRailColumn` first renders from an unseeded store, so `RailColumn`
+  starts at 300 px and the watcher's seed then forces a collapse. Reasoned, not
+  observed; normal launches reach the reader after home, so the store is
+  already seeded. Fix idea: set the width without `withTiming` for a
+  `collapsed` change before first layout, or have `ReaderRailColumn` wait for
+  the seed. Raised in 4.5a's final review, 2026-10-07.
+- **The happening filter-reset layout effect is duplicated.**
+  `components/reader/rail/rail-list.tsx:75-82` repeats
+  `components/plot/plot-list-pane.tsx:98-103`, same comment and same reset. A
+  small shared hook (e.g. `useOfferedFilterReset`) would remove the copy; it
+  fits the same pass as the filed `EntryIndexStatus` and collapse-defaults
+  extractions. Raised in 4.5a's final review, 2026-10-07.
+- **A medium Sheet can be lifted under the status bar by a tall keyboard.**
+  `components/ui/sheet.tsx:322` gives Sheets smaller than `tall`
+  `keyboardBehavior='interactive'` with no `topInset`, so on a small phone a
+  medium (60 %) Sheet can rise until its head sits under the status bar.
+  Inferred from the code, not observed; the rail Sheet (medium, a search field
+  right under its head) is the likeliest place to see it. Raised in 4.5a's
+  final review, 2026-10-07.
