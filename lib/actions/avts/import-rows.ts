@@ -26,7 +26,6 @@ function baseDraft(payload: EntityImport): EntityBaseDraft {
   }
 }
 
-// data-model.md → Aventuras file format: branch-local refs never travel, so the copy starts with none.
 function characterDraft(payload: CharacterImport): CharacterDraft {
   const { state } = payload
   return {
@@ -55,6 +54,7 @@ export function importEntity(
   payload: EntityImport,
   ctx: DbCtx,
 ): Promise<ImportRowResult> {
+  // data-model.md → Aventuras file format: branch-local refs never travel, so the copy starts with none.
   const create = { branchId, row: null, keywordsBase: [] }
   switch (payload.kind) {
     case 'character':

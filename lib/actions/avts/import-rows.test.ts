@@ -223,7 +223,14 @@ describe('importEntity', () => {
       ...entityBase('Kael'),
       kind: 'character',
       state: {
-        visual: { hair: 'dark', eyes: 'grey' },
+        visual: {
+          physique: 'lean',
+          face: 'scarred',
+          hair: 'dark',
+          eyes: 'grey',
+          attire: 'a salt-stained coat',
+          distinguishing: 'a missing finger',
+        },
         traits: ['wry'],
         drives: ['find her sister'],
         voice: 'Clipped.',
@@ -232,7 +239,14 @@ describe('importEntity', () => {
     }
     const id = okId(await importEntity('br_2', payload, ctx))
     expect((await entityRow(db, id)).state).toEqual({
-      visual: { hair: 'dark', eyes: 'grey' },
+      visual: {
+        physique: 'lean',
+        face: 'scarred',
+        hair: 'dark',
+        eyes: 'grey',
+        attire: 'a salt-stained coat',
+        distinguishing: 'a missing finger',
+      },
       traits: ['wry'],
       drives: ['find her sister'],
       voice: 'Clipped.',
@@ -402,7 +416,14 @@ describe('export → parse → import round trip', () => {
   const KAEL: NewEntity = {
     ...seedBase('char_kael', 'character', 'Kael'),
     state: {
-      visual: { hair: 'dark' },
+      visual: {
+        physique: 'lean',
+        face: 'scarred',
+        hair: 'dark',
+        eyes: 'grey',
+        attire: 'a salt-stained coat',
+        distinguishing: 'a missing finger',
+      },
       traits: ['wry'],
       drives: ['find her sister'],
       voice: 'Clipped.',
@@ -419,7 +440,14 @@ describe('export → parse → import round trip', () => {
     {
       seed: KAEL,
       expected: {
-        visual: { hair: 'dark' },
+        visual: {
+          physique: 'lean',
+          face: 'scarred',
+          hair: 'dark',
+          eyes: 'grey',
+          attire: 'a salt-stained coat',
+          distinguishing: 'a missing finger',
+        },
         traits: ['wry'],
         drives: ['find her sister'],
         voice: 'Clipped.',
