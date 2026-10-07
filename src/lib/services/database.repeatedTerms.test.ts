@@ -61,6 +61,24 @@ describe('traits a row stores with repeats load without them', () => {
     expect(character.traits).toEqual(CLEAN)
   })
 
+  it('stored values that are not lists', async () => {
+    mocks.select.mockResolvedValueOnce([
+      {
+        id: 'c1',
+        story_id: 's1',
+        name: 'Tony',
+        traits: 'null',
+        translated_traits: 'null',
+        visual_descriptors: '{}',
+      },
+    ])
+
+    const [character] = await database.getCharacters('s1')
+
+    expect(character.traits).toEqual([])
+    expect(character.translatedTraits).toBeNull()
+  })
+
   it('traits that differ beyond case and padding stay apart', async () => {
     mocks.select.mockResolvedValueOnce([
       {
@@ -111,6 +129,21 @@ describe('traits are stored without repeats', () => {
     const values = lastCall()[1]
     expect(values).toContain('["honest"]')
     expect(values.filter((v) => v === '["honest"]')).toHaveLength(2)
+  })
+
+  it('adding a character without traits, as an imported file can', async () => {
+    await database.addCharacter({
+      id: 'c1',
+      storyId: 's1',
+      name: 'Tony',
+      description: null,
+      relationship: null,
+      traits: undefined,
+      visualDescriptors: {},
+      status: 'active',
+    } as any)
+
+    expect(lastCall()[1]).toContain('[]')
   })
 
   it('updating a character', async () => {

@@ -479,6 +479,12 @@ describe('uniqueTerms', () => {
   it('returns an empty list for an empty list', () => {
     expect(uniqueTerms([])).toEqual([])
   })
+
+  it('returns an empty list for a value that is not a list', () => {
+    for (const bad of [null, undefined, 'brave', {}, 3]) {
+      expect(uniqueTerms(bad as any)).toEqual([])
+    }
+  })
 })
 
 describe('applyTermChanges', () => {

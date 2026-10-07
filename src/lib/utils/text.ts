@@ -666,8 +666,12 @@ export function termKey(term: string): string {
   return term.trim().normalize('NFC').toLowerCase()
 }
 
-/** Trimmed terms without blanks or repeats by `termKey`; the first spelling is kept. */
+/**
+ * Trimmed terms without blanks or repeats by `termKey`; the first spelling is kept. Stored and
+ * imported data is not type-checked, so anything but an array yields `[]`.
+ */
 export function uniqueTerms(list: readonly string[]): string[] {
+  if (!Array.isArray(list)) return []
   const seen = new Set<string>()
   const out: string[] = []
   for (const raw of list) {

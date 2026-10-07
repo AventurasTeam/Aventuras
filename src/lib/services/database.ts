@@ -2753,6 +2753,7 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
+    const rawTranslatedTraits = row.translated_traits ? JSON.parse(row.translated_traits) : null
 
     return {
       id: row.id,
@@ -2772,8 +2773,8 @@ class DatabaseService {
       translatedName: row.translated_name || null,
       translatedDescription: row.translated_description || null,
       translatedRelationship: row.translated_relationship || null,
-      translatedTraits: row.translated_traits
-        ? uniqueTerms(JSON.parse(row.translated_traits))
+      translatedTraits: Array.isArray(rawTranslatedTraits)
+        ? uniqueTerms(rawTranslatedTraits)
         : null,
       translatedVisualDescriptors: rawTranslatedDescriptors
         ? migrateVisualDescriptors(rawTranslatedDescriptors)
