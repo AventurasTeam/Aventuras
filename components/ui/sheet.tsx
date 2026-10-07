@@ -123,19 +123,26 @@ function SheetBackdrop({ dismissible, opacity, ...props }: SheetBackdropProps) {
   )
 }
 
+type SheetDismissal = {
+  enablePanDownToClose: boolean
+  backdropComponent: FC<BottomSheetBackdropProps>
+}
+
 /**
- * The scrim behind a gorhom sheet, over the whole sheet host (the window). A press closes the
- * sheet only while `dismissible`; a flag change swaps the component, so it holds while open.
+ * Spread onto a gorhom sheet: drag-down and a press on the scrim (over the whole sheet host, the
+ * window) close it together while `dismissible`, and neither does otherwise. A flip while open
+ * takes effect at once.
  */
-export function useSheetBackdrop(dismissible: boolean): FC<BottomSheetBackdropProps> {
+export function useSheetDismissal(dismissible: boolean): SheetDismissal {
   const { theme } = useTheme()
   const opacity = SCRIM_OPACITY[theme.mode]
-  return useCallback(
+  const backdropComponent = useCallback(
     (props: BottomSheetBackdropProps) => (
       <SheetBackdrop {...props} dismissible={dismissible} opacity={opacity} />
     ),
     [dismissible, opacity],
   )
+  return { enablePanDownToClose: dismissible, backdropComponent }
 }
 
 // Native-only swap, as for the input: gorhom's scroll view hands the gesture to the sheet's
@@ -167,7 +174,10 @@ const BOTTOM_SNAP_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
 type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   anchor?: SheetAnchor
   size?: SheetSize
-  /** Bottom-anchor only — allows a pending action to block swipe dismissal. */
+  /**
+   * Bottom-anchor only — `false` blocks drag-down and tap-outside dismissal, for a pending action;
+   * Android back still closes.
+   */
   enablePanDownToClose?: boolean
   /** Right-anchor only — names the rn-primitives Portal host to render into. */
   portalHost?: string
@@ -204,8 +214,7 @@ function BottomSheetContent({
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
-  // Tap-outside follows swipe-dismiss: a sheet whose pending action blocks one blocks both.
-  const backdrop = useSheetBackdrop(enablePanDownToClose)
+  const dismissal = useSheetDismissal(enablePanDownToClose)
 
   const sheetRef = useRef<BottomSheetModal>(null)
   // gorhom's dismiss() on an already-dismissed modal corrupts internal state
@@ -311,8 +320,7 @@ function BottomSheetContent({
       ref={sheetRef}
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
-      enablePanDownToClose={enablePanDownToClose}
-      backdropComponent={backdrop}
+      {...dismissal}
       // 'extend' resolves to the sheet's own tallest detent. Every size here has
       // exactly one ('auto' has none), so it never grows anything — it earns its
       // keep only on 'tall', which at 95% already clears the keyboard and just

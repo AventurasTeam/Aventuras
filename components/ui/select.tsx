@@ -23,7 +23,7 @@ import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
-import { QuietSheetBackground, QuietSheetHandle, useSheetBackdrop } from '@/components/ui/sheet'
+import { QuietSheetBackground, QuietSheetHandle, useSheetDismissal } from '@/components/ui/sheet'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
@@ -132,7 +132,7 @@ function PhoneSheetContent({
   useRegisteredOverlay(open)
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
-  const backdrop = useSheetBackdrop(true)
+  const dismissal = useSheetDismissal(true)
 
   const sheetRef = useRef<BottomSheet>(null)
   const snapPoints = useMemo(() => [SHEET_HEIGHT_PCT[sheetSize]], [sheetSize])
@@ -172,8 +172,7 @@ function PhoneSheetContent({
             index={open ? 0 : -1}
             snapPoints={snapPoints}
             enableDynamicSizing={false}
-            enablePanDownToClose
-            backdropComponent={backdrop}
+            {...dismissal}
             // One detent at 33%/60%, so 'extend' resolves to the position the
             // sheet already holds and grows nothing. 'interactive' lifts it by
             // the keyboard height instead — same call sheet.tsx makes below 'tall'.
