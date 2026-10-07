@@ -26,6 +26,7 @@
     CollapsibleTrigger,
   } from '$lib/components/ui/collapsible'
   import { cn } from '$lib/utils/cn'
+  import { uniqueStrings } from '$lib/utils/text'
 
   interface Props {
     entry?: Entry | null
@@ -255,7 +256,7 @@
       </span>
     </Label>
     <div class="mb-2 flex flex-wrap gap-2">
-      {#each aliases as alias (alias)}
+      {#each uniqueStrings(aliases) as alias (alias)}
         <Badge variant="secondary" class="gap-1 pr-1">
           {alias}
           <button class="hover:bg-muted rounded-full p-0.5" onclick={() => removeAlias(alias)}>
@@ -287,7 +288,7 @@
       </span>
     </Label>
     <div class="mb-2 flex flex-wrap gap-2">
-      {#each keywords as keyword (keyword)}
+      {#each uniqueStrings(keywords) as keyword (keyword)}
         <Badge
           variant="default"
           class="bg-primary/20 text-primary hover:bg-primary/30 gap-1 border-transparent pr-1"
