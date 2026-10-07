@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { pressSheetScrim, SHEET_NO_CLOSE_MS } from '@/components/ui/sheet-scrim-probe'
+import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 
 import { WorldTimeEditSheet } from './worldtime-edit-sheet'
@@ -116,5 +119,56 @@ export const UntouchedSaveClosesWithoutWriting: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1))
     expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
+// CI runs plays several times slower than local; every post-interaction wait uses this.
+const WAIT = { timeout: 3000 }
+
+const LANDMARK = 'Reader behind the editor'
+
+/** The reader under the editor: a tap outside the sheet lands on this canvas. */
+const overCanvas: Story['render'] = (args) => (
+  <View className="gap-4 p-4" style={{ minHeight: 640 }}>
+    <Text>{LANDMARK}</Text>
+    <WorldTimeEditSheet {...args} />
+  </View>
+)
+
+/** Untouched, a tap outside the editor closes it, as drag-down does. */
+export const BackdropClosesUntouched: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: overCanvas,
+  play: async ({ args }) => {
+    await openSheet()
+    await pressSheetScrim(screen.getByText(LANDMARK))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** An edit holds the sheet: tap-outside does nothing until Save or Cancel. */
+export const BackdropIgnoredWhileEdited: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: overCanvas,
+  play: async ({ args }) => {
+    await openSheet()
+    await typeSecond('45')
+    await pressSheetScrim(screen.getByText(LANDMARK))
+    await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
+    expect(args.onClose).not.toHaveBeenCalled()
+    expect(secondField()).toHaveValue('45')
+  },
+}
+
+/** Dirty means different from the opening time: typing it back frees the sheet again. */
+export const BackdropClosesAfterRevert: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: overCanvas,
+  play: async ({ args }) => {
+    await openSheet()
+    await typeSecond('45')
+    await typeSecond('30')
+    await pressSheetScrim(screen.getByText(LANDMARK))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
   },
 }

@@ -26,6 +26,9 @@ export function WorldTimeEditSheet({
 }: WorldTimeEditSheetProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
+  // Unsaved input holds the sheet: drag-down and tap-outside wait for Save or Cancel. Android
+  // back still closes it through the primitive's BackHandler.
+  const [dirty, setDirty] = useState(false)
 
   async function save(next: number) {
     if (saving) return
@@ -52,7 +55,7 @@ export function WorldTimeEditSheet({
       }}
       ariaLabel={t('reader:worldTimeEdit.title')}
     >
-      <SheetContent anchor="bottom" size="auto" enablePanDownToClose={!saving}>
+      <SheetContent anchor="bottom" size="auto" enablePanDownToClose={!saving && !dirty}>
         {/* Keyed so an external worldTime change (undo, classifier write)
             reseeds the form, which only reads the prop on mount. */}
         <WorldTimeEditForm
@@ -64,6 +67,7 @@ export function WorldTimeEditSheet({
           saveError={saveError}
           onSave={(next) => void save(next)}
           onCancel={onClose}
+          onDirtyChange={setDirty}
         />
       </SheetContent>
     </Sheet>
