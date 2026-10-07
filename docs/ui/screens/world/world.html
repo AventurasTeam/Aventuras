@@ -1449,12 +1449,12 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <!-- MERGE body — canonical picker + per-field grid + relations summary -->
     <div class="resolve-body active" data-path="merge">
       <div class="canon-picker" id="canon-picker">
-        <div class="seg active" data-canon="A">
-          Kael &middot; 3 days ago &middot; Canonical
+        <div class="seg active" data-canon="A" data-name="Kael">
+          Kael &middot; 3 days ago<span class="canon-suffix" data-side="A"> &middot; Canonical</span>
           <span class="meta">older</span>
         </div>
-        <div class="seg" data-canon="B">
-          Kael &middot; just now
+        <div class="seg" data-canon="B" data-name="Kael">
+          Kael &middot; just now<span class="canon-suffix" data-side="B" hidden> &middot; Canonical</span>
           <span class="meta">newer</span>
         </div>
       </div>
@@ -1462,19 +1462,19 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
            Identical values aren't surfaced (no decision to make). -->
       <div class="field-grid">
         <span class="h">field</span>
-        <span class="h">Older &middot; 3 days ago &middot; Canonical</span>
-        <span class="h">Newer &middot; just now</span>
+        <span class="h">Older &middot; 3 days ago<span class="canon-suffix" data-side="A"> &middot; Canonical</span></span>
+        <span class="h">Newer &middot; just now<span class="canon-suffix" data-side="B" hidden> &middot; Canonical</span></span>
 
         <span class="row-l">description</span>
         <span class="row-v">
-          <input type="radio" name="f-desc" checked>
+          <input type="radio" name="f-desc" data-side="A" checked>
           <span class="row-prose" data-expandable>
             <span class="prose-body">wandering swordsman, weathered jaw, ice-blue eyes; raised in the southern marshes by rebels who taught him to track and to harbor a deep distrust of authority despite his privileged origins; carries a worn signet ring he refuses to explain.</span>
             <span class="side-meta">Older &middot; 3 days ago</span>
           </span>
         </span>
         <span class="row-v">
-          <input type="radio" name="f-desc">
+          <input type="radio" name="f-desc" data-side="B">
           <span class="row-prose" data-expandable>
             <span class="prose-body">guardsman at the city gate, recently posted</span>
             <span class="side-meta">Newer &middot; just now</span>
@@ -1539,7 +1539,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
 
     <div class="resolve-foot">
       <button class="ghost" id="resolve-cancel">Cancel</button>
-      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into Kael (older)</span></button>
+      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into Kael</span></button>
     </div>
   </div>
 </div>
@@ -1738,7 +1738,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     const lbl = document.getElementById('resolve-primary-label');
     const primary = document.getElementById('resolve-primary');
     if (!lbl || !primary) return;
-    if (p === 'merge') { lbl.textContent = 'Merge into Kael (older)'; primary.classList.add('danger'); }
+    if (p === 'merge') { lbl.textContent = mergeLabel(); primary.classList.add('danger'); }
     else if (p === 'rename') { lbl.textContent = 'Save renames'; primary.classList.remove('danger'); }
     else if (p === 'keep') { lbl.textContent = 'Keep as distinct'; primary.classList.remove('danger'); }
   }
@@ -1775,16 +1775,21 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     });
   });
 
-  // canon-picker segment — flips primary button label so destructive direction stays obvious
+  // canon-picker segment — the "· Canonical" suffix, the divergent radios and the primary
+  // button's "Merge into <canonical-name>" follow the pick, so destructive direction stays obvious
+  function mergeLabel() {
+    const seg = document.querySelector('.canon-picker .seg.active');
+    return 'Merge into ' + (seg?.dataset.name ?? '');
+  }
+  function setCanonical(side) {
+    document.querySelectorAll('.canon-picker .seg').forEach(x => x.classList.toggle('active', x.dataset.canon === side));
+    document.querySelectorAll('.canon-suffix').forEach(x => { x.hidden = x.dataset.side !== side; });
+    document.querySelectorAll('.field-grid input[type="radio"][data-side]').forEach(r => { r.checked = r.dataset.side === side; });
+    const lbl = document.getElementById('resolve-primary-label');
+    if (lbl) lbl.textContent = mergeLabel();
+  }
   document.querySelectorAll('.canon-picker .seg').forEach(s => {
-    s.addEventListener('click', () => {
-      document.querySelectorAll('.canon-picker .seg').forEach(x => x.classList.remove('active'));
-      s.classList.add('active');
-      const lbl = document.getElementById('resolve-primary-label');
-      if (lbl) {
-        lbl.textContent = s.dataset.canon === 'A' ? 'Merge into Kael (older)' : 'Merge into Kael (newer)';
-      }
-    });
+    s.addEventListener('click', () => setCanonical(s.dataset.canon));
   });
 
   document.addEventListener('keydown', e => {
