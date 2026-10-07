@@ -17,7 +17,7 @@ import {
 import { resolveLead } from '@/lib/world'
 
 export type RailData = {
-  /** The happening list reads this branch's entry index itself, while it shows. */
+  /** The branch whose entry index the happening list reads. */
   branchId: string
   /** The branch's entities, every kind. */
   entities: readonly Entity[]

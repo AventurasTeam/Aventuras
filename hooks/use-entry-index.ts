@@ -29,7 +29,10 @@ const readFromDb: EntryIndexRead = (branchId) => readEntryIndex(branchId, db)
 
 const EntryIndexReadContext = createContext<EntryIndexRead>(readFromDb)
 
-/** Swaps the entry read for stories, which have no app database. */
+/**
+ * Swaps the entry read for stories, which have no app database. The read isn't in the query key,
+ * so keep one read per QueryClient; a gorhom Sheet's content doesn't see a provider outside it.
+ */
 export const EntryIndexReadProvider = EntryIndexReadContext.Provider
 
 const EMPTY_ENTRIES: readonly EntryRef[] = []
