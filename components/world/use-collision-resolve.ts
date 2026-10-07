@@ -22,6 +22,7 @@ import {
   entitiesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
@@ -135,6 +136,7 @@ export function useCollisionResolve(
   const open = requested != null
   // Subscribed only while open, so a closed dialog doesn't re-render the route on every link patch.
   const entityRows = entitiesStore.useEntities((rows) => (open ? rows : null))
+  const happeningRows = happeningsStore.useHappenings((rows) => (open ? rows : null))
   const awarenessRows = happeningAwarenessStore.useAwareness((rows) => (open ? rows : null))
   const involvementRows = happeningInvolvementsStore.useInvolvements((rows) => (open ? rows : null))
   const relationshipRows = characterRelationshipsStore.useRelationships((rows) =>
@@ -146,6 +148,7 @@ export function useCollisionResolve(
     if (
       requested == null ||
       entityRows == null ||
+      happeningRows == null ||
       awarenessRows == null ||
       involvementRows == null ||
       relationshipRows == null ||
@@ -155,6 +158,7 @@ export function useCollisionResolve(
     const live = collisionPair(requested, {
       branchId,
       entities: inBranch(entityRows, branchId),
+      happenings: inBranch(happeningRows, branchId),
       awareness: inBranch(awarenessRows, branchId),
       involvements: inBranch(involvementRows, branchId),
       relationships: inBranch(relationshipRows, branchId),
@@ -165,6 +169,7 @@ export function useCollisionResolve(
     requested,
     branchId,
     entityRows,
+    happeningRows,
     awarenessRows,
     involvementRows,
     relationshipRows,

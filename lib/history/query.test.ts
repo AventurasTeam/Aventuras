@@ -27,6 +27,7 @@ import {
   entitiesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
   resetAllStores,
 } from '@/lib/stores'
 
@@ -639,6 +640,7 @@ describe('link-row union', () => {
     await write(aware('char_b', 'hap_fire'))
     await write(involve('hinv_b', 'char_b', 'hap_fire', 'witness'))
     entitiesStore.hydrate(BRANCH, (await db.select().from(entities)) as Entity[])
+    happeningsStore.hydrate(BRANCH, await db.select().from(happenings))
     happeningAwarenessStore.hydrate(BRANCH, await db.select().from(happeningAwareness))
     happeningInvolvementsStore.hydrate(BRANCH, await db.select().from(happeningInvolvements))
     characterRelationshipsStore.hydrate(BRANCH, await db.select().from(characterRelationships))

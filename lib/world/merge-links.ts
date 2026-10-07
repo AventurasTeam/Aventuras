@@ -1,6 +1,7 @@
 import type {
   CharacterRelationship,
   Entity,
+  Happening,
   HappeningAwareness,
   HappeningInvolvement,
 } from '@/lib/db'
@@ -13,6 +14,8 @@ export type MergeLinkInput = {
   loser: Entity
   /** The branch's entities, both rows among them. */
   branchEntities: readonly Entity[]
+  /** The branch's happenings, read with the link rows: one missing here is gone. */
+  happenings: readonly Pick<Happening, 'id' | 'branchId'>[]
   /** The branch's link rows. */
   awareness: readonly HappeningAwareness[]
   involvements: readonly HappeningInvolvement[]
@@ -45,7 +48,10 @@ export type RelationshipCopy = {
 }
 
 export type MergeLinks = {
-  /** The loser's link rows the merge moves or gives way on: all but the pair's own relationship. */
+  /**
+   * The loser's link rows the merge moves or gives way on: those whose other end the branch still
+   * has, the pair's own relationship aside. The cascade removes the rest unmoved.
+   */
   rows: EntityLinkRows
   /** What the merge writes on the canonical. */
   moved: {
@@ -104,12 +110,19 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
     })
   const own = linksOf(loser.id)
   const canonicalLinks = linksOf(canonical.id)
+  // A create's reversal can orphan a link row; its copy's create would refuse the missing end.
+  const onBranch = <Row extends { id: string; branchId: string }>(rows: readonly Row[]) =>
+    new Set(rows.filter((row) => row.branchId === branchId).map((row) => row.id))
+  const happenings = onBranch(input.happenings)
+  const entities = onBranch(input.branchEntities)
   const rows: EntityLinkRows = {
-    ...own,
-    // The pair would name the canonical twice; the cascade removes the row.
-    relationships: own.relationships.filter(
-      (row) => seenFrom(row, loser.id).other !== canonical.id,
-    ),
+    awareness: own.awareness.filter((row) => happenings.has(row.happeningId)),
+    involvements: own.involvements.filter((row) => happenings.has(row.happeningId)),
+    relationships: own.relationships.filter((row) => {
+      const other = seenFrom(row, loser.id).other
+      // The pair would name the canonical twice; the cascade removes the row.
+      return other !== canonical.id && entities.has(other)
+    }),
   }
 
   const known = new Set(canonicalLinks.awareness.map((row) => row.happeningId))

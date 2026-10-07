@@ -22,6 +22,7 @@ import {
   entitiesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
   translationsStore,
 } from '@/lib/stores'
 import { collisionPairOf, entityMergeActions } from '@/lib/world'
@@ -80,27 +81,45 @@ const relationship = (id: string, aId: string, bId: string) => ({
   updatedAt: 1,
 })
 
+// Link rows count only while their other end is still on the branch.
+const LIVE_HAPPENING =
+  'EXISTS (SELECT 1 FROM happenings h WHERE h.branch_id = ?1 AND h.id = happening_id)'
+const LIVE_OTHER_END = `EXISTS (SELECT 1 FROM entities e WHERE e.branch_id = ?1
+  AND e.id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)`
+
 const SQL = {
-  awarenessRows:
-    'SELECT count(*) AS n FROM happening_awareness WHERE branch_id = ?1 AND character_id = ?2',
-  involvements:
-    'SELECT count(*) AS n FROM happening_involvements WHERE branch_id = ?1 AND entity_id = ?2',
+  awarenessRows: `SELECT count(*) AS n FROM happening_awareness
+    WHERE branch_id = ?1 AND character_id = ?2 AND ${LIVE_HAPPENING}`,
+  involvements: `SELECT count(*) AS n FROM happening_involvements
+    WHERE branch_id = ?1 AND entity_id = ?2 AND ${LIVE_HAPPENING}`,
   // The pair's own relationship is dropped by the merge, not moved, so it isn't counted.
-  relationships:
-    'SELECT count(*) AS n FROM character_relationships WHERE branch_id = ?1 AND (a_id = ?2 OR b_id = ?2) AND NOT (a_id = ?3 OR b_id = ?3)',
+  relationships: `SELECT count(*) AS n FROM character_relationships r
+    WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT (r.a_id = ?3 OR r.b_id = ?3)
+      AND ${LIVE_OTHER_END}`,
   // Rows of this side whose other end the partner already relates to (the joining row excluded).
   overlapRelationships: `SELECT count(*) AS n FROM character_relationships r
     WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT (r.a_id = ?3 OR r.b_id = ?3)
+      AND ${LIVE_OTHER_END}
       AND EXISTS (SELECT 1 FROM character_relationships p WHERE p.branch_id = ?1 AND (
         (p.a_id = ?3 AND p.b_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)
         OR (p.b_id = ?3 AND p.a_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)))`,
   // Every involvement but one per happening the partner isn't in: the rest give way.
   overlapInvolvements: `SELECT
-    (SELECT count(*) FROM happening_involvements WHERE branch_id = ?1 AND entity_id = ?2)
+    (SELECT count(*) FROM happening_involvements
+      WHERE branch_id = ?1 AND entity_id = ?2 AND ${LIVE_HAPPENING})
     - (SELECT count(DISTINCT i.happening_id) FROM happening_involvements i
-        WHERE i.branch_id = ?1 AND i.entity_id = ?2 AND NOT EXISTS (
-          SELECT 1 FROM happening_involvements p
-          WHERE p.branch_id = ?1 AND p.entity_id = ?3 AND p.happening_id = i.happening_id)) AS n`,
+        WHERE i.branch_id = ?1 AND i.entity_id = ?2
+          AND EXISTS (SELECT 1 FROM happenings h WHERE h.branch_id = ?1 AND h.id = i.happening_id)
+          AND NOT EXISTS (
+            SELECT 1 FROM happening_involvements p
+            WHERE p.branch_id = ?1 AND p.entity_id = ?3 AND p.happening_id = i.happening_id)) AS n`,
+  danglingLinks: `SELECT
+    (SELECT count(*) FROM happening_awareness WHERE branch_id = ?1 AND character_id = ?2
+      AND NOT ${LIVE_HAPPENING})
+    + (SELECT count(*) FROM happening_involvements WHERE branch_id = ?1 AND entity_id = ?2
+      AND NOT ${LIVE_HAPPENING})
+    + (SELECT count(*) FROM character_relationships r
+      WHERE r.branch_id = ?1 AND (r.a_id = ?2 OR r.b_id = ?2) AND NOT ${LIVE_OTHER_END}) AS n`,
   joiningRelationships: `SELECT count(*) AS n FROM character_relationships
     WHERE branch_id = ?1 AND ((a_id = ?2 AND b_id = ?3) OR (a_id = ?3 AND b_id = ?2))`,
   inverseRefs: `SELECT count(*) AS n FROM entities e
@@ -127,6 +146,7 @@ function sources(): CollisionSources {
   return {
     branchId: 'b1',
     entities: [...entitiesStore.getEntities().values()],
+    happenings: [...happeningsStore.getHappenings().values()],
     awareness: [...happeningAwarenessStore.getAwareness().values()],
     involvements: [...happeningInvolvementsStore.getInvolvements().values()],
     relationships: [...characterRelationshipsStore.getRelationshipRows().values()],
@@ -191,6 +211,8 @@ beforeEach(async () => {
     { id: 'haw_a2', branchId: 'b1', happeningId: 'hap_2', characterId: 'char_a' },
     { id: 'haw_b1', branchId: 'b1', happeningId: 'hap_1', characterId: 'char_b' },
     { id: 'haw_b3', branchId: 'b1', happeningId: 'hap_3', characterId: 'char_b' },
+    // Its happening is gone: a create's reversal can leave a link row naming nothing.
+    { id: 'haw_bg', branchId: 'b1', happeningId: 'hap_gone', characterId: 'char_b' },
   ])
   await db.insert(happeningInvolvements).values([
     { id: 'hinv_a1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_a', role: 'host' },
@@ -198,6 +220,7 @@ beforeEach(async () => {
     { id: 'hinv_b1x', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_b', role: 'thief' },
     { id: 'hinv_b2', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_b', role: null },
     { id: 'hinv_b2x', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_b', role: 'guard' },
+    { id: 'hinv_bg', branchId: 'b1', happeningId: 'hap_gone', entityId: 'char_b', role: null },
   ])
   await db
     .insert(characterRelationships)
@@ -206,6 +229,7 @@ beforeEach(async () => {
       relationship('rel_ac', 'char_a', 'char_c'),
       relationship('rel_bc', 'char_b', 'char_c'),
       relationship('rel_bx', 'char_b', 'char_x'),
+      relationship('rel_bg', 'char_b', 'char_gone'),
     ])
   await db
     .insert(translations)
@@ -215,9 +239,11 @@ beforeEach(async () => {
       translation('tr_ab', 'character_relationship', 'rel_ab'),
       translation('tr_ac', 'character_relationship', 'rel_ac'),
       translation('tr_bc', 'character_relationship', 'rel_bc'),
+      translation('tr_bg', 'character_relationship', 'rel_bg'),
     ])
 
   entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+  happeningsStore.hydrate('b1', await db.select().from(happenings))
   happeningAwarenessStore.hydrate('b1', await db.select().from(happeningAwareness))
   happeningInvolvementsStore.hydrate('b1', await db.select().from(happeningInvolvements))
   characterRelationshipsStore.hydrate('b1', await db.select().from(characterRelationships))
@@ -243,6 +269,8 @@ describe('collisionPair', () => {
     expect(dbCount(SQL.overlapRelationships, 'char_b', 'char_a')).toBe(1)
     expect(dbCount(SQL.relationships, 'char_b', 'char_a')).toBe(2)
     expect(dbCount(SQL.joiningRelationships, 'char_a', 'char_b')).toBe(1)
+    // An awareness row, an involvement and a relationship whose other end is gone.
+    expect(dbCount(SQL.danglingLinks, 'char_b', 'char_a')).toBe(3)
   })
 
   it.each([
@@ -333,6 +361,7 @@ describe('collisionPair', () => {
         deselectedTags: [],
         deselectedKeywords: [],
         branchEntities: src.entities,
+        happenings: src.happenings,
         awareness: src.awareness,
         involvements: src.involvements,
         relationships: src.relationships,

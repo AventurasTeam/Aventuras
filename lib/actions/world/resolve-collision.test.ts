@@ -36,6 +36,7 @@ import {
   generationStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
 } from '@/lib/stores'
 import { entityLinkRows } from '@/lib/world'
 
@@ -154,6 +155,7 @@ function vectorCount(id: string): number {
 
 async function hydrateStores(): Promise<void> {
   entitiesStore.hydrate('b1', (await ctx.db.select().from(entities)) as never)
+  happeningsStore.hydrate('b1', await ctx.db.select().from(happenings))
   happeningAwarenessStore.hydrate('b1', await ctx.db.select().from(happeningAwareness))
   happeningInvolvementsStore.hydrate('b1', await ctx.db.select().from(happeningInvolvements))
   characterRelationshipsStore.hydrate('b1', await ctx.db.select().from(characterRelationships))

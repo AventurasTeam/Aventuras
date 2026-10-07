@@ -116,9 +116,11 @@ relations-summary block shows the **non-canonical**'s counts (what
 the merge carries over or drops), so toggling canonical flips the
 displayed counts to the other side. The World consumer builds both
 sides from the stores: link counts with the entity cascade's own
-predicates, inverse refs across the six ref fields without the
-pair partner (a ref between the two collapses rather than moves),
-`embeddings` as 1 when the row isn't `embedding_stale`, and
+predicates, less the rows whose other end the branch no longer has
+(the merge doesn't move them), inverse refs across the six ref
+fields without the pair partner (a ref between the two collapses
+rather than moves), `embeddings` as 1 when the row isn't
+`embedding_stale`, and
 `overlap` as the rows of this side that give way rather than move:
 its awareness rows and involvements in a happening the other side
 is in, each of its involvements after its first in one happening,

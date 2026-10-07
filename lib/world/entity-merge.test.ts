@@ -93,6 +93,9 @@ function sequentialIds(): (prefix: string) => string {
 
 const A = entity('char_a', 'character')
 const B = entity('char_b', 'character', { nameCollisionFlag: 1 })
+// Bystanders the link rows name.
+const M = entity('char_m', 'character', { name: 'Mira' })
+const N = entity('char_n', 'character', { name: 'Nell' })
 
 function pairOf(first: Entity, second: Entity): CollisionPair {
   const lookup = collisionPairOf([first, second], [first.id, second.id])
@@ -112,7 +115,8 @@ function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) 
     fromLoser: [],
     deselectedTags: [],
     deselectedKeywords: [],
-    branchEntities: [canonical, loser],
+    branchEntities: [canonical, loser, M, N],
+    happenings: ['hap_1', 'hap_2', 'hap_3'].map((id) => ({ id, branchId: 'b1' })),
     awareness: [],
     involvements: [],
     relationships: [],
@@ -161,6 +165,7 @@ describe('entityMergeActions — refusals', () => {
         deselectedTags: [],
         deselectedKeywords: [],
         branchEntities: [A, B],
+        happenings: [],
         awareness: [],
         involvements: [],
         relationships: [],
@@ -179,6 +184,7 @@ describe('entityMergeActions — refusals', () => {
       deselectedTags: [],
       deselectedKeywords: [],
       branchEntities: [A, B],
+      happenings: [],
       awareness: [],
       involvements: [],
       relationships: [],
@@ -485,6 +491,50 @@ describe('entityMergeActions — link rows', () => {
     expect(plan.overlap.involvements).toBe(1)
   })
 
+  it('copies a link row whose other end the branch has, and leaves one whose end is gone', () => {
+    const plan = merge({
+      branchEntities: [A, B, M, entity('char_g', 'character', { branchId: 'b2' })],
+      // hap_g survives on another branch only.
+      happenings: [
+        { id: 'hap_1', branchId: 'b1' },
+        { id: 'hap_g', branchId: 'b2' },
+      ],
+      awareness: [aware('haw_1', 'char_b', 'hap_1'), aware('haw_2', 'char_b', 'hap_g')],
+      involvements: [
+        involved('hinv_1', 'char_b', 'hap_g', null),
+        involved('hinv_2', 'char_b', 'hap_1', 'witness'),
+      ],
+      relationships: [
+        rel('rel_1', 'char_b', 'char_g', 'friend', null),
+        rel('rel_2', 'char_b', 'char_m', 'mentor', null),
+      ],
+    })
+    const ends = plan.actions.map((a) => {
+      switch (a.kind) {
+        case 'upsertHappeningAwareness':
+          return `${a.kind}:${a.payload.happeningId}`
+        case 'createHappeningInvolvement':
+          return `${a.kind}:${a.payload.entry.happeningId}`
+        case 'upsertCharacterRelationship':
+          return `${a.kind}:${a.payload.objectId}`
+        default:
+          return a.kind
+      }
+    })
+    expect(ends).toStrictEqual([
+      'upsertHappeningAwareness:hap_1',
+      'createHappeningInvolvement:hap_1',
+      'upsertCharacterRelationship:char_m',
+      'deleteEntity',
+    ])
+    expect(plan.overlap).toStrictEqual({
+      awareness: 0,
+      involvements: 0,
+      relationships: 0,
+      holdersLosingItem: 0,
+    })
+  })
+
   it('drops the relationship between the pair', () => {
     const plan = merge({ relationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
@@ -495,7 +545,7 @@ describe('entityMergeActions — link rows', () => {
     const canonical = entity('char_z', 'character')
     const plan = merge({
       canonical,
-      branchEntities: [canonical, B],
+      branchEntities: [canonical, B, A, M],
       relationships: [
         rel('rel_1', 'char_b', 'char_m', 'mentor', 'pupil'),
         rel('rel_2', 'char_a', 'char_b', 'ally', 'rival'),

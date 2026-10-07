@@ -6,6 +6,7 @@ import {
   generationStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
 } from '@/lib/stores'
 import {
   COLLISION_PAIR_MISS,
@@ -145,6 +146,7 @@ function buildMerge(branchId: string, resolution: MergeResolution, tail: DeleteT
     deselectedTags: resolution.deselectedTags,
     deselectedKeywords: resolution.deselectedKeywords,
     branchEntities,
+    happenings: branchRows(happeningsStore.getHappenings(), branchId),
     awareness: branchRows(happeningAwarenessStore.getAwareness(), branchId),
     involvements: branchRows(happeningInvolvementsStore.getInvolvements(), branchId),
     relationships: branchRows(characterRelationshipsStore.getRelationshipRows(), branchId),

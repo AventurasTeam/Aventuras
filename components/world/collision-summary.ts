@@ -2,6 +2,7 @@ import type { EntitySummary } from '@/components/compounds/collision-resolve-dif
 import type {
   CharacterRelationship,
   Entity,
+  Happening,
   HappeningAwareness,
   HappeningInvolvement,
   Translation,
@@ -18,6 +19,7 @@ export type CollisionSources = {
   branchId: string
   /** The branch's entities. Entities and translations aren't re-filtered; link rows are. */
   entities: readonly Entity[]
+  happenings: readonly Happening[]
   awareness: readonly HappeningAwareness[]
   involvements: readonly HappeningInvolvement[]
   relationships: readonly CharacterRelationship[]
@@ -48,6 +50,7 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
     canonical: partner,
     loser: entity,
     branchEntities: sources.entities,
+    happenings: sources.happenings,
     awareness: sources.awareness,
     involvements: sources.involvements,
     relationships: sources.relationships,

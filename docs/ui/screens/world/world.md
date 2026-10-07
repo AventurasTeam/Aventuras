@@ -1050,6 +1050,11 @@ case fires, and says when a holder loses an item because the
 canonical item is already held or placed, or that the relationship
 between the two is dropped.
 
+A link row whose other end the branch no longer has (a happening or
+character a reversed create removed) isn't counted or moved: a copy
+would name a missing row, so the non-canonical's delete removes it
+with the rest.
+
 Footer:
 
 ```
@@ -1162,18 +1167,19 @@ Merge writes, in order:
   winning.
 - `happening_awareness` op=`create` per moved row, on the
   canonical, carrying the row's `retrieval_count`. A row for a
-  happening the canonical already knows isn't moved.
+  happening the canonical already knows, or one gone from the branch,
+  isn't moved.
 - `happening_involvements` op=`create` per moved row, on the
   canonical. One in a happening the canonical already takes part in
-  isn't moved, nor one after the non-canonical's first in the same
-  happening.
+  or one gone from the branch isn't moved, nor one after the
+  non-canonical's first in the same happening.
 - `character_relationships` op=`create` (op=`update` when the
   canonical already has a row with that character) per character
   the non-canonical relates to, the views merged with the
   canonical's non-null view winning; no write when the canonical's
   row already holds them. The row keeps `a_id < b_id`, so a view
   changes column when the order flips. A relationship between the
-  two rows isn't moved.
+  two rows, or with a character gone from the branch, isn't moved.
 - `story_entries` metadata update on the tail entry when its scene
   names the non-canonical, or it is the tail's location
   ([Merge](#merge), the tail scene).

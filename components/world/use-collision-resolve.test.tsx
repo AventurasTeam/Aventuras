@@ -13,6 +13,7 @@ import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
 import {
   emptyEntityState,
   type CharacterRelationship,
+  type Happening,
   type HappeningAwareness,
   type HappeningInvolvement,
   type Translation,
@@ -24,6 +25,7 @@ import {
   entitiesStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
+  happeningsStore,
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
@@ -144,8 +146,24 @@ function fieldChoices(
   return state.fieldChoices
 }
 
+const HAPPENING: Happening = {
+  id: 'hap_1',
+  branchId: BRANCH,
+  title: 'Fire',
+  description: null,
+  category: null,
+  icon: null,
+  temporal: null,
+  occurredAtEntryId: null,
+  commonKnowledge: 1,
+  embeddingStale: 0,
+  createdAt: 1,
+  updatedAt: 1,
+}
+
 beforeEach(() => {
   entitiesStore.hydrate(BRANCH, [OLDER, NEWER])
+  happeningsStore.hydrate(BRANCH, [HAPPENING])
   happeningAwarenessStore.hydrate(BRANCH, [])
   happeningInvolvementsStore.hydrate(BRANCH, [])
   characterRelationshipsStore.hydrate(BRANCH, [])
@@ -160,6 +178,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   entitiesStore.__reset()
+  happeningsStore.__reset()
   happeningAwarenessStore.__reset()
   happeningInvolvementsStore.__reset()
   characterRelationshipsStore.__reset()
