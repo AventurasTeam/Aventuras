@@ -2366,7 +2366,7 @@ resume on the timer.
 
 [`ui/patterns/chips.md`](./ui/patterns/chips.md) splits Chip
 (square, toggleable filter / state) and Tag (pill, labeled content)
-along corner radius as the visual fundamental. Three wireframes
+along corner radius as the visual fundamental. Two wireframes
 drifted to pill on filter chips when they should match the square
 Chip shape:
 
@@ -2374,9 +2374,6 @@ Chip shape:
   (All / Favorited / Archived) currently `border-radius: 999px`.
 - `docs/ui/screens/vault/calendars/calendars.html` —
   `.filter-chip` (All / Built-in / Custom) currently `999px`.
-- `docs/ui/screens/reader-composer/reader-composer.html` —
-  `.sheet-chip` inside the Browse rail mobile sheet (All / Lead /
-  Recent / Pinned) currently `999px`.
 
 Cosmetic consolidation pass — primitive ships independent of
 wireframe state, and the wireframes still communicate the right UX
@@ -2908,6 +2905,26 @@ rule when this lands. Only `locales/en` ships.
 
 Parked 2026-09-27 from triage; the signal is the first non-English
 locale.
+
+#### Category-label lowercasing
+
+The list panes' search placeholder and empty-list title lowercase
+the category label in code, in the app language
+(`components/entity/world-list-copy.ts`,
+`components/plot/plot-list-copy.ts`), so a translation whose nouns
+keep their capital (German) can't opt out. A formatter in the
+string itself (`{{category, lowercase}}`) would hand the choice to
+translators. i18next ships no `lowercase` formatter, though, and
+lowercasing fixes capitals but not case — many languages inflect
+the noun after "No" or "Search". The label is surface-owned per
+[Milestone 4's C2](./implementation/milestones/04-world-plot-read-surfaces/milestone.md#c2--per-kind-list-modules)
+(World's `Locations`, the Browse rail's `Places`), so the rail
+inherits the same lowercasing; the likelier fix is the surface
+passing finished copy strings, as the rail already does for its
+empty subtext. Only `en` ships today.
+
+Raised 2026-09-11 in Slice 4.5a's open questions and parked in its
+planning (2026-10-07); the signal is a second UI language shipping.
 
 #### Reader rejection copy always offers a retry
 

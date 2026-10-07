@@ -169,19 +169,32 @@ chip, whose tint is the aggregate classifier signal.
   `app_settings.appearance.readerRailCollapsed` boolean with a Zod
   default (the `showJumpToBottom` precedent). Alternative: device
   storage outside the DB. Canon calls this an implementation detail.
+  Resolved in planning (2026-10-07): the additive key as assumed,
+  default `false` (first launch open), applied optimistically — see
+  the `appearance` line in
+  [`data-model.md → Diagram`](../../../../data-model.md#diagram).
 - **Chapterless phone strip.** Canon hides the whole strip — Browse
   chip included — until the story has a chapter, which makes the rail
   unreachable on phone for every story before M5. Default: show the
   strip with the Browse chip whenever the branch has any browsable
   row, and amend `navigation.md`'s empty-state rule in this PR.
+  Resolved in planning (2026-10-07), wider than the default: the chip
+  renders on every phone reader, browsable rows or not, so the strip
+  never pops in mid-session; an empty story opens the Sheet onto the
+  per-category empty state — see
+  [`navigation.md → Reader chip strip`](../../../../ui/foundations/mobile/navigation.md#reader-chip-strip-phone-only).
 - **Rail width.** Canon says ~300 px; the placeholder is 260 px. Pick
-  at planning against the reader's narrow-window behavior.
+  at planning against the reader's narrow-window behavior. Resolved
+  in planning (2026-10-07): 300 px, per canon.
 - **Empty-state copy mismatch.** `world:empty.classifierBody` says
   "+ New", which the rail doesn't have — needs per-surface empty
   subtext. More broadly, `EntityRow` and list-module copy read the
   `world:` i18n namespace, so the rail pulls World's namespace into
   the reader — decide whether to move the shared C2 copy to a neutral
-  namespace.
+  namespace. Resolved in planning (2026-10-07): the rail passes its own
+  empty subtext (`reader:rail.empty.*`, no `+ New` clause, lore
+  pointing to the World panel); the shared C2 copy stays in `world:`
+  and `plot:`, since every namespace is bundled at init.
 - **World's category-label lowercasing is English-only.**
   (2026-09-11) The search placeholder and the empty-list title
   lowercase the category label in code, in the app language, so a
@@ -193,10 +206,14 @@ chip, whose tint is the aggregate classifier signal.
   surface-owned per C2 (World's `Locations`, the rail's `Places`), so
   the rail inherits the same lowercasing; the likelier fix is the
   surface passing finished copy strings, which pairs with the question
-  above. Only `en` ships today.
+  above. Only `en` ships today. Resolved in planning (2026-10-07):
+  parked until a second UI language ships — see
+  [`parked.md → Category-label lowercasing`](../../../../parked.md#category-label-lowercasing).
 - **Read the lead through `resolveLead`** (4.2b): a reversal can leave
   `leadEntityId` dangling, and the You badge / peek `Set as lead` must
-  treat it as absent.
+  treat it as absent. Resolved in planning (2026-10-07): the rail's
+  lead comes from `resolveLead`, labelled `you` in adventure and
+  `protagonist` in creative; the peek's `Set as lead` is 4.5b's.
 
 ## Implementation notes
 

@@ -106,3 +106,13 @@ slice-planning gate forces its resolution before that slice is planned.
   connection), so it's routed here rather than into the slice. Revisit
   if History or another log-shaped query feels slow on a long story,
   Android first. Found during 4.2c planning (2026-10-06).
+- **Editor overlays skip canon's in-edit dismissal guard.**
+  [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) wants an
+  in-edit dismissal to raise the save-session navigate-away guard (Save /
+  Discard / Cancel) and Esc to dismiss on desktop. On phone, the world-time
+  and scene editors are bottom Sheets: gorhom reports a dismissal only after
+  it happens, so 4.5a blocks drag-down and tap-outside while they hold
+  unsaved input, but Android back still closes them through the primitive's
+  `BackHandler` and discards it, and bottom Sheets bind no Esc on web. On
+  desktop and tablet the same edits run in `EntryCard`'s Radix Dialogs, which
+  drop the input on an outside click. Raised in 4.5a planning, 2026-10-07.

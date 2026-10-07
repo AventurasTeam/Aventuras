@@ -201,9 +201,8 @@ flex-wrap).
 
 ## Followups
 
-- **Wireframe reframe — pill → square on filter chips.** Three
+- **Wireframe reframe — pill → square on filter chips.** Two
   surfaces drifted to pill in their wireframes when they should
-  match the Chip square shape: story-list, vault calendars, reader
-  Browse rail mobile sheet. Cosmetic consistency pass; not a v1
-  blocker. Tracked at
+  match the Chip square shape: story-list and vault calendars.
+  Cosmetic consistency pass; not a v1 blocker. Tracked at
   [`parked.md → Filter chip pill→square wireframe consolidation`](../../parked.md#filter-chip-pillsquare-wireframe-consolidation).
