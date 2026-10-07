@@ -12,6 +12,8 @@ import {
 
 import {
   entityLinkRows,
+  holdersLosingItem,
+  itemHasPosition,
   referencingEntities,
   stateWithRefRewritten,
   unheldItemsWithout,
@@ -223,6 +225,37 @@ describe('entityLinkRows', () => {
     expect(links.awareness.map((r) => r.id)).toEqual(['haw_1'])
     expect(links.involvements.map((r) => r.id)).toEqual(['hinv_1'])
     expect(links.relationships.map((r) => r.id)).toEqual(['rel_1', 'rel_2'])
+  })
+})
+
+describe('itemHasPosition', () => {
+  it('is true for an item placed at a location or carried by a character', () => {
+    expect(itemHasPosition(entity('item_1', 'item', { at_location_id: 'loc_1' }), [])).toBe(true)
+    const carrier = entity('char_1', 'character', { equipped_items: ['item_2'] })
+    expect(itemHasPosition(entity('item_2', 'item'), [carrier])).toBe(true)
+    expect(itemHasPosition(entity('item_3', 'item'), [carrier])).toBe(false)
+  })
+})
+
+describe('holdersLosingItem', () => {
+  const loser = entity('item_b', 'item')
+  const placed = entity('item_a', 'item', { at_location_id: 'loc_1' })
+  const lone = entity('char_1', 'character', { inventory: ['item_b'] })
+  const both = entity('char_2', 'character', { equipped_items: ['item_a'], inventory: ['item_b'] })
+
+  it('counts the holders of the loser that do not already carry the canonical', () => {
+    expect(holdersLosingItem(loser, placed, [placed, loser, lone, both])).toBe(1)
+  })
+
+  it('counts nobody when the canonical has no position: every holder moves to it', () => {
+    const bare = entity('item_a', 'item')
+    expect(holdersLosingItem(loser, bare, [bare, loser, lone])).toBe(0)
+  })
+
+  it('counts nobody when the pair is not items', () => {
+    const a = entity('loc_a', 'location')
+    const b = entity('loc_b', 'location')
+    expect(holdersLosingItem(b, a, [a, b, lone])).toBe(0)
   })
 })
 

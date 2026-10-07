@@ -11,8 +11,14 @@ import { dedupeTerms } from '@/lib/keyword-terms'
 
 import { cleanList, sameList } from './draft-text'
 import type { DeleteTail } from './entity-delete'
-import { heldItems, stateOf } from './entity-draft'
-import { entityLinkRows, stateWithRefRewritten, type EntityLinkRows } from './entity-refs'
+import { stateOf } from './entity-draft'
+import {
+  entityLinkRows,
+  holdersLosingItem,
+  itemHasPosition,
+  stateWithRefRewritten,
+  type EntityLinkRows,
+} from './entity-refs'
 
 export const MERGE_SCALARS = [
   'name',
@@ -46,8 +52,17 @@ export type EntityMergeInput = {
 
 export type EntityMergePlan = {
   actions: PipelineAction[]
-  /** Loser rows the canonical already covers; the cascade removes them. */
-  dropped: { awareness: number; involvements: number }
+  /**
+   * What the canonical already covers, so the loser's side gives way: awareness and involvement
+   * rows the cascade removes unmoved, relationships whose views the canonical keeps over the
+   * loser's, and holders who lose the loser item because the canonical already has a position.
+   */
+  dropped: {
+    awareness: number
+    involvements: number
+    relationships: number
+    holdersLosingItem: number
+  }
 }
 
 type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload']['patch']
@@ -89,12 +104,9 @@ function canonicalPatch(input: EntityMergeInput): EntityPatch {
  * ItemState shape): a held or placed canonical keeps its own; the loser's holders drop it.
  */
 function refTarget({ canonical, branchEntities }: EntityMergeInput): string | null {
-  if (canonical.kind !== 'item') return canonical.id
-  const placed = stateOf(canonical, 'item').at_location_id != null
-  const held = branchEntities.some(
-    (e) => e.kind === 'character' && heldItems(stateOf(e, 'character')).includes(canonical.id),
-  )
-  return placed || held ? null : canonical.id
+  return canonical.kind === 'item' && itemHasPosition(canonical, branchEntities)
+    ? null
+    : canonical.id
 }
 
 /**
@@ -124,7 +136,7 @@ function relationshipActions(
   input: EntityMergeInput,
   loser: EntityLinkRows,
   canonical: EntityLinkRows,
-): PipelineAction[] {
+): { actions: PipelineAction[]; alreadyRelated: number } {
   const { branchId } = input
   const kept = new Map(
     canonical.relationships.map((row) => {
@@ -133,11 +145,13 @@ function relationshipActions(
     }),
   )
   const actions: PipelineAction[] = []
+  let alreadyRelated = 0
   for (const row of loser.relationships) {
     const moved = seenFrom(row, input.loser.id)
     // The pair would name the canonical twice; the cascade removes the row.
     if (moved.other === input.canonical.id) continue
     const existing = kept.get(moved.other)
+    if (existing != null) alreadyRelated += 1
     const self = existing?.self ?? moved.self
     const their = existing?.their ?? moved.their
     if (existing != null && existing.self === self && existing.their === their) continue
@@ -153,7 +167,7 @@ function relationshipActions(
       },
     })
   }
-  return actions
+  return { actions, alreadyRelated }
 }
 
 /** The loser replaced by the canonical in place, the canonical kept once. */
@@ -214,7 +228,12 @@ export function entityMergeActions(input: EntityMergeInput): EntityMergePlan {
   const loserLinks = linksOf(loser.id)
   const canonicalLinks = linksOf(canonical.id)
   const actions: PipelineAction[] = []
-  const dropped = { awareness: 0, involvements: 0 }
+  const dropped = {
+    awareness: 0,
+    involvements: 0,
+    relationships: 0,
+    holdersLosingItem: holdersLosingItem(loser, canonical, input.branchEntities),
+  }
 
   const patch = canonicalPatch(input)
   if (Object.keys(patch).length > 0) actions.push(updateEntity(branchId, canonical.id, patch))
@@ -268,7 +287,9 @@ export function entityMergeActions(input: EntityMergeInput): EntityMergePlan {
     })
   }
 
-  actions.push(...relationshipActions(input, loserLinks, canonicalLinks))
+  const relationships = relationshipActions(input, loserLinks, canonicalLinks)
+  actions.push(...relationships.actions)
+  dropped.relationships = relationships.alreadyRelated
   actions.push(...tailActions(input))
   actions.push({ kind: 'deleteEntity', source: 'user_edit', payload: { branchId, id: loser.id } })
   return { actions, dropped }

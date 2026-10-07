@@ -1,5 +1,5 @@
 import { useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
-import { Platform, ScrollView, View, type ViewProps } from 'react-native'
+import { Platform, Pressable, ScrollView, View, type ViewProps } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -14,34 +14,95 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { useTier } from '@/hooks/use-tier'
+import { relativeTimeLabel, t } from '@/lib/i18n'
+import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
+import { RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
 
 import {
   computeDivergence,
+  keywordUnion,
+  selectedTerms,
   type DiffPayload,
   type EntitySummary,
   type Resolution,
   type ScalarField,
+  type TermPartition,
 } from './collision-resolve-diff'
 import { initMergeState, mergeReducer } from './collision-resolve-machine'
 
 type Mode = 'merge' | 'rename' | 'keep'
 
-const SCALAR_LABELS: Record<ScalarField, string> = {
-  name: 'Name',
-  description: 'Description',
-  status: 'Status',
-  retiredReason: 'Retired reason',
-  injectionMode: 'Injection mode',
+type Side = 'A' | 'B'
+
+// world.md → Merge: stacked choices clamp prose values and expand them in place.
+const PROSE_FIELDS: ReadonlySet<ScalarField> = new Set<ScalarField>([
+  'description',
+  'retiredReason',
+])
+const STACKED_CLAMP_LINES = 3
+
+const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
+  [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
+  [RENAME_ISSUE.stillColliding]: () => t('collisionDialog.renameIssue.stillColliding'),
 }
 
 type CollisionResolveDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  entityA: EntitySummary
-  entityB: EntitySummary
+  entityA: EntitySummary // older by createdAt; default canonical
+  entityB: EntitySummary // newer
+  /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
+  /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
+  blockedReason?: string
+}
+
+type BodyProps = {
+  onSubmit: (resolution: Resolution) => void
+  onCancel: () => void
+  submitting: boolean
+  blockedReason?: string
+  error: string | null
+}
+
+function ageOf(entity: EntitySummary, nowMs: number): string {
+  return relativeTimeLabel(Date.parse(entity.createdAt), nowMs)
+}
+
+function markCanonical(label: string, canonical: boolean): string {
+  return canonical ? t('collisionDialog.canonicalSuffix', { label }) : label
+}
+
+function sideCaption(side: Side, entity: EntitySummary, nowMs: number): string {
+  const when = ageOf(entity, nowMs)
+  return side === 'A'
+    ? t('collisionDialog.olderSide', { when })
+    : t('collisionDialog.newerSide', { when })
+}
+
+function fieldValue(field: ScalarField, entity: EntitySummary): string {
+  switch (field) {
+    case 'name':
+      return entity.name
+    case 'description':
+      return entity.description ?? t('collisionDialog.emptyValue')
+    case 'retiredReason':
+      return entity.retiredReason ?? t('collisionDialog.emptyValue')
+    case 'status':
+      return t(`world:status.${entity.status}`)
+    case 'injectionMode':
+      return t(`world:fields.injection.${entity.injectionMode}`)
+    case 'priority':
+      return String(entity.priority)
+  }
+}
+
+function termUnion(partition: TermPartition): string[] {
+  return partition == null
+    ? []
+    : [...partition.both, ...partition.onlyInA, ...partition.onlyInB].sort()
 }
 
 export function CollisionResolveDialog({
@@ -50,10 +111,13 @@ export function CollisionResolveDialog({
   entityA,
   entityB,
   onResolve,
+  blockedReason,
 }: CollisionResolveDialogProps) {
   const [mode, setMode] = useState<Mode>('merge')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // One clock per mounted dialog, so the side captions don't drift between renders.
+  const [nowMs] = useState(() => Date.now())
 
   const diff = useMemo(() => computeDivergence(entityA, entityB), [entityA, entityB])
 
@@ -64,7 +128,7 @@ export function CollisionResolveDialog({
       await onResolve(resolution)
       onOpenChange(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Resolution failed')
+      setError(e instanceof Error ? e.message : t('collisionDialog.failed'))
     } finally {
       setSubmitting(false)
     }
@@ -83,19 +147,20 @@ export function CollisionResolveDialog({
   }
 
   const modeOptions: SelectOption[] = [
-    { value: 'merge', label: 'Merge into one' },
-    { value: 'rename', label: 'Rename one' },
-    { value: 'keep', label: 'Keep as distinct' },
+    { value: 'merge', label: t('collisionDialog.mode.merge') },
+    { value: 'rename', label: t('collisionDialog.mode.rename') },
+    { value: 'keep', label: t('collisionDialog.mode.keep') },
   ]
+  const onCancel = () => handleOpenChange(false)
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl" scrollable={false}>
         <DialogHeader>
-          <DialogTitle>{`⚠ Two ${entityA.kind}s named "${entityA.name}"`}</DialogTitle>
-          <DialogDescription>
-            Pick how to resolve this collision. Switching modes discards in-progress choices.
-          </DialogDescription>
+          <DialogTitle>
+            {t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })}
+          </DialogTitle>
+          <DialogDescription>{t('collisionDialog.description')}</DialogDescription>
         </DialogHeader>
 
         <Select
@@ -103,7 +168,7 @@ export function CollisionResolveDialog({
           value={mode}
           onValueChange={handleModeChange}
           mode="segment"
-          label="Resolution path"
+          label={t('collisionDialog.modeLabel')}
           disabled={submitting}
         />
 
@@ -112,9 +177,11 @@ export function CollisionResolveDialog({
             entityA={entityA}
             entityB={entityB}
             diff={diff}
+            nowMs={nowMs}
             onSubmit={handleSubmit}
-            onCancel={() => handleOpenChange(false)}
+            onCancel={onCancel}
             submitting={submitting}
+            blockedReason={blockedReason}
             error={error}
           />
         )}
@@ -122,9 +189,11 @@ export function CollisionResolveDialog({
           <RenameBody
             entityA={entityA}
             entityB={entityB}
+            nowMs={nowMs}
             onSubmit={handleSubmit}
-            onCancel={() => handleOpenChange(false)}
+            onCancel={onCancel}
             submitting={submitting}
+            blockedReason={blockedReason}
             error={error}
           />
         )}
@@ -132,8 +201,9 @@ export function CollisionResolveDialog({
           <KeepBody
             name={entityA.name}
             onSubmit={handleSubmit}
-            onCancel={() => handleOpenChange(false)}
+            onCancel={onCancel}
             submitting={submitting}
+            blockedReason={blockedReason}
             error={error}
           />
         )}
@@ -146,7 +216,15 @@ export function CollisionResolveDialog({
  * Mode body: the content scrolls, the actions stay put. See
  * [overlays.md](../../docs/ui/patterns/overlays.md) — Dialog height and scroll.
  */
-function ModeBody({ children, actions }: { children: ViewProps['children']; actions: ReactNode }) {
+function ModeBody({
+  children,
+  actions,
+  blockedReason,
+}: {
+  children: ViewProps['children']
+  actions: ReactNode
+  blockedReason?: string
+}) {
   return (
     <View className="shrink gap-4">
       <ScrollView
@@ -157,29 +235,53 @@ function ModeBody({ children, actions }: { children: ViewProps['children']; acti
         {children}
       </ScrollView>
       <DialogFooter>{actions}</DialogFooter>
+      {blockedReason != null ? (
+        <Text size="sm" variant="muted">
+          {blockedReason}
+        </Text>
+      ) : null}
     </View>
   )
 }
 
-type MergeBodyProps = {
+function ErrorLine({ error }: { error: string | null }) {
+  if (error == null) return null
+  return (
+    <Text size="sm" className="text-danger">
+      {error}
+    </Text>
+  )
+}
+
+function CancelButton({ onCancel, submitting }: { onCancel: () => void; submitting: boolean }) {
+  return (
+    <Button variant="secondary" onPress={onCancel} disabled={submitting}>
+      <Text>{t('cancel')}</Text>
+    </Button>
+  )
+}
+
+type MergeBodyProps = BodyProps & {
   entityA: EntitySummary
   entityB: EntitySummary
   diff: DiffPayload
-  onSubmit: (resolution: Resolution) => void
-  onCancel: () => void
-  submitting: boolean
-  error: string | null
+  nowMs: number
 }
 
 function MergeBody({
   entityA,
   entityB,
   diff,
+  nowMs,
   onSubmit,
   onCancel,
   submitting,
+  blockedReason,
   error,
 }: MergeBodyProps) {
+  // Web tiers above phone lay the choices out in columns; native stacks them at every tier.
+  const phone = useTier() === 'phone'
+  const stacked = phone || Platform.OS !== 'web'
   const [state, dispatch] = useReducer(mergeReducer, undefined, () =>
     initMergeState(diff, entityA.id, entityA.id),
   )
@@ -202,72 +304,89 @@ function MergeBody({
   const nonCanonical = state.canonicalId === entityA.id ? entityB : entityA
 
   const canonicalOptions: SelectOption[] = [
-    { value: entityA.id, label: `${entityA.name} · ${formatAgo(entityA.createdAt)}` },
-    { value: entityB.id, label: `${entityB.name} · ${formatAgo(entityB.createdAt)}` },
+    {
+      value: entityA.id,
+      label: markCanonical(
+        t('collisionDialog.canonicalOption', { name: entityA.name, when: ageOf(entityA, nowMs) }),
+        canonical === entityA,
+      ),
+    },
+    {
+      value: entityB.id,
+      label: markCanonical(
+        t('collisionDialog.canonicalOption', { name: entityB.name, when: ageOf(entityB, nowMs) }),
+        canonical === entityB,
+      ),
+    },
   ]
 
-  const allTags = useMemo(() => {
-    if (diff.tags == null) return [...entityA.tags].sort()
-    return [...diff.tags.both, ...diff.tags.onlyInA, ...diff.tags.onlyInB].sort()
-  }, [diff.tags, entityA.tags])
-
-  const finalTags = useMemo(
-    () => allTags.filter((t) => !state.deselectedTags.includes(t)),
-    [allTags, state.deselectedTags],
+  const allTags = useMemo(() => termUnion(diff.tags), [diff.tags])
+  const allKeywords = useMemo(
+    () => keywordUnion(diff.keywords, canonical.keywords),
+    [diff.keywords, canonical.keywords],
   )
-
-  const allKeywords = useMemo(() => {
-    if (diff.keywords == null) return [...entityA.keywords].sort()
-    return [...diff.keywords.both, ...diff.keywords.onlyInA, ...diff.keywords.onlyInB].sort()
-  }, [diff.keywords, entityA.keywords])
-
-  // Deselects first (what the user acted on), then the normalization collapse —
-  // collision-resolve.md: a case variant must not survive as a second entry.
-  const finalKeywords = useMemo(() => {
-    const seen = new Set<string>()
-    return allKeywords
-      .filter((k) => !state.deselectedKeywords.includes(k))
-      .filter((k) => {
-        const key = normalizeTerm(k)
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-  }, [allKeywords, state.deselectedKeywords])
+  // A null partition means the two sides already agree: submit the canonical's own list, so the
+  // merge doesn't write a reordered or respelled copy of it.
+  const finalTags =
+    diff.tags == null
+      ? canonical.tags
+      : selectedTerms({
+          own: canonical.tags,
+          offered: allTags,
+          deselected: state.deselectedTags,
+          keyOf: (tag) => tag,
+        })
+  const finalKeywords =
+    diff.keywords == null
+      ? canonical.keywords
+      : selectedTerms({
+          own: dedupeTerms(canonical.keywords),
+          offered: allKeywords,
+          deselected: state.deselectedKeywords,
+          keyOf: normalizeTerm,
+        })
 
   function handleConfirm() {
     onSubmit({
       mode: 'merge',
       canonicalId: state.canonicalId,
       fieldChoices: state.fieldChoices,
-      finalTags,
-      finalKeywords,
+      finalTags: [...finalTags],
+      finalKeywords: [...finalKeywords],
     })
   }
 
+  const counts = nonCanonical.relationCounts
+
   return (
     <ModeBody
+      blockedReason={blockedReason}
       actions={
         <>
-          <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-            <Text>Cancel</Text>
-          </Button>
-          <Button variant="primary" onPress={handleConfirm} loading={submitting}>
-            <Text>{`Merge into ${canonical.name}`}</Text>
+          <CancelButton onCancel={onCancel} submitting={submitting} />
+          <Button
+            variant="primary"
+            onPress={handleConfirm}
+            loading={submitting}
+            disabled={blockedReason != null}
+            disabledReason={blockedReason}
+          >
+            <Text>{t('collisionDialog.mergeConfirm', { name: canonical.name })}</Text>
           </Button>
         </>
       }
     >
       <View className="gap-2">
         <Text size="sm" variant="muted">
-          Canonical (this row survives)
+          {t('collisionDialog.canonicalHint')}
         </Text>
         <Select
           options={canonicalOptions}
           value={state.canonicalId}
           onValueChange={(id) => dispatch({ type: 'pick-canonical', id, entityAId: entityA.id })}
-          mode="segment"
-          label="Canonical"
+          // Segment options are one fixed-height row; a phone's half-width label wraps and clips.
+          mode={phone ? 'radio' : 'segment'}
+          label={t('collisionDialog.canonicalLabel')}
           disabled={submitting}
         />
       </View>
@@ -275,15 +394,33 @@ function MergeBody({
       {diff.divergentScalars.length > 0 && (
         <View className="gap-2 rounded-md border border-border bg-bg-sunken p-3">
           <Text size="sm" variant="muted">
-            Divergent fields
+            {t('collisionDialog.divergentFields')}
           </Text>
+          {/* world.md → Merge, side identification: stacked choices carry their own caption. */}
+          {!stacked && (
+            <View className="flex-row gap-2">
+              {(['A', 'B'] as const).map((side) => {
+                const entity = side === 'A' ? entityA : entityB
+                return (
+                  <Text key={side} size="xs" variant="muted" className="flex-1">
+                    {markCanonical(
+                      sideCaption(side, entity, nowMs),
+                      entity.id === state.canonicalId,
+                    )}
+                  </Text>
+                )
+              })}
+            </View>
+          )}
           {diff.divergentScalars.map((field) => (
             <FieldRow
               key={field}
               field={field}
-              valueA={String(entityA[field] ?? '—')}
-              valueB={String(entityB[field] ?? '—')}
-              pick={state.fieldChoices[field]}
+              entityA={entityA}
+              entityB={entityB}
+              nowMs={nowMs}
+              stacked={stacked}
+              pick={state.fieldChoices[field] ?? (canonical === entityA ? 'A' : 'B')}
               onPick={(side) => dispatch({ type: 'pick-field', field, side })}
               disabled={submitting}
             />
@@ -294,11 +431,11 @@ function MergeBody({
       {diff.keywords != null && (
         <View className="gap-2">
           <Text size="sm" variant="muted">
-            Keywords (click to remove from merge)
+            {t('collisionDialog.keywords')}
           </Text>
           <View className="flex-row flex-wrap gap-2">
             {allKeywords.map((keyword) => {
-              const deselected = state.deselectedKeywords.includes(keyword)
+              const deselected = state.deselectedKeywords.includes(normalizeTerm(keyword))
               return (
                 <Chip
                   key={keyword}
@@ -317,7 +454,7 @@ function MergeBody({
       {diff.tags != null && (
         <View className="gap-2">
           <Text size="sm" variant="muted">
-            Tags (click to remove from merge)
+            {t('collisionDialog.tags')}
           </Text>
           <View className="flex-row flex-wrap gap-2">
             {allTags.map((tag) => {
@@ -339,59 +476,141 @@ function MergeBody({
 
       {diff.stateDivergent && (
         <Text size="sm" variant="muted">
-          State JSON will follow the canonical row · edit on detail pane after merge.
+          {t('collisionDialog.stateNote')}
         </Text>
       )}
 
       <View className="gap-1 rounded-md border border-border bg-bg-sunken p-3">
         <Text size="sm" variant="muted">
-          {`Moves on merge (${nonCanonical.name} → ${canonical.name})`}
+          {t('collisionDialog.summary.heading', { from: nonCanonical.name, to: canonical.name })}
         </Text>
-        <Text size="sm">{`Awareness rows: ${nonCanonical.relationCounts.awarenessRows}`}</Text>
-        <Text size="sm">{`Involvements: ${nonCanonical.relationCounts.involvements}`}</Text>
-        <Text size="sm">{`Inverse refs: ${nonCanonical.relationCounts.inverseRefs}`}</Text>
-        <Text size="sm">{`Embeddings: ${nonCanonical.relationCounts.embeddings}`}</Text>
-        <Text size="sm">{`Translation rows: ${nonCanonical.relationCounts.translationRows}`}</Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.awareness', { value: counts.awarenessRows })}
+        </Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.involvements', { value: counts.involvements })}
+        </Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.relationships', { value: counts.relationships })}
+        </Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.inverseRefs', { value: counts.inverseRefs })}
+        </Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.embeddings', { value: counts.embeddings })}
+        </Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.unheldItems', { value: counts.unheldItems })}
+        </Text>
+        <Text size="sm">
+          {t('collisionDialog.summary.translations', { value: counts.translationRows })}
+        </Text>
+        {counts.overlap.awareness > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.overlapAwareness', {
+              count: counts.overlap.awareness,
+              name: canonical.name,
+            })}
+          </Text>
+        ) : null}
+        {counts.overlap.involvements > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.overlapInvolvements', {
+              count: counts.overlap.involvements,
+              name: canonical.name,
+            })}
+          </Text>
+        ) : null}
+        {counts.overlap.relationships > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.overlapRelationships', {
+              count: counts.overlap.relationships,
+              name: canonical.name,
+            })}
+          </Text>
+        ) : null}
+        {counts.overlap.holdersLosingItem > 0 ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.holdersLosingItem', {
+              count: counts.overlap.holdersLosingItem,
+              name: canonical.name,
+            })}
+          </Text>
+        ) : null}
+        {counts.joiningRelationship ? (
+          <Text size="xs" variant="muted">
+            {t('collisionDialog.summary.joiningRelationship')}
+          </Text>
+        ) : null}
       </View>
 
-      {error != null && (
-        <Text size="sm" className="text-danger">
-          {error}
-        </Text>
-      )}
+      <ErrorLine error={error} />
     </ModeBody>
   )
 }
 
 type FieldRowProps = {
   field: ScalarField
-  valueA: string
-  valueB: string
-  pick: 'A' | 'B'
-  onPick: (side: 'A' | 'B') => void
+  entityA: EntitySummary
+  entityB: EntitySummary
+  nowMs: number
+  stacked: boolean
+  pick: Side
+  onPick: (side: Side) => void
   disabled?: boolean
 }
 
-function FieldRow({ field, valueA, valueB, pick, onPick, disabled }: FieldRowProps) {
+function FieldRow({
+  field,
+  entityA,
+  entityB,
+  nowMs,
+  stacked,
+  pick,
+  onPick,
+  disabled,
+}: FieldRowProps) {
+  const label = t(`collisionDialog.field.${field}`)
   return (
-    <View className="gap-1">
+    <View role={stacked ? 'radiogroup' : 'group'} accessibilityLabel={label} className="gap-1">
       <Text size="sm" variant="muted">
-        {SCALAR_LABELS[field]}
+        {label}
       </Text>
-      <View className={Platform.select({ web: 'flex-row gap-2', default: 'gap-2' }) ?? 'gap-2'}>
-        <RadioCard
-          label={valueA}
-          selected={pick === 'A'}
-          onPress={() => onPick('A')}
-          disabled={disabled}
-        />
-        <RadioCard
-          label={valueB}
-          selected={pick === 'B'}
-          onPress={() => onPick('B')}
-          disabled={disabled}
-        />
-      </View>
+      {stacked ? (
+        <View className="gap-1">
+          <StackedChoice
+            value={fieldValue(field, entityA)}
+            caption={sideCaption('A', entityA, nowMs)}
+            prose={PROSE_FIELDS.has(field)}
+            selected={pick === 'A'}
+            onPick={() => onPick('A')}
+            disabled={disabled}
+          />
+          <StackedChoice
+            value={fieldValue(field, entityB)}
+            caption={sideCaption('B', entityB, nowMs)}
+            prose={PROSE_FIELDS.has(field)}
+            selected={pick === 'B'}
+            onPick={() => onPick('B')}
+            disabled={disabled}
+          />
+        </View>
+      ) : (
+        <View className="flex-row gap-2">
+          <RadioCard
+            label={fieldValue(field, entityA)}
+            selected={pick === 'A'}
+            onPress={() => onPick('A')}
+            disabled={disabled}
+          />
+          <RadioCard
+            label={fieldValue(field, entityB)}
+            selected={pick === 'B'}
+            onPress={() => onPick('B')}
+            disabled={disabled}
+          />
+        </View>
+      )}
     </View>
   )
 }
@@ -411,27 +630,77 @@ function RadioCard({ label, selected, onPress, disabled }: RadioCardProps) {
   )
 }
 
-function formatAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60_000) return 'just now'
-  const mins = Math.floor(ms / 60_000)
-  if (mins < 60) return `${mins} min ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs} h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days} d ago`
+type StackedChoiceProps = {
+  value: string
+  caption: string
+  prose: boolean
+  selected: boolean
+  onPick: () => void
+  disabled?: boolean
 }
 
-type RenameBodyProps = {
+// world.md → Merge on mobile: radio and prose are separate taps; the caption names the side.
+function StackedChoice({ value, caption, prose, selected, onPick, disabled }: StackedChoiceProps) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <View className="flex-row items-start gap-1">
+      <Pressable
+        role="radio"
+        accessibilityRole="radio"
+        aria-checked={selected}
+        accessibilityLabel={caption}
+        accessibilityState={{ checked: selected, disabled: !!disabled }}
+        disabled={disabled}
+        onPress={onPick}
+        className={cn('size-11 items-center justify-center', disabled && 'opacity-50')}
+      >
+        <View
+          className={cn(
+            'size-4 items-center justify-center rounded-full border-2',
+            selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
+          )}
+        >
+          {selected ? <View className="size-1.5 rounded-full bg-accent-fg" /> : null}
+        </View>
+      </Pressable>
+      <View className="min-w-0 flex-1 gap-0.5 py-3">
+        {prose ? (
+          <Pressable
+            accessibilityRole="button"
+            aria-expanded={expanded}
+            onPress={() => setExpanded((open) => !open)}
+          >
+            <Text size="sm" numberOfLines={expanded ? undefined : STACKED_CLAMP_LINES}>
+              {value}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text size="sm">{value}</Text>
+        )}
+        <Text size="xs" variant="muted">
+          {caption}
+        </Text>
+      </View>
+    </View>
+  )
+}
+
+type RenameBodyProps = BodyProps & {
   entityA: EntitySummary
   entityB: EntitySummary
-  onSubmit: (resolution: Resolution) => void
-  onCancel: () => void
-  submitting: boolean
-  error: string | null
+  nowMs: number
 }
 
-function RenameBody({ entityA, entityB, onSubmit, onCancel, submitting, error }: RenameBodyProps) {
+function RenameBody({
+  entityA,
+  entityB,
+  nowMs,
+  onSubmit,
+  onCancel,
+  submitting,
+  blockedReason,
+  error,
+}: RenameBodyProps) {
   const [nameA, setNameA] = useState(entityA.name)
   const [nameB, setNameB] = useState(entityB.name)
 
@@ -444,87 +713,97 @@ function RenameBody({ entityA, entityB, onSubmit, onCancel, submitting, error }:
     setNameB(entityB.name)
   }
 
-  const dirty = nameA !== entityA.name || nameB !== entityB.name
+  const issue = renameIssue(entityA.kind, [nameA, nameB])
+  const untouched = nameA === entityA.name && nameB === entityB.name
+  const help =
+    untouched || issue == null ? t('collisionDialog.renameHelp') : RENAME_ISSUE_TEXT[issue]()
+  const captionA = sideCaption('A', entityA, nowMs)
+  const captionB = sideCaption('B', entityB, nowMs)
 
   function handleConfirm() {
     const renames: { id: string; newName: string }[] = []
-    if (nameA !== entityA.name) renames.push({ id: entityA.id, newName: nameA })
-    if (nameB !== entityB.name) renames.push({ id: entityB.id, newName: nameB })
+    const trimmedA = nameA.trim()
+    const trimmedB = nameB.trim()
+    if (trimmedA !== entityA.name) renames.push({ id: entityA.id, newName: trimmedA })
+    if (trimmedB !== entityB.name) renames.push({ id: entityB.id, newName: trimmedB })
     onSubmit({ mode: 'rename', renames })
   }
 
   return (
     <ModeBody
+      blockedReason={blockedReason}
       actions={
         <>
-          <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-            <Text>Cancel</Text>
-          </Button>
-          <Button variant="primary" onPress={handleConfirm} loading={submitting} disabled={!dirty}>
-            <Text>Save renames</Text>
+          <CancelButton onCancel={onCancel} submitting={submitting} />
+          <Button
+            variant="primary"
+            onPress={handleConfirm}
+            loading={submitting}
+            disabled={blockedReason != null || issue != null}
+            disabledReason={blockedReason ?? (issue == null ? undefined : help)}
+          >
+            <Text>{t('collisionDialog.renameConfirm')}</Text>
           </Button>
         </>
       }
     >
       <View className="gap-1">
         <Text size="sm" variant="muted">
-          {`Older · ${formatAgo(entityA.createdAt)}`}
+          {captionA}
         </Text>
-        <Input value={nameA} onChangeText={setNameA} editable={!submitting} />
+        <Input
+          value={nameA}
+          onChangeText={setNameA}
+          editable={!submitting}
+          accessibilityLabel={captionA}
+        />
       </View>
       <View className="gap-1">
         <Text size="sm" variant="muted">
-          {`Newer · ${formatAgo(entityB.createdAt)}`}
+          {captionB}
         </Text>
-        <Input value={nameB} onChangeText={setNameB} editable={!submitting} />
+        <Input
+          value={nameB}
+          onChangeText={setNameB}
+          editable={!submitting}
+          accessibilityLabel={captionB}
+        />
       </View>
       <Text size="sm" variant="muted">
-        Change at least one name to clear the collision.
+        {help}
       </Text>
 
-      {error != null && (
-        <Text size="sm" className="text-danger">
-          {error}
-        </Text>
-      )}
+      <ErrorLine error={error} />
     </ModeBody>
   )
 }
 
-type KeepBodyProps = {
-  name: string
-  onSubmit: (resolution: Resolution) => void
-  onCancel: () => void
-  submitting: boolean
-  error: string | null
-}
+type KeepBodyProps = BodyProps & { name: string }
 
-function KeepBody({ name, onSubmit, onCancel, submitting, error }: KeepBodyProps) {
-  function handleConfirm() {
-    onSubmit({ mode: 'keep' })
-  }
+function KeepBody({ name, onSubmit, onCancel, submitting, blockedReason, error }: KeepBodyProps) {
   return (
     <ModeBody
+      blockedReason={blockedReason}
       actions={
         <>
-          <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-            <Text>Cancel</Text>
-          </Button>
-          <Button variant="primary" onPress={handleConfirm} loading={submitting}>
-            <Text>Keep as distinct</Text>
+          <CancelButton onCancel={onCancel} submitting={submitting} />
+          <Button
+            variant="primary"
+            onPress={() => onSubmit({ mode: 'keep' })}
+            loading={submitting}
+            disabled={blockedReason != null}
+            disabledReason={blockedReason}
+          >
+            <Text>{t('collisionDialog.keepConfirm')}</Text>
           </Button>
         </>
       }
     >
       <Text size="sm" variant="muted">
-        {`Both "${name}" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.`}
+        {t('collisionDialog.keepBody', { name })}
       </Text>
 
-      {error != null && (
-        <Text size="sm" className="text-danger">
-          {error}
-        </Text>
-      )}
+      <ErrorLine error={error} />
     </ModeBody>
   )
 }

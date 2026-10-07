@@ -201,7 +201,12 @@ convention, and the expectation that subsystems route through
   not-found only on the handler path) /
   `entity_delete_failed` / `lore_delete_failed` / `thread_delete_failed` /
   `happening_delete_failed` (error: the delete's delta group threw) —
-  `lib/actions/row-delete/delete-row.ts`
+  `lib/actions/row-delete/delete-row.ts`; `collision_resolve_rejected`
+  (warn: a collision resolution refused, logged with its `code` and
+  reason, and a `rawCode` when the runner's code was mapped to one of
+  the action's) / `collision_resolve_failed` (error: the resolve
+  threw, whether in its tail read, its locks, its build or its delta
+  group, then rethrown) — `lib/actions/world/resolve-collision.ts`
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`,
   `failure_record_retried` (warn: the first attempt to record a failed
   pass threw, and the hook tried once more)
@@ -251,7 +256,12 @@ convention, and the expectation that subsystems route through
   (`components/world/use-lore-row-session.ts` — the lore pane's
   twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
-  refused), `world_delete_failed` (`components/world/use-world-delete.ts`
+  refused), `world_collision_resolve_failed`
+  (`components/world/use-collision-resolve.ts` — a resolve dialog's
+  `resolveCollision` that threw rather than refused; the dialog shows
+  the generic failure inline, or as a toast when it already closed),
+  `world_delete_failed`
+  (`components/world/use-world-delete.ts`
   — a confirmed `⋯ → Delete entity` / `Delete` whose `deleteEntityRow` /
   `deleteRow` threw rather than refused), `plot_delete_failed`
   (`components/plot/use-plot-delete.ts` — its Plot twin, a confirmed

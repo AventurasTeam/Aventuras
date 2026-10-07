@@ -45,6 +45,7 @@ export { entityDeleteActions } from './entity-delete'
 export type { DeleteTail, EntityDeleteInput, EntityDeletePlan } from './entity-delete'
 export {
   entityLinkRows,
+  holdersLosingItem,
   referencingEntities,
   stateWithRefRewritten,
   unheldItemsWithout,

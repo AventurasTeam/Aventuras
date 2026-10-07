@@ -1440,11 +1440,17 @@ write nulled and the create re-owned. Each changed payload is one write
 to that delta's `undo_payload` in the reversal's transaction; stores
 hold no deleted rows, so no patch follows. A captured fact so follows a
 live one: a prose edit's sweep removes it, and undoing the edit leaves
-the next pass to re-derive it. CTRL-Z is newest-first, so the delete
-can be undone only after the edit is, once the prose the fact came from
-is back. The cost is narrow: a pass that runs between the two undos
-cannot re-derive a link naming the still-deleted row, and that link
-stays lost.
+the next pass to re-derive it. A collision merge's copy of a link row
+on the canonical is a user create, though, so that sweep leaves it
+when it removes the classifier's original from the loser's delete
+payload, unless the copy names a row that pass created (a happening
+the sweep removes takes its awareness and involvement copies too).
+Rollback and regenerate sweep every World edit after their target,
+so they take the merge's group with it. CTRL-Z is newest-first, so
+the delete can be undone only after the edit is, once the prose the
+fact came from is back. The cost is narrow: a pass that runs between
+the two undos cannot re-derive a link naming the still-deleted row,
+and that link stays lost.
 
 **Four states are refused as integrity errors, writing nothing.** A
 delete the planner would prune that shares its action group with a
@@ -1939,12 +1945,21 @@ could otherwise commit between two of them by timing alone, and a later
 failure in the same run would reverse the pass around it, pruning a
 link the delete's `undo_payload` still holds.
 
-Every `applyDeltaAction` and `applyDeltaActionGroup` takes a per-branch
-write lock in shared mode, inside the entry metadata lock and before
-its row keys. A `no-gate` run takes it exclusive at its first emitted
-write — after its model call, embedding and reconciliation, so World
-stays editable through those — and waits for every shared holder, so a
-write already in flight lands first. The run's own writes go through
+Every `applyDeltaAction`, `applyDeltaActionGroup` and
+`applyDeltaActionGroupBuilt` takes a per-branch write lock in shared
+mode, inside the entry metadata lock and before its row keys. The
+built variant exists for a user write that plans from state a
+`no-gate` pass also writes, such as the collision merge's link rows,
+`status` and `keywords`: it builds its actions under the shared hold,
+so the plan can't predate a `no-gate` pass's writes. It can still
+run while another user write holds a row key mid-commit, since
+handlers re-read under the key. The build must not write, takes no
+lock and should not await long: the hold isn't reentrant, and a pass
+queued for the exclusive lock waits behind it. A `no-gate` run takes
+the lock exclusive at its first emitted write — after its model
+call, embedding and reconciliation, so World stays editable through
+those — and waits for every shared holder, so a write already in
+flight lands first. The run's own writes go through
 inside the hold, which ends when the run settles: after the watermark
 write on success, after the abort's reversal on failure, whether it
 commits or leaves the run to boot recovery. Ending it on an
@@ -1961,9 +1976,10 @@ runs before any branch loads. The rollback preview writes nothing but
 takes the lock shared around its set selection, so neither a pass's
 abort reversal nor a prose reversal can land between the closure's
 reads. The lock order holds because a burst
-never asks for the metadata lock: only the scene-field, world-time and
-entity-delete actions take it, and the orchestrator commits a pass's
-writes through `applyDeltaAction` directly.
+never asks for the metadata lock: only the scene-field, world-time,
+entity-delete and collision-merge actions take it, and the
+orchestrator commits a pass's writes through `applyDeltaAction`
+directly.
 
 ### Chained start bypasses concurrencyPolicy
 

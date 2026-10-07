@@ -496,16 +496,16 @@
     .history-row > *:last-child { white-space: normal; overflow: visible; text-overflow: clip; }
     .history-ts { font-size: 10px; }
 
-    /* Resolve modal reflows to Sheet (tall ~95%) on phone — per
-       world.md → Mobile expression. Modal pins to bottom of the
-       viewport; merge body's three-column field grid collapses to
-       single column. Each divergent field renders as a section: field
+    /* Resolve dialog stays a Modal on phone — per world.md → Mobile
+       expression (a short Modal has no Sheet expression). Body scrolls,
+       footer stays put; merge body's three-column field grid collapses
+       to single column. Each divergent field renders as a section: field
        name as section header, then side A (radio + value + meta) and
        side B (radio + value + meta) as the only descendants. Long
        prose clamps to 3 lines with tap-to-expand. */
-    .resolve-overlay { padding: 0; align-items: flex-end; overflow: visible; }
-    .resolve-modal { max-width: none; height: 95%; max-height: 95%; border-radius: 4px 4px 0 0; }
-    .resolve-body { overflow: auto; }
+    .resolve-overlay { padding: 16px; align-items: center; overflow: visible; }
+    .resolve-modal { max-width: none; max-height: 90%; }
+    .resolve-body.active { overflow: auto; flex: 1 1 auto; min-height: 0; }
     .canon-picker { flex-direction: column; }
     .field-grid { grid-template-columns: 1fr; gap: 0; }
     /* Hide column headers on mobile — per-section structure carries layout. */
@@ -1440,34 +1440,34 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <div class="resolve-body active" data-path="merge">
       <div class="canon-picker" id="canon-picker">
         <div class="seg active" data-canon="A">
-          char_a1b2c3… &mdash; Kael
-          <span class="meta">created 12 turns ago &middot; canonical</span>
+          Kael &middot; 3 days ago &middot; Canonical
+          <span class="meta">older</span>
         </div>
         <div class="seg" data-canon="B">
-          char_d4e5f6… &mdash; Kael
-          <span class="meta">created this turn</span>
+          Kael &middot; just now
+          <span class="meta">newer</span>
         </div>
       </div>
       <!-- Only fields that diverge between the two rows render here.
            Identical values aren't surfaced (no decision to make). -->
       <div class="field-grid">
         <span class="h">field</span>
-        <span class="h">side A (canonical)</span>
-        <span class="h">side B</span>
+        <span class="h">Older &middot; 3 days ago &middot; Canonical</span>
+        <span class="h">Newer &middot; just now</span>
 
         <span class="row-l">description</span>
         <span class="row-v">
           <input type="radio" name="f-desc" checked>
           <span class="row-prose" data-expandable>
             <span class="prose-body">wandering swordsman, weathered jaw, ice-blue eyes; raised in the southern marshes by rebels who taught him to track and to harbor a deep distrust of authority despite his privileged origins; carries a worn signet ring he refuses to explain.</span>
-            <span class="side-meta">12 turns ago &middot; canonical</span>
+            <span class="side-meta">Older &middot; 3 days ago</span>
           </span>
         </span>
         <span class="row-v">
           <input type="radio" name="f-desc">
           <span class="row-prose" data-expandable>
             <span class="prose-body">guardsman at the city gate, recently posted</span>
-            <span class="side-meta">this turn</span>
+            <span class="side-meta">Newer &middot; just now</span>
           </span>
         </span>
 
@@ -1486,16 +1486,18 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <code>state</code> JSON is taken whole-side from canonical (per-kind shape &mdash; character / location / item / faction). To pick the loser&rsquo;s state, re-pick canonical above.
       </div>
       <div class="relations-block">
-        <div class="h">Relations move to canonical</div>
+        <div class="h">Moves on merge (Kael &rarr; Kael)</div>
         <ul>
-          <li>Awareness rows: 4 (1 dropped on UNIQUE collision &mdash; see footnote)</li>
+          <li>Awareness rows: 4</li>
           <li>Involvements: 2</li>
+          <li>Relationships: 3</li>
           <li>Inverse refs: 3 entities point at non-canonical &rarr; rewritten</li>
           <li>Embeddings: 1 vec0 row dropped (canonical re-embeds if any field changed)</li>
-          <li>Translation rows: 0</li>
+          <li>Items left unheld: 1</li>
+          <li>Translation rows dropped: 0</li>
         </ul>
         <div class="footnote">
-          One awareness row exists on both sides for happening &ldquo;tavern brawl&rdquo;; canonical&rsquo;s row stays, non-canonical&rsquo;s drops.
+          Kael already has 1 of these awareness rows (&ldquo;tavern brawl&rdquo;) and takes part in 1 of these happenings: it keeps its own, and the duplicates are dropped.
         </div>
       </div>
     </div>
@@ -1503,15 +1505,15 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <!-- RENAME body — two stacked rename rows -->
     <div class="resolve-body" data-path="rename">
       <div class="rename-row">
-        <div class="meta"><strong>char_a1b2c3…</strong>created 12 turns ago</div>
+        <div class="meta"><strong>Older &middot; 3 days ago</strong></div>
         <input type="text" value="Kael">
       </div>
       <div class="rename-row">
-        <div class="meta"><strong>char_d4e5f6…</strong>created this turn</div>
+        <div class="meta"><strong>Newer &middot; just now</strong></div>
         <input type="text" value="Kael (the guardsman)">
       </div>
       <div class="state-note">
-        At least one name must change. Both rows persist; the formerly-flagged row clears its <code>name_collision_flag</code>.
+        Save stays disabled until both trimmed names are non-empty and no longer collide &mdash; a change of letter case or leading and trailing spaces alone still collides. Both rows persist; each flagged row of the pair clears its <code>name_collision_flag</code>.
       </div>
     </div>
 

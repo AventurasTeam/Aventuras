@@ -317,9 +317,11 @@ mechanism where the shipped runner forces it:
   translation set mirrors the merge path canon gives in
   [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility)
   minus the rewrite-to-canonical half. The tail-metadata drop is this
-  milestone's **default assumption** — canon is silent on it for both
-  delete and merge — routed as an [open question](#open-questions) for
-  a `world.md` amendment.
+  milestone's **default assumption**, since recorded for the delete in
+  [`world.md → Delete`](../../../ui/screens/world/world.md#delete);
+  4.2c replaced it for the merge with a rewrite to the canonical
+  ([`world.md → Merge`](../../../ui/screens/world/world.md#merge),
+  the tail scene). See the [open question](#open-questions).
 - Deleting the **lead character** is refused with a named rejection
   (`lead-entity`) rather than nulling `definition.leadEntityId`, which
   the schema's `needsLead` refine forbids in adventure or first- and
@@ -673,6 +675,8 @@ use.
   [`world.md → Delete`](../../../ui/screens/world/world.md#delete) and
   the merge-writes list in
   [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility).
+  Superseded for the merge in 4.2c: it rewrites the tail scene to the
+  canonical instead of dropping the id.
 - **Plot chapter buckets before M5.** No chapter is opened in M4, so
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open

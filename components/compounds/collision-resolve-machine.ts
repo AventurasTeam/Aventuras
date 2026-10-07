@@ -1,9 +1,12 @@
+import { normalizeTerm } from '@/lib/keyword-terms'
+
 import type { DiffPayload, ScalarField } from './collision-resolve-diff'
 
 export type MergeState = {
   canonicalId: string
   fieldChoices: Record<ScalarField, 'A' | 'B'>
   deselectedTags: string[]
+  /** `normalizeTerm` keys: a chip's spelling follows the canonical, the deselect follows the keyword. */
   deselectedKeywords: string[]
 }
 
@@ -74,12 +77,13 @@ export function mergeReducer(state: MergeState, action: MergeAction): MergeState
       }
     }
     case 'toggle-keyword': {
-      const has = state.deselectedKeywords.includes(action.keyword)
+      const key = normalizeTerm(action.keyword)
+      const has = state.deselectedKeywords.includes(key)
       return {
         ...state,
         deselectedKeywords: has
-          ? state.deselectedKeywords.filter((k) => k !== action.keyword)
-          : [...state.deselectedKeywords, action.keyword],
+          ? state.deselectedKeywords.filter((k) => k !== key)
+          : [...state.deselectedKeywords, key],
       }
     }
     case 'reset': {

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -19,7 +19,7 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     description: 'A wandering swordsman drifting between cities.',
     status: 'active',
     retiredReason: undefined,
-    injectionMode: 'on-relevance',
+    injectionMode: 'auto',
     priority: 20,
     tags: ['hero', 'sword'],
     keywords: ['the wanderer', 'the swordsman'],
@@ -27,9 +27,13 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     relationCounts: {
       awarenessRows: 12,
       involvements: 4,
+      relationships: 2,
+      joiningRelationship: false,
       inverseRefs: 2,
       embeddings: 1,
       translationRows: 3,
+      unheldItems: 1,
+      overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
     },
     ...overrides,
   }
@@ -42,17 +46,31 @@ const entityB = baseEntity({
   description: 'A city guardsman posted at the eastern gate.',
   status: 'staged',
   tags: ['guard', 'sword'],
-  // 'The Swordsman' is A's 'the swordsman' recased — only one survives the merge.
+  // 'The Swordsman' is A's 'the swordsman' recased: one keyword, in A's spelling.
   keywords: ['the gate guard', 'The Swordsman'],
   state: { hp: 90, post: 'east-gate' },
   relationCounts: {
     awarenessRows: 1,
     involvements: 0,
+    relationships: 0,
+    joiningRelationship: false,
     inverseRefs: 0,
     embeddings: 1,
     translationRows: 0,
+    unheldItems: 0,
+    overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
   },
 })
+
+const LONG_A =
+  'A wandering swordsman drifting between cities, marked by old scars on his off-hand and the habit of speaking only when spoken to. Known to keep the company of stray dogs at every inn he passes through.'
+const LONG_B =
+  'A city guardsman posted at the eastern gate, terse and slow to anger; identified by the inverted phoenix sigil on his pauldron and the half-moon scar across his right eyebrow that the captain claims is from a tavern brawl, though Kael never confirms.'
+
+const GATE_REASON = 'Generation is in flight. Cancel to edit.'
+
+const lineClamp = (node: HTMLElement) =>
+  getComputedStyle(node).getPropertyValue('-webkit-line-clamp')
 
 const resolveOk = async (r: Resolution) => {
   console.log('[story] resolved:', r)
@@ -71,11 +89,13 @@ function ControlledDialog({
   entityA: a,
   entityB: b,
   onResolve,
+  blockedReason,
 }: {
   initialOpen?: boolean
   entityA: EntitySummary
   entityB: EntitySummary
   onResolve: (r: Resolution) => Promise<void>
+  blockedReason?: string
 }) {
   const [open, setOpen] = useState(initialOpen)
   return (
@@ -89,6 +109,7 @@ function ControlledDialog({
         entityA={a}
         entityB={b}
         onResolve={onResolve}
+        blockedReason={blockedReason}
       />
     </View>
   )
@@ -150,18 +171,159 @@ export const MergeNoDivergence: Story = {
 export const MergeLongDescriptions: Story = {
   render: () => (
     <ControlledDialog
-      entityA={baseEntity({
-        description:
-          'A wandering swordsman drifting between cities, marked by old scars on his off-hand and the habit of speaking only when spoken to. Known to keep the company of stray dogs at every inn he passes through.',
-      })}
+      entityA={baseEntity({ description: LONG_A })}
+      entityB={baseEntity({ id: 'ent_kael_2', description: LONG_B })}
+      onResolve={resolveOk}
+    />
+  ),
+}
+
+export const MergePriorityOnly: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity()}
+      entityB={baseEntity({ id: 'ent_kael_2', priority: 5 })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    const row = await screen.findByRole('group', { name: 'Priority' })
+    for (const label of ['Name', 'Description', 'Status', 'Retired reason', 'Injection mode'])
+      expect(screen.queryByRole('group', { name: label })).toBeNull()
+    expect(within(row).getByRole('button', { name: '20' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: '5' })).toBeInTheDocument()
+  },
+}
+
+export const PhoneLongDescriptions: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ description: LONG_A })}
+      entityB={baseEntity({ id: 'ent_kael_2', description: LONG_B })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // useTier reads RN-Web's Dimensions, which updates a tick after the viewport global lands.
+    await waitFor(() => expect(lineClamp(screen.getByText(LONG_A))).toBe('3'))
+    const older = screen.getByRole('radio', { name: /^Older · / })
+    const newer = screen.getByRole('radio', { name: /^Newer · / })
+    expect(older).toHaveAttribute('aria-checked', 'true')
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Description' })).getAllByRole('radio'),
+    ).toHaveLength(2)
+
+    // Radio mode stacks the picker's options at full width; segment mode clips a wrapped label.
+    const [pickA, pickB] = screen.getAllByRole('radio', { name: /^Kael · / })
+    expect(pickB.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      pickA.getBoundingClientRect().bottom,
+    )
+    const pickAText = within(pickA).getByText(/ · Canonical$/)
+    expect(pickAText.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      pickA.getBoundingClientRect().bottom,
+    )
+
+    // Stacked choices carry their own captions, so the column header row is absent.
+    expect(screen.queryByText(/^Older · .+ · Canonical$/)).toBeNull()
+
+    // A is the picked side, so tapping B's prose is the only tap that could wrongly pick.
+    await userEvent.click(screen.getByText(LONG_B))
+
+    await waitFor(() => expect(lineClamp(screen.getByText(LONG_B))).toBe('none'))
+    expect(lineClamp(screen.getByText(LONG_A))).toBe('3')
+    expect(older).toHaveAttribute('aria-checked', 'true')
+    expect(newer).toHaveAttribute('aria-checked', 'false')
+
+    await userEvent.click(newer)
+    await waitFor(() => expect(newer).toHaveAttribute('aria-checked', 'true'))
+  },
+}
+
+export const MergeOverlapFootnote: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={{
+        ...entityA,
+        relationCounts: { ...entityA.relationCounts, joiningRelationship: true },
+      }}
+      entityB={{
+        ...entityB,
+        // A case variant, so a footnote naming the wrong row is visible.
+        name: 'KAEL',
+        relationCounts: {
+          ...entityB.relationCounts,
+          joiningRelationship: true,
+          overlap: { awareness: 2, involvements: 1, relationships: 3, holdersLosingItem: 0 },
+        },
+      }}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // Side identification and the canonical marker: column headers and the picker agree.
+    expect(await screen.findByText(/^Older · .+ · Canonical$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Newer · [^·]+$/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Kael · .+ · Canonical$/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^KAEL · [^·]+$/ })).toBeInTheDocument()
+    expect(screen.getByText('Moves on merge (KAEL → Kael)')).toBeInTheDocument()
+
+    expect(
+      await screen.findByText(
+        'Kael already has 2 of these awareness rows: it keeps its own, and the duplicates are dropped.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Kael already takes part in 1 of these happenings: it keeps its involvement, and the duplicate is dropped.',
+      ),
+    ).toBeInTheDocument()
+
+    expect(
+      screen.getByText(
+        "Kael already relates to 3 of these characters: it keeps its own views and takes the duplicate's only where its own is blank.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('The relationship between the two is dropped.')).toBeInTheDocument()
+
+    // With B canonical the summary shows A's counts, and A overlaps nothing.
+    await userEvent.click(screen.getByRole('radio', { name: /^KAEL · / }))
+    await waitFor(() => expect(screen.queryByText(/already has/)).toBeNull())
+    expect(screen.queryByText(/already takes part/)).toBeNull()
+    expect(screen.queryByText(/already relates/)).toBeNull()
+    // The joining relationship is dropped whichever side survives.
+    expect(screen.getByText('The relationship between the two is dropped.')).toBeInTheDocument()
+    expect(screen.getByText('Moves on merge (Kael → KAEL)')).toBeInTheDocument()
+    expect(screen.getByText(/^Newer · .+ · Canonical$/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^KAEL · .+ · Canonical$/ })).toBeInTheDocument()
+  },
+}
+
+export const MergeHoldersFootnote: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ id: 'ent_lamp_1', kind: 'item', name: 'Lantern' })}
       entityB={baseEntity({
-        id: 'ent_kael_2',
-        description:
-          'A city guardsman posted at the eastern gate, terse and slow to anger; identified by the inverted phoenix sigil on his pauldron and the half-moon scar across his right eyebrow that the captain claims is from a tavern brawl, though Kael never confirms.',
+        id: 'ent_lamp_2',
+        kind: 'item',
+        name: 'Lantern',
+        createdAt: new Date().toISOString(),
+        relationCounts: {
+          ...entityB.relationCounts,
+          overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 2 },
+        },
       })}
       onResolve={resolveOk}
     />
   ),
+  play: async () => {
+    expect(
+      await screen.findByText('2 holders lose this item: Lantern is already held or placed.'),
+    ).toBeInTheDocument()
+    // With the newer item canonical the shown side is the older, whose holders keep theirs.
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Lantern · / })[1])
+    await waitFor(() => expect(screen.queryByText(/holders? lose/)).toBeNull())
+  },
 }
 
 export const MergeCanonicalFlip: Story = {
@@ -169,10 +331,8 @@ export const MergeCanonicalFlip: Story = {
 }
 
 export const MergeLoading: Story = {
-  // Visual-only: the dialog gates close while submitting (collision-
-  // resolve-dialog.tsx line 74), so the never-resolving driver leaves
-  // body scroll-locked between tests. Skipped from vitest via
-  // `tags: { exclude: ['no-vitest'] }` in vitest.config.ts.
+  // Visual-only: `handleOpenChange` gates close while submitting, so the never-resolving driver
+  // leaves body scroll locked between tests; vitest.config.ts excludes the `no-vitest` tag.
   tags: ['no-vitest'],
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
   play: async () => {
@@ -198,11 +358,150 @@ export const MergeKeywordUnion: Story = {
     expect(resolution).not.toBeNull()
     expect(resolution).toMatchObject({
       mode: 'merge',
-      // The losing side's aliases survive; the deselected one is dropped, and the
-      // case variant collapses into the entry that sorted first.
-      finalKeywords: ['The Swordsman', 'the gate guard'],
-      finalTags: ['guard', 'hero', 'sword'],
+      // The canonical's own entries keep their order and the losing side's additions follow; the
+      // deselected one is dropped, and the case variant was one keyword all along.
+      finalKeywords: ['the swordsman', 'the gate guard'],
+      finalTags: ['hero', 'sword', 'guard'],
     })
+  },
+}
+
+export const MergeAgreeingListsKeepCanonical: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ tags: ['hero', 'sword'], keywords: ['the swordsman', 'the wanderer'] })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        tags: ['sword', 'hero'],
+        keywords: ['The Wanderer', 'the swordsman'],
+      })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    // Both partitions are null, so no chips render: pick B canonical and submit.
+    await userEvent.click((await screen.findAllByRole('radio', { name: /^Kael · / }))[1])
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    const resolution = lastResolution as Resolution | null
+    expect(resolution).not.toBeNull()
+    // The canonical's own lists, in its own order and spelling; A's sorted copy would differ.
+    expect(resolution).toMatchObject({
+      mode: 'merge',
+      canonicalId: 'ent_kael_2',
+      finalTags: ['sword', 'hero'],
+      finalKeywords: ['The Wanderer', 'the swordsman'],
+    })
+  },
+}
+
+export const MergeKeywordsInCanonicalSpelling: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ keywords: ['the swordsman', 'the wanderer'] })}
+      entityB={baseEntity({ id: 'ent_kael_2', keywords: ['The Swordsman', 'the gate guard'] })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click((await screen.findAllByRole('radio', { name: /^Kael · / }))[1])
+    // The shared keyword shows, and is written, as the canonical spells it.
+    expect(await screen.findByRole('button', { name: 'The Swordsman' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'the swordsman' })).toBeNull()
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    expect(lastResolution).toMatchObject({
+      canonicalId: 'ent_kael_2',
+      finalKeywords: ['The Swordsman', 'the gate guard', 'the wanderer'],
+    })
+  },
+}
+
+export const MergeKeywordDeselectSurvivesFlip: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ keywords: ['The Swordsman', 'the wanderer'] })}
+      entityB={baseEntity({ id: 'ent_kael_2', keywords: ['THE SWORDSMAN', 'the gate guard'] })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('button', { name: 'The Swordsman' }))
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    // B spells it in capitals, so a raw-spelling compare would not see the deselect.
+    expect(await screen.findByRole('button', { name: 'THE SWORDSMAN' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    expect(lastResolution).toMatchObject({
+      finalKeywords: ['the gate guard', 'the wanderer'],
+    })
+  },
+}
+
+export const MergeDeselectedAdditionsKeepCanonicalLists: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ tags: ['sword', 'hero'], keywords: ['the wanderer', 'the swordsman'] })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        tags: ['sword', 'guard'],
+        keywords: ['the swordsman', 'the gate guard'],
+      })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('button', { name: 'guard' }))
+    await userEvent.click(screen.getByRole('button', { name: 'the gate guard' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+
+    // The canonical's set came back unchanged, so it goes back in its stored order, not re-sorted.
+    expect(lastResolution).toMatchObject({
+      finalTags: ['sword', 'hero'],
+      finalKeywords: ['the wanderer', 'the swordsman'],
+    })
+  },
+}
+
+// A no-gate classifier write can make a field differ while the dialog is open.
+let divergeNow: (() => void) | null = null
+function DivergesWhileOpen() {
+  const [b, setB] = useState(baseEntity({ id: 'ent_kael_2' }))
+  useEffect(() => {
+    divergeNow = () => setB(baseEntity({ id: 'ent_kael_2', priority: 5 }))
+    return () => {
+      divergeNow = null
+    }
+  }, [])
+  return <ControlledDialog entityA={baseEntity()} entityB={b} onResolve={resolveOk} />
+}
+
+export const MergeFieldDivergesWhileOpen: Story = {
+  render: () => <DivergesWhileOpen />,
+  play: async () => {
+    await screen.findByRole('button', { name: /^Merge into / })
+    expect(screen.queryByRole('group', { name: 'Priority' })).toBeNull()
+    divergeNow?.()
+
+    const row = await screen.findByRole('group', { name: 'Priority' })
+    expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'false')
+
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await waitFor(() =>
+      expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'false')
   },
 }
 
@@ -212,6 +511,87 @@ export const MergeError: Story = {
 
 export const RenameMode: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+}
+
+export const RenameCaseOnly: Story = {
+  render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const save = () => screen.getByRole('button', { name: 'Save renames' })
+    expect(save()).toBeDisabled()
+    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+    // Nothing edited yet: the disabled reason says what the help line says.
+    expect(save().closest('[title]')).toHaveAttribute(
+      'title',
+      'Change at least one name to clear the collision.',
+    )
+
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'KAEL')
+
+    expect(await screen.findByText(/still collide/)).toBeInTheDocument()
+    expect(save()).toBeDisabled()
+    expect(save().closest('[title]')).toHaveAttribute(
+      'title',
+      expect.stringContaining('still collide'),
+    )
+
+    await userEvent.type(inputs[1], ' the Guard')
+
+    await waitFor(() => expect(save()).not.toBeDisabled())
+    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+  },
+}
+
+export const RenameSubmitsTrimmedChanges: Story = {
+  render: () => (
+    <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveCapturing} />
+  ),
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const inputs = await screen.findAllByRole('textbox')
+    // A gains only a trailing space, which trims back to its current name.
+    await userEvent.type(inputs[0], ' ')
+    await userEvent.type(inputs[1], ' the Guard  ')
+    await userEvent.click(screen.getByRole('button', { name: 'Save renames' }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
+      mode: 'rename',
+      renames: [{ id: 'ent_kael_2', newName: 'Kael the Guard' }],
+    })
+  },
+}
+
+export const Blocked: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={entityB}
+      onResolve={resolveOk}
+      blockedReason={GATE_REASON}
+    />
+  ),
+  play: async () => {
+    expect(await screen.findByRole('button', { name: /^Merge into / })).toBeDisabled()
+    expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Merge into / }).closest('[title]')).toHaveAttribute(
+      'title',
+      GATE_REASON,
+    )
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Rename one' }))
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.type(inputs[1], ' the Guard')
+    expect(screen.getByRole('button', { name: 'Save renames' })).toBeDisabled()
+    expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Keep as distinct' }))
+    expect(screen.getByRole('button', { name: 'Keep as distinct' })).toBeDisabled()
+  },
 }
 
 export const RenameLoading: Story = {

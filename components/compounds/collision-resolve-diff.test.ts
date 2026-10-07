@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeDivergence, type EntitySummary } from './collision-resolve-diff'
+import {
+  computeDivergence,
+  keywordUnion,
+  selectedTerms,
+  type EntitySummary,
+} from './collision-resolve-diff'
 
 function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
   return {
@@ -11,7 +16,7 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     description: 'A wandering swordsman.',
     status: 'active',
     retiredReason: undefined,
-    injectionMode: 'on-relevance',
+    injectionMode: 'auto',
     priority: 0,
     tags: ['hero', 'sword'],
     keywords: [],
@@ -19,9 +24,13 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     relationCounts: {
       awarenessRows: 0,
       involvements: 0,
+      relationships: 0,
+      joiningRelationship: false,
       inverseRefs: 0,
       embeddings: 1,
       translationRows: 0,
+      unheldItems: 0,
+      overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
     },
     ...overrides,
   }
@@ -54,6 +63,22 @@ describe('computeDivergence', () => {
       const diff = computeDivergence(a, b)
       // Order matches SCALAR_FIELDS, not input order
       expect(diff.divergentScalars).toEqual(['name', 'description', 'status'])
+    })
+
+    it('places priority last in the fixed order', () => {
+      const a = baseEntity()
+      const b = baseEntity({ id: 'ent_b', name: 'Kael II', injectionMode: 'always', priority: 4 })
+      const diff = computeDivergence(a, b)
+      expect(diff.divergentScalars).toEqual(['name', 'injectionMode', 'priority'])
+    })
+
+    // world.md → Merge lists priority among the per-row radio scalars.
+    it('reports a priority-only divergence as exactly one divergent scalar', () => {
+      const diff = computeDivergence(
+        baseEntity({ priority: 0 }),
+        baseEntity({ id: 'ent_b', priority: 9 }),
+      )
+      expect(diff.divergentScalars).toEqual(['priority'])
     })
 
     it('treats undefined description as divergent from a string', () => {
@@ -95,6 +120,13 @@ describe('computeDivergence', () => {
         onlyInB: ['guard'],
         both: ['sword'],
       })
+    })
+
+    it('keeps tags exact: a case variant tag diverges', () => {
+      const a = baseEntity({ tags: ['Hero'] })
+      const b = baseEntity({ id: 'ent_b', tags: ['hero'] })
+      const diff = computeDivergence(a, b)
+      expect(diff.tags).toEqual({ onlyInA: ['Hero'], onlyInB: ['hero'], both: [] })
     })
 
     it('sorts each partition alphabetically', () => {
@@ -215,13 +247,127 @@ describe('keywords', () => {
     expect(diff.tags).not.toBeNull()
   })
 
-  // Canon: priority rides the projection but is NOT a divergent scalar — the merge
-  // takes the canonical's value under the implicit-field rule.
-  it('does not treat priority as a divergent scalar', () => {
+  it('treats a case or spacing variant as the same keyword', () => {
     const diff = computeDivergence(
-      baseEntity({ priority: 0 }),
-      baseEntity({ id: 'ent_b', priority: 9 }),
+      baseEntity({ keywords: ['The Wanderer'] }),
+      baseEntity({ id: 'ent_b', keywords: [' the wanderer'] }),
     )
-    expect(diff.divergentScalars).toEqual([])
+    expect(diff.keywords).toBeNull()
+  })
+
+  it("shows a shared keyword in A's spelling and each side's own in its first spelling", () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['Sword', 'sword', 'gate'] }),
+      baseEntity({ id: 'ent_b', keywords: ['SWORD', 'inn', 'Inn'] }),
+    )
+    expect(diff.keywords).toEqual({ onlyInA: ['gate'], onlyInB: ['inn'], both: ['Sword'] })
+  })
+
+  it('ignores blank keywords', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['a', '  '] }),
+      baseEntity({ id: 'ent_b', keywords: ['a'] }),
+    )
+    expect(diff.keywords).toBeNull()
+  })
+
+  it('shows a stored keyword trimmed, as the merge writes it', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: [' courier', 'Sword'] }),
+      baseEntity({ id: 'ent_b', keywords: ['alpha', 'sword'] }),
+    )
+    expect(diff.keywords).toEqual({ onlyInA: ['courier'], onlyInB: ['alpha'], both: ['Sword'] })
+  })
+
+  it('sorts each keyword partition alphabetically', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['zebra', 'apple', 'Yak', 'Cat'] }),
+      baseEntity({ id: 'ent_b', keywords: ['mango', 'banana', 'yak', 'cat'] }),
+    )
+    expect(diff.keywords).toEqual({
+      onlyInA: ['apple', 'zebra'],
+      onlyInB: ['banana', 'mango'],
+      both: ['Cat', 'Yak'],
+    })
+  })
+})
+
+describe('keywordUnion', () => {
+  const partition = {
+    onlyInA: ['the wanderer'],
+    onlyInB: ['the gate guard'],
+    both: ['the swordsman'],
+  }
+
+  it('spells a shared keyword as the canonical does', () => {
+    expect(keywordUnion(partition, ['The Swordsman', 'the gate guard'])).toContain('The Swordsman')
+    expect(keywordUnion(partition, ['The Swordsman', 'the gate guard'])).not.toContain(
+      'the swordsman',
+    )
+  })
+
+  it('keeps the first spelling when the canonical holds two case variants', () => {
+    expect(keywordUnion(partition, ['The Swordsman', 'THE SWORDSMAN'])).toContain('The Swordsman')
+    expect(keywordUnion(partition, ['THE SWORDSMAN', 'The Swordsman'])).toContain('THE SWORDSMAN')
+  })
+
+  it('returns the union sorted, with one-sided keywords as their side spells them', () => {
+    expect(keywordUnion(partition, ['The Swordsman'])).toEqual([
+      'The Swordsman',
+      'the gate guard',
+      'the wanderer',
+    ])
+  })
+
+  it('is empty when the two sides already agree', () => {
+    expect(keywordUnion(null, ['anything'])).toEqual([])
+  })
+})
+
+describe('selectedTerms', () => {
+  const identity = (term: string) => term
+
+  it('returns the canonical list as stored when every addition is deselected', () => {
+    expect(
+      selectedTerms({
+        own: ['sword', 'hero'],
+        offered: ['guard', 'hero', 'sword'],
+        deselected: ['guard'],
+        keyOf: identity,
+      }),
+    ).toEqual(['sword', 'hero'])
+  })
+
+  it('puts the additions after the canonical entries, in offered order', () => {
+    expect(
+      selectedTerms({
+        own: ['sword', 'hero'],
+        offered: ['alpha', 'hero', 'sword', 'zeta'],
+        deselected: [],
+        keyOf: identity,
+      }),
+    ).toEqual(['sword', 'hero', 'alpha', 'zeta'])
+  })
+
+  it('drops a deselected canonical entry too', () => {
+    expect(
+      selectedTerms({
+        own: ['sword', 'hero'],
+        offered: ['guard', 'hero', 'sword'],
+        deselected: ['sword'],
+        keyOf: identity,
+      }),
+    ).toEqual(['hero', 'guard'])
+  })
+
+  it('matches by the key, so a differently spelled addition is not a second entry', () => {
+    expect(
+      selectedTerms({
+        own: ['The Swordsman'],
+        offered: ['the swordsman', 'the wanderer'],
+        deselected: ['the wanderer'],
+        keyOf: (term) => term.toLowerCase(),
+      }),
+    ).toEqual(['The Swordsman'])
   })
 })
