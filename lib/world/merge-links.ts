@@ -109,7 +109,7 @@ function relationshipCopies(
 
 /**
  * world.md → Merge: which of the loser's link rows the merge re-creates on the canonical, and what
- * gives way because the canonical already has it. The planner writes `moved`; the dialog counts.
+ * it drops instead. The planner writes `moved`; the collision dialog counts `rows` and `overlap`.
  */
 export function mergeLinks(input: MergeLinkInput): MergeLinks {
   const { branchId, canonical, loser } = input
