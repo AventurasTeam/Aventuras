@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
+import { and, asc, eq, inArray, or, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 
 import {
   characterRelationships,
@@ -270,7 +270,7 @@ async function namesOf(
   const missing = ids.filter((id) => !names.has(id))
   if (missing.length > 0) {
     const deleted = await db
-      .select({ id: deltas.targetId, name: PAYLOAD_NAME })
+      .select({ id: deltas.targetId, name: PAYLOAD_NAME, logPosition: deltas.logPosition })
       .from(deltas)
       .where(
         and(
@@ -280,7 +280,9 @@ async function namesOf(
           inJsonList(deltas.targetId, missing),
         ),
       )
-      .orderBy(desc(deltas.logPosition))
+    // Sorted here: without table statistics, an ORDER BY log_position steers SQLite off
+    // deltas_chain_idx onto a scan of the whole branch.
+    deleted.sort((x, y) => y.logPosition - x.logPosition)
     for (const row of deleted)
       if (row.name != null && !names.has(row.id)) names.set(row.id, row.name)
   }
