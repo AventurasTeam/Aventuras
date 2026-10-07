@@ -659,6 +659,22 @@ export function foldName(raw: string): string {
 }
 
 /**
+ * A list of terms without repeats, for lists rendered keyed by their own value, where a
+ * repeat throws. Repeats are judged by `foldName`; the first spelling and the order stay.
+ */
+export function uniqueStrings(list: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of list) {
+    const folded = foldName(raw)
+    if (!folded || seen.has(folded)) continue
+    seen.add(folded)
+    out.push(raw.trim())
+  }
+  return out
+}
+
+/**
  * Whether two names refer to the same entity as far as spelling can tell.
  *
  * Replaces `a.toLowerCase() === b.toLowerCase()` across the world-state pipeline, adding

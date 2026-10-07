@@ -7,6 +7,7 @@ import {
   paragraphMatches,
   sameEntityName,
   truncateAroundMatch,
+  uniqueStrings,
 } from './text'
 
 describe('entityNameMatches — word boundaries', () => {
@@ -424,6 +425,51 @@ describe('foldName — the apostrophe', () => {
   it('still folds the separators that are separators', () => {
     expect(foldName('Kaelen, the Bold')).toBe('kaelen the bold')
     expect(foldName('Ash-ford  Keep')).toBe('ash ford keep')
+  })
+})
+
+describe('uniqueStrings', () => {
+  it('drops a repeated term and keeps the first position', () => {
+    const traits = [
+      'intelligent',
+      'deliberate',
+      'eager to learn',
+      'patient',
+      'honest',
+      'confident',
+      'honest',
+      'genuine',
+    ]
+    expect(uniqueStrings(traits)).toEqual([
+      'intelligent',
+      'deliberate',
+      'eager to learn',
+      'patient',
+      'honest',
+      'confident',
+      'genuine',
+    ])
+  })
+
+  it('treats case, accents and punctuation as the same term and keeps the first spelling', () => {
+    expect(uniqueStrings(['Honest', 'honest', 'Élan', 'elan', "Kaelen's", 'Kaelens'])).toEqual([
+      'Honest',
+      'Élan',
+      "Kaelen's",
+    ])
+  })
+
+  it('trims, and drops empty and unreadable entries', () => {
+    expect(uniqueStrings(['  brave ', '', '   ', '!!!', 'brave'])).toEqual(['brave'])
+  })
+
+  it('keeps an article as a separate term', () => {
+    expect(uniqueStrings(['Citadel', 'The Citadel'])).toEqual(['Citadel', 'The Citadel'])
+  })
+
+  it('leaves a list without repeats as it was', () => {
+    expect(uniqueStrings(['a', 'b', 'c'])).toEqual(['a', 'b', 'c'])
+    expect(uniqueStrings([])).toEqual([])
   })
 })
 
