@@ -20,8 +20,9 @@ awareness / involvement / relationship rows re-created on the
 canonical with duplicates dropped, inverse-ref rewrite, the loser's
 translations dropped, keyword and tag union), **rename** (both rows,
 flag clears), **keep as distinct** (flag clears only). The dialog's
-drifted `InjectionMode` and `ScalarField` unions are fixed first. The History tab also starts listing edits to the link
-rows that name its row: relationships, involvements, awareness.
+drifted `InjectionMode` and `ScalarField` unions are fixed first. The
+History tab also starts listing edits to the link rows that name its
+row: relationships, involvements, awareness.
 
 ## Background
 
@@ -87,8 +88,9 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   its vectors and translations, and refuses if the loser is the lead),
   and the flag cleared. As shipped, link rows are re-created on the
   canonical rather than re-keyed; see
-  [Implementation notes](#implementation-notes). The canonical re-embeds via `embedding_stale`
-  if an embedded field changed (already the update arm's behavior).
+  [Implementation notes](#implementation-notes). The canonical
+  re-embeds via `embedding_stale` if an embedded field changed
+  (already the update arm's behavior).
 - **Rename driver:** two `updateEntity` deltas (sparse — only rows
   whose name changed) plus a flag clear on each flagged row of the
   pair, one `action_id`.
@@ -108,11 +110,11 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   its namesake is itself flagged).
 - **History shows link-row edits** (moved from `parked.md` on the 4.2b
   stack's manual review, 2026-09-30: the developer asked where a
-  relationship edit went, the entry's revisit signal). A character's
-  History tab omits relationship edits; an entity's omits its
-  involvement edits; a happening's omits involvement and awareness
-  edits; a character's also omits its own awareness edits. All four
-  are deltas on the link row itself (`character_relationships`,
+  relationship edit went, the entry's revisit signal). Before this
+  slice, a character's History tab omitted relationship edits; an
+  entity's omitted its involvement edits; a happening's omitted
+  involvement and awareness edits; a character's also omitted its own
+  awareness edits. All four are deltas on the link row itself (`character_relationships`,
   `happening_involvements`, `happening_awareness`), keyed by the link
   row's own id, not the target's. See
   [World — History tab](../../../../ui/screens/world/world.md#history-tab).
@@ -122,8 +124,7 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   merge driver, which reattaches these same link rows
   ([Implementation notes](#implementation-notes)).
 - **Storybook:** the dialog already has stories; add the `priority`
-  radio row and the phone 3-line prose clamp state if the pattern's
-  open item is picked up here.
+  radio row and the phone 3-line prose clamp state.
 
 ## Scope: out
 
@@ -205,10 +206,11 @@ collision canon, PR 3 History union). Developer decisions are marked.
   `deleteEntity(loser)`'s C3 cascade removes the originals. No arm
   re-keys a link row in place. Moved rows get new ids, so their
   pre-merge edits stay on the other end's History tab through the
-  union, not on the canonical's. Duplicates the canonical already holds
-  are dropped and footnoted: awareness and involvements in the same
-  happening, and relationships with a character the canonical already
-  relates to (the canonical's non-null views win).
+  union, not on the canonical's. Awareness and involvements the
+  canonical already holds in the same happening are dropped and
+  footnoted. A relationship with a character the canonical already
+  relates to merges perspectives (the canonical's non-null views win,
+  the loser's fill its blanks) and is footnoted too.
 - **Merge copies across sweeps** (developer, during the run). The
   copies are user creates with no entry anchor, so a prose-edit sweep
   that reverses the classifier pass behind the originals leaves them,
@@ -262,7 +264,7 @@ collision canon, PR 3 History union). Developer decisions are marked.
   - Native tiers stack choices with Older / Newer captions.
   - `Resolve →` goes through the pane's dirty guard.
   - A refusal that lands after the dialog closed shows as a toast.
-- **History union** (developer, planning, U1–U4). A tab lists live
+- **History union** (developer, planning). A tab lists live
   link rows naming its row, link rows deleted on their own, and link
   rows held in the other end's delete payload. Relationship edits show
   on both characters' tabs, labelled from the tab's side. An
