@@ -429,46 +429,35 @@ describe('foldName — the apostrophe', () => {
 })
 
 describe('uniqueStrings', () => {
-  it('drops a repeated term and keeps the first position', () => {
-    const traits = [
-      'intelligent',
-      'deliberate',
-      'eager to learn',
-      'patient',
-      'honest',
-      'confident',
-      'honest',
-      'genuine',
-    ]
-    expect(uniqueStrings(traits)).toEqual([
-      'intelligent',
-      'deliberate',
-      'eager to learn',
-      'patient',
-      'honest',
-      'confident',
-      'genuine',
-    ])
+  it('drops an exact repeat and keeps the first position', () => {
+    expect(uniqueStrings(['a', 'b', 'a', 'c'])).toEqual(['a', 'b', 'c'])
   })
 
-  it('treats case, accents and punctuation as the same term and keeps the first spelling', () => {
-    expect(uniqueStrings(['Honest', 'honest', 'Élan', 'elan', "Kaelen's", 'Kaelens'])).toEqual([
+  it('keeps terms that differ in case, accents, punctuation or padding', () => {
+    const terms = [
       'Honest',
+      'honest',
       'Élan',
+      'Elan',
       "Kaelen's",
-    ])
+      'Kaelens',
+      'ハート',
+      'ハード',
+      ' a',
+      'a',
+    ]
+    expect(uniqueStrings(terms)).toEqual(terms)
   })
 
-  it('trims, and drops empty and unreadable entries', () => {
-    expect(uniqueStrings(['  brave ', '', '   ', '!!!', 'brave'])).toEqual(['brave'])
+  it('keeps emoji and symbol terms', () => {
+    expect(uniqueStrings(['🔥', '★', '🔥'])).toEqual(['🔥', '★'])
   })
 
-  it('keeps an article as a separate term', () => {
-    expect(uniqueStrings(['Citadel', 'The Citadel'])).toEqual(['Citadel', 'The Citadel'])
+  it('drops empty and whitespace-only entries', () => {
+    expect(uniqueStrings(['brave', '', '   ', 'brave'])).toEqual(['brave'])
   })
 
-  it('leaves a list without repeats as it was', () => {
-    expect(uniqueStrings(['a', 'b', 'c'])).toEqual(['a', 'b', 'c'])
+  it('returns an empty list for an empty list', () => {
     expect(uniqueStrings([])).toEqual([])
   })
 })

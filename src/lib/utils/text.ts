@@ -658,18 +658,14 @@ export function foldName(raw: string): string {
     .trim()
 }
 
-/**
- * A list of terms without repeats, for lists rendered keyed by their own value, where a
- * repeat throws. Repeats are judged by `foldName`; the first spelling and the order stay.
- */
+/** A list without repeats, which is what a keyed `{#each}` compares: exact strings, first kept. */
 export function uniqueStrings(list: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const raw of list) {
-    const folded = foldName(raw)
-    if (!folded || seen.has(folded)) continue
-    seen.add(folded)
-    out.push(raw.trim())
+    if (typeof raw !== 'string' || !raw.trim() || seen.has(raw)) continue
+    seen.add(raw)
+    out.push(raw)
   }
   return out
 }
