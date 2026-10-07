@@ -167,5 +167,35 @@
     "failedNoMetadata": "This entry has no world state to edit.",
     "failedNotFound": "This entry no longer exists.",
     "proseNote": "This doesn't change the entry's text. If the prose still names someone you removed, edit it too."
+  },
+  "rail": {
+    "label": "Browse rail",
+    "categorySelect": "Browse category",
+    "groups": { "world": "World", "plot": "Plot" },
+    "categories": {
+      "character": "Characters",
+      "location": "Places",
+      "item": "Items",
+      "faction": "Factions",
+      "lore": "Lore",
+      "thread": "Threads",
+      "happening": "Happenings"
+    },
+    "collapse": "Collapse rail",
+    "expand": "Expand rail",
+    "strip": {
+      "character": "Characters in scene: {{count}}",
+      "item": "Items in scene: {{count}}",
+      "location": "Location",
+      "faction": "Factions"
+    },
+    "empty": {
+      "classifierBody": "The classifier writes most rows automatically as the story progresses.",
+      "loreBody": "Add lore from the World panel."
+    },
+    "importFromVault": "+ Import from Vault",
+    "importFromVaultReason": "Vault lands in M8",
+    "browse": "Browse",
+    "backToCategories": "Back to categories"
   }
 }
