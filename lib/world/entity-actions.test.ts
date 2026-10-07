@@ -648,3 +648,61 @@ describe('one position per item', () => {
     ])
   })
 })
+
+describe('orphaned collision flags', () => {
+  const TWIN: Entity = { ...KAEL, id: 'char_twin', nameCollisionFlag: 1 }
+
+  function rename(row: Entity, name: string, branchEntities: readonly Entity[]) {
+    return entityActions({
+      branchEntities,
+      kind: 'character',
+      row,
+      keywordsBase: row.keywords,
+      draft: { ...characterDraftFrom(row, []), name },
+      relationships: [],
+      relationshipsBase: [],
+      ...AT,
+    })
+  }
+
+  it('clears the flag of the namesake a rename leaves without a partner', () => {
+    expect(rename(KAEL, 'Kael Vane', [KAEL, TWIN])).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_kael', patch: { name: 'Kael Vane' } },
+      },
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_twin', patch: { nameCollisionFlag: 0 } },
+      },
+    ])
+  })
+
+  it('folds the clear into the update of a flagged row renamed away', () => {
+    const flaggedKael: Entity = { ...KAEL, nameCollisionFlag: 1 }
+    const twin: Entity = { ...KAEL, id: 'char_twin' }
+    expect(rename(flaggedKael, 'Kael Vane', [flaggedKael, twin])).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'char_kael',
+          patch: { name: 'Kael Vane', nameCollisionFlag: 0 },
+        },
+      },
+    ])
+  })
+
+  it('clears nothing for a case-only rename', () => {
+    expect(rename(KAEL, 'KAEL', [KAEL, TWIN])).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_kael', patch: { name: 'KAEL' } },
+      },
+    ])
+  })
+})

@@ -210,7 +210,7 @@ function Harness({
           setSelectedId(id)
           ref.current?.revealRow(id)
         }}
-        resolveCollision={{ disabledReason: 'Lands in Slice 4.2c' }}
+        resolveCollision={{ disabledReason: 'Generation is in flight. Cancel to edit.' }}
         addSlot={
           <ImporterMenu
             trigger="icon"
@@ -376,7 +376,7 @@ export const FilterStaged: Story = {
 export const FlaggedRow: Story = {
   play: async () => {
     expect(await screen.findByRole('link', { name: '⚠ Collides with Brannoc' })).toBeInTheDocument()
-    expect(screen.getByTitle('Lands in Slice 4.2c')).toBeInTheDocument()
+    expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /needs? review/ })).toBeNull()
   },
 }

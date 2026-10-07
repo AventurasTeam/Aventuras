@@ -351,7 +351,7 @@ const meta: Meta<typeof Harness> = {
   // No real db loader or React Query in Storybook; History stories supply their own provider.
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null, names: {} })}>
         <Story />
       </HistoryLoaderProvider>
     ),
@@ -695,7 +695,9 @@ export const CreateLocation: Story = {
   },
 }
 
-const entityHistoryLoader = fn(async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }))
+const entityHistoryLoader = fn(
+  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null, names: {} }),
+)
 
 /** `[+] Blank` from a character open on History lands the new draft on Identity. */
 export const BlankFromHistoryLandsOnIdentity: Story = {
@@ -752,6 +754,7 @@ export const CreateThenHistoryTargetsTheSavedRow: Story = {
             targetTable: 'entities',
             targetId: 'location_new',
           }),
+          expect.any(Function),
         ),
       WAIT,
     )

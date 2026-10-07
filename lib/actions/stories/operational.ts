@@ -13,6 +13,7 @@ import {
   storySettingsSchema,
   stories,
   threads,
+  translations,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { kickStoryDrain } from '@/lib/embedder-swap'
@@ -30,6 +31,7 @@ import {
   rehydrateStories,
   storiesStore,
   threadsStore,
+  translationsStore,
   type OpenFailureKind,
   type OpenStory,
 } from '@/lib/stores'
@@ -166,6 +168,11 @@ async function loadAndPublish(
     .from(characterRelationships)
     .where(eq(characterRelationships.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
+  const translationRows = await ctx.db
+    .select()
+    .from(translations)
+    .where(eq(translations.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
 
   storiesStore.clearOpenFailure(row.storyId)
   entriesStore.hydrate(branchId, entryRows)
@@ -177,6 +184,7 @@ async function loadAndPublish(
   happeningAwarenessStore.hydrate(branchId, awarenessRows)
   chaptersStore.hydrate(branchId, chapterRows)
   characterRelationshipsStore.hydrate(branchId, relationshipRows)
+  translationsStore.hydrate(branchId, translationRows)
   publish({ storyId: row.storyId, branchId, definition, settings })
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.

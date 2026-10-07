@@ -1,11 +1,7 @@
-import { normalizeCollisionName } from '@/lib/classifier'
 import type { Entity } from '@/lib/db'
+import { namesakeKey } from '@/lib/world'
 
 export type CollisionTarget = { otherId: string; otherName: string }
-
-// Must reuse the flag writer's namesake rule, or the review surface could
-// disagree with what tripped the flag.
-const keyOf = (e: Entity) => `${e.kind}:${normalizeCollisionName(e.name)}`
 
 /**
  * Flagged rows → the same-kind namesake they collide with. Ranked
@@ -17,7 +13,9 @@ export function deriveCollisions(
 ): ReadonlyMap<string, CollisionTarget> {
   const byKey = new Map<string, Entity[]>()
   for (const e of entities) {
-    const key = keyOf(e)
+    // namesakeKey is the flag writer's rule (lib/world pins it to the classifier's), so the review
+    // surface can't disagree with what tripped the flag.
+    const key = namesakeKey(e)
     const group = byKey.get(key)
     if (group) group.push(e)
     else byKey.set(key, [e])
@@ -25,7 +23,7 @@ export function deriveCollisions(
   const out = new Map<string, CollisionTarget>()
   for (const e of entities) {
     if (e.nameCollisionFlag !== 1) continue
-    const namesakes = (byKey.get(keyOf(e)) ?? []).filter((n) => n.id !== e.id)
+    const namesakes = (byKey.get(namesakeKey(e)) ?? []).filter((n) => n.id !== e.id)
     const other = [...namesakes].sort(
       (a, b) =>
         a.nameCollisionFlag - b.nameCollisionFlag ||

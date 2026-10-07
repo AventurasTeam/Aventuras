@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
+import { goToWorld as goToWorldFlow } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
@@ -64,9 +65,7 @@ async function entitySnapshot(page: Page, id: string): Promise<EntitySnapshot> {
 // Reader → World over GO TO. The round trip pops to the World instance already on the stack, which
 // keeps its category and selection, so callers pick the category they need.
 async function goToWorld(page: Page): Promise<string> {
-  await chrome.actionsTrigger(page).click()
-  await chrome.goToWorldRow(page).click()
-  await page.waitForURL(/\/world\//)
+  await goToWorldFlow(page)
   return currentBranchId(page, HERO_STORY)
 }
 

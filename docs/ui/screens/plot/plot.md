@@ -199,12 +199,11 @@ per the
   chips at 0.2 / 0.5 / 0.8; a chip reads selected only on an exact
   match, so classifier-written values display with none lit) +
   `source` (free-form text descriptor). Add / remove rows.
-- **History** — delta log filtered to this happening. Involvement
-  and awareness edits are their link rows' deltas, not the
-  happening's, so they don't show here yet — a links-only Save shows
-  nothing new in History. See
-  [World — History tab](../world/world.md#history-tab) and the fix
-  [scheduled for Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in).
+- **History** — delta log filtered to this happening, and the
+  deltas of its involvement and awareness rows, including rows
+  removed with the other end's delete, so a links-only Save lists
+  its link edits here. See
+  [World — History tab](../world/world.md#history-tab).
 
 ### Entry-ref picker
 

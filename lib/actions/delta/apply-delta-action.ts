@@ -271,6 +271,32 @@ export async function applyDeltaActionGroup(
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
+export type BuiltGroup<Code extends string = string> =
+  | { status: 'ok'; actions: readonly PipelineAction[] }
+  | { status: 'rejected'; reason: string; code: Code }
+
+/**
+ * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold through the commit:
+ * it reads every no-gate pass's writes so far, and none lands before commit. `build` must take no
+ * lock, as the hold isn't reentrant. Refusals return as is, throws reject. Tracked as a user write.
+ */
+export function applyDeltaActionGroupBuilt(
+  build: () => BuiltGroup,
+  args: GroupArgs,
+  ctx: DbCtx,
+): Promise<DeltaGroupResult> {
+  const write = withBranchWriteShared(args.branchId, args.actionId, async () => {
+    const built = build()
+    if (built.status === 'rejected') return built
+    const { actions } = built
+    // Row keys come from the plan, so they follow the build, still inside the branch lock.
+    return withKeyLocks(actions.flatMap(lockKeysFor), () =>
+      applyDeltaActionGroupUnlocked(actions, args, ctx),
+    )
+  })
+  return trackUserWrite(write)
+}
+
 async function applyDeltaActionGroupUnlocked(
   actions: readonly PipelineAction[],
   args: GroupArgs,

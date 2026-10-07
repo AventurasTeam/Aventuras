@@ -317,9 +317,9 @@ it should be.
   `MasterDetailLayout`'s wrapper pads too — see
   [Slice 4.3](./03-plot-panel.md)'s Open questions.
 - The review pill's target and the pane's list signals are built
-  separately under a comment-only switch-and-reveal contract — see
-  [Slice 4.2c](./02c-collision-review.md)'s Open questions for a
-  possible `revealFirstFlagged()` handle.
+  separately under a comment-only switch-and-reveal contract;
+  [Slice 4.2c](./02c-collision-review.md#implementation-notes) didn't
+  take a `revealFirstFlagged()` handle.
 - The route shows the reader's loading copy until the story is open
   (an empty list would otherwise read "No characters on this branch
   yet."), and hides `Add entity…` / `Add lore…` until then; a failed

@@ -6,6 +6,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
 
+import type { PipelineActionMap } from '../action-map'
 import { registerEntities } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
@@ -524,5 +525,98 @@ describe('parent_location_id cycle guard', () => {
       parentId: 'loc_x',
     })
     error.mockRestore()
+  })
+})
+
+type EntityPatch = PipelineActionMap['updateEntity']['payload']['patch']
+
+const patchChar = (patch: EntityPatch, actionId: string) => ({
+  action: {
+    kind: 'updateEntity' as const,
+    source: 'user_edit' as const,
+    payload: { branchId: 'br_1', id: 'char_1', patch },
+  },
+  actionId,
+  branchId: 'br_1',
+})
+
+describe('collision flag clear', () => {
+  async function seedChar(ctx: Awaited<ReturnType<typeof setup>>['ctx'], entry: NewEntity) {
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  }
+
+  const deltasOf = (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+
+  it('clears the flag in one delta whose undo re-flags, without dirtying the vector', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, { ...CHAR, nameCollisionFlag: 1, embeddingStale: 0 })
+
+    const result = await applyDeltaAction(patchChar({ nameCollisionFlag: 0 }, 'act_keep'), ctx)
+
+    expect(result).toMatchObject({ status: 'ok' })
+    const row = await rowFor(db, 'char_1')
+    expect(row.nameCollisionFlag).toBe(0)
+    expect(row.embeddingStale).toBe(0)
+    expect(entitiesStore.getById('char_1')?.nameCollisionFlag).toBe(0)
+    const logged = await deltasOf(db, 'act_keep')
+    expect(logged).toHaveLength(1)
+    expect(logged[0].undoPayload).toEqual({ nameCollisionFlag: 1 })
+
+    expect(await reverseReplayDeltas('act_keep', ctx)).toBe(1)
+    expect((await rowFor(db, 'char_1')).nameCollisionFlag).toBe(1)
+    expect(entitiesStore.getById('char_1')?.nameCollisionFlag).toBe(1)
+  })
+
+  it('carries a rename and the clear as one delta', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, { ...CHAR, nameCollisionFlag: 1 })
+
+    await applyDeltaAction(patchChar({ name: 'Kaelin', nameCollisionFlag: 0 }, 'act_rename'), ctx)
+
+    const logged = await deltasOf(db, 'act_rename')
+    expect(logged).toHaveLength(1)
+    expect(logged[0].undoPayload).toEqual({ name: 'Kael', nameCollisionFlag: 1 })
+    const row = await rowFor(db, 'char_1')
+    expect(row.name).toBe('Kaelin')
+    expect(row.nameCollisionFlag).toBe(0)
+  })
+
+  it('drops a clear on an unflagged row, so a clear-only patch is the noop refusal', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, CHAR)
+
+    const result = await applyDeltaAction(patchChar({ nameCollisionFlag: 0 }, 'act_keep'), ctx)
+
+    expect(result).toEqual({ status: 'rejected', reason: 'no-op entity patch', code: 'noop' })
+    expect(await db.select().from(deltas)).toHaveLength(1)
+  })
+
+  // The type admits 0 or undefined: a cast reaches 1, and an explicit undefined compiles but must
+  // be refused.
+  it('refuses a flag value other than 0, so no user path can set it', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, CHAR)
+    const refusal = {
+      status: 'rejected',
+      reason: 'invalid entity patch: nameCollisionFlag can only be cleared',
+    }
+
+    const set = { nameCollisionFlag: 1 } as unknown as EntityPatch
+    expect(await applyDeltaAction(patchChar(set, 'act_set'), ctx)).toEqual(refusal)
+    expect((await rowFor(db, 'char_1')).nameCollisionFlag).toBe(0)
+
+    // A present-but-undefined key would reach the store patch as an undefined flag.
+    const blank = { name: 'Kaelin', nameCollisionFlag: undefined }
+    expect(await applyDeltaAction(patchChar(blank, 'act_blank'), ctx)).toEqual(refusal)
+    expect((await rowFor(db, 'char_1')).name).toBe('Kael')
+    expect(await db.select().from(deltas)).toHaveLength(1)
   })
 })

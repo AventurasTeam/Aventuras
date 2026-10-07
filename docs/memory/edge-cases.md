@@ -88,7 +88,9 @@ entities {
 ```
 
 Flag clears when the user resolves the collision (merge, rename, or
-explicit "keep as distinct").
+keep as distinct), or when a rename or delete leaves no same-kind
+namesake
+([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)).
 
 ### Polymorphic naming — v1 limitation
 
