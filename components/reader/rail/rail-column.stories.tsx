@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useLayoutEffect, useState, type ReactNode } from 'react'
-import { View } from 'react-native'
+import { TextInput, View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
@@ -18,17 +18,24 @@ import { railStripOf } from './use-rail-data'
 const DATA = railDataFixture()
 const STRIP = railStripOf(DATA)
 const ANIMATION = { timeout: 5000 }
+const OUTSIDE_FIELD = 'Composer'
 
 function Stage({ children }: { children: ReactNode }) {
   return (
     <View style={{ height: 560, flexDirection: 'row' }}>
-      <View style={{ flex: 1, padding: 16 }}>
+      <View style={{ flex: 1, padding: 16, gap: 8 }}>
         <Text>Narrative column</Text>
+        <TextInput aria-label={OUTSIDE_FIELD} className="border border-border p-2" />
       </View>
       {children}
     </View>
   )
 }
+
+const stripChevron = (strip: HTMLElement) =>
+  within(strip).getByRole('button', { name: t('reader:rail.expand') })
+const collapseChevron = (rail: HTMLElement) =>
+  within(rail).getByRole('button', { name: t('reader:rail.collapse') })
 
 function ColumnHarness({
   initiallyCollapsed = false,
@@ -190,7 +197,53 @@ export const ConnectedShortcutFromSearchField: Story = {
   play: async () => {
     await userEvent.click(await screen.findByPlaceholderText('Search characters…'))
     await userEvent.keyboard('{Control>}\\{/Control}')
+    const strip = await screen.findByTestId('rail-strip', {}, ANIMATION)
+    // The field left with the rail; focus lands on the strip's chevron, not the page.
+    await waitFor(() => expect(document.activeElement).toBe(stripChevron(strip)), ANIMATION)
+  },
+}
+
+/** A keyboard expand hands focus to the rail's collapse chevron. */
+export const ConnectedExpandKeepsFocus: Story = {
+  render: () => <ConnectedStage />,
+  beforeEach: () => {
+    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true })
+  },
+  play: async () => {
+    stripChevron(await screen.findByTestId('rail-strip')).focus()
+    await userEvent.keyboard('{Enter}')
+    const rail = await screen.findByTestId('reader-rail', {}, ANIMATION)
+    await waitFor(() => expect(document.activeElement).toBe(collapseChevron(rail)), ANIMATION)
+  },
+}
+
+/** A keyboard collapse hands focus to the strip's expand chevron. */
+export const ConnectedCollapseKeepsFocus: Story = {
+  render: () => <ConnectedStage />,
+  play: async () => {
+    collapseChevron(await screen.findByTestId('reader-rail')).focus()
+    await userEvent.keyboard('{Enter}')
+    const strip = await screen.findByTestId('rail-strip', {}, ANIMATION)
+    await waitFor(() => expect(document.activeElement).toBe(stripChevron(strip)), ANIMATION)
+  },
+}
+
+/** Focus outside the column stays put whichever way the shortcut toggles. */
+export const ConnectedShortcutLeavesOutsideFocus: Story = {
+  render: () => <ConnectedStage />,
+  play: async () => {
+    await screen.findByTestId('reader-rail')
+    const field = screen.getByLabelText(OUTSIDE_FIELD)
+    await userEvent.click(field)
+    await userEvent.keyboard('{Control>}\\{/Control}')
     await screen.findByTestId('rail-strip', {}, ANIMATION)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await expect(document.activeElement).toBe(field)
+
+    await userEvent.keyboard('{Control>}\\{/Control}')
+    await screen.findByTestId('reader-rail', {}, ANIMATION)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await expect(document.activeElement).toBe(field)
   },
 }
 

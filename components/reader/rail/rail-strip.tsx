@@ -1,5 +1,5 @@
 import { ChevronLeft } from 'lucide-react-native'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 
 import { useTapTooltipTrigger } from '@/components/compounds/truncated-text'
@@ -26,13 +26,15 @@ export type RailStripProps = {
   onExpand: () => void
   /** A cell: expand and switch to its category. */
   onExpandTo: (category: StripCategory) => void
+  /** The chevron, for the column to hand focus to after a collapse. */
+  expandRef?: Ref<View>
 }
 
-export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
+export function RailStrip({ model, onExpand, onExpandTo, expandRef }: RailStripProps) {
   return (
     <View testID="rail-strip" className="flex-1 bg-bg-sunken" style={STRIP_WIDTH_STYLE}>
       <EmptyRegion className="h-1" onPress={onExpand} />
-      <StripCell label={t('reader:rail.expand')} onPress={onExpand}>
+      <StripCell ref={expandRef} label={t('reader:rail.expand')} onPress={onExpand}>
         <Icon as={ChevronLeft} size="sm" />
       </StripCell>
       {model.counted.map((cell) => (
@@ -93,6 +95,7 @@ type StripCellProps = {
   tint?: RecentlyClassified
   tintTestID?: string
   hoverTestID?: string
+  ref?: Ref<View>
   children: ReactNode
 }
 
@@ -132,6 +135,7 @@ function NativeStripCell(props: StripCellProps) {
 }
 
 function CellPressable({
+  ref,
   label,
   onPress,
   onLongPress,
@@ -142,6 +146,7 @@ function CellPressable({
 }: StripCellProps & { onLongPress?: () => void }) {
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       aria-label={label}
       onPress={onPress}

@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import type { View } from 'react-native'
 
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { matchesRailToggleShortcut, type RailCategory } from '@/lib/reader-rail'
@@ -21,6 +22,8 @@ export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColu
   const view = readerRailStore.useView()
   const { collapsed, setCollapsed } = useRailCollapse()
   const strip = useMemo(() => railStripOf(data), [data])
+  const collapseRef = useRef<View>(null)
+  const expandRef = useRef<View>(null)
   // reader-composer.md: the shortcut toggles regardless of focus, a text field included. Capture
   // phase: RN-Web's TextInput stops every keydown from bubbling.
   useGlobalHotkey(matchesRailToggleShortcut, () => setCollapsed(!collapsed), {
@@ -31,6 +34,8 @@ export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColu
   return (
     <RailColumn
       collapsed={collapsed}
+      expandedToggleRef={collapseRef}
+      stripToggleRef={expandRef}
       expanded={
         <BrowseRail
           data={data}
@@ -39,11 +44,13 @@ export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColu
           onCategoryChange={(category) => readerRailStore.setCategory(category)}
           onRowPress={onRowPress}
           onCollapse={() => setCollapsed(true)}
+          collapseRef={collapseRef}
         />
       }
       strip={
         <RailStrip
           model={strip}
+          expandRef={expandRef}
           onExpand={() => setCollapsed(false)}
           onExpandTo={(category) => {
             readerRailStore.setCategory(category)
