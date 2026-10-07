@@ -247,7 +247,7 @@ export const HappeningsIndexLands: Story = {
   play: async () => {
     const trigger = await screen.findByLabelText('Browse category')
     await userEvent.click(trigger)
-    await userEvent.click(await screen.findByRole('option', { name: 'Happenings' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Happenings' }, WAIT))
     expect(await screen.findByText('Loading happenings…', {}, WAIT)).toBeVisible()
     await waitFor(() => expect(trigger).toHaveFocus(), WAIT)
     expect(await screen.findByRole('button', { name: "Vorne's pact" }, WAIT)).toBeVisible()
@@ -285,12 +285,14 @@ export const CategorySwitch: Story = {
     // The popover fades in, so its group labels are not yet visible when they first mount.
     await waitFor(() => expect(screen.getByText('World')).toBeVisible(), WAIT)
     expect(screen.getByText('Plot')).toBeVisible()
-    await userEvent.click(await screen.findByRole('option', { name: 'Places' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Places' }, WAIT))
     expect(await screen.findByPlaceholderText('Search places…', {}, WAIT)).toBeVisible()
     await userEvent.click(screen.getByLabelText('Browse category'))
-    await userEvent.click(await screen.findByRole('option', { name: 'Threads' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Threads' }, WAIT))
     expect(await screen.findByPlaceholderText('Search threads…', {}, WAIT)).toBeVisible()
-    await userEvent.click(await screen.findByRole('button', { name: 'What the amulet wants' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'What the amulet wants' }, WAIT),
+    )
     expect(args.onRowPress).toHaveBeenCalledWith('thread', 't_amulet')
   },
 }
