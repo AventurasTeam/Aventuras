@@ -279,3 +279,11 @@ slice-planning gate forces its resolution before that slice is planned.
   4.2c's visual review. A width prop, or a documented `sm:` override,
   would stop the next dialog from repeating it. Found in 4.2c's
   developer review (2026-10-07).
+- **The desktop window has no minimum width.** `createWindow` in
+  `electron/main.ts` sets `width` and `height` but no `minWidth`, so the
+  window can shrink to widths no desktop user works at, and layouts get
+  exercised there that only phones should reach. Example: below 330 px
+  the collision dialog's mode segment clips (see the segment-clip entry
+  above). Developer-requested: set `minWidth` around 360 px, which still
+  lets the window narrow into the phone tier to check phone layouts.
+  Found in 4.2c's developer review (2026-10-07).
