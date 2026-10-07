@@ -11,6 +11,7 @@ import { exchangeToCharacter, parseExchange } from '$lib/services/exchange'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
+import { uniqueTerms } from '$lib/utils/text'
 
 const log = createLogger('CharacterVault')
 
@@ -220,13 +221,7 @@ class CharacterVaultStore {
     tags?: string[]
     version?: string
   }): Promise<VaultCharacter> {
-    const traits = card.personality
-      ? card.personality
-          .split(/[,;]/)
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .slice(0, 10)
-      : []
+    const traits = card.personality ? uniqueTerms(card.personality.split(/[,;]/)).slice(0, 10) : []
 
     return this.add({
       name: card.name,
@@ -400,13 +395,7 @@ class CharacterVaultStore {
         description: sanitized?.description || parsed.description || parsed.creator_notes || null,
         traits:
           sanitized?.traits ||
-          (parsed.personality
-            ? parsed.personality
-                .split(/[,;]/)
-                .map((t) => t.trim())
-                .filter(Boolean)
-                .slice(0, 10)
-            : []),
+          (parsed.personality ? uniqueTerms(parsed.personality.split(/[,;]/)).slice(0, 10) : []),
         visualDescriptors: sanitized?.visualDescriptors || {},
         portrait: portrait || null,
         tags: extraMetadata.tags || parsed.tags || ['imported'],

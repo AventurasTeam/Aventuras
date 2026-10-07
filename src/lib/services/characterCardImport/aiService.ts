@@ -8,6 +8,7 @@ import { ContextBuilder } from '$lib/services/context'
 import { cardImportResultSchema, vaultCharacterImportSchema } from './schemas'
 import type { CardImportResult, ParsedCard, SanitizedCharacter } from './types'
 import { parseJson } from './parseJson'
+import { parseTerms } from '$lib/utils/text'
 
 const log = createLogger('characterCardImport:aiService')
 
@@ -68,10 +69,7 @@ class AIService extends BaseAIService {
       role: npc.role,
       description: npc.description,
       relationship: npc.relationship,
-      traits: npc.personality
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
+      traits: parseTerms(npc.personality),
     }))
 
     log('Card import successful', {
