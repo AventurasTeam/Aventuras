@@ -1,3 +1,4 @@
+import type { EntityCascadeLinkTable } from '@/lib/actions'
 import type {
   CharacterRelationship,
   CharacterState,
@@ -92,10 +93,16 @@ export type EntityLinkRows = {
   relationships: CharacterRelationship[]
 }
 
-/**
- * The link rows the entity arm's cascade removes with `id`, by `entityCascade`'s predicates
- * (lib/actions/entities/entity-cascade.ts): a new cascade link table needs a list here.
- */
+// A link table the cascade gains fails to compile here until it has a list: a merge moves only
+// the listed rows, and the loser's delete takes the rest.
+const CASCADE_LISTS: Record<EntityCascadeLinkTable, keyof EntityLinkRows> = {
+  happening_involvements: 'involvements',
+  happening_awareness: 'awareness',
+  character_relationships: 'relationships',
+}
+void CASCADE_LISTS
+
+/** The link rows the entity arm's cascade removes with `id`, by `entityCascade`'s predicates. */
 export function entityLinkRows(input: {
   branchId: string
   id: string
