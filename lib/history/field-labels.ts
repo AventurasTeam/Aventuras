@@ -85,11 +85,11 @@ const RELATIONSHIP_SIDE_B: Labels = { kind: theirView, inverseKind: yourView }
 
 const INVOLVEMENT: Labels = { role: () => t('history:field.role') }
 
-// No retrievalCount: the query leaves its bumps out.
 const AWARENESS: Labels = {
   source: () => t('history:field.source'),
   decayResistance: () => t('history:field.decayResistance'),
   learnedAtEntryId: () => t('history:field.learnedAt'),
+  retrievalCount: () => t('history:field.retrievalCount'),
 }
 
 const LABELS: Record<SidelessTable, Labels> = {

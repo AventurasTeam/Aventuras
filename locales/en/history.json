@@ -94,6 +94,7 @@
     "role": "Role",
     "source": "Source",
     "decayResistance": "Decay resistance",
-    "learnedAt": "Learned at"
+    "learnedAt": "Learned at",
+    "retrievalCount": "Retrieval count"
   }
 }

@@ -540,10 +540,19 @@ describe('link-row union', () => {
       undoPayload: { retrievalCount: 0, source: null },
       createdAt: 1000,
     })
-    expect(await tab('char_aria')).toEqual([
+    const chunk = await loadHistoryChunk(db, tabQuery('char_aria'))
+    expect(chunk.rows.map(sig)).toEqual([
       'happening_awareness update hap_fire',
       'happening_awareness create hap_fire',
     ])
+    const context: HumanizeContext = {
+      targetTable: 'entities',
+      targetName: 'Aria',
+      otherName: (id) => chunk.names[id] ?? null,
+      entryLabel: () => null,
+      nowMs: 0,
+    }
+    expect(humanizeDelta(chunk.rows[0], context).summary).toBe('Modified Retrieval count, Source')
   })
 
   it("lists any entity's involvements live, removed on their own and with the happening", async () => {

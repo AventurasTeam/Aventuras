@@ -38,8 +38,7 @@ const LINK_TABLE_DEFS = {
   happening_awareness: happeningAwareness,
 } as const
 
-// Identity, branch and the two ends are structure, not edited values; the awareness counter is
-// bumped by the memory pipeline and its label is left out on purpose.
+// Identity, branch and the two ends are structure, not edited values.
 const STRUCTURAL_COLUMNS = new Set([
   'id',
   'branchId',
@@ -50,7 +49,6 @@ const STRUCTURAL_COLUMNS = new Set([
   'characterId',
   'createdAt',
   'updatedAt',
-  'retrievalCount',
 ])
 
 describe('field-labels vocabulary coverage', () => {
@@ -110,14 +108,13 @@ describe('link-row labels', () => {
     expect(() => pathsMatchingLabel('character_relationships', 'view')).toThrow()
   })
 
-  it('labels involvement and awareness columns, and leaves the retrieval counter raw', () => {
+  it('labels involvement and awareness columns', () => {
     expect(fieldPathLabel('happening_involvements', 'role')).toBe('Role')
     expect(
-      ['source', 'decayResistance', 'learnedAtEntryId'].map((column) =>
+      ['source', 'decayResistance', 'learnedAtEntryId', 'retrievalCount'].map((column) =>
         fieldPathLabel('happening_awareness', column),
       ),
-    ).toEqual(['Source', 'Decay resistance', 'Learned at'])
-    expect(fieldPathLabel('happening_awareness', 'retrievalCount')).toBe('retrievalCount')
+    ).toEqual(['Source', 'Decay resistance', 'Learned at', 'Retrieval count'])
   })
 })
 

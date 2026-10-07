@@ -628,8 +628,8 @@ prose, then hands pre-formatted strings to the compound.
   `inverseKind` read "Your view" and "Their view" by the tab's side:
   `kind` is `a`'s view of `b`, with `a_id < b_id`, so the tab's
   character holds `kind` when it is `a`. An involvement's `role` reads
-  "Role"; awareness columns read "Source", "Decay resistance" and
-  "Learned at". The muted path stays the payload's raw key
+  "Role"; awareness columns read "Source", "Decay resistance",
+  "Learned at" and "Retrieval count". The muted path stays the payload's raw key
   (`inverseKind`, not the column's snake case).
 - **Refresh** — the tab refetches when its row changes in the working
   set, when a link row naming it is added, removed, or changes in a
