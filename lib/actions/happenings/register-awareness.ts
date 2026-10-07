@@ -17,7 +17,10 @@ type AwarenessUpsertPayload = {
   learnedAtEntryId?: string | null
   decayResistance?: number | null
   source?: string | null
-  /** Create only, user source only; a pipeline create and every update ignore it. */
+  /**
+   * Create only, user source only: a pipeline create and every update ignore a valid one; an
+   * invalid value refuses the action.
+   */
   retrievalCount?: number
 }
 
@@ -124,7 +127,8 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     characterId,
     learnedAtEntryId: nullifyRef(learnedAtEntryId),
     decayResistance: decayResistance ?? null,
-    // Only bumpAwarenessRetrieval counts retrievals; a pipeline create starts at 0.
+    // A merge's moved row keeps its count; a pipeline create starts at 0, since only
+    // bumpAwarenessRetrieval counts retrievals.
     retrievalCount: isUserOriginatedSource(action.source) ? (retrievalCount ?? 0) : 0,
     source: source ?? null,
   }

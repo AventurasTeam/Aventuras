@@ -189,7 +189,10 @@ function tailOf(head: Awaited<ReturnType<typeof loadHeadTurn>>): DeleteTail | nu
       }
 }
 
-/** world.md → Delete: the merge rewrites the tail scene, so it holds the tail's metadata lock. */
+/**
+ * generation-pipeline.md → No-gate write phase: the merge rewrites the tail scene, so it holds the
+ * tail's metadata lock around the branch lock.
+ */
 async function commitMerge(
   branchId: string,
   resolution: MergeResolution,
