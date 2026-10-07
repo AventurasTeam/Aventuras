@@ -2899,8 +2899,8 @@ class StoryStore {
           if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
             changes.traits = applyTermChanges(
               existing.traits,
-              update.changes.newTraits ?? [],
-              update.changes.removeTraits ?? [],
+              update.changes.newTraits,
+              update.changes.removeTraits,
             )
           }
           // Handle visual descriptor updates for image generation

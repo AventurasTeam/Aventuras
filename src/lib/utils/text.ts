@@ -694,8 +694,8 @@ export function parseTerms(text: string): string[] {
 /** `existing` minus `remove`, then plus `add`, by `termKey`; a term in both is kept. */
 export function applyTermChanges(
   existing: readonly string[],
-  add: readonly string[],
-  remove: readonly string[],
+  add: readonly string[] = [],
+  remove: readonly string[] = [],
 ): string[] {
   const removed = new Set(remove.map(termKey))
   return uniqueTerms([...existing.filter((t) => !removed.has(termKey(t))), ...add])

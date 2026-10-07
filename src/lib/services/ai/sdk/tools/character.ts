@@ -254,7 +254,7 @@ export function createCharacterTools(context: CharacterToolContext) {
           resolvedTraits = uniqueTerms(updates.replaceTraits)
         } else {
           if (addTraits?.length || removeTraits?.length) {
-            resolvedTraits = applyTermChanges(resolvedTraits, addTraits ?? [], removeTraits ?? [])
+            resolvedTraits = applyTermChanges(resolvedTraits, addTraits, removeTraits)
           }
         }
 
