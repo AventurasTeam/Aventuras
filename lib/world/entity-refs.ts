@@ -126,6 +126,11 @@ function heldBy(entity: Entity): string[] {
   return entity.kind === 'character' ? heldItems(stateOf(entity, 'character')) : []
 }
 
+/** The items some entity other than `holderId` holds. */
+export function heldElsewhere(holderId: string, branchEntities: readonly Entity[]): Set<string> {
+  return new Set(branchEntities.filter((e) => e.id !== holderId).flatMap((e) => heldBy(e)))
+}
+
 /** An item is placed at a location or carried by some character in the branch. */
 export function itemHasPosition(item: Entity, branchEntities: readonly Entity[]): boolean {
   return (
@@ -154,14 +159,12 @@ export function unheldItemsWithout(holderId: string, branchEntities: readonly En
   const holder = branchEntities.find((e) => e.id === holderId)
   if (holder == null) return 0
   const carried = new Set(heldBy(holder))
-  const heldElsewhere = new Set(
-    branchEntities.filter((e) => e.id !== holderId).flatMap((e) => heldBy(e)),
-  )
+  const othersHold = heldElsewhere(holderId, branchEntities)
   return branchEntities.filter(
     (item) =>
       item.kind === 'item' &&
       carried.has(item.id) &&
-      !heldElsewhere.has(item.id) &&
+      !othersHold.has(item.id) &&
       stateOf(item, 'item').at_location_id == null,
   ).length
 }

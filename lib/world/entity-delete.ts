@@ -2,8 +2,8 @@ import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 
 import { orphanedFlags, withFlagClears } from './collision-flags'
-import { heldItems, stateOf } from './entity-draft'
-import { stateWithRefRewritten, unheldItemsWithout } from './entity-refs'
+import { stateOf } from './entity-draft'
+import { heldElsewhere, stateWithRefRewritten, unheldItemsWithout } from './entity-refs'
 
 export type DeleteTail = {
   id: string
@@ -30,18 +30,12 @@ export type EntityDeletePlan = {
   tailScene: boolean
 }
 
-function heldBy(entity: Entity): string[] {
-  return entity.kind === 'character' ? heldItems(stateOf(entity, 'character')) : []
-}
-
 function unplacedItems(target: Entity, branchEntities: readonly Entity[]): number {
-  const heldElsewhere = new Set(
-    branchEntities.filter((e) => e.id !== target.id).flatMap((e) => heldBy(e)),
-  )
+  const othersHold = heldElsewhere(target.id, branchEntities)
   const atTarget = branchEntities.filter(
     (item) =>
       item.kind === 'item' &&
-      !heldElsewhere.has(item.id) &&
+      !othersHold.has(item.id) &&
       stateOf(item, 'item').at_location_id === target.id,
   ).length
   return unheldItemsWithout(target.id, branchEntities) + atTarget
