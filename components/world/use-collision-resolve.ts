@@ -16,6 +16,7 @@ import {
 } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import {
   characterRelationshipsStore,
   entitiesStore,
@@ -47,6 +48,16 @@ function inBranch<Row extends { branchId: string }>(
   return [...rows.values()].filter((row) => row.branchId === branchId)
 }
 
+/** Each term of the pair whose key the dialog's final list lacks: the user deselected it. */
+function deselected(
+  terms: readonly string[],
+  final: readonly string[],
+  keyOf: (term: string) => string,
+): string[] {
+  const kept = new Set(final.map(keyOf))
+  return [...new Set(terms.map(keyOf))].filter((key) => key !== '' && !kept.has(key))
+}
+
 /** The dialog's resolution as the action takes it; `pair` is older first, as the dialog got it. */
 function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionResolution {
   switch (resolution.mode) {
@@ -58,8 +69,14 @@ function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionR
         canonicalId: resolution.canonicalId,
         loserId: canonicalIsA ? b.id : a.id,
         fromLoser: SCALAR_FIELDS.filter((field) => resolution.fieldChoices[field] === loserSide),
-        tags: resolution.finalTags,
-        keywords: resolution.finalKeywords,
+        deselectedTags: deselected([...a.tags, ...b.tags], resolution.finalTags, (tag) =>
+          tag.trim(),
+        ),
+        deselectedKeywords: deselected(
+          [...a.keywords, ...b.keywords],
+          resolution.finalKeywords,
+          normalizeTerm,
+        ),
       }
     }
     case 'rename': {

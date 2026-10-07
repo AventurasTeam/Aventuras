@@ -1949,9 +1949,13 @@ Every `applyDeltaAction`, `applyDeltaActionGroup` and
 `applyDeltaActionGroupBuilt` takes a per-branch write lock in shared
 mode, inside the entry metadata lock and before its row keys. The
 built variant exists for a user write that plans from state a
-`no-gate` pass also writes, such as the collision merge's link rows,
-`status` and `keywords`: it builds its actions under the shared hold,
-so the plan can't predate a `no-gate` pass's writes. It can still
+`no-gate` pass also writes, such as the collision merge: it builds
+its actions under the shared hold, so the plan can't predate a
+`no-gate` pass's writes. The merge reads both rows there, their link
+rows, `status`, tags and keywords included; the user's choice travels
+as the scalars to take and the tags and keywords to drop, never as
+final lists, so a keyword a pass appends to either row while the
+merge waits is kept. It can still
 run while another user write holds a row key mid-commit, since
 handlers re-read under the key. The build must not write, takes no
 lock and should not await long: the hold isn't reentrant, and a pass

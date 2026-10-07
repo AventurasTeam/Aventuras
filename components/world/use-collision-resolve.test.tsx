@@ -267,8 +267,8 @@ describe('useCollisionResolve → what resolve sends', () => {
         canonicalId: OLDER.id,
         loserId: NEWER.id,
         fromLoser: ['status'],
-        tags: TAGS,
-        keywords: KEYWORDS,
+        deselectedTags: [],
+        deselectedKeywords: [],
       },
       ctx,
     )
@@ -295,12 +295,34 @@ describe('useCollisionResolve → what resolve sends', () => {
         canonicalId: NEWER.id,
         loserId: OLDER.id,
         fromLoser: ['description'],
-        tags: TAGS,
-        keywords: KEYWORDS,
+        deselectedTags: [],
+        deselectedKeywords: [],
       },
       ctx,
     )
     expect(toast.success).toHaveBeenCalledWith('Merged into BRANNOC.')
+  })
+
+  it('sends each term missing from the final lists as deselected, keywords by their key', async () => {
+    const result = openPair()
+    const pair = openedPair(result)
+
+    await result.current.resolve({
+      mode: 'merge',
+      canonicalId: OLDER.id,
+      fieldChoices: fieldChoices(pair, OLDER.id, []),
+      finalTags: ['watch'],
+      finalKeywords: ['The River Gate'],
+    })
+
+    expect(resolveCollision).toHaveBeenCalledWith(
+      BRANCH,
+      expect.objectContaining({
+        deselectedTags: ['smuggler'],
+        deselectedKeywords: ['the sergeant'],
+      }),
+      ctx,
+    )
   })
 
   it("names the merged row by the loser's name when the merge takes it", async () => {

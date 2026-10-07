@@ -100,8 +100,8 @@ function merge(overrides: Partial<EntityMergeInput> = {}) {
     canonical,
     loser,
     fromLoser: [],
-    tags: canonical.tags,
-    keywords: canonical.keywords,
+    deselectedTags: [],
+    deselectedKeywords: [],
     branchEntities: [canonical, loser],
     awareness: [],
     involvements: [],
@@ -166,18 +166,39 @@ describe('entityMergeActions — the canonical', () => {
     })
   })
 
-  it('collapses keyword case variants and trims and de-duplicates tags', () => {
+  it("unions the loser's terms after the canonical's, collapsing keyword case variants", () => {
     const canonical = entity('char_a', 'character', {
       keywords: ['the courier'],
       tags: ['courier'],
     })
-    const { actions } = merge({
-      canonical,
-      keywords: ['the courier', 'The Courier', ' Grey Wolf ', 'grey wolf'],
+    const loser = entity('char_b', 'character', {
+      keywords: ['The Courier', ' Grey Wolf ', 'grey wolf'],
       tags: [' courier', 'courier', '', 'fugitive'],
     })
+    const { actions } = merge({ canonical, loser })
     expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
       keywords: ['the courier', 'Grey Wolf'],
+      tags: ['courier', 'fugitive'],
+    })
+  })
+
+  it('drops the deselected terms of either row', () => {
+    const canonical = entity('char_a', 'character', {
+      keywords: ['the courier', 'the rider'],
+      tags: ['courier', 'rider'],
+    })
+    const loser = entity('char_b', 'character', {
+      keywords: ['Grey Wolf', 'the fugitive'],
+      tags: ['fugitive', 'wolf'],
+    })
+    const { actions } = merge({
+      canonical,
+      loser,
+      deselectedTags: ['rider', 'wolf'],
+      deselectedKeywords: ['THE RIDER', 'grey wolf'],
+    })
+    expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
+      keywords: ['the courier', 'the fugitive'],
       tags: ['courier', 'fugitive'],
     })
   })
@@ -187,13 +208,11 @@ describe('entityMergeActions — the canonical', () => {
       keywords: ['The Courier'],
       tags: ['courier'],
     })
-    const { actions } = merge({
-      canonical,
-      loser: entity('char_b', 'character'),
-      keywords: ['The Courier', 'the courier'],
-      tags: ['courier', ' courier '],
+    const loser = entity('char_b', 'character', {
+      keywords: ['the courier'],
+      tags: [' courier '],
     })
-    expect(actions).toStrictEqual([deleteLoser])
+    expect(merge({ canonical, loser }).actions).toStrictEqual([deleteLoser])
   })
 
   it('writes a stored list back normalized when it was not', () => {
@@ -201,12 +220,7 @@ describe('entityMergeActions — the canonical', () => {
       keywords: ['the courier', 'The Courier'],
       tags: [' courier'],
     })
-    const { actions } = merge({
-      canonical,
-      loser: entity('char_b', 'character'),
-      keywords: canonical.keywords,
-      tags: canonical.tags,
-    })
+    const { actions } = merge({ canonical, loser: entity('char_b', 'character') })
     expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
       tags: ['courier'],
       keywords: ['the courier'],

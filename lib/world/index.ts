@@ -53,6 +53,8 @@ export {
 export type { EntityLinkRows } from './entity-refs'
 export { entityMergeActions, MERGE_SCALARS } from './entity-merge'
 export type { EntityMergeInput, EntityMergePlan, MergeScalar } from './entity-merge'
+export { mergedTerms } from './merge-terms'
+export type { MergedTerms, MergeDeselections } from './merge-terms'
 export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
 export type { LoreDraft } from './lore-draft'
 export { resolveLead } from './lead'

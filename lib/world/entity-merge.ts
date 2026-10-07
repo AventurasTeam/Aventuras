@@ -7,9 +7,8 @@ import type {
   HappeningInvolvement,
   ItemState,
 } from '@/lib/db'
-import { dedupeTerms } from '@/lib/keyword-terms'
 
-import { cleanList, sameList } from './draft-text'
+import { sameList } from './draft-text'
 import type { DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
 import {
@@ -19,6 +18,7 @@ import {
   stateWithRefRewritten,
   type EntityLinkRows,
 } from './entity-refs'
+import { mergedTerms, type MergeDeselections } from './merge-terms'
 
 export const MERGE_SCALARS = [
   'name',
@@ -30,16 +30,12 @@ export const MERGE_SCALARS = [
 ] as const
 export type MergeScalar = (typeof MERGE_SCALARS)[number]
 
-export type EntityMergeInput = {
+export type EntityMergeInput = MergeDeselections & {
   branchId: string
   canonical: Entity
   loser: Entity
   /** Scalars the merged row takes from the loser; every other one keeps the canonical's. */
   fromLoser: readonly MergeScalar[]
-  /** Final tags after the user's deselects. */
-  tags: readonly string[]
-  /** Final keywords; normalized and de-duplicated here. */
-  keywords: readonly string[]
   /** The branch's entities, both rows among them. */
   branchEntities: readonly Entity[]
   /** The branch's link rows. */
@@ -85,8 +81,7 @@ function canonicalPatch(input: EntityMergeInput): EntityPatch {
   for (const field of input.fromLoser) {
     if (loser[field] !== canonical[field]) takeScalar(scalars, field, loser)
   }
-  const tags = [...new Set(cleanList(input.tags))]
-  const keywords = dedupeTerms(input.keywords)
+  const { tags, keywords } = mergedTerms({ canonical, other: loser }, input)
   const rewritten = stateWithRefRewritten(canonical, loser.id, canonical.id)
   const state = adoptedPlacement(input, rewritten) ?? rewritten
   // Spread, never `nameCollisionFlag: undefined`: the update arm refuses any value but 0.

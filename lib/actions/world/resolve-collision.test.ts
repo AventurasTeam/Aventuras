@@ -104,7 +104,14 @@ const characterState = (state: Partial<CharacterState>): CharacterState => ({
 })
 
 function mergeInto(canonicalId: string, loserId: string): CollisionResolution {
-  return { mode: 'merge', canonicalId, loserId, fromLoser: [], tags: [], keywords: [] }
+  return {
+    mode: 'merge',
+    canonicalId,
+    loserId,
+    fromLoser: [],
+    deselectedTags: [],
+    deselectedKeywords: [],
+  }
 }
 
 const MERGE_B_INTO_A = mergeInto('char_a', 'char_b')
@@ -178,10 +185,36 @@ async function deltaRows(): Promise<Delta[]> {
 }
 
 async function undoAll() {
-  const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows() })
+  return undoAllBut(null)
+}
+
+async function undoAllBut(keptActionId: string | null) {
+  const target = (await deltaRows()).filter((r) => r.actionId !== keptActionId)
+  const set = await selectReversalSet(ctx, { branchId: 'b1', target })
   const { group, reverse } = await prepareUndo(set, ctx)
   await reverse()
   return group
+}
+
+async function setTerms(id: string, terms: Partial<Pick<Entity, 'tags' | 'keywords'>>) {
+  await ctx.db.update(entities).set(terms).where(eq(entities.id, id))
+  await hydrateStores()
+}
+
+async function passAppendsKeyword(id: string, keyword: string) {
+  const written = await applyDeltaAction(
+    {
+      action: {
+        kind: 'appendEntityKeywords',
+        source: 'periodic_classifier',
+        payload: { branchId: 'b1', id, keywords: [keyword], proseEntryId: null },
+      },
+      actionId: 'act_pass',
+      branchId: 'b1',
+    },
+    ctx,
+  )
+  return written.status
 }
 
 async function awarenessIds(): Promise<string[]> {
@@ -666,6 +699,39 @@ describe('resolveCollision — merge', () => {
       .where(eq(happeningAwareness.characterId, 'char_a'))
     expect(onA.map((r) => r.happeningId).sort()).toEqual(['hap_1', 'hap_2', 'hap_3'])
   })
+
+  it.each([
+    ['the canonical', 'char_a'],
+    ['the loser', 'char_b'],
+  ])(
+    'keeps a keyword a pass appends to %s while the merge waits; CTRL-Z and redo are exact',
+    async (_, appendedTo) => {
+      await setTerms('char_a', { keywords: ['the guard'] })
+      await setTerms('char_b', { keywords: ['Captain Brannoc'] })
+      await holdBranchWriteExclusive('b1', 'act_pass')
+      const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx)
+      await flush()
+      await flush()
+
+      expect(await passAppendsKeyword(appendedTo, 'the smith')).toBe('ok')
+      const before = await worldSnapshot()
+      releaseBranchWriteExclusive('b1', 'act_pass')
+
+      expect(await merging).toEqual({ status: 'ok' })
+      expect((await entityRow('char_a'))?.keywords).toEqual(
+        appendedTo === 'char_a'
+          ? ['the guard', 'the smith', 'Captain Brannoc']
+          : ['the guard', 'Captain Brannoc', 'the smith'],
+      )
+      const merged = await worldSnapshot()
+
+      const group = await undoAllBut('act_pass')
+      expect(await worldSnapshot()).toEqual(before)
+
+      await applyRedo(group, ctx)
+      expect(await worldSnapshot()).toEqual(merged)
+    },
+  )
 })
 
 describe('resolveCollision — merge seats the canonical in the tail scene', () => {

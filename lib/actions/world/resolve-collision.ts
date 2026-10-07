@@ -52,8 +52,13 @@ export type CollisionResolution =
       canonicalId: string
       loserId: string
       fromLoser: readonly MergeScalar[]
-      tags: readonly string[]
-      keywords: readonly string[]
+      /**
+       * The terms the user dropped (tags trimmed, keywords matched by `normalizeTerm`), never the
+       * final lists: the build unions the rows it reads under the branch lock, so a term a no-gate
+       * pass adds while the merge waits is kept.
+       */
+      deselectedTags: readonly string[]
+      deselectedKeywords: readonly string[]
     }
   | { mode: 'rename'; ids: readonly [string, string]; names: readonly [string, string] }
   | { mode: 'keep'; ids: readonly [string, string] }
@@ -141,8 +146,8 @@ function buildMerge(
     canonical,
     loser,
     fromLoser: resolution.fromLoser,
-    tags: resolution.tags,
-    keywords: resolution.keywords,
+    deselectedTags: resolution.deselectedTags,
+    deselectedKeywords: resolution.deselectedKeywords,
     branchEntities,
     awareness: branchRows(happeningAwarenessStore.getAwareness(), branchId),
     involvements: branchRows(happeningInvolvementsStore.getInvolvements(), branchId),
