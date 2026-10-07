@@ -671,7 +671,6 @@ function StackedChoice({
   keys,
   disabled,
 }: StackedChoiceProps) {
-  const [expanded, setExpanded] = useState(false)
   return (
     <View className="flex-row items-start gap-1">
       <RadioGroupBase.Item
@@ -691,23 +690,55 @@ function StackedChoice({
         <RadioDot selected={selected} />
       </RadioGroupBase.Item>
       <View className="min-w-0 flex-1 gap-0.5 py-3">
-        {prose ? (
-          <Pressable
-            accessibilityRole="button"
-            aria-expanded={expanded}
-            onPress={() => setExpanded((open) => !open)}
-          >
-            <Text size="sm" numberOfLines={expanded ? undefined : STACKED_CLAMP_LINES}>
-              {value}
-            </Text>
-          </Pressable>
-        ) : (
-          <Text size="sm">{value}</Text>
-        )}
+        {prose ? <ClampedProse value={value} /> : <Text size="sm">{value}</Text>}
         <Text size="xs" variant="muted">
           {caption}
         </Text>
       </View>
+    </View>
+  )
+}
+
+/**
+ * A clamp that expands in place. An invisible unclamped copy measures the full height, so the tap
+ * shows only on prose that clamps; onLayout reports both heights alike on web and native.
+ */
+function ClampedProse({ value }: { value: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [clampedHeight, setClampedHeight] = useState(0)
+  const [fullHeight, setFullHeight] = useState(0)
+  const text = (
+    <Text
+      size="sm"
+      numberOfLines={expanded ? undefined : STACKED_CLAMP_LINES}
+      onLayout={(event) => {
+        if (!expanded) setClampedHeight(event.nativeEvent.layout.height)
+      }}
+    >
+      {value}
+    </Text>
+  )
+  return (
+    <View className="overflow-hidden">
+      {expanded || fullHeight > clampedHeight + 1 ? (
+        <Pressable
+          accessibilityRole="button"
+          aria-expanded={expanded}
+          onPress={() => setExpanded((open) => !open)}
+        >
+          {text}
+        </Pressable>
+      ) : (
+        text
+      )}
+      <Text
+        size="sm"
+        aria-hidden
+        className="pointer-events-none absolute left-0 right-0 top-0 opacity-0"
+        onLayout={(event) => setFullHeight(event.nativeEvent.layout.height)}
+      >
+        {value}
+      </Text>
     </View>
   )
 }

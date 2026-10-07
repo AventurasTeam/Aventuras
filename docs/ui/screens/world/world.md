@@ -992,7 +992,8 @@ Field-level rules:
   fields wrap freely where the choices sit in columns (modal
   scrolls). On stacked tiers (phone, and every native tier), a
   3-line clamp applies with a "..." trailing truncation; tap
-  the prose body to expand the row in place. Radios stay tappable
+  the prose body to expand the row in place (prose that fits in
+  three lines offers no tap). Radios stay tappable
   independently — the tap zone splits between the radio circle
   and the prose body. Keeps comparison glance-able when prose
   diverges in length.

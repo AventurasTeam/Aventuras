@@ -81,6 +81,8 @@ const LONG_B =
 
 const GATE_REASON = 'Generation is in flight. Cancel to edit.'
 
+// Clamped prose renders an aria-hidden copy to measure its full height.
+const visibleText = (text: string) => screen.getByText(text, { ignore: '[aria-hidden="true"]' })
 const lineClamp = (node: HTMLElement) =>
   getComputedStyle(node).getPropertyValue('-webkit-line-clamp')
 
@@ -240,7 +242,7 @@ export const PhoneLongDescriptions: Story = {
   ),
   play: async () => {
     // useTier reads RN-Web's Dimensions, which updates a tick after the viewport global lands.
-    await waitFor(() => expect(lineClamp(screen.getByText(LONG_A))).toBe('3'))
+    await waitFor(() => expect(lineClamp(visibleText(LONG_A))).toBe('3'))
     const older = screen.getByRole('radio', { name: /^Older · / })
     const newer = screen.getByRole('radio', { name: /^Newer · / })
     expect(older).toHaveAttribute('aria-checked', 'true')
@@ -262,10 +264,10 @@ export const PhoneLongDescriptions: Story = {
     expect(screen.queryByText(/^Older · .+ · Canonical$/)).toBeNull()
 
     // A is the picked side, so tapping B's prose is the only tap that could wrongly pick.
-    await userEvent.click(screen.getByText(LONG_B))
+    await userEvent.click(visibleText(LONG_B))
 
-    await waitFor(() => expect(lineClamp(screen.getByText(LONG_B))).toBe('none'))
-    expect(lineClamp(screen.getByText(LONG_A))).toBe('3')
+    await waitFor(() => expect(lineClamp(visibleText(LONG_B))).toBe('none'))
+    expect(lineClamp(visibleText(LONG_A))).toBe('3')
     expect(older).toHaveAttribute('aria-checked', 'true')
     expect(newer).toHaveAttribute('aria-checked', 'false')
 
@@ -274,11 +276,30 @@ export const PhoneLongDescriptions: Story = {
   },
 }
 
+export const PhoneExpandsOnlyClampedProse: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ description: 'A thief.' })}
+      entityB={baseEntity({ id: 'ent_kael_2', description: LONG_B })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // Waiting on the long one's tap target means both have been measured.
+    expect(await screen.findByRole('button', { name: LONG_B })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.queryByRole('button', { name: 'A thief.' })).toBeNull()
+  },
+}
+
 export const PhoneRadioKeyboard: Story = {
   globals: { viewport: { value: 'mobile1' } },
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
   play: async () => {
-    await waitFor(() => expect(lineClamp(screen.getByText(entityA.description!))).toBe('3'))
+    await waitFor(() => expect(lineClamp(visibleText(entityA.description!))).toBe('3'))
     const status = within(screen.getByRole('radiogroup', { name: 'Status' }))
     // Each radio names its side and its value, so it reads on its own.
     const older = status.getByRole('radio', { name: /^Older · .+: active$/ })

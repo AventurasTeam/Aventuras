@@ -351,8 +351,10 @@ footer: `[ Cancel ]` · `[ Keep as distinct ]`.
 **Phone tier and native tiers** — the dialog stays a Modal on
 phone. In the merge table, which stacks on these tiers, prose
 values (`description`, `retiredReason`) clamp to 3 lines, and
-tapping the prose expands that value in place, apart from its
-radio's tap target. Each radio shows an inline age caption under
+tapping prose the clamp cuts expands that value in place, apart from
+its radio's tap target; prose that fits offers no tap. An invisible
+unclamped copy measures the full height, the same way on web and
+native. Each radio shows an inline age caption under
 its value, and is named by both (`Older · 3 days ago: active`).
 
 ## `CollisionListRow`
