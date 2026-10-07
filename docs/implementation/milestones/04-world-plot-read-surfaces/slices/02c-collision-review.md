@@ -46,7 +46,7 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   the in-flight gate, the 3+ iteration rule.
 - [`patterns/collision-resolve.md`](../../../../ui/patterns/collision-resolve.md)
   in full — dialog props, `EntitySummary` projection, `Resolution`
-  shape, divergence and merge reducer, submit rules, open items.
+  shape, divergence and merge reducer, submit rules, bodies.
 - [`layout.md → Mapping — desktop to mobile`](../../../../ui/foundations/mobile/layout.md#mapping--desktop-to-mobile)
   — a short Modal stays a Modal on phone; the dialog has no Sheet
   expression.
@@ -57,7 +57,8 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   [`Character-to-character relationships`](../../../../data-model.md#character-to-character-relationships)
   (the `a_id < b_id` invariant a reattached row must keep).
 - [`data-model.md → Translation targets`](../../../../data-model.md#translation-targets)
-  — the rows that move with the canonical id.
+  — what the loser's translation rows address; the merge drops them
+  with the loser rather than moving them to the canonical id.
 - [`memory/retrieval.md → Keywords schema`](../../../../memory/retrieval.md#keywords-schema)
   — why keywords union and de-duplicate.
 - [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
@@ -73,7 +74,7 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   values (older by `created_at` first) with real `relationCounts`
   read from the stores / DB (awareness, involvements, inverse refs
   across the six ref fields, embeddings 0 | 1, translations).
-- **Merge driver:** one `applyDeltaActionGroup` under a single
+- **Merge driver:** one `applyDeltaActionGroupBuilt` under a single
   `action_id` with `source = 'user_edit'` — `updateEntity` on the
   canonical (chosen scalars, keyword union normalized through C12, tag
   union), awareness rows moved to the canonical id (loser's row

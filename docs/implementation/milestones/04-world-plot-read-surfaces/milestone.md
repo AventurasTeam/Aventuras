@@ -310,8 +310,10 @@ mechanism where the shipped runner forces it:
   `faction_id`, `equipped_items[]`, `inventory[]`) merged into a single
   `state` patch — the runner rejects two writes to one row's column —
   then one `updateStoryEntryMetadata` dropping the id from the tail
-  entry's `sceneEntities` / `currentLocationId`, then the
-  `deleteEntity` whose registered cascade removes its
+  entry's `sceneEntities` / `currentLocationId`, then, since 4.2c, a
+  `nameCollisionFlag` clear on each flagged row the delete leaves
+  without a namesake (folded into that row's `updateEntity`, else its
+  own), then the `deleteEntity` whose registered cascade removes its
   `happening_involvements`, `happening_awareness`,
   `character_relationships` and `translations` rows. The link and
   translation set mirrors the merge path canon gives in
@@ -469,7 +471,8 @@ reversed in M4.4; Story Settings and Plot do this). This
 is **not** the Story Settings session from M3.11 — that one aggregates
 sections into a single settings write with no delta; this one is
 per-row and delta-logged. Consumers: 4.2b (lore pane), 4.2c (the
-relationship re-keying shape), 4.3 (thread and happening panes — a
+both-perspective upsert, which its merge writes at most once per
+character the loser relates to), 4.3 (thread and happening panes — a
 doc-as-contract pair with 4.2a; whichever lands first creates the hook
 and the other adopts it). Name fixed in the first commit to land. 4.3
 landed first, shipping the hook as `useRowSaveSession`
