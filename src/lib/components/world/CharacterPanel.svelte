@@ -124,7 +124,6 @@
     hasDescriptors as hasVisualDescriptors,
   } from '$lib/utils/visualDescriptors'
   import { SvelteSet } from 'svelte/reactivity'
-  import { uniqueStrings } from '$lib/utils/text'
 
   // Color palette for descriptor categories
   const CATEGORY_COLORS: Record<keyof VisualDescriptors, string> = {
@@ -888,7 +887,7 @@
               <div class="mt-2 flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-0.5">
                 {#if hasTraits}
                   <div class="flex flex-wrap gap-1">
-                    {#each uniqueStrings(character.translatedTraits ?? character.traits) as trait (trait)}
+                    {#each character.translatedTraits ?? character.traits as trait, i (i)}
                       <span
                         class="bg-muted text-muted-foreground inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium"
                       >

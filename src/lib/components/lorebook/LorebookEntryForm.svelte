@@ -26,7 +26,6 @@
     CollapsibleTrigger,
   } from '$lib/components/ui/collapsible'
   import { cn } from '$lib/utils/cn'
-  import { uniqueStrings } from '$lib/utils/text'
 
   interface Props {
     entry?: Entry | null
@@ -139,8 +138,8 @@
     newAlias = ''
   }
 
-  function removeAlias(alias: string) {
-    aliases = aliases.filter((a) => a !== alias)
+  function removeAlias(index: number) {
+    aliases = aliases.filter((_, j) => j !== index)
   }
 
   function addKeyword() {
@@ -151,8 +150,8 @@
     newKeyword = ''
   }
 
-  function removeKeyword(keyword: string) {
-    keywords = keywords.filter((k) => k !== keyword)
+  function removeKeyword(index: number) {
+    keywords = keywords.filter((_, j) => j !== index)
   }
 
   function handleAliasKeydown(e: KeyboardEvent) {
@@ -256,10 +255,10 @@
       </span>
     </Label>
     <div class="mb-2 flex flex-wrap gap-2">
-      {#each uniqueStrings(aliases) as alias (alias)}
+      {#each aliases as alias, i (i)}
         <Badge variant="secondary" class="gap-1 pr-1">
           {alias}
-          <button class="hover:bg-muted rounded-full p-0.5" onclick={() => removeAlias(alias)}>
+          <button class="hover:bg-muted rounded-full p-0.5" onclick={() => removeAlias(i)}>
             <X class="h-3 w-3" />
           </button>
         </Badge>
@@ -288,7 +287,7 @@
       </span>
     </Label>
     <div class="mb-2 flex flex-wrap gap-2">
-      {#each uniqueStrings(keywords) as keyword (keyword)}
+      {#each keywords as keyword, i (i)}
         <Badge
           variant="default"
           class="bg-primary/20 text-primary hover:bg-primary/30 gap-1 border-transparent pr-1"
@@ -296,7 +295,7 @@
           {keyword}
           <button
             class="hover:bg-primary/20 text-primary rounded-full p-0.5"
-            onclick={() => removeKeyword(keyword)}
+            onclick={() => removeKeyword(i)}
           >
             <X class="h-3 w-3" />
           </button>
