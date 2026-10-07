@@ -8,6 +8,7 @@ import {
   entityRenameActions,
   RENAME_ISSUE,
   renameIssue,
+  type EntityRename,
 } from './collision-resolve'
 
 function character(id: string, name: string, flag = 0): Entity {
@@ -68,20 +69,70 @@ describe('renameIssue', () => {
 })
 
 describe('entityRenameActions', () => {
-  const rename = (
+  const plan = (
     [first, second]: readonly [Entity, Entity],
-    names: readonly [string, string],
+    renames: readonly EntityRename[],
     others: Entity[] = [],
   ) =>
     entityRenameActions({
       branchId: 'b1',
       pair: pairOf(first, second),
-      names,
+      renames,
       branchEntities: [first, second, ...others],
     })
+  const rename = (
+    pair: readonly [Entity, Entity],
+    [nameA, nameB]: readonly [string, string],
+    others: Entity[] = [],
+  ) => {
+    const result = plan(
+      pair,
+      [
+        { id: pair[0].id, name: nameA },
+        { id: pair[1].id, name: nameB },
+      ],
+      others,
+    )
+    if ('issue' in result) throw new Error(`unexpected rename issue: ${result.issue}`)
+    return result.actions
+  }
 
-  it('throws on a rename issue', () => {
-    expect(() => rename([A, B], ['Kael', 'kael'])).toThrow(RENAME_ISSUE.stillColliding)
+  it('returns the rename issue instead of a plan', () => {
+    expect(
+      plan(
+        [A, B],
+        [
+          { id: 'char_a', name: 'Kael' },
+          { id: 'char_b', name: 'kael' },
+        ],
+      ),
+    ).toStrictEqual({ issue: RENAME_ISSUE.stillColliding })
+  })
+
+  it('names each row by its id, and keeps the name of a row with no entry', () => {
+    const renamedB = {
+      actions: [
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'b1',
+            id: 'char_b',
+            patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+          },
+        },
+      ],
+    }
+    expect(
+      plan(
+        [A, B],
+        [
+          { id: 'char_b', name: 'Kael the guard' },
+          { id: 'char_a', name: 'Kael' },
+        ],
+      ),
+    ).toStrictEqual(renamedB)
+    expect(plan([A, B], [{ id: 'char_b', name: 'Kael the guard' }])).toStrictEqual(renamedB)
   })
 
   it('renames the flagged row and clears its flag in one update', () => {

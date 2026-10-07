@@ -22,33 +22,40 @@ export function renameIssue(
 const flaggedIds = (pair: CollisionPair) =>
   pair.filter((row) => row.nameCollisionFlag === 1).map((row) => row.id)
 
+/** A row's name after a rename. */
+export type EntityRename = { id: string; name: string }
+
+export type EntityRenamePlan = { actions: PipelineAction[] } | { issue: RenameIssue }
+
 /**
  * The renamed rows' name updates, with the flag cleared on each flagged row of the pair and on any
- * other row the rename leaves without a namesake. Throws on a `renameIssue`: callers check first.
+ * other row the rename leaves without a namesake; or the `renameIssue` that refuses it.
  */
 export function entityRenameActions(input: {
   branchId: string
   pair: CollisionPair
-  /** The pair's names after the rename, in pair order; an unchanged one is its current name. */
-  names: readonly [string, string]
+  /** Matched to the pair by id; a pair row with no entry keeps its name. */
+  renames: readonly EntityRename[]
   /** The branch's entities before the write, the pair among them: namesakes are counted from it. */
   branchEntities: readonly Entity[]
-}): PipelineAction[] {
-  const { branchId, pair, names } = input
-  const issue = renameIssue(pair[0].kind, names)
-  if (issue != null) throw new Error(`entityRenameActions: ${issue}`)
+}): EntityRenamePlan {
+  const { branchId, pair } = input
+  const nameOf = (row: Entity) =>
+    input.renames.find((rename) => rename.id === row.id)?.name ?? row.name
+  const issue = renameIssue(pair[0].kind, [nameOf(pair[0]), nameOf(pair[1])])
+  if (issue != null) return { issue }
   const renamed = new Map<string, string>()
-  pair.forEach((row, index) => {
-    const name = names[index].trim()
+  for (const row of pair) {
+    const name = nameOf(row).trim()
     if (name !== row.name.trim()) renamed.set(row.id, name)
-  })
+  }
   const updates: PipelineAction[] = [...renamed].map(([id, name]) => ({
     kind: 'updateEntity',
     source: 'user_edit',
     payload: { branchId, id, patch: { name } },
   }))
   const orphans = orphanedFlags({ entities: input.branchEntities, renamed })
-  return withFlagClears(updates, branchId, [...flaggedIds(pair), ...orphans])
+  return { actions: withFlagClears(updates, branchId, [...flaggedIds(pair), ...orphans]) }
 }
 
 /** Keep as distinct: the flag cleared on each flagged row of the pair, and nothing else. */

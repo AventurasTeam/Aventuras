@@ -119,6 +119,16 @@ function mergeInto(canonicalId: string, loserId: string): MergeResolution {
 const MERGE_B_INTO_A = mergeInto('char_a', 'char_b')
 const KEEP_A_B: CollisionResolution = { mode: 'keep', ids: ['char_a', 'char_b'] }
 
+function renameTo(nameA: string, nameB: string): CollisionResolution {
+  return {
+    mode: 'rename',
+    renames: [
+      { id: 'char_a', name: nameA },
+      { id: 'char_b', name: nameB },
+    ],
+  }
+}
+
 function plantVectors(id: string): void {
   for (const dim of [384, 8]) {
     plantVec(sqlite, {
@@ -948,13 +958,9 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
 
 describe('resolveCollision — rename', () => {
   it('renames only B and clears its flag in that same delta', async () => {
-    expect(
-      await resolveCollision(
-        'b1',
-        { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', ' Brannoc the Younger '] },
-        ctx,
-      ),
-    ).toEqual({ status: 'ok' })
+    expect(await resolveCollision('b1', renameTo('Brannoc', ' Brannoc the Younger '), ctx)).toEqual(
+      { status: 'ok' },
+    )
 
     expect(await entityRow('char_b')).toMatchObject({
       name: 'Brannoc the Younger',
@@ -970,14 +976,26 @@ describe('resolveCollision — rename', () => {
     })
   })
 
+  it('matches each name to its row by id, in either order', async () => {
+    const resolution: CollisionResolution = {
+      mode: 'rename',
+      renames: [
+        { id: 'char_b', name: 'Brannoc the Younger' },
+        { id: 'char_a', name: 'Brannoc' },
+      ],
+    }
+
+    expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
+
+    expect((await entityRow('char_a'))?.name).toBe('Brannoc')
+    expect((await entityRow('char_b'))?.name).toBe('Brannoc the Younger')
+    expect((await deltaRows()).map((r) => r.targetId)).toEqual(['char_b'])
+  })
+
   it('CTRL-Z restores both names and flags; redo renames and clears again', async () => {
     await setFlag('char_a', 1)
     const before = await worldSnapshot()
-    await resolveCollision(
-      'b1',
-      { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', 'Brannoc the Younger'] },
-      ctx,
-    )
+    await resolveCollision('b1', renameTo('Brannoc', 'Brannoc the Younger'), ctx)
     const renamed = await worldSnapshot()
     expect(await entityRow('char_a')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 0 })
     expect(await entityRow('char_b')).toMatchObject({
@@ -1000,13 +1018,10 @@ describe('resolveCollision — rename', () => {
     ['a case-only rename', 'BRANNOC'],
     ['an empty name', '   '],
   ])('refuses %s with invalid-rename and writes nothing', async (_, name) => {
-    expect(
-      await resolveCollision(
-        'b1',
-        { mode: 'rename', ids: ['char_a', 'char_b'], names: ['Brannoc', name] },
-        ctx,
-      ),
-    ).toMatchObject({ status: 'rejected', code: 'invalid-rename' })
+    expect(await resolveCollision('b1', renameTo('Brannoc', name), ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'invalid-rename',
+    })
     expect(await deltaRows()).toEqual([])
   })
 })

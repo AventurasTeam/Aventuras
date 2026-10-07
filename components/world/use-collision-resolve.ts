@@ -82,7 +82,13 @@ function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionR
     case 'rename': {
       const nameOf = (side: EntitySummary) =>
         resolution.renames.find((rename) => rename.id === side.id)?.newName ?? side.name
-      return { mode: 'rename', ids: [a.id, b.id], names: [nameOf(a), nameOf(b)] }
+      return {
+        mode: 'rename',
+        renames: [
+          { id: a.id, name: nameOf(a) },
+          { id: b.id, name: nameOf(b) },
+        ],
+      }
     }
     case 'keep':
       return { mode: 'keep', ids: [a.id, b.id] }

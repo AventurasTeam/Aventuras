@@ -15,9 +15,9 @@ import {
   entityRenameActions,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
-  renameIssue,
   type CollisionPairMiss,
   type DeleteTail,
+  type EntityRename,
   type MergeScalar,
 } from '@/lib/world'
 
@@ -61,7 +61,11 @@ export type CollisionResolution =
       deselectedTags: readonly string[]
       deselectedKeywords: readonly string[]
     }
-  | { mode: 'rename'; ids: readonly [string, string]; names: readonly [string, string] }
+  | {
+      mode: 'rename'
+      /** Both rows of the pair, an unchanged one under its current name. */
+      renames: readonly [EntityRename, EntityRename]
+    }
   | { mode: 'keep'; ids: readonly [string, string] }
 
 export type CollisionResolveResult =
@@ -94,6 +98,17 @@ function rejectionCode(code: string | undefined): CollisionRejectionCode {
       return COLLISION_REJECTION.invalidRename
     default:
       return COLLISION_REJECTION.failed
+  }
+}
+
+function pairIds(resolution: CollisionResolution): readonly [string, string] {
+  switch (resolution.mode) {
+    case 'merge':
+      return [resolution.canonicalId, resolution.loserId]
+    case 'rename':
+      return [resolution.renames[0].id, resolution.renames[1].id]
+    case 'keep':
+      return resolution.ids
   }
 }
 
@@ -132,7 +147,7 @@ function buildMerge(
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
-  const lookup = collisionPairOf(branchEntities, [resolution.canonicalId, resolution.loserId])
+  const lookup = collisionPairOf(branchEntities, pairIds(resolution))
   if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
   const [canonical] = pair
@@ -160,17 +175,15 @@ function buildPairResolution(branchId: string, resolution: PairResolution): Buil
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
-  const lookup = collisionPairOf(branchEntities, resolution.ids)
+  const lookup = collisionPairOf(branchEntities, pairIds(resolution))
   if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
   if (resolution.mode === 'keep')
     return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }
-  const issue = renameIssue(pair[0].kind, resolution.names)
-  if (issue != null) return refusal(COLLISION_REJECTION.invalidRename, issue)
-  return {
-    status: 'ok',
-    actions: entityRenameActions({ branchId, pair, names: resolution.names, branchEntities }),
-  }
+  const plan = entityRenameActions({ branchId, pair, renames: resolution.renames, branchEntities })
+  return 'issue' in plan
+    ? refusal(COLLISION_REJECTION.invalidRename, plan.issue)
+    : { status: 'ok', actions: plan.actions }
 }
 
 function commit(branchId: string, build: () => BuiltGroup, ctx: DbCtx): Promise<DeltaGroupResult> {
@@ -236,10 +249,7 @@ export async function resolveCollision(
   const context: Record<string, unknown> = {
     branchId,
     mode: resolution.mode,
-    ids:
-      resolution.mode === 'merge'
-        ? [resolution.canonicalId, resolution.loserId]
-        : [...resolution.ids],
+    ids: [...pairIds(resolution)],
   }
   // generation-pipeline.md → Action rejection — defense in depth: the UI disables Resolve first.
   if (generationStore.isUserEditBlocked())

@@ -38,7 +38,7 @@ export {
   RENAME_ISSUE,
   renameIssue,
 } from './collision-resolve'
-export type { RenameIssue } from './collision-resolve'
+export type { EntityRename, EntityRenamePlan, RenameIssue } from './collision-resolve'
 export { COLLISION_PAIR_MISS, collisionPairOf } from './collision-pair'
 export type { CollisionPair, CollisionPairLookup, CollisionPairMiss } from './collision-pair'
 export { entityActions } from './entity-actions'

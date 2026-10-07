@@ -359,8 +359,10 @@ describe('useCollisionResolve → what resolve sends', () => {
       BRANCH,
       {
         mode: 'rename',
-        ids: [OLDER.id, NEWER.id],
-        names: ['Brannoc', 'Brannoc of the river gate'],
+        renames: [
+          { id: OLDER.id, name: 'Brannoc' },
+          { id: NEWER.id, name: 'Brannoc of the river gate' },
+        ],
       },
       ctx,
     )
