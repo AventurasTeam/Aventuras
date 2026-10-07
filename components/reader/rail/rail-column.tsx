@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, {
   Easing,
@@ -23,9 +23,16 @@ export type RailColumnProps = {
 export function RailColumn({ collapsed, expanded, strip }: RailColumnProps) {
   const width = useSharedValue(collapsed ? RAIL_STRIP_WIDTH_PX : RAIL_WIDTH_PX)
   const [showStrip, setShowStrip] = useState(collapsed)
+  const collapsedRef = useRef(collapsed)
 
   useEffect(() => {
+    collapsedRef.current = collapsed
     if (!collapsed) setShowStrip(false)
+    // Reads the latest target, not this closure's: a same-width set completes synchronously, so a
+    // mount's settled slide can land after a newer expand.
+    const landStrip = () => {
+      if (collapsedRef.current) setShowStrip(true)
+    }
     width.set(
       withTiming(
         collapsed ? RAIL_STRIP_WIDTH_PX : RAIL_WIDTH_PX,
@@ -35,7 +42,7 @@ export function RailColumn({ collapsed, expanded, strip }: RailColumnProps) {
         },
         (finished) => {
           'worklet'
-          if (finished && collapsed) scheduleOnRN(setShowStrip, true)
+          if (finished && collapsed) scheduleOnRN(landStrip)
         },
       ),
     )

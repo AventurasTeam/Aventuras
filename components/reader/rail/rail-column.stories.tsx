@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useState, type ReactNode } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -28,8 +28,18 @@ function Stage({ children }: { children: ReactNode }) {
   )
 }
 
-function ColumnHarness({ initiallyCollapsed = false }: { initiallyCollapsed?: boolean }) {
+function ColumnHarness({
+  initiallyCollapsed = false,
+  expandOnMount = false,
+}: {
+  initiallyCollapsed?: boolean
+  /** Expands in the mount's own task, as a viewport cross landing with the column's mount does. */
+  expandOnMount?: boolean
+}) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed)
+  useLayoutEffect(() => {
+    if (expandOnMount) setCollapsed(false)
+  }, [expandOnMount])
   const [view, setView] = useState<RailView>(DEFAULT_RAIL_VIEW)
   return (
     <Stage>
@@ -119,6 +129,16 @@ export const Toggle: Story = {
     await expect(screen.queryByTestId('reader-rail')).not.toBeNull()
     await expect(screen.queryByTestId('rail-strip')).toBeNull()
     await waitFor(() => expect(columnWidth()).toBeGreaterThanOrEqual(300), ANIMATION)
+  },
+}
+
+/** Mounted collapsed and expanded in the same task: the mount's settled slide can't bring the strip back. */
+export const ExpandedRightAfterCollapsedMount: Story = {
+  args: { initiallyCollapsed: true, expandOnMount: true },
+  play: async () => {
+    await waitFor(() => expect(columnWidth()).toBeGreaterThanOrEqual(300), ANIMATION)
+    await expect(screen.getByTestId('reader-rail')).toBeVisible()
+    await expect(screen.queryByTestId('rail-strip')).toBeNull()
   },
 }
 
