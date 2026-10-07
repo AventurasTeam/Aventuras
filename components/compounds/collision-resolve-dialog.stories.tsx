@@ -272,7 +272,8 @@ export const PhoneLongDescriptions: Story = {
     expect(screen.queryByText(/^Older · .+ · Canonical$/)).toBeNull()
 
     // A is the picked side, so tapping B's prose is the only tap that could wrongly pick.
-    await userEvent.click(visibleText(LONG_B))
+    // The tap target mounts only once both heights are measured, after the clamp shows.
+    await userEvent.click(await screen.findByRole('button', { name: LONG_B }))
 
     await waitFor(() => expect(lineClamp(visibleText(LONG_B))).toBe('none'))
     expect(lineClamp(visibleText(LONG_A))).toBe('3')
@@ -294,10 +295,12 @@ export const PhoneExpandsOnlyClampedProse: Story = {
     />
   ),
   play: async () => {
-    // Waiting on the long one's tap target means both have been measured.
-    expect(await screen.findByRole('button', { name: LONG_B })).toHaveAttribute(
-      'aria-expanded',
-      'false',
+    const long = await screen.findByRole('button', { name: LONG_B })
+    expect(long).toHaveAttribute('aria-expanded', 'false')
+    // Layout events land in render order, so the long one's tap target means the short one,
+    // rendered before it, has been measured too.
+    expect(visibleText('A thief.').compareDocumentPosition(long)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     )
     expect(screen.queryByRole('button', { name: 'A thief.' })).toBeNull()
   },
