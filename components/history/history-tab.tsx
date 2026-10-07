@@ -55,7 +55,7 @@ function useStoreNames(branchId: string, ids: readonly string[]): ReadonlyMap<st
   }, [ids, entityNames, happeningTitles])
 }
 
-// A shown other end that leaves the working set must re-read its name from its delete payload,
+// A watched other end that leaves the working set must re-read its name from its delete payload,
 // and under a search a rename changes which rows match server-side; either calls `onChange`.
 function useOtherEndChanges(
   names: ReadonlyMap<string, string>,
@@ -98,7 +98,11 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
     settledVersion,
   )
   const entryIndex = useEntryIndex(branchId)
-  const otherIds = useMemo(() => otherEndIds(chunks.rows), [chunks.rows])
+  // Under a search every link end is watched: a rename can make an unshown one match.
+  const otherIds = useMemo(
+    () => (search === '' ? otherEndIds(chunks.rows) : Object.keys(chunks.names)),
+    [chunks.rows, chunks.names, search],
+  )
   const storeNames = useStoreNames(branchId, otherIds)
   useOtherEndChanges(storeNames, otherIds, search !== '', otherEndChanged)
   const name = historyTargetName(row) ?? t('history:unknownTarget')

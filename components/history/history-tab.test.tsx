@@ -304,6 +304,31 @@ describe('HistoryTab over the link-row union', () => {
     )
   })
 
+  it("refetches for an unshown link end's rename only while a search is set", async () => {
+    happeningsStore.hydrate(BRANCH, [fire(BRANCH, 'Fire')])
+    const load = loader((query) => (query.search === 'blaze' ? [] : [INVOLVES_FIRE]), {
+      hap_fire: 'Fire',
+    })
+    renderTab(load, 'char_aria')
+    await firstRow()
+    act(() => view.props?.onSearchChange('blaze'))
+    await waitFor(() => expect(view.props?.rows).toHaveLength(0))
+    const searched = load.mock.calls.length
+    act(() =>
+      happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Blaze' } }),
+    )
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(searched + 1))
+
+    act(() => view.props?.onSearchChange(''))
+    await firstRow()
+    const unfiltered = load.mock.calls.length
+    act(() =>
+      happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Ember' } }),
+    )
+    await pastCoalescing()
+    expect(load).toHaveBeenCalledTimes(unfiltered)
+  })
+
   it("prefers a happening's working-set title over the chunk's name", async () => {
     happeningsStore.hydrate(BRANCH, [fire(BRANCH, 'The keep burns')])
     renderTab(
