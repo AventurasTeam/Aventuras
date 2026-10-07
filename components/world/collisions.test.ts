@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
-import { entityKeepActions } from '@/lib/world'
+import { collisionPairOf, entityKeepActions } from '@/lib/world'
 
 import { deriveCollisions } from './collisions'
 
@@ -46,7 +46,9 @@ describe('deriveCollisions', () => {
     const second = entity('f2', 'Sage', { nameCollisionFlag: 1, createdAt: 3 })
     expect(deriveCollisions([base, first, second]).get('f1')?.otherId).toBe('base')
 
-    const kept = entityKeepActions({ branchId: 'br_1', pair: [base, first] })
+    const lookup = collisionPairOf([base, first, second], ['base', 'f1'])
+    if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+    const kept = entityKeepActions({ branchId: 'br_1', pair: lookup.pair })
     const after = deriveCollisions(withFlagsCleared([base, first, second], kept))
 
     expect(after.has('f1')).toBe(false)

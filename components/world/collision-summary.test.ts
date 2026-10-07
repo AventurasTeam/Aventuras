@@ -23,7 +23,7 @@ import {
   happeningInvolvementsStore,
   translationsStore,
 } from '@/lib/stores'
-import { entityMergeActions } from '@/lib/world'
+import { collisionPairOf, entityMergeActions } from '@/lib/world'
 
 import { collisionPair, type CollisionSources } from './collision-summary'
 
@@ -311,14 +311,15 @@ describe('collisionPair', () => {
       const src = sources()
       const pair = collisionPair([canonicalId, loserId], src)!
       const loserSummary = pair.find((side) => side.id === loserId)!
-      const byId = new Map(src.entities.map((e) => [e.id, e]))
+      const lookup = collisionPairOf(src.entities, [canonicalId, loserId])
+      if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
       const plan = entityMergeActions({
         branchId: 'b1',
-        canonical: byId.get(canonicalId)!,
-        loser: byId.get(loserId)!,
+        pair: lookup.pair,
+        canonicalId,
         fromLoser: [],
-        tags: [],
-        keywords: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
         branchEntities: src.entities,
         awareness: src.awareness,
         involvements: src.involvements,
