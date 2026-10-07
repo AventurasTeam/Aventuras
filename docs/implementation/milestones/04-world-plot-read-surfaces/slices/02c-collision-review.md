@@ -301,11 +301,17 @@ collision canon, PR 3 History union). Developer decisions are marked.
     rows.
 - **Unknown other end.** A removal whose other end has no name to read
   says "Removed when its other end was deleted".
-- **Union cost.** Measured on a 30k-delta branch, the link-end scan
-  takes 6–32 ms per page and per search keystroke, more on
-  delete-heavy branches. If History feels slow on a long story, cache
-  the link ends per tab, keyed on the tab's refresh version (not a DB
-  token: sweeps rewrite payloads in place). The missing table
-  statistics are in [triage](../../../triage.md).
+- **Union cost** (developer, reviewing #581: "I would probably take
+  some optimizations here if we can without too much effort."). The
+  link-end scan reads every delete on the branch, so each History tab
+  keeps one scan per refresh version and its searches, filters and
+  pages reuse it (not a DB token: sweeps rewrite payloads in place).
+  Other ends' names are still read per load, sorted in JS so the
+  lookup keeps `deltas_chain_idx`. On a 30k-delta branch
+  (`pnpm bench:history`), a page or search keystroke went from 16 ms
+  to 9 ms, and from 138 ms to 9–11 ms with 30% deletes; a next chunk
+  takes under 1 ms. The first load after each refresh trigger still
+  scans. Most of the rest is the missing table statistics, in
+  [triage](../../../triage.md).
 - **Not taken:** `revealFirstFlagged()`; the pill's handler is
   untouched.

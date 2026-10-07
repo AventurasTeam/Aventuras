@@ -105,7 +105,11 @@ slice-planning gate forces its resolution before that slice is planned.
   cross-cutting (desktop main process and the mobile expo-sqlite
   connection), so it's routed here rather than into the slice. Revisit
   if History or another log-shaped query feels slow on a long story,
-  Android first. Found during 4.2c planning (2026-10-06).
+  Android first. Found during 4.2c planning (2026-10-06). Once the
+  History tab reused its link-end scan (#581), this is most of what is
+  left: on a 30k-delta branch whose tab row has only old deltas, a
+  first chunk or search keystroke still takes about 9 ms while the
+  next chunk takes under 1 ms (`pnpm bench:history`).
 - **The entity update arm accepts a present-but-`undefined` column.**
   `updateHandler` (`lib/actions/entities/register.ts`) treats a key as
   written whenever `col in patch`, so `{ name: undefined, priority: 7 }`
