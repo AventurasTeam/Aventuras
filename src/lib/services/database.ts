@@ -13,7 +13,6 @@ import type {
   Branch,
   Entry,
   EntryType,
-  EntryInjection,
   EntryPreview,
   PersistentRetryState,
   PersistentStyleReviewState,
@@ -47,7 +46,6 @@ import {
 } from '$lib/services/packs/replace-statements'
 import type { PackExport } from '$lib/services/packs/validation'
 import { readStorySettings } from '$lib/utils/storySettings'
-import { uniqueStrings } from '$lib/utils/text'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -2172,7 +2170,7 @@ class DatabaseService {
       name: row.name,
       type: row.type,
       description: row.description || '',
-      aliases: uniqueStrings(row.aliases ? JSON.parse(row.aliases) : []),
+      aliases: row.aliases ? JSON.parse(row.aliases) : [],
     }))
   }
 
@@ -2755,7 +2753,7 @@ class DatabaseService {
       name: row.name,
       description: row.description,
       relationship: row.relationship,
-      traits: uniqueStrings(row.traits ? JSON.parse(row.traits) : []),
+      traits: row.traits ? JSON.parse(row.traits) : [],
       visualDescriptors: migrateVisualDescriptors(rawDescriptors),
       portrait: row.portrait || null,
       status: row.status,
@@ -2767,9 +2765,7 @@ class DatabaseService {
       translatedName: row.translated_name || null,
       translatedDescription: row.translated_description || null,
       translatedRelationship: row.translated_relationship || null,
-      translatedTraits: row.translated_traits
-        ? uniqueStrings(JSON.parse(row.translated_traits))
-        : null,
+      translatedTraits: row.translated_traits ? JSON.parse(row.translated_traits) : null,
       translatedVisualDescriptors: rawTranslatedDescriptors
         ? migrateVisualDescriptors(rawTranslatedDescriptors)
         : null,
@@ -2918,10 +2914,6 @@ class DatabaseService {
   }
 
   private mapEntry(row: any): Entry {
-    const injection: EntryInjection = row.injection
-      ? JSON.parse(row.injection)
-      : { mode: 'keyword', keywords: [], priority: 0 }
-
     return {
       id: row.id,
       storyId: row.story_id,
@@ -2929,11 +2921,13 @@ class DatabaseService {
       type: row.type,
       description: row.description || '',
       hiddenInfo: row.hidden_info,
-      aliases: uniqueStrings(row.aliases ? JSON.parse(row.aliases) : []),
+      aliases: row.aliases ? JSON.parse(row.aliases) : [],
       state: row.state ? JSON.parse(row.state) : { type: row.type },
       adventureState: row.adventure_state ? JSON.parse(row.adventure_state) : null,
       creativeState: row.creative_state ? JSON.parse(row.creative_state) : null,
-      injection: { ...injection, keywords: uniqueStrings(injection.keywords ?? []) },
+      injection: row.injection
+        ? JSON.parse(row.injection)
+        : { mode: 'keyword', keywords: [], priority: 0 },
       createdBy: row.created_by || 'user',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -3053,7 +3047,7 @@ class DatabaseService {
       id: row.id,
       name: row.name,
       description: row.description,
-      traits: uniqueStrings(row.traits ? JSON.parse(row.traits) : []),
+      traits: row.traits ? JSON.parse(row.traits) : [],
       visualDescriptors: migrateVisualDescriptors(rawDescriptors),
       portrait: row.portrait,
       tags: row.tags ? JSON.parse(row.tags) : [],
