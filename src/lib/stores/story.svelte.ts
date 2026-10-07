@@ -90,7 +90,7 @@ import {
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
-import { sameEntityName, uniqueStrings } from '$lib/utils/text'
+import { sameEntityName, termKey, uniqueTerms } from '$lib/utils/text'
 import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
@@ -2866,7 +2866,7 @@ class StoryStore {
             name: newCharData?.name ?? update.name,
             description: newCharData?.description ?? null,
             relationship: newCharData?.relationship ?? null,
-            traits: uniqueStrings(newCharData?.traits ?? []),
+            traits: uniqueTerms(newCharData?.traits ?? []),
             visualDescriptors: newCharData?.visualDescriptors ?? {},
             status: (newCharData?.status as Character['status']) ?? 'active',
             metadata: charMetadata,
@@ -2893,14 +2893,13 @@ class StoryStore {
           if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
             let traits = [...existing.traits]
             if (update.changes.removeTraits?.length) {
-              const toRemove = new Set(update.changes.removeTraits.map((t) => t.toLowerCase()))
-              traits = traits.filter((t) => !toRemove.has(t.toLowerCase()))
+              const toRemove = new Set(update.changes.removeTraits.map(termKey))
+              traits = traits.filter((t) => !toRemove.has(termKey(t)))
             }
             if (update.changes.newTraits?.length) {
               traits = [...traits, ...update.changes.newTraits]
             }
-            const traitMap = new Map(traits.map((t) => [t.toLowerCase(), t]))
-            changes.traits = Array.from(traitMap.values())
+            changes.traits = uniqueTerms(traits)
           }
           // Handle visual descriptor updates for image generation
           // New format: visualDescriptors is a structured object that replaces entirely
@@ -3181,7 +3180,7 @@ class StoryStore {
             name: newChar.name,
             description: newChar.description ?? null,
             relationship: newChar.relationship ?? null,
-            traits: uniqueStrings(newChar.traits ?? []),
+            traits: uniqueTerms(newChar.traits ?? []),
             visualDescriptors: newChar.visualDescriptors ?? {},
             status: 'active',
             metadata: charMetadata,

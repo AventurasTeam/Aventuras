@@ -658,14 +658,27 @@ export function foldName(raw: string): string {
     .trim()
 }
 
-/** A list without repeats, which is what a keyed `{#each}` compares: exact strings, first kept. */
-export function uniqueStrings(list: readonly string[]): string[] {
+/**
+ * The identity of a trait or keyword: trimmed, compatibility-normalised and lowercased, so
+ * `Brave`, ` brave ` and fullwidth `ｂｒａｖｅ` are one term. Accents, punctuation and kana
+ * voicing stay distinct (`Élan`/`Elan`, `Kaelen's`/`Kaelens`), as they do when retrieval matches.
+ */
+export function termKey(term: string): string {
+  return term.trim().normalize('NFKC').toLowerCase()
+}
+
+/** Trimmed terms without blanks or repeats by `termKey`; the first spelling is kept. */
+export function uniqueTerms(list: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const raw of list) {
-    if (typeof raw !== 'string' || !raw.trim() || seen.has(raw)) continue
-    seen.add(raw)
-    out.push(raw)
+    if (typeof raw !== 'string') continue
+    const term = raw.trim()
+    if (!term) continue
+    const key = termKey(term)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(term)
   }
   return out
 }

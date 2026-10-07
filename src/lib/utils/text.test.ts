@@ -7,7 +7,8 @@ import {
   paragraphMatches,
   sameEntityName,
   truncateAroundMatch,
-  uniqueStrings,
+  termKey,
+  uniqueTerms,
 } from './text'
 
 describe('entityNameMatches — word boundaries', () => {
@@ -428,37 +429,51 @@ describe('foldName — the apostrophe', () => {
   })
 })
 
-describe('uniqueStrings', () => {
-  it('drops an exact repeat and keeps the first position', () => {
-    expect(uniqueStrings(['a', 'b', 'a', 'c'])).toEqual(['a', 'b', 'c'])
+describe('termKey', () => {
+  it('ignores case, padding, width and compatibility forms', () => {
+    expect(termKey(' Brave ')).toBe('brave')
+    expect(termKey('ｂｒａｖｅ')).toBe('brave')
+    expect(termKey('ﬁre')).toBe('fire')
+    expect(termKey('a ')).toBe('a')
+    expect(termKey('ｶﾞ')).toBe(termKey('ガ'))
   })
 
-  it('keeps terms that differ in case, accents, punctuation or padding', () => {
-    const terms = [
-      'Honest',
-      'honest',
-      'Élan',
-      'Elan',
-      "Kaelen's",
-      'Kaelens',
-      'ハート',
-      'ハード',
-      ' a',
-      'a',
+  it('keeps accents, punctuation and kana voicing distinct', () => {
+    const pairs = [
+      ['Élan', 'Elan'],
+      ["Kaelen's", 'Kaelens'],
+      ['ハート', 'ハード'],
+      ['कम', 'काम'],
     ]
-    expect(uniqueStrings(terms)).toEqual(terms)
+    for (const [a, b] of pairs) expect(termKey(a)).not.toBe(termKey(b))
+  })
+})
+
+describe('uniqueTerms', () => {
+  it('drops a repeat and keeps the first spelling and position', () => {
+    expect(uniqueTerms(['a', 'b', 'A', 'c', 'a'])).toEqual(['a', 'b', 'c'])
+    expect(uniqueTerms(['Brave', 'brave', 'ｂｒａｖｅ'])).toEqual(['Brave'])
+  })
+
+  it('keeps terms that differ beyond case and width', () => {
+    const terms = ['Élan', 'Elan', "Kaelen's", 'Kaelens', 'ハート', 'ハード', 'कम', 'काम']
+    expect(uniqueTerms(terms)).toEqual(terms)
+  })
+
+  it('returns trimmed terms', () => {
+    expect(uniqueTerms([' a', 'b '])).toEqual(['a', 'b'])
   })
 
   it('keeps emoji and symbol terms', () => {
-    expect(uniqueStrings(['🔥', '★', '🔥'])).toEqual(['🔥', '★'])
+    expect(uniqueTerms(['🔥', '★', '🔥'])).toEqual(['🔥', '★'])
   })
 
   it('drops empty and whitespace-only entries', () => {
-    expect(uniqueStrings(['brave', '', '   ', 'brave'])).toEqual(['brave'])
+    expect(uniqueTerms(['brave', '', '   ', 'brave'])).toEqual(['brave'])
   })
 
   it('returns an empty list for an empty list', () => {
-    expect(uniqueStrings([])).toEqual([])
+    expect(uniqueTerms([])).toEqual([])
   })
 })
 
