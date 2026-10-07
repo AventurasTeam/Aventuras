@@ -32,6 +32,7 @@ import {
 } from '@/lib/stores'
 
 import { humanizeDelta, type HumanizeContext } from './humanize'
+import { memoizedLinkEndScan } from './link-ends'
 import type { HistoryRow } from './link-rows'
 import { loadHistoryChunk, type HistoryQuery } from './query'
 
@@ -219,6 +220,21 @@ describe('loadHistoryChunk', () => {
     })
     expect(second.rows.map((row) => row.delta.logPosition)).toEqual([5, 6])
     expect(second.nextCursor).toBeNull()
+  })
+
+  it('reuses the link-end scan it is given, so a link row removed since stays out', async () => {
+    const scan = memoizedLinkEndScan()
+    await loadHistoryChunk(db, base, scan)
+    const removed = { id: 'rel_1', branchId: 'b1', aId: 'char_1', bId: 'char_2', kind: 'ally' }
+    await db
+      .insert(deltas)
+      .values({ ...delta(10, 'delete', removed, 'rel_1'), targetTable: 'character_relationships' })
+
+    const reused = await loadHistoryChunk(db, { ...base, search: 'Deleted' }, scan)
+    const fresh = await loadHistoryChunk(db, { ...base, search: 'Deleted' }, memoizedLinkEndScan())
+
+    expect(reused.rows.map((row) => row.delta.logPosition)).toEqual([6])
+    expect(fresh.rows.map((row) => row.delta.logPosition)).toEqual([10, 6])
   })
 
   it('never crosses into another branch holding a delta with the same target id', async () => {

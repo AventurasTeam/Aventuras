@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { logger } from '@/lib/diagnostics'
-import { HISTORY_CHUNK_SIZE, type HistoryQuery, type HistoryRow } from '@/lib/history'
+import {
+  HISTORY_CHUNK_SIZE,
+  memoizedLinkEndScan,
+  type HistoryQuery,
+  type HistoryRow,
+  type ScanLinkEnds,
+} from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
@@ -45,7 +51,8 @@ function message(error: unknown): string {
 /**
  * patterns/lists.md → Load-older. A query change reloads from the first chunk; a `version` change
  * refetches as many rows as are loaded and swaps them in, running a `loadMore` pressed meanwhile
- * once it lands. Memoize `version`: a fresh one per render never settles.
+ * once it lands. Loads under one `version` share one link-end scan. Memoize `version`: a fresh one
+ * per render never settles.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,
@@ -60,6 +67,7 @@ export function useHistoryChunks(
   // A refresh replaces the rows, so a loadMore meanwhile would append to stale ones: it waits.
   const refreshing = useRef(false)
   const queuedMore = useRef(false)
+  const linkEnds = useRef<{ version: unknown; scan: ScanLinkEnds } | null>(null)
   const { branchId, targetTable, targetId, op, search, sort } = query
   const request = useMemo<Request>(
     () => ({
@@ -77,11 +85,11 @@ export function useHistoryChunks(
     appliedRef.current = applied
   }, [applied])
 
-  const more = useCallback((from: Request, cursor: number) => {
+  const more = useCallback((from: Request, cursor: number, scan: ScanLinkEnds) => {
     loadingMore.current = true
     const mine = generation.current
     setApplied((current) => current && { ...current, status: 'loading-more' })
-    from.load({ ...from.query, cursor }).then(
+    from.load({ ...from.query, cursor }, scan).then(
       (chunk) => {
         if (generation.current !== mine) return
         loadingMore.current = false
@@ -113,6 +121,12 @@ export function useHistoryChunks(
   // Read the query only through `request`: its identity is what resets the rows.
   useEffect(() => {
     const mine = ++generation.current
+    let ends = linkEnds.current
+    if (ends == null || ends.version !== version) {
+      ends = { version, scan: memoizedLinkEndScan() }
+      linkEnds.current = ends
+    }
+    const { scan } = ends
     // Same request, so only `version` moved: the rows stay up until the refetch replaces them.
     const kept = appliedRef.current?.for === request ? appliedRef.current : null
     const refresh = kept != null && kept.status !== 'failed'
@@ -124,10 +138,11 @@ export function useHistoryChunks(
       refreshing.current = false
       const queued = queuedMore.current
       queuedMore.current = false
-      if (queued && cursor != null) more(request, cursor)
+      if (queued && cursor != null) more(request, cursor, scan)
     }
     const limit = refresh ? Math.max(HISTORY_CHUNK_SIZE, kept.rows.length) : undefined
-    request.load({ ...request.query, cursor: null, ...(limit != null ? { limit } : {}) }).then(
+    const first = { ...request.query, cursor: null, ...(limit != null ? { limit } : {}) }
+    request.load(first, scan).then(
       (chunk) => {
         if (generation.current !== mine) return
         setApplied({
@@ -161,14 +176,16 @@ export function useHistoryChunks(
   }, [request, version, more])
 
   const loadMore = useCallback(() => {
-    if (state.nextCursor == null) return
+    const ends = linkEnds.current
+    // Null only before the first load, when there's no cursor either.
+    if (state.nextCursor == null || ends == null) return
     if (refreshing.current) {
       queuedMore.current = true
       setApplied((current) => current && { ...current, status: 'loading-more' })
       return
     }
     if (loadingMore.current || state.status !== 'ready') return
-    more(request, state.nextCursor)
+    more(request, state.nextCursor, ends.scan)
   }, [state, request, more])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])

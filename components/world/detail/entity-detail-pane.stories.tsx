@@ -754,6 +754,7 @@ export const CreateThenHistoryTargetsTheSavedRow: Story = {
             targetTable: 'entities',
             targetId: 'location_new',
           }),
+          expect.any(Function),
         ),
       WAIT,
     )

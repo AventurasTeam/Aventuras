@@ -287,7 +287,10 @@ describe('HistoryTab over the link-row union', () => {
     await firstRow()
     act(() => view.props?.onSearchChange('fire'))
     await waitFor(() =>
-      expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'fire' })),
+      expect(load).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: 'fire' }),
+        expect.any(Function),
+      ),
     )
     await firstRow()
     const searched = load.mock.calls.length
@@ -295,7 +298,10 @@ describe('HistoryTab over the link-row union', () => {
       happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Blaze' } }),
     )
     await waitFor(() => expect(load).toHaveBeenCalledTimes(searched + 1))
-    expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'fire', cursor: null }))
+    expect(load).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: 'fire', cursor: null }),
+      expect.any(Function),
+    )
   })
 
   it("prefers a happening's working-set title over the chunk's name", async () => {
@@ -412,6 +418,7 @@ describe('HistoryTab over the link-row union', () => {
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
     expect(load).toHaveBeenLastCalledWith(
       expect.objectContaining({ targetId: 'char_aria', cursor: null }),
+      expect.any(Function),
     )
 
     act(() =>

@@ -25,7 +25,7 @@ const chunk = (
 const positions = (rows: readonly HistoryRow[]) => rows.map((r) => r.delta.logPosition)
 
 function autoLoader() {
-  return vi.fn(
+  return vi.fn<HistoryLoader>(
     async (query: HistoryQuery): Promise<HistoryChunk> =>
       query.cursor == null ? chunk([row(4), row(3)], 3) : chunk([row(2)], null),
   )
@@ -76,7 +76,10 @@ describe('useHistoryChunks', () => {
 
     act(() => hook.result.current.loadMore())
     await waitFor(() => expect(positions(hook.result.current.rows)).toEqual([4, 3, 2]))
-    expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 3 }))
+    expect(load).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 3 }),
+      expect.any(Function),
+    )
     expect(hook.result.current.hasMore).toBe(false)
   })
 
@@ -87,9 +90,27 @@ describe('useHistoryChunks', () => {
     await waitFor(() =>
       expect(load).toHaveBeenLastCalledWith(
         expect.objectContaining({ search: 'traits', cursor: null }),
+        expect.any(Function),
       ),
     )
     await waitFor(() => expect(positions(hook.result.current.rows)).toEqual([4, 3]))
+  })
+
+  it("shares one link-end scan across a version's loads, and takes a fresh one on a version change", async () => {
+    const load = autoLoader()
+    const { hook, version } = setup(load)
+    await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+    act(() => hook.result.current.loadMore())
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    hook.rerender({ search: 'traits', version })
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(3))
+    hook.rerender({ search: 'traits', version: {} })
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(4))
+
+    const [first, more, searched, refreshed] = load.mock.calls.map(([, scan]) => scan)
+    expect(more).toBe(first)
+    expect(searched).toBe(first)
+    expect(refreshed).not.toBe(first)
   })
 
   it('refreshes in place when the version changes, keeping the loaded rows until the refetch lands', async () => {

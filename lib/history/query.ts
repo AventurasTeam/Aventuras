@@ -15,7 +15,13 @@ import {
   summaryFieldTerms,
   type HistoryTable,
 } from './field-labels'
-import { inJsonList, loadLinkEnds, type LinkEnd, type LinkEnds } from './link-ends'
+import {
+  inJsonList,
+  loadLinkEnds,
+  type LinkEnd,
+  type LinkEnds,
+  type ScanLinkEnds,
+} from './link-ends'
 import {
   RETRIEVAL_COUNT,
   type HistoryLinkTable,
@@ -202,13 +208,17 @@ function viaOf(query: HistoryQuery, ends: LinkEnds): (delta: Delta) => HistoryVi
   }
 }
 
-/** One chunk of a row's delta log and its link rows', paged in sort order. */
+/**
+ * One chunk of a row's delta log and its link rows', paged in sort order. `scan` lets a caller
+ * reuse one link-end scan across chunks (`memoizedLinkEndScan`).
+ */
 export async function loadHistoryChunk(
   db: DbCtx['db'],
   query: HistoryQuery,
+  scan?: ScanLinkEnds,
 ): Promise<HistoryChunk> {
   const limit = query.limit ?? HISTORY_CHUNK_SIZE
-  const ends = await loadLinkEnds(db, query.branchId, query.targetTable, query.targetId)
+  const ends = await loadLinkEnds(db, query.branchId, query.targetTable, query.targetId, scan)
   const scopes: Scope[] = [
     {
       member: and(

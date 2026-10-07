@@ -322,6 +322,7 @@ export const HistoryReadsTheRow: Story = {
             targetTable: 'lore',
             targetId: AETHERIUM.id,
           }),
+          expect.any(Function),
         ),
       WAIT,
     )
@@ -360,6 +361,7 @@ export const CreateThenHistoryTargetsTheSavedRow: Story = {
       () =>
         expect(loreHistoryLoader).toHaveBeenCalledWith(
           expect.objectContaining({ branchId: 'br_1', targetTable: 'lore', targetId: NEW_ID }),
+          expect.any(Function),
         ),
       WAIT,
     )

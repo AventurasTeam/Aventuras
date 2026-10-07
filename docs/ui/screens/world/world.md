@@ -641,6 +641,9 @@ prose, then hands pre-formatted strings to the compound.
   reversal settles, which covers a reversal that only edits a delete's
   payload. Triggers that land close together, like the separate
   commits of one classifier pass, refetch once, shortly after the last.
+  Between triggers, a search, filter or next chunk reuses the link rows
+  found at the last one, since finding them reads every delete on the
+  branch; other ends' names are read on every load.
   A `Load older` pressed while a refetch runs loads after it lands.
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).

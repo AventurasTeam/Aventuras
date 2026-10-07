@@ -613,6 +613,7 @@ export const Phone: Story = {
       () =>
         expect(phoneHistoryLoader).toHaveBeenCalledWith(
           expect.objectContaining({ targetTable: 'threads', targetId: AMULET.id }),
+          expect.any(Function),
         ),
       WAIT,
     )

@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -18,7 +19,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { HISTORY_LINK_WATCH, loadLinkEnds, type LinkEnds } from './link-ends'
+import { HISTORY_LINK_WATCH, loadLinkEnds, memoizedLinkEndScan, type LinkEnds } from './link-ends'
 
 let db: DbCtx['db']
 let position = 0
@@ -320,6 +321,43 @@ describe('loadLinkEnds', () => {
     const none = { links: [], removals: [], names: {} }
     expect(await loadLinkEnds(db, 'b1', 'lore', 'lore_1')).toEqual(none)
     expect(await loadLinkEnds(db, 'b1', 'threads', 'thread_1')).toEqual(none)
+  })
+})
+
+describe('memoizedLinkEndScan', () => {
+  const removedMira = () =>
+    deleted('character_relationships', 'rel_9', relationship('rel_9', 'char_aria', 'char_mira'))
+
+  it("reuses one target's scan until the memo is dropped", async () => {
+    const scan = memoizedLinkEndScan()
+    expect((await loadLinkEnds(db, 'b1', 'entities', 'char_aria', scan)).links).toEqual([])
+    await db.insert(deltas).values(removedMira())
+
+    expect((await loadLinkEnds(db, 'b1', 'entities', 'char_aria', scan)).links).toEqual([])
+    expect((await loadLinkEnds(db, 'b1', 'entities', 'char_mira', scan)).links).toHaveLength(1)
+    const fresh = memoizedLinkEndScan()
+    expect((await loadLinkEnds(db, 'b1', 'entities', 'char_aria', fresh)).links).toHaveLength(1)
+  })
+
+  it("reads the other ends' names on every call", async () => {
+    await db.insert(deltas).values(removedMira())
+    const scan = memoizedLinkEndScan()
+    await loadLinkEnds(db, 'b1', 'entities', 'char_aria', scan)
+    await db.update(entities).set({ name: 'Mirabel' }).where(eq(entities.id, 'char_mira'))
+
+    const ends = await loadLinkEnds(db, 'b1', 'entities', 'char_aria', scan)
+
+    expect(ends.names).toEqual({ char_mira: 'Mirabel' })
+  })
+
+  it('scans again after a failed scan', async () => {
+    const scan = memoizedLinkEndScan()
+    const closed = await createTestDb()
+    closed.sqlite.close()
+    await expect(scan(closed.db, 'b1', 'entities', 'char_aria')).rejects.toThrow()
+    await db.insert(deltas).values(removedMira())
+
+    expect((await scan(db, 'b1', 'entities', 'char_aria')).links).toHaveLength(1)
   })
 })
 

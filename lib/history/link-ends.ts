@@ -287,15 +287,19 @@ async function namesOf(
   return Object.fromEntries(names)
 }
 
-/** Link rows naming a History tab's row, live or in a delete's payload (world.md → History tab). */
-export async function loadLinkEnds(
+/** A tab's link ends without the other ends' names: the part that scans the branch's deletes. */
+export type LinkEndScan = Pick<LinkEnds, 'links' | 'removals'>
+
+export type ScanLinkEnds = (
   db: Db,
   branchId: string,
   targetTable: HistoryTable,
   targetId: string,
-): Promise<LinkEnds> {
+) => Promise<LinkEndScan>
+
+const scanLinkEnds: ScanLinkEnds = async (db, branchId, targetTable, targetId) => {
   const ends = ENDS[targetTable]
-  if (ends.length === 0) return { links: [], removals: [], names: {} }
+  if (ends.length === 0) return { links: [], removals: [] }
   const [live, deletes] = await Promise.all([
     liveRows(db, branchId, targetTable, targetId),
     db
@@ -334,6 +338,41 @@ export async function loadLinkEnds(
     if (isNonEmpty(tables) && !own)
       removals.push({ deltaId: removed.id, tables, otherId: removed.targetId })
   }
+  return { links, removals }
+}
+
+/**
+ * One scan per target until the memo is dropped. Its holder drops it on every History refresh
+ * trigger: a sweep rewrites a delete's payload in place, so no DB token says when it went stale.
+ */
+export function memoizedLinkEndScan(): ScanLinkEnds {
+  const scans = new Map<string, Promise<LinkEndScan>>()
+  return (db, branchId, targetTable, targetId) => {
+    const key = JSON.stringify([branchId, targetTable, targetId])
+    const kept = scans.get(key)
+    if (kept != null) return kept
+    const scan = scanLinkEnds(db, branchId, targetTable, targetId)
+    scans.set(key, scan)
+    // Not kept when it fails, so a Retry scans again.
+    scan.catch(() => {
+      if (scans.get(key) === scan) scans.delete(key)
+    })
+    return scan
+  }
+}
+
+/**
+ * Link rows naming a History tab's row, live or in a delete's payload (world.md → History tab).
+ * Names are read on every call, so a rename between refreshes still matches a search.
+ */
+export async function loadLinkEnds(
+  db: Db,
+  branchId: string,
+  targetTable: HistoryTable,
+  targetId: string,
+  scan: ScanLinkEnds = scanLinkEnds,
+): Promise<LinkEnds> {
+  const { links, removals } = await scan(db, branchId, targetTable, targetId)
   const otherIds = [...new Set([...links, ...removals].map((end) => end.otherId))]
   return { links, removals, names: await namesOf(db, branchId, otherIds) }
 }
