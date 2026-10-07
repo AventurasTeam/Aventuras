@@ -47,7 +47,6 @@ function inBranch<Row extends { branchId: string }>(
   return [...rows.values()].filter((row) => row.branchId === branchId)
 }
 
-/** The dialog's resolution as the action takes it: the loser is the pair row that isn't canonical. */
 function toCollisionResolution(resolution: Resolution, [a, b]: Pair): CollisionResolution {
   switch (resolution.mode) {
     case 'merge': {

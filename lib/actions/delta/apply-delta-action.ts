@@ -276,10 +276,9 @@ export type BuiltGroup<Code extends string = string> =
   | { status: 'rejected'; reason: string; code: Code }
 
 /**
- * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold, through the commit:
- * the store state it reads holds every no-gate pass's writes so far, and no pass writes before the
- * commit. `build` is synchronous and takes no lock, since the hold isn't reentrant. Its refusal
- * returns as is; a throw rejects the call. Tracked as a user write.
+ * applyDeltaActionGroup, but `build` runs under the branch lock's shared hold through the commit:
+ * it reads every no-gate pass's writes so far, and none lands before commit. `build` must take no
+ * lock, as the hold isn't reentrant. Refusals return as is, throws reject. Tracked as a user write.
  */
 export function applyDeltaActionGroupBuilt(
   build: () => BuiltGroup,

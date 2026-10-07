@@ -661,8 +661,7 @@ function ColumnChoice({ side, value, caption, selected, keys, disabled }: Choice
 
 type StackedChoiceProps = ChoiceProps & { prose: boolean }
 
-// world.md → Merge (Long-text values, Side identification): the radio and the prose are separate
-// taps, and the caption names the side.
+// world.md → Merge (Long-text values, Side identification): radio and prose are separate taps.
 function StackedChoice({
   side,
   value,
@@ -701,8 +700,8 @@ function StackedChoice({
 }
 
 /**
- * A clamp that expands in place. An invisible unclamped copy measures the full height, so the tap
- * shows only on prose that clamps; onLayout reports both heights alike on web and native.
+ * An invisible unclamped copy measures the full height, so the tap shows only on prose that
+ * clamps; onLayout reports both heights alike on web and native.
  */
 function ClampedProse({ value }: { value: string }) {
   const [expanded, setExpanded] = useState(false)

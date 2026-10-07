@@ -54,9 +54,8 @@ export type CollisionResolution =
       loserId: string
       fromLoser: readonly MergeScalar[]
       /**
-       * The terms the user dropped (tags trimmed, keywords matched by `normalizeTerm`), never the
-       * final lists: the build unions the rows it reads under the branch lock, so a term a no-gate
-       * pass adds while the merge waits is kept.
+       * Terms the user dropped (tags trimmed, keywords by `normalizeTerm`), never final lists: the
+       * build unions rows read under the branch lock, so a no-gate pass's interim terms survive.
        */
       deselectedTags: readonly string[]
       deselectedKeywords: readonly string[]

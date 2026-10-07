@@ -9,7 +9,7 @@ import type {
 
 export type MergeState = {
   canonicalId: string
-  /** Fields the merged row takes from the non-canonical row; every other one keeps the canonical's. */
+  /** Fields the merged row takes from the non-canonical; every other one keeps the canonical's. */
   fromOther: ReadonlySet<ScalarField>
   deselectedTags: string[]
   /** `normalizeTerm` keys: a chip's spelling follows the canonical, the deselect follows the keyword. */

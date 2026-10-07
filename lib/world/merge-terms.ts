@@ -32,9 +32,7 @@ const trimmed = (tag: string) => tag.trim()
 
 /**
  * collision-resolve.md → Resolution shape: the canonical's own terms in stored order minus the
- * deselected, then the other row's remaining additions sorted as the dialog offers them. Keywords
- * are de-duplicated by `normalizeTerm` (first spelling, so a shared one keeps the canonical's);
- * tags are trimmed and de-duplicated exactly. Every term not deselected is kept, read from `rows`.
+ * deselected, then the other row's remaining additions sorted as the dialog offers them.
  */
 export function mergedTerms(
   rows: { canonical: TermSide; other: TermSide },

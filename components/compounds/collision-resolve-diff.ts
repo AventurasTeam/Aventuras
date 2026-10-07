@@ -122,7 +122,7 @@ export type MergeChips = { tags: string[]; keywords: string[] }
 
 const NO_DESELECTIONS: MergeDeselections = { deselectedTags: [], deselectedKeywords: [] }
 
-/** The chips a merge offers, in the order it writes them; a list the two rows agree on offers none. */
+/** The chips a merge offers, in write order; a list the two rows agree on offers none. */
 export function mergeChips(
   diff: DiffPayload,
   canonical: EntitySummary,

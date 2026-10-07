@@ -288,8 +288,7 @@ function typedName(lead: string, tail: string, term: string): string | null {
 
 /**
  * A term read against the removal summary ("Removed when Kael was deleted"): typed through a name
- * it names the other end, a word run of the summary's own wording matches every removal, and the
- * unknown-end wording typed whole matches the removals that render it.
+ * → `named`; a word run of its wording → `any`; the unknown-end wording typed whole → `unknown`.
  */
 export function removalSummaryTerm(term: string): RemovalSummaryTerm | null {
   const needle = searchText(term)

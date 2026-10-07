@@ -92,9 +92,8 @@ function adoptedPlacement(input: MergeContext, rewritten: EntityState | null): E
 }
 
 /**
- * world.md → Merge, the tail scene: a canonical the merge seats in the tail is promoted when its
- * merged status is staged and, for a character, tracked to the tail's location. Each folds into the
- * canonical's patch when that already writes the column, since a group writes a row once.
+ * world.md → Merge, the tail scene. Each effect folds into the canonical's patch when that already
+ * writes the column: a group writes a row once.
  */
 function withSceneEffects(
   input: MergeContext,

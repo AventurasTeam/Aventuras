@@ -402,7 +402,7 @@ export const MergeOverlapFootnote: Story = {
 
 type Counts = EntitySummary['relationCounts']
 
-// Every count distinct on both sides, so a line showing the wrong count, or the wrong side's, fails.
+// Every count distinct on both sides, so a line with the wrong count, or the wrong side's, fails.
 const OLDER_COUNTS: Counts = {
   awarenessRows: 11,
   involvements: 12,
@@ -608,8 +608,7 @@ export const MergeKeywordUnion: Story = {
     lastResolution = null
     // ControlledDialog opens by default; the Open button sits behind the overlay.
     await userEvent.click(await screen.findByRole('button', { name: 'the wanderer' }))
-    // The write's order: the canonical's own in stored order, then the other row's additions; the
-    // case variant was one keyword all along.
+    // Write order: the canonical's own as stored, then the other's additions; case variants fold.
     expect(chipNames(KEYWORD_CHIPS)).toEqual(['the wanderer', 'the swordsman', 'the gate guard'])
     expect(chipNames(TAG_CHIPS)).toEqual(['hero', 'sword', 'guard'])
     await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))

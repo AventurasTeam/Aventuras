@@ -43,10 +43,9 @@ function message(error: unknown): string {
 }
 
 /**
- * patterns/lists.md → Load-older: a query change reloads from the first chunk. A `version` identity
- * change refetches as many rows as are loaded and swaps them in, keeping the shown rows meanwhile
- * and running a `loadMore` pressed meanwhile once it lands. `version` must be memoized; a fresh
- * one per render never settles.
+ * patterns/lists.md → Load-older. A query change reloads from the first chunk; a `version` change
+ * refetches as many rows as are loaded and swaps them in, running a `loadMore` pressed meanwhile
+ * once it lands. Memoize `version`: a fresh one per render never settles.
  */
 export function useHistoryChunks(
   query: Omit<HistoryQuery, 'cursor' | 'limit'>,

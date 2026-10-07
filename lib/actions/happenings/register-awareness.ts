@@ -17,10 +17,7 @@ type AwarenessUpsertPayload = {
   learnedAtEntryId?: string | null
   decayResistance?: number | null
   source?: string | null
-  /**
-   * Create only, user source only: a pipeline create and every update ignore a valid one; an
-   * invalid value refuses the action.
-   */
+  /** Honored only on a user-source create; an invalid value rejects the action regardless. */
   retrievalCount?: number
 }
 
