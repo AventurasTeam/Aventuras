@@ -55,6 +55,8 @@ export type ModuleListProps<
   density?: RowDensity
   /** Replaces the module's empty-state subtext, for a surface whose add affordance differs. */
   emptySubtext?: string
+  /** Replaces the list and its empty state; the header and toolbar stay mounted. */
+  body?: ReactNode
 }
 
 // Style, not `className`: NativeWind drops classes on a component it doesn't register, and the
@@ -89,6 +91,7 @@ export function ModuleList<
   resetKey,
   density = 'default',
   emptySubtext,
+  body,
 }: ModuleListProps<Row, Filter, Key, Signals>) {
   const { scrollRef, contentRef, rowRef, focusRef } = useRevealScroll(reveal, resetKey)
   const Scroll = useContext(ScrollComponentContext)
@@ -188,6 +191,7 @@ export function ModuleList<
             ))
       }
       isEmpty={rows.length === 0}
+      body={body}
       emptyState={
         <EmptyState title={copy.emptyTitle} subtext={emptySubtext ?? copy.emptySubtext} />
       }

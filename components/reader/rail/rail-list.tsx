@@ -35,40 +35,18 @@ function railCollapseDefaults(category: RailCategory): ReadonlySet<string> {
 
 function ignoreFilter(): void {}
 
-/**
- * The happening list's stand-in while the entry index is unread: its anchors would all read as
- * dangling. Keeps the list pane's header row so the category Select and collapse chevron work.
- */
-function EntryIndexPending({
-  header,
-  headerAction,
-  entryIndex,
-}: {
-  header: ReactNode
-  headerAction?: ReactNode
-  entryIndex: RailData['entryIndex']
-}): ReactNode {
+/** The happening body while the entry index is unread (every anchor would read dangling) or failed. */
+function EntryIndexStatus({ entryIndex }: { entryIndex: RailData['entryIndex'] }): ReactNode {
+  if (!entryIndex.failed) return <EmptyState title={t('reader:rail.happeningsLoading')} />
   return (
-    <View className="w-full flex-1 flex-col gap-3 bg-bg-base p-3">
-      <View className="flex-row items-center gap-2">
-        <View className="min-w-0 flex-1">{header}</View>
-        {headerAction != null ? <View className="shrink-0">{headerAction}</View> : null}
-      </View>
-      <View className="min-h-0 flex-1">
-        {entryIndex.failed ? (
-          <View className="items-center gap-3">
-            <EmptyState
-              title={t('plot:entryIndexFailed')}
-              subtext={t('plot:entryIndexFailedBody')}
-            />
-            <Button variant="secondary" onPress={entryIndex.retry}>
-              <Text>{t('plot:entryIndexRetry')}</Text>
-            </Button>
-          </View>
-        ) : (
-          <EmptyState title={t('reader:hydrationLoading')} />
-        )}
-      </View>
+    <View className="items-center gap-3">
+      <EmptyState
+        title={t('plot:entryIndexFailed')}
+        subtext={t('reader:rail.entryIndexFailedBody')}
+      />
+      <Button variant="secondary" onPress={entryIndex.retry}>
+        <Text>{t('plot:entryIndexRetry')}</Text>
+      </Button>
     </View>
   )
 }
@@ -140,19 +118,14 @@ export function RailList({
         />
       )
     case 'happening':
-      if (!data.entryIndex.ready) {
-        return (
-          <EntryIndexPending
-            header={header}
-            headerAction={headerAction}
-            entryIndex={data.entryIndex}
-          />
-        )
-      }
       return (
         <ModuleList
           {...shared}
           listModule={RAIL_MODULES.happening}
+          // The header stays mounted while the body waits, so the Select keeps focus.
+          body={
+            data.entryIndex.ready ? undefined : <EntryIndexStatus entryIndex={data.entryIndex} />
+          }
           rows={data.happenings}
           filter={view.filter}
           onFilterChange={(filter) => onViewChange({ ...view, filter })}

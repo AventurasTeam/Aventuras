@@ -26,7 +26,11 @@ export type RailData = {
   happenings: readonly Happening[]
   entityListSignals: EntityListSignals
   plotListSignals: PlotListSignals
-  /** The happening list waits on this: an unread index would mark every anchored happening dangling. */
+  /**
+   * The happening list waits on this: an unread index would mark every anchored happening
+   * dangling. The index is read only while `readerRailStore`'s category is `happening`, so hosts
+   * must drive the rail's view from that store.
+   */
   entryIndex: { ready: boolean; failed: boolean; retry: () => void }
   /** Lead, in-scene and recently-classified; never `collision` (World resolves collisions). */
   rowSignals: (id: string) => Omit<RowSignals, 'collision'>

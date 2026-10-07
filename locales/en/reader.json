@@ -171,6 +171,8 @@
   "rail": {
     "label": "Browse rail",
     "categorySelect": "Browse category",
+    "happeningsLoading": "Loading happenings…",
+    "entryIndexFailedBody": "The rail reads them again when the next run finishes, or when you retry.",
     "groups": { "world": "World", "plot": "Plot" },
     "categories": {
       "character": "Characters",

@@ -43,6 +43,12 @@ type EntityListPaneProps = {
   emptyState: ReactNode
 
   /**
+   * Replaces the list and its empty state; the header and toolbar stay mounted. Omit for the
+   * list or, when `isEmpty`, the empty state.
+   */
+  body?: ReactNode
+
+  /**
    * Consumer derives. Shell uses this to switch list vs empty
    * rendering.
    */
@@ -60,6 +66,7 @@ export function EntityListPane({
   children,
   emptyState,
   isEmpty,
+  body,
   className,
 }: EntityListPaneProps) {
   return (
@@ -76,7 +83,7 @@ export function EntityListPane({
         {sortControl}
       </Toolbar>
 
-      <View className="min-h-0 flex-1">{isEmpty ? emptyState : children}</View>
+      <View className="min-h-0 flex-1">{body ?? (isEmpty ? emptyState : children)}</View>
     </View>
   )
 }

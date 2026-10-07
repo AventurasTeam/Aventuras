@@ -152,6 +152,12 @@ export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
   const entities = overrides.entities ?? ENTITIES
   const entityListSignals = overrides.entityListSignals ?? ENTITY_LIST_SIGNALS
   const categoryTint = overrides.categoryTint ?? CATEGORY_TINT
+  // An unread index holds no entries; a story that wants another pairing overrides `plotListSignals`.
+  const plotListSignals =
+    overrides.plotListSignals ??
+    (overrides.entryIndex?.ready === false
+      ? { ...PLOT_LIST_SIGNALS, entries: new Map<string, EntryRef>() }
+      : PLOT_LIST_SIGNALS)
   const { leadId, inScene } = entityListSignals
   const rowSignals = (id: string): Omit<RowSignals, 'collision'> => ({
     lead: id === leadId ? 'you' : null,
@@ -164,7 +170,7 @@ export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
     threads: THREADS,
     happenings: HAPPENINGS,
     entityListSignals,
-    plotListSignals: PLOT_LIST_SIGNALS,
+    plotListSignals,
     entryIndex: { ready: true, failed: false, retry: () => {} },
     rowSignals,
     strip: railStripModel({ inScene, entities, byCategory: categoryTint }),

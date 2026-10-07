@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -14,6 +14,12 @@ import type { RailData } from './use-rail-data'
 
 const DATA = railDataFixture()
 const EMPTY = railDataFixture({ entities: [], lore: [], threads: [], happenings: [] })
+const INDEX_PENDING = railDataFixture({
+  entryIndex: { ready: false, failed: false, retry: () => {} },
+})
+const NO_PLACES = railDataFixture({
+  entities: DATA.entities.filter((e) => e.kind !== 'location'),
+})
 const NO_CLOSED_CHAPTER = railDataFixture({
   plotListSignals: { entries: DATA.plotListSignals.entries, hasClosedChapters: false },
 })
@@ -23,6 +29,8 @@ type HarnessProps = {
   /** Starts on this exact view instead of `railViewFor(category)`. */
   initialView?: RailView
   data?: RailData
+  /** Starts with the entry index unread and lands it (`data`) after this many milliseconds. */
+  landIndexAfterMs?: number
   onRowPress: (category: RailCategory, id: string) => void
   onCollapse: () => void
 }
@@ -31,14 +39,21 @@ function Harness({
   category = 'character',
   initialView,
   data = DATA,
+  landIndexAfterMs,
   onRowPress,
   onCollapse,
 }: HarnessProps) {
   const [view, setView] = useState<RailView>(() => initialView ?? railViewFor(category))
+  const [landed, setLanded] = useState(landIndexAfterMs == null)
+  useEffect(() => {
+    if (landIndexAfterMs == null) return
+    const id = setTimeout(() => setLanded(true), landIndexAfterMs)
+    return () => clearTimeout(id)
+  }, [landIndexAfterMs])
   return (
     <View style={{ width: 300, height: 640 }} className="border-l border-border">
       <BrowseRail
-        data={data}
+        data={landed ? data : INDEX_PENDING}
         view={view}
         onViewChange={setView}
         onCategoryChange={(next) => setView(railViewFor(next))}
@@ -87,6 +102,16 @@ export const Characters: Story = {
     expect(screen.getByTitle('Vault lands in M8')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Collapse rail' }))
     expect(args.onCollapse).toHaveBeenCalledTimes(1)
+    expect(screen.getByTitle('Collapse rail')).toBeInTheDocument()
+    // The kind's filter chips and search are wired to the view.
+    await userEvent.click(screen.getByRole('button', { name: 'In scene' }))
+    expect(
+      await screen.findByRole('button', { name: 'In scene', pressed: true }, WAIT),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Vorne' })).toBeNull()
+    await userEvent.type(screen.getByPlaceholderText('Search characters…'), 'Mir')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Kael' })).toBeNull(), WAIT)
+    expect(screen.getByRole('button', { name: 'Mira' })).toBeVisible()
     expect(args.onRowPress).not.toHaveBeenCalled()
   },
 }
@@ -142,6 +167,15 @@ export const Threads: Story = {
     expect(
       listCollapseStore.getCollapsed('thread', plotCollapseDefaults('thread')).has('pending'),
     ).toBe(false)
+    // A filter chip narrows the rows to its tier.
+    await userEvent.click(screen.getByRole('button', { name: 'Resolved' }))
+    expect(
+      await screen.findByRole('button', { name: 'Resolved', pressed: true }, WAIT),
+    ).toBeVisible()
+    await waitFor(
+      () => expect(screen.queryByRole('button', { name: 'What the amulet wants' })).toBeNull(),
+      WAIT,
+    )
   },
 }
 
@@ -152,6 +186,14 @@ export const Happenings: Story = {
     expect(await screen.findByRole('button', { name: "Vorne's pact" })).toBeVisible()
     expect(screen.getByRole('button', { name: 'This chapter', pressed: false })).toBeVisible()
     expect(screen.getByPlaceholderText('Search happenings…')).toBeVisible()
+    // The Earlier bucket starts collapsed.
+    expect(screen.queryByRole('button', { name: 'The alley ambush' })).toBeNull()
+    // A filter chip narrows the rows: nothing here is common knowledge.
+    await userEvent.click(screen.getByRole('button', { name: 'Common knowledge' }))
+    await waitFor(
+      () => expect(screen.queryByRole('button', { name: "Vorne's pact" })).toBeNull(),
+      WAIT,
+    )
   },
 }
 
@@ -174,7 +216,7 @@ export const HappeningsLoading: Story = {
     data: railDataFixture({ entryIndex: { ready: false, failed: false, retry: () => {} } }),
   },
   play: async () => {
-    expect(await screen.findByText('Loading story…', {}, WAIT)).toBeVisible()
+    expect(await screen.findByText('Loading happenings…', {}, WAIT)).toBeVisible()
     expect(screen.queryByRole('button', { name: "Vorne's pact" })).toBeNull()
     expect(screen.queryByText('Entry no longer exists')).toBeNull()
     // The category Select and the collapse chevron stay usable while the list waits.
@@ -191,16 +233,38 @@ export const HappeningsFailed: Story = {
   play: async ({ args }) => {
     const data = args.data as RailData
     expect(await screen.findByText("Couldn't read this branch's entries.", {}, WAIT)).toBeVisible()
+    expect(
+      screen.getByText('The rail reads them again when the next run finishes, or when you retry.'),
+    ).toBeVisible()
     expect(screen.queryByRole('button', { name: "Vorne's pact" })).toBeNull()
-    expect(screen.queryByText('Loading story…')).toBeNull()
+    expect(screen.queryByText('Loading happenings…')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(data.entryIndex.retry).toHaveBeenCalledTimes(1)
   },
 }
 
+/**
+ * Switching to Happenings while the index is unread, then the index landing, must not remount the
+ * header: the category Select keeps focus through both transitions.
+ */
+export const HappeningsIndexLands: Story = {
+  args: { landIndexAfterMs: 600 },
+  play: async () => {
+    const trigger = await screen.findByLabelText('Browse category')
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Happenings' }))
+    expect(await screen.findByText('Loading happenings…', {}, WAIT)).toBeVisible()
+    await waitFor(() => expect(trigger).toHaveFocus(), WAIT)
+    expect(await screen.findByRole('button', { name: "Vorne's pact" }, WAIT)).toBeVisible()
+    expect(screen.queryByText('Loading happenings…')).toBeNull()
+    expect(trigger).toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  },
+}
+
 /** The rail's own empty copy: no `+ New` clause, which the rail has no affordance for. */
 export const EmptyCategory: Story = {
-  args: { category: 'location', data: EMPTY },
+  args: { category: 'location', data: NO_PLACES },
   play: async () => {
     expect(await screen.findByText('No places on this branch yet.')).toBeVisible()
     expect(
