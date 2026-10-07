@@ -18,8 +18,10 @@ export type ReaderRailColumnProps = {
 export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColumnProps) {
   const view = readerRailStore.useView()
   const { collapsed, setCollapsed } = useRailCollapse()
-  // reader-composer.md: the shortcut toggles regardless of focus, a text field included.
+  // reader-composer.md: the shortcut toggles regardless of focus, a text field included. Capture
+  // phase: RN-Web's TextInput stops every keydown from bubbling.
   useGlobalHotkey(matchesRailToggleShortcut, () => setCollapsed(!collapsed), {
+    capture: true,
     enabled: isFocused,
   })
 

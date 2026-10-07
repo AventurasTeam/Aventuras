@@ -115,7 +115,8 @@ export const Toggle: Story = {
     await expect(screen.queryByTestId('reader-rail')).toBeNull()
 
     await userEvent.click(within(strip).getByRole('button', { name: t('reader:rail.expand') }))
-    await screen.findByTestId('reader-rail')
+    // No wait: the rail mounts with the click, before the slide has run.
+    await expect(screen.queryByTestId('reader-rail')).not.toBeNull()
     await expect(screen.queryByTestId('rail-strip')).toBeNull()
     await waitFor(() => expect(columnWidth()).toBeGreaterThanOrEqual(300), ANIMATION)
   },
@@ -161,12 +162,43 @@ export const ConnectedShortcutToggles: Story = {
   },
 }
 
+/** reader-composer.md: the shortcut toggles regardless of focus, a text field included. */
+export const ConnectedShortcutFromSearchField: Story = {
+  render: () => <ConnectedStage />,
+  play: async () => {
+    await userEvent.click(await screen.findByPlaceholderText('Search characters…'))
+    await userEvent.keyboard('{Control>}\\{/Control}')
+    await screen.findByTestId('rail-strip', {}, ANIMATION)
+  },
+}
+
+/** A collapse cut short by an expand must never land the strip. */
+export const ConnectedShortcutDoublePress: Story = {
+  render: () => <ConnectedStage />,
+  play: async () => {
+    await screen.findByTestId('reader-rail')
+    await waitFor(() => expect(columnWidth()).toBeGreaterThanOrEqual(300), ANIMATION)
+    await userEvent.keyboard('{Control>}\\{/Control}')
+    await expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+    // Inside the slide: the second toggle cuts the collapse short (it may clear to null once the
+    // rejected writes settle, since it matches the stored value).
+    await userEvent.keyboard('{Control>}\\{/Control}')
+    await expect(readerRailStore.getDisplay().pendingCollapsed).not.toBe(true)
+    // A negative check needs a settle window longer than the 150 ms slide.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await expect(columnWidth()).toBeGreaterThanOrEqual(300)
+    await expect(screen.getByTestId('reader-rail')).toBeVisible()
+    await expect(screen.queryByTestId('rail-strip')).toBeNull()
+  },
+}
+
 /** A pushed-under reader keeps its column mounted; it must not answer the shortcut. */
 export const ConnectedShortcutIgnoredUnfocused: Story = {
   render: () => <ConnectedStage isFocused={false} />,
   play: async () => {
     await screen.findByTestId('reader-rail')
     await userEvent.keyboard('{Control>}\\{/Control}')
+    await expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull()
     // A negative check needs a settle window longer than the 150 ms slide.
     await new Promise((resolve) => setTimeout(resolve, 400))
     await expect(screen.getByTestId('reader-rail')).toBeVisible()

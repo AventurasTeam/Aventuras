@@ -21,7 +21,10 @@ export async function setAppearanceThemeId(themeId: string, ctx: DbCtx): Promise
   await mergeAppearance({ themeId }, ctx)
 }
 
-/** Rejects when the write fails, with the store unchanged. */
+/**
+ * Rejects when the write fails, with the store unchanged; resolves with the store stale when the
+ * write lands but its re-hydrate reports config-corrupt.
+ */
 export async function setReaderRailCollapsed(collapsed: boolean, ctx: DbCtx): Promise<void> {
   await mergeAppearance({ readerRailCollapsed: collapsed }, ctx)
 }
