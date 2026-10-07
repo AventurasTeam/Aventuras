@@ -44,7 +44,7 @@ describe('matchesRailToggleShortcut', () => {
     expect(matchesRailToggleShortcut(press({ ctrlKey: true, altKey: true }))).toBe(false)
   })
 
-  it('rejects AltGr typing a backslash, which browsers report as Ctrl+Alt', () => {
+  it('rejects AltGr typing a backslash, which Windows browsers report as Ctrl+Alt', () => {
     // German AltGr+ß: text input in the composer, not the shortcut.
     expect(
       matchesRailToggleShortcut(press({ ctrlKey: true, altKey: true, key: '\\', code: 'Minus' })),

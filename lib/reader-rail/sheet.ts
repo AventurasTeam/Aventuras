@@ -12,8 +12,11 @@ export type RailSheetEvent =
   | { type: 'openPeek'; peek: RailPeek }
   | { type: 'back' }
 
-/** Where every open starts: the current category's list at the medium detent. */
-export const RAIL_SHEET_OPENED: RailSheetState = { content: 'list', size: 'medium' }
+/**
+ * Where every open starts: the current category's list at the medium detent.
+ * Frozen, since hosts adopt it as their state.
+ */
+export const RAIL_SHEET_OPENED: RailSheetState = Object.freeze({ content: 'list', size: 'medium' })
 
 /** A legal move returns the next level; any other pairing returns `state` itself. */
 export function reduceRailSheet(state: RailSheetState, event: RailSheetEvent): RailSheetState {

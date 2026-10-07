@@ -27,6 +27,10 @@ describe('reduceRailSheet', () => {
     expect(RAIL_SHEET_OPENED).toEqual({ content: 'list', size: 'medium' })
   })
 
+  it('freezes the opening state, which the host adopts as its own', () => {
+    expect(Object.isFrozen(RAIL_SHEET_OPENED)).toBe(true)
+  })
+
   it('goes up from the list to the categories, staying medium', () => {
     expect(reduceRailSheet(LIST, EVENTS.up)).toEqual({ content: 'categories', size: 'medium' })
   })
