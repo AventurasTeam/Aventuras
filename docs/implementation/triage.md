@@ -196,11 +196,10 @@ slice-planning gate forces its resolution before that slice is planned.
   `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
   2026-10-07.
 - **`useRailData` runs in the uncompiled reader route.** The route
-  re-renders on lore, thread, happening and chapter writes, and
-  `useEntryIndex`'s `tailId` selector loops all entries on every render, each
-  stream chunk. Unmeasured. Options: each connected rail component calls
-  `useRailData` itself, memoized, or a `useReaderRail(branchId)` hook. Raised
-  in 4.5a review, 2026-10-07.
+  re-renders on lore, thread, happening and chapter writes. Unmeasured.
+  Options: each connected rail component calls `useRailData` itself,
+  memoized, or a `useReaderRail(branchId)` hook. Raised in 4.5a review,
+  2026-10-07.
 - **`ROW_CATEGORIES` duplicates a list `lib/list-modules` already has.**
   `lib/row-signals/types.ts:3-11` spells out what
   `[...WORLD_CATEGORIES, ...PLOT_KINDS]` gives. Raised in 4.5a review,

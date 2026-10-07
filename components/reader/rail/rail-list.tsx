@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { WORLD_COLLAPSED_DEFAULTS } from '@/components/world/world-list-pane'
+import { useEntryIndex, type EntryIndexSnapshot } from '@/hooks/use-entry-index'
 import { t } from '@/lib/i18n'
+import type { PlotListSignals } from '@/lib/list-modules'
 import type { RailCategory, RailView } from '@/lib/reader-rail'
 import { listCollapseStore } from '@/lib/stores'
 
@@ -39,7 +41,11 @@ function railCollapseDefaults(category: RailCategory): ReadonlySet<string> {
 function ignoreFilter(): void {}
 
 /** The happening body while the entry index is unread or failed. */
-function EntryIndexStatus({ entryIndex }: { entryIndex: RailData['entryIndex'] }): ReactNode {
+function EntryIndexStatus({
+  entryIndex,
+}: {
+  entryIndex: Pick<EntryIndexSnapshot, 'failed' | 'retry'>
+}): ReactNode {
   if (!entryIndex.failed) return <EmptyState title={t('reader:rail.happeningsLoading')} />
   return (
     <View className="items-center gap-3">
@@ -71,9 +77,16 @@ export function RailList({
     () => data.entities.filter((e) => e.kind === category),
     [data.entities, category],
   )
+  // A full-branch read per turn, so enabled for happenings only; called for every category, since
+  // a happenings-only wrapper would remount the list's header and drop its focus on a switch.
+  const entryIndex = useEntryIndex(data.branchId, { enabled: category === 'happening' })
+  const plotListSignals = useMemo<PlotListSignals>(
+    () => ({ entries: entryIndex.index, hasClosedChapters: data.hasClosedChapters }),
+    [entryIndex.index, data.hasClosedChapters],
+  )
 
   // Filter-set shrinkage: `This chapter` leaves the vocabulary when no chapter is closed.
-  const offeredHappeningFilters = RAIL_MODULES.happening.filters(data.plotListSignals)
+  const offeredHappeningFilters = RAIL_MODULES.happening.filters(plotListSignals)
   // A layout effect lands the reset before paint, so the chip row never shows nothing selected.
   useLayoutEffect(() => {
     if (view.category === 'happening' && !offeredHappeningFilters.includes(view.filter)) {
@@ -119,7 +132,7 @@ export function RailList({
           rows={data.threads}
           filter={view.filter}
           onFilterChange={(filter) => onViewChange({ ...view, filter })}
-          listSignals={data.plotListSignals}
+          listSignals={plotListSignals}
         />
       )
     case 'happening':
@@ -128,13 +141,11 @@ export function RailList({
           {...shared}
           listModule={RAIL_MODULES.happening}
           // The header stays mounted while the body waits, so the Select keeps focus.
-          body={
-            data.entryIndex.ready ? undefined : <EntryIndexStatus entryIndex={data.entryIndex} />
-          }
+          body={entryIndex.ready ? undefined : <EntryIndexStatus entryIndex={entryIndex} />}
           rows={data.happenings}
           filter={view.filter}
           onFilterChange={(filter) => onViewChange({ ...view, filter })}
-          listSignals={data.plotListSignals}
+          listSignals={plotListSignals}
         />
       )
     default:

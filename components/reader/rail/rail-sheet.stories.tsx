@@ -434,3 +434,25 @@ export const ReaderChipBackdropClosesCategories: Story = {
     await expect(args.onRowPress).not.toHaveBeenCalled()
   },
 }
+
+/** A closed Sheet unmounts its list, so the happening list's per-turn entry read stops with it. */
+export const ReaderChipCloseUnmountsList: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  beforeEach: () => {
+    readerRailStore.setCategory('happening')
+  },
+  play: async () => {
+    const chip = await screen.findByTestId('browse-chip')
+    await userEvent.click(chip)
+    await waitFor(() => expect(railDialog()).toBeVisible())
+    await headIs('happening')
+    const search = RAIL_MODULES.happening.copy(railCategoryLabel('happening')).searchPlaceholder
+    await expect(screen.getByPlaceholderText(search)).toBeInTheDocument()
+
+    await pressBackdropOver(chip)
+    await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
+    // Gone from the DOM, not just hidden: the role query above skips hidden elements.
+    await expect(screen.queryByPlaceholderText(search)).toBeNull()
+  },
+}

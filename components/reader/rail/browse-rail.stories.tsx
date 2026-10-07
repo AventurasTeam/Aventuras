@@ -1,68 +1,61 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { plotCollapseDefaults } from '@/components/plot/plot-list-pane'
 import { WORLD_COLLAPSED_DEFAULTS } from '@/components/world/world-list-pane'
+import { EntryIndexReadProvider, type EntryIndexRead } from '@/hooks/use-entry-index'
 import { railViewFor, type RailCategory, type RailView } from '@/lib/reader-rail'
-import { listCollapseStore } from '@/lib/stores'
+import { listCollapseStore, readerRailStore } from '@/lib/stores'
 
 import { BrowseRail } from './browse-rail'
-import { railDataFixture } from './rail-story-fixtures'
+import { railDataFixture, readRailFixtureEntries } from './rail-story-fixtures'
 import type { RailData } from './use-rail-data'
 
 const DATA = railDataFixture()
 const EMPTY = railDataFixture({ entities: [], lore: [], threads: [], happenings: [] })
-const INDEX_PENDING = railDataFixture({
-  entryIndex: { ready: false, failed: false, retry: () => {} },
-})
 const NO_PLACES = railDataFixture({
   entities: DATA.entities.filter((e) => e.kind !== 'location'),
 })
-const NO_CLOSED_CHAPTER = railDataFixture({
-  plotListSignals: { entries: DATA.plotListSignals.entries, hasClosedChapters: false },
-})
+const NO_CLOSED_CHAPTER = railDataFixture({ hasClosedChapters: false })
+
+const INDEX_LANDS_MS = 600
 
 type HarnessProps = {
   category?: RailCategory
   /** Starts on this exact view instead of `railViewFor(category)`. */
   initialView?: RailView
   data?: RailData
-  /** Lands the unread entry index (`data`) this long after the view first shows Happenings. */
-  landIndexAfterMs?: number
+  /** The entry index's read: stories have no database. */
+  readEntries?: EntryIndexRead
   onRowPress: (category: RailCategory, id: string) => void
   onCollapse: () => void
 }
 
+// Keeps its own view, as any host may: the store's category never reaches the list.
 function Harness({
   category = 'character',
   initialView,
   data = DATA,
-  landIndexAfterMs,
+  readEntries = readRailFixtureEntries,
   onRowPress,
   onCollapse,
 }: HarnessProps) {
   const [view, setView] = useState<RailView>(() => initialView ?? railViewFor(category))
-  const [landed, setLanded] = useState(landIndexAfterMs == null)
-  // Counted from the switch to Happenings, so a slow runner still sees the loading state.
-  const happeningShown = view.category === 'happening'
-  useEffect(() => {
-    if (landIndexAfterMs == null || !happeningShown) return
-    const id = setTimeout(() => setLanded(true), landIndexAfterMs)
-    return () => clearTimeout(id)
-  }, [happeningShown, landIndexAfterMs])
   return (
-    <View style={{ width: 300, height: 640 }} className="border-l border-border">
-      <BrowseRail
-        data={landed ? data : INDEX_PENDING}
-        view={view}
-        onViewChange={setView}
-        onCategoryChange={(next) => setView(railViewFor(next))}
-        onRowPress={onRowPress}
-        onCollapse={onCollapse}
-      />
-    </View>
+    <EntryIndexReadProvider value={readEntries}>
+      <View style={{ width: 300, height: 640 }} className="border-l border-border">
+        <BrowseRail
+          data={data}
+          view={view}
+          onViewChange={setView}
+          onCategoryChange={(next) => setView(railViewFor(next))}
+          onRowPress={onRowPress}
+          onCollapse={onCollapse}
+        />
+      </View>
+    </EntryIndexReadProvider>
   )
 }
 
@@ -74,6 +67,7 @@ const meta: Meta<typeof Harness> = {
   // Session-scoped module state: reset before render so no story inherits the last one's groups.
   beforeEach: () => {
     listCollapseStore.__reset()
+    readerRailStore.__reset()
   },
 }
 
@@ -177,11 +171,15 @@ export const Threads: Story = {
   },
 }
 
-/** A closed chapter offers `This chapter`; the Current bucket starts open. */
+/**
+ * A closed chapter offers `This chapter`; the Current bucket starts open. The list reads the
+ * entry index for its own view while the store's category stays Characters.
+ */
 export const Happenings: Story = {
   args: { category: 'happening' },
   play: async () => {
-    expect(await screen.findByRole('button', { name: "Vorne's pact" })).toBeVisible()
+    expect(readerRailStore.getView().category).toBe('character')
+    expect(await screen.findByRole('button', { name: "Vorne's pact" }, WAIT)).toBeVisible()
     expect(screen.getByRole('button', { name: 'This chapter', pressed: false })).toBeVisible()
     expect(screen.getByPlaceholderText('Search happenings…')).toBeVisible()
     // The Earlier bucket starts collapsed.
@@ -209,7 +207,7 @@ export const HappeningFilterReset: Story = {
 
 /** An unread entry index would mark every anchored happening dangling, so the list waits. */
 export const HappeningsLoading: Story = {
-  args: { category: 'happening', data: INDEX_PENDING },
+  args: { category: 'happening', readEntries: () => new Promise(() => {}) },
   play: async () => {
     expect(await screen.findByText('Loading happenings…', {}, WAIT)).toBeVisible()
     expect(screen.queryByRole('button', { name: "Vorne's pact" })).toBeNull()
@@ -223,26 +221,38 @@ export const HappeningsLoading: Story = {
 export const HappeningsFailed: Story = {
   args: {
     category: 'happening',
-    data: railDataFixture({ entryIndex: { ready: false, failed: true, retry: fn() } }),
+    readEntries: fn<EntryIndexRead>(async () => {
+      throw new Error('read failed')
+    }),
   },
   play: async ({ args }) => {
-    const data = args.data as RailData
     expect(await screen.findByText("Couldn't read this branch's entries.", {}, WAIT)).toBeVisible()
     expect(
       screen.getByText('The rail reads them again when the next run finishes, or when you retry.'),
     ).toBeVisible()
     expect(screen.queryByRole('button', { name: "Vorne's pact" })).toBeNull()
     expect(screen.queryByText('Loading happenings…')).toBeNull()
+    expect(args.readEntries).toHaveBeenCalledTimes(1)
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(data.entryIndex.retry).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(args.readEntries).toHaveBeenCalledTimes(2), WAIT)
   },
 }
 
-/** Switching to Happenings, then the index landing, must not remount the header or drop focus. */
+/**
+ * No read until the list shows Happenings. Switching to them, then the index landing, must not
+ * remount the header or drop focus.
+ */
 export const HappeningsIndexLands: Story = {
-  args: { landIndexAfterMs: 600 },
-  play: async () => {
+  args: {
+    // Counted from the read, which starts at the switch, so a slow runner still sees loading.
+    readEntries: fn<EntryIndexRead>(async (branchId) => {
+      await new Promise((resolve) => setTimeout(resolve, INDEX_LANDS_MS))
+      return readRailFixtureEntries(branchId)
+    }),
+  },
+  play: async ({ args }) => {
     const trigger = await screen.findByLabelText('Browse category')
+    expect(args.readEntries).not.toHaveBeenCalled()
     await userEvent.click(trigger)
     await userEvent.click(await screen.findByRole('option', { name: 'Happenings' }, WAIT))
     expect(await screen.findByText('Loading happenings…', {}, WAIT)).toBeVisible()
@@ -251,6 +261,7 @@ export const HappeningsIndexLands: Story = {
     expect(screen.queryByText('Loading happenings…')).toBeNull()
     expect(trigger).toBeInTheDocument()
     expect(trigger).toHaveFocus()
+    expect(args.readEntries).toHaveBeenCalledTimes(1)
   },
 }
 

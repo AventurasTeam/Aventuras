@@ -1,16 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useLayoutEffect, useState, type ReactNode } from 'react'
 import { TextInput, View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
+import { EntryIndexReadProvider, type EntryIndexRead } from '@/hooks/use-entry-index'
+import type { StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { DEFAULT_RAIL_VIEW, railViewFor, type RailView } from '@/lib/reader-rail'
-import { appSettingsStore, listCollapseStore, readerRailStore } from '@/lib/stores'
+import { appSettingsStore, entriesStore, listCollapseStore, readerRailStore } from '@/lib/stores'
 
 import { BrowseRail } from './browse-rail'
 import { RailColumn } from './rail-column'
-import { railDataFixture } from './rail-story-fixtures'
+import { railDataFixture, readRailFixtureEntries } from './rail-story-fixtures'
 import { RailStrip } from './rail-strip'
 import { ReaderRailColumn } from './reader-rail-column'
 import { railStripOf } from './use-rail-data'
@@ -78,12 +80,35 @@ function ColumnHarness({
 
 // Storybook has no DB bridge: every preference write rejects and the display keeps the
 // optimistic toggle, so these exercise the connected column on its failed-write path.
-function ConnectedStage({ isFocused = true }: { isFocused?: boolean }) {
+function ConnectedStage({
+  isFocused = true,
+  readEntries = readRailFixtureEntries,
+}: {
+  isFocused?: boolean
+  readEntries?: EntryIndexRead
+}) {
   return (
-    <Stage>
-      <ReaderRailColumn data={DATA} isFocused={isFocused} onRowPress={() => {}} />
-    </Stage>
+    <EntryIndexReadProvider value={readEntries}>
+      <Stage>
+        <ReaderRailColumn data={DATA} isFocused={isFocused} onRowPress={() => {}} />
+      </Stage>
+    </EntryIndexReadProvider>
   )
+}
+
+// A turn moves the branch's tail, which keys a fresh entry-index read.
+function takeTurn(position: number) {
+  const entry: StoryEntry = {
+    id: `e_${position}`,
+    branchId: DATA.branchId,
+    position,
+    kind: 'ai_reply',
+    content: '',
+    chapterId: null,
+    metadata: null,
+    createdAt: position,
+  }
+  entriesStore.hydrate(DATA.branchId, [entry])
 }
 
 const columnWidth = () => screen.getByTestId('rail-column').getBoundingClientRect().width
@@ -269,5 +294,33 @@ export const ConnectedShortcutIgnoredUnfocused: Story = {
     await new Promise((resolve) => setTimeout(resolve, 400))
     await expect(screen.getByTestId('reader-rail')).toBeVisible()
     await expect(screen.queryByTestId('rail-strip')).toBeNull()
+  },
+}
+
+const readPerTurn = fn<EntryIndexRead>(readRailFixtureEntries)
+
+/** The happening list reads per turn only while mounted: a turn under the strip reads nothing. */
+export const ConnectedHappeningsReadOnlyWhileExpanded: Story = {
+  render: () => <ConnectedStage readEntries={readPerTurn} />,
+  beforeEach: () => {
+    readPerTurn.mockClear()
+    readerRailStore.setCategory('happening')
+    return () => entriesStore.__reset()
+  },
+  play: async () => {
+    await screen.findByRole('button', { name: "Vorne's pact" }, ANIMATION)
+    await expect(readPerTurn).toHaveBeenCalledTimes(1)
+    takeTurn(61)
+    await waitFor(() => expect(readPerTurn).toHaveBeenCalledTimes(2), ANIMATION)
+
+    await userEvent.click(collapseChevron(screen.getByTestId('reader-rail')))
+    const strip = await screen.findByTestId('rail-strip', {}, ANIMATION)
+    takeTurn(62)
+    // A negative check: a mounted list reads within a frame of the turn.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await expect(readPerTurn).toHaveBeenCalledTimes(2)
+
+    await userEvent.click(stripChevron(strip))
+    await waitFor(() => expect(readPerTurn).toHaveBeenCalledTimes(3), ANIMATION)
   },
 }

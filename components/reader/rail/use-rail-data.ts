@@ -1,10 +1,9 @@
 import { useCallback, useMemo } from 'react'
 
 import type { LeadLabel, RowSignals } from '@/components/list/list-module'
-import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import type { Entity, Happening, Lore, Thread } from '@/lib/db'
-import type { EntityListSignals, PlotListSignals } from '@/lib/list-modules'
+import type { EntityListSignals } from '@/lib/list-modules'
 import { aggregateTint, railStripModel, type RailStripModel } from '@/lib/reader-rail'
 import type { RecentlyClassified, RowCategory } from '@/lib/row-signals'
 import {
@@ -13,24 +12,21 @@ import {
   entitiesStore,
   happeningsStore,
   loreStore,
-  readerRailStore,
   threadsStore,
 } from '@/lib/stores'
 import { resolveLead } from '@/lib/world'
 
 export type RailData = {
+  /** The happening list reads this branch's entry index itself, while it shows. */
+  branchId: string
   /** The branch's entities, every kind. */
   entities: readonly Entity[]
   lore: readonly Lore[]
   threads: readonly Thread[]
   happenings: readonly Happening[]
   entityListSignals: EntityListSignals
-  plotListSignals: PlotListSignals
-  /**
-   * The happening list waits on this: unread, every anchored happening reads dangling. Read only
-   * while `readerRailStore`'s category is `happening`, so hosts must drive the view from it.
-   */
-  entryIndex: { ready: boolean; failed: boolean; retry: () => void }
+  /** Offers the happening list's `This chapter` filter. */
+  hasClosedChapters: boolean
   /** Lead, in-scene and recently-classified; never `collision` (World resolves collisions). */
   rowSignals: (id: string) => Omit<RowSignals, 'collision'>
   categoryTint: ReadonlyMap<RowCategory, RecentlyClassified>
@@ -50,7 +46,10 @@ export function railChipTintOf(data: RailData): RecentlyClassified | undefined {
   return aggregateTint(data.categoryTint)
 }
 
-/** Everything every rail view reads, computed once per reader so each tier's rail shares it. */
+/**
+ * What every rail view reads, computed once per reader so each tier's rail shares it; the
+ * happening list's entry index is read by the list, so it follows what is mounted.
+ */
 export function useRailData(branchId: string): RailData {
   // Raw maps are stable between patches; arrays via useMemo.
   const entityRows = entitiesStore.useEntities((m) => m)
@@ -79,11 +78,6 @@ export function useRailData(branchId: string): RailData {
     () => [...chapterRows.values()].some((c) => c.branchId === branchId),
     [chapterRows, branchId],
   )
-  // Only the happening list reads the index, and it is a full-branch read after every turn.
-  const happeningsShown = readerRailStore.useCategory() === 'happening'
-  const entryIndex = useEntryIndex(branchId, { enabled: happeningsShown })
-  const { ready, failed, retry } = entryIndex
-  const entryIndexState = useMemo(() => ({ ready, failed, retry }), [ready, failed, retry])
   const { inScene, recentlyClassified } = useRowSignals(branchId)
   const rowTints = recentlyClassified.rows
   const byCategory = recentlyClassified.byCategory
@@ -107,10 +101,6 @@ export function useRailData(branchId: string): RailData {
     () => ({ leadId, inScene }),
     [leadId, inScene],
   )
-  const plotListSignals = useMemo<PlotListSignals>(
-    () => ({ entries: entryIndex.index, hasClosedChapters }),
-    [entryIndex.index, hasClosedChapters],
-  )
   const rowSignals = useCallback(
     (id: string): Omit<RowSignals, 'collision'> => ({
       lead: id === leadId ? leadLabel : null,
@@ -121,24 +111,24 @@ export function useRailData(branchId: string): RailData {
   )
   return useMemo(
     () => ({
+      branchId,
       entities,
       lore,
       threads,
       happenings,
       entityListSignals,
-      plotListSignals,
-      entryIndex: entryIndexState,
+      hasClosedChapters,
       rowSignals,
       categoryTint: byCategory,
     }),
     [
+      branchId,
       entities,
       lore,
       threads,
       happenings,
       entityListSignals,
-      plotListSignals,
-      entryIndexState,
+      hasClosedChapters,
       rowSignals,
       byCategory,
     ],
