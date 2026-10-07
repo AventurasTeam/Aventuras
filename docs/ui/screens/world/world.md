@@ -929,7 +929,8 @@ another surface), and when the screen loses focus. A refusal shows
 inline in the dialog, which stays open. A resolution that lands
 closes it and toasts the result ("Merged into <name>.", "Names
 saved.", "Kept as distinct."); a refusal that arrives after the
-dialog has closed shows as an error toast instead. After a
+dialog has closed shows as an error toast instead, worded without
+the dialog's advice (no row to pick any more). After a
 resolution the list re-derives — the pill count drops and the strip
 goes; with 3+ namesakes, another flagged row keeps its strip
 ([Authorship and 3+ collisions](#authorship-and-3-collisions)).

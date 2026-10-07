@@ -185,7 +185,20 @@ slice-planning gate forces its resolution before that slice is planned.
   segment whose labels carry user data clips once a label wraps. 4.2c's
   collision dialog moved its phone picker to radio rows to avoid it; the
   component itself still needs a line limit or a growing row. Found in
-  4.2c's PR 2 review (2026-10-06).
+  4.2c's PR 2 review (2026-10-06). The desktop canonical picker is still
+  a segment, and its options now carry the side word as well ("Kael,
+  Older, 3 days ago, Canonical"), so a long name reaches the clip sooner
+  (4.2c's slice review, 2026-10-07).
+- **Select's radio groups don't follow the keyboard on web.**
+  `components/ui/select.tsx` builds its segment and radio-row branches on
+  `@rn-primitives/radio-group`, whose web side relies on Radix's roving
+  focus. RN-Web drops the `data-radix-collection-item` attribute Radix
+  finds its items by. Probed on the collision dialog's mode picker (a
+  segment): the group is a stray tab stop and an arrow key moves focus
+  without checking anything. The radio-row branch uses the same
+  primitive and wasn't probed. 4.2c's collision dialog handles Space,
+  the arrows and the single tab stop itself for its stacked radios.
+  Found in 4.2c's slice review (2026-10-07).
 - **`Dialog` doesn't register as a blocking overlay.**
   `components/ui/dialog.tsx` never calls `useRegisteredOverlay`, while
   `alert-dialog.tsx`, `sheet.tsx` and `select.tsx` do, and
