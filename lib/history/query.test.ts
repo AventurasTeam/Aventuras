@@ -525,6 +525,27 @@ describe('link-row union', () => {
     })
   })
 
+  it('lists an awareness update that changed more than its retrieval count', async () => {
+    await write(aware('char_aria', 'hap_fire'))
+    await db.insert(deltas).values({
+      id: 'delta_mixed',
+      branchId: BRANCH,
+      entryId: null,
+      actionId: 'act_mixed',
+      logPosition: 1000,
+      source: 'user_edit',
+      targetTable: 'happening_awareness',
+      targetId: await awarenessId('char_aria', 'hap_fire'),
+      op: 'update',
+      undoPayload: { retrievalCount: 0, source: null },
+      createdAt: 1000,
+    })
+    expect(await tab('char_aria')).toEqual([
+      'happening_awareness update hap_fire',
+      'happening_awareness create hap_fire',
+    ])
+  })
+
   it("lists any entity's involvements live, removed on their own and with the happening", async () => {
     await write(involve('hinv_1', 'loc_keep', 'hap_fire', 'site'))
     await write(recast('hinv_1', 'ruin'))
@@ -657,6 +678,18 @@ describe('link-row union', () => {
       expect(await tab('char_aria', { search: 'their view' })).toEqual([])
       expect(await tab('char_kael', { search: 'their view' })).toEqual([
         'character_relationships update char_aria b',
+      ])
+    })
+
+    it("matches a typed summary against each side's labels, never across sides", async () => {
+      // Abe holds `kind` on Abe–Aria, so changing his view is "Their view" on Aria's tab.
+      await write(relate('char_abe', 'char_aria', 'mentor', 'rival'))
+      expect(await tab('char_aria', { search: 'Modified Their view' })).toEqual([
+        'character_relationships update char_abe b',
+      ])
+      expect(await tab('char_aria', { search: 'Modified Your view' })).toEqual([
+        'character_relationships update char_abe b',
+        'character_relationships update char_kael a',
       ])
     })
 
