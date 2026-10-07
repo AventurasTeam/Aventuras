@@ -24,7 +24,7 @@ import {
   threadsStore,
 } from '@/lib/stores'
 
-import { useRailData } from './use-rail-data'
+import { railChipTintOf, railStripOf, useRailData } from './use-rail-data'
 
 const harness = vi.hoisted(() => ({
   signals: null as RowSignalsSnapshot | null,
@@ -259,16 +259,17 @@ describe('useRailData', () => {
 
   it('builds the strip and the chip tint from the per-kind aggregate', () => {
     const { result } = renderHook(() => useRailData('br_1'))
-    expect(result.current.strip.counted).toEqual([
+    const strip = railStripOf(result.current)
+    expect(strip.counted).toEqual([
       { category: 'character', count: 2, tint: 'fresh' },
       { category: 'item', count: 1, tint: 'fading' },
     ])
-    expect(result.current.strip.quickAccess).toEqual([
+    expect(strip.quickAccess).toEqual([
       { category: 'location', tint: undefined },
       { category: 'faction', tint: undefined },
     ])
     expect(result.current.categoryTint).toBe(harness.signals?.recentlyClassified.byCategory)
-    expect(result.current.chipTint).toBe('fresh')
+    expect(railChipTintOf(result.current)).toBe('fresh')
   })
 
   it('leaves the chip untinted when no kind has a classifier write', () => {
@@ -277,7 +278,7 @@ describe('useRailData', () => {
       recentlyClassified: { rows: new Map(), byCategory: new Map() },
     }
     const { result } = renderHook(() => useRailData('br_1'))
-    expect(result.current.chipTint).toBeUndefined()
+    expect(railChipTintOf(result.current)).toBeUndefined()
   })
 
   it('offers chapter-scoped happenings only once this branch closed a chapter', () => {

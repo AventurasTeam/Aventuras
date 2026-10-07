@@ -13,8 +13,10 @@ import { RailColumn } from './rail-column'
 import { railDataFixture } from './rail-story-fixtures'
 import { RailStrip } from './rail-strip'
 import { ReaderRailColumn } from './reader-rail-column'
+import { railStripOf } from './use-rail-data'
 
 const DATA = railDataFixture()
+const STRIP = railStripOf(DATA)
 const ANIMATION = { timeout: 5000 }
 
 function Stage({ children }: { children: ReactNode }) {
@@ -57,7 +59,7 @@ function ColumnHarness({
         }
         strip={
           <RailStrip
-            model={DATA.strip}
+            model={STRIP}
             onExpand={() => setCollapsed(false)}
             onExpandTo={() => setCollapsed(false)}
           />
@@ -160,7 +162,7 @@ export const ConnectedStripExpands: Story = {
       }),
     )
     const stripAgain = await screen.findByTestId('rail-strip', {}, ANIMATION)
-    const items = DATA.strip.counted[1]
+    const items = STRIP.counted[1]
     await userEvent.click(
       within(stripAgain).getByRole('button', {
         name: t('reader:rail.strip.item', { count: items.count }),

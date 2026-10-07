@@ -7,6 +7,7 @@ import type { RailStripModel, StripCategory } from '@/lib/reader-rail'
 
 import { railDataFixture } from './rail-story-fixtures'
 import { RAIL_STRIP_WIDTH_PX, RailStrip } from './rail-strip'
+import { railStripOf } from './use-rail-data'
 
 const MIXED: RailStripModel = {
   counted: [
@@ -109,7 +110,7 @@ export default meta
 type Story = StoryObj<typeof RailStrip>
 
 export const FromFixture: Story = {
-  args: { model: railDataFixture().strip },
+  args: { model: railStripOf(railDataFixture()) },
   play: async () => {
     await expect(screen.getByTestId('rail-strip')).toBeVisible()
     await expect(screen.getByRole('button', { name: t('reader:rail.expand') })).toBeVisible()

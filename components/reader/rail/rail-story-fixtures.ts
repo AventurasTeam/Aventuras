@@ -2,7 +2,6 @@ import type { RowSignals } from '@/components/list/list-module'
 import type { Entity, Happening, Lore, Thread } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { EntityListSignals, PlotListSignals } from '@/lib/list-modules'
-import { aggregateTint, railStripModel } from '@/lib/reader-rail'
 import type { RecentlyClassified, RowCategory } from '@/lib/row-signals'
 
 import type { RailData } from './use-rail-data'
@@ -143,14 +142,8 @@ const CATEGORY_TINT: ReadonlyMap<RowCategory, RecentlyClassified> = new Map([
   ['thread', 'fading'],
 ])
 
-/**
- * `strip` and `chipTint` follow the merged `entities`, `entityListSignals` and `categoryTint`
- * unless overridden themselves.
- */
 export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
-  const entities = overrides.entities ?? ENTITIES
   const entityListSignals = overrides.entityListSignals ?? ENTITY_LIST_SIGNALS
-  const categoryTint = overrides.categoryTint ?? CATEGORY_TINT
   // An unread index holds no entries; override `plotListSignals` for another pairing.
   const plotListSignals =
     overrides.plotListSignals ??
@@ -164,7 +157,7 @@ export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
     recentlyClassified: ROW_TINTS.get(id),
   })
   return {
-    entities,
+    entities: ENTITIES,
     lore: LORE,
     threads: THREADS,
     happenings: HAPPENINGS,
@@ -172,9 +165,7 @@ export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
     plotListSignals,
     entryIndex: { ready: true, failed: false, retry: () => {} },
     rowSignals,
-    strip: railStripModel({ inScene, entities, byCategory: categoryTint }),
-    categoryTint,
-    chipTint: aggregateTint(categoryTint),
+    categoryTint: CATEGORY_TINT,
     ...overrides,
   }
 }

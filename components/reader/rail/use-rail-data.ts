@@ -33,9 +33,21 @@ export type RailData = {
   entryIndex: { ready: boolean; failed: boolean; retry: () => void }
   /** Lead, in-scene and recently-classified; never `collision` (World resolves collisions). */
   rowSignals: (id: string) => Omit<RowSignals, 'collision'>
-  strip: RailStripModel
   categoryTint: ReadonlyMap<RowCategory, RecentlyClassified>
-  chipTint: RecentlyClassified | undefined
+}
+
+/** The collapsed strip, counted and tinted from the same rows and signals the rail lists. */
+export function railStripOf(data: RailData): RailStripModel {
+  return railStripModel({
+    inScene: data.entityListSignals.inScene,
+    entities: data.entities,
+    byCategory: data.categoryTint,
+  })
+}
+
+/** The phone Browse chip's tint: the strongest of every category's. */
+export function railChipTintOf(data: RailData): RecentlyClassified | undefined {
+  return aggregateTint(data.categoryTint)
 }
 
 /** Everything every rail view reads, computed once per reader so each tier's rail shares it. */
@@ -107,12 +119,6 @@ export function useRailData(branchId: string): RailData {
     }),
     [leadId, leadLabel, inScene, rowTints],
   )
-  const strip = useMemo(
-    () => railStripModel({ inScene, entities, byCategory }),
-    [inScene, entities, byCategory],
-  )
-  const chipTint = aggregateTint(byCategory)
-
   return useMemo(
     () => ({
       entities,
@@ -123,9 +129,7 @@ export function useRailData(branchId: string): RailData {
       plotListSignals,
       entryIndex: entryIndexState,
       rowSignals,
-      strip,
       categoryTint: byCategory,
-      chipTint,
     }),
     [
       entities,
@@ -136,9 +140,7 @@ export function useRailData(branchId: string): RailData {
       plotListSignals,
       entryIndexState,
       rowSignals,
-      strip,
       byCategory,
-      chipTint,
     ],
   )
 }
