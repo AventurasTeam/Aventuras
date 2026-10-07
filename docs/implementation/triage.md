@@ -265,3 +265,12 @@ slice-planning gate forces its resolution before that slice is planned.
   `resolve-collision.ts`, `inBranch` in
   `components/world/use-collision-resolve.ts`). A store-level accessor
   would replace them. Found in 4.2c's slice review (2026-10-07).
+- **A `DialogContent` width override silently loses to
+  `sm:max-w-lg`.** The primitive (`components/ui/dialog.tsx`) sets
+  `max-w-[calc(100%-2rem)] sm:max-w-lg`, and tailwind-merge only
+  replaces a class with the same variant. An unprefixed `max-w-2xl`
+  therefore leaves the dialog at 512 px from `sm` up, and below `sm` it
+  drops the side margin. The collision dialog shipped like this until
+  4.2c's visual review. A width prop, or a documented `sm:` override,
+  would stop the next dialog from repeating it. Found in 4.2c's
+  developer review (2026-10-07).

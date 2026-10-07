@@ -180,7 +180,7 @@ export function CollisionResolveDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl" scrollable={false}>
+      <DialogContent className="sm:max-w-2xl lg:max-w-4xl" scrollable={false}>
         <DialogHeader>
           <DialogTitle>
             {t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })}

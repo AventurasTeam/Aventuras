@@ -74,6 +74,10 @@ A refusal shows inline until the user answers it: the next submit,
 a mode switch, or any merge choice changed (canonical, field or
 chip) clears it.
 
+The dialog is 672 px wide from `sm` and 896 px from `lg`, so the
+merge table's columns have room. Below `sm` (the phone tier) it keeps
+the `Dialog` primitive's side margin.
+
 ### Entity projection
 
 ```ts
