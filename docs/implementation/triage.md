@@ -220,7 +220,7 @@ slice-planning gate forces its resolution before that slice is planned.
   `ReaderRailColumn` wait for the first width. Raised in 4.5a's final review,
   2026-10-07.
 - **The happening filter-reset layout effect is duplicated.**
-  `components/reader/rail/rail-list.tsx:75-82` repeats
+  `components/reader/rail/rail-list.tsx:88-95` repeats
   `components/plot/plot-list-pane.tsx:98-103`, same comment and same reset. A
   small shared hook (e.g. `useOfferedFilterReset`) would remove the copy; it
   fits the same pass as the filed `EntryIndexStatus` and collapse-defaults

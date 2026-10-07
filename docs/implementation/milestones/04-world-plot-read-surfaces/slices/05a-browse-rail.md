@@ -274,7 +274,7 @@ Canon carries the detail; each line points to it.
   and
   [`touch.md → Hover translation`](../../../../ui/foundations/mobile/touch.md#hover-translation).
 
-One controller decision awaits the developer's ruling in the PR:
+A controller decision, reversible, with its alternative:
 
 - **Storybook runs `react-native-worklets/plugin` over
   `@gorhom/bottom-sheet`**, instead of a web-only scrim. The real
