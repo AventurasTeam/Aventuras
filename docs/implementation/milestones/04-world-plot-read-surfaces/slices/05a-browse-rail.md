@@ -100,8 +100,8 @@ chip, whose tint is the aggregate classifier signal.
   tinted by C1's aggregate across every rail-surfaceable category; tap
   opens the rail content as a Sheet (bottom, medium initial).
 - **C10 morph seam:** the Sheet host holding `{ content, size }`,
-  rendering the rail vocabulary for `list`, an empty slot for `peek`,
-  and changing the Sheet's detent on a content swap; a criterion below
+  rendering the category root for `categories`, the rail vocabulary
+  for `list`, an empty slot for `peek`, and changing the Sheet's detent on a content swap; a criterion below
   exercises the size change so 4.5b inherits a working morph.
 - **Placeholder removal:** the `railPlaceholder` string and column go.
 - **Storybook:** rail per category, collapsed strip tint states,
@@ -223,9 +223,10 @@ Canon carries the detail; each line points to it.
 - **Rail view state reaches app-wide for the category only**
   (developer, 2026-10-07). Filter, search and the peek slot reset when
   the reader's branch changes, through `readerRailStore.enterBranch`,
-  which the reader route calls. Within a branch the view survives
-  collapse and expand, a reflow and a reader remount. This overrides
-  the planning default that the whole view survives any remount; see
+  which the reader route calls. Within a branch the category, filter
+  and search survive collapse and expand, a reflow and a reader
+  remount. This overrides the planning default that the whole view
+  survives any remount; see
   [`reader-composer.md → State model`](../../../../ui/screens/reader-composer/reader-composer.md#state-model--manual--viewport-decoupled).
 - **The phone Sheet has three levels** (categories, list, peek), not a
   dropdown inside the Sheet: `Select` presents as a bottom Sheet on
@@ -233,15 +234,17 @@ Canon carries the detail; each line points to it.
   see
   [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
 - **The Browse chip is always present on the phone reader**, so the
-  chapterless-story rule in `navigation.md` narrowed to the chapter and
-  time chips.
+  chapterless-story rule narrowed to the chapter and time chips; see
+  [`navigation.md → Reader chip strip`](../../../../ui/foundations/mobile/navigation.md#reader-chip-strip-phone-only).
 - **The preference is `appearance.readerRailCollapsed`**, default
   `false`, applied optimistically; see
   [`data-model.md → Diagram`](../../../../data-model.md#diagram).
 - **The rail owns its empty copy** (`reader:rail.empty.*`); the shared
-  C2 copy stays in `world:` and `plot:`.
+  C2 copy stays in `world:` and `plot:`. The states themselves follow
+  [`lists.md → Empty list / table state`](../../../../ui/patterns/lists.md#empty-list--table-state).
 - **Rail rows carry no collision strip**; World stays the only place a
-  collision is resolved.
+  collision is resolved; see
+  [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout).
 - **Category-label lowercasing** is parked, not fixed; see
   [`parked.md → Category-label lowercasing`](../../../../parked.md#category-label-lowercasing).
 - **The bottom `Sheet` primitive gained its scrim** (gorhom's
@@ -273,6 +276,7 @@ listens in the capture phase, since RN-Web's `TextInput` stops keydown
 ([lesson](../../../lessons-learned/rnweb-textinput-stops-keydown.md)).
 
 For [Slice 4.5b](./05b-peek-drawer.md), whose Open questions carry the
-detail: reset both peeks on a branch change, render the desktop drawer
-only under an expanded rail, and key `enterBranch` on focus once M6 adds
-branch switching.
+detail: the desktop peek's branch reset, rendering the drawer only under
+an expanded rail, the deleted-row case and the lead-label helper. Keying
+`enterBranch` on focus is M6's, in
+[`triage.md`](../../../triage.md).

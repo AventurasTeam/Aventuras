@@ -46,6 +46,9 @@ slice-planning gate forces its resolution before that slice is planned.
     pointer-events or portal state rather than `data-density`, which
     every file sets for itself through the global decorator in
     `.storybook/preview.tsx`.
+  - 2026-10-07, 4.5a: `Trigger Opens Overlay`
+    (`preset-browser.stories.tsx:49`) failed once in a 27-file parallel
+    run, on `findByText`'s 1 s default, and passed 3 of 3 alone.
 
   **Revisit trigger.** A browser-project regression that a parallel run
   cannot localise. That is the moment the missing debugging move costs
@@ -158,10 +161,6 @@ slice-planning gate forces its resolution before that slice is planned.
   review, 2026-10-07.
 - **`.storybook/*.ts` is never typechecked.** `tsc`'s `**/*.ts` include skips
   dot-directories. Raised in 4.5a review, 2026-10-07.
-- **Flaky story: `preset-browser.stories.tsx` "Trigger Opens Overlay".**
-  `components/wizard/preset-browser.stories.tsx:49` failed once in a 27-file
-  run on `findByText`'s 1 s default and passed 3 of 3 alone. Raised in 4.5a
-  review, 2026-10-07.
 - **Three explicit gorhom scroll views should use `ScrollComponentContext`.**
   `SceneEditForm`'s inside-sheet `Body`, `AiAssist`'s `Scroller` and
   `MultiSelect`'s phone list pick their scroll host by hand; moving them onto
@@ -182,11 +181,16 @@ slice-planning gate forces its resolution before that slice is planned.
   thread and entry writes, so rail lists re-render through a classifier
   burst; keep the old value when the contents are equal. Raised in 4.5a
   review, 2026-10-07.
-- **The mode to `LeadLabel` ternary is duplicated.**
-  `app/world/[branchId].tsx:152-153` and
-  `components/reader/rail/use-rail-data.ts` each map it, and 4.5b's peek head
-  needs a third copy; a `leadLabelFor(mode)` helper would serve all three.
-  Raised in 4.5a review, 2026-10-07.
+- **`readerRailStore.enterBranch` is keyed on `branchId` only.** Once M6 adds
+  branch switching, key it on focus too: a pushed reader for another branch,
+  popped back, would otherwise keep the other branch's view. Raised in 4.5a
+  review, 2026-10-07.
+- **The World and Plot `search` locators match the hidden reader rail's search
+  box.** `e2e/locators/world.ts:41` and `e2e/locators/plot.ts:28` match the
+  rail's identical placeholder whenever the rail shows the same category
+  (World's default `Characters`), a latent strict-mode trap. Scope them like
+  `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
+  2026-10-07.
 - **`useRailData` runs in the uncompiled reader route.** The route
   re-renders on lore, thread, happening and chapter writes, and
   `useEntryIndex`'s `tailId` selector loops all entries on every render, each
