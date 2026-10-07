@@ -264,7 +264,7 @@ const BACKDROP_WAIT = { timeout: 3000 }
 
 const LANDMARK = 'Canvas below the sheet'
 
-/** `pending` stands in for a save in flight: it blocks swipe-dismiss, as the edit sheets do. */
+/** `pending` stands in for a save in flight, which blocks swipe-dismiss. */
 function BackdropHarness({ initiallyPending = false }: { initiallyPending?: boolean }) {
   const [pending, setPending] = useState(initiallyPending)
   return (
@@ -306,10 +306,7 @@ export const BackdropPressCloses: Story = {
   },
 }
 
-/**
- * A pending action blocks tap-outside too: the scrim still covers the canvas, and a press on it
- * leaves the sheet open.
- */
+/** A pending action blocks tap-outside too: the scrim stays up and a press on it does nothing. */
 export const BackdropPressBlocked: Story = {
   parameters: { layout: 'fullscreen' },
   render: () => <BackdropHarness initiallyPending />,

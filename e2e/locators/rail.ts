@@ -5,9 +5,8 @@ import type { RailCategory, StripCategory } from '@/lib/reader-rail'
 
 import { t } from '../harness/i18n'
 
-// The reader's Browse rail (components/reader/rail/). Its rows, chips and search share names with
-// World's and Plot's, so every locator but the portaled category option is scoped inside the
-// expanded rail's or the strip's testID (docs/testing.md → Selector strategy, Tier 3).
+// Rows, chips and search share names with World's and Plot's: scope every locator but the portaled
+// category option inside the rail or strip testID (docs/testing.md → Selector strategy, Tier 3).
 
 const COUNT_SENTINEL = '@@'
 

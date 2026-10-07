@@ -83,10 +83,7 @@ type Story = StoryObj<typeof Harness>
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const WAIT = { timeout: 3000 }
 
-/**
- * Characters: the lead pinned with its badge, World's tier defaults and collapse key, the
- * collapse chevron, the inert Vault footer.
- */
+/** Lead pinned with badge, World's tier defaults and collapse key, chevron, inert Vault footer. */
 export const Characters: Story = {
   play: async ({ args }) => {
     const rows = await screen.findAllByRole('button', { name: /^(Kael|Mira)$/ })
@@ -169,7 +166,6 @@ export const Threads: Story = {
     expect(
       listCollapseStore.getCollapsed('thread', plotCollapseDefaults('thread')).has('pending'),
     ).toBe(false)
-    // A filter chip narrows the rows to its tier.
     await userEvent.click(screen.getByRole('button', { name: 'Resolved' }))
     expect(
       await screen.findByRole('button', { name: 'Resolved', pressed: true }, WAIT),
@@ -245,10 +241,7 @@ export const HappeningsFailed: Story = {
   },
 }
 
-/**
- * Switching to Happenings while the index is unread, then the index landing, must not remount the
- * header: the category Select keeps focus through both transitions.
- */
+/** Switching to Happenings, then the index landing, must not remount the header or drop focus. */
 export const HappeningsIndexLands: Story = {
   args: { landIndexAfterMs: 600 },
   play: async () => {
@@ -284,10 +277,7 @@ export const EmptyLore: Story = {
   },
 }
 
-/**
- * The Select groups the seven categories World / Plot; search scope copy rotates with the
- * category; a row press reports its category and id.
- */
+/** Select groups World / Plot; search copy follows the category; a press reports category + id. */
 export const CategorySwitch: Story = {
   play: async ({ args }) => {
     expect(await screen.findByPlaceholderText('Search characters…')).toBeVisible()

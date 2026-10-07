@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
-/** Vault import is M8.3; the footer shows the affordance, inert, with its reason. */
+/** Inert until vault import lands (M8.3). */
 export function RailImportFooter(): ReactNode {
   return (
     <View className="border-t border-border p-2">

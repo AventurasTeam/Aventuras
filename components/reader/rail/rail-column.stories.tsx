@@ -132,7 +132,7 @@ export const Toggle: Story = {
   },
 }
 
-/** Mounted collapsed and expanded in the same task: the mount's settled slide can't bring the strip back. */
+/** Collapsed mount, expanded in its own task: the settled slide can't bring the strip back. */
 export const ExpandedRightAfterCollapsedMount: Story = {
   args: { initiallyCollapsed: true, expandOnMount: true },
   play: async () => {

@@ -14,9 +14,8 @@ export const SHEET_NO_CLOSE_MS = 2000
 export type SheetScrimHit = { scrim: HTMLElement; coords: { clientX: number; clientY: number } }
 
 /**
- * Hit-tests the centre of `landmark`, canvas that sits above an open bottom Sheet, as a real tap
- * lands: resolves once the topmost element there is the scrim rather than the canvas and the
- * scrim has faded in.
+ * Hit-tests the centre of `landmark` (canvas above an open bottom Sheet) as a real tap lands;
+ * resolves once the scrim, not the canvas, is topmost there and has faded in.
  */
 export async function findSheetScrim(landmark: HTMLElement): Promise<SheetScrimHit> {
   const box = landmark.getBoundingClientRect()

@@ -6,7 +6,7 @@ import { isRailCategory, RAIL_CATEGORIES, railGroupOf, type RailCategory } from 
 
 import { railCategoryLabel } from './rail-modules'
 
-/** The seven categories grouped World / Plot (principles.md → World / Plot split). */
+/** Category picker, grouped per principles.md → World / Plot split. */
 export function RailCategorySelect({
   value,
   onValueChange,

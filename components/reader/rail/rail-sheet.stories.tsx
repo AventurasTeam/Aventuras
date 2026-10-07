@@ -118,7 +118,7 @@ async function headIs(category: RailCategory) {
   )
 }
 
-/** Share of the stage the Sheet covers, from its top edge (under the handle) to the stage bottom. */
+/** Share of the stage the Sheet covers, from its top edge (under the handle). */
 function sheetCoverage(): number {
   const stage = screen.getByTestId('rail-sheet-stage').getBoundingClientRect()
   return (stage.bottom - railDialog().getBoundingClientRect().top) / stage.height
@@ -147,20 +147,14 @@ function tintOpacity(category: RailCategory): string | null {
   return layer == null ? null : getComputedStyle(layer).opacity
 }
 
-/**
- * Presses the scrim over `under`'s centre through `components/ui/sheet-scrim-probe.ts`, after also asserting the
- * point isn't inside the rail Sheet itself.
- */
+/** Presses the scrim over `under` via the probe, after asserting the scrim isn't in the Sheet. */
 async function pressBackdropOver(under: HTMLElement) {
   const { scrim } = await findSheetScrim(under)
   expect(railDialog().contains(scrim)).toBe(false)
   await pressSheetScrim(under)
 }
 
-/**
- * Waits until the Sheet has started opening: gorhom drops a dismiss sent before then, and the
- * scrim over `landmark` only fades in once the opening animation runs.
- */
+/** Waits until opening starts (the scrim fades in then): gorhom drops a dismiss sent earlier. */
 async function waitForSheetOpening(landmark: HTMLElement) {
   await findSheetScrim(landmark)
 }
@@ -334,7 +328,7 @@ export const ReaderChipOpensOnLastCategory: Story = {
   },
 }
 
-/** A pick goes through the store, which the rail data reads (the entry index loads for happenings). */
+/** A pick goes through the store; the rail data reads it (entry index loads for happenings). */
 export const ReaderChipPickSetsStoreCategory: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
@@ -349,7 +343,7 @@ export const ReaderChipPickSetsStoreCategory: Story = {
   },
 }
 
-/** Filter and search edits inside the Sheet land in the store, so they survive a reopen or reflow. */
+/** Filter and search edits in the Sheet land in the store, so they survive a reopen or reflow. */
 export const ReaderChipViewEditsSetStoreView: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
@@ -372,7 +366,7 @@ export const ReaderChipViewEditsSetStoreView: Story = {
   },
 }
 
-/** Without a peek renderer a row routes out: the Sheet closes and the row press reaches the host. */
+/** Without a peek renderer a row routes out: the Sheet closes and the press reaches the host. */
 export const ReaderChipRowPressClosesSheet: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness onRowPress={args.onRowPress} />,

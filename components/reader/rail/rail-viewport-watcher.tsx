@@ -3,10 +3,7 @@ import { useWindowDimensions } from 'react-native'
 
 import { readerRailStore } from '@/lib/stores'
 
-/**
- * Feeds window widths to the rail's display state from the app root, so a threshold cross on any
- * screen counts and a reader remount never re-seeds over a manual expand.
- */
+/** App root: any screen's width cross counts; a remount can't re-seed over a manual expand. */
 export function RailViewportWatcher(): null {
   const { width } = useWindowDimensions()
   useLayoutEffect(() => {

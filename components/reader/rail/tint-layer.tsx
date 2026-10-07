@@ -10,11 +10,7 @@ const FADING_STYLE = { ...TINT_STYLE, opacity: 0.5 } satisfies ViewStyle
 
 export type TintLayerProps = { tint: RecentlyClassified | undefined; testID?: string }
 
-/**
- * The recently-classified tint behind a rail control: full when fresh, half when fading, nothing
- * otherwise. Its negative `zIndex` keeps the control's content drawing over it at full contrast,
- * wherever the layer sits among its siblings.
- */
+/** The recently-classified tint behind a rail control: full when fresh, half when fading. */
 export function TintLayer({ tint, testID }: TintLayerProps) {
   if (tint == null) return null
   return (

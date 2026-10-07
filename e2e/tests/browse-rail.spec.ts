@@ -13,12 +13,9 @@ import { plot } from '../locators/plot'
 import { rail } from '../locators/rail'
 import { reader } from '../locators/reader'
 
-// reader-composer.md → Browse rail at the seams only a running app reaches: rows from the real
-// stores, a row press landing Plot, the preference written to app_settings and read back after a
-// relaunch, the global shortcut over a focused composer, real window resizes, and the filter and
-// search reset on a story switch (the store's half: lib/stores/ui/reader-rail.test.ts). The display
-// reducer: lib/reader-rail/display.test.ts; hit zones and tints: rail-strip.stories.tsx; category
-// switching and search copy: browse-rail.stories.tsx. See docs/testing.md → Coverage.
+// reader-composer.md → Browse rail, at the seams only a running app reaches. The rest: store reset
+// in reader-rail.test.ts, display reducer in display.test.ts, strip and category switching in the
+// rail stories (docs/testing.md → Coverage).
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'

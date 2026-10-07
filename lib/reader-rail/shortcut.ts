@@ -1,6 +1,5 @@
-// reader-composer.md → Open state: Cmd/Ctrl+\. `code` holds the physical key on layouts that
-// type another character there; `key` covers layouts that type `\` elsewhere. On Windows AltGr
-// reports as Ctrl+Alt, so `!altKey` keeps an AltGr-typed backslash as text.
+// reader-composer.md → Open state. `code` covers layouts typing another character on that key,
+// `key` those typing `\` elsewhere. `!altKey`: Windows AltGr reports Ctrl+Alt, so it stays text.
 export function matchesRailToggleShortcut(
   event: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'key' | 'code'>,
 ): boolean {

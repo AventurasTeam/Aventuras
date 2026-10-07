@@ -8,7 +8,7 @@ import { appSettingsStore, readerRailStore } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
 
-/** The rail's displayed collapse and its manual toggle: the display moves first, the write follows. */
+/** The rail's displayed collapse and its toggle: the display moves first, the write follows. */
 export function useRailCollapse(): {
   collapsed: boolean
   setCollapsed: (collapsed: boolean) => void
@@ -18,9 +18,8 @@ export function useRailCollapse(): {
   const collapsed = readerRailStore.useDisplay((display) => isRailCollapsed(display, stored))
   const [writesInFlight, setWritesInFlight] = useState(0)
 
-  // A resolved write doesn't prove the store re-hydrated (a failed read reports config-corrupt
-  // rather than throwing), and an earlier write's re-hydrate can match a later toggle by chance:
-  // only the store reaching the pending value with every write settled retires it.
+  // Retire only once the store reaches `pending` with every write settled: a resolved write doesn't
+  // prove a re-hydrate (failed reads report config-corrupt); an earlier one can match by chance.
   useEffect(() => {
     if (writesInFlight === 0 && pending !== null && stored === pending) {
       readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: stored })

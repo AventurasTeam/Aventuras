@@ -11,7 +11,7 @@ export const ROW_CATEGORIES = [
 ] as const
 export type RowCategory = (typeof ROW_CATEGORIES)[number]
 
-/** Categories a delta's table names directly; no kind lookup proves the row exists, so the selector asks. */
+/** Categories a delta's table names directly; only `isLive` can say the row still exists. */
 export type LiveRowCategory = 'lore' | 'thread' | 'happening'
 
 /** Same literal union as `ListRowProps.recentlyClassified` (components/compounds/list-row.tsx). */

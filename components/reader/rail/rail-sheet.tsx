@@ -32,8 +32,8 @@ export type RailSheetProps = {
   /** A row press when no `renderPeek` is given: the row's panel. */
   onRowPress: (category: RailCategory, id: string) => void
   /**
-   * C10's peek slot: with it, a row press swaps the list for the peek at the tall detent. Called
-   * inline at the peek level only, so it returns an element and must not call hooks.
+   * Peek slot: with it, a row press swaps the list for the peek at the tall detent. Called inline
+   * at the peek level only, so it returns an element and must not call hooks.
    */
   renderPeek?: (peek: RailPeek, back: () => void) => ReactNode
 }

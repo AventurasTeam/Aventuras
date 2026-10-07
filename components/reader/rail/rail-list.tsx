@@ -38,7 +38,7 @@ function railCollapseDefaults(category: RailCategory): ReadonlySet<string> {
 
 function ignoreFilter(): void {}
 
-/** The happening body while the entry index is unread (every anchor would read dangling) or failed. */
+/** The happening body while the entry index is unread or failed. */
 function EntryIndexStatus({ entryIndex }: { entryIndex: RailData['entryIndex'] }): ReactNode {
   if (!entryIndex.failed) return <EmptyState title={t('reader:rail.happeningsLoading')} />
   return (

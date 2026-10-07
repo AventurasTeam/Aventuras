@@ -52,7 +52,7 @@ export const readerRailStore = {
   setCategory: (category: RailCategory): void =>
     store.setState((s) => (s.view.category === category ? s : { view: railViewFor(category) })),
   setView: (view: RailView): void => store.setState({ view }),
-  /** A search or filter typed for one branch shouldn't apply to another; the category carries over. */
+  /** A branch's search and filter don't carry to another branch; the category does. */
   enterBranch: (branchId: string): void =>
     store.setState((s) =>
       s.branchId === branchId

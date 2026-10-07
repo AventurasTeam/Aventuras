@@ -61,9 +61,8 @@ export function WorldTimeEditForm({
     [worldTimeRaw, calendar, origin],
   )
   const [tuple, setTuple] = useState<TierTuple>(seedTuple)
-  // Tuple-level equality, not seconds-level: on a coarse-grain calendar the
-  // tuple cannot express a sub-base-unit remainder, so an untouched save
-  // compared in seconds would silently truncate the stored worldTime.
+  // Tuple-level, not seconds: a coarse calendar's tuple can't hold a sub-base-unit
+  // remainder, so an untouched save compared in seconds would truncate worldTime.
   const dirty = !tuplesEqual(tuple, seedTuple, calendar)
   useEffect(() => {
     onDirtyChange?.(dirty)

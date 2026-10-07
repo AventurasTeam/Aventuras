@@ -107,8 +107,7 @@ const SCRIM_OPACITY: Record<Theme['mode'], number> = { light: 0.4, dark: 0.6 }
 
 type SheetBackdropProps = BottomSheetBackdropProps & { dismissible: boolean; opacity: number }
 
-// Out of the a11y tree, like the background and handle above and rn-primitives' own dialog
-// overlay: assistive tech dismisses with back. Null role and label drop gorhom's English button.
+// Out of the a11y tree (assistive tech uses back); null role/label drop gorhom's English button.
 function SheetBackdrop({ dismissible, opacity, ...props }: SheetBackdropProps) {
   return (
     <BottomSheetBackdrop
@@ -140,8 +139,7 @@ export function useSheetBackdrop(dismissible: boolean): FC<BottomSheetBackdropPr
 }
 
 // Native-only swap, as for the input: gorhom's scroll view hands the gesture to the sheet's
-// drag-down at the top of the list. Cast: gorhom types its ref `BottomSheetScrollViewMethods`,
-// which carries the `scrollTo` a list calls.
+// drag-down at list top. Cast: its ref type `BottomSheetScrollViewMethods` carries `scrollTo`.
 const SheetScrollComponent = (
   Platform.OS === 'web' ? ScrollView : BottomSheetScrollView
 ) as ScrollComponent

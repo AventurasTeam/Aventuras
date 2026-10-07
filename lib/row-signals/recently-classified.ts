@@ -24,10 +24,7 @@ type Input = {
   entries: readonly SignalEntry[]
   boundaries: TurnBoundaries | null
   categoryOf: (entityId: string) => EntityKind | null
-  /**
-   * Whether a lore, thread or happening row is still on the branch; a gone row contributes to
-   * neither map.
-   */
+  /** Whether a lore, thread or happening row is still on the branch; a gone one is dropped. */
   isLive: (category: LiveRowCategory, id: string) => boolean
 }
 

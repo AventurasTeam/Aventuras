@@ -144,15 +144,14 @@ const CATEGORY_TINT: ReadonlyMap<RowCategory, RecentlyClassified> = new Map([
 ])
 
 /**
- * A branch with a lead (Kael), two in-scene characters, an in-scene item, the current location,
- * a faction, lore, threads and happenings. `strip` and `chipTint` follow the merged `entities`,
- * `entityListSignals` and `categoryTint` unless overridden themselves.
+ * `strip` and `chipTint` follow the merged `entities`, `entityListSignals` and `categoryTint`
+ * unless overridden themselves.
  */
 export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
   const entities = overrides.entities ?? ENTITIES
   const entityListSignals = overrides.entityListSignals ?? ENTITY_LIST_SIGNALS
   const categoryTint = overrides.categoryTint ?? CATEGORY_TINT
-  // An unread index holds no entries; a story that wants another pairing overrides `plotListSignals`.
+  // An unread index holds no entries; override `plotListSignals` for another pairing.
   const plotListSignals =
     overrides.plotListSignals ??
     (overrides.entryIndex?.ready === false

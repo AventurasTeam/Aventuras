@@ -35,7 +35,7 @@ const harness = vi.hoisted(() => ({
   indexOptions: vi.fn(),
 }))
 
-// C1 and the entry index read the DB; the hook only composes them.
+// Row signals and the entry index read the DB; the hook only composes them.
 vi.mock('@/hooks/use-row-signals', () => ({ useRowSignals: () => harness.signals }))
 vi.mock('@/hooks/use-entry-index', () => ({
   useEntryIndex: (branchId: string, options?: { enabled?: boolean }) => {
