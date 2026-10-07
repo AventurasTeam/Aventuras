@@ -1155,9 +1155,9 @@ Merge writes, in order:
   ref to the non-canonical (the ref collapses — a scalar nulls, an
   array drops it — since a location can't parent itself), the
   non-canonical's `at_location_id` when the canonical item has no
-  position of its own (no holder, no placement), so a merged item is
-  never left nowhere, and the flag clear when the canonical is
-  flagged.
+  position of its own (no holder, no placement), so the merged item
+  keeps whichever position either side had, and the flag clear when
+  the canonical is flagged.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
   one patch per entity. An item has at most one position

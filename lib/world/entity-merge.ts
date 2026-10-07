@@ -79,8 +79,8 @@ function refTarget({ canonical, branchEntities }: MergeContext): string | null {
 }
 
 /**
- * A canonical item with no position takes the loser's placement, so a merge never leaves the item
- * nowhere. A held loser needs nothing here: its holders move to the canonical through `refTarget`.
+ * A canonical item with no position takes the loser's placement, so the merged item keeps whichever
+ * position either side had. A held loser needs nothing here: its holders move through `refTarget`.
  */
 function adoptedPlacement(input: MergeContext, rewritten: EntityState | null): EntityState | null {
   const { canonical, loser } = input
