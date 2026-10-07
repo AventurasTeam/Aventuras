@@ -70,6 +70,10 @@ The caller sorts by `createdAt` before passing, matching the spec's
 "older = default canonical" rule. The dialog never reorders
 internally — caller data is the source of truth.
 
+A refusal shows inline until the user answers it: the next submit,
+a mode switch, or any merge choice changed (canonical, field or
+chip) clears it.
+
 ### Entity projection
 
 ```ts

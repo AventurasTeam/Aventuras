@@ -29,7 +29,12 @@ import {
   type Resolution,
   type ScalarField,
 } from './collision-resolve-diff'
-import { initMergeState, mergeReducer, mergeResolution } from './collision-resolve-machine'
+import {
+  initMergeState,
+  mergeReducer,
+  mergeResolution,
+  type MergeAction,
+} from './collision-resolve-machine'
 
 type Mode = 'merge' | 'rename' | 'keep'
 
@@ -179,6 +184,7 @@ export function CollisionResolveDialog({
             submitting={submitting}
             blockedReason={blockedReason}
             error={error}
+            onChoice={() => setError(null)}
           />
         )}
         {mode === 'rename' && (
@@ -262,6 +268,8 @@ type MergeBodyProps = BodyProps & {
   entityB: EntitySummary
   diff: DiffPayload
   nowMs: number
+  /** The user changed a merge choice, which answers a refusal shown for the last one. */
+  onChoice: () => void
 }
 
 function MergeBody({
@@ -274,11 +282,16 @@ function MergeBody({
   submitting,
   blockedReason,
   error,
+  onChoice,
 }: MergeBodyProps) {
   // Web tiers above phone lay the choices out in columns; native stacks them at every tier.
   const phone = useTier() === 'phone'
   const stacked = phone || Platform.OS !== 'web'
   const [state, dispatch] = useReducer(mergeReducer, entityA.id, initMergeState)
+  const choose = (action: MergeAction) => {
+    onChoice()
+    dispatch(action)
+  }
 
   // Reset reducer state when entities change. Same render-cycle
   // ref-check pattern as embedder-download-dialog.tsx.
@@ -345,7 +358,7 @@ function MergeBody({
         <Select
           options={canonicalOptions}
           value={state.canonicalId}
-          onValueChange={(id) => dispatch({ type: 'pick-canonical', id })}
+          onValueChange={(id) => choose({ type: 'pick-canonical', id })}
           // Segment options are one fixed-height row; a phone's half-width label wraps and clips.
           mode={phone ? 'radio' : 'segment'}
           label={t('collisionDialog.canonicalLabel')}
@@ -384,7 +397,7 @@ function MergeBody({
               stacked={stacked}
               pick={(state.fromOther.has(field) ? nonCanonical : canonical) === entityA ? 'A' : 'B'}
               onPick={(side) =>
-                dispatch({
+                choose({
                   type: 'pick-field',
                   field,
                   fromOther: (side === 'A' ? entityA : entityB).id !== state.canonicalId,
@@ -400,14 +413,14 @@ function MergeBody({
         label={t('collisionDialog.keywords')}
         terms={chips.keywords}
         isDeselected={(keyword) => state.deselectedKeywords.includes(normalizeTerm(keyword))}
-        onToggle={(keyword) => dispatch({ type: 'toggle-keyword', keyword })}
+        onToggle={(keyword) => choose({ type: 'toggle-keyword', keyword })}
         disabled={submitting}
       />
       <TermChips
         label={t('collisionDialog.tags')}
         terms={chips.tags}
         isDeselected={(tag) => state.deselectedTags.includes(tag)}
-        onToggle={(tag) => dispatch({ type: 'toggle-tag', tag })}
+        onToggle={(tag) => choose({ type: 'toggle-tag', tag })}
         disabled={submitting}
       />
 

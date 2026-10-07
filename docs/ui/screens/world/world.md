@@ -1082,7 +1082,7 @@ that location's parent to the canonical would make the canonical its
 own ancestor — picking the other row as canonical merges cleanly).
 A parent chain the merge touches that already loops or runs past
 the depth cap refuses as `parent-chain-broken`; fix that chain
-first.
+first. The reason clears once the user changes a merge choice.
 
 **The tail scene.** The tail entry's scene is the next turn's
 retrieval floor, and the newer row a default merge deletes is the one

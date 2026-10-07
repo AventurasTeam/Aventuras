@@ -643,6 +643,36 @@ export const MergeConvergesWhileOpen: Story = {
 
 export const MergeError: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveError} />,
+  play: async () => {
+    const refusal = 'Write failed (story stub)'
+    const merge = async () => {
+      await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+      expect(await screen.findByText(refusal)).toBeInTheDocument()
+      // A refusal leaves the dialog open on the choices it refused.
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    }
+    const cleared = () => waitFor(() => expect(screen.queryByText(refusal)).toBeNull())
+
+    await screen.findByRole('button', { name: /^Merge into / })
+    // A changed choice answers the refusal, whichever choice it is.
+    await merge()
+    await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
+    await cleared()
+    await merge()
+    const status = screen.getByRole('radiogroup', { name: 'Status' })
+    await userEvent.click(within(status).getByRole('radio', { name: /^Older · / }))
+    await cleared()
+    await merge()
+    await userEvent.click(screen.getByRole('button', { name: 'guard' }))
+    await cleared()
+    await merge()
+    await userEvent.click(screen.getByRole('button', { name: 'the wanderer' }))
+    await cleared()
+
+    await merge()
+    await userEvent.click(screen.getByRole('radio', { name: 'Rename one' }))
+    await cleared()
+  },
 }
 
 export const RenameMode: Story = {
