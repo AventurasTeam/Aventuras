@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useEntryIndex } from '@/hooks/use-entry-index'
@@ -27,13 +27,13 @@ export function HistoryTab(props: HistoryTabProps) {
   return <HistoryTabForTarget key={`${props.targetTable}:${props.targetId}`} {...props} />
 }
 
+function otherEndIds(rows: readonly HistoryRow[]): string[] {
+  return [...new Set(rows.flatMap((row) => (row.via.kind === 'own' ? [] : [row.via.otherId])))]
+}
+
 // Working-set names for the rows' other ends. Selectors return a string, so a patch to any
 // other row leaves the tab alone.
-function useStoreNames(branchId: string, rows: readonly HistoryRow[]): ReadonlyMap<string, string> {
-  const ids = useMemo(
-    () => [...new Set(rows.flatMap((row) => (row.via.kind === 'own' ? [] : [row.via.otherId])))],
-    [rows],
-  )
+function useStoreNames(branchId: string, ids: readonly string[]): ReadonlyMap<string, string> {
   const entityNames = entitiesStore.useEntities((m) =>
     JSON.stringify(ids.map((id) => (m.get(id)?.branchId === branchId ? m.get(id)?.name : null))),
   )
@@ -52,6 +52,28 @@ function useStoreNames(branchId: string, rows: readonly HistoryRow[]): ReadonlyM
   }, [ids, entityNames, happeningTitles])
 }
 
+// A shown other end that leaves the working set must re-read its name from its delete payload,
+// and under a search a rename changes which rows match server-side; either calls `onChange`.
+function useOtherEndChanges(
+  names: ReadonlyMap<string, string>,
+  ids: readonly string[],
+  searching: boolean,
+  onChange: () => void,
+): void {
+  const seen = useRef(names)
+  useEffect(() => {
+    const before = seen.current
+    seen.current = names
+    const changed = ids.some((id) => {
+      const was = before.get(id)
+      if (was == null) return false
+      const now = names.get(id)
+      return now == null || (searching && now !== was)
+    })
+    if (changed) onChange()
+  }, [names, ids, searching, onChange])
+}
+
 function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProps) {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)
@@ -60,14 +82,20 @@ function HistoryTabForTarget({ branchId, targetTable, targetId }: HistoryTabProp
   const row = useHistoryTarget(targetTable, targetId)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const links = useLinkVersion(targetTable, targetId, branchId)
-  // Fresh identity when the row or a link row naming it is patched, or a run/reversal settles.
-  const version = useMemo(() => ({ row, settleCount, links }), [row, settleCount, links])
+  const [otherEnds, otherEndChanged] = useReducer((n: number) => n + 1, 0)
+  // Fresh identity on world.md → History tab's Refresh triggers; a retrieval bump isn't one.
+  const version = useMemo(
+    () => ({ row, settleCount, links, otherEnds }),
+    [row, settleCount, links, otherEnds],
+  )
   const chunks = useHistoryChunks(
     { branchId, targetTable, targetId, op: op ?? undefined, search, sort },
     version,
   )
   const entryIndex = useEntryIndex(branchId)
-  const storeNames = useStoreNames(branchId, chunks.rows)
+  const otherIds = useMemo(() => otherEndIds(chunks.rows), [chunks.rows])
+  const storeNames = useStoreNames(branchId, otherIds)
+  useOtherEndChanges(storeNames, otherIds, search !== '', otherEndChanged)
   const name = historyTargetName(row) ?? t('history:unknownTarget')
   const rows = useMemo(() => {
     const nowMs = Date.now()

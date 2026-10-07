@@ -220,6 +220,9 @@ describe('HistoryTab over the link-row union', () => {
       summary: 'Removed when Kael was deleted',
       fieldPath: null,
     })
+    // An other end the working set never held hasn't left it, so it doesn't refetch.
+    await act(async () => {})
+    expect(load).toHaveBeenCalledTimes(1)
   })
 
   it("prefers the working set's name, so a renamed other end reads its new name without a refetch", async () => {
@@ -237,6 +240,57 @@ describe('HistoryTab over the link-row union', () => {
       expect(view.props?.rows[0]?.targetDisplayName).toBe('Relationship · Kael the Elder'),
     )
     expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('refetches when a shown other end leaves the working set, so its name comes from its delete', async () => {
+    happeningsStore.hydrate(BRANCH, [fire(BRANCH, 'Fire')])
+    const awarenessGone: HistoryRow = {
+      delta: { ...VIEW_EDIT, targetTable: 'happening_awareness', targetId: 'haw_1', op: 'delete' },
+      via: {
+        kind: 'link',
+        table: 'happening_awareness',
+        linkId: 'haw_1',
+        otherId: 'hap_fire',
+        side: null,
+      },
+    }
+    // What the loader reads for the other end: live title while it lives, then its delete payload.
+    let fireName = 'Fire'
+    const load = vi.fn(
+      async (): Promise<HistoryChunk> => ({
+        rows: [awarenessGone],
+        nextCursor: null,
+        names: { hap_fire: fireName },
+      }),
+    )
+    renderTab(load, 'char_aria')
+    expect((await firstRow())?.targetDisplayName).toBe('Awareness · Fire')
+    act(() =>
+      happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Blaze' } }),
+    )
+    expect(view.props?.rows[0]?.targetDisplayName).toBe('Awareness · Blaze')
+    fireName = 'Blaze'
+    act(() => happeningsStore.patch(BRANCH, { op: 'delete', id: 'hap_fire' }))
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(view.props?.rows[0]?.targetDisplayName).toBe('Awareness · Blaze'))
+  })
+
+  it("refetches for a shown other end's rename while a search is set, as the match is server-side", async () => {
+    happeningsStore.hydrate(BRANCH, [fire(BRANCH, 'Fire')])
+    const load = loader(() => [INVOLVES_FIRE], { hap_fire: 'Fire' })
+    renderTab(load, 'char_aria')
+    await firstRow()
+    act(() => view.props?.onSearchChange('fire'))
+    await waitFor(() =>
+      expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'fire' })),
+    )
+    await firstRow()
+    const searched = load.mock.calls.length
+    act(() =>
+      happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Blaze' } }),
+    )
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(searched + 1))
+    expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'fire', cursor: null }))
   })
 
   it("prefers a happening's working-set title over the chunk's name", async () => {

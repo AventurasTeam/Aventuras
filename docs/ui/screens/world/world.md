@@ -634,7 +634,10 @@ prose, then hands pre-formatted strings to the compound.
   (`inverseKind`, not the column's snake case).
 - **Refresh** — the tab refetches when its row changes in the working
   set, when a link row naming it is added, removed, or changes in a
-  column the tab shows (a retrieval bump doesn't), and when a run or
+  column whose edit it lists (a retrieval bump doesn't), when an other
+  end it shows leaves the working set, so its name reads from its
+  delete payload, when an other end it shows is renamed while a search
+  is set, since the name match runs in SQLite, and when a run or
   reversal settles, which covers a reversal that only edits a delete's
   payload.
 - **Rows aren't pressable.** `entry #n` is meta text; see
