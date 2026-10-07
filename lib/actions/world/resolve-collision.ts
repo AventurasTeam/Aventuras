@@ -33,7 +33,6 @@ import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withEntryMetadataLock } from '../story-entries/entry-metadata-lock'
 import { loadHeadTurn } from '../story-entries/head-turn'
 import type { DbCtx } from '../types'
-import { withMergeSceneEffects } from './merge-scene'
 
 export const COLLISION_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
@@ -138,11 +137,10 @@ function buildMerge(branchId: string, resolution: MergeResolution, tail: DeleteT
   const lookup = collisionPairOf(branchEntities, pairIds(resolution))
   if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
-  const [canonical] = pair
   const actions = entityMergeActions({
     branchId,
     pair,
-    canonicalId: canonical.id,
+    canonicalId: resolution.canonicalId,
     fromLoser: resolution.fromLoser,
     deselectedTags: resolution.deselectedTags,
     deselectedKeywords: resolution.deselectedKeywords,
@@ -153,10 +151,7 @@ function buildMerge(branchId: string, resolution: MergeResolution, tail: DeleteT
     tail,
     newId: generateId,
   })
-  return {
-    status: 'ok',
-    actions: withMergeSceneEffects({ branchId, actions, canonical, tail }),
-  }
+  return { status: 'ok', actions }
 }
 
 function buildPairResolution(branchId: string, resolution: PairResolution): Built {

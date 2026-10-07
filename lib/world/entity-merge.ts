@@ -119,6 +119,47 @@ function tailActions(input: MergeContext): PipelineAction[] {
   ]
 }
 
+/**
+ * world.md → Merge, the tail scene: a canonical the merge seats in the tail is promoted when its
+ * merged status is staged and, for a character, tracked to the tail's location. Each folds into the
+ * canonical's patch when that already writes the column, since a group writes a row once.
+ */
+function withSceneEffects(
+  input: MergeContext,
+  patch: EntityPatch,
+  seated: boolean,
+): { patch: EntityPatch; actions: PipelineAction[] } {
+  const { branchId, canonical, tail } = input
+  const actions: PipelineAction[] = []
+  if (!seated || tail == null) return { patch, actions }
+  let next = patch
+  if ((next.status ?? canonical.status) === 'staged') {
+    if (next.status === undefined)
+      actions.push({
+        kind: 'promoteStagedEntity',
+        source: 'user_edit',
+        payload: { branchId, id: canonical.id, proseEntryId: null },
+      })
+    else next = { ...next, status: 'active' }
+  }
+  // Tracked only to a known location: a null one leaves the canonical where it was.
+  const location = tail.currentLocationId
+  if (canonical.kind === 'character' && location != null) {
+    if (next.state == null)
+      actions.push({
+        kind: 'updateEntityLocationTracking',
+        source: 'user_edit',
+        payload: { branchId, id: canonical.id, currentLocationId: location },
+      })
+    else
+      next = {
+        ...next,
+        state: { ...stateOf({ state: next.state }, 'character'), current_location_id: location },
+      }
+  }
+  return { patch: next, actions }
+}
+
 function mergeContext({ pair, canonicalId, ...rest }: EntityMergeInput): MergeContext {
   const [first, second] = pair
   if (canonicalId !== first.id && canonicalId !== second.id)
@@ -142,10 +183,12 @@ export function entityMergeActions(request: EntityMergeInput): PipelineAction[] 
   const input = mergeContext(request)
   const { branchId, canonical, loser, newId } = input
   const { moved } = mergeLinks(input)
+  const tail = tailActions(input)
+  const scene = withSceneEffects(input, canonicalPatch(input), tail.length > 0)
   const actions: PipelineAction[] = []
 
-  const patch = canonicalPatch(input)
-  if (Object.keys(patch).length > 0) actions.push(updateEntity(branchId, canonical.id, patch))
+  if (Object.keys(scene.patch).length > 0)
+    actions.push(updateEntity(branchId, canonical.id, scene.patch))
 
   const target = refTarget(input)
   for (const other of input.branchEntities) {
@@ -197,7 +240,8 @@ export function entityMergeActions(request: EntityMergeInput): PipelineAction[] 
       },
     })
 
-  actions.push(...tailActions(input))
+  actions.push(...tail)
   actions.push({ kind: 'deleteEntity', source: 'user_edit', payload: { branchId, id: loser.id } })
+  actions.push(...scene.actions)
   return actions
 }

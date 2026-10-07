@@ -596,6 +596,60 @@ describe('entityMergeActions — tail scene', () => {
   })
 })
 
+describe('entityMergeActions — scene effects', () => {
+  const tail = { id: 'entry_9', sceneEntities: ['char_b'], currentLocationId: 'loc_t' }
+  const promote = {
+    kind: 'promoteStagedEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id: 'char_a', proseEntryId: null },
+  }
+  const track = {
+    kind: 'updateEntityLocationTracking',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id: 'char_a', currentLocationId: 'loc_t' },
+  }
+
+  it('promotes a staged canonical it seats and tracks it to the tail, after the delete', () => {
+    const canonical = entity('char_a', 'character', { status: 'staged' })
+    const { actions } = merge({ canonical, branchEntities: [canonical, B], tail })
+    expect(actions.slice(-3)).toStrictEqual([deleteLoser, promote, track])
+    expect(ofKind(actions, 'updateEntity')).toStrictEqual([])
+  })
+
+  it('folds the promotion into a staged status the canonical takes from the loser', () => {
+    const loser = entity('char_b', 'character', { status: 'staged' })
+    const { actions } = merge({ loser, branchEntities: [A, loser], tail, fromLoser: ['status'] })
+    expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({ status: 'active' })
+    expect(ofKind(actions, 'promoteStagedEntity')).toStrictEqual([])
+  })
+
+  it("folds the tail's location into a state patch the canonical already writes", () => {
+    // No well-formed character merge writes the canonical's state: a ref to the loser forces one.
+    const canonical = entity('char_a', 'character', {}, { faction_id: 'char_b' })
+    const { actions } = merge({ canonical, branchEntities: [canonical, B], tail })
+    expect(ofKind(actions, 'updateEntity')[0].payload.patch).toStrictEqual({
+      state: { ...emptyEntityState('character'), current_location_id: 'loc_t' },
+    })
+    expect(ofKind(actions, 'updateEntityLocationTracking')).toStrictEqual([])
+  })
+
+  it('tracks nothing to a tail with no location, and seats nothing the tail never named', () => {
+    const staged = entity('char_a', 'character', { status: 'staged' })
+    const unlocated = merge({
+      canonical: staged,
+      branchEntities: [staged, B],
+      tail: { ...tail, currentLocationId: null },
+    })
+    expect(unlocated.actions.slice(-2)).toStrictEqual([deleteLoser, promote])
+    const elsewhere = merge({
+      canonical: staged,
+      branchEntities: [staged, B],
+      tail: { ...tail, sceneEntities: ['char_m'] },
+    })
+    expect(elsewhere.actions).toStrictEqual([deleteLoser])
+  })
+})
+
 describe('entityMergeActions — the group', () => {
   it('orders canonical, refs, awareness, involvements, relationships, tail, delete, all user edits', () => {
     const walker = entity('char_w', 'character', {}, { faction_id: 'fac_x' })
