@@ -52,6 +52,7 @@ export {
   setDefaultProvider,
   setDiagnosticsEnabled,
   setEmbedderDefaults,
+  setReaderRailCollapsed,
   updateProvider,
   upsertProfile,
 } from './settings'
