@@ -198,8 +198,10 @@ describe('removalSummaryTerm', () => {
     expect(removalSummaryTerm('Removed whenever')).toBeNull()
   })
 
-  it('reads the unknown-other-end wording whole as any removal', () => {
-    expect(removalSummaryTerm('Removed when its other end was deleted')).toEqual({ kind: 'any' })
+  it('reads the unknown-other-end wording whole as the removals that render it', () => {
+    expect(removalSummaryTerm('Removed when its other end was deleted')).toEqual({
+      kind: 'unknown',
+    })
   })
 
   it('follows a locale that puts the name first', async () => {

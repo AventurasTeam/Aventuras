@@ -160,6 +160,7 @@ function targetLineCondition(ends: LinkEnds, term: string): SQL | null {
   const removals = ends.removals.filter(
     (row) =>
       removal?.kind === 'any' ||
+      (removal?.kind === 'unknown' && !Object.hasOwn(ends.names, row.otherId)) ||
       removedNamed.has(row.otherId) ||
       named.has(row.otherId) ||
       startsAWord(removalTargetLabel(row.tables), needle) ||

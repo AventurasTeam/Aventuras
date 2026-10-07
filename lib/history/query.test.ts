@@ -749,6 +749,39 @@ describe('link-row union', () => {
       ])
     })
 
+    it('matches the unknown-end wording only to the removals whose other end has no name', async () => {
+      await db.insert(deltas).values({
+        id: 'delta_ghost',
+        branchId: BRANCH,
+        entryId: null,
+        actionId: 'act_ghost',
+        logPosition: 1000,
+        source: 'user_edit',
+        targetTable: 'entities',
+        targetId: 'char_ghost',
+        op: 'delete',
+        undoPayload: {
+          id: 'char_ghost',
+          relationships: [
+            {
+              id: 'rel_ghost',
+              branchId: BRANCH,
+              aId: 'char_aria',
+              bId: 'char_ghost',
+              kind: 'ally',
+              inverseKind: null,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        },
+        createdAt: 1000,
+      })
+      expect(await tab('char_aria', { search: 'Removed when its other end was deleted' })).toEqual([
+        'removed character_relationships char_ghost',
+      ])
+    })
+
     it('finds every union row by the summary it renders', async () => {
       const chunk = await loadHistoryChunk(db, tabQuery('char_aria'))
       const context: HumanizeContext = {

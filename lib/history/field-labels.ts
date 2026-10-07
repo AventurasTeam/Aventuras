@@ -246,7 +246,11 @@ export function summaryFieldTerms(term: string): string[] | null {
   return labels.length > 0 ? labels : null
 }
 
-export type RemovalSummaryTerm = { kind: 'any' } | { kind: 'named'; name: string }
+/** The removals a term matches by their summary: all, those whose other end has no name, or one. */
+export type RemovalSummaryTerm =
+  | { kind: 'any' }
+  | { kind: 'unknown' }
+  | { kind: 'named'; name: string }
 
 const collapse = (text: string) => text.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
 
@@ -267,12 +271,13 @@ function typedName(lead: string, tail: string, term: string): string | null {
 
 /**
  * A term read against the removal summary ("Removed when Kael was deleted"): typed through a name
- * it names the other end, and a word run of the summary's own wording matches every removal.
+ * it names the other end, a word run of the summary's own wording matches every removal, and the
+ * unknown-end wording typed whole matches the removals that render it.
  */
 export function removalSummaryTerm(term: string): RemovalSummaryTerm | null {
   const needle = collapse(term)
   if (needle === '') return null
-  if (needle === collapse(t('history:summary.removedWithUnknown'))) return { kind: 'any' }
+  if (needle === collapse(t('history:summary.removedWithUnknown'))) return { kind: 'unknown' }
   const summary = slotPattern(t('history:summary.removedWith', { name: SLOT }))
   if (summary == null) return null
   const name = typedName(summary.lead, summary.tail, term)

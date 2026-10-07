@@ -576,7 +576,8 @@ prose, then hands pre-formatted strings to the compound.
   word run of the named wording, typed whole or partway, matches
   every removal, and the wording plus a partial name matches the
   removals whose other end has a name word starting with it. The
-  unknown-end wording matches only when typed whole. The row's own
+  unknown-end wording, typed whole, matches only the removals that
+  read it, those whose other end has no name. The row's own
   target line is constant within the tab, so it is never matched.
   SQLite filters server-side; lazy-loaded delta log doesn't need to
   be fully in memory.
