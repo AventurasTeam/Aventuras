@@ -106,3 +106,72 @@ slice-planning gate forces its resolution before that slice is planned.
   connection), so it's routed here rather than into the slice. Revisit
   if History or another log-shaped query feels slow on a long story,
   Android first. Found during 4.2c planning (2026-10-06).
+- **The entity update arm accepts a present-but-`undefined` column.**
+  `updateHandler` (`lib/actions/entities/register.ts`) treats a key as
+  written whenever `col in patch`, so `{ name: undefined, priority: 7 }`
+  returns `ok`: the DB keeps the old name, the store row's `name` becomes
+  `undefined`, and the undo payload records `name`, so History shows
+  "Modified Name" for a change that never landed and user precedence
+  treats `name` as user-written. 4.2c closed the hole for
+  `nameCollisionFlag` only (its own refusal). A general rule — refuse or
+  skip any updatable key whose value is `undefined` — would cover every
+  column. Found in 4.2c's Task 1 review (2026-10-06).
+- **The entity operational seam's flag arm can bypass the delta log.**
+  `lib/actions/entities/operational.ts` still calls itself the non-delta
+  seam for the compute-lifecycle columns, flag included, but 4.2c made
+  the flag clear a delta-logged user write. Its flag arm is unused; a
+  future classifier path calling it would write a column the user path
+  delta-logs, and a rollback couldn't revert it. Either drop the arm or
+  narrow the header. Found in 4.2c's Task 1 review (2026-10-06).
+- **Plot's awareness upsert type duplicates the arm's payload.**
+  `lib/plot/happening-draft.ts` declares a local `AwarenessUpsert` type
+  instead of deriving it from the `upsertHappeningAwareness` payload in
+  `PipelineActionMap`. It is compatible today and can drift silently
+  (4.2c added `retrievalCount` to the arm). Found in 4.2c's Task 3
+  review (2026-10-06).
+- **Undo and redo of a story entry's metadata skip its metadata lock.**
+  `withEntryMetadataLock` has four callers (scene fields, world time,
+  entity delete, 4.2c's merge); the undo and redo paths for an
+  `updateStoryEntryMetadata` delta (`lib/actions/story-entries/undo.ts`,
+  `lib/actions/delta/redo.ts`) take no lock. A CTRL-Z landing while a
+  scene edit, delete or merge sits between its tail read and its commit
+  could have its restore overwritten. Unverified: it needs two user
+  actions at once. Found in 4.2c's Task 8 review (2026-10-06).
+- **The entity update arm's missing-row refusal carries no code.**
+  `updateHandler` (`lib/actions/entities/register.ts`) refuses "update
+  target … not found" without `TARGET_NOT_FOUND`, which the delete arm
+  sets. Callers that map refusal codes (`resolveCollision`,
+  `commitRowSave`) therefore report a vanished row as `failed` instead
+  of `not-found`. Found in 4.2c's PR 1 final review (2026-10-06).
+- **The group runner commits an update and a delete of one row.**
+  `groupConflict` (`lib/actions/delta/apply-delta-action.ts`) refuses a
+  write to a row a delete in the same group cascades, but not an update
+  of the deleted row itself. Such a group commits, and its undo then
+  throws `ReversalIntegrityError` (`held-in-redo`), so the action can't
+  be reversed. No shipped planner emits it (4.2c's merge leaves the
+  loser out of its scene effects for this reason); any future planner
+  that does would commit an irreversible action. Found while fixing
+  4.2c's merge scene effects (2026-10-06).
+- **The group conflict check can't see refs inside entity `state`.**
+  `rowRefs` (`lib/actions/delta/live-refs.ts`) covers link-row columns
+  but not the ref fields inside an entity's `state` (`current_location_id`
+  and the rest), so `groupConflict` can't refuse a state write that names
+  a row the same group deletes. Planners avoid it by discipline (4.2c's
+  merge rewrites every ref to the loser before deleting it); nothing
+  checks it. Found in 4.2c's PR 1 review (2026-10-06).
+- **A tail scene edit re-anchors characters who left at the tail.** The
+  scene editor (`lib/actions/story-entries/scene-fields.ts`) runs
+  `sceneTrackingActions` over the previous, original and edited scenes
+  on every tail edit, so a character the tail's scene dropped is moved
+  back to the previous entry's location, overwriting a manual location
+  edit made since. Plausibly intended (the edit re-states the scene) but
+  undocumented as a consequence. Its live filter on the previous scene's
+  ids has no effect, since tracking iterates live entities only. Found
+  in 4.2c's PR 1 review (2026-10-06).
+- **Location tracking accepts an item target.**
+  `updateEntityLocationTracking`
+  (`lib/actions/entities/state-patch-actions.ts`) has no kind check, so
+  it writes `current_location_id` into an item's state, which the item
+  state schema doesn't refuse; `updateItemPosition` checks its kind.
+  4.2c's merge guards its own call; the arm doesn't. Found in 4.2c's
+  PR 1 review (2026-10-06).

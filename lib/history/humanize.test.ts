@@ -119,6 +119,12 @@ describe('humanizeDelta', () => {
     expect(view.summary).toBe('Modified Appearance')
   })
 
+  it('labels a collision-flag clear', () => {
+    const view = humanizeDelta(delta({ undoPayload: { nameCollisionFlag: 1 } }), context)
+    expect(view.summary).toBe('Modified Collision flag')
+    expect(view.fieldPath).toBe('nameCollisionFlag')
+  })
+
   it('falls back to "Modified" with no field path when an update carries no readable columns', () => {
     const view = humanizeDelta(delta({ undoPayload: {} }), context)
     expect(view.summary).toBe('Modified')

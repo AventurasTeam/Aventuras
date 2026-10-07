@@ -577,3 +577,123 @@ describe('bumpAwarenessRetrieval', () => {
     expect(await countOf(ctx, 'haw_1', OTHER_BRANCH)).toBe(9)
   })
 })
+
+describe('upsertHappeningAwareness retrievalCount', () => {
+  const upsert = (
+    source: 'user_edit' | 'ai_classifier',
+    fields: { retrievalCount?: number; source?: string },
+    actionId = 'act_1',
+  ) => ({
+    action: {
+      kind: 'upsertHappeningAwareness' as const,
+      source,
+      payload: { branchId: BRANCH, characterId: 'char_a', happeningId: 'hap_1', ...fields },
+    },
+    actionId,
+    branchId: BRANCH,
+  })
+
+  it('refuses invalid retrievalCount on the update path', async () => {
+    const { db, ctx } = await setup([
+      {
+        id: 'haw_1',
+        branchId: BRANCH,
+        happeningId: 'hap_1',
+        characterId: 'char_a',
+        learnedAtEntryId: null,
+        decayResistance: null,
+        retrievalCount: 4,
+        source: 'told',
+      },
+    ])
+
+    expect(
+      await applyDeltaAction(upsert('user_edit', { retrievalCount: -1, source: 'x' }), ctx),
+    ).toEqual({
+      status: 'rejected',
+      reason: 'invalid awareness: retrievalCount must be a non-negative integer',
+    })
+
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row.source).toBe('told')
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
+  it('keeps the count a user create carries', async () => {
+    const { db, ctx } = await setup()
+
+    expect(await applyDeltaAction(upsert('user_edit', { retrievalCount: 7 }), ctx)).toMatchObject({
+      status: 'ok',
+    })
+
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row.retrievalCount).toBe(7)
+    expect(happeningAwarenessStore.getById(row.id)?.retrievalCount).toBe(7)
+  })
+
+  it('starts a classifier create at zero whatever it carries', async () => {
+    const { db, ctx } = await setup()
+
+    await applyDeltaAction(upsert('ai_classifier', { retrievalCount: 7 }), ctx)
+
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row.retrievalCount).toBe(0)
+  })
+
+  it('leaves the count alone on an update, which logs only the merged fields', async () => {
+    const { db, ctx } = await setup([
+      {
+        id: 'haw_1',
+        branchId: BRANCH,
+        happeningId: 'hap_1',
+        characterId: 'char_a',
+        learnedAtEntryId: null,
+        decayResistance: null,
+        retrievalCount: 4,
+        source: 'told',
+      },
+    ])
+
+    const result = await applyDeltaAction(
+      upsert('user_edit', { retrievalCount: 9, source: 'told by Jorin' }),
+      ctx,
+    )
+
+    expect(result).toMatchObject({ status: 'ok' })
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row.source).toBe('told by Jorin')
+    expect(row.retrievalCount).toBe(4)
+    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(4)
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ source: 'told' })
+  })
+
+  it('accepts zero', async () => {
+    const { db, ctx } = await setup()
+
+    expect(await applyDeltaAction(upsert('user_edit', { retrievalCount: 0 }), ctx)).toMatchObject({
+      status: 'ok',
+    })
+    expect((await awarenessRows(db, 'char_a', 'hap_1'))[0].retrievalCount).toBe(0)
+  })
+
+  it('a user create without a count starts at zero', async () => {
+    const { db, ctx } = await setup()
+
+    expect(await applyDeltaAction(upsert('user_edit', {}), ctx)).toMatchObject({
+      status: 'ok',
+    })
+    expect((await awarenessRows(db, 'char_a', 'hap_1'))[0].retrievalCount).toBe(0)
+  })
+
+  it.each([-1, 1.5, Number.NaN])('refuses %s, writing nothing', async (retrievalCount) => {
+    const { db, ctx } = await setup()
+
+    expect(await applyDeltaAction(upsert('user_edit', { retrievalCount }), ctx)).toEqual({
+      status: 'rejected',
+      reason: 'invalid awareness: retrievalCount must be a non-negative integer',
+    })
+    expect(await awarenessRows(db, 'char_a', 'hap_1')).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+})

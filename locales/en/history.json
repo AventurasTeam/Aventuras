@@ -51,6 +51,7 @@
     "tags": "Tags",
     "keywords": "Keywords",
     "priority": "Priority",
+    "nameCollisionFlag": "Collision flag",
     "state": "State",
     "visual": "Appearance",
     "physique": "Physique",

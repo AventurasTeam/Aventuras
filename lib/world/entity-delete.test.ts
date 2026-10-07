@@ -213,3 +213,69 @@ describe('entityDeleteActions', () => {
     })
   })
 })
+
+describe('entityDeleteActions — orphaned collision flags', () => {
+  const named = (
+    id: string,
+    kind: EntityKind,
+    name: string,
+    flag: number,
+    state: Partial<EntityState> = {},
+  ): Entity => ({
+    ...entity(id, kind, state),
+    name,
+    nameCollisionFlag: flag,
+  })
+
+  it('clears the flag of the namesake the delete leaves without a partner, before the delete', () => {
+    const target = named('char_x', 'character', 'Kael', 0)
+    const twin = named('char_t', 'character', 'kael', 1)
+    expect(
+      entityDeleteActions({ branchId: 'b1', target, branchEntities: [target, twin], tail: null })
+        .actions,
+    ).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'char_t', patch: { nameCollisionFlag: 0 } },
+      },
+      { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: 'b1', id: 'char_x' } },
+    ])
+  })
+
+  it('folds the clear into the ref patch of a namesake that named the target', () => {
+    const target = named('loc_a', 'location', 'Hollow', 0)
+    const child = named('loc_b', 'location', 'Hollow', 1, { parent_location_id: 'loc_a' })
+    const plan = entityDeleteActions({
+      branchId: 'b1',
+      target,
+      branchEntities: [target, child],
+      tail: null,
+    })
+    expect(plan.actions[0]).toStrictEqual({
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_b',
+        patch: { state: { parent_location_id: null }, nameCollisionFlag: 0 },
+      },
+    })
+    expect(plan.actions).toHaveLength(2)
+    expect(plan.references).toBe(1)
+  })
+
+  it('leaves a flagged row that keeps another namesake alone', () => {
+    const target = named('char_x', 'character', 'Kael', 0)
+    const twin = named('char_t', 'character', 'Kael', 1)
+    const third = named('char_u', 'character', 'Kael', 0)
+    expect(
+      entityDeleteActions({
+        branchId: 'b1',
+        target,
+        branchEntities: [target, twin, third],
+        tail: null,
+      }).actions.map((a) => a.kind),
+    ).toStrictEqual(['deleteEntity'])
+  })
+})
