@@ -73,6 +73,9 @@ slice plans when relevant.
 - [A `group` or pseudo-class on a native `View` turns it into a `Pressable`](./nativewind-group-view-becomes-pressable.md)
   — css-interop upgrades the host silently and its no-op `onPress`
   eats the parent row's tap; gate the class on the interactive branch.
+- [A bubble-phase global hotkey never sees a key pressed in a field](./rnweb-textinput-stops-keydown.md)
+  — RN-Web's `TextInput` stops keydown propagation, so a shortcut that
+  must fire from a field passes `capture: true` to `useGlobalHotkey`.
 
 ### rn-primitives substrate
 
