@@ -142,14 +142,14 @@ export const Collision: Story = {
       collision: {
         otherName: 'Brannoc',
         onJumpToOther,
-        resolveDisabledReason: 'Lands in Slice 4.2c',
+        resolveDisabledReason: 'Generation is in flight. Cancel to edit.',
       },
     },
   },
   play: async () => {
     const link = screen.getByRole('link', { name: '⚠ Collides with Brannoc' })
     expect(link).toBeInTheDocument()
-    expect(screen.getByTitle('Lands in Slice 4.2c')).toBeInTheDocument()
+    expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
     await userEvent.click(link)
     await waitFor(() => expect(onJumpToOther).toHaveBeenCalled())
   },

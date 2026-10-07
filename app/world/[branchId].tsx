@@ -5,6 +5,7 @@ import { View } from 'react-native'
 import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
+import { CollisionResolveDialog } from '@/components/compounds/collision-resolve-dialog'
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
@@ -26,6 +27,8 @@ import type { EntityPaneData } from '@/components/world/detail/entity-pane-props
 import { entityTabOf } from '@/components/world/detail/entity-tabs'
 import { LoreDetailPane } from '@/components/world/detail/lore-detail-pane'
 import { firstFlaggedRow } from '@/components/world/first-flagged-row'
+import { useCollisionGate } from '@/components/world/use-collision-gate'
+import { collisionResolveProp, useCollisionResolve } from '@/components/world/use-collision-resolve'
 import { useWorldDelete } from '@/components/world/use-world-delete'
 import {
   useWorldSelection,
@@ -214,6 +217,24 @@ export default function WorldRoute() {
   useEffect(() => {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
+  const collision = useCollisionResolve(branchId, ctx, guard)
+  const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
+  const { close: closeCollision, request: requestCollision } = collision
+  // The dialog is portaled: left open, it would paint over the screen pushed on top.
+  useEffect(() => {
+    if (!focused) closeCollision()
+  }, [focused, closeCollision])
+  const openCollision = useCallback(
+    (id: string) => {
+      const target = collisions.get(id)
+      if (target != null) requestCollision(id, target.otherId)
+    },
+    [collisions, requestCollision],
+  )
+  const resolveCollisionProp = useMemo(
+    () => collisionResolveProp(collisionBlocked, openCollision),
+    [collisionBlocked, openCollision],
+  )
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
@@ -544,7 +565,7 @@ export default function WorldRoute() {
                 leadLabel={leadLabel}
                 collisions={collisions}
                 onJumpToRow={jumpToRow}
-                resolveCollision={{ disabledReason: t('world:collision.resolveReason') }}
+                resolveCollision={resolveCollisionProp}
                 addSlot={
                   <ImporterMenu
                     trigger="icon"
@@ -571,6 +592,18 @@ export default function WorldRoute() {
           }}
           {...worldDelete.copy}
           onConfirm={worldDelete.confirm}
+        />
+      ) : null}
+      {collision.pair != null ? (
+        <CollisionResolveDialog
+          open={focused}
+          onOpenChange={(next) => {
+            if (!next) closeCollision()
+          }}
+          entityA={collision.pair[0]}
+          entityB={collision.pair[1]}
+          onResolve={collision.resolve}
+          blockedReason={collisionBlocked}
         />
       ) : null}
     </ScreenShell>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
+import { collisionPairOf, entityKeepActions } from '@/lib/world'
 
 import { deriveCollisions } from './collisions'
 
@@ -26,7 +28,33 @@ function entity(id: string, name: string, overrides: Partial<Entity> = {}): Enti
   }
 }
 
+function withFlagsCleared(rows: readonly Entity[], actions: readonly PipelineAction[]): Entity[] {
+  const cleared = new Set(
+    actions.flatMap((action) =>
+      action.kind === 'updateEntity' && action.payload.patch.nameCollisionFlag === 0
+        ? [action.payload.id]
+        : [],
+    ),
+  )
+  return rows.map((row) => (cleared.has(row.id) ? { ...row, nameCollisionFlag: 0 } : row))
+}
+
 describe('deriveCollisions', () => {
+  it('after a keep on one pair of three namesakes, the other flagged row keeps its strip', () => {
+    const base = entity('base', 'Sage', { createdAt: 1 })
+    const first = entity('f1', 'Sage', { nameCollisionFlag: 1, createdAt: 2 })
+    const second = entity('f2', 'Sage', { nameCollisionFlag: 1, createdAt: 3 })
+    expect(deriveCollisions([base, first, second]).get('f1')?.otherId).toBe('base')
+
+    const lookup = collisionPairOf([base, first, second], ['base', 'f1'])
+    if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+    const kept = entityKeepActions({ branchId: 'br_1', pair: lookup.pair })
+    const after = deriveCollisions(withFlagsCleared([base, first, second], kept))
+
+    expect(after.has('f1')).toBe(false)
+    expect(after.get('f2')).toEqual({ otherId: 'base', otherName: 'Sage' })
+  })
+
   it('pairs a flagged row with its unflagged same-kind namesake, case-insensitively', () => {
     const map = deriveCollisions([
       entity('old', 'Brannoc', { status: 'staged' }),

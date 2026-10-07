@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeDivergence, type EntitySummary } from './collision-resolve-diff'
+import { computeDivergence, mergeChips, type EntitySummary } from './collision-resolve-diff'
 
 function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
   return {
@@ -11,7 +11,7 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     description: 'A wandering swordsman.',
     status: 'active',
     retiredReason: undefined,
-    injectionMode: 'on-relevance',
+    injectionMode: 'auto',
     priority: 0,
     tags: ['hero', 'sword'],
     keywords: [],
@@ -19,9 +19,19 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
     relationCounts: {
       awarenessRows: 0,
       involvements: 0,
+      relationships: 0,
+      joiningRelationship: false,
       inverseRefs: 0,
       embeddings: 1,
       translationRows: 0,
+      unheldItems: 0,
+      overlap: {
+        awareness: 0,
+        involvements: 0,
+        relationships: 0,
+        holdersLosingItem: 0,
+        canonicalRefs: 0,
+      },
     },
     ...overrides,
   }
@@ -54,6 +64,22 @@ describe('computeDivergence', () => {
       const diff = computeDivergence(a, b)
       // Order matches SCALAR_FIELDS, not input order
       expect(diff.divergentScalars).toEqual(['name', 'description', 'status'])
+    })
+
+    it('places priority last in the fixed order', () => {
+      const a = baseEntity()
+      const b = baseEntity({ id: 'ent_b', name: 'Kael II', injectionMode: 'always', priority: 4 })
+      const diff = computeDivergence(a, b)
+      expect(diff.divergentScalars).toEqual(['name', 'injectionMode', 'priority'])
+    })
+
+    // world.md → Merge lists priority among the per-row radio scalars.
+    it('reports a priority-only divergence as exactly one divergent scalar', () => {
+      const diff = computeDivergence(
+        baseEntity({ priority: 0 }),
+        baseEntity({ id: 'ent_b', priority: 9 }),
+      )
+      expect(diff.divergentScalars).toEqual(['priority'])
     })
 
     it('treats undefined description as divergent from a string', () => {
@@ -95,6 +121,13 @@ describe('computeDivergence', () => {
         onlyInB: ['guard'],
         both: ['sword'],
       })
+    })
+
+    it('keeps tags exact: a case variant tag diverges', () => {
+      const a = baseEntity({ tags: ['Hero'] })
+      const b = baseEntity({ id: 'ent_b', tags: ['hero'] })
+      const diff = computeDivergence(a, b)
+      expect(diff.tags).toEqual({ onlyInA: ['Hero'], onlyInB: ['hero'], both: [] })
     })
 
     it('sorts each partition alphabetically', () => {
@@ -215,13 +248,87 @@ describe('keywords', () => {
     expect(diff.tags).not.toBeNull()
   })
 
-  // Canon: priority rides the projection but is NOT a divergent scalar — the merge
-  // takes the canonical's value under the implicit-field rule.
-  it('does not treat priority as a divergent scalar', () => {
+  it('treats a case or spacing variant as the same keyword', () => {
     const diff = computeDivergence(
-      baseEntity({ priority: 0 }),
-      baseEntity({ id: 'ent_b', priority: 9 }),
+      baseEntity({ keywords: ['The Wanderer'] }),
+      baseEntity({ id: 'ent_b', keywords: [' the wanderer'] }),
     )
-    expect(diff.divergentScalars).toEqual([])
+    expect(diff.keywords).toBeNull()
+  })
+
+  it("shows a shared keyword in A's spelling and each side's own in its first spelling", () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['Sword', 'sword', 'gate'] }),
+      baseEntity({ id: 'ent_b', keywords: ['SWORD', 'inn', 'Inn'] }),
+    )
+    expect(diff.keywords).toEqual({ onlyInA: ['gate'], onlyInB: ['inn'], both: ['Sword'] })
+  })
+
+  it('ignores blank keywords', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['a', '  '] }),
+      baseEntity({ id: 'ent_b', keywords: ['a'] }),
+    )
+    expect(diff.keywords).toBeNull()
+  })
+
+  it('shows a stored keyword trimmed, as the merge writes it', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: [' courier', 'Sword'] }),
+      baseEntity({ id: 'ent_b', keywords: ['alpha', 'sword'] }),
+    )
+    expect(diff.keywords).toEqual({ onlyInA: ['courier'], onlyInB: ['alpha'], both: ['Sword'] })
+  })
+
+  it('sorts each keyword partition alphabetically', () => {
+    const diff = computeDivergence(
+      baseEntity({ keywords: ['zebra', 'apple', 'Yak', 'Cat'] }),
+      baseEntity({ id: 'ent_b', keywords: ['mango', 'banana', 'yak', 'cat'] }),
+    )
+    expect(diff.keywords).toEqual({
+      onlyInA: ['apple', 'zebra'],
+      onlyInB: ['banana', 'mango'],
+      both: ['Cat', 'Yak'],
+    })
+  })
+})
+
+describe('mergeChips', () => {
+  const chipsFor = (a: EntitySummary, b: EntitySummary, canonical: EntitySummary) =>
+    mergeChips(computeDivergence(a, b), canonical, canonical === a ? b : a)
+
+  it("offers the canonical's terms in stored order, then the other row's additions sorted", () => {
+    const a = baseEntity({ tags: ['sword', 'hero'], keywords: ['the wanderer', 'Kael'] })
+    const b = baseEntity({
+      id: 'ent_b',
+      tags: ['zeta', 'hero', 'alpha'],
+      keywords: ['the gate guard', 'Amber'],
+    })
+    expect(chipsFor(a, b, a)).toEqual({
+      tags: ['sword', 'hero', 'alpha', 'zeta'],
+      keywords: ['the wanderer', 'Kael', 'Amber', 'the gate guard'],
+    })
+    expect(chipsFor(a, b, b)).toEqual({
+      tags: ['zeta', 'hero', 'alpha', 'sword'],
+      keywords: ['the gate guard', 'Amber', 'Kael', 'the wanderer'],
+    })
+  })
+
+  it("offers a shared keyword once, in the canonical's spelling", () => {
+    const a = baseEntity({ keywords: ['The Swordsman', 'the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', keywords: ['THE SWORDSMAN', 'the gate guard'] })
+    expect(chipsFor(a, b, b).keywords).toEqual(['THE SWORDSMAN', 'the gate guard', 'the wanderer'])
+  })
+
+  it('offers no chips for a list the two rows agree on', () => {
+    const a = baseEntity({ tags: ['hero', 'sword'], keywords: ['the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', tags: ['sword', 'hero'], keywords: ['The Wanderer'] })
+    expect(chipsFor(a, b, a)).toEqual({ tags: [], keywords: [] })
+  })
+
+  it('judges each list on its own', () => {
+    const a = baseEntity({ tags: ['hero'], keywords: ['the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', tags: ['hero'], keywords: ['the gate guard'] })
+    expect(chipsFor(a, b, a)).toEqual({ tags: [], keywords: ['the wanderer', 'the gate guard'] })
   })
 })

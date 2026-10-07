@@ -374,7 +374,7 @@ Overview | Identity | Carrying | Connections | Settings | Assets | Involvements 
 | **Settings**     | Entity-management chrome: status, injection_mode, retired_reason, keywords, priority, tags. Same fields for all kinds. |
 | **Assets**       | Attached images / audio / files via `entry_assets`.                                                                    |
 | **Involvements** | `happening_involvements` table for this entity.                                                                        |
-| **History**      | Delta log filtered to this entity.                                                                                     |
+| **History**      | Delta log filtered to this entity, and its link rows'.                                                                 |
 
 The tab name **Connections** is the umbrella for both structural
 links (positional, affiliation) and social bonds (friend / enemy /

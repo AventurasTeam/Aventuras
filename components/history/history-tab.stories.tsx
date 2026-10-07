@@ -5,9 +5,9 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import type { Delta, Happening, Thread } from '@/lib/db'
-import type { HistoryChunk, HistoryQuery, HistoryTable } from '@/lib/history'
-import { generationStore, happeningsStore, threadsStore } from '@/lib/stores'
+import type { Delta, Entity, Happening, Thread } from '@/lib/db'
+import type { HistoryChunk, HistoryQuery, HistoryRow, HistoryTable } from '@/lib/history'
+import { entitiesStore, generationStore, happeningsStore, threadsStore } from '@/lib/stores'
 
 import { HistoryLoaderProvider } from './history-loader'
 import { HistoryTab } from './history-tab'
@@ -31,6 +31,8 @@ const delta = (
   createdAt: Date.now() - 60_000,
 })
 
+const own = (row: Delta): HistoryRow => ({ delta: row, via: { kind: 'own' } })
+
 const WAIT = { timeout: 3000 }
 
 const queries: HistoryQuery[] = []
@@ -38,14 +40,18 @@ const queries: HistoryQuery[] = []
 // A filtered query matches nothing, so the no-match state is reachable.
 const load = async (query: HistoryQuery): Promise<HistoryChunk> => {
   queries.push(query)
-  if (query.op != null || (query.search ?? '') !== '') return { rows: [], nextCursor: null }
+  if (query.op != null || (query.search ?? '') !== '')
+    return { rows: [], nextCursor: null, names: {} }
   return {
     rows: [
-      query.targetTable === 'threads'
-        ? delta('threads', 'thread_amulet', { status: 'pending' })
-        : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
+      own(
+        query.targetTable === 'threads'
+          ? delta('threads', 'thread_amulet', { status: 'pending' })
+          : delta('happenings', 'hap_fire', { commonKnowledge: 0 }),
+      ),
     ],
     nextCursor: null,
+    names: {},
   }
 }
 
@@ -214,8 +220,9 @@ export const SwitchingTargetsResetsFilters: Story = {
 
 const reloadSpy = fn(
   async (_query: HistoryQuery): Promise<HistoryChunk> => ({
-    rows: [delta('threads', 'thread_amulet', { status: 'pending' })],
+    rows: [own(delta('threads', 'thread_amulet', { status: 'pending' }))],
     nextCursor: null,
+    names: {},
   }),
 )
 
@@ -264,5 +271,64 @@ export const ReloadsOnRowPatchAndRunSettle: Story = {
     generationStore.finishRun(runId)
     await waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(3), WAIT)
     expect(reloadSpy.mock.calls[2][0]).toEqual(expect.objectContaining({ cursor: null }))
+  },
+}
+
+const KAEL: Entity = {
+  id: 'char_kael',
+  branchId: 'br_1',
+  kind: 'character',
+  name: 'Kael',
+  description: null,
+  status: 'active',
+  retiredReason: null,
+  injectionMode: 'auto',
+  nameCollisionFlag: 0,
+  state: null,
+  tags: [],
+  keywords: [],
+  priority: 0,
+  embeddingStale: 1,
+  createdAt: 1,
+  updatedAt: 1,
+}
+
+const awarenessCreate = (linkId: string, characterId: string): HistoryRow => ({
+  delta: { ...delta('happening_awareness', linkId, {}), op: 'create', undoPayload: null },
+  via: {
+    kind: 'link',
+    table: 'happening_awareness',
+    linkId,
+    otherId: characterId,
+    side: null,
+  },
+})
+
+const linkRowsLoad = async (): Promise<HistoryChunk> => ({
+  rows: [awarenessCreate('haw_kael', 'char_kael'), awarenessCreate('haw_mira', 'char_mira')],
+  nextCursor: null,
+  // Kael's chunk name is stale: the working set's must win. Mira is in the chunk only.
+  names: { char_kael: 'Kael (as deleted)', char_mira: 'Mira' },
+})
+
+/** The other end of a link row reads from the working set, else from the chunk's `names`. */
+export const NamesLinkRowsByOtherEnd: Story = {
+  args: { branchId: 'br_1', targetTable: 'happenings', targetId: 'hap_fire' },
+  beforeEach: () => {
+    entitiesStore.hydrate('br_1', [KAEL])
+    return () => entitiesStore.__reset()
+  },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={linkRowsLoad}>
+        <Story />
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    const rows = await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('Awareness · Kael')).toBeVisible()
+    expect(within(rows[1]).getByText('Awareness · Mira')).toBeVisible()
   },
 }

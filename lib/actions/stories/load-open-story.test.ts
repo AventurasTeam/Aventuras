@@ -14,6 +14,7 @@ import {
   storySettingsSchema,
   stories,
   threads,
+  translations,
   type StoryDefinition,
   type StorySettings,
 } from '@/lib/db'
@@ -31,6 +32,7 @@ import {
   resetAllStores,
   storiesStore,
   threadsStore,
+  translationsStore,
 } from '@/lib/stores'
 
 import { loadOpenStory } from './operational'
@@ -199,15 +201,40 @@ describe('loadOpenStory', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await db.insert(translations).values([
+      {
+        id: 'tr_1',
+        branchId: 'br_1',
+        targetKind: 'entity',
+        targetId: 'char_1',
+        field: 'name',
+        language: 'de',
+        translatedText: 'Kael',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      // Another branch's row: the read must filter by branch.
+      {
+        id: 'tr_2',
+        branchId: 'br_2',
+        targetKind: 'entity',
+        targetId: 'char_1',
+        field: 'name',
+        language: 'de',
+        translatedText: 'Kael',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
 
-    // Counts only loadOpenStory's own reads: join + entries + entities + lore + threads +
-    // happenings + involvements + awareness + chapters + relationships = 10; more is an N+1 read.
+    // Only loadOpenStory's own reads: the join + entries, entities, lore, threads, happenings,
+    // involvements, awareness, chapters, relationships, translations = 11; more is an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)
 
     expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
-    expect(selectSpy).toHaveBeenCalledTimes(10)
+    expect(selectSpy).toHaveBeenCalledTimes(11)
 
     const open = currentStoryStore.getCurrentStory()
     expect(open?.storyId).toBe('story_1')
@@ -238,6 +265,9 @@ describe('loadOpenStory', () => {
     expect(characterRelationshipsStore.getRelationships('char_1', 'br_1')).toEqual([
       { rowId: 'rel_1', otherId: 'char_2', selfToOther: 'ally', otherToSelf: null },
     ])
+
+    expect(translationsStore.getLoadedBranch()).toBe('br_1')
+    expect([...translationsStore.getTranslations().values()].map((r) => r.id)).toEqual(['tr_1'])
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })

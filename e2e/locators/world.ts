@@ -29,6 +29,25 @@ export const world = {
 
   collisionStrip: (page: Page, otherName: string): Locator =>
     page.getByRole('link', { name: t('collisionRow.collidesWith', { name: otherName }) }),
+  resolveButton: (page: Page): Locator =>
+    page.getByRole('button', { name: t('collisionRow.resolve'), exact: true }),
+
+  // The resolve dialog (collision-resolve-dialog.tsx). Its mode segment and the Keep footer button
+  // share the "Keep as distinct" name, so each locator pins its role inside the dialog.
+  collisionDialog: (page: Page): Locator => page.getByRole('dialog'),
+  collisionMode: (page: Page, mode: 'merge' | 'rename' | 'keep'): Locator =>
+    world
+      .collisionDialog(page)
+      .getByRole('radio', { name: t(`collisionDialog.mode.${mode}`), exact: true }),
+  mergeConfirm: (page: Page, canonical: 'older' | 'newer', canonicalName: string): Locator =>
+    world.collisionDialog(page).getByRole('button', {
+      name: t(`collisionDialog.mergeConfirm.${canonical}`, { name: canonicalName }),
+      exact: true,
+    }),
+  keepConfirm: (page: Page): Locator =>
+    world
+      .collisionDialog(page)
+      .getByRole('button', { name: t('collisionDialog.keepConfirm'), exact: true }),
 
   // Select's trigger aria-label is fixed to "Category" (select.tsx: label always wins over text
   // content) — assert the selected value via visible text (toHaveText), not this locator's name.

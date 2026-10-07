@@ -358,8 +358,9 @@ the controls disable and Save shows its loading indicator while
 pending; only a successful write closes it; a Save with nothing
 changed takes the cancel route without writing a delta.
 
-**The edit is the second ungated writer to entry metadata**, so it
-serializes against the world-time footer's write on a per-row lock
+**The edit is one of four ungated writers to entry metadata** (the
+world-time footer, the entity delete and the collision merge are the
+others), so it serializes against them on a per-row lock
 (`withEntryMetadataLock`,
 `lib/actions/story-entries/entry-metadata-lock.ts`) —
 per row rather than per action, because same-row writers under different

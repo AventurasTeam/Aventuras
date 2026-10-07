@@ -5,22 +5,29 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { HistoryChunk, HistoryQuery } from '@/lib/history'
+import type { HistoryChunk, HistoryQuery, HistoryRow } from '@/lib/history'
 import { toast } from '@/lib/toast'
 
 import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { useHistoryChunks } from './use-history-chunks'
 
-const row = (logPosition: number) => ({ id: `delta_${logPosition}`, logPosition }) as Delta
+const row = (logPosition: number): HistoryRow => ({
+  delta: { id: `delta_${logPosition}`, logPosition } as Delta,
+  via: { kind: 'own' },
+})
 
-const positions = (rows: readonly Delta[]) => rows.map((r) => r.logPosition)
+const chunk = (
+  rows: readonly HistoryRow[],
+  nextCursor: number | null,
+  names: Readonly<Record<string, string>> = {},
+): HistoryChunk => ({ rows: [...rows], nextCursor, names })
+
+const positions = (rows: readonly HistoryRow[]) => rows.map((r) => r.delta.logPosition)
 
 function autoLoader() {
-  return vi.fn(
+  return vi.fn<HistoryLoader>(
     async (query: HistoryQuery): Promise<HistoryChunk> =>
-      query.cursor == null
-        ? { rows: [row(4), row(3)], nextCursor: 3 }
-        : { rows: [row(2)], nextCursor: null },
+      query.cursor == null ? chunk([row(4), row(3)], 3) : chunk([row(2)], null),
   )
 }
 
@@ -63,15 +70,16 @@ describe('useHistoryChunks', () => {
   it('loads the first chunk once and appends the next only on loadMore', async () => {
     const { load, hook } = setup()
     await waitFor(() => expect(hook.result.current.status).toBe('ready'))
-    expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3])
+    expect(positions(hook.result.current.rows)).toEqual([4, 3])
     expect(hook.result.current.hasMore).toBe(true)
     expect(load).toHaveBeenCalledTimes(1)
 
     act(() => hook.result.current.loadMore())
-    await waitFor(() =>
-      expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3, 2]),
+    await waitFor(() => expect(positions(hook.result.current.rows)).toEqual([4, 3, 2]))
+    expect(load).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 3 }),
+      expect.any(Function),
     )
-    expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 3 }))
     expect(hook.result.current.hasMore).toBe(false)
   })
 
@@ -82,18 +90,36 @@ describe('useHistoryChunks', () => {
     await waitFor(() =>
       expect(load).toHaveBeenLastCalledWith(
         expect.objectContaining({ search: 'traits', cursor: null }),
+        expect.any(Function),
       ),
     )
-    await waitFor(() => expect(hook.result.current.rows.map((r) => r.logPosition)).toEqual([4, 3]))
+    await waitFor(() => expect(positions(hook.result.current.rows)).toEqual([4, 3]))
+  })
+
+  it("shares one link-end scan across a version's loads, and takes a fresh one on a version change", async () => {
+    const load = autoLoader()
+    const { hook, version } = setup(load)
+    await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+    act(() => hook.result.current.loadMore())
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    hook.rerender({ search: 'traits', version })
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(3))
+    hook.rerender({ search: 'traits', version: {} })
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(4))
+
+    const [first, more, searched, refreshed] = load.mock.calls.map(([, scan]) => scan)
+    expect(more).toBe(first)
+    expect(searched).toBe(first)
+    expect(refreshed).not.toBe(first)
   })
 
   it('refreshes in place when the version changes, keeping the loaded rows until the refetch lands', async () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     act(() => hook.result.current.loadMore())
-    await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: null }))
+    await act(async () => calls[1].resolve(chunk([row(2)], null)))
 
     hook.rerender({ search: '', version: {} })
     expect(hook.result.current.status).toBe('ready')
@@ -101,7 +127,7 @@ describe('useHistoryChunks', () => {
     await waitFor(() => expect(calls).toHaveLength(3))
     expect(calls[2].query).toEqual(expect.objectContaining({ cursor: null, limit: 50 }))
 
-    await act(async () => calls[2].resolve({ rows: [row(5), row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[2].resolve(chunk([row(5), row(4), row(3)], 3)))
     expect(positions(hook.result.current.rows)).toEqual([5, 4, 3])
     expect(hook.result.current.hasMore).toBe(true)
   })
@@ -111,15 +137,17 @@ describe('useHistoryChunks', () => {
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
     const firstPage = Array.from({ length: 50 }, (_, i) => row(100 - i))
-    await act(async () => calls[0].resolve({ rows: firstPage, nextCursor: 51 }))
+    await act(async () => calls[0].resolve(chunk(firstPage, 51)))
     act(() => hook.result.current.loadMore())
     await waitFor(() => expect(calls).toHaveLength(2))
     expect(calls[1].query).toEqual(expect.objectContaining({ cursor: 51 }))
     await act(async () =>
-      calls[1].resolve({
-        rows: Array.from({ length: 10 }, (_, i) => row(50 - i)),
-        nextCursor: null,
-      }),
+      calls[1].resolve(
+        chunk(
+          Array.from({ length: 10 }, (_, i) => row(50 - i)),
+          null,
+        ),
+      ),
     )
     expect(hook.result.current.rows).toHaveLength(60)
 
@@ -133,7 +161,7 @@ describe('useHistoryChunks', () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
 
     hook.rerender({ search: '', version: {} })
     await waitFor(() => expect(calls).toHaveLength(2))
@@ -144,28 +172,80 @@ describe('useHistoryChunks', () => {
     expect(error).toHaveBeenCalledWith('app.history_load_failed', expect.anything())
   })
 
-  it('ignores loadMore while a version refresh is in flight', async () => {
+  it('runs a loadMore pressed during a version refresh once the refresh lands, from its cursor', async () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
 
     hook.rerender({ search: '', version: {} })
     await waitFor(() => expect(calls).toHaveLength(2))
     act(() => hook.result.current.loadMore())
     expect(calls).toHaveLength(2)
 
-    await act(async () => calls[1].resolve({ rows: [row(5), row(4)], nextCursor: 4 }))
-    act(() => hook.result.current.loadMore())
+    await act(async () => calls[1].resolve(chunk([row(5), row(4)], 4)))
     expect(calls).toHaveLength(3)
     expect(calls[2].query).toEqual(expect.objectContaining({ cursor: 4 }))
+    expect(hook.result.current.status).toBe('loading-more')
+    await act(async () => calls[2].resolve(chunk([row(3)], null)))
+    expect(positions(hook.result.current.rows)).toEqual([5, 4, 3])
+    expect(hook.result.current.status).toBe('ready')
+  })
+
+  it('reruns a loadMore that a version refresh orphaned, after the refresh lands', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
+    act(() => hook.result.current.loadMore())
+    expect(calls).toHaveLength(2)
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(3))
+    await act(async () => calls[1].resolve(chunk([row(2)], null)))
+    await act(async () => calls[2].resolve(chunk([row(5), row(4)], 4)))
+    expect(calls).toHaveLength(4)
+    expect(calls[3].query).toEqual(expect.objectContaining({ cursor: 4 }))
+  })
+
+  it('runs a queued loadMore from the kept rows when the refresh fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    act(() => hook.result.current.loadMore())
+    await act(async () => calls[1].reject(new Error('busy')))
+    expect(calls).toHaveLength(3)
+    expect(calls[2].query).toEqual(expect.objectContaining({ cursor: 3 }))
+  })
+
+  it('drops a queued loadMore when the query changes before the refresh lands', async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
+
+    const refreshed = {}
+    hook.rerender({ search: '', version: refreshed })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    act(() => hook.result.current.loadMore())
+    hook.rerender({ search: 'traits', version: refreshed })
+    await waitFor(() => expect(calls).toHaveLength(3))
+    await act(async () => calls[1].resolve(chunk([row(5), row(4)], 4)))
+    await act(async () => calls[2].resolve(chunk([row(8)], 8)))
+    expect(calls).toHaveLength(3)
+    expect(hook.result.current.status).toBe('ready')
   })
 
   it('shows loading with no rows while a changed query reloads (same-commit reset: ClearingASearch story)', async () => {
     const { load, calls } = manualLoader()
     const { hook, version } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     expect(hook.result.current.status).toBe('ready')
 
     hook.rerender({ search: 'traits', version })
@@ -173,7 +253,7 @@ describe('useHistoryChunks', () => {
     expect(hook.result.current.rows).toEqual([])
     expect(hook.result.current.hasMore).toBe(false)
 
-    await act(async () => calls[1].resolve({ rows: [row(4)], nextCursor: null }))
+    await act(async () => calls[1].resolve(chunk([row(4)], null)))
     expect(hook.result.current.status).toBe('ready')
   })
 
@@ -188,7 +268,7 @@ describe('useHistoryChunks', () => {
     expect(hook.result.current.status).toBe('loading')
     expect(calls).toHaveLength(2)
     expect(calls[1].query.cursor).toBeNull()
-    await act(async () => calls[1].resolve({ rows: [row(4)], nextCursor: null }))
+    await act(async () => calls[1].resolve(chunk([row(4)], null)))
     expect(positions(hook.result.current.rows)).toEqual([4])
   })
 
@@ -199,8 +279,8 @@ describe('useHistoryChunks', () => {
     hook.rerender({ search: 'traits', version })
     await waitFor(() => expect(calls).toHaveLength(2))
 
-    await act(async () => calls[1].resolve({ rows: [row(9)], nextCursor: null }))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[1].resolve(chunk([row(9)], null)))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     expect(positions(hook.result.current.rows)).toEqual([9])
     expect(hook.result.current.hasMore).toBe(false)
   })
@@ -224,7 +304,7 @@ describe('useHistoryChunks', () => {
         shown.push({ search, status: chunks.status, rows: positions(chunks.rows) })
         // Settles the old read inside the new query's commit, before its passive effects run.
         useLayoutEffect(() => {
-          if (search === 'traits') calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 })
+          if (search === 'traits') calls[0].resolve(chunk([row(4), row(3)], 3))
         }, [search])
         return chunks
       },
@@ -241,7 +321,7 @@ describe('useHistoryChunks', () => {
 
     act(() => hook.result.current.loadMore())
     expect(calls).toHaveLength(2)
-    await act(async () => calls[1].resolve({ rows: [row(9)], nextCursor: null }))
+    await act(async () => calls[1].resolve(chunk([row(9)], null)))
     expect(hook.result.current.status).toBe('ready')
     expect(positions(hook.result.current.rows)).toEqual([9])
   })
@@ -250,14 +330,14 @@ describe('useHistoryChunks', () => {
     const { load, calls } = manualLoader()
     const { hook, version } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     act(() => hook.result.current.loadMore())
     expect(calls[1].query.cursor).toBe(3)
 
     hook.rerender({ search: 'traits', version })
     await waitFor(() => expect(calls).toHaveLength(3))
-    await act(async () => calls[2].resolve({ rows: [row(8)], nextCursor: 8 }))
-    await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: null }))
+    await act(async () => calls[2].resolve(chunk([row(8)], 8)))
+    await act(async () => calls[1].resolve(chunk([row(2)], null)))
     expect(positions(hook.result.current.rows)).toEqual([8])
     expect(hook.result.current.status).toBe('ready')
 
@@ -270,13 +350,13 @@ describe('useHistoryChunks', () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     act(() => {
       hook.result.current.loadMore()
       hook.result.current.loadMore()
     })
     expect(calls).toHaveLength(2)
-    await act(async () => calls[1].resolve({ rows: [row(2)], nextCursor: 2 }))
+    await act(async () => calls[1].resolve(chunk([row(2)], 2)))
     expect(positions(hook.result.current.rows)).toEqual([4, 3, 2])
 
     act(() => hook.result.current.loadMore())
@@ -289,7 +369,7 @@ describe('useHistoryChunks', () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     act(() => hook.result.current.loadMore())
     await act(async () => calls[1].reject(new Error('read failed')))
     expect(toastError).toHaveBeenCalledTimes(1)
@@ -306,11 +386,30 @@ describe('useHistoryChunks', () => {
     const { load, calls } = manualLoader()
     const { hook } = setup(load)
     await waitFor(() => expect(calls).toHaveLength(1))
-    await act(async () => calls[0].resolve({ rows: [row(4), row(3)], nextCursor: 3 }))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3)))
     act(() => hook.result.current.loadMore())
 
     hook.unmount()
     await act(async () => calls[1].reject(new Error('read failed')))
     expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it("merges each loaded chunk's names, and a refresh replaces them", async () => {
+    const { load, calls } = manualLoader()
+    const { hook } = setup(load)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    await act(async () => calls[0].resolve(chunk([row(4), row(3)], 3, { char_kael: 'Kael' })))
+    expect(hook.result.current.names).toEqual({ char_kael: 'Kael' })
+
+    act(() => hook.result.current.loadMore())
+    await act(async () => calls[1].resolve(chunk([row(2)], null, { char_zed: 'Zed' })))
+    expect(hook.result.current.names).toEqual({ char_kael: 'Kael', char_zed: 'Zed' })
+
+    hook.rerender({ search: '', version: {} })
+    await waitFor(() => expect(calls).toHaveLength(3))
+    await act(async () =>
+      calls[2].resolve(chunk([row(4), row(3), row(2)], null, { char_mira: 'Mira' })),
+    )
+    expect(hook.result.current.names).toEqual({ char_mira: 'Mira' })
   })
 })

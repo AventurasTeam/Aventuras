@@ -124,13 +124,13 @@ export const ResolveDisabledWithReason: Story = {
         collision={{
           otherName: baseCollision.otherName,
           onJumpToOther: baseCollision.onJumpToOther,
-          resolveDisabledReason: 'Lands in Slice 4.2c',
+          resolveDisabledReason: 'Generation is in flight. Cancel to edit.',
         }}
       />
     </View>
   ),
   play: async () => {
-    expect(screen.getByTitle('Lands in Slice 4.2c')).toBeInTheDocument()
+    expect(screen.getByTitle('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '⚠ Collides with Kael' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Resolve →' })).toHaveAttribute(
       'aria-disabled',

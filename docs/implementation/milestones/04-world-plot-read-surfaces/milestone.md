@@ -310,16 +310,20 @@ mechanism where the shipped runner forces it:
   `faction_id`, `equipped_items[]`, `inventory[]`) merged into a single
   `state` patch — the runner rejects two writes to one row's column —
   then one `updateStoryEntryMetadata` dropping the id from the tail
-  entry's `sceneEntities` / `currentLocationId`, then the
-  `deleteEntity` whose registered cascade removes its
+  entry's `sceneEntities` / `currentLocationId`, then, since 4.2c, a
+  `nameCollisionFlag` clear on each flagged row the delete leaves
+  without a namesake (folded into that row's `updateEntity`, else its
+  own), then the `deleteEntity` whose registered cascade removes its
   `happening_involvements`, `happening_awareness`,
   `character_relationships` and `translations` rows. The link and
   translation set mirrors the merge path canon gives in
   [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility)
   minus the rewrite-to-canonical half. The tail-metadata drop is this
-  milestone's **default assumption** — canon is silent on it for both
-  delete and merge — routed as an [open question](#open-questions) for
-  a `world.md` amendment.
+  milestone's **default assumption**, since recorded for the delete in
+  [`world.md → Delete`](../../../ui/screens/world/world.md#delete);
+  4.2c replaced it for the merge with a rewrite to the canonical
+  ([`world.md → Merge`](../../../ui/screens/world/world.md#merge),
+  the tail scene). See the [open question](#open-questions).
 - Deleting the **lead character** is refused with a named rejection
   (`lead-entity`) rather than nulling `definition.leadEntityId`, which
   the schema's `needsLead` refine forbids in adventure or first- and
@@ -351,8 +355,8 @@ mechanism where the shipped runner forces it:
   embed racing a delete writes nothing.
 - The group runner rejects a group that both deletes a row and writes
   a link naming it, or that targets a child row a delete's cascade
-  removes — 4.2c's merge must re-key the loser's links another way
-  (4.2c Open questions).
+  removes — so 4.2c's merge creates the loser's links on the canonical
+  and lets the cascade remove the originals.
 
 Consumers: 4.2b itself (thread and happening delete surfaces, wiring
 4.3's disabled entries), 4.2c (the merge's losing row goes through the
@@ -363,21 +367,28 @@ delete that bypasses the arm is a contract violation.
 
 [Slice 4.2b](./slices/02b-lore-history-delete.md) owns the delta-log
 History tab every detail pane shares. Pinned surface: a branch-scoped
-**query** taking `{ targetTable, targetId, op?, search?, labelPaths?, sort, cursor }`
-and returning one load-older chunk (search matches `op` by its rendered
-label, word-start, or the raw enum; the field-path and free-text arms
-apply to `update` deltas only, since a delete's undo payload is the
-full row and would match every path; a field path tests via
+**query** taking `{ targetTable, targetId, op?, search?, sort, cursor, limit? }`
+and returning one load-older chunk of the row's own deltas and, since
+[4.2c](./slices/02c-collision-review.md), the deltas of the link rows
+naming it and the other ends' deletes that removed them, each tagged
+with how it reaches the row, with the link rows' other-end names
+(search matches `op` by its rendered label, word-start, or the raw
+enum; the field-path and free-text arms apply to `update` deltas only,
+since a delete's undo payload is the full row and would match every
+path; a field path tests via
 `json_type(undo_payload, '$.<path>') IS NOT NULL`, not `json_extract`,
-so a null pre-change value still matches; `target_table` is not
-matched, since it's constant within a per-row tab — per
+so a null pre-change value still matches; a field term resolves against
+the labels of the delta's own table; a link row's target line matches
+by its link label or its other end's name, word-start, while the row's
+own target line, constant within the tab, is not matched — per
 [`world.md → History tab`](../../../ui/screens/world/world.md#history-tab));
-a **host humanizer** mapping a `deltas` row to the
+a **host humanizer** mapping a union row to the
 [`DeltaLogRow` props](../../../ui/patterns/delta-log-row.md#compound-api)
-— target display name resolved from the working-set stores, field
-path, a summary derived from `undo_payload` keys (the M4 interim;
-M6.4's diff cache upgrades the prose without changing this contract),
-source, relative time, `entry #n`; and a **`HistoryTab` component**
+— target display name resolved from the working-set stores (a link
+row's names the link and its other end), field path, a summary
+derived from `undo_payload` keys (the M4 interim; M6.4's diff cache
+upgrades the prose without changing this contract), source, relative
+time, `entry #n`; and a **`HistoryTab` component**
 taking `{ branchId, targetTable, targetId }` that composes search,
 op-filter chips, sort, the load-older list and the read-only empty
 state. The humanizer owns the field-path label vocabulary: a later
@@ -460,7 +471,8 @@ reversed in M4.4; Story Settings and Plot do this). This
 is **not** the Story Settings session from M3.11 — that one aggregates
 sections into a single settings write with no delta; this one is
 per-row and delta-logged. Consumers: 4.2b (lore pane), 4.2c (the
-relationship re-keying shape), 4.3 (thread and happening panes — a
+both-perspective upsert, which its merge writes at most once per
+character the loser relates to), 4.3 (thread and happening panes — a
 doc-as-contract pair with 4.2a; whichever lands first creates the hook
 and the other adopts it). Name fixed in the first commit to land. 4.3
 landed first, shipping the hook as `useRowSaveSession`
@@ -676,6 +688,8 @@ use.
   [`world.md → Delete`](../../../ui/screens/world/world.md#delete) and
   the merge-writes list in
   [`world.md → Reversibility`](../../../ui/screens/world/world.md#reversibility).
+  Superseded for the merge in 4.2c: it rewrites the tail scene to the
+  canonical instead of dropping the id.
 - **Plot chapter buckets before M5.** No chapter is opened in M4, so
   the chapter-keyed grouping is seed-only. Default: one implicit bucket
   and a hidden `This chapter` chip while the branch has no open

@@ -12,6 +12,7 @@ import {
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { blankToNull } from '@/lib/text'
 
+import { orphanedFlags, withFlagClears } from './collision-flags'
 import { cleanList, sameList } from './draft-text'
 import {
   heldItems,
@@ -372,7 +373,10 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
   return actions
 }
 
-/** A create or the changed columns and state paths of an update, plus relationship writes. */
+/**
+ * A create or the changed columns and state paths of an update, plus relationship writes, plus a
+ * flag clear on each flagged row the rename leaves without a namesake.
+ */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args
   if (row != null && row.kind !== args.kind)
@@ -423,5 +427,11 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
       ),
     )
   }
-  return actions
+  const name = draft.name.trim()
+  if (row == null || name === row.name.trim()) return actions
+  const orphans = orphanedFlags({
+    entities: args.branchEntities,
+    renamed: new Map([[row.id, name]]),
+  })
+  return withFlagClears(actions, branchId, orphans)
 }

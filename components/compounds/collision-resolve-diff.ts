@@ -1,20 +1,24 @@
-export type EntityKind = 'character' | 'location' | 'item' | 'faction'
+import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
+import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
+import {
+  MERGE_SCALARS,
+  mergedTerms,
+  type MergeDeselections,
+  type MergeOverlap,
+  type MergeScalar,
+} from '@/lib/world'
 
-export type EntityStatus = 'active' | 'staged' | 'retired'
-
-export type InjectionMode = 'always' | 'on-relevance' | 'never'
-
-export type ScalarField = 'name' | 'description' | 'status' | 'retiredReason' | 'injectionMode'
+export type ScalarField = MergeScalar
 
 export type TermPartition = { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
 
 export type EntitySummary = {
   id: string
   kind: EntityKind
-  createdAt: string
+  createdAt: string // ISO
   name: string
   description?: string
-  status: EntityStatus
+  status: Entity['status']
   retiredReason?: string
   injectionMode: InjectionMode
   priority: number
@@ -24,9 +28,18 @@ export type EntitySummary = {
   relationCounts: {
     awarenessRows: number
     involvements: number
+    /** This side's relationship rows except the one joining the pair, which the merge drops. */
+    relationships: number
+    /** A relationship row joins the two rows; the merge drops it rather than moving it. */
+    joiningRelationship: boolean
     inverseRefs: number
     embeddings: 0 | 1
+    /** Dropped with the merge: the entity's translations and its relationships'. */
     translationRows: number
+    /** Items this side carries that nothing else holds or places; a merge leaves them unheld. */
+    unheldItems: number
+    /** What gives way when this side merges into the partner. */
+    overlap: MergeOverlap
   }
 }
 
@@ -37,29 +50,22 @@ export type DiffPayload = {
   stateDivergent: boolean
 }
 
+export type MergeResolution = {
+  mode: 'merge'
+  canonicalId: string
+  /** Divergent fields the merged row takes from the non-canonical row, in `SCALAR_FIELDS` order. */
+  fromOther: readonly ScalarField[]
+} & MergeDeselections
+
 export type Resolution =
-  | {
-      mode: 'merge'
-      canonicalId: string
-      fieldChoices: Record<ScalarField, 'A' | 'B'>
-      finalTags: string[]
-      finalKeywords: string[]
-    }
+  | MergeResolution
   | {
       mode: 'rename'
       renames: { id: string; newName: string }[]
     }
   | { mode: 'keep' }
 
-// Fixed scalar order for stable rendering. Matches the spec's
-// table column order in world.md → Merge.
-export const SCALAR_FIELDS: ScalarField[] = [
-  'name',
-  'description',
-  'status',
-  'retiredReason',
-  'injectionMode',
-]
+export const SCALAR_FIELDS = MERGE_SCALARS
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
@@ -91,11 +97,49 @@ function partition(a: readonly string[], b: readonly string[]): TermPartition {
   return { onlyInA, onlyInB, both: a.filter((t) => bSet.has(t)).sort() }
 }
 
+/** `normalizeTerm` key → the spelling the merge writes: `dedupeTerms`' trimmed first spelling. */
+function firstSpellings(terms: readonly string[]): Map<string, string> {
+  return new Map(dedupeTerms(terms).map((term) => [normalizeTerm(term), term]))
+}
+
+/** `partition` by `normalizeTerm`: a case variant is one keyword, in A's spelling when shared. */
+function keywordPartition(a: readonly string[], b: readonly string[]): TermPartition {
+  const inA = firstSpellings(a)
+  const inB = firstSpellings(b)
+  const only = (side: Map<string, string>, other: Map<string, string>) =>
+    [...side].filter(([key]) => !other.has(key)).map(([, term]) => term)
+  const onlyInA = only(inA, inB).sort()
+  const onlyInB = only(inB, inA).sort()
+  if (onlyInA.length === 0 && onlyInB.length === 0) return null
+  const both = [...inA]
+    .filter(([key]) => inB.has(key))
+    .map(([, term]) => term)
+    .sort()
+  return { onlyInA, onlyInB, both }
+}
+
+export type MergeChips = { tags: string[]; keywords: string[] }
+
+const NO_DESELECTIONS: MergeDeselections = { deselectedTags: [], deselectedKeywords: [] }
+
+/** The chips a merge offers, in write order; a list the two rows agree on offers none. */
+export function mergeChips(
+  diff: DiffPayload,
+  canonical: EntitySummary,
+  other: EntitySummary,
+): MergeChips {
+  const all = mergedTerms({ canonical, other }, NO_DESELECTIONS)
+  return {
+    tags: diff.tags == null ? [] : all.tags,
+    keywords: diff.keywords == null ? [] : all.keywords,
+  }
+}
+
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {
   return {
     divergentScalars: SCALAR_FIELDS.filter((f) => a[f] !== b[f]),
     tags: partition(a.tags, b.tags),
-    keywords: partition(a.keywords, b.keywords),
+    keywords: keywordPartition(a.keywords, b.keywords),
     stateDivergent: !deepEqual(a.state, b.state),
   }
 }

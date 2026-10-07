@@ -6,7 +6,7 @@ import type {
   StoryEntry,
 } from '@/lib/db'
 import { resolveHeadTurn } from '@/lib/head-turn'
-import { entityDeleteActions } from '@/lib/world'
+import { entityDeleteActions, entityLinkRows } from '@/lib/world'
 
 export type EntityDeleteImpact = {
   awareness: number
@@ -28,17 +28,7 @@ type ImpactInput = {
   relationships: Iterable<CharacterRelationship>
 }
 
-function count<T>(rows: Iterable<T>, match: (row: T) => boolean): number {
-  let n = 0
-  for (const row of rows) if (match(row)) n += 1
-  return n
-}
-
-/**
- * `references`/`unplacedItems`/`tailScene` mirror `entityDeleteActions`; the rest repeat
- * `entityCascade`'s predicates (lib/actions/entities/entity-cascade.ts) — a new cascade table
- * needs a matching count here.
- */
+/** Mirrors `entityDeleteActions` for refs, items and the tail; `entityLinkRows` for link counts. */
 export function entityDeleteImpact({
   branchId,
   row,
@@ -65,13 +55,11 @@ export function entityDeleteImpact({
             currentLocationId: metadata.currentLocationId,
           },
   })
+  const links = entityLinkRows({ branchId, id: row.id, awareness, involvements, relationships })
   return {
-    awareness: count(awareness, (a) => a.branchId === branchId && a.characterId === row.id),
-    involvements: count(involvements, (i) => i.branchId === branchId && i.entityId === row.id),
-    relationships: count(
-      relationships,
-      (r) => r.branchId === branchId && (r.aId === row.id || r.bId === row.id),
-    ),
+    awareness: links.awareness.length,
+    involvements: links.involvements.length,
+    relationships: links.relationships.length,
     references: plan.references,
     unplacedItems: plan.unplacedItems,
     tailScene: plan.tailScene,

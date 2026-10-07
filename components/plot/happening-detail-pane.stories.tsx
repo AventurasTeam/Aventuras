@@ -305,7 +305,7 @@ const meta: Meta<typeof Harness> = {
   // overrides this with its own provider nested closer to the tree.
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null })}>
+      <HistoryLoaderProvider value={async () => ({ rows: [], nextCursor: null, names: {} })}>
         <Story />
       </HistoryLoaderProvider>
     ),
@@ -653,7 +653,7 @@ export const Create: Story = {
 }
 
 const happeningHistoryLoader = fn(
-  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null }),
+  async (): Promise<HistoryChunk> => ({ rows: [], nextCursor: null, names: {} }),
 )
 
 /** A create's History tab targets the saved row's id, not stale create-mode state. */
@@ -687,6 +687,7 @@ export const CreateThenHistoryTargetsTheSavedRow: Story = {
             targetTable: 'happenings',
             targetId: NEW_ID,
           }),
+          expect.any(Function),
         ),
       WAIT,
     )
