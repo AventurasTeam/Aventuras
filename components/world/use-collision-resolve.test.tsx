@@ -539,18 +539,12 @@ describe('collisionResolveProp', () => {
   const onResolve = () => {}
 
   it('passes the handler through while writes are open', () => {
-    expect(collisionResolveProp(false, undefined, onResolve)).toStrictEqual({ onResolve })
+    expect(collisionResolveProp(undefined, onResolve)).toStrictEqual({ onResolve })
   })
 
-  it("disables Resolve with the gate's own reason during a turn", () => {
+  it("disables Resolve with the gate's reason during a turn", () => {
     expect(
-      collisionResolveProp(true, 'Chapter close in progress. Cancel to edit.', onResolve),
+      collisionResolveProp('Chapter close in progress. Cancel to edit.', onResolve),
     ).toStrictEqual({ disabledReason: 'Chapter close in progress. Cancel to edit.' })
-  })
-
-  it('falls back to the in-flight text when the gate gives no reason', () => {
-    expect(collisionResolveProp(true, undefined, onResolve)).toStrictEqual({
-      disabledReason: 'Generation is in flight. Cancel to edit.',
-    })
   })
 })

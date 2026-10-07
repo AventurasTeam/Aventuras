@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { type EntitySummary, type Resolution } from '@/components/compounds/collision-resolve-diff'
-import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import {
   COLLISION_REJECTION,
   resolveCollision,
@@ -200,10 +199,8 @@ export function useCollisionResolve(
 
 /** WorldListPane's `resolveCollision`: Resolve acts, or stays inert with the gate's reason. */
 export function collisionResolveProp(
-  editBlocked: boolean,
-  gateReason: string | undefined,
+  disabledReason: string | undefined,
   onResolve: (id: string) => void,
 ): { onResolve: (id: string) => void } | { disabledReason: string } {
-  const disabledReason = gateDisabledReason(editBlocked, gateReason)
   return disabledReason == null ? { onResolve } : { disabledReason }
 }
