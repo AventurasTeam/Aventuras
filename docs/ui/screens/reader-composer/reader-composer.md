@@ -1071,7 +1071,9 @@ constraint.
 - **Cell** — expand rail **and** switch its category to that
   kind. Tooltip: `<Kind> in scene: <count>` for Group A;
   `<Kind>` for Group B.
-- **Empty region** — expand rail, preserve current category.
+- **Empty region** — the strip's top padding, the gap between the
+  two groups and the area below the last cell: expand rail,
+  preserve current category.
 
 Hover decoration brightens per zone independently — cells aren't
 brightened by hovering empty area, and vice versa. Cell tints
@@ -1089,13 +1091,13 @@ targets. A tap on a cell is its action, so
 doesn't apply: a cell's tooltip text opens on a **long press**, in
 a transient popover, as does the chevron's. The chevron and the
 empty region keep a tap as expand. Cells fall under the 44-px iOS
-recommended hit-target. A tap that misses a cell lands on the
-empty region (which also expands) only below the last cell; between
-adjacent cells (character and item, location and faction) a miss
-switches to the neighbouring category, and a miss in the strip's top
-padding or the gap between the two groups does nothing. Neither
-case is destructive: worst case is an expand onto the wrong
-category.
+recommended hit-target. A tap that misses a cell into the top
+padding, the gap between the groups or the area below the last cell
+lands on the empty region, which also expands. Between adjacent
+controls (chevron and character, character and item, location and
+faction) a miss lands on the neighbour, so it can switch to the
+neighbouring category. Neither case is destructive: worst case is
+an expand onto the wrong category.
 
 ### Open state — collapse trigger
 
