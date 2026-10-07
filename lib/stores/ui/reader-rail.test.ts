@@ -36,6 +36,12 @@ describe('readerRailStore view', () => {
     })
   })
 
+  it('replaces the view on setView, keeping no key of the old one', () => {
+    readerRailStore.setView({ category: 'character', filter: 'staged', search: 'Mira' })
+    readerRailStore.setView({ category: 'lore', search: 'oath' })
+    expect(readerRailStore.getView()).toEqual({ category: 'lore', search: 'oath' })
+  })
+
   it('replaces the view on setView', () => {
     readerRailStore.setView({ category: 'item', filter: 'in-scene', search: 'blade' })
     expect(readerRailStore.getView()).toEqual({
@@ -94,6 +100,18 @@ describe('readerRailStore display', () => {
     })
     readerRailStore.seedViewport(1200)
     expect(readerRailStore.getDisplay().lastWidth).toBe(850)
+  })
+
+  it('reduces other events before the seed, and the seed drops them', () => {
+    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+    readerRailStore.seedViewport(1200)
+    expect(readerRailStore.getDisplay()).toEqual({
+      lastWidth: 1200,
+      forced: false,
+      pendingCollapsed: null,
+      peek: null,
+    })
   })
 
   it('runs every other event through the reducer', () => {
