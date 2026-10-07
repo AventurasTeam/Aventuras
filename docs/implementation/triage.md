@@ -187,8 +187,13 @@ slice-planning gate forces its resolution before that slice is planned.
   component itself still needs a line limit or a growing row. Found in
   4.2c's PR 2 review (2026-10-06). The desktop canonical picker is still
   a segment, and its options now carry the side word as well ("Kael,
-  Older, 3 days ago, Canonical"), so a long name reaches the clip sooner
-  (4.2c's slice review, 2026-10-07).
+  Older, 3 days ago"), so a long name reaches the clip sooner (4.2c's
+  slice review, 2026-10-07). The dialog's mode picker clips too, on web
+  in a window narrower than 330 px: "Keep as distinct", then "Merge into
+  one", wrap to three lines (text 192–252 px in a 201–243 px row at 320
+  px). It fit while the dialog lacked the primitive's side margin, which
+  4.2c's developer review restored. Native keeps no such margin and is
+  unaffected (2026-10-07).
 - **Select's radio groups don't follow the keyboard on web.**
   `components/ui/select.tsx` builds its segment and radio-row branches on
   `@rn-primitives/radio-group`, whose web side relies on Radix's roving
