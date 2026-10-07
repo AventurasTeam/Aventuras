@@ -91,16 +91,20 @@ function removalMember(removals: LinkEnds['removals']): SQL {
   )
 }
 
-// A relationship's labels turn on the tab's side, so its link rows scope per side.
-function linkScopes(ends: LinkEnds): Scope[] {
+// A relationship's labels turn on the tab's side, so its link rows group per side.
+function grouped(links: readonly LinkEnd[]): { first: LinkEnd; ids: string[] }[] {
   const groups = new Map<string, { first: LinkEnd; ids: string[] }>()
-  for (const link of ends.links) {
+  for (const link of links) {
     const key = `${link.table}:${link.side}`
-    const group = groups.get(key) ?? { first: link, ids: [] }
-    group.ids.push(link.linkId)
-    groups.set(key, group)
+    const group = groups.get(key)
+    if (group == null) groups.set(key, { first: link, ids: [link.linkId] })
+    else group.ids.push(link.linkId)
   }
-  return [...groups.values()].map(({ first, ids }) => {
+  return [...groups.values()]
+}
+
+function linkScopes(ends: LinkEnds): Scope[] {
+  return grouped(ends.links).map(({ first, ids }) => {
     const member = linkMember(first.table, ids)
     return first.table === 'character_relationships'
       ? { member, table: first.table, side: first.side }
@@ -108,10 +112,8 @@ function linkScopes(ends: LinkEnds): Scope[] {
   })
 }
 
-function linkMembers(links: LinkEnds['links']): SQL[] {
-  const ids = new Map<HistoryLinkTable, string[]>()
-  for (const link of links) ids.set(link.table, [...(ids.get(link.table) ?? []), link.linkId])
-  return [...ids].map(([table, tableIds]) => linkMember(table, tableIds))
+function linkMembers(links: readonly LinkEnd[]): SQL[] {
+  return grouped(links).map(({ first, ids }) => linkMember(first.table, ids))
 }
 
 // world.md → History tab: a retrieval-count bump changes nothing the user wrote or sees.
