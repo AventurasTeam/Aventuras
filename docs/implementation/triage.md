@@ -136,7 +136,11 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/actions/delta/redo.ts`) take no lock. A CTRL-Z landing while a
   scene edit, delete or merge sits between its tail read and its commit
   could have its restore overwritten. Unverified: it needs two user
-  actions at once. Found in 4.2c's Task 8 review (2026-10-06).
+  actions at once. Found in 4.2c's Task 8 review (2026-10-06). The fix
+  can't take the metadata lock inside the branch lock's exclusive hold:
+  the merge holds the tail's metadata lock while it waits for the shared
+  branch lock, so that order deadlocks. Take the metadata lock first, as
+  the four callers do (4.2c's slice review, 2026-10-07).
 - **The entity update arm's missing-row refusal carries no code.**
   `updateHandler` (`lib/actions/entities/register.ts`) refuses "update
   target … not found" without `TARGET_NOT_FOUND`, which the delete arm
@@ -227,3 +231,10 @@ slice-planning gate forces its resolution before that slice is planned.
   (3+ collisions) cites the contract for who sets and clears it: the
   classifier at create, user paths only clearing it since 4.2c. Found
   in 4.2c's PR 2 review (2026-10-06).
+- **Row-save and row-delete map refusal codes from a plain string.**
+  `rejectionCode` in `lib/actions/row-save/commit-row-save.ts` and
+  `lib/actions/row-delete/delete-row.ts` switches over the runner's
+  untyped `code: string`, defaulting to `failed`, so a new arm refusal
+  code compiles and is silently reported as `failed`. 4.2c made its own
+  collision mapping exhaustive; these two predate it. Found in 4.2c's
+  slice review (2026-10-07).

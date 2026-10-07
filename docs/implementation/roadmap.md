@@ -335,6 +335,18 @@ DB-backed `openRegionTokens` resolves all of them.
   shows exactly that once a close is taken back. Found while the
   2026-10-05 triage pass re-placed the seed's chapter closes; verified
   against canon and the schema, not reproduced in a real close.
+- **M5.2 — The close's awareness merge meets user-written awareness.**
+  The awareness upsert (`lib/actions/happenings/register-awareness.ts`)
+  checks no user precedence: a re-emit overwrites `source` and
+  `decay_resistance` whoever wrote them. User rows exist since 4.2a's
+  Plot editor and 4.2c's collision merge, whose copied awareness is a
+  user create. Today only the periodic classifier writes awareness, and
+  only for happenings it creates in the same pass. The close's
+  happening-cluster merge
+  ([`memory/chapter-close.md`](../memory/chapter-close.md)) will rewrite
+  awareness on rows it didn't create (max decay resistance, sources
+  concatenated), so M5.2 decides whether a user-written awareness row
+  keeps its values. Found in 4.2c's slice review (2026-10-07).
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
