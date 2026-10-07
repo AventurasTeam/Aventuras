@@ -155,13 +155,9 @@ type Resolution =
     }
   | { mode: 'keep' }
 
-type ScalarField =
-  | 'name'
-  | 'description'
-  | 'status'
-  | 'retiredReason'
-  | 'injectionMode'
-  | 'priority'
+// lib/world's MERGE_SCALARS: name, description, status,
+// retiredReason, injectionMode, priority
+type ScalarField = MergeScalar
 ```
 
 `fieldChoices` only carries entries for fields that diverge.

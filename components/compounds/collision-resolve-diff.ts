@@ -1,14 +1,8 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
-import type { MergeOverlap } from '@/lib/world'
+import { MERGE_SCALARS, type MergeOverlap, type MergeScalar } from '@/lib/world'
 
-export type ScalarField =
-  | 'name'
-  | 'description'
-  | 'status'
-  | 'retiredReason'
-  | 'injectionMode'
-  | 'priority'
+export type ScalarField = MergeScalar
 
 export type TermPartition = { onlyInA: string[]; onlyInB: string[]; both: string[] } | null
 
@@ -64,16 +58,7 @@ export type Resolution =
     }
   | { mode: 'keep' }
 
-// Fixed scalar order for stable rendering. Matches the spec's
-// table column order in world.md → Merge.
-export const SCALAR_FIELDS: readonly ScalarField[] = [
-  'name',
-  'description',
-  'status',
-  'retiredReason',
-  'injectionMode',
-  'priority',
-]
+export const SCALAR_FIELDS = MERGE_SCALARS
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true

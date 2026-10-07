@@ -4,7 +4,6 @@ import {
   SCALAR_FIELDS,
   type EntitySummary,
   type Resolution,
-  type ScalarField,
 } from '@/components/compounds/collision-resolve-diff'
 import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import {
@@ -26,21 +25,12 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { namesakeKey, type MergeScalar } from '@/lib/world'
+import { namesakeKey } from '@/lib/world'
 
 import { collisionRejectionText } from './collision-copy'
 import { collisionPair } from './collision-summary'
 
 type Pair = readonly [EntitySummary, EntitySummary]
-
-// The dialog's scalars and the merge's must be the same set; `fromLoser` alone checks one way.
-type _ScalarsMatch = [ScalarField] extends [MergeScalar]
-  ? [MergeScalar] extends [ScalarField]
-    ? true
-    : never
-  : never
-const _scalarsMatchCheck: [_ScalarsMatch] = [true]
-void _scalarsMatchCheck
 
 function inBranch<Row extends { branchId: string }>(
   rows: ReadonlyMap<string, Row>,
