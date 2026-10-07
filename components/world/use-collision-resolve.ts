@@ -5,6 +5,7 @@ import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import {
   COLLISION_REJECTION,
   resolveCollision,
+  type CollisionRejectionCode,
   type CollisionResolution,
   type CollisionResolveResult,
   type DbCtx,
@@ -26,6 +27,19 @@ import { collisionRejectionText } from './collision-copy'
 import { collisionPair } from './collision-summary'
 
 type Pair = readonly [EntitySummary, EntitySummary]
+
+// A toast lands after the dialog closed, so it can't tell the user to close it or pick a row in it.
+const CLOSED_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
+  [COLLISION_REJECTION.inFlight]: () => collisionRejectionText(COLLISION_REJECTION.inFlight),
+  [COLLISION_REJECTION.notFound]: () => t('world:collision.closedRejection.notFound'),
+  [COLLISION_REJECTION.leadEntity]: () => t('world:collision.closedRejection.leadEntity'),
+  [COLLISION_REJECTION.parentCycle]: () => t('world:collision.closedRejection.parentCycle'),
+  [COLLISION_REJECTION.parentChainBroken]: () =>
+    collisionRejectionText(COLLISION_REJECTION.parentChainBroken),
+  [COLLISION_REJECTION.invalidRename]: () =>
+    collisionRejectionText(COLLISION_REJECTION.invalidRename),
+  [COLLISION_REJECTION.failed]: () => collisionRejectionText(COLLISION_REJECTION.failed),
+}
 
 function inBranch<Row extends { branchId: string }>(
   rows: ReadonlyMap<string, Row>,
@@ -158,9 +172,9 @@ export function useCollisionResolve(
     async (resolution: Resolution): Promise<void> => {
       if (pair == null) throw new Error(collisionRejectionText(COLLISION_REJECTION.notFound))
       const asked = requestedRef.current
-      const refuse = (text: string): never => {
-        if (requestedRef.current !== asked) toast.error(text)
-        throw new Error(text)
+      const refuse = (code: CollisionRejectionCode): never => {
+        if (requestedRef.current !== asked) toast.error(CLOSED_REJECTION_TEXT[code]())
+        throw new Error(collisionRejectionText(code))
       }
       const action = toCollisionResolution(resolution, pair)
       let result: CollisionResolveResult
@@ -173,9 +187,9 @@ export function useCollisionResolve(
           ids: pair.map((side) => side.id),
           error: error instanceof Error ? error.message : String(error),
         })
-        return refuse(t('world:collision.failed'))
+        return refuse(COLLISION_REJECTION.failed)
       }
-      if (result.status === 'rejected') return refuse(collisionRejectionText(result.code))
+      if (result.status === 'rejected') return refuse(result.code)
       toast.success(resolvedText(action, pair))
     },
     [pair, branchId, ctx],

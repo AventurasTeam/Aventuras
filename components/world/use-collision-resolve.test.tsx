@@ -475,8 +475,44 @@ describe('useCollisionResolve → outcomes', () => {
     settle({ status: 'rejected', reason: 'not found', code: COLLISION_REJECTION.notFound })
 
     await expect(pending).rejects.toThrow(NOT_FOUND_TEXT)
-    expect(toast.error).toHaveBeenCalledWith(NOT_FOUND_TEXT)
+    // The dialog's copy says to close it and recheck; the toast can't point at a closed dialog.
+    expect(toast.error).toHaveBeenCalledWith(
+      "Couldn't resolve the collision: the rows changed or no longer collide.",
+    )
   })
+
+  it.each([
+    [
+      COLLISION_REJECTION.leadEntity,
+      LEAD_TEXT,
+      "Couldn't merge: the story's lead can't be the row a merge removes.",
+    ],
+    [
+      COLLISION_REJECTION.parentCycle,
+      'Merging these would make a location part of itself. Pick the other row to survive.',
+      "Couldn't merge: it would make a location part of itself.",
+    ],
+  ])(
+    "toasts a %s refusal after close without the dialog's instruction",
+    async (code, dialogText, toastText) => {
+      let settle: (result: unknown) => void = () => {}
+      resolveCollision.mockReturnValue(new Promise((resolve) => (settle = resolve)))
+      const result = openPair()
+
+      const pending = result.current.resolve({
+        mode: 'merge',
+        canonicalId: OLDER.id,
+        fromOther: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
+      })
+      act(() => result.current.close())
+      settle({ status: 'rejected', reason: code, code })
+
+      await expect(pending).rejects.toThrow(dialogText)
+      expect(toast.error).toHaveBeenCalledWith(toastText)
+    },
+  )
 
   it('leaves a refusal to the open dialog, without a toast', async () => {
     resolveCollision.mockResolvedValue({

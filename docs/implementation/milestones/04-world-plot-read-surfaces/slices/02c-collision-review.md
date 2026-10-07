@@ -278,7 +278,9 @@ collision canon, PR 3 History union). Developer decisions are marked.
     clip.
   - Native tiers stack choices with Older / Newer captions.
   - `Resolve →` goes through the pane's dirty guard.
-  - A refusal that lands after the dialog closed shows as a toast.
+  - A refusal that lands after the dialog closed shows as a toast,
+    in its own copy where the dialog's tells the user to close it or
+    pick a row in it.
 - **History union** (developer, planning). A tab lists live
   link rows naming its row, link rows deleted on their own, and link
   rows held in the other end's delete payload, that delete itself
