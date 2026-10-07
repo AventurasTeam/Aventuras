@@ -579,7 +579,9 @@ export const MergeInFlightStaysOpen: Story = {
     for (const value of ['active', 'staged'])
       expect(status.getByText(value)).toHaveStyle({ pointerEvents: 'none' })
 
-    settleResolve?.()
+    // The driver assigns it after the reset above, which narrowing can't see.
+    const settle = settleResolve as (() => void) | null
+    settle?.()
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   },
 }
