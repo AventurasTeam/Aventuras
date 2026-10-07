@@ -195,6 +195,21 @@ export const MergeLongDescriptions: Story = {
       onResolve={resolveOk}
     />
   ),
+  play: async () => {
+    const heading = await screen.findByText(/^Moves on merge/)
+    for (const prose of [LONG_A, LONG_B]) {
+      const text = screen.getByText(prose)
+      const card = text.closest<HTMLElement>('[role="radio"]')
+      expect(card).not.toBeNull()
+      // Columns wrap prose freely: the card grows with its text instead of spilling over.
+      expect(text.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        card!.getBoundingClientRect().bottom,
+      )
+      expect(card!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        heading.getBoundingClientRect().top,
+      )
+    }
+  },
 }
 
 export const MergePriorityOnly: Story = {
@@ -206,11 +221,11 @@ export const MergePriorityOnly: Story = {
     />
   ),
   play: async () => {
-    const row = await screen.findByRole('group', { name: 'Priority' })
+    const row = await screen.findByRole('radiogroup', { name: 'Priority' })
     for (const label of ['Name', 'Description', 'Status', 'Retired reason', 'Injection mode'])
-      expect(screen.queryByRole('group', { name: label })).toBeNull()
-    expect(within(row).getByRole('button', { name: '20' })).toBeInTheDocument()
-    expect(within(row).getByRole('button', { name: '5' })).toBeInTheDocument()
+      expect(screen.queryByRole('radiogroup', { name: label })).toBeNull()
+    expect(within(row).getByRole('radio', { name: /^Older · .+: 20$/ })).toBeInTheDocument()
+    expect(within(row).getByRole('radio', { name: /^Newer · .+: 5$/ })).toBeInTheDocument()
   },
 }
 
@@ -436,12 +451,12 @@ export const MergeFieldsFromOther: Story = {
   ),
   play: async () => {
     lastResolution = null
-    const description = await screen.findByRole('group', { name: 'Description' })
-    await userEvent.click(within(description).getByRole('button', { name: entityB.description }))
+    const description = await screen.findByRole('radiogroup', { name: 'Description' })
+    await userEvent.click(within(description).getByRole('radio', { name: /^Newer · / }))
     // A canonical pick takes every field from the new canonical again.
     await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
-    const status = screen.getByRole('group', { name: 'Status' })
-    await userEvent.click(within(status).getByRole('button', { name: 'active' }))
+    const status = screen.getByRole('radiogroup', { name: 'Status' })
+    await userEvent.click(within(status).getByRole('radio', { name: /^Older · .+: active$/ }))
     await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
 
     await waitFor(() => expect(lastResolution).not.toBeNull())
@@ -544,21 +559,18 @@ export const MergeFieldDivergesWhileOpen: Story = {
   render: () => <DivergesWhileOpen />,
   play: async () => {
     await screen.findByRole('button', { name: /^Merge into / })
-    expect(screen.queryByRole('group', { name: 'Priority' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Priority' })).toBeNull()
     divergeNow?.()
 
-    const row = await screen.findByRole('group', { name: 'Priority' })
-    expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'false')
+    const row = await screen.findByRole('radiogroup', { name: 'Priority' })
+    const older = within(row).getByRole('radio', { name: /: 20$/ })
+    const newer = within(row).getByRole('radio', { name: /: 5$/ })
+    expect(older).toHaveAttribute('aria-checked', 'true')
+    expect(newer).toHaveAttribute('aria-checked', 'false')
 
     await userEvent.click(screen.getAllByRole('radio', { name: /^Kael · / })[1])
-    await waitFor(() =>
-      expect(within(row).getByRole('button', { name: '5' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      ),
-    )
-    expect(within(row).getByRole('button', { name: '20' })).toHaveAttribute('aria-pressed', 'false')
+    await waitFor(() => expect(newer).toHaveAttribute('aria-checked', 'true'))
+    expect(older).toHaveAttribute('aria-checked', 'false')
   },
 }
 
@@ -585,13 +597,13 @@ export const MergeConvergesWhileOpen: Story = {
   render: () => <ConvergesWhileOpen />,
   play: async () => {
     lastResolution = null
-    const row = await screen.findByRole('group', { name: 'Priority' })
-    await userEvent.click(within(row).getByRole('button', { name: '5' }))
+    const row = await screen.findByRole('radiogroup', { name: 'Priority' })
+    await userEvent.click(within(row).getByRole('radio', { name: /: 5$/ }))
     // Terms both rows keep after converging: a stale deselect would drop them from the canonical.
     await userEvent.click(screen.getByRole('button', { name: 'sword' }))
     await userEvent.click(screen.getByRole('button', { name: 'the swordsman' }))
     convergeNow?.()
-    await waitFor(() => expect(screen.queryByRole('group', { name: 'Priority' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Priority' })).toBeNull())
     expect(screen.queryByRole('group', { name: TAG_CHIPS })).toBeNull()
     expect(screen.queryByRole('group', { name: KEYWORD_CHIPS })).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))

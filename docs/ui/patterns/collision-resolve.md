@@ -295,17 +295,18 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    History renders (`relativeTimeLabel`). A `· Canonical` suffix
    appears on the selected side. On phone the picker renders as
    full-width radio rows, since a half-width segment label clips.
-2. **Divergent-field table** — one row per divergent scalar.
-   Each row: field label · radio for A's value · radio for B's
+2. **Divergent-field table** — one row per divergent scalar, a
+   `radiogroup` named by the field label with a radio for A's value
+   and one for B's, each radio named by its side caption and its
    value. Identical fields are omitted entirely. Empty when no
    scalars diverge. Where the choices sit side by side (web above
-   phone), a header row names the sides `Older · <relative time>` /
+   phone), each is a bordered card that grows with its value, and a
+   header row names the sides `Older · <relative time>` /
    `Newer · <relative time>`, the canonical's with the `· Canonical`
    suffix; on stacked tiers (phone, or any native tier) each choice
-   carries that caption itself instead, and each field is one
-   `radiogroup` named by the field label. From the keyboard a
-   field is one tab stop, on its checked radio: Space checks the
-   focused radio and the arrow keys move the check.
+   carries that caption itself instead. From the keyboard a field is
+   one tab stop, on its checked radio: Space checks the focused radio
+   and the arrow keys move the check.
 3. **Keyword union** (when `diff.keywords != null`) — single row
    labeled "Keywords", identical in shape to the tag row below it and
    rendered directly above it.

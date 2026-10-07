@@ -572,82 +572,47 @@ function FieldRow({
 }: FieldRowProps) {
   const label = t(`collisionDialog.field.${field}`)
   const keys = useChoiceKeys(pick, onPick, disabled)
-  if (stacked)
-    return (
-      <View className="gap-1">
-        <Text size="sm" variant="muted">
-          {label}
-        </Text>
-        <RadioGroupBase.Root
-          value={pick}
-          onValueChange={(side) => onPick(side as Side)}
-          disabled={disabled}
-          aria-label={label}
-          tabIndex={Platform.OS === 'web' ? -1 : undefined}
-          className="gap-1"
-        >
-          {(['A', 'B'] as const).map((side) => {
-            const entity = side === 'A' ? entityA : entityB
-            return (
-              <StackedChoice
-                key={side}
-                side={side}
-                value={fieldValue(field, entity)}
-                caption={sideCaption(side, entity, nowMs)}
-                prose={PROSE_FIELDS.has(field)}
-                selected={pick === side}
-                keys={keys(side)}
-                disabled={disabled}
-              />
-            )
-          })}
-        </RadioGroupBase.Root>
-      </View>
-    )
   return (
-    <View role="group" accessibilityLabel={label} className="gap-1">
+    <View className="gap-1">
       <Text size="sm" variant="muted">
         {label}
       </Text>
-      <View className="flex-row gap-2">
-        <RadioCard
-          label={fieldValue(field, entityA)}
-          selected={pick === 'A'}
-          onPress={() => onPick('A')}
-          disabled={disabled}
-        />
-        <RadioCard
-          label={fieldValue(field, entityB)}
-          selected={pick === 'B'}
-          onPress={() => onPick('B')}
-          disabled={disabled}
-        />
-      </View>
+      <RadioGroupBase.Root
+        value={pick}
+        onValueChange={(side) => onPick(side as Side)}
+        disabled={disabled}
+        aria-label={label}
+        tabIndex={Platform.OS === 'web' ? -1 : undefined}
+        className={stacked ? 'gap-1' : 'flex-row gap-2'}
+      >
+        {(['A', 'B'] as const).map((side) => {
+          const entity = side === 'A' ? entityA : entityB
+          const choice = {
+            side,
+            value: fieldValue(field, entity),
+            caption: sideCaption(side, entity, nowMs),
+            selected: pick === side,
+            keys: keys(side),
+            disabled,
+          }
+          return stacked ? (
+            <StackedChoice key={side} {...choice} prose={PROSE_FIELDS.has(field)} />
+          ) : (
+            <ColumnChoice key={side} {...choice} />
+          )
+        })}
+      </RadioGroupBase.Root>
     </View>
   )
 }
 
-type RadioCardProps = {
-  label: string
-  selected: boolean
-  onPress: () => void
-  disabled?: boolean
-}
-
-function RadioCard({ label, selected, onPress, disabled }: RadioCardProps) {
-  return (
-    <Chip selected={selected} onPress={onPress} className="flex-1" disabled={disabled}>
-      <Text>{label}</Text>
-    </Chip>
-  )
-}
-
-function RadioDot({ selected }: { selected: boolean }) {
+function RadioDot({ selected, className }: { selected: boolean; className?: string }) {
   return (
     <View
       className={cn(
         'size-4 items-center justify-center rounded-full border-2',
         selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
+        className,
       )}
     >
       <RadioGroupBase.Indicator className="size-1.5 rounded-full bg-accent-fg" />
@@ -655,15 +620,45 @@ function RadioDot({ selected }: { selected: boolean }) {
   )
 }
 
-type StackedChoiceProps = {
+type ChoiceProps = {
   side: Side
   value: string
   caption: string
-  prose: boolean
   selected: boolean
   keys: ChoiceKeys
   disabled?: boolean
 }
+
+/** A card per side that grows with its value, so prose wraps in place (world.md → Merge). */
+function ColumnChoice({ side, value, caption, selected, keys, disabled }: ChoiceProps) {
+  return (
+    <RadioGroupBase.Item
+      {...keys}
+      value={side}
+      aria-label={t('collisionDialog.choiceLabel', { caption, value })}
+      disabled={disabled}
+      style={disabled ? GATED : undefined}
+      className={cn(
+        'flex-1 flex-row items-start gap-3 rounded-md border bg-bg-base px-row-x-md py-row-y-md',
+        selected ? 'border-accent' : 'border-border active:bg-tint-press',
+        Platform.select({
+          web: cn(
+            !selected && 'hover:bg-tint-hover',
+            'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+          ),
+        }),
+        disabled && 'opacity-50',
+      )}
+    >
+      <RadioDot selected={selected} className="mt-0.5" />
+      <Text size="sm" className="min-w-0 flex-1">
+        {value}
+      </Text>
+    </RadioGroupBase.Item>
+  )
+}
+
+type StackedChoiceProps = ChoiceProps & { prose: boolean }
 
 // world.md → Merge (Long-text values, Side identification): the radio and the prose are separate
 // taps, and the caption names the side.
