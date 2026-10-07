@@ -19,7 +19,7 @@ export function avtsFileName(prefix: string, name: string): string {
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[ßæœøłđðþı]/g, (ch) => UNSPLITTABLE[ch] ?? ch)
+    .replace(/[^a-z0-9]/g, (ch) => UNSPLITTABLE[ch] ?? ch)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, SLUG_MAX)
