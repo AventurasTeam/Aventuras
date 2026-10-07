@@ -226,11 +226,15 @@ collision canon, PR 3 History union). Developer decisions are marked.
   (`promoteStagedEntity`, `updateEntityLocationTracking`). No bystander
   is written. The next turn's structural floor seats only active
   entities, and its prompt is built before its piggyback fold.
-- **Planned inside the branch lock.** Every resolution commits through
-  `applyDeltaActionGroupBuilt`, so a no-gate classifier pass can't
-  stale the plan. 4.2b's entity delete stays on the plain group: it
-  now also plans from names and flags, which the classifier never
-  renames, deletes or clears.
+  Accepted consequences: an in-scene canonical is promoted even when
+  the status choice was left on `staged`, and the tail's location
+  overwrites a manual location edit on the canonical when the tail
+  scene already held the canonical beside the loser.
+- **Planned inside the branch lock** (developer, planning). Every
+  resolution commits through `applyDeltaActionGroupBuilt`, so a no-gate
+  classifier pass can't stale the plan. 4.2b's entity delete stays on
+  the plain group: it now also plans from names and flags, which the
+  classifier never renames, deletes or clears.
 - **Grouped writes need no group-aware pass.** The runner refuses two
   writes to one column of a row, and the merge makes none: one
   both-view relationship per other character, one `updateEntity` per
@@ -239,13 +243,14 @@ collision canon, PR 3 History union). Developer decisions are marked.
   canonical collapses to null. A merge whose canonical descends from
   the loser through another location is refused as `parent-cycle`,
   because the pre-group reads see the cycle.
-- **Flag clears.** Every dialog path clears each flagged row of its
-  pair, not only the newer one: an older flagged row would otherwise
-  be unresolvable. 4.2a's rename save and 4.2b's delete clear any flag
-  their write leaves without a namesake. The clear folds into a row's
-  `updateEntity` only, so a row that also loses an item writes two
-  deltas. A reversal that orphans a flag is accepted; the next pairing
-  clears it.
+- **Flag clears** (developer, planning). Every dialog path clears each
+  flagged row of its pair, not only the newer one: an older flagged row
+  would otherwise be unresolvable. 4.2a's rename save and 4.2b's delete
+  clear any flag their write leaves without a namesake. A reversal that
+  orphans a flag is accepted; the next pairing clears it.
+- **Where a clear lands.** It folds into a row's `updateEntity` only,
+  so when a 4.2a save also takes an item from a row whose flag it
+  clears, that row writes two deltas.
 - **Other merge write-set choices** (developer, planning):
   - The loser's translations are dropped, not moved.
   - The tail scene is rewritten to the canonical, overturning 4.2b's
@@ -253,8 +258,9 @@ collision canon, PR 3 History union). Developer decisions are marked.
   - A canonical item with no position takes the loser's placement.
     When the canonical item is already held or placed, the loser's
     holders drop it; one carrying both copies keeps one.
-  - Moved awareness keeps `retrieval_count`. A dropped duplicate's
-    count is lost.
+  - Moved awareness keeps `retrieval_count`. Since a duplicate is
+    dropped rather than merged (first bullet), its count is lost; the
+    canonical keeps its own.
   - A merge-written relationship view counts as the user's.
 - **Rename validation.** Trimmed names must be non-empty and stop
   colliding under the namesake rule, so a change of letter case or of
@@ -270,10 +276,23 @@ collision canon, PR 3 History union). Developer decisions are marked.
   - A refusal that lands after the dialog closed shows as a toast.
 - **History union** (developer, planning). A tab lists live
   link rows naming its row, link rows deleted on their own, and link
-  rows held in the other end's delete payload. Relationship edits show
-  on both characters' tabs, labelled from the tab's side. An
-  unresolvable other end on a removal reads "Removed when its other end
-  was deleted". Retrieval bumps are left out.
+  rows held in the other end's delete payload, that delete itself
+  listing under `Deleted`. Relationship edits show on both characters'
+  tabs, whichever view they changed, labelled from the tab's side of
+  the `a_id < b_id` pair. Awareness updates that change only the
+  retrieval count are left out.
+  - Wording: a link row's target line reads `<link> · <other end>`,
+    the other end's name taken from the stores, else its delete
+    payload, else unknown. Summaries read `Created`,
+    `Modified <fields>`, `Deleted` and
+    `Removed when <name> was deleted`. Link fields read Your view /
+    Their view, Role, Source, Decay resistance and Learned at.
+  - Search: a field term resolves against the labels of the delta's
+    own table, a relationship's by side; free text works as before;
+    the target line matches from a word start; the op chips count link
+    rows.
+- **Unknown other end.** A removal whose other end has no name to read
+  says "Removed when its other end was deleted".
 - **Union cost.** Measured on a 30k-delta branch, the link-end scan
   takes 6–32 ms per page and per search keystroke, more on
   delete-heavy branches. If History feels slow on a long story, cache
