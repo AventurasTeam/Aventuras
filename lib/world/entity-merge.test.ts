@@ -712,6 +712,20 @@ describe('entityMergeActions — scene effects', () => {
     expect(ofKind(actions, 'updateEntityLocationTracking')).toStrictEqual([])
   })
 
+  it('promotes a canonical the scene already held, but keeps its own location', () => {
+    const canonical = entity('char_a', 'character', { status: 'staged' })
+    const sharedTail = { ...tail, sceneEntities: ['char_a', 'char_b'] }
+    const { actions } = merge({ canonical, branchEntities: [canonical, B], tail: sharedTail })
+    expect(actions.slice(-2)).toStrictEqual([deleteLoser, promote])
+    expect(ofKind(actions, 'updateEntityLocationTracking')).toStrictEqual([])
+
+    const writing = entity('char_a', 'character', {}, { faction_id: 'char_b' })
+    const folded = merge({ canonical: writing, branchEntities: [writing, B], tail: sharedTail })
+    expect(ofKind(folded.actions, 'updateEntity')[0].payload.patch).toStrictEqual({
+      state: emptyEntityState('character'),
+    })
+  })
+
   it('tracks nothing to a tail with no location, and seats nothing the tail never named', () => {
     const staged = entity('char_a', 'character', { status: 'staged' })
     const unlocated = merge({

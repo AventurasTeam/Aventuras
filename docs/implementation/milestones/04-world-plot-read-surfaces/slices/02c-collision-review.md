@@ -222,16 +222,17 @@ collision canon, PR 3 History union). Developer decisions are marked.
 - **The merge's tail-scene effects cover the canonical only**
   (developer, during the run). A merge that rewrites the tail promotes
   the canonical if its merged status is `staged`, whatever its kind,
-  and a character canonical in the tail scene takes the tail's known
-  location. Each folds into the canonical's update when that already
-  writes the column (`status`, `state`), else is its own write
-  (`promoteStagedEntity`, `updateEntityLocationTracking`). No bystander
-  is written. The next turn's structural floor seats only active
-  entities, and its prompt is built before its piggyback fold.
-  Accepted consequences: an in-scene canonical is promoted even when
-  the status choice was left on `staged`, and the tail's location
-  overwrites a manual location edit on the canonical when the tail
-  scene already held the canonical beside the loser.
+  and a character canonical the merge brings into the tail scene in
+  the loser's place takes the tail's known location. Each folds into
+  the canonical's update when that already writes the column
+  (`status`, `state`), else is its own write (`promoteStagedEntity`,
+  `updateEntityLocationTracking`). No bystander is written. The next
+  turn's structural floor seats only active entities, and its prompt
+  is built before its piggyback fold. Accepted consequence: an
+  in-scene canonical is promoted even when the status choice was left
+  on `staged`. A canonical the tail scene already held beside the
+  loser keeps its own location, so a manual location edit survives
+  (developer, reviewing #578: "Yes, the narrowing makes sense.").
 - **Planned inside the branch lock** (developer, planning). Every
   resolution commits through `applyDeltaActionGroupBuilt`, so a no-gate
   classifier pass can't stale the plan. 4.2b's entity delete stays on

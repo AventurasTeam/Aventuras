@@ -1100,13 +1100,14 @@ when the canonical is already there), and a `currentLocationId`
 naming the non-canonical becomes the canonical's. The floor seats
 only active rows, so the canonical is also promoted when its merged
 status is `staged`, whatever its kind, even if the status choice was
-left on staged; and a character canonical in the scene takes the
-tail's location when that location is known. No other row is
-written: the scene isn't re-folded and bystanders aren't
-re-anchored. A location merge tracks no characters, since the ref
-rewrite already moves those at the loser. When the tail already
-held the canonical beside the non-canonical, the canonical is still
-tracked to the tail's location, overwriting a manual location edit.
+left on staged; and a character canonical that takes the
+non-canonical's place in the scene takes the tail's location when
+that location is known. A canonical the scene already held beside
+the non-canonical keeps its own location, which may be a manual
+edit; it is still promoted. No other row is written: the scene isn't
+re-folded and bystanders aren't re-anchored. A location merge tracks
+no characters, since the ref rewrite already moves those at the
+loser.
 
 #### Rename
 
@@ -1208,8 +1209,9 @@ Merge writes, in order:
 - When the tail was rewritten, the canonical's scene effects: a
   promotion to `active` when its merged status is `staged` (folded
   into the canonical's update above when that already writes
-  `status`, else its own `op=update`), and, for a character, the
-  tail's location as its `current_location_id` (folded into the
+  `status`, else its own `op=update`), and, for a character the
+  merge brings into the scene, the tail's location as its
+  `current_location_id` (folded into the
   canonical's `state` patch when it has one, else its own
   `op=update`).
 

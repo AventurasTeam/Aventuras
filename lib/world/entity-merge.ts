@@ -113,9 +113,11 @@ function withSceneEffects(
       })
     else next = { ...next, status: 'active' }
   }
-  // Tracked only to a known location: a null one leaves the canonical where it was.
+  // Tracked only when it takes the loser's seat, and to a known location: a canonical the scene
+  // already held keeps its own, which may be a manual edit.
   const location = tail.currentLocationId
-  if (canonical.kind === 'character' && location != null) {
+  const joins = !tail.sceneEntities.includes(canonical.id)
+  if (canonical.kind === 'character' && joins && location != null) {
     if (next.state == null)
       actions.push({
         kind: 'updateEntityLocationTracking',

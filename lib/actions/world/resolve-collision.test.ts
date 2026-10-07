@@ -890,6 +890,24 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
     expect(await deltasOn('char_b')).toEqual(['delete'])
   })
 
+  it('keeps the location of a canonical the scene already held, and still promotes it', async () => {
+    await setTail({
+      sceneEntities: ['char_a', 'char_b', 'char_o'],
+      currentLocationId: 'loc_b',
+      worldTime: 0,
+    })
+    await setStatus('char_a', 'staged')
+    await setState('char_a', characterState({ current_location_id: 'loc_a' }))
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+
+    expect((await tail()).sceneEntities).toEqual(['char_a', 'char_o'])
+    expect(await entityRow('char_a')).toMatchObject({
+      status: 'active',
+      state: { current_location_id: 'loc_a' },
+    })
+  })
+
   it("leaves the canonical's location alone when the tail has none", async () => {
     await setTail({ sceneEntities: ['char_b', 'char_o'], currentLocationId: null, worldTime: 0 })
     await setState('char_a', characterState({ current_location_id: 'loc_a' }))
