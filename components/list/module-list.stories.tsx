@@ -1,15 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState, type Ref } from 'react'
+import { useState, type ReactElement, type Ref } from 'react'
 import { ScrollView, View, type ScrollViewProps } from 'react-native'
 import { expect, fn, screen, userEvent } from 'storybook/test'
 
 import { entityListModule } from '@/components/entity/entity-list-module'
 import { LORE_FILTER, loreListModule } from '@/components/entity/lore-list-module'
 import { ScrollComponentContext } from '@/components/ui/scroll-component'
+import { Text } from '@/components/ui/text'
 import type { Entity, Lore } from '@/lib/db'
 import type { EntityFilter, EntityListSignals } from '@/lib/list-modules'
 
-import type { RowDensity } from './list-module'
+import type { RowDensity, RowSignals } from './list-module'
 import { ModuleList } from './module-list'
 
 const SIGNALS: EntityListSignals = { leadId: null, inScene: new Set() }
@@ -63,9 +64,17 @@ type LoreHarnessProps = {
   rows?: Lore[]
   density?: RowDensity
   emptySubtext?: string
+  body?: ReactElement
+  rowSignals?: (id: string) => RowSignals
 }
 
-function LoreHarness({ rows = LORE, density, emptySubtext }: LoreHarnessProps) {
+function LoreHarness({
+  rows = LORE,
+  density,
+  emptySubtext,
+  body,
+  rowSignals = () => ({}),
+}: LoreHarnessProps) {
   const [search, setSearch] = useState('')
   return (
     <View style={{ width: 300, height: 400 }}>
@@ -80,7 +89,7 @@ function LoreHarness({ rows = LORE, density, emptySubtext }: LoreHarnessProps) {
         kindSelector={null}
         addSlot={null}
         listSignals={SIGNALS}
-        rowSignals={() => ({})}
+        rowSignals={rowSignals}
         selectedId={null}
         onSelect={() => {}}
         collapsed={COLLAPSED}
@@ -88,6 +97,7 @@ function LoreHarness({ rows = LORE, density, emptySubtext }: LoreHarnessProps) {
         resetKey="lore"
         density={density}
         emptySubtext={emptySubtext}
+        body={body}
       />
     </View>
   )
@@ -125,7 +135,10 @@ function TaggedScroll(props: ScrollViewProps & { ref?: Ref<ScrollView> }) {
   return <ScrollView {...props} testID="injected-scroll" />
 }
 
-type StoryArgs = { onReveal?: (id: string) => void }
+type StoryArgs = {
+  onReveal?: (id: string) => void
+  rowSignals?: (id: string) => RowSignals
+}
 
 const meta: Meta<StoryArgs> = {
   title: 'Compounds/List/ModuleList',
@@ -181,6 +194,17 @@ export const FlaggedWithReveal: Story = {
     const badge = await screen.findByRole('button', { name: '1 in Staged needs review' })
     await userEvent.click(badge)
     expect(args.onReveal).toHaveBeenCalledWith('char_sage')
+  },
+}
+
+/** `body` replaces the list without building it: no row renders or reads its signals. */
+export const BodySkipsRows: Story = {
+  args: { rowSignals: fn(() => ({})) },
+  render: (args) => <LoreHarness body={<Text>Index loading</Text>} rowSignals={args.rowSignals} />,
+  play: async ({ args }) => {
+    expect(await screen.findByText('Index loading')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'The Veil' })).toBeNull()
+    expect(args.rowSignals).not.toHaveBeenCalled()
   },
 }
 

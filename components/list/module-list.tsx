@@ -120,8 +120,9 @@ export function ModuleList<
     </View>
   )
 
+  // Building a row reads its signals and registers its reveal refs; a `body` shows none of them.
   const list =
-    grouped == null ? (
+    body != null ? null : grouped == null ? (
       visible.map(renderRow)
     ) : (
       <>
