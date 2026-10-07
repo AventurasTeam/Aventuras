@@ -3,6 +3,7 @@ import {
   BottomSheetHandle,
   type BottomSheetHandleProps,
   BottomSheetModal,
+  BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
 } from '@gorhom/bottom-sheet'
@@ -19,6 +20,7 @@ import {
 import {
   BackHandler,
   Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   useWindowDimensions,
@@ -31,6 +33,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
@@ -94,6 +97,13 @@ export function QuietSheetHandle(props: BottomSheetHandleProps) {
 const SheetInputComponent = (
   Platform.OS === 'web' ? TextInput : BottomSheetTextInput
 ) as InputComponent
+
+// Native-only swap, as for the input: gorhom's scroll view hands the gesture to the sheet's
+// drag-down at the top of the list. Cast: gorhom types its ref `BottomSheetScrollViewMethods`,
+// which carries the `scrollTo` a list calls.
+const SheetScrollComponent = (
+  Platform.OS === 'web' ? ScrollView : BottomSheetScrollView
+) as ScrollComponent
 
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
@@ -292,35 +302,37 @@ function BottomSheetContent({
             so focusing an Input inside a sheet triggers gorhom's translate-up
             behavior. Plain TextInput isn't tracked by the sheet's keyboard system. */}
         <InputComponentContext.Provider value={SheetInputComponent}>
-          {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
-              (dynamic sizing measures BottomSheetView's content height). Fixed-detent
-              sizes skip BottomSheetView because it captures vertical pan gestures and
-              blocks nested scrollables (e.g. BottomSheetSectionList in
-              SearchableOverlayList) from claiming them. */}
-          {/* Edge-to-edge draws the sheet under the system navigation bar, so
-              without this the last rows of a tall sheet sit behind it —
-              unreachable, and a scrollable reports itself fully scrolled. */}
-          {size === 'auto' ? (
-            <BottomSheetView>
+          <ScrollComponentContext.Provider value={SheetScrollComponent}>
+            {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
+                (dynamic sizing measures BottomSheetView's content height). Fixed-detent
+                sizes skip BottomSheetView because it captures vertical pan gestures and
+                blocks nested scrollables (e.g. BottomSheetSectionList in
+                SearchableOverlayList) from claiming them. */}
+            {/* Edge-to-edge draws the sheet under the system navigation bar, so
+                without this the last rows of a tall sheet sit behind it —
+                unreachable, and a scrollable reports itself fully scrolled. */}
+            {size === 'auto' ? (
+              <BottomSheetView>
+                <View
+                  className={cn('p-6', className)}
+                  {...webDialog}
+                  {...(contentProps as ComponentProps<typeof View>)}
+                  style={[safeBottomStyle(insets.bottom), style]}
+                >
+                  {children}
+                </View>
+              </BottomSheetView>
+            ) : (
               <View
-                className={cn('p-6', className)}
+                className={cn('flex-1 p-6', className)}
                 {...webDialog}
                 {...(contentProps as ComponentProps<typeof View>)}
                 style={[safeBottomStyle(insets.bottom), style]}
               >
                 {children}
               </View>
-            </BottomSheetView>
-          ) : (
-            <View
-              className={cn('flex-1 p-6', className)}
-              {...webDialog}
-              {...(contentProps as ComponentProps<typeof View>)}
-              style={[safeBottomStyle(insets.bottom), style]}
-            >
-              {children}
-            </View>
-          )}
+            )}
+          </ScrollComponentContext.Provider>
         </InputComponentContext.Provider>
       </TextClassContext.Provider>
     </BottomSheetModal>
