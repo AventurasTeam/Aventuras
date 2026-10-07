@@ -74,9 +74,10 @@ A refusal shows inline until the user answers it: the next submit,
 a mode switch, or any merge choice changed (canonical, field or
 chip) clears it.
 
-The dialog is 672 px wide from `sm` and 896 px from `lg`, so the
-merge table's columns have room. Below `sm` (the phone tier) it keeps
-the `Dialog` primitive's side margin.
+The dialog is 42rem wide from `sm` and 56rem from `lg`, so the merge
+table's columns have room: 672 and 896 px on web, 588 and 784 dp on
+native, where NativeWind's rem is 14. Below `sm` (the phone tier) it
+keeps the `Dialog` primitive's side margin.
 
 ### Entity projection
 
