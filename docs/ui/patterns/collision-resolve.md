@@ -303,7 +303,9 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    `Newer · <relative time>`, the canonical's with the `· Canonical`
    suffix; on stacked tiers (phone, or any native tier) each choice
    carries that caption itself instead, and each field is one
-   `radiogroup` named by the field label.
+   `radiogroup` named by the field label. From the keyboard a
+   field is one tab stop, on its checked radio: Space checks the
+   focused radio and the arrow keys move the check.
 3. **Keyword union** (when `diff.keywords != null`) — single row
    labeled "Keywords", identical in shape to the tag row below it and
    rendered directly above it.

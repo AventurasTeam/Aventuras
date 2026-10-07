@@ -259,6 +259,35 @@ export const PhoneLongDescriptions: Story = {
   },
 }
 
+export const PhoneRadioKeyboard: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+  play: async () => {
+    await waitFor(() => expect(lineClamp(screen.getByText(entityA.description!))).toBe('3'))
+    const [older, newer] = within(screen.getByRole('radiogroup', { name: 'Status' })).getAllByRole(
+      'radio',
+    )
+
+    newer.focus()
+    await userEvent.keyboard(' ')
+    await waitFor(() => expect(newer).toHaveAttribute('aria-checked', 'true'))
+    expect(older).toHaveAttribute('aria-checked', 'false')
+
+    await userEvent.keyboard('{ArrowUp}')
+    await waitFor(() => expect(older).toHaveAttribute('aria-checked', 'true'))
+    expect(older).toHaveFocus()
+    expect(newer).toHaveAttribute('aria-checked', 'false')
+    await userEvent.keyboard('{ArrowDown}')
+    await waitFor(() => expect(newer).toHaveAttribute('aria-checked', 'true'))
+    expect(newer).toHaveFocus()
+
+    // One tab stop per group, on its checked radio; the group itself isn't one.
+    expect(newer).toHaveAttribute('tabindex', '0')
+    expect(older).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('radiogroup', { name: 'Status' })).toHaveAttribute('tabindex', '-1')
+  },
+}
+
 export const MergeOverlapFootnote: Story = {
   render: () => (
     <ControlledDialog

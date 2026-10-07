@@ -1,5 +1,6 @@
-import { useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, ScrollView, View, type ViewProps } from 'react-native'
+import * as RadioGroupBase from '@rn-primitives/radio-group'
+import { useMemo, useReducer, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Platform, Pressable, ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -40,6 +41,9 @@ const PROSE_FIELDS: ReadonlySet<ScalarField> = new Set<ScalarField>([
   'retiredReason',
 ])
 const STACKED_CLAMP_LINES = 3
+// rn-primitives doesn't gate disabled clicks on web; needs an inline style.
+const GATED: ViewStyle = { pointerEvents: 'none' }
+const ARROW_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 
 const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
@@ -527,6 +531,35 @@ type FieldRowProps = {
   disabled?: boolean
 }
 
+/** What a field's radio needs from its group to work from the keyboard on web. */
+type ChoiceKeys = {
+  ref: (node: View | null) => void
+  tabIndex?: 0 | -1
+  onKeyDown: (event: KeyboardEvent) => void
+}
+
+/**
+ * Radix's roving focus finds its items by a data attribute RN-Web drops, so on web it leaves every
+ * radio out of the tab order and arrows inert: the group does its own Space, arrows and tab stop.
+ */
+function useChoiceKeys(pick: Side, onPick: (side: Side) => void, disabled?: boolean) {
+  const nodes = useRef<Record<Side, View | null>>({ A: null, B: null })
+  return (side: Side): ChoiceKeys => ({
+    ref: (node) => {
+      nodes.current[side] = node
+    },
+    tabIndex: Platform.OS === 'web' ? (pick === side ? 0 : -1) : undefined,
+    onKeyDown: (event) => {
+      const other: Side = side === 'A' ? 'B' : 'A'
+      const to = event.key === ' ' ? side : ARROW_KEYS.has(event.key) ? other : null
+      if (disabled || to == null) return
+      event.preventDefault()
+      onPick(to)
+      nodes.current[to]?.focus()
+    },
+  })
+}
+
 function FieldRow({
   field,
   entityA,
@@ -538,46 +571,58 @@ function FieldRow({
   disabled,
 }: FieldRowProps) {
   const label = t(`collisionDialog.field.${field}`)
+  const keys = useChoiceKeys(pick, onPick, disabled)
+  if (stacked)
+    return (
+      <View className="gap-1">
+        <Text size="sm" variant="muted">
+          {label}
+        </Text>
+        <RadioGroupBase.Root
+          value={pick}
+          onValueChange={(side) => onPick(side as Side)}
+          disabled={disabled}
+          aria-label={label}
+          tabIndex={Platform.OS === 'web' ? -1 : undefined}
+          className="gap-1"
+        >
+          {(['A', 'B'] as const).map((side) => {
+            const entity = side === 'A' ? entityA : entityB
+            return (
+              <StackedChoice
+                key={side}
+                side={side}
+                value={fieldValue(field, entity)}
+                caption={sideCaption(side, entity, nowMs)}
+                prose={PROSE_FIELDS.has(field)}
+                selected={pick === side}
+                keys={keys(side)}
+                disabled={disabled}
+              />
+            )
+          })}
+        </RadioGroupBase.Root>
+      </View>
+    )
   return (
-    <View role={stacked ? 'radiogroup' : 'group'} accessibilityLabel={label} className="gap-1">
+    <View role="group" accessibilityLabel={label} className="gap-1">
       <Text size="sm" variant="muted">
         {label}
       </Text>
-      {stacked ? (
-        <View className="gap-1">
-          <StackedChoice
-            value={fieldValue(field, entityA)}
-            caption={sideCaption('A', entityA, nowMs)}
-            prose={PROSE_FIELDS.has(field)}
-            selected={pick === 'A'}
-            onPick={() => onPick('A')}
-            disabled={disabled}
-          />
-          <StackedChoice
-            value={fieldValue(field, entityB)}
-            caption={sideCaption('B', entityB, nowMs)}
-            prose={PROSE_FIELDS.has(field)}
-            selected={pick === 'B'}
-            onPick={() => onPick('B')}
-            disabled={disabled}
-          />
-        </View>
-      ) : (
-        <View className="flex-row gap-2">
-          <RadioCard
-            label={fieldValue(field, entityA)}
-            selected={pick === 'A'}
-            onPress={() => onPick('A')}
-            disabled={disabled}
-          />
-          <RadioCard
-            label={fieldValue(field, entityB)}
-            selected={pick === 'B'}
-            onPress={() => onPick('B')}
-            disabled={disabled}
-          />
-        </View>
-      )}
+      <View className="flex-row gap-2">
+        <RadioCard
+          label={fieldValue(field, entityA)}
+          selected={pick === 'A'}
+          onPress={() => onPick('A')}
+          disabled={disabled}
+        />
+        <RadioCard
+          label={fieldValue(field, entityB)}
+          selected={pick === 'B'}
+          onPress={() => onPick('B')}
+          disabled={disabled}
+        />
+      </View>
     </View>
   )
 }
@@ -597,39 +642,59 @@ function RadioCard({ label, selected, onPress, disabled }: RadioCardProps) {
   )
 }
 
+function RadioDot({ selected }: { selected: boolean }) {
+  return (
+    <View
+      className={cn(
+        'size-4 items-center justify-center rounded-full border-2',
+        selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
+      )}
+    >
+      <RadioGroupBase.Indicator className="size-1.5 rounded-full bg-accent-fg" />
+    </View>
+  )
+}
+
 type StackedChoiceProps = {
+  side: Side
   value: string
   caption: string
   prose: boolean
   selected: boolean
-  onPick: () => void
+  keys: ChoiceKeys
   disabled?: boolean
 }
 
-// world.md → Merge on mobile: radio and prose are separate taps; the caption names the side.
-function StackedChoice({ value, caption, prose, selected, onPick, disabled }: StackedChoiceProps) {
+// world.md → Merge (Long-text values, Side identification): the radio and the prose are separate
+// taps, and the caption names the side.
+function StackedChoice({
+  side,
+  value,
+  caption,
+  prose,
+  selected,
+  keys,
+  disabled,
+}: StackedChoiceProps) {
   const [expanded, setExpanded] = useState(false)
   return (
     <View className="flex-row items-start gap-1">
-      <Pressable
-        role="radio"
-        accessibilityRole="radio"
-        aria-checked={selected}
-        accessibilityLabel={caption}
-        accessibilityState={{ checked: selected, disabled: !!disabled }}
+      <RadioGroupBase.Item
+        {...keys}
+        value={side}
+        aria-label={caption}
         disabled={disabled}
-        onPress={onPick}
-        className={cn('size-11 items-center justify-center', disabled && 'opacity-50')}
+        style={disabled ? GATED : undefined}
+        className={cn(
+          'size-11 items-center justify-center rounded-full',
+          Platform.select({
+            web: 'outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+          }),
+          disabled && 'opacity-50',
+        )}
       >
-        <View
-          className={cn(
-            'size-4 items-center justify-center rounded-full border-2',
-            selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
-          )}
-        >
-          {selected ? <View className="size-1.5 rounded-full bg-accent-fg" /> : null}
-        </View>
-      </Pressable>
+        <RadioDot selected={selected} />
+      </RadioGroupBase.Item>
       <View className="min-w-0 flex-1 gap-0.5 py-3">
         {prose ? (
           <Pressable
