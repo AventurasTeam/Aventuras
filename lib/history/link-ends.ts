@@ -10,7 +10,7 @@ import {
   type DbCtx,
 } from '@/lib/db'
 
-import type { HistoryTable } from './field-labels'
+import { listedLinkColumns, type HistoryTable } from './field-labels'
 import { HISTORY_LINK_TABLES, type HistoryLinkTable, type HistoryVia } from './link-rows'
 
 // Omit per union member, so each arm keeps its table–side pairing.
@@ -71,6 +71,29 @@ const ENDS: Record<HistoryTable, readonly End[]> = {
   ],
   lore: [],
   threads: [],
+}
+
+/** In one link table, the columns naming a tab's row and those whose change lists a delta. */
+export type HistoryLinkWatch = { keys: readonly string[]; listed: readonly string[] }
+
+function watchOf(ends: readonly End[]): Partial<Record<HistoryLinkTable, HistoryLinkWatch>> {
+  const watch: Partial<Record<HistoryLinkTable, { keys: string[]; listed: string[] }>> = {}
+  for (const { link, key } of ends) {
+    const entry = watch[link.table]
+    if (entry == null) watch[link.table] = { keys: [key], listed: listedLinkColumns(link.table) }
+    else entry.keys.push(key)
+  }
+  return watch
+}
+
+/** Per tab table, what its History watches in each link table naming its row. */
+export const HISTORY_LINK_WATCH: Readonly<
+  Record<HistoryTable, Partial<Record<HistoryLinkTable, HistoryLinkWatch>>>
+> = {
+  entities: watchOf(ENDS.entities),
+  happenings: watchOf(ENDS.happenings),
+  lore: watchOf(ENDS.lore),
+  threads: watchOf(ENDS.threads),
 }
 
 // Where a delete's payload holds its cascade-removed link rows (delete-cascade.ts → PAYLOAD_KEY).

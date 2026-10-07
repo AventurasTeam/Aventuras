@@ -1,7 +1,12 @@
 import type { Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
-import { HISTORY_LINK_TABLES, type HistoryLinkTable, type LinkSide } from './link-rows'
+import {
+  HISTORY_LINK_TABLES,
+  RETRIEVAL_COUNT,
+  type HistoryLinkTable,
+  type LinkSide,
+} from './link-rows'
 
 export const HISTORY_TABLES = ['entities', 'lore', 'threads', 'happenings'] as const
 export type HistoryTable = (typeof HISTORY_TABLES)[number]
@@ -110,6 +115,12 @@ function labelsFor(table: HistoryTable | HistoryLinkTable, side?: LinkSide): Lab
 }
 
 type SidelessTable = HistoryTable | Exclude<HistoryLinkTable, 'character_relationships'>
+
+/** A link table's columns whose change lists a delta: each labelled one but the retrieval count. */
+export function listedLinkColumns(table: HistoryLinkTable): string[] {
+  const labels = table === 'character_relationships' ? RELATIONSHIP_SIDE_A : LABELS[table]
+  return Object.keys(labels).filter((column) => column !== RETRIEVAL_COUNT)
+}
 
 function parentPath(path: string): string {
   const dot = path.lastIndexOf('.')

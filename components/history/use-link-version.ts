@@ -1,56 +1,39 @@
-import type { HistoryTable } from '@/lib/history'
+import { HISTORY_LINK_WATCH, type HistoryLinkWatch, type HistoryTable } from '@/lib/history'
 import {
   characterRelationshipsStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
 } from '@/lib/stores'
 
-// Only id + the columns History shows, so a retrieval bump leaves the signature unchanged.
+// Id and the columns whose change gets a delta listed, so a retrieval bump leaves it unchanged.
 function signature<Row extends { id: string; branchId: string }>(
   rows: ReadonlyMap<string, Row>,
   branchId: string,
-  namesTarget: (row: Row) => boolean,
-  columns: (row: Row) => readonly unknown[],
+  id: string,
+  watch: HistoryLinkWatch | undefined,
 ): string {
+  if (watch == null) return ''
   const named: string[] = []
-  for (const row of rows.values())
-    if (row.branchId === branchId && namesTarget(row))
-      named.push(JSON.stringify([row.id, ...columns(row)]))
+  for (const row of rows.values()) {
+    const cells: Readonly<Record<string, unknown>> = row
+    if (row.branchId === branchId && watch.keys.some((key) => cells[key] === id))
+      named.push(JSON.stringify([row.id, ...watch.listed.map((column) => cells[column])]))
+  }
   return named.sort().join('\n')
 }
 
 /** A value whose identity changes only when a link row naming the target changes. */
 export function useLinkVersion(table: HistoryTable, id: string, branchId: string): string {
-  // Lore and threads have no link rows, so their selectors scan nothing.
+  // A table no link row names (lore, threads) watches nothing, so its selectors scan nothing.
+  const watch = HISTORY_LINK_WATCH[table]
   const relationships = characterRelationshipsStore.useRelationships((rows) =>
-    table === 'entities'
-      ? signature(
-          rows,
-          branchId,
-          (row) => row.aId === id || row.bId === id,
-          (row) => [row.kind, row.inverseKind],
-        )
-      : '',
+    signature(rows, branchId, id, watch.character_relationships),
   )
   const involvements = happeningInvolvementsStore.useInvolvements((rows) =>
-    table === 'entities' || table === 'happenings'
-      ? signature(
-          rows,
-          branchId,
-          (row) => (table === 'entities' ? row.entityId : row.happeningId) === id,
-          (row) => [row.role],
-        )
-      : '',
+    signature(rows, branchId, id, watch.happening_involvements),
   )
   const awareness = happeningAwarenessStore.useAwareness((rows) =>
-    table === 'entities' || table === 'happenings'
-      ? signature(
-          rows,
-          branchId,
-          (row) => (table === 'entities' ? row.characterId : row.happeningId) === id,
-          (row) => [row.learnedAtEntryId, row.decayResistance, row.source],
-        )
-      : '',
+    signature(rows, branchId, id, watch.happening_awareness),
   )
   return JSON.stringify([relationships, involvements, awareness])
 }

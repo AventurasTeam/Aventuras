@@ -18,7 +18,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { loadLinkEnds, type LinkEnds } from './link-ends'
+import { HISTORY_LINK_WATCH, loadLinkEnds, type LinkEnds } from './link-ends'
 
 let db: DbCtx['db']
 let position = 0
@@ -320,5 +320,24 @@ describe('loadLinkEnds', () => {
     const none = { links: [], removals: [], names: {} }
     expect(await loadLinkEnds(db, 'b1', 'lore', 'lore_1')).toEqual(none)
     expect(await loadLinkEnds(db, 'b1', 'threads', 'thread_1')).toEqual(none)
+  })
+})
+
+describe('HISTORY_LINK_WATCH', () => {
+  it("names, per tab, each link table's columns naming its row and those whose change lists a delta", () => {
+    const awareness = ['source', 'decayResistance', 'learnedAtEntryId']
+    expect(HISTORY_LINK_WATCH).toEqual({
+      entities: {
+        character_relationships: { keys: ['aId', 'bId'], listed: ['kind', 'inverseKind'] },
+        happening_involvements: { keys: ['entityId'], listed: ['role'] },
+        happening_awareness: { keys: ['characterId'], listed: awareness },
+      },
+      happenings: {
+        happening_involvements: { keys: ['happeningId'], listed: ['role'] },
+        happening_awareness: { keys: ['happeningId'], listed: awareness },
+      },
+      lore: {},
+      threads: {},
+    })
   })
 })

@@ -16,7 +16,12 @@ import {
   type HistoryTable,
 } from './field-labels'
 import { inJsonList, loadLinkEnds, type LinkEnd, type LinkEnds } from './link-ends'
-import type { HistoryLinkTable, HistoryRow, HistoryVia } from './link-rows'
+import {
+  RETRIEVAL_COUNT,
+  type HistoryLinkTable,
+  type HistoryRow,
+  type HistoryVia,
+} from './link-rows'
 
 export type HistoryOp = Delta['op']
 export type HistorySort = 'newest' | 'oldest'
@@ -120,7 +125,7 @@ function linkMembers(links: readonly LinkEnd[]): SQL[] {
 const NOT_RETRIEVAL_BUMP = sql`NOT (${deltas.targetTable} = 'happening_awareness'
   AND ${deltas.op} = 'update'
   AND (SELECT count(*) FROM json_each(${deltas.undoPayload})) = 1
-  AND json_type(${deltas.undoPayload}, '$.retrievalCount') IS NOT NULL)`
+  AND json_type(${deltas.undoPayload}, ${`$.${RETRIEVAL_COUNT}`}) IS NOT NULL)`
 
 // op=update gate: a delete's payload is the full row, so every field would else match.
 function fieldSearchCondition(scopes: readonly Scope[], term: string): SQL {
