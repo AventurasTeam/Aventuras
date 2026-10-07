@@ -139,7 +139,7 @@ function buildMerge(branchId: string, resolution: MergeResolution, tail: DeleteT
   if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
   const [canonical] = pair
-  const { actions } = entityMergeActions({
+  const actions = entityMergeActions({
     branchId,
     pair,
     canonicalId: canonical.id,

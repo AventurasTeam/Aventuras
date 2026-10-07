@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import type { PipelineAction } from '@/lib/actions'
 import {
   branches,
   characterRelationships,
@@ -306,14 +307,14 @@ describe('collisionPair', () => {
     ['item_p', 'item_q'],
     ['item_q', 'item_p'],
   ] as const)(
-    'overlap and inverse refs on the loser of %s <- %s match what the merge planner does',
+    'the counts on the loser of %s <- %s add up to what the merge planner writes',
     (canonicalId, loserId) => {
       const src = sources()
       const pair = collisionPair([canonicalId, loserId], src)!
-      const loserSummary = pair.find((side) => side.id === loserId)!
+      const { relationCounts: counts } = pair.find((side) => side.id === loserId)!
       const lookup = collisionPairOf(src.entities, [canonicalId, loserId])
       if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
-      const plan = entityMergeActions({
+      const actions = entityMergeActions({
         branchId: 'b1',
         pair: lookup.pair,
         canonicalId,
@@ -327,12 +328,18 @@ describe('collisionPair', () => {
         tail: null,
         newId: (prefix) => `${prefix}_new`,
       })
-      expect(plan.dropped).toEqual(loserSummary.relationCounts.overlap)
-      const rewrittenOthers = plan.actions.filter(
-        (a) =>
-          a.kind === 'updateEntity' && a.payload.id !== canonicalId && a.payload.id !== loserId,
+      const written = <K extends PipelineAction['kind']>(kind: K) =>
+        actions.filter((a): a is Extract<PipelineAction, { kind: K }> => a.kind === kind)
+      expect(written('upsertHappeningAwareness')).toHaveLength(
+        counts.awarenessRows - counts.overlap.awareness,
       )
-      expect(rewrittenOthers).toHaveLength(loserSummary.relationCounts.inverseRefs)
+      expect(written('createHappeningInvolvement')).toHaveLength(
+        counts.involvements - counts.overlap.involvements,
+      )
+      const rewrittenOthers = written('updateEntity').filter(
+        (a) => a.payload.id !== canonicalId && a.payload.id !== loserId,
+      )
+      expect(rewrittenOthers).toHaveLength(counts.inverseRefs)
     },
   )
 

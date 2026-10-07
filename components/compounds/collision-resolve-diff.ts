@@ -1,5 +1,6 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
+import type { MergeOverlap } from '@/lib/world'
 
 export type ScalarField =
   | 'name'
@@ -37,17 +38,8 @@ export type EntitySummary = {
     translationRows: number
     /** Items this side carries that nothing else holds or places; a merge leaves them unheld. */
     unheldItems: number
-    /**
-     * What gives way when this side loses because the partner already has it: awareness and
-     * involvement rows, relationships to an end the partner already relates to, and item holders
-     * when the partner item has a position. Mirrors `EntityMergePlan.dropped`.
-     */
-    overlap: {
-      awareness: number
-      involvements: number
-      relationships: number
-      holdersLosingItem: number
-    }
+    /** What gives way when this side merges into the partner. */
+    overlap: MergeOverlap
   }
 }
 

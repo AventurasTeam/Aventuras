@@ -13,6 +13,7 @@ import {
 
 import { collisionPairOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
+import { mergeLinks } from './merge-links'
 
 function entity(
   id: string,
@@ -104,11 +105,10 @@ type MergeOverrides = Partial<Omit<EntityMergeInput, 'pair' | 'canonicalId'>> & 
   loser?: Entity
 }
 
+/** The planner's actions, and what `mergeLinks` counts as giving way for the same input. */
 function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) {
-  return entityMergeActions({
+  const input = {
     branchId: 'b1',
-    pair: pairOf(canonical, loser),
-    canonicalId: canonical.id,
     fromLoser: [],
     deselectedTags: [],
     deselectedKeywords: [],
@@ -119,7 +119,15 @@ function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) 
     tail: null,
     newId: sequentialIds(),
     ...overrides,
-  })
+  }
+  return {
+    actions: entityMergeActions({
+      ...input,
+      pair: pairOf(canonical, loser),
+      canonicalId: canonical.id,
+    }),
+    overlap: mergeLinks({ ...input, canonical, loser }).overlap,
+  }
 }
 
 const ofKind = <K extends PipelineAction['kind']>(actions: readonly PipelineAction[], kind: K) =>
@@ -163,7 +171,7 @@ describe('entityMergeActions — refusals', () => {
   })
 
   it('merges into the second row of the pair as readily as the first', () => {
-    const { actions } = entityMergeActions({
+    const actions = entityMergeActions({
       branchId: 'b1',
       pair: pairOf(B, A),
       canonicalId: 'char_a',
@@ -313,7 +321,7 @@ describe('entityMergeActions — inverse refs', () => {
       equipped_items: ['item_a'],
       inventory: ['item_x'],
     })
-    expect(plan.dropped.holdersLosingItem).toBe(0)
+    expect(plan.overlap.holdersLosingItem).toBe(0)
   })
 
   it('takes the loser off its holders when the canonical item is already held or placed', () => {
@@ -332,7 +340,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(
       ofKind(whileHeld.actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
     ).toStrictEqual([['char_1', dropped]])
-    expect(whileHeld.dropped.holdersLosingItem).toBe(1)
+    expect(whileHeld.overlap.holdersLosingItem).toBe(1)
 
     const whilePlaced = merge({
       canonical: placed,
@@ -342,7 +350,7 @@ describe('entityMergeActions — inverse refs', () => {
     expect(
       ofKind(whilePlaced.actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
     ).toStrictEqual([['char_1', dropped]])
-    expect(whilePlaced.dropped.holdersLosingItem).toBe(1)
+    expect(whilePlaced.overlap.holdersLosingItem).toBe(1)
   })
 
   it('counts no holder as losing the item when it carries both copies', () => {
@@ -360,7 +368,7 @@ describe('entityMergeActions — inverse refs', () => {
       'char_1',
       'char_2',
     ])
-    expect(plan.dropped.holdersLosingItem).toBe(1)
+    expect(plan.overlap.holdersLosingItem).toBe(1)
   })
 
   it('gives a canonical item with no position the loser’s placement', () => {
@@ -428,7 +436,7 @@ describe('entityMergeActions — link rows', () => {
         },
       },
     ])
-    expect(plan.dropped.awareness).toBe(1)
+    expect(plan.overlap.awareness).toBe(1)
   })
 
   it('re-creates an involvement under an injected id, dropping one in a happening the canonical is in', () => {
@@ -454,13 +462,13 @@ describe('entityMergeActions — link rows', () => {
         },
       },
     ])
-    expect(plan.dropped.involvements).toBe(1)
+    expect(plan.overlap.involvements).toBe(1)
   })
 
   it('drops the relationship between the pair', () => {
     const plan = merge({ relationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
-    expect(plan.dropped.relationships).toBe(0)
+    expect(plan.overlap.relationships).toBe(0)
   })
 
   it('carries each view to the right side when the a/b order flips', () => {
@@ -511,7 +519,7 @@ describe('entityMergeActions — link rows', () => {
         },
       ],
     )
-    expect(plan.dropped.relationships).toBe(1)
+    expect(plan.overlap.relationships).toBe(1)
   })
 
   it('writes no relationship when the canonical’s views already cover the pair', () => {
@@ -522,7 +530,7 @@ describe('entityMergeActions — link rows', () => {
       ],
     })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
-    expect(plan.dropped.relationships).toBe(1)
+    expect(plan.overlap.relationships).toBe(1)
   })
 
   it('counts only the loser’s relationships whose other end the canonical already has', () => {
@@ -534,7 +542,7 @@ describe('entityMergeActions — link rows', () => {
         rel('rel_4', 'char_a', 'char_b', 'twin', 'twin'),
       ],
     })
-    expect(plan.dropped.relationships).toBe(1)
+    expect(plan.overlap.relationships).toBe(1)
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toHaveLength(1)
   })
 })

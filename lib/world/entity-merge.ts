@@ -1,24 +1,12 @@
 import type { PipelineAction } from '@/lib/actions'
-import type {
-  CharacterRelationship,
-  Entity,
-  EntityState,
-  HappeningAwareness,
-  HappeningInvolvement,
-  ItemState,
-} from '@/lib/db'
+import type { Entity, EntityState, ItemState } from '@/lib/db'
 
 import type { CollisionPair } from './collision-pair'
 import { sameList } from './draft-text'
 import type { DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
-import {
-  entityLinkRows,
-  holdersLosingItem,
-  itemHasPosition,
-  stateWithRefRewritten,
-  type EntityLinkRows,
-} from './entity-refs'
+import { itemHasPosition, stateWithRefRewritten } from './entity-refs'
+import { mergeLinks, type MergeLinkInput } from './merge-links'
 import { mergedTerms, type MergeDeselections } from './merge-terms'
 
 export const MERGE_SCALARS = [
@@ -31,37 +19,16 @@ export const MERGE_SCALARS = [
 ] as const
 export type MergeScalar = (typeof MERGE_SCALARS)[number]
 
-export type EntityMergeInput = MergeDeselections & {
-  branchId: string
-  pair: CollisionPair
-  /** The row of `pair` that survives; the other one is the loser. */
-  canonicalId: string
-  /** Scalars the merged row takes from the loser; every other one keeps the canonical's. */
-  fromLoser: readonly MergeScalar[]
-  /** The branch's entities, both rows among them. */
-  branchEntities: readonly Entity[]
-  /** The branch's link rows. */
-  awareness: readonly HappeningAwareness[]
-  involvements: readonly HappeningInvolvement[]
-  relationships: readonly CharacterRelationship[]
-  tail: DeleteTail | null
-  newId: (prefix: string) => string
-}
-
-export type EntityMergePlan = {
-  actions: PipelineAction[]
-  /**
-   * What the canonical already covers, so the loser's side gives way: awareness and involvement
-   * rows the cascade removes unmoved, relationships whose views the canonical keeps over the
-   * loser's, and holders who lose the loser item because the canonical already has a position.
-   */
-  dropped: {
-    awareness: number
-    involvements: number
-    relationships: number
-    holdersLosingItem: number
+export type EntityMergeInput = MergeDeselections &
+  Omit<MergeLinkInput, 'canonical' | 'loser'> & {
+    pair: CollisionPair
+    /** The row of `pair` that survives; the other one is the loser. */
+    canonicalId: string
+    /** Scalars the merged row takes from the loser; every other one keeps the canonical's. */
+    fromLoser: readonly MergeScalar[]
+    tail: DeleteTail | null
+    newId: (prefix: string) => string
   }
-}
 
 type MergeContext = Omit<EntityMergeInput, 'pair' | 'canonicalId'> & {
   canonical: Entity
@@ -124,51 +91,6 @@ function adoptedPlacement(input: MergeContext, rewritten: EntityState | null): E
   return { ...base, at_location_id: at }
 }
 
-/** A relationship row seen from `id`: the other end, `id`'s view of it, and its view of `id`. */
-function seenFrom(row: CharacterRelationship, id: string) {
-  return row.aId === id
-    ? { other: row.bId, self: row.kind, their: row.inverseKind }
-    : { other: row.aId, self: row.inverseKind, their: row.kind }
-}
-
-function relationshipActions(
-  input: MergeContext,
-  loser: EntityLinkRows,
-  canonical: EntityLinkRows,
-): { actions: PipelineAction[]; alreadyRelated: number } {
-  const { branchId } = input
-  const kept = new Map(
-    canonical.relationships.map((row) => {
-      const view = seenFrom(row, input.canonical.id)
-      return [view.other, view] as const
-    }),
-  )
-  const actions: PipelineAction[] = []
-  let alreadyRelated = 0
-  for (const row of loser.relationships) {
-    const moved = seenFrom(row, input.loser.id)
-    // The pair would name the canonical twice; the cascade removes the row.
-    if (moved.other === input.canonical.id) continue
-    const existing = kept.get(moved.other)
-    if (existing != null) alreadyRelated += 1
-    const self = existing?.self ?? moved.self
-    const their = existing?.their ?? moved.their
-    if (existing != null && existing.self === self && existing.their === their) continue
-    actions.push({
-      kind: 'upsertCharacterRelationship',
-      source: 'user_edit',
-      payload: {
-        branchId,
-        subjectId: input.canonical.id,
-        objectId: moved.other,
-        kind: self,
-        inverseKind: their,
-      },
-    })
-  }
-  return { actions, alreadyRelated }
-}
-
 /** The loser replaced by the canonical in place, the canonical kept once. */
 function sceneWithCanonical(scene: readonly string[], loserId: string, canonicalId: string) {
   const out: string[] = []
@@ -216,26 +138,11 @@ function mergeContext({ pair, canonicalId, ...rest }: EntityMergeInput): MergeCo
  * world.md → Merge. The loser's link rows are re-created on the canonical and its `deleteEntity`
  * cascades the originals: no arm re-keys a link row, and the group runner refuses writes to them.
  */
-export function entityMergeActions(request: EntityMergeInput): EntityMergePlan {
+export function entityMergeActions(request: EntityMergeInput): PipelineAction[] {
   const input = mergeContext(request)
   const { branchId, canonical, loser, newId } = input
-  const linksOf = (id: string) =>
-    entityLinkRows({
-      branchId,
-      id,
-      awareness: input.awareness,
-      involvements: input.involvements,
-      relationships: input.relationships,
-    })
-  const loserLinks = linksOf(loser.id)
-  const canonicalLinks = linksOf(canonical.id)
+  const { moved } = mergeLinks(input)
   const actions: PipelineAction[] = []
-  const dropped = {
-    awareness: 0,
-    involvements: 0,
-    relationships: 0,
-    holdersLosingItem: holdersLosingItem(loser, canonical, input.branchEntities),
-  }
 
   const patch = canonicalPatch(input)
   if (Object.keys(patch).length > 0) actions.push(updateEntity(branchId, canonical.id, patch))
@@ -247,12 +154,7 @@ export function entityMergeActions(request: EntityMergeInput): EntityMergePlan {
     if (state != null) actions.push(updateEntity(branchId, other.id, { state }))
   }
 
-  const known = new Set(canonicalLinks.awareness.map((row) => row.happeningId))
-  for (const row of loserLinks.awareness) {
-    if (known.has(row.happeningId)) {
-      dropped.awareness += 1
-      continue
-    }
+  for (const row of moved.awareness)
     actions.push({
       kind: 'upsertHappeningAwareness',
       source: 'user_edit',
@@ -266,14 +168,8 @@ export function entityMergeActions(request: EntityMergeInput): EntityMergePlan {
         retrievalCount: row.retrievalCount,
       },
     })
-  }
 
-  const involved = new Set(canonicalLinks.involvements.map((row) => row.happeningId))
-  for (const row of loserLinks.involvements) {
-    if (involved.has(row.happeningId)) {
-      dropped.involvements += 1
-      continue
-    }
+  for (const row of moved.involvements)
     actions.push({
       kind: 'createHappeningInvolvement',
       source: 'user_edit',
@@ -287,12 +183,21 @@ export function entityMergeActions(request: EntityMergeInput): EntityMergePlan {
         },
       },
     })
-  }
 
-  const relationships = relationshipActions(input, loserLinks, canonicalLinks)
-  actions.push(...relationships.actions)
-  dropped.relationships = relationships.alreadyRelated
+  for (const copy of moved.relationships)
+    actions.push({
+      kind: 'upsertCharacterRelationship',
+      source: 'user_edit',
+      payload: {
+        branchId,
+        subjectId: canonical.id,
+        objectId: copy.otherId,
+        kind: copy.kind,
+        inverseKind: copy.inverseKind,
+      },
+    })
+
   actions.push(...tailActions(input))
   actions.push({ kind: 'deleteEntity', source: 'user_edit', payload: { branchId, id: loser.id } })
-  return { actions, dropped }
+  return actions
 }
