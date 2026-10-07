@@ -86,6 +86,24 @@
     "faction": "Faction",
     "lore": "Lore"
   },
+  "avts": {
+    "issue": {
+      "nameRequired": "A name is required.",
+      "titleRequired": "A title is required.",
+      "bodyRequired": "Lore needs a body.",
+      "timeAnchorExclusive": "occurredAtEntryId and temporal can’t both be set.",
+      "priorityRange": "Enter a whole number from 0 to 100.",
+      "stackableKeyRequired": "A quantity needs a name.",
+      "duplicateStackable": "This quantity is listed twice.",
+      "expectedKind": {
+        "character": "Expected a character.",
+        "location": "Expected a location.",
+        "item": "Expected an item.",
+        "faction": "Expected a faction."
+      }
+    },
+    "exportFailed": "Couldn’t export the file."
+  },
   "chrome": {
     "appSettings": "App Settings",
     "storySettings": "Story Settings",
