@@ -881,6 +881,19 @@ export interface VaultLorebookToolContext {
   generateId?: () => string
 }
 
+/** `read_lorebook_summary` minus its entry list, and the focused-entity record the Vault sends. */
+export function toLorebookSummary(lorebook: VaultLorebook) {
+  return {
+    id: lorebook.id,
+    name: lorebook.name,
+    description: lorebook.description,
+    tags: lorebook.tags,
+    favorite: lorebook.favorite,
+    source: lorebook.source,
+    entryCount: lorebook.entries.length,
+  }
+}
+
 /**
  * Create vault-level lorebook browsing tools.
  * These complement the existing entry-level tools by providing
@@ -978,13 +991,7 @@ function createVaultLorebookTools(context: VaultLorebookToolContext) {
         return {
           found: true,
           lorebook: {
-            id: lorebook.id,
-            name: lorebook.name,
-            description: lorebook.description,
-            tags: lorebook.tags,
-            favorite: lorebook.favorite,
-            source: lorebook.source,
-            entryCount: lorebook.entries.length,
+            ...toLorebookSummary(lorebook),
             entries: lorebook.entries.map((e, index) => ({
               index,
               name: e.name,

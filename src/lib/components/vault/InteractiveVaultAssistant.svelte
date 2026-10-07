@@ -273,7 +273,7 @@
     vaultEditor.reset()
   })
 
-  async function initializeService(focused: FocusedEntity | null = null) {
+  async function initializeService() {
     try {
       service = new InteractiveVaultService('interactiveVault')
 
@@ -285,12 +285,11 @@
           totalEntryCount: allLorebooks.reduce((sum, lb) => sum + lb.entries.length, 0),
           scenarioCount: scenarioVault.items.length,
         },
-        focused ?? undefined,
+        focusedEntity,
       )
 
-      const entityToUse = focused ?? focusedEntity
-      const greetingContent = entityToUse
-        ? `Hello! I can see you were editing the ${entityToUse.entityType} **${entityToUse.entityName}**. What would you like to work on?`
+      const greetingContent = focusedEntity
+        ? `Hello! I can see you were editing the ${focusedEntity.entityType} **${focusedEntity.entityName}**. What would you like to work on?`
         : "Hello! I'm your Vault Assistant. I can help you manage characters, lorebooks, and scenarios in your vault.\n\nTry asking me to create a character, organize lorebook entries, or set up a new scenario."
 
       messages = [
@@ -481,11 +480,12 @@
     const myGenerationId = ++activeGenerationId
 
     try {
+      // The service's focus, not the prop: loading a saved conversation drops it.
+      const focus = service.getFocusedEntity()
+
       // Check for external lorebook edits before streaming
       const lorebookId =
-        focusedEntity?.entityType === 'lorebook'
-          ? focusedEntity.entityId
-          : vaultEditor.currentLorebookId
+        focus?.entityType === 'lorebook' ? focus.entityId : vaultEditor.currentLorebookId
       if (lorebookId) {
         service.injectLorebookChangeNote(lorebookId)
       }
@@ -495,21 +495,15 @@
         lorebooks: () => lorebookVault.items,
         scenarios: () => scenarioVault.items,
         get activeLorebookId() {
-          if (focusedEntity?.entityType === 'lorebook') return focusedEntity.entityId
+          if (focus?.entityType === 'lorebook') return focus.entityId
           return vaultEditor.currentLorebookId ?? undefined
         },
         get activeEntries() {
           const id =
-            focusedEntity?.entityType === 'lorebook'
-              ? focusedEntity.entityId
-              : vaultEditor.currentLorebookId
+            focus?.entityType === 'lorebook' ? focus.entityId : vaultEditor.currentLorebookId
           if (!id) return undefined
           return lorebookVault.getById(id)?.entries
         },
-        activeCharacterId:
-          focusedEntity?.entityType === 'character' ? focusedEntity.entityId : undefined,
-        activeScenarioId:
-          focusedEntity?.entityType === 'scenario' ? focusedEntity.entityId : undefined,
       }
 
       for await (const event of service.sendMessageStreaming(

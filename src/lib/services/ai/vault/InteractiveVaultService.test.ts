@@ -53,7 +53,10 @@ vi.mock('$lib/stores/debug.svelte', () => ({
 const conversationRows = new Map<string, Record<string, unknown>>()
 vi.mock('$lib/services/database', () => ({
   database: {
-    getPackTemplate: vi.fn(async () => ({ content: 'Vault assistant for {{characterCount}}.' })),
+    // Null makes ContextBuilder fall back to the built-in templates, so these tests render
+    // the real interactive-lorebook prompt.
+    getPackTemplate: vi.fn(async () => null),
+    getPackVariables: vi.fn(async () => []),
     createVaultConversation: vi.fn(async (c: Record<string, unknown>) => {
       conversationRows.set(c.id as string, { ...c })
     }),
@@ -75,7 +78,11 @@ let nextStreamError: Error | null = null
 // Captures the options (tools, prepareStep, ...) passed to the factory on the
 // most recent call, so tests can exercise the load_toolset tool and prepareStep
 // directly instead of only the pure getActiveToolNames helper.
-let lastCreateOptions: { tools: Record<string, any>; prepareStep: () => unknown } | null = null
+let lastCreateOptions: {
+  tools: Record<string, any>
+  prepareStep: () => unknown
+  instructions: string
+} | null = null
 
 vi.mock('../sdk/agents/factory', () => ({
   createStreamingAgenticAssistant: vi.fn((options: any) => {
@@ -96,6 +103,8 @@ vi.mock('../sdk/agents/factory', () => ({
 
 const { InteractiveVaultService, getActiveToolNames, TOOL_CATEGORIES, ALWAYS_ACTIVE_TOOLS } =
   await import('./InteractiveVaultService')
+const { database } = await import('$lib/services/database')
+type Service = import('./InteractiveVaultService').InteractiveVaultService
 type VaultState = import('./InteractiveVaultService').VaultState
 type VaultSummary = import('./InteractiveVaultService').VaultSummary
 type ToolCategory = import('./InteractiveVaultService').ToolCategory
@@ -178,6 +187,235 @@ describe('initialize', () => {
     expect(service.loadedCategories.has('scenarios')).toBe(true)
     await service.initialize(emptySummary)
     expect(service.loadedCategories.size).toBe(0)
+  })
+})
+
+describe('focused entity context', () => {
+  const alice = {
+    id: 'char-1',
+    name: 'Alice',
+    description: 'A thief',
+    traits: ['sly'],
+    visualDescriptors: {},
+    tags: [],
+    favorite: false,
+    source: 'manual',
+    portrait: 'data:image/png;base64,SECRET',
+  }
+  const focusOnAlice = {
+    entityType: 'character' as const,
+    entityId: 'char-1',
+    entityName: 'Alice',
+  }
+
+  function stateWith(overrides: Partial<VaultState>): VaultState {
+    return { ...emptyVaultState(), ...overrides }
+  }
+
+  async function send(service: Service, state: VaultState) {
+    for await (const _ of service.sendMessageStreaming(state, 'make her taller')) {
+      // drain
+    }
+  }
+
+  const userMessages = (service: Service) =>
+    service
+      .getConversationHistory()
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content as string)
+
+  it('adds no Active Context and sends the raw message without a focus', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary)
+    await send(service, stateWith({ characters: () => [alice as never] }))
+
+    expect(lastCreateOptions!.instructions).not.toContain('Active Context')
+    expect(userMessages(service)).toEqual(['make her taller'])
+  })
+
+  it('names the entity in the system prompt and puts its record in the first user turn', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    await send(service, stateWith({ characters: () => [alice as never] }))
+
+    expect(lastCreateOptions!.instructions).toContain('## Active Context')
+    expect(lastCreateOptions!.instructions).toContain('"Alice" (ID: `char-1`)')
+    expect(lastCreateOptions!.instructions).not.toContain('"sly"')
+
+    const [first] = userMessages(service)
+    expect(first).toContain('"name": "Alice"')
+    expect(first).toContain('"sly"')
+    expect(first).not.toContain('SECRET')
+    expect(first.endsWith('make her taller')).toBe(true)
+  })
+
+  it('does not repeat an unchanged record and leaves the system prompt alone', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    const state = stateWith({ characters: () => [alice as never] })
+
+    await send(service, state)
+    const firstInstructions = lastCreateOptions!.instructions
+    await send(service, state)
+
+    expect(lastCreateOptions!.instructions).toBe(firstInstructions)
+    expect(userMessages(service)[1]).toBe('make her taller')
+  })
+
+  it('sends the record again, leaving earlier turns untouched, once it changes', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    let current = alice
+
+    const state = stateWith({ characters: () => [current as never] })
+    await send(service, state)
+    const [first] = userMessages(service)
+
+    current = { ...alice, traits: ['sly', 'tall'] }
+    await send(service, state)
+
+    const messages = userMessages(service)
+    expect(messages[0]).toBe(first)
+    expect(messages[1]).toContain('"tall"')
+    expect(messages[1].endsWith('make her taller')).toBe(true)
+  })
+
+  it('keeps the record unsent when rendering the turn fails', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    const state = stateWith({ characters: () => [alice as never] })
+
+    vi.mocked(database.getPackTemplate).mockRejectedValueOnce(new Error('db unavailable'))
+    const events: unknown[] = []
+    for await (const event of service.sendMessageStreaming(state, 'make her taller')) {
+      events.push(event)
+    }
+    expect(events).toEqual([{ type: 'error', error: 'db unavailable' }])
+    expect(userMessages(service)).toEqual([])
+
+    await send(service, state)
+    expect(userMessages(service)[0]).toContain('"name": "Alice"')
+  })
+
+  it('says so, without a record, when the entity is not in the vault on the first turn', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    await send(service, emptyVaultState())
+
+    expect(lastCreateOptions!.instructions).toContain('## Active Context')
+    const [first] = userMessages(service)
+    expect(first).toContain('no longer in the vault')
+    expect(first).not.toContain('"name"')
+    expect(first.endsWith('make her taller')).toBe(true)
+  })
+
+  it('says once that the entity is gone after its record was sent', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+
+    await send(service, stateWith({ characters: () => [alice as never] }))
+    await send(service, emptyVaultState())
+    await send(service, emptyVaultState())
+
+    const [first, second, third] = userMessages(service)
+    expect(first).not.toContain('no longer in the vault')
+    expect(second).toContain('The character from the Active Context is no longer in the vault.')
+    expect(third).toBe('make her taller')
+  })
+
+  it('never says an entity is gone when there is no focus', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary)
+    await send(service, emptyVaultState())
+
+    expect(userMessages(service)).toEqual(['make her taller'])
+  })
+
+  it('summarises a focused lorebook without its entries', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, {
+      entityType: 'lorebook',
+      entityId: 'lb-1',
+      entityName: 'Realm',
+    })
+    const lorebook = {
+      id: 'lb-1',
+      name: 'Realm',
+      description: 'A world',
+      tags: ['realm'],
+      entries: [{ name: 'Secret Entry' }, { name: 'Another' }],
+    }
+    await send(service, stateWith({ lorebooks: () => [lorebook as never] }))
+
+    const [first] = userMessages(service)
+    expect(first).toContain('"entryCount": 2')
+    expect(first).toContain('"realm"')
+    expect(first).not.toContain('Secret Entry')
+  })
+
+  it('drops the focus when a saved conversation is loaded', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    await service.loadConversation(id)
+    await send(service, stateWith({ characters: () => [alice as never] }))
+
+    expect(service.getFocusedEntity()).toBeNull()
+    expect(lastCreateOptions!.instructions).not.toContain('Active Context')
+    expect(userMessages(service).at(-1)).toBe('make her taller')
+  })
+
+  it('drops the toolset seeded from the focus when a saved conversation is loaded', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    expect(service.loadedCategories.has('characters')).toBe(true)
+
+    await service.loadConversation(id)
+    expect(service.loadedCategories.size).toBe(0)
+  })
+
+  it('keeps the current conversation when the prompt cannot be rendered on load', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+    vi.mocked(database.getPackTemplate).mockRejectedValueOnce(new Error('db unavailable'))
+
+    expect(await service.loadConversation(id)).toBeNull()
+    expect(service.getConversationId()).toBeNull()
+    expect(service.getFocusedEntity()).toEqual(focusOnAlice)
+    expect(service.loadedCategories.has('characters')).toBe(true)
+  })
+
+  it('keeps the current conversation when the saved one cannot be parsed', async () => {
+    const writer = new InteractiveVaultService('interactiveVault')
+    const id = await writer.saveConversation(
+      [{ id: 'm1', role: 'user', content: 'hi', timestamp: 1 }],
+      [],
+    )
+    conversationRows.get(id)!.chatMessages = '{not json'
+
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focusOnAlice)
+
+    expect(await service.loadConversation(id)).toBeNull()
+    expect(service.getConversationId()).toBeNull()
+    expect(service.getFocusedEntity()).toEqual(focusOnAlice)
   })
 })
 
@@ -525,7 +763,7 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     return service
   }
 
-  async function run(state: VaultState, service?: InstanceType<typeof InteractiveVaultService>) {
+  async function run(state: VaultState, service?: Service) {
     const events: any[] = []
     for await (const event of (service ?? (await newService())).sendMessageStreaming(state, 'go')) {
       events.push(event)
@@ -614,7 +852,7 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     name: string
     state: () => VaultState
     args: Record<string, unknown>
-    seed?: (service: InstanceType<typeof InteractiveVaultService>) => void
+    seed?: (service: Service) => void
   }[] = [
     {
       name: 'create_character',

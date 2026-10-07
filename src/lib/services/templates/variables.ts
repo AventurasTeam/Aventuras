@@ -907,7 +907,7 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
 
-  // === Interactive Vault (external template) ===
+  // === Interactive Vault ===
   {
     name: 'characterCount',
     type: 'text',
@@ -934,6 +934,49 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     type: 'text',
     category: 'runtime',
     description: 'Number of scenarios in the vault',
+    required: false,
+  },
+  {
+    name: 'userMessage',
+    type: 'text',
+    category: 'runtime',
+    description: "The user's message in the Vault assistant",
+    required: false,
+  },
+  {
+    name: 'focusedEntityType',
+    type: 'text',
+    category: 'runtime',
+    description: 'character, lorebook or scenario when opened from that editor; empty otherwise',
+    required: false,
+  },
+  {
+    name: 'focusedEntityId',
+    type: 'text',
+    category: 'runtime',
+    description: 'ID of the entity the assistant was opened from',
+    required: false,
+  },
+  {
+    name: 'focusedEntityName',
+    type: 'text',
+    category: 'runtime',
+    description: 'Name of the entity the assistant was opened from',
+    required: false,
+  },
+  {
+    name: 'focusedEntityRecord',
+    type: 'text',
+    category: 'runtime',
+    description:
+      "JSON of the focused entity's current state, set only on a turn where it changed since the last one sent",
+    required: false,
+  },
+  {
+    name: 'focusedEntityRemoved',
+    type: 'boolean',
+    category: 'runtime',
+    description: 'Whether the focused entity is gone from the vault as of this turn',
     required: false,
   },
 

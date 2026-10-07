@@ -5,7 +5,7 @@
  * via .add(), then render templates via .render(). Variables accumulate
  * across services -- all templates can access all variables.
  *
- * External templates (image styles, lorebook tools) don't use ContextBuilder.
+ * External templates (image styles) don't use ContextBuilder.
  * Services fetch those directly from the pack and inject data programmatically.
  */
 

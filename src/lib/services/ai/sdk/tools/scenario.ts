@@ -23,6 +23,23 @@ export interface ScenarioToolContext {
   generateId: () => string
 }
 
+/** The shape `read_scenario` returns, and the focused-entity record the Vault sends. */
+export function toScenarioDetails(scenario: VaultScenario) {
+  return {
+    id: scenario.id,
+    name: scenario.name,
+    description: scenario.description,
+    settingSeed: scenario.settingSeed,
+    npcs: scenario.npcs,
+    primaryCharacterName: scenario.primaryCharacterName,
+    firstMessage: scenario.firstMessage,
+    alternateGreetings: scenario.alternateGreetings,
+    tags: scenario.tags,
+    favorite: scenario.favorite,
+    source: scenario.source,
+  }
+}
+
 /**
  * Create scenario CRUD tools with the given context.
  */
@@ -84,22 +101,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
           return { found: false, error: `Scenario with ID "${scenarioId}" not found` }
         }
 
-        return {
-          found: true,
-          scenario: {
-            id: scenario.id,
-            name: scenario.name,
-            description: scenario.description,
-            settingSeed: scenario.settingSeed,
-            npcs: scenario.npcs,
-            primaryCharacterName: scenario.primaryCharacterName,
-            firstMessage: scenario.firstMessage,
-            alternateGreetings: scenario.alternateGreetings,
-            tags: scenario.tags,
-            favorite: scenario.favorite,
-            source: scenario.source,
-          },
-        }
+        return { found: true, scenario: toScenarioDetails(scenario) }
       },
     }),
 

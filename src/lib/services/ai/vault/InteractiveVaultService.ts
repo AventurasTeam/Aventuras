@@ -16,10 +16,14 @@ import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { createLogger } from '$lib/log'
 import { FandomService } from '../../fandom'
+import { ContextBuilder } from '$lib/services/context'
 import { stopWhenDone } from '../sdk/agents/stopConditions'
 import {
   createCharacterTools,
   createScenarioTools,
+  toCharacterDetails,
+  toScenarioDetails,
+  toLorebookSummary,
   createInteractiveVaultLorebookTools,
   createVaultLinkingTools,
   createFandomTools,
@@ -101,10 +105,6 @@ export interface VaultState {
   /** Current lorebook entries for entry-level tools (optional, scoped to active lorebook) */
   activeLorebookId?: string
   activeEntries?: VaultLorebookEntry[]
-  /** ID of the character the user is actively editing (for focused assistant context) */
-  activeCharacterId?: string
-  /** ID of the scenario the user is actively editing (for focused assistant context) */
-  activeScenarioId?: string
 }
 
 /** Entity context passed when the assistant is opened from an edit interface */
@@ -186,6 +186,10 @@ export class InteractiveVaultService extends BaseAIService {
   private fandomService: FandomService
   private conversationHistory: ModelMessage[] = []
   private systemPrompt: string = ''
+  private vaultSummary: VaultSummary | null = null
+  private focusedEntity: FocusedEntity | null = null
+  /** The focused entity's record as last sent, so an unchanged one isn't repeated each turn. */
+  private lastSentRecord: string | null = null
   private conversationId: string | null = null
   /** Per-lorebook known entry version at last interaction — used to detect external changes */
   private _knownEntryVersions = new Map<string, number>()
@@ -219,7 +223,10 @@ export class InteractiveVaultService extends BaseAIService {
    * Initialize the conversation with vault summary data.
    * Optionally pass a focusedEntity to inject context about which entity the user was editing.
    */
-  async initialize(vaultSummary: VaultSummary, focusedEntity?: FocusedEntity): Promise<void> {
+  async initialize(
+    vaultSummary: VaultSummary,
+    focusedEntity: FocusedEntity | null = null,
+  ): Promise<void> {
     this.conversationHistory = []
 
     // Seed loaded categories from focused entity context
@@ -234,19 +241,10 @@ export class InteractiveVaultService extends BaseAIService {
       if (seeded) this.loadedCategories.add(seeded)
     }
 
-    const template = await database.getPackTemplate('default-pack', 'interactive-lorebook')
-
-    let content = template?.content ?? ''
-    content = content
-      .replace(/\{\{\s*characterCount\s*\}\}/g, String(vaultSummary.characterCount))
-      .replace(/\{\{\s*lorebookCount\s*\}\}/g, String(vaultSummary.lorebookCount))
-      .replace(/\{\{\s*totalEntryCount\s*\}\}/g, String(vaultSummary.totalEntryCount))
-      .replace(/\{\{\s*scenarioCount\s*\}\}/g, String(vaultSummary.scenarioCount))
-    this.systemPrompt = content
-
-    if (focusedEntity) {
-      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). The \`${focusedEntity.entityType}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
-    }
+    this.vaultSummary = vaultSummary
+    this.focusedEntity = focusedEntity
+    this.lastSentRecord = null
+    this.systemPrompt = await this.renderSystemPrompt(focusedEntity)
 
     this.initialized = true
     log('Initialized conversation', {
@@ -254,6 +252,65 @@ export class InteractiveVaultService extends BaseAIService {
       model: this.preset.model,
       loadedCategories: [...this.loadedCategories],
     })
+  }
+
+  private async renderSystemPrompt(focus: FocusedEntity | null): Promise<string> {
+    const ctx = await ContextBuilder.forPack(undefined)
+    ctx.add({
+      ...this.vaultSummary,
+      focusedEntityType: focus?.entityType,
+      focusedEntityId: focus?.entityId,
+      focusedEntityName: focus?.entityName,
+    })
+    return ctx.renderTemplate('interactive-lorebook')
+  }
+
+  /**
+   * The focused entity as it stands in the vault now, or '' when there is none. Lorebooks are
+   * summarised only: `list_entries` / `read_entry` cover their entries.
+   */
+  private focusedEntityRecord(vaultState: VaultState): string {
+    const focus = this.focusedEntity
+    if (!focus) return ''
+
+    switch (focus.entityType) {
+      case 'character': {
+        const character = vaultState.characters().find((c) => c.id === focus.entityId)
+        return character ? JSON.stringify(toCharacterDetails(character), null, 2) : ''
+      }
+      case 'scenario': {
+        const scenario = vaultState.scenarios().find((s) => s.id === focus.entityId)
+        return scenario ? JSON.stringify(toScenarioDetails(scenario), null, 2) : ''
+      }
+      case 'lorebook': {
+        const lorebook = vaultState.lorebooks().find((lb) => lb.id === focus.entityId)
+        return lorebook ? JSON.stringify(toLorebookSummary(lorebook), null, 2) : ''
+      }
+    }
+  }
+
+  /**
+   * Wrap the user's message in the `-user` half of the template. The focused entity's record
+   * rides along only when it differs from the last one sent, so earlier turns stay untouched.
+   * Returns the record too: the caller marks it sent once the message is in the history.
+   */
+  private async renderUserMessage(
+    vaultState: VaultState,
+    userMessage: string,
+  ): Promise<{ content: string; record: string }> {
+    const focus = this.focusedEntity
+    const record = this.focusedEntityRecord(vaultState)
+    const changed = record !== this.lastSentRecord
+
+    const ctx = await ContextBuilder.forPack(undefined)
+    ctx.add({
+      userMessage,
+      focusedEntityType: focus?.entityType,
+      focusedEntityRecord: changed ? record : '',
+      focusedEntityRemoved: changed && focus !== null && record === '',
+    })
+    const content = (await ctx.renderTemplate('interactive-lorebook-user')) || userMessage
+    return { content, record }
   }
 
   /**
@@ -516,15 +573,14 @@ export class InteractiveVaultService extends BaseAIService {
       ...imageTools,
     }
 
-    // Add user message to conversation history
-    if (userMessage) {
-      this.conversationHistory.push({
-        role: 'user',
-        content: userMessage,
-      })
-    }
-
     try {
+      // Add user message to conversation history
+      if (userMessage) {
+        const { content, record } = await this.renderUserMessage(vaultState, userMessage)
+        this.conversationHistory.push({ role: 'user', content })
+        this.lastSentRecord = record
+      }
+
       const agent = createStreamingAgenticAssistant(
         {
           presetId: this.presetId,
@@ -1043,11 +1099,27 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     try {
-      this.conversationHistory = JSON.parse(conversation.messages) as ModelMessage[]
-      this.conversationId = conversationId
-
+      // Everything that can fail runs before any state is replaced, so a failure leaves the
+      // conversation on screen and the one that gets saved the same.
+      const history = JSON.parse(conversation.messages) as ModelMessage[]
       const chatMessages = JSON.parse(conversation.chatMessages) as ChatMessage[]
       const pendingChanges = JSON.parse(conversation.pendingChanges) as VaultPendingChange[]
+      const entryVersions = new Map(
+        conversation.entryVersions
+          ? (JSON.parse(conversation.entryVersions) as [string, number][])
+          : [],
+      )
+      // The saved conversation may be about a different entity than the one the assistant
+      // was opened from, so it loads without a focus.
+      const systemPrompt = await this.renderSystemPrompt(null)
+
+      this.conversationHistory = history
+      this.conversationId = conversationId
+      this.focusedEntity = null
+      this.lastSentRecord = null
+      this.loadedCategories.clear()
+      this.systemPrompt = systemPrompt
+      this._knownEntryVersions = entryVersions
 
       // Restore generated images from chat messages so set_portrait still works
       // for images generated in a previous session
@@ -1061,13 +1133,6 @@ export class InteractiveVaultService extends BaseAIService {
           }
         }
       }
-
-      // Restore known entry versions for change detection across sessions
-      this._knownEntryVersions = new Map(
-        conversation.entryVersions
-          ? (JSON.parse(conversation.entryVersions) as [string, number][])
-          : [],
-      )
 
       log('Loaded conversation', {
         id: conversationId,
@@ -1087,6 +1152,14 @@ export class InteractiveVaultService extends BaseAIService {
    */
   getConversationId(): string | null {
     return this.conversationId
+  }
+
+  /**
+   * The entity the current conversation is about, or null once a saved conversation has
+   * replaced the one the assistant was opened with.
+   */
+  getFocusedEntity(): FocusedEntity | null {
+    return this.focusedEntity
   }
 
   /**
@@ -1117,6 +1190,9 @@ export class InteractiveVaultService extends BaseAIService {
   reset(): void {
     this.conversationHistory = []
     this.systemPrompt = ''
+    this.vaultSummary = null
+    this.focusedEntity = null
+    this.lastSentRecord = null
     this.initialized = false
     this.conversationId = null
     this.loadedCategories.clear()

@@ -23,6 +23,20 @@ export interface CharacterToolContext {
   generateId: () => string
 }
 
+/** The shape `read_character` returns, and the focused-entity record the Vault sends. */
+export function toCharacterDetails(character: VaultCharacter) {
+  return {
+    id: character.id,
+    name: character.name,
+    description: character.description,
+    traits: character.traits,
+    visualDescriptors: character.visualDescriptors,
+    tags: character.tags,
+    favorite: character.favorite,
+    source: character.source,
+  }
+}
+
 /**
  * Create character CRUD tools with the given context.
  */
@@ -101,19 +115,7 @@ export function createCharacterTools(context: CharacterToolContext) {
           return { found: false, error: `Character with ID "${characterId}" not found` }
         }
 
-        return {
-          found: true,
-          character: {
-            id: character.id,
-            name: character.name,
-            description: character.description,
-            traits: character.traits,
-            visualDescriptors: character.visualDescriptors,
-            tags: character.tags,
-            favorite: character.favorite,
-            source: character.source,
-          },
-        }
+        return { found: true, character: toCharacterDetails(character) }
       },
     }),
 
