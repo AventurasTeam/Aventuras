@@ -11,6 +11,7 @@ import {
   type HappeningInvolvement,
 } from '@/lib/db'
 
+import { collisionPairOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
 
 function entity(
@@ -92,13 +93,22 @@ function sequentialIds(): (prefix: string) => string {
 const A = entity('char_a', 'character')
 const B = entity('char_b', 'character', { nameCollisionFlag: 1 })
 
-function merge(overrides: Partial<EntityMergeInput> = {}) {
-  const canonical = overrides.canonical ?? A
-  const loser = overrides.loser ?? B
+function pairOf(first: Entity, second: Entity): CollisionPair {
+  const lookup = collisionPairOf([first, second], [first.id, second.id])
+  if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+  return lookup.pair
+}
+
+type MergeOverrides = Partial<Omit<EntityMergeInput, 'pair' | 'canonicalId'>> & {
+  canonical?: Entity
+  loser?: Entity
+}
+
+function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) {
   return entityMergeActions({
     branchId: 'b1',
-    canonical,
-    loser,
+    pair: pairOf(canonical, loser),
+    canonicalId: canonical.id,
     fromLoser: [],
     deselectedTags: [],
     deselectedKeywords: [],
@@ -123,18 +133,51 @@ const deleteLoser = {
 
 describe('entityMergeActions — refusals', () => {
   it('throws for a pair it cannot merge', () => {
-    expect(() => merge({ loser: A })).toThrow(/char_a merged into itself/)
-    expect(() => merge({ loser: entity('loc_b', 'location') })).toThrow(
-      /location merged into character/,
-    )
-    expect(() => merge({ loser: entity('char_b', 'character', { branchId: 'b2' }) })).toThrow(
-      /not both on b1/,
-    )
-    expect(() => merge({ canonical: entity('char_a', 'character', { branchId: 'b2' }) })).toThrow(
-      /not both on b1/,
-    )
+    expect(() =>
+      merge({
+        canonical: entity('char_a', 'character', { branchId: 'b2' }),
+        loser: entity('char_b', 'character', { branchId: 'b2' }),
+      }),
+    ).toThrow(/not both on b1/)
     expect(() => merge({ branchEntities: [A] })).toThrow(/not among the branch entities/)
     expect(() => merge({ branchEntities: [B] })).toThrow(/not among the branch entities/)
+  })
+
+  it('throws for a canonical id outside the pair', () => {
+    expect(() =>
+      entityMergeActions({
+        branchId: 'b1',
+        pair: pairOf(A, B),
+        canonicalId: 'char_z',
+        fromLoser: [],
+        deselectedTags: [],
+        deselectedKeywords: [],
+        branchEntities: [A, B],
+        awareness: [],
+        involvements: [],
+        relationships: [],
+        tail: null,
+        newId: sequentialIds(),
+      }),
+    ).toThrow(/char_z is not in the pair/)
+  })
+
+  it('merges into the second row of the pair as readily as the first', () => {
+    const { actions } = entityMergeActions({
+      branchId: 'b1',
+      pair: pairOf(B, A),
+      canonicalId: 'char_a',
+      fromLoser: [],
+      deselectedTags: [],
+      deselectedKeywords: [],
+      branchEntities: [A, B],
+      awareness: [],
+      involvements: [],
+      relationships: [],
+      tail: null,
+      newId: sequentialIds(),
+    })
+    expect(actions).toStrictEqual([deleteLoser])
   })
 })
 

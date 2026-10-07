@@ -1,4 +1,3 @@
-import type { Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
@@ -9,13 +8,15 @@ import {
   happeningInvolvementsStore,
 } from '@/lib/stores'
 import {
+  COLLISION_PAIR_MISS,
+  collisionPairOf,
   entityKeepActions,
   entityMergeActions,
   entityRenameActions,
-  namesakeKey,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   renameIssue,
+  type CollisionPairMiss,
   type DeleteTail,
   type MergeScalar,
 } from '@/lib/world'
@@ -70,7 +71,6 @@ export type CollisionResolveResult =
 type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
 type PairResolution = Exclude<CollisionResolution, { mode: 'merge' }>
 type Refusal = Extract<BuiltGroup, { status: 'rejected' }>
-type PairLookup = { pair: readonly [Entity, Entity] } | { refusal: Refusal }
 
 function refusal(code: CollisionRejectionCode, reason: string): Refusal {
   return { status: 'rejected', reason, code }
@@ -104,22 +104,16 @@ function branchRows<T extends { branchId: string }>(
   return [...rows.values()].filter((r) => r.branchId === branchId)
 }
 
-function lookupPair(branchEntities: readonly Entity[], ids: readonly [string, string]): PairLookup {
-  // The planners throw on equal ids (a programming error there); here it's a stale or bad request.
-  if (ids[0] === ids[1])
-    return { refusal: refusal(COLLISION_REJECTION.notFound, 'a row cannot collide with itself') }
-  const first = branchEntities.find((e) => e.id === ids[0])
-  const second = branchEntities.find((e) => e.id === ids[1])
-  if (first == null || second == null)
-    return {
-      refusal: refusal(
-        COLLISION_REJECTION.notFound,
-        `entity ${first == null ? ids[0] : ids[1]} not found`,
-      ),
-    }
-  if (first.kind !== second.kind || namesakeKey(first) !== namesakeKey(second))
-    return { refusal: refusal(COLLISION_REJECTION.notFound, 'the two rows no longer collide') }
-  return { pair: [first, second] }
+// Every miss reports as not-found: the pair the dialog showed no longer exists as asked.
+function missRefusal(lookup: CollisionPairMiss): Refusal {
+  switch (lookup.miss) {
+    case COLLISION_PAIR_MISS.sameRow:
+      return refusal(COLLISION_REJECTION.notFound, 'a row cannot collide with itself')
+    case COLLISION_PAIR_MISS.notFound:
+      return refusal(COLLISION_REJECTION.notFound, `entity ${lookup.id} not found`)
+    case COLLISION_PAIR_MISS.notColliding:
+      return refusal(COLLISION_REJECTION.notFound, 'the two rows no longer collide')
+  }
 }
 
 // For a merge, the first check predates the tail-lock awaits; a hard-gate run started since has
@@ -138,13 +132,14 @@ function buildMerge(
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
-  const lookup = lookupPair(branchEntities, [resolution.canonicalId, resolution.loserId])
-  if ('refusal' in lookup) return lookup.refusal
-  const [canonical, loser] = lookup.pair
+  const lookup = collisionPairOf(branchEntities, [resolution.canonicalId, resolution.loserId])
+  if ('miss' in lookup) return missRefusal(lookup)
+  const { pair } = lookup
+  const [canonical] = pair
   const { actions } = entityMergeActions({
     branchId,
-    canonical,
-    loser,
+    pair,
+    canonicalId: canonical.id,
     fromLoser: resolution.fromLoser,
     deselectedTags: resolution.deselectedTags,
     deselectedKeywords: resolution.deselectedKeywords,
@@ -165,8 +160,8 @@ function buildPairResolution(branchId: string, resolution: PairResolution): Buil
   const gated = gateRefusal()
   if (gated) return gated
   const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
-  const lookup = lookupPair(branchEntities, resolution.ids)
-  if ('refusal' in lookup) return lookup.refusal
+  const lookup = collisionPairOf(branchEntities, resolution.ids)
+  if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
   if (resolution.mode === 'keep')
     return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }

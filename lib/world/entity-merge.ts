@@ -8,6 +8,7 @@ import type {
   ItemState,
 } from '@/lib/db'
 
+import type { CollisionPair } from './collision-pair'
 import { sameList } from './draft-text'
 import type { DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
@@ -32,8 +33,9 @@ export type MergeScalar = (typeof MERGE_SCALARS)[number]
 
 export type EntityMergeInput = MergeDeselections & {
   branchId: string
-  canonical: Entity
-  loser: Entity
+  pair: CollisionPair
+  /** The row of `pair` that survives; the other one is the loser. */
+  canonicalId: string
   /** Scalars the merged row takes from the loser; every other one keeps the canonical's. */
   fromLoser: readonly MergeScalar[]
   /** The branch's entities, both rows among them. */
@@ -61,6 +63,11 @@ export type EntityMergePlan = {
   }
 }
 
+type MergeContext = Omit<EntityMergeInput, 'pair' | 'canonicalId'> & {
+  canonical: Entity
+  loser: Entity
+}
+
 type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload']['patch']
 
 function updateEntity(branchId: string, id: string, patch: EntityPatch): PipelineAction {
@@ -75,7 +82,7 @@ function takeScalar<K extends MergeScalar>(
   patch[field] = from[field]
 }
 
-function canonicalPatch(input: EntityMergeInput): EntityPatch {
+function canonicalPatch(input: MergeContext): EntityPatch {
   const { canonical, loser } = input
   const scalars: Partial<Pick<Entity, MergeScalar>> = {}
   for (const field of input.fromLoser) {
@@ -98,7 +105,7 @@ function canonicalPatch(input: EntityMergeInput): EntityPatch {
  * Where other rows' refs to the loser go. An item has at most one position (data-model.md →
  * ItemState shape): a held or placed canonical keeps its own; the loser's holders drop it.
  */
-function refTarget({ canonical, branchEntities }: EntityMergeInput): string | null {
+function refTarget({ canonical, branchEntities }: MergeContext): string | null {
   return canonical.kind === 'item' && itemHasPosition(canonical, branchEntities)
     ? null
     : canonical.id
@@ -108,10 +115,7 @@ function refTarget({ canonical, branchEntities }: EntityMergeInput): string | nu
  * A canonical item with no position takes the loser's placement, so a merge never leaves the item
  * nowhere. A held loser needs nothing here: its holders move to the canonical through `refTarget`.
  */
-function adoptedPlacement(
-  input: EntityMergeInput,
-  rewritten: EntityState | null,
-): EntityState | null {
+function adoptedPlacement(input: MergeContext, rewritten: EntityState | null): EntityState | null {
   const { canonical, loser } = input
   if (canonical.kind !== 'item' || refTarget(input) !== canonical.id) return null
   const at = stateOf(loser, 'item').at_location_id
@@ -128,7 +132,7 @@ function seenFrom(row: CharacterRelationship, id: string) {
 }
 
 function relationshipActions(
-  input: EntityMergeInput,
+  input: MergeContext,
   loser: EntityLinkRows,
   canonical: EntityLinkRows,
 ): { actions: PipelineAction[]; alreadyRelated: number } {
@@ -176,7 +180,7 @@ function sceneWithCanonical(scene: readonly string[], loserId: string, canonical
   return out
 }
 
-function tailActions(input: EntityMergeInput): PipelineAction[] {
+function tailActions(input: MergeContext): PipelineAction[] {
   const { branchId, tail, loser, canonical } = input
   if (tail == null) return []
   const metadata: { sceneEntities?: string[]; currentLocationId?: string } = {}
@@ -193,24 +197,27 @@ function tailActions(input: EntityMergeInput): PipelineAction[] {
   ]
 }
 
-function assertMergeable({ branchId, canonical, loser, branchEntities }: EntityMergeInput): void {
-  if (canonical.id === loser.id)
-    throw new Error(`entityMergeActions: ${loser.id} merged into itself`)
-  if (canonical.branchId !== branchId || loser.branchId !== branchId)
+function mergeContext({ pair, canonicalId, ...rest }: EntityMergeInput): MergeContext {
+  const [first, second] = pair
+  if (canonicalId !== first.id && canonicalId !== second.id)
+    throw new Error(`entityMergeActions: ${canonicalId} is not in the pair`)
+  const canonical = canonicalId === first.id ? first : second
+  const loser = canonical === first ? second : first
+  const { branchId, branchEntities } = rest
+  if (canonical.branchId !== branchId)
     throw new Error(`entityMergeActions: ${canonical.id} and ${loser.id} not both on ${branchId}`)
-  if (canonical.kind !== loser.kind)
-    throw new Error(`entityMergeActions: ${loser.kind} merged into ${canonical.kind}`)
   const ids = new Set(branchEntities.map((e) => e.id))
   if (!ids.has(canonical.id) || !ids.has(loser.id))
     throw new Error('entityMergeActions: the pair is not among the branch entities')
+  return { ...rest, canonical, loser }
 }
 
 /**
  * world.md → Merge. The loser's link rows are re-created on the canonical and its `deleteEntity`
  * cascades the originals: no arm re-keys a link row, and the group runner refuses writes to them.
  */
-export function entityMergeActions(input: EntityMergeInput): EntityMergePlan {
-  assertMergeable(input)
+export function entityMergeActions(request: EntityMergeInput): EntityMergePlan {
+  const input = mergeContext(request)
   const { branchId, canonical, loser, newId } = input
   const linksOf = (id: string) =>
     entityLinkRows({

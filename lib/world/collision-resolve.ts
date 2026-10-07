@@ -2,8 +2,7 @@ import type { PipelineAction } from '@/lib/actions'
 import type { Entity, EntityKind } from '@/lib/db'
 
 import { namesakeKey, orphanedFlags, withFlagClears } from './collision-flags'
-
-export type CollisionPair = readonly [Entity, Entity]
+import type { CollisionPair } from './collision-pair'
 
 export const RENAME_ISSUE = { emptyName: 'empty-name', stillColliding: 'still-colliding' } as const
 export type RenameIssue = (typeof RENAME_ISSUE)[keyof typeof RENAME_ISSUE]
