@@ -36,18 +36,17 @@ export type ModuleListProps<
   addSlot: ReactNode
   listSignals: Signals
   rowSignals: (id: string) => RowSignals
-  /** Rows counted by a collapsed group's `⚠ N` badge; omit for a kind with no flagged rows. */
-  flagged?: { has: (id: string) => boolean }
+  /**
+   * A collapsed group's `⚠ N` badge counts its `flagged` rows; a press hands `onReveal` the first,
+   * and the owner widens the view, expands the group and sends `reveal`. Omit for a kind with no
+   * flagged rows.
+   */
+  badge?: { flagged: { has: (id: string) => boolean }; onReveal: (id: string) => void }
   selectedId: string | null
   onSelect: (id: string) => void
   /** Group keys the All view shows collapsed; the owner persists changes. */
   collapsed: ReadonlySet<string>
   onCollapsedChange: (key: Key, collapsed: boolean) => void
-  /**
-   * A badge press; the owner widens the view, expands the group and sends `reveal`. Without it
-   * no `⚠ N` badge renders, whatever `flagged` holds.
-   */
-  onReveal?: (id: string) => void
   reveal?: RevealRequest | null
   /** A change scrolls the list back to the top, unless a reveal lands with it. */
   resetKey: string
@@ -83,12 +82,11 @@ export function ModuleList<
   addSlot,
   listSignals,
   rowSignals,
-  flagged,
+  badge,
   selectedId,
   onSelect,
   collapsed,
   onCollapsedChange,
-  onReveal,
   reveal = null,
   resetKey,
   density = 'default',
@@ -98,7 +96,6 @@ export function ModuleList<
 }: ModuleListProps<Row, Filter, Key, Signals>) {
   const { scrollRef, contentRef, rowRef, focusRef } = useRevealScroll(reveal, resetKey)
   const Scroll = useContext(ScrollComponentContext)
-  const badge = flagged != null && onReveal != null ? { flagged, onReveal } : null
 
   const { visible, grouped } = useMemo(
     () => arrangeRows(listModule, rows, { search, filter }, listSignals),

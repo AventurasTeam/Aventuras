@@ -110,12 +110,11 @@ function CharacterHarness({ onReveal }: { onReveal?: (id: string) => void }) {
         addSlot={null}
         listSignals={SIGNALS}
         rowSignals={() => ({})}
-        flagged={FLAGGED}
+        badge={onReveal == null ? undefined : { flagged: FLAGGED, onReveal }}
         selectedId={null}
         onSelect={() => {}}
         collapsed={COLLAPSED}
         onCollapsedChange={() => {}}
-        onReveal={onReveal}
         resetKey="character"
       />
     </View>
@@ -164,7 +163,7 @@ export const EmptySubtextOverride: Story = {
   },
 }
 
-/** Without `onReveal`, a collapsed group holding a flagged row shows no `⚠ N` badge. */
+/** Without `badge`, a collapsed group holding a flagged row shows no `⚠ N`. */
 export const FlaggedWithoutReveal: Story = {
   render: () => <CharacterHarness />,
   play: async () => {
@@ -174,7 +173,7 @@ export const FlaggedWithoutReveal: Story = {
   },
 }
 
-/** With `onReveal`, the same group shows the badge, and a press reveals the flagged row. */
+/** With `badge`, the same group shows `⚠ N`, and a press hands `onReveal` the flagged row's id. */
 export const FlaggedWithReveal: Story = {
   args: { onReveal: fn() },
   render: (args) => <CharacterHarness onReveal={args.onReveal} />,

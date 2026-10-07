@@ -200,7 +200,6 @@ export function PlotListPane({
     collapsed,
     onCollapsedChange: (key: string, value: boolean) =>
       listCollapseStore.setCollapsed(kind, key, value, plotCollapseDefaults(kind)),
-    onReveal: (id: string) => revealRow(kind, id),
     reveal,
     resetKey: kind,
   }
