@@ -686,14 +686,17 @@ describe('upsertHappeningAwareness retrievalCount', () => {
     expect((await awarenessRows(db, 'char_a', 'hap_1'))[0].retrievalCount).toBe(0)
   })
 
-  it.each([-1, 1.5, Number.NaN])('refuses %s, writing nothing', async (retrievalCount) => {
-    const { db, ctx } = await setup()
+  it.each([-1, 1.5, Number.NaN, 2 ** 53, 1e100])(
+    'refuses %s, writing nothing',
+    async (retrievalCount) => {
+      const { db, ctx } = await setup()
 
-    expect(await applyDeltaAction(upsert('user_edit', { retrievalCount }), ctx)).toEqual({
-      status: 'rejected',
-      reason: 'invalid awareness: retrievalCount must be a non-negative integer',
-    })
-    expect(await awarenessRows(db, 'char_a', 'hap_1')).toEqual([])
-    expect(await db.select().from(deltas)).toEqual([])
-  })
+      expect(await applyDeltaAction(upsert('user_edit', { retrievalCount }), ctx)).toEqual({
+        status: 'rejected',
+        reason: 'invalid awareness: retrievalCount must be a non-negative integer',
+      })
+      expect(await awarenessRows(db, 'char_a', 'hap_1')).toEqual([])
+      expect(await db.select().from(deltas)).toEqual([])
+    },
+  )
 })

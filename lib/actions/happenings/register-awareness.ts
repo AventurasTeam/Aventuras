@@ -46,7 +46,10 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
-  if (retrievalCount !== undefined && !(Number.isInteger(retrievalCount) && retrievalCount >= 0))
+  if (
+    retrievalCount !== undefined &&
+    !(Number.isSafeInteger(retrievalCount) && retrievalCount >= 0)
+  )
     return {
       status: 'rejected',
       reason: 'invalid awareness: retrievalCount must be a non-negative integer',
