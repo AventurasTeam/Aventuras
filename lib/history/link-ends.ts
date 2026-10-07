@@ -122,75 +122,68 @@ async function liveRows(
   targetTable: HistoryTable,
   targetId: string,
 ): Promise<{ table: HistoryLinkTable; rows: Row[] }[]> {
-  if (targetTable === 'entities')
+  if (targetTable === 'entities') {
+    const [relationships, involvements, awareness] = await Promise.all([
+      db
+        .select()
+        .from(characterRelationships)
+        .where(
+          and(
+            eq(characterRelationships.branchId, branchId),
+            or(eq(characterRelationships.aId, targetId), eq(characterRelationships.bId, targetId)),
+          ),
+        ),
+      db
+        .select()
+        .from(happeningInvolvements)
+        .where(
+          and(
+            eq(happeningInvolvements.branchId, branchId),
+            eq(happeningInvolvements.entityId, targetId),
+          ),
+        ),
+      db
+        .select()
+        .from(happeningAwareness)
+        .where(
+          and(
+            eq(happeningAwareness.branchId, branchId),
+            eq(happeningAwareness.characterId, targetId),
+          ),
+        ),
+    ])
     return [
-      {
-        table: 'character_relationships',
-        rows: await db
-          .select()
-          .from(characterRelationships)
-          .where(
-            and(
-              eq(characterRelationships.branchId, branchId),
-              or(
-                eq(characterRelationships.aId, targetId),
-                eq(characterRelationships.bId, targetId),
-              ),
-            ),
-          ),
-      },
-      {
-        table: 'happening_involvements',
-        rows: await db
-          .select()
-          .from(happeningInvolvements)
-          .where(
-            and(
-              eq(happeningInvolvements.branchId, branchId),
-              eq(happeningInvolvements.entityId, targetId),
-            ),
-          ),
-      },
-      {
-        table: 'happening_awareness',
-        rows: await db
-          .select()
-          .from(happeningAwareness)
-          .where(
-            and(
-              eq(happeningAwareness.branchId, branchId),
-              eq(happeningAwareness.characterId, targetId),
-            ),
-          ),
-      },
+      { table: 'character_relationships', rows: relationships },
+      { table: 'happening_involvements', rows: involvements },
+      { table: 'happening_awareness', rows: awareness },
     ]
-  if (targetTable === 'happenings')
+  }
+  if (targetTable === 'happenings') {
+    const [involvements, awareness] = await Promise.all([
+      db
+        .select()
+        .from(happeningInvolvements)
+        .where(
+          and(
+            eq(happeningInvolvements.branchId, branchId),
+            eq(happeningInvolvements.happeningId, targetId),
+          ),
+        ),
+      db
+        .select()
+        .from(happeningAwareness)
+        .where(
+          and(
+            eq(happeningAwareness.branchId, branchId),
+            eq(happeningAwareness.happeningId, targetId),
+          ),
+        ),
+    ])
     return [
-      {
-        table: 'happening_involvements',
-        rows: await db
-          .select()
-          .from(happeningInvolvements)
-          .where(
-            and(
-              eq(happeningInvolvements.branchId, branchId),
-              eq(happeningInvolvements.happeningId, targetId),
-            ),
-          ),
-      },
-      {
-        table: 'happening_awareness',
-        rows: await db
-          .select()
-          .from(happeningAwareness)
-          .where(
-            and(
-              eq(happeningAwareness.branchId, branchId),
-              eq(happeningAwareness.happeningId, targetId),
-            ),
-          ),
-      },
+      { table: 'happening_involvements', rows: involvements },
+      { table: 'happening_awareness', rows: awareness },
     ]
+  }
   return []
 }
 
@@ -237,17 +230,17 @@ async function namesOf(
 ): Promise<Record<string, string>> {
   if (ids.length === 0) return {}
   const names = new Map<string, string>()
-  const live = [
-    ...(await db
+  const [liveEntities, liveHappenings] = await Promise.all([
+    db
       .select({ id: entities.id, name: entities.name })
       .from(entities)
-      .where(and(eq(entities.branchId, branchId), inJsonList(entities.id, ids)))),
-    ...(await db
+      .where(and(eq(entities.branchId, branchId), inJsonList(entities.id, ids))),
+    db
       .select({ id: happenings.id, name: happenings.title })
       .from(happenings)
-      .where(and(eq(happenings.branchId, branchId), inJsonList(happenings.id, ids)))),
-  ]
-  for (const row of live) names.set(row.id, row.name)
+      .where(and(eq(happenings.branchId, branchId), inJsonList(happenings.id, ids))),
+  ])
+  for (const row of [...liveEntities, ...liveHappenings]) names.set(row.id, row.name)
   const missing = ids.filter((id) => !names.has(id))
   if (missing.length > 0) {
     const deleted = await db
@@ -277,26 +270,29 @@ export async function loadLinkEnds(
 ): Promise<LinkEnds> {
   const ends = ENDS[targetTable]
   if (ends.length === 0) return { links: [], removals: [], names: {} }
+  const [live, deletes] = await Promise.all([
+    liveRows(db, branchId, targetTable, targetId),
+    db
+      .select({
+        id: deltas.id,
+        targetTable: deltas.targetTable,
+        targetId: deltas.targetId,
+        undoPayload: deltas.undoPayload,
+      })
+      .from(deltas)
+      .where(
+        and(eq(deltas.branchId, branchId), eq(deltas.op, 'delete'), namingTarget(ends, targetId)),
+      )
+      .orderBy(asc(deltas.logPosition)),
+  ])
   const links: LinkEnd[] = []
-  for (const { table, rows } of await liveRows(db, branchId, targetTable, targetId)) {
+  for (const { table, rows } of live) {
     for (const row of rows) {
       const link = linkOf(table, row, ends, targetId)
       if (link != null) links.push(link)
     }
   }
   const removals: Removal[] = []
-  const deletes = await db
-    .select({
-      id: deltas.id,
-      targetTable: deltas.targetTable,
-      targetId: deltas.targetId,
-      undoPayload: deltas.undoPayload,
-    })
-    .from(deltas)
-    .where(
-      and(eq(deltas.branchId, branchId), eq(deltas.op, 'delete'), namingTarget(ends, targetId)),
-    )
-    .orderBy(asc(deltas.logPosition))
   for (const removed of deletes) {
     const payload = removed.undoPayload ?? {}
     if (isLinkTable(removed.targetTable)) {
