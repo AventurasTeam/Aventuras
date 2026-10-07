@@ -211,10 +211,13 @@ beforeEach(async () => {
     { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
     { id: 'hap_2', branchId: 'b1', title: 'Flood', createdAt: 1, updatedAt: 1 },
     { id: 'hap_3', branchId: 'b1', title: 'Feast', createdAt: 1, updatedAt: 1 },
+    { id: 'hap_4', branchId: 'b1', title: 'Duel', createdAt: 1, updatedAt: 1 },
   ])
   await db.insert(happeningAwareness).values([
     { id: 'haw_a1', branchId: 'b1', happeningId: 'hap_1', characterId: 'char_a' },
     { id: 'haw_a2', branchId: 'b1', happeningId: 'hap_2', characterId: 'char_a' },
+    // One more than char_b's live rows, so neither side's count can stand in for the other's.
+    { id: 'haw_a4', branchId: 'b1', happeningId: 'hap_4', characterId: 'char_a' },
     { id: 'haw_b1', branchId: 'b1', happeningId: 'hap_1', characterId: 'char_b' },
     { id: 'haw_b3', branchId: 'b1', happeningId: 'hap_3', characterId: 'char_b' },
     // Its happening is gone: a create's reversal can leave a link row naming nothing.
@@ -264,7 +267,8 @@ describe('collisionPair', () => {
     expect(dbCount(SQL.inverseRefs, 'fac_a', 'fac_b')).toBe(2)
     // equipped_items, inventory ×3 (one of them also carries item_b).
     expect(dbCount(SQL.inverseRefs, 'item_a', 'item_b')).toBe(4)
-    expect(dbCount(SQL.awarenessRows, 'char_a', 'char_b')).toBe(2)
+    expect(dbCount(SQL.awarenessRows, 'char_a', 'char_b')).toBe(3)
+    expect(dbCount(SQL.awarenessRows, 'char_b', 'char_a')).toBe(2)
     expect(dbCount(SQL.involvements, 'char_b', 'char_a')).toBe(4)
     // Both in hap_1, which char_a is in, and the second in hap_2.
     expect(dbCount(SQL.overlapInvolvements, 'char_b', 'char_a')).toBe(3)
