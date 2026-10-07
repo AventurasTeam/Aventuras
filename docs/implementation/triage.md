@@ -251,3 +251,17 @@ slice-planning gate forces its resolution before that slice is planned.
   code compiles and is silently reported as `failed`. 4.2c made its own
   collision mapping exhaustive; these two predate it. Found in 4.2c's
   slice review (2026-10-07).
+- **The tail-lock sequence is written twice.** The collision merge
+  (`lib/actions/world/resolve-collision.ts`) copies the entity delete's
+  steps (`lib/actions/row-delete/delete-entity.ts`): read the head's
+  tail, take its metadata lock, re-read the head, refuse if the tail
+  moved, then build the tail value. `components/world/delete-impact.ts`
+  builds the same tail value a third time. A shared helper in
+  `lib/actions/story-entries` would keep the lock order in one place.
+  Found in 4.2c's slice review (2026-10-07).
+- **No shared branch filter for store rows.** About twenty call sites
+  in `lib`, `components` and `app` filter a store's rows by
+  `branchId` inline; 4.2c added two more (`branchRows` in
+  `resolve-collision.ts`, `inBranch` in
+  `components/world/use-collision-resolve.ts`). A store-level accessor
+  would replace them. Found in 4.2c's slice review (2026-10-07).
