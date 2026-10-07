@@ -208,3 +208,22 @@ slice-planning gate forces its resolution before that slice is planned.
   `userData` directory. The harness needs a fallback that exits the app
   from main or kills it after a timeout. Found in 4.2c's PR 2 review
   (2026-10-06).
+- **Link update arms log unchanged values.** The involvement update arm
+  (`lib/actions/happenings/register-involvements.ts`) and the awareness
+  upsert (`register-awareness.ts`) write a delta even when the value
+  doesn't change, where the relationship arm refuses it as a `noop`. A
+  caller sending the same role writes a "Modified Role" History row
+  with no change. The Plot draft compares before writing, so no shipped
+  path does this today. Found in 4.2c's PR 3 review (2026-10-07).
+- **The History tab reads its own row without a branch check.**
+  `components/history/use-history-target.ts` looks the tab's row up in
+  the stores by id alone; ids repeat across branches (composite primary
+  key), and 4.2c added branch guards to the other-end name lookups and
+  the link version beside it. Unreachable while panes render only
+  branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07).
+- **The authorship contract table doesn't list the collision flag.**
+  `docs/data-model.md → Authorship contract` has no row for
+  `name_collision_flag`, though the World screen's authorship section
+  (3+ collisions) cites the contract for who sets and clears it: the
+  classifier at create, user paths only clearing it since 4.2c. Found
+  in 4.2c's PR 2 review (2026-10-06).
