@@ -734,6 +734,41 @@ describe('resolveCollision — merge', () => {
   )
 })
 
+describe('resolveCollision — merge tags and keywords', () => {
+  beforeEach(async () => {
+    await setTerms('char_a', { tags: ['guard'], keywords: ['the guard'] })
+    await setTerms('char_b', { tags: ['captain'], keywords: ['Captain Brannoc'] })
+  })
+
+  it("adds B's tags and keywords after A's own; CTRL-Z puts A's lists back", async () => {
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      tags: ['guard', 'captain'],
+      keywords: ['the guard', 'Captain Brannoc'],
+    })
+
+    await undoAll()
+
+    expect(await entityRow('char_a')).toMatchObject({ tags: ['guard'], keywords: ['the guard'] })
+  })
+
+  it('leaves out a deselected tag and keyword, whichever row held it', async () => {
+    const resolution: CollisionResolution = {
+      ...MERGE_B_INTO_A,
+      deselectedTags: ['captain'],
+      deselectedKeywords: ['THE GUARD'],
+    }
+
+    expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      tags: ['guard'],
+      keywords: ['Captain Brannoc'],
+    })
+  })
+})
+
 describe('resolveCollision — merge seats the canonical in the tail scene', () => {
   const deltasOn = async (id: string) =>
     (await deltaRows()).filter((r) => r.targetId === id).map((r) => r.op)
