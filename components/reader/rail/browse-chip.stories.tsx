@@ -27,7 +27,10 @@ export const Fresh: Story = {
   globals: PHONE,
   args: { tint: 'fresh' },
   play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
+    const chip = await screen.findByRole('button', { name: t('reader:rail.browse') })
+    await expect(chip).toHaveAttribute('aria-haspopup', 'dialog')
+    await expect(chip).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(chip)
     await expect(args.onPress).toHaveBeenCalledTimes(1)
     await expect(tintOpacity()).toBe('1')
   },

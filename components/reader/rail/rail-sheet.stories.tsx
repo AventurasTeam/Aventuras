@@ -315,9 +315,22 @@ export const ReaderChipOpensOnLastCategory: Story = {
     readerRailStore.setCategory('lore')
   },
   play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
+    const chip = await screen.findByTestId('browse-chip')
+    // The fixture's per-kind tints aggregate to fresh.
+    await expect(getComputedStyle(screen.getByTestId('browse-chip-tint')).opacity).toBe('1')
+
+    await userEvent.click(chip)
     await waitFor(() => expect(railDialog()).toBeVisible())
     await headIs('lore')
+    await expect(chip).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(backToCategories())
+    await expect(
+      await screen.findByRole('button', { name: railCategoryLabel('lore') }),
+    ).toHaveAttribute('aria-selected', 'true')
+    await expect(
+      screen.getByRole('button', { name: railCategoryLabel('character') }),
+    ).not.toHaveAttribute('aria-selected', 'true')
   },
 }
 
@@ -336,6 +349,29 @@ export const ReaderChipPickSetsStoreCategory: Story = {
   },
 }
 
+/** Filter and search edits inside the Sheet land in the store, so they survive a reopen or reflow. */
+export const ReaderChipViewEditsSetStoreView: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
+    await waitFor(() => expect(railDialog()).toBeVisible())
+    await headIs('character')
+
+    const copy = RAIL_MODULES.character.copy(railCategoryLabel('character'))
+    await userEvent.click(screen.getByRole('button', { name: copy.filterLabel('staged') }))
+    await userEvent.type(screen.getByPlaceholderText(copy.searchPlaceholder), 'Vor')
+
+    await waitFor(() =>
+      expect(readerRailStore.getView()).toEqual({
+        category: 'character',
+        filter: 'staged',
+        search: 'Vor',
+      }),
+    )
+  },
+}
+
 /** Without a peek renderer a row routes out: the Sheet closes and the row press reaches the host. */
 export const ReaderChipRowPressClosesSheet: Story = {
   globals: PHONE,
@@ -347,32 +383,45 @@ export const ReaderChipRowPressClosesSheet: Story = {
     await waitForSheetOpening(screen.getByTestId('browse-chip'))
 
     const lead = leadOf(DATA)
-    await userEvent.click(screen.getByRole('button', { name: lead.name }))
+    const row = screen.getByRole('button', { name: lead.name })
+    // A second tap while the Sheet animates out must not route twice.
+    await userEvent.click(row)
+    await userEvent.click(row)
+    await expect(args.onRowPress).toHaveBeenCalledTimes(1)
     await expect(args.onRowPress).toHaveBeenCalledWith('character', lead.id)
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
   },
 }
 
-/** The scrim covers the whole window, chip included, and a press on it closes either level. */
-export const ReaderChipBackdropCloses: Story = {
+/** The scrim covers the whole window, chip included, and a press on it closes the list level. */
+export const ReaderChipBackdropClosesList: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
   play: async ({ args }) => {
     const chip = await screen.findByTestId('browse-chip')
-
     await userEvent.click(chip)
     await waitFor(() => expect(railDialog()).toBeVisible())
     await headIs('character')
+
     await pressBackdropOver(chip)
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
+    await expect(args.onRowPress).not.toHaveBeenCalled()
+  },
+}
 
+/** A scrim press closes the categories level too. */
+export const ReaderChipBackdropClosesCategories: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  play: async ({ args }) => {
+    const chip = await screen.findByTestId('browse-chip')
     await userEvent.click(chip)
     await waitFor(() => expect(railDialog()).toBeVisible())
     await userEvent.click(backToCategories())
     await screen.findByRole('button', { name: railCategoryLabel('lore') })
+
     await pressBackdropOver(chip)
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
-
     await expect(args.onRowPress).not.toHaveBeenCalled()
   },
 }

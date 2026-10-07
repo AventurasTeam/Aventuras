@@ -133,6 +133,42 @@ function PendingActionProbe() {
   )
 }
 
+function SizeMorphProbe() {
+  const [size, setSize] = useState<'medium' | 'tall'>('medium')
+  return (
+    <View>
+      <Heading level={3}>Size morph (runtime size change)</Heading>
+      <Text variant="muted" size="xs" className="mt-1">
+        One open sheet whose size flips between medium and tall, as the rail Sheet does on a peek
+        swap. Expect: the same sheet glides between the two detents without closing or remounting,
+        and drag-down still closes it from either.
+      </Text>
+      <View className="mt-3">
+        <Sheet
+          ariaLabel="Size morph"
+          onOpenChange={(open) => {
+            if (!open) setSize('medium')
+          }}
+        >
+          <SheetTrigger asChild>
+            <Button variant="secondary">
+              <Text>morph</Text>
+            </Button>
+          </SheetTrigger>
+          <SheetContent anchor="bottom" size={size}>
+            <View className="flex-col gap-3">
+              <Heading level={4}>{size === 'medium' ? 'Medium' : 'Tall'}</Heading>
+              <Button onPress={() => setSize((s) => (s === 'medium' ? 'tall' : 'medium'))}>
+                <Text>{size === 'medium' ? 'Grow to tall' : 'Shrink to medium'}</Text>
+              </Button>
+            </View>
+          </SheetContent>
+        </Sheet>
+      </View>
+    </View>
+  )
+}
+
 export default function SheetDevRoute() {
   const [noteValue, setNoteValue] = useState('')
 
@@ -142,6 +178,7 @@ export default function SheetDevRoute() {
       <View className="flex-col gap-6 p-4">
         <KeyboardOrderingProbe />
         <PendingActionProbe />
+        <SizeMorphProbe />
 
         <View>
           <Heading level={3}>Default</Heading>

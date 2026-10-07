@@ -34,10 +34,10 @@ export function RailSheetCategories({ value, tints, onPick }: RailSheetCategorie
           return (
             <View key={group}>
               <Heading
-                level={4}
+                level={3}
                 size="xs"
                 variant="muted"
-                className="px-row-x-md pb-1 pt-3 uppercase"
+                className="px-row-x-md pb-1 pt-3 font-medium uppercase"
               >
                 {t(`reader:rail.groups.${group}`)}
               </Heading>

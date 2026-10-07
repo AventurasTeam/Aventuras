@@ -19,7 +19,7 @@ export function ReaderBrowseChip({ data, onRowPress }: ReaderBrowseChipProps) {
   return (
     // One element: on native the Sheet's dialog root is a View that would join the chip row's gap.
     <View className="flex-row items-center">
-      <BrowseChip tint={data.chipTint} onPress={() => setOpen(true)} />
+      <BrowseChip tint={data.chipTint} expanded={open} onPress={() => setOpen(true)} />
       <RailSheet
         open={open}
         onOpenChange={setOpen}
@@ -28,6 +28,8 @@ export function ReaderBrowseChip({ data, onRowPress }: ReaderBrowseChipProps) {
         onViewChange={(next) => readerRailStore.setView(next)}
         onCategoryChange={(category) => readerRailStore.setCategory(category)}
         onRowPress={(category, id) => {
+          // Rows stay pressable while the Sheet animates out; a second tap must not navigate again.
+          if (!open) return
           // layout.md → Stacking: dismiss the Sheet, then navigate.
           setOpen(false)
           onRowPress(category, id)

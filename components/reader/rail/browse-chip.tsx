@@ -1,6 +1,7 @@
 import { Menu } from 'lucide-react-native'
 import { Platform, Pressable } from 'react-native'
 
+import { CHIP_HIT_SLOP } from '@/components/ui/chip'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -9,18 +10,24 @@ import { cn } from '@/lib/utils'
 
 import { TintLayer } from './tint-layer'
 
-// As Chip: h-control-xs is 36 at regular density, and 36 + 2·4 reaches the 44 px phone floor.
-const CHIP_HIT_SLOP = 4
+export type BrowseChipProps = {
+  tint: RecentlyClassified | undefined
+  onPress: () => void
+  /** Whether the rail Sheet it opens is open. */
+  expanded?: boolean
+}
 
-export type BrowseChipProps = { tint: RecentlyClassified | undefined; onPress: () => void }
-
-export function BrowseChip({ tint, onPress }: BrowseChipProps) {
+export function BrowseChip({ tint, onPress, expanded = false }: BrowseChipProps) {
   const label = t('reader:rail.browse')
+  // As SheetTrigger: aria-haspopup is a web-only DOM attribute RN's prop types don't model.
+  const webProps = Platform.OS === 'web' ? ({ 'aria-haspopup': 'dialog' } as object) : null
   return (
     <Pressable
       testID="browse-chip"
       accessibilityRole="button"
       aria-label={label}
+      aria-expanded={expanded}
+      {...webProps}
       onPress={onPress}
       hitSlop={CHIP_HIT_SLOP}
       className={cn(
