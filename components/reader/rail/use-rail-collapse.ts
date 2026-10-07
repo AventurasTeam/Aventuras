@@ -29,7 +29,7 @@ export function useRailCollapse(): {
     void readerRailStore
       .writeCollapsed(next, () => setReaderRailCollapsed(next, ctx))
       .catch((error: unknown) =>
-        logger.warn('reader.rail_pref_write_failed', {
+        logger.error('reader.rail_pref_write_failed', {
           collapsed: next,
           error: error instanceof Error ? error.message : String(error),
         }),

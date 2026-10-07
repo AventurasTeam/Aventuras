@@ -157,7 +157,7 @@ describe('useRailCollapse', () => {
         await second.promise
         throw new Error('disk full')
       })
-    const warn = vi.spyOn(logger, 'warn')
+    const error = vi.spyOn(logger, 'error')
     const seen: boolean[] = []
     const front = renderRecording(seen)
     const back = renderRecording(seen)
@@ -172,7 +172,7 @@ describe('useRailCollapse', () => {
     })
     expect(appSettingsStore.getAppSettings().appearance.readerRailCollapsed).toBe(true)
     act(() => second.resolve())
-    await waitFor(() => expect(warn).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(error).toHaveBeenCalledTimes(1))
 
     expect(seen).not.toContain(true)
     expect(front.result.current.collapsed).toBe(false)
@@ -184,11 +184,11 @@ describe('useRailCollapse', () => {
     writeRailPreference
       .mockRejectedValueOnce(new Error('disk full'))
       .mockImplementationOnce(async (next: boolean) => storeRailPreference(next))
-    const warn = vi.spyOn(logger, 'warn')
+    const error = vi.spyOn(logger, 'error')
     const { result } = renderHook(() => useRailCollapse())
 
     act(() => result.current.setCollapsed(true))
-    await waitFor(() => expect(warn).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(error).toHaveBeenCalledTimes(1))
     expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
 
     act(() => result.current.setCollapsed(true))
@@ -202,12 +202,12 @@ describe('useRailCollapse', () => {
 
   it('keeps the toggled display and logs when the write fails', async () => {
     writeRailPreference.mockRejectedValue(new Error('disk full'))
-    const warn = vi.spyOn(logger, 'warn')
+    const error = vi.spyOn(logger, 'error')
     const { result } = renderHook(() => useRailCollapse())
 
     act(() => result.current.setCollapsed(true))
     await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('reader.rail_pref_write_failed', {
+      expect(error).toHaveBeenCalledWith('reader.rail_pref_write_failed', {
         collapsed: true,
         error: 'disk full',
       }),
