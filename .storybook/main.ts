@@ -7,6 +7,22 @@ import type { StorybookConfig } from '@storybook/react-native-web-vite'
 const dirname =
   typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
 
+// gorhom's prebuilt lib has no worklet closures and pluginReactOptions skips node_modules, so its
+// reactions never subscribe. See lessons-learned/vite-targets-dont-read-babel-config.md.
+const gorhomWorklets = {
+  filter: { id: /@gorhom[\\/]bottom-sheet[\\/]lib[\\/]module[\\/].*\.js$/ },
+  async handler(code: string, id: string) {
+    const result = await transformAsync(code, {
+      filename: id,
+      babelrc: false,
+      configFile: false,
+      sourceMaps: true,
+      plugins: ['react-native-worklets/plugin'],
+    })
+    return result?.code == null ? null : { code: result.code, map: result.map }
+  },
+}
+
 const config: StorybookConfig = {
   stories: [
     '../components/**/*.mdx',
@@ -52,29 +68,18 @@ const config: StorybookConfig = {
       // SharedArrayBuffer. Stub it out; see jsdom-stub.ts for the full story.
       { find: 'jsdom', replacement: path.resolve(dirname, 'jsdom-stub.ts') },
     ]
-    // gorhom's prebuilt lib has no worklet closures and Vite prebundles it past the plugin, so its
-    // reactions never subscribe. See lessons-learned/vite-targets-dont-read-babel-config.md.
+    // The dev server and vitest serve gorhom from the dependency prebundle, past regular plugins.
     viteConfig.optimizeDeps ??= {}
     viteConfig.optimizeDeps.rolldownOptions ??= {}
     viteConfig.optimizeDeps.rolldownOptions.plugins = [
       ...[viteConfig.optimizeDeps.rolldownOptions.plugins ?? []].flat(),
-      {
-        // Vite hashes optimizer plugins by name only; bump on any change.
-        name: 'worklets-gorhom-bottom-sheet@1',
-        transform: {
-          filter: { id: /@gorhom[\\/]bottom-sheet[\\/]lib[\\/]module[\\/].*\.js$/ },
-          async handler(code: string, id: string) {
-            const result = await transformAsync(code, {
-              filename: id,
-              babelrc: false,
-              configFile: false,
-              sourceMaps: true,
-              plugins: ['react-native-worklets/plugin'],
-            })
-            return result?.code == null ? null : { code: result.code, map: result.map }
-          },
-        },
-      },
+      // Vite hashes optimizer plugins by name only; bump on any change to gorhomWorklets.
+      { name: 'worklets-gorhom-bottom-sheet@1', transform: gorhomWorklets },
+    ]
+    // `storybook build` doesn't prebundle, so gorhom reaches the regular plugin pipeline there.
+    viteConfig.plugins = [
+      ...(viteConfig.plugins ?? []),
+      { name: 'worklets-gorhom-bottom-sheet', apply: 'build', transform: gorhomWorklets },
     ]
     return viteConfig
   },
