@@ -538,7 +538,8 @@ configured for the active kind:
 ## History tab
 
 History is the delta log filtered to this row: every delta keyed
-to this row (`op=create / update / delete`). Never editable —
+to this row (`op=create / update / delete`), and the deltas of the
+link rows that name it (see **Link rows** below). Never editable —
 rollback happens in the reader. Row rendering follows the
 [DeltaLogRow pattern](../../patterns/delta-log-row.md); host
 resolves target display names and renders the diff summary
@@ -560,10 +561,26 @@ prose, then hands pre-formatted strings to the compound.
   `json_extract` (which misses a `null` pre-change value); a search
   term also resolves against the field-path label vocabulary, so
   typing a rendered label (not just its raw path) matches the paths
-  it names. `target_table` is never matched, since it's constant
-  within a per-row tab. SQLite filters server-side; lazy-loaded delta
-  log doesn't need to be fully in memory.
-- **Op filter** — all / create / update / delete
+  it names. A term resolves against the labels of the table each
+  delta belongs to, so a link row's paths match its own labels, a
+  relationship's by the tab's side of the pair: "Modified Your view"
+  lists each side's edits against that side's labels, never across
+  sides. A link row's target line is searchable too: a term starting
+  a word of its link label (`Relationship`, `Involvement`,
+  `Awareness`) or of its other end's name lists that link row's
+  deltas and the other-end deletes that removed it. A removal also
+  matches a term starting a word of its target label (`Links` when it
+  held several kinds, else that kind's label) or of the label of any
+  kind it held. Its summary is searchable whole or typed partway: a
+  term that starts a word run of its fixed wording matches every
+  removal, and the wording plus a partial name matches the removals
+  whose other end's name starts with it. The row's own target line
+  is constant within the tab, so it is never matched. SQLite filters
+  server-side; lazy-loaded delta log doesn't need to be fully in
+  memory.
+- **Op filter** — all / create / update / delete. Link deltas count
+  too: `Created` also lists the relationships made, and `Deleted` a
+  link row removed on its own and an other end's delete.
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — log-shaped data, 50-row chunks; uses the
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)
@@ -576,9 +593,45 @@ prose, then hands pre-formatted strings to the compound.
   starts at the first save" instead of an empty log.
 - **Resets on row change** — search, op filter and sort return to
   their defaults when the tab is keyed to a new row.
-- **Reads the row's own deltas.** Relationship, awareness and
-  involvement edits are their link rows' deltas and don't show here yet
-  ([Slice 4.2c](../../../implementation/milestones/04-world-plot-read-surfaces/slices/02c-collision-review.md#scope-in)).
+- **Link rows** — the tab also lists the edits of the link rows that
+  name its row, in log order among its own deltas: a character's
+  relationships and awareness rows, any entity's involvements, and a
+  happening's involvements and awareness rows. A relationship edit
+  lists on both characters' tabs, whichever view it changed. Three
+  sources feed it: live link rows; link rows deleted on their own,
+  whose delete delta's payload names both ends; and link rows removed
+  with the other end's delete, which log no delta of their own and
+  ride in that delete's payload under `relationships`, `involvements`
+  or `awareness`
+  ([Reverse-replay](../../../generation-pipeline.md#reverse-replay)).
+  That delete lists once on the surviving tab, under `Deleted`; a
+  reversal that takes a link row prunes it out of a later delete's
+  payload, so no removal lists for a row the reversal took.
+  Retrieval-count bumps, awareness updates whose undo payload holds
+  only `retrievalCount`, are left out; an update that also changed
+  another column is listed. A merge re-creates the loser's link rows
+  on the canonical under new ids, so their earlier edits stay with
+  the originals and list on the other end's tab, not the canonical's
+  ([Reversibility](#reversibility)).
+- **Link-row wording** — a link delta's target line names the link and
+  its other end, `Relationship · Kael` (or `Involvement`,
+  `Awareness`). The other end's name is read live, the working set
+  first, then its stored row, else from the latest delete payload
+  that held it, always within the tab's branch, else "Unknown row";
+  a rename shows without a reload. Summaries read `Created`,
+  `Modified <fields>` and `Deleted`. An other end's delete reads
+  "Removed when Kael was deleted" under the link label alone, `Links`
+  when it removed more than one kind; with no name to read, "Removed
+  when its other end was deleted". A relationship's `kind` and
+  `inverse_kind` read "Your view" and "Their view" by the tab's side:
+  `kind` is `a`'s view of `b`, with `a_id < b_id`, so the tab's
+  character holds `kind` when it is `a`. An involvement's `role` reads
+  "Role"; awareness columns read "Source", "Decay resistance" and
+  "Learned at". The muted path stays the raw column.
+- **Refresh** — the tab refetches when its row or a link row naming
+  it changes in the working set (in a column the tab shows, so a
+  retrieval bump doesn't), and when a run or reversal settles, which
+  covers a reversal that only edits a delete's payload.
 - **Rows aren't pressable.** `entry #n` is meta text; see
   [DeltaLogRow → Click behavior](../../patterns/delta-log-row.md#click-behavior).
 
