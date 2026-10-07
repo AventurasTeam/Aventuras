@@ -30,7 +30,8 @@ export type RailStripProps = {
 
 export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
   return (
-    <View testID="rail-strip" className="flex-1 bg-bg-sunken pt-1" style={STRIP_WIDTH_STYLE}>
+    <View testID="rail-strip" className="flex-1 bg-bg-sunken" style={STRIP_WIDTH_STYLE}>
+      <EmptyRegion className="h-1" onPress={onExpand} />
       <StripCell label={t('reader:rail.expand')} onPress={onExpand}>
         <Icon as={ChevronLeft} size="sm" />
       </StripCell>
@@ -49,7 +50,7 @@ export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
           </Text>
         </StripCell>
       ))}
-      <View aria-hidden className="h-1.5" />
+      <EmptyRegion className="h-1.5" onPress={onExpand} />
       {model.quickAccess.map((cell) => (
         <StripCell
           key={cell.category}
@@ -62,17 +63,26 @@ export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
           <Icon as={KIND_GLYPHS[cell.category]} size="sm" />
         </StripCell>
       ))}
-      {/* Pointer-only: it repeats the chevron's action, so assistive tech meets one expand control. */}
-      <Pressable
-        testID="rail-strip-empty"
-        accessible={false}
-        tabIndex={-1}
-        onPress={onExpand}
-        className={cn('group relative flex-1', Platform.select({ web: 'cursor-pointer' }))}
-      >
-        <HoverLayer />
-      </Pressable>
+      <EmptyRegion testID="rail-strip-empty" className="flex-1" onPress={onExpand} />
     </View>
+  )
+}
+
+type EmptyRegionProps = { testID?: string; className: string; onPress: () => void }
+
+// Every strip area outside a cell: a tap that misses expands. Pointer-only, since it repeats the
+// chevron's action, so assistive tech meets one expand control.
+function EmptyRegion({ testID, className, onPress }: EmptyRegionProps) {
+  return (
+    <Pressable
+      testID={testID}
+      accessible={false}
+      tabIndex={-1}
+      onPress={onPress}
+      className={cn('group relative', Platform.select({ web: 'cursor-pointer' }), className)}
+    >
+      <HoverLayer />
+    </Pressable>
   )
 }
 

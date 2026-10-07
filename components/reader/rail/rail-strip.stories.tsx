@@ -77,6 +77,20 @@ function topLayerBesideGlyph(...testIDs: string[]): Element | null {
   return topmostAt(testIDs, besideGlyph).hit
 }
 
+// Points in the strip's top padding and in the gap between its groups, relative to the strip.
+function missPoints(): { x: number; y: number }[] {
+  const strip = screen.getByTestId('rail-strip').getBoundingClientRect()
+  const rect = (name: string) => screen.getByRole('button', { name }).getBoundingClientRect()
+  const chevron = rect(t('reader:rail.expand'))
+  const item = rect(t('reader:rail.strip.item', { count: 1 }))
+  const location = rect(t('reader:rail.strip.location'))
+  if (chevron.top <= strip.top || location.top <= item.bottom) throw new Error('No miss area')
+  return [(strip.top + chevron.top) / 2, (item.bottom + location.top) / 2].map((y) => ({
+    x: strip.width / 2,
+    y: y - strip.top,
+  }))
+}
+
 const meta: Meta<typeof RailStrip> = {
   title: 'Compounds/Reader/RailStrip',
   component: RailStrip,
@@ -176,6 +190,41 @@ export const HitZones: Story = {
   },
 }
 
+/** A miss above the chevron or between the groups lands on the empty region: expand, no switch. */
+export const MissesExpand: Story = {
+  play: async ({ args }) => {
+    const strip = screen.getByTestId('rail-strip').getBoundingClientRect()
+    for (const point of missPoints()) {
+      const target = document.elementFromPoint(strip.left + point.x, strip.top + point.y)
+      if (target == null) throw new Error('Nothing at the miss point')
+      await userEvent.click(target)
+    }
+    await expect(args.onExpand).toHaveBeenCalledTimes(2)
+    await expect(args.onExpandTo).not.toHaveBeenCalled()
+  },
+}
+
+/** Five Tab stops, the chevron then the cells; every part of the empty region is pointer-only. */
+export const TabOrder: Story = {
+  play: async () => {
+    const strip = screen.getByTestId('rail-strip')
+    const stops: (string | null)[] = []
+    for (let i = 0; i < 12; i += 1) {
+      await userEvent.tab()
+      const focused = document.activeElement
+      if (focused != null && strip.contains(focused)) stops.push(focused.getAttribute('aria-label'))
+      else if (stops.length > 0) break
+    }
+    await expect(stops).toEqual([
+      t('reader:rail.expand'),
+      t('reader:rail.strip.character', { count: 3 }),
+      t('reader:rail.strip.item', { count: 1 }),
+      t('reader:rail.strip.location'),
+      t('reader:rail.strip.faction'),
+    ])
+  },
+}
+
 /** Hover lights its own zone only, and leaves the tint under it untouched. */
 export const HoverPerZone: Story = {
   play: async () => {
@@ -189,6 +238,12 @@ export const HoverPerZone: Story = {
     // Real pointer hover exists only under Vitest; the module throws on import anywhere else.
     const browser = await import('vitest/browser').catch(() => null)
     if (browser == null) return
+
+    // The top padding and the group gap belong to the empty region: no cell lights.
+    for (const position of missPoints()) {
+      await browser.userEvent.hover(screen.getByTestId('rail-strip'), { position })
+      for (const category of STRIP_CATEGORIES) await expect(hoverBg(category)).toBe(idle)
+    }
 
     await browser.userEvent.hover(
       screen.getByRole('button', { name: t('reader:rail.strip.character', { count: 3 }) }),
