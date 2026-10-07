@@ -625,6 +625,17 @@ describe('resolveCollision — merge', () => {
     expect(await deltaRows()).toEqual([])
   })
 
+  it('merges a namesake into the lead: the loser goes, the lead stays and loses its flag', async () => {
+    await setFlag('char_lead', 1)
+
+    expect(await resolveCollision('b1', mergeInto('char_lead', 'char_kael2'), ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await entityRow('char_kael2')).toBeUndefined()
+    expect(await entityRow('char_lead')).toMatchObject({ name: 'Kael', nameCollisionFlag: 0 })
+  })
+
   it('refuses parent-cycle when the canonical descends from the loser', async () => {
     await ctx.db.insert(entities).values(
       row('loc_m', 'location', 'Dock', 1, {
