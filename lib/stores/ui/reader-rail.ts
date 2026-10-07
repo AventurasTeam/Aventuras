@@ -36,8 +36,7 @@ const store = createStore<ReaderRailState>()(() => INITIAL)
 function isFreshView(view: RailView): boolean {
   const fresh: Record<string, unknown> = railViewFor(view.category)
   const current: Record<string, unknown> = view
-  const keys = Object.keys(fresh)
-  return keys.length === Object.keys(current).length && keys.every((k) => fresh[k] === current[k])
+  return Object.keys(fresh).every((k) => fresh[k] === current[k])
 }
 
 function seed(width: number): void {

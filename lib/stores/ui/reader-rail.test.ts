@@ -192,6 +192,12 @@ describe('readerRailStore enterBranch', () => {
     expect(readerRailStore.getDisplay().peek).toBeNull()
   })
 
+  it('resets a filter alone, with the search already empty, on a new branch', () => {
+    readerRailStore.setView({ category: 'thread', filter: 'pending', search: '' })
+    readerRailStore.enterBranch('br_1')
+    expect(readerRailStore.getView()).toEqual({ category: 'thread', filter: 'all', search: '' })
+  })
+
   it('__reset forgets the recorded branch', () => {
     readerRailStore.enterBranch('br_1')
     readerRailStore.__reset()
