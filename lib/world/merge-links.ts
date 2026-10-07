@@ -23,7 +23,10 @@ export type MergeLinkInput = {
 export type MergeOverlap = {
   /** Awareness rows in a happening the canonical already knows; its own row stays. */
   awareness: number
-  /** Involvements in a happening the canonical already takes part in; its own row and role stay. */
+  /**
+   * Involvements in a happening the canonical already takes part in, whose own row and role stay,
+   * and each of the loser's own after its first in one happening.
+   */
   involvements: number
   /**
    * Relationships with a character the canonical already relates to; its views stay, and the
@@ -112,7 +115,11 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
   const known = new Set(canonicalLinks.awareness.map((row) => row.happeningId))
   const awareness = rows.awareness.filter((row) => !known.has(row.happeningId))
   const involved = new Set(canonicalLinks.involvements.map((row) => row.happeningId))
-  const involvements = rows.involvements.filter((row) => !involved.has(row.happeningId))
+  const involvements = rows.involvements.filter((row) => {
+    if (involved.has(row.happeningId)) return false
+    involved.add(row.happeningId)
+    return true
+  })
   const relationships = relationshipCopies(input, rows.relationships, canonicalLinks.relationships)
 
   return {

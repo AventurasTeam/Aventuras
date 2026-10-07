@@ -465,6 +465,26 @@ describe('entityMergeActions — link rows', () => {
     expect(plan.overlap.involvements).toBe(1)
   })
 
+  it('moves one of the loser’s involvements per happening, the first with its role', () => {
+    const plan = merge({
+      involvements: [
+        involved('hinv_1', 'char_b', 'hap_2', 'victim'),
+        involved('hinv_2', 'char_b', 'hap_3', null),
+        involved('hinv_3', 'char_b', 'hap_2', 'witness'),
+      ],
+    })
+    expect(
+      ofKind(plan.actions, 'createHappeningInvolvement').map((a) => [
+        a.payload.entry.happeningId,
+        a.payload.entry.role,
+      ]),
+    ).toStrictEqual([
+      ['hap_2', 'victim'],
+      ['hap_3', null],
+    ])
+    expect(plan.overlap.involvements).toBe(1)
+  })
+
   it('drops the relationship between the pair', () => {
     const plan = merge({ relationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])

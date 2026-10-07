@@ -1040,8 +1040,10 @@ canonical row, the canonical's row stays and the loser's row is
 dropped. An involvement in a happening the canonical already takes
 part in is dropped the same way: the table has no UNIQUE, but two
 involvements of one entity in one happening say nothing one row
-doesn't, and the canonical's `role` stays. A relationship the
-canonical already has with the same character is the UNIQUE
+doesn't, and the canonical's `role` stays. For the same reason, of
+the non-canonical's own involvements in one happening only the first
+moves, with its `role`. A relationship the canonical already has
+with the same character is the UNIQUE
 `(branch_id, a_id, b_id)` case, handled as the list says. A
 footnote under the relations summary counts each of these when the
 case fires, and says when a holder loses an item because the
@@ -1163,7 +1165,8 @@ Merge writes, in order:
   happening the canonical already knows isn't moved.
 - `happening_involvements` op=`create` per moved row, on the
   canonical. One in a happening the canonical already takes part in
-  isn't moved.
+  isn't moved, nor one after the non-canonical's first in the same
+  happening.
 - `character_relationships` op=`create` (op=`update` when the
   canonical already has a row with that character) per character
   the non-canonical relates to, the views merged with the

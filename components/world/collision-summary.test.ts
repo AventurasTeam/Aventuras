@@ -94,6 +94,13 @@ const SQL = {
       AND EXISTS (SELECT 1 FROM character_relationships p WHERE p.branch_id = ?1 AND (
         (p.a_id = ?3 AND p.b_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)
         OR (p.b_id = ?3 AND p.a_id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)))`,
+  // Every involvement but one per happening the partner isn't in: the rest give way.
+  overlapInvolvements: `SELECT
+    (SELECT count(*) FROM happening_involvements WHERE branch_id = ?1 AND entity_id = ?2)
+    - (SELECT count(DISTINCT i.happening_id) FROM happening_involvements i
+        WHERE i.branch_id = ?1 AND i.entity_id = ?2 AND NOT EXISTS (
+          SELECT 1 FROM happening_involvements p
+          WHERE p.branch_id = ?1 AND p.entity_id = ?3 AND p.happening_id = i.happening_id)) AS n`,
   joiningRelationships: `SELECT count(*) AS n FROM character_relationships
     WHERE branch_id = ?1 AND ((a_id = ?2 AND b_id = ?3) OR (a_id = ?3 AND b_id = ?2))`,
   inverseRefs: `SELECT count(*) AS n FROM entities e
@@ -190,6 +197,7 @@ beforeEach(async () => {
     { id: 'hinv_b1', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_b', role: 'witness' },
     { id: 'hinv_b1x', branchId: 'b1', happeningId: 'hap_1', entityId: 'char_b', role: 'thief' },
     { id: 'hinv_b2', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_b', role: null },
+    { id: 'hinv_b2x', branchId: 'b1', happeningId: 'hap_2', entityId: 'char_b', role: 'guard' },
   ])
   await db
     .insert(characterRelationships)
@@ -224,7 +232,9 @@ describe('collisionPair', () => {
     // equipped_items, inventory ×3 (one of them also carries item_b).
     expect(dbCount(SQL.inverseRefs, 'item_a', 'item_b')).toBe(4)
     expect(dbCount(SQL.awarenessRows, 'char_a', 'char_b')).toBe(2)
-    expect(dbCount(SQL.involvements, 'char_b', 'char_a')).toBe(3)
+    expect(dbCount(SQL.involvements, 'char_b', 'char_a')).toBe(4)
+    // Both in hap_1, which char_a is in, and the second in hap_2.
+    expect(dbCount(SQL.overlapInvolvements, 'char_b', 'char_a')).toBe(3)
     // rel_ac only: rel_ab joins the pair.
     expect(dbCount(SQL.relationships, 'char_a', 'char_b')).toBe(1)
     expect(dbCount(SQL.translationRows, 'char_a', 'char_b')).toBe(3)
@@ -257,6 +267,7 @@ describe('collisionPair', () => {
         translationRows: dbCount(SQL.translationRows, side.id, partner.id),
         joiningRelationship: dbCount(SQL.joiningRelationships, side.id, partner.id) > 0,
         overlap: {
+          involvements: dbCount(SQL.overlapInvolvements, side.id, partner.id),
           relationships: dbCount(SQL.overlapRelationships, side.id, partner.id),
         },
       })
@@ -273,7 +284,7 @@ describe('collisionPair', () => {
     expect(b.relationCounts).toMatchObject({
       embeddings: 0,
       unheldItems: 2,
-      overlap: { awareness: 1, involvements: 2, relationships: 1 },
+      overlap: { awareness: 1, involvements: 3, relationships: 1 },
     })
   })
 

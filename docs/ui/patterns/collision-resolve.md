@@ -119,11 +119,12 @@ sides from the stores: link counts with the entity cascade's own
 predicates, inverse refs across the six ref fields without the
 pair partner (a ref between the two collapses rather than moves),
 `embeddings` as 1 when the row isn't `embedding_stale`, and
-`overlap` as the rows of this side the other side already has: its
-awareness rows and involvements in a happening the other side is
-in, its relationships with a character the other side relates to,
-and, for an item, its holders who lose it because the other item
-already has a position.
+`overlap` as the rows of this side that give way rather than move:
+its awareness rows and involvements in a happening the other side
+is in, each of its involvements after its first in one happening,
+its relationships with a character the other side relates to, and,
+for an item, its holders who lose it because the other item already
+has a position.
 
 `state` is opaque (`Record<string, unknown>`). The dialog only
 deep-equals it to decide whether to render the inline note
@@ -318,8 +319,9 @@ side matches the canonical, and `deselectedTags = []` and
    refs, embeddings, items left unheld, and translation rows as
    dropped. Footnotes, each shown only when its count is non-zero:
    awareness rows and involvements the canonical already has (it
-   keeps its own, the duplicates drop), relationships with a
-   character the canonical already relates to (it keeps its own
+   keeps its own, the duplicates drop) or that repeat a happening
+   the non-canonical is already in (the first moves), relationships
+   with a character the canonical already relates to (it keeps its own
    views, taking the duplicate's only where blank), holders who lose
    an item because the canonical item is already held or placed, and
    the relationship between the two being dropped. Counts re-derive
