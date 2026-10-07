@@ -1,12 +1,18 @@
 import type {
   CharacterRelationship,
   Entity,
+  EntityState,
   Happening,
   HappeningAwareness,
   HappeningInvolvement,
 } from '@/lib/db'
 
-import { entityLinkRows, holdersLosingItem, type EntityLinkRows } from './entity-refs'
+import {
+  entityLinkRows,
+  holdersLosingItem,
+  stateWithRefRewritten,
+  type EntityLinkRows,
+} from './entity-refs'
 
 export type MergeLinkInput = {
   branchId: string
@@ -22,7 +28,7 @@ export type MergeLinkInput = {
   relationships: readonly CharacterRelationship[]
 }
 
-/** What of the loser's gives way to the canonical's instead of moving to it. */
+/** What a merge drops instead of moving it to the canonical. */
 export type MergeOverlap = {
   /** Awareness rows in a happening the canonical already knows; its own row stays. */
   awareness: number
@@ -38,6 +44,8 @@ export type MergeOverlap = {
   relationships: number
   /** Holders that drop the loser item because the canonical item is already held or placed. */
   holdersLosingItem: number
+  /** 1 when the canonical's state names the loser (a location under it): that ref is cleared. */
+  canonicalRefs: number
 }
 
 /** A relationship the canonical takes from the loser: the other end and the merged views. */
@@ -60,6 +68,11 @@ export type MergeLinks = {
     relationships: RelationshipCopy[]
   }
   overlap: MergeOverlap
+}
+
+/** The canonical's state with its refs to the loser cleared, since it can't point at itself. */
+export function canonicalRefsCleared(canonical: Entity, loserId: string): EntityState | null {
+  return stateWithRefRewritten(canonical, loserId, canonical.id)
 }
 
 /** A relationship row seen from `id`: the other end, `id`'s view of it, and its view of `id`. */
@@ -143,6 +156,7 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
       involvements: rows.involvements.length - involvements.length,
       relationships: relationships.overlap,
       holdersLosingItem: holdersLosingItem(loser, canonical, input.branchEntities),
+      canonicalRefs: canonicalRefsCleared(canonical, loser.id) == null ? 0 : 1,
     },
   }
 }

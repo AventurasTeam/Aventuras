@@ -26,7 +26,13 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
       embeddings: 1,
       translationRows: 0,
       unheldItems: 0,
-      overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
+      overlap: {
+        awareness: 0,
+        involvements: 0,
+        relationships: 0,
+        holdersLosingItem: 0,
+        canonicalRefs: 0,
+      },
     },
     ...overrides,
   }

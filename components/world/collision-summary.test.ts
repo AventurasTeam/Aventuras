@@ -87,6 +87,15 @@ const LIVE_HAPPENING =
 const LIVE_OTHER_END = `EXISTS (SELECT 1 FROM entities e WHERE e.branch_id = ?1
   AND e.id = CASE WHEN r.a_id = ?2 THEN r.b_id ELSE r.a_id END)`
 
+// Entity `e`'s state names this side in one of its six ref fields.
+const NAMES_THIS_SIDE = `(
+  json_extract(e.state, '$.current_location_id') = ?2
+  OR json_extract(e.state, '$.faction_id') = ?2
+  OR json_extract(e.state, '$.parent_location_id') = ?2
+  OR json_extract(e.state, '$.at_location_id') = ?2
+  OR EXISTS (SELECT 1 FROM json_each(e.state, '$.equipped_items') WHERE value = ?2)
+  OR EXISTS (SELECT 1 FROM json_each(e.state, '$.inventory') WHERE value = ?2))`
+
 const SQL = {
   awarenessRows: `SELECT count(*) AS n FROM happening_awareness
     WHERE branch_id = ?1 AND character_id = ?2 AND ${LIVE_HAPPENING}`,
@@ -123,13 +132,10 @@ const SQL = {
   joiningRelationships: `SELECT count(*) AS n FROM character_relationships
     WHERE branch_id = ?1 AND ((a_id = ?2 AND b_id = ?3) OR (a_id = ?3 AND b_id = ?2))`,
   inverseRefs: `SELECT count(*) AS n FROM entities e
-    WHERE e.branch_id = ?1 AND e.id NOT IN (?2, ?3) AND (
-      json_extract(e.state, '$.current_location_id') = ?2
-      OR json_extract(e.state, '$.faction_id') = ?2
-      OR json_extract(e.state, '$.parent_location_id') = ?2
-      OR json_extract(e.state, '$.at_location_id') = ?2
-      OR EXISTS (SELECT 1 FROM json_each(e.state, '$.equipped_items') WHERE value = ?2)
-      OR EXISTS (SELECT 1 FROM json_each(e.state, '$.inventory') WHERE value = ?2))`,
+    WHERE e.branch_id = ?1 AND e.id NOT IN (?2, ?3) AND ${NAMES_THIS_SIDE}`,
+  // The partner's own ref to this side, which a merge into the partner clears.
+  partnerRefs: `SELECT count(*) AS n FROM entities e
+    WHERE e.branch_id = ?1 AND e.id = ?3 AND ${NAMES_THIS_SIDE}`,
   translationRows: `SELECT count(*) AS n FROM translations
     WHERE branch_id = ?1 AND (
       (target_kind = 'entity' AND target_id = ?2)
@@ -254,6 +260,7 @@ describe('collisionPair', () => {
   it('builds a fixture that reaches every inverse-ref field and link table', () => {
     // current_location_id ×2, parent_location_id, at_location_id; the partner's parent excluded.
     expect(dbCount(SQL.inverseRefs, 'loc_a', 'loc_b')).toBe(4)
+    expect(dbCount(SQL.partnerRefs, 'loc_a', 'loc_b')).toBe(1)
     expect(dbCount(SQL.inverseRefs, 'fac_a', 'fac_b')).toBe(2)
     // equipped_items, inventory ×3 (one of them also carries item_b).
     expect(dbCount(SQL.inverseRefs, 'item_a', 'item_b')).toBe(4)
@@ -295,6 +302,7 @@ describe('collisionPair', () => {
         translationRows: dbCount(SQL.translationRows, side.id, partner.id),
         joiningRelationship: dbCount(SQL.joiningRelationships, side.id, partner.id) > 0,
         overlap: {
+          canonicalRefs: dbCount(SQL.partnerRefs, side.id, partner.id),
           involvements: dbCount(SQL.overlapInvolvements, side.id, partner.id),
           relationships: dbCount(SQL.overlapRelationships, side.id, partner.id),
         },

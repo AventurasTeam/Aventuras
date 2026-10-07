@@ -6,7 +6,7 @@ import { sameList } from './draft-text'
 import type { DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
 import { itemHasPosition, stateWithRefRewritten } from './entity-refs'
-import { mergeLinks, type MergeLinkInput } from './merge-links'
+import { canonicalRefsCleared, mergeLinks, type MergeLinkInput } from './merge-links'
 import { mergedTerms, type MergeDeselections } from './merge-terms'
 
 export const MERGE_SCALARS = [
@@ -56,7 +56,7 @@ function canonicalPatch(input: MergeContext): EntityPatch {
     if (loser[field] !== canonical[field]) takeScalar(scalars, field, loser)
   }
   const { tags, keywords } = mergedTerms({ canonical, other: loser }, input)
-  const rewritten = stateWithRefRewritten(canonical, loser.id, canonical.id)
+  const rewritten = canonicalRefsCleared(canonical, loser.id)
   const state = adoptedPlacement(input, rewritten) ?? rewritten
   // Spread, never `nameCollisionFlag: undefined`: the update arm refuses any value but 0.
   return {

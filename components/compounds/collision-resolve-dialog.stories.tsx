@@ -33,7 +33,13 @@ function baseEntity(overrides: Partial<EntitySummary> = {}): EntitySummary {
       embeddings: 1,
       translationRows: 3,
       unheldItems: 1,
-      overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
+      overlap: {
+        awareness: 0,
+        involvements: 0,
+        relationships: 0,
+        holdersLosingItem: 0,
+        canonicalRefs: 0,
+      },
     },
     ...overrides,
   }
@@ -58,7 +64,13 @@ const entityB = baseEntity({
     embeddings: 1,
     translationRows: 0,
     unheldItems: 0,
-    overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 0 },
+    overlap: {
+      awareness: 0,
+      involvements: 0,
+      relationships: 0,
+      holdersLosingItem: 0,
+      canonicalRefs: 0,
+    },
   },
 })
 
@@ -254,7 +266,13 @@ export const MergeOverlapFootnote: Story = {
         relationCounts: {
           ...entityB.relationCounts,
           joiningRelationship: true,
-          overlap: { awareness: 2, involvements: 1, relationships: 3, holdersLosingItem: 0 },
+          overlap: {
+            awareness: 2,
+            involvements: 1,
+            relationships: 3,
+            holdersLosingItem: 0,
+            canonicalRefs: 0,
+          },
         },
       }}
       onResolve={resolveOk}
@@ -310,7 +328,13 @@ export const MergeHoldersFootnote: Story = {
         createdAt: new Date().toISOString(),
         relationCounts: {
           ...entityB.relationCounts,
-          overlap: { awareness: 0, involvements: 0, relationships: 0, holdersLosingItem: 2 },
+          overlap: {
+            awareness: 0,
+            involvements: 0,
+            relationships: 0,
+            holdersLosingItem: 2,
+            canonicalRefs: 0,
+          },
         },
       })}
       onResolve={resolveOk}

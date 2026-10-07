@@ -100,12 +100,14 @@ type EntitySummary = {
     translationRows: number
     /** Items this side carries that nothing else holds or places. */
     unheldItems: number
-    /** What gives way when this side loses: the other side already has it. */
+    /** What gives way when this side loses (`MergeOverlap`, lib/world). */
     overlap: {
       awareness: number
       involvements: number
       relationships: number
       holdersLosingItem: number
+      /** 1 when the other side's state names this side; the merge clears that ref. */
+      canonicalRefs: number
     }
   }
 }
@@ -120,13 +122,14 @@ predicates, less the rows whose other end the branch no longer has
 (the merge doesn't move them), inverse refs across the six ref
 fields without the pair partner (a ref between the two collapses
 rather than moves), `embeddings` as 1 when the row isn't
-`embedding_stale`, and
-`overlap` as the rows of this side that give way rather than move:
-its awareness rows and involvements in a happening the other side
-is in, each of its involvements after its first in one happening,
-its relationships with a character the other side relates to, and,
-for an item, its holders who lose it because the other item already
-has a position.
+`embedding_stale`, and `overlap` as what gives way rather than
+moves: this side's awareness rows and involvements in a happening
+the other side is in, each of its involvements after its first in
+one happening, its relationships with a character the other side
+relates to, for an item its holders who lose it because the other
+item already has a position, and in `canonicalRefs` the other
+side's own ref to this side (a location parented under it), which
+the merge clears since the merged row can't point at itself.
 
 `state` is opaque (`Record<string, unknown>`). The dialog only
 deep-equals it to decide whether to render the inline note
@@ -325,9 +328,10 @@ side matches the canonical, and `deselectedTags = []` and
    the non-canonical is already in (the first moves), relationships
    with a character the canonical already relates to (it keeps its own
    views, taking the duplicate's only where blank), holders who lose
-   an item because the canonical item is already held or placed, and
-   the relationship between the two being dropped. Counts re-derive
-   when canonical flips.
+   an item because the canonical item is already held or placed, the
+   relationship between the two being dropped, and the canonical's
+   own ref to the non-canonical (its parent location) being cleared.
+   Counts re-derive when canonical flips.
 7. **Footer** — `[ Cancel ]` · `[ Merge into <canonical-name> ]`.
    The primary button echoes the canonical pick so the destructive
    direction is obvious.

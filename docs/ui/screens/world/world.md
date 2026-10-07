@@ -1021,7 +1021,9 @@ non-canonical's counts:
   `inventory[]`, `equipped_items[]`, `current_location_id`,
   `parent_location_id`, `at_location_id`, or `faction_id` —
   rewritten to canonical. A ref between the two rows doesn't
-  count: it collapses rather than moves. A holder of a
+  count: it collapses rather than moves, and when it is the
+  canonical's (a location parented under the non-canonical) a
+  footnote says the canonical loses it. A holder of a
   non-canonical item drops it instead when the canonical item
   already has a position ([Reversibility](#reversibility)), and
   still counts here.
@@ -1047,8 +1049,9 @@ with the same character is the UNIQUE
 `(branch_id, a_id, b_id)` case, handled as the list says. A
 footnote under the relations summary counts each of these when the
 case fires, and says when a holder loses an item because the
-canonical item is already held or placed, or that the relationship
-between the two is dropped.
+canonical item is already held or placed, that the relationship
+between the two is dropped, or that the canonical's own ref to the
+non-canonical is cleared.
 
 A link row whose other end the branch no longer has (a happening or
 character a reversed create removed) isn't counted or moved: a copy

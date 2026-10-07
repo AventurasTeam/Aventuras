@@ -399,16 +399,24 @@ describe('entityMergeActions — inverse refs', () => {
     expect(ofKind(kept.actions, 'updateEntity')).toStrictEqual([])
   })
 
-  it('nulls the canonical’s parent when it was the loser', () => {
+  it('nulls the canonical’s parent when it was the loser, and counts the cleared ref', () => {
     const cellar = entity('loc_a', 'location', {}, { parent_location_id: 'loc_b' })
     const hall = entity('loc_b', 'location')
-    const { actions } = merge({ canonical: cellar, loser: hall, branchEntities: [cellar, hall] })
+    const { actions, overlap } = merge({
+      canonical: cellar,
+      loser: hall,
+      branchEntities: [cellar, hall],
+    })
     expect(actions).toHaveLength(2)
     expect(actions[0]).toStrictEqual({
       kind: 'updateEntity',
       source: 'user_edit',
       payload: { branchId: 'b1', id: 'loc_a', patch: { state: { parent_location_id: null } } },
     })
+    expect(overlap.canonicalRefs).toBe(1)
+    // The other way round the loser's own parent goes with it: nothing on the canonical clears.
+    const reversed = merge({ canonical: hall, loser: cellar, branchEntities: [cellar, hall] })
+    expect(reversed.overlap.canonicalRefs).toBe(0)
   })
 })
 
@@ -532,6 +540,7 @@ describe('entityMergeActions — link rows', () => {
       involvements: 0,
       relationships: 0,
       holdersLosingItem: 0,
+      canonicalRefs: 0,
     })
   })
 
