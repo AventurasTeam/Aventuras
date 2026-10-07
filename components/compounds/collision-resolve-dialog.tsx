@@ -1,5 +1,5 @@
 import * as RadioGroupBase from '@rn-primitives/radio-group'
-import { useMemo, useReducer, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import { Platform, Pressable, ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -68,13 +68,14 @@ type CollisionResolveDialogProps = {
   blockedReason?: string
 }
 
-type BodyProps = {
-  onSubmit: (resolution: Resolution) => void
+type FooterProps = {
   onCancel: () => void
   submitting: boolean
   blockedReason?: string
   error: string | null
 }
+
+type BodyProps = FooterProps & { onSubmit: (resolution: Resolution) => void }
 
 function ageOf(entity: EntitySummary, nowMs: number): string {
   return relativeTimeLabel(Date.parse(entity.createdAt), nowMs)
@@ -216,19 +217,29 @@ export function CollisionResolveDialog({
   )
 }
 
+type ModeBodyProps = FooterProps & {
+  children: ViewProps['children']
+  confirmLabel: string
+  onConfirm: () => void
+  /** Why the input can't resolve the pair yet; disables Confirm. `blockedReason` wins over it. */
+  confirmIssue?: string
+}
+
 /**
  * Mode body: the content scrolls, the actions stay put. See
  * [overlays.md](../../docs/ui/patterns/overlays.md) — Dialog height and scroll.
  */
 function ModeBody({
   children,
-  actions,
+  confirmLabel,
+  onConfirm,
+  confirmIssue,
+  onCancel,
+  submitting,
   blockedReason,
-}: {
-  children: ViewProps['children']
-  actions: ReactNode
-  blockedReason?: string
-}) {
+  error,
+}: ModeBodyProps) {
+  const disabledReason = blockedReason ?? confirmIssue
   return (
     <View className="shrink gap-4">
       <ScrollView
@@ -237,31 +248,32 @@ function ModeBody({
         contentContainerClassName="gap-4"
       >
         {children}
+        {error != null ? (
+          <Text size="sm" className="text-danger">
+            {error}
+          </Text>
+        ) : null}
       </ScrollView>
-      <DialogFooter>{actions}</DialogFooter>
+      <DialogFooter>
+        <Button variant="secondary" onPress={onCancel} disabled={submitting}>
+          <Text>{t('cancel')}</Text>
+        </Button>
+        <Button
+          variant="primary"
+          onPress={onConfirm}
+          loading={submitting}
+          disabled={disabledReason != null}
+          disabledReason={disabledReason}
+        >
+          <Text>{confirmLabel}</Text>
+        </Button>
+      </DialogFooter>
       {blockedReason != null ? (
         <Text size="sm" variant="muted">
           {blockedReason}
         </Text>
       ) : null}
     </View>
-  )
-}
-
-function ErrorLine({ error }: { error: string | null }) {
-  if (error == null) return null
-  return (
-    <Text size="sm" className="text-danger">
-      {error}
-    </Text>
-  )
-}
-
-function CancelButton({ onCancel, submitting }: { onCancel: () => void; submitting: boolean }) {
-  return (
-    <Button variant="secondary" onPress={onCancel} disabled={submitting}>
-      <Text>{t('cancel')}</Text>
-    </Button>
   )
 }
 
@@ -333,25 +345,15 @@ function MergeBody({
 
   return (
     <ModeBody
+      confirmLabel={t(
+        `collisionDialog.mergeConfirm.${SIDE_WORD[canonical === entityA ? 'A' : 'B']}`,
+        { name: canonical.name },
+      )}
+      onConfirm={handleConfirm}
+      onCancel={onCancel}
+      submitting={submitting}
       blockedReason={blockedReason}
-      actions={
-        <>
-          <CancelButton onCancel={onCancel} submitting={submitting} />
-          <Button
-            variant="primary"
-            onPress={handleConfirm}
-            loading={submitting}
-            disabled={blockedReason != null}
-            disabledReason={blockedReason}
-          >
-            <Text>
-              {t(`collisionDialog.mergeConfirm.${SIDE_WORD[canonical === entityA ? 'A' : 'B']}`, {
-                name: canonical.name,
-              })}
-            </Text>
-          </Button>
-        </>
-      }
+      error={error}
     >
       <View className="gap-2">
         <Text size="sm" variant="muted">
@@ -500,8 +502,6 @@ function MergeBody({
           </Text>
         ) : null}
       </View>
-
-      <ErrorLine error={error} />
     </ModeBody>
   )
 }
@@ -809,21 +809,13 @@ function RenameBody({
 
   return (
     <ModeBody
+      confirmLabel={t('collisionDialog.renameConfirm')}
+      onConfirm={handleConfirm}
+      confirmIssue={issue == null ? undefined : help}
+      onCancel={onCancel}
+      submitting={submitting}
       blockedReason={blockedReason}
-      actions={
-        <>
-          <CancelButton onCancel={onCancel} submitting={submitting} />
-          <Button
-            variant="primary"
-            onPress={handleConfirm}
-            loading={submitting}
-            disabled={blockedReason != null || issue != null}
-            disabledReason={blockedReason ?? (issue == null ? undefined : help)}
-          >
-            <Text>{t('collisionDialog.renameConfirm')}</Text>
-          </Button>
-        </>
-      }
+      error={error}
     >
       <View className="gap-1">
         <Text size="sm" variant="muted">
@@ -850,8 +842,6 @@ function RenameBody({
       <Text size="sm" variant="muted">
         {help}
       </Text>
-
-      <ErrorLine error={error} />
     </ModeBody>
   )
 }
@@ -861,27 +851,16 @@ type KeepBodyProps = BodyProps & { name: string }
 function KeepBody({ name, onSubmit, onCancel, submitting, blockedReason, error }: KeepBodyProps) {
   return (
     <ModeBody
+      confirmLabel={t('collisionDialog.keepConfirm')}
+      onConfirm={() => onSubmit({ mode: 'keep' })}
+      onCancel={onCancel}
+      submitting={submitting}
       blockedReason={blockedReason}
-      actions={
-        <>
-          <CancelButton onCancel={onCancel} submitting={submitting} />
-          <Button
-            variant="primary"
-            onPress={() => onSubmit({ mode: 'keep' })}
-            loading={submitting}
-            disabled={blockedReason != null}
-            disabledReason={blockedReason}
-          >
-            <Text>{t('collisionDialog.keepConfirm')}</Text>
-          </Button>
-        </>
-      }
+      error={error}
     >
       <Text size="sm" variant="muted">
         {t('collisionDialog.keepBody', { name })}
       </Text>
-
-      <ErrorLine error={error} />
     </ModeBody>
   )
 }
