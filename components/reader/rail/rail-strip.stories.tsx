@@ -72,7 +72,7 @@ function glyphIsTopmost(...testIDs: string[]): boolean {
   return hit != null && glyph.contains(hit)
 }
 
-/** Beside the glyph the topmost layer is the first id: hover above tint, tint above the strip. */
+/** The topmost of the probed layers just left of the glyph; callers list the expected top first. */
 function topLayerBesideGlyph(...testIDs: string[]): Element | null {
   return topmostAt(testIDs, besideGlyph).hit
 }
