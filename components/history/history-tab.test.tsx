@@ -10,6 +10,7 @@ import {
   entitiesStore,
   generationStore,
   happeningAwarenessStore,
+  happeningInvolvementsStore,
   happeningsStore,
 } from '@/lib/stores'
 
@@ -153,6 +154,7 @@ beforeEach(() => {
   happeningsStore.__reset()
   characterRelationshipsStore.__reset()
   happeningAwarenessStore.__reset()
+  happeningInvolvementsStore.__reset()
   generationStore.__reset()
   entitiesStore.hydrate(BRANCH, [
     makeEntity({ id: 'char_aria', kind: 'character', name: 'Aria' }),
@@ -263,20 +265,31 @@ describe('HistoryTab over the link-row union', () => {
   })
 
   it('re-renders for a rename of a shown other end, not of an unrelated row', async () => {
-    const load = loader(() => [ON_ARIAS_TAB])
+    happeningsStore.hydrate(BRANCH, [
+      fire(BRANCH, 'The keep burns'),
+      { ...fire(BRANCH, 'The flood'), id: 'hap_flood' },
+    ])
+    const load = loader(() => [ON_ARIAS_TAB, INVOLVES_FIRE])
     renderTab(load, 'char_aria')
-    await firstRow()
+    await waitFor(() => expect(view.props?.rows).toHaveLength(2))
     await act(async () => {})
     const settled = view.renders
-    act(() =>
-      entitiesStore.patch(BRANCH, { op: 'update', id: 'char_mira', columns: { name: 'Mira II' } }),
-    )
+    act(() => {
+      entitiesStore.patch(BRANCH, { op: 'update', id: 'char_mira', columns: { name: 'Mira II' } })
+      happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_flood', columns: { title: 'Ebb' } })
+    })
     expect(view.renders).toBe(settled)
     act(() =>
       entitiesStore.patch(BRANCH, { op: 'update', id: 'char_kael', columns: { name: 'Kael II' } }),
     )
     expect(view.props?.rows[0]?.targetDisplayName).toBe('Relationship · Kael II')
-    expect(view.renders).toBeGreaterThan(settled)
+    const renamed = view.renders
+    expect(renamed).toBeGreaterThan(settled)
+    act(() =>
+      happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Ashes' } }),
+    )
+    expect(view.props?.rows[1]?.targetDisplayName).toBe('Involvement · Ashes')
+    expect(view.renders).toBeGreaterThan(renamed)
   })
 
   it("names a happening's awareness row by its character", async () => {
