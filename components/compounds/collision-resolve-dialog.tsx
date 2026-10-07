@@ -343,13 +343,10 @@ function MergeBody({
     const entity = side === 'A' ? entityA : entityB
     return {
       value: entity.id,
-      label: markCanonical(
-        t(`collisionDialog.canonicalOption.${SIDE_WORD[side]}`, {
-          name: entity.name,
-          when: ageOf(entity, nowMs),
-        }),
-        canonical === entity,
-      ),
+      label: t(`collisionDialog.canonicalOption.${SIDE_WORD[side]}`, {
+        name: entity.name,
+        when: ageOf(entity, nowMs),
+      }),
     }
   })
 

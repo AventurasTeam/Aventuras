@@ -263,7 +263,7 @@ export const PhoneLongDescriptions: Story = {
     expect(pickB.getBoundingClientRect().top).toBeGreaterThanOrEqual(
       pickA.getBoundingClientRect().bottom,
     )
-    const pickAText = within(pickA).getByText(/ · Canonical$/)
+    const pickAText = within(pickA).getByText(/^Kael · Older · /)
     expect(pickAText.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       pickA.getBoundingClientRect().bottom,
     )
@@ -363,13 +363,17 @@ export const MergeOverlapFootnote: Story = {
     />
   ),
   play: async () => {
-    // Side identification and the canonical marker: column headers and the picker agree.
+    // The column header marks the canonical with a suffix; the picker marks it by selection only.
     expect(await screen.findByText(/^Older · .+ · Canonical$/)).toBeInTheDocument()
     expect(screen.getByText(/^Newer · [^·]+$/)).toBeInTheDocument()
-    expect(
-      screen.getByRole('radio', { name: /^Kael · Older · .+ · Canonical$/ }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /^KAEL · Newer · [^·]+$/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Kael · Older · [^·]+$/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('radio', { name: /^KAEL · Newer · [^·]+$/ })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     expect(screen.getByText('Moves on merge (KAEL → Kael)')).toBeInTheDocument()
 
     expect(
@@ -399,9 +403,10 @@ export const MergeOverlapFootnote: Story = {
     expect(screen.getByText('The relationship between the two is dropped.')).toBeInTheDocument()
     expect(screen.getByText('Moves on merge (Kael → KAEL)')).toBeInTheDocument()
     expect(screen.getByText(/^Newer · .+ · Canonical$/)).toBeInTheDocument()
-    expect(
-      screen.getByRole('radio', { name: /^KAEL · Newer · .+ · Canonical$/ }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^KAEL · Newer · [^·]+$/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
   },
 }
 
@@ -553,16 +558,17 @@ export const MergeNamesTheSide: Story = {
     />
   ),
   play: async () => {
-    expect(
-      await screen.findByRole('radio', { name: 'Kael · Older · just now · Canonical' }),
-    ).toBeInTheDocument()
+    // The option text stays put on a flip; only the selection moves.
+    const older = await screen.findByRole('radio', { name: 'Kael · Older · just now' })
+    const newer = screen.getByRole('radio', { name: 'Kael · Newer · just now' })
+    expect(older).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('button', { name: 'Merge into the older Kael' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Kael · Newer · just now' }))
-    expect(
-      await screen.findByRole('radio', { name: 'Kael · Newer · just now · Canonical' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Kael · Older · just now' })).toBeInTheDocument()
+    await userEvent.click(newer)
+    await waitFor(() => expect(newer).toHaveAttribute('aria-checked', 'true'))
+    expect(older).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('radio', { name: 'Kael · Newer · just now' })).toBe(newer)
+    expect(screen.getByRole('radio', { name: 'Kael · Older · just now' })).toBe(older)
     expect(screen.getByRole('button', { name: 'Merge into the newer Kael' })).toBeInTheDocument()
   },
 }

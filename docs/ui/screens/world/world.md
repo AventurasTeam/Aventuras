@@ -940,10 +940,12 @@ goes; with 3+ namesakes, another flagged row keeps its strip
 The body renders the two rows side-by-side with a **canonical
 picker** at the top: a segment toggle picking which row's `id`
 survives, each option naming its side (`Kael · Older · 3 days ago`)
-since namesakes created close together read alike otherwise, the
-selected side marked `· Canonical` (full-width radio rows on phone,
-where a half-width segment would clip). The non-canonical row is
-deleted at end-of-merge.
+since namesakes created close together read alike otherwise
+(full-width radio rows on phone, where a half-width segment would
+clip). The selection alone marks the surviving side, under the label
+"Canonical (this row survives)"; an option's text stays the same
+whichever side is picked. The non-canonical row is deleted at
+end-of-merge.
 Default selection is the older row by `created_at` — the older
 row tends to have more accumulated state (relations, lore
 links, history), so absorbing the newer one into it preserves
@@ -1002,10 +1004,11 @@ Field-level rules:
   diverges in length.
 - **Side identification.** On web above phone, a header row above
   the columns names each side (`Older · 3 days ago`,
-  `Newer · just now`), the canonical's with a `· Canonical` suffix.
+  `Newer · just now`), the canonical's with a `· Canonical` suffix,
+  since nothing else marks the surviving column there.
   Stacked tiers (phone, and every native tier) have no header row,
   so each radio's value carries an inline age caption underneath
-  the prose — the wall-clock relative time the canonical picker
+  the prose, without the suffix — the wall-clock relative time the canonical picker
   shows, since an entity records when it was created, not the turn.
   Each stacked field is one radio group named by the field. Each
   radio is self-describing without relying on column position: its

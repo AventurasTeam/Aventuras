@@ -301,9 +301,11 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    `<A.name> · Older · <relative time>` /
    `<B.name> · Newer · <relative time>`, the wall-clock relative time
    History renders (`relativeTimeLabel`). The side word tells apart
-   two rows created within one relative-time bucket. A `· Canonical` suffix
-   appears on the selected side. On phone the picker renders as
-   full-width radio rows, since a half-width segment label clips.
+   two rows created within one relative-time bucket. The options carry
+   no canonical marker and keep their text on a flip: the selection,
+   under the label "Canonical (this row survives)", marks the surviving
+   row. On phone the picker renders as full-width radio rows, since a
+   half-width segment label clips.
 2. **Divergent-field table** — one row per divergent scalar, a
    `radiogroup` named by the field label with a radio for A's value
    and one for B's, each radio named by its side caption and its
@@ -313,7 +315,7 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    header row names the sides `Older · <relative time>` /
    `Newer · <relative time>`, the canonical's with the `· Canonical`
    suffix; on stacked tiers (phone, or any native tier) each choice
-   carries that caption itself instead. From the keyboard a field is
+   carries its side's caption itself instead, without the suffix. From the keyboard a field is
    one tab stop, on its checked radio: Space checks the focused radio
    and the arrow keys move the check.
 3. **Keyword union** (when `diff.keywords != null`) — single row
