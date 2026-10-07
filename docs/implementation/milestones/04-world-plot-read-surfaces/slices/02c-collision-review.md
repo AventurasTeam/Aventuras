@@ -158,8 +158,9 @@ to clear before wiring: `collision-resolve-diff.ts` declares
   flag clear), CTRL-Z re-flags the row, and the History tab labels the
   field (vitest; component test on the humanizer).
 - With three same-name rows, resolving one pair leaves the remaining
-  pair flagged and visible on next open (vitest on the list
-  derivation).
+  pair visible on next open while the row outside the resolved pair is
+  itself flagged: it keeps its strip, paired with a remaining namesake
+  (vitest on the list derivation).
 - `Resolve →` is disabled with the in-flight tooltip during a turn
   (component test).
 - `tsc --noEmit` passes with the compound consuming the shipped
