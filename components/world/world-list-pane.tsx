@@ -191,12 +191,11 @@ export function WorldListPane({
     addSlot,
     listSignals,
     rowSignals,
-    flagged: collisions,
+    badge: { flagged: collisions, onReveal: revealRow },
     selectedId,
     onSelect,
     collapsed,
     onCollapsedChange: setGroupCollapsed,
-    onReveal: revealRow,
     reveal,
     resetKey: category,
   }

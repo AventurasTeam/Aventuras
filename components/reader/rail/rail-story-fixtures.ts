@@ -1,8 +1,8 @@
 import type { RowSignals } from '@/components/list/list-module'
-import type { Entity, Happening, Lore, Thread } from '@/lib/db'
-import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
-import type { EntityListSignals, PlotListSignals } from '@/lib/list-modules'
-import { aggregateTint, railStripModel } from '@/lib/reader-rail'
+import type { EntryIndexRead } from '@/hooks/use-entry-index'
+import type { Entity, Happening, Lore, StoryEntry, Thread } from '@/lib/db'
+import type { EntryRef } from '@/lib/entry-refs'
+import type { EntityListSignals } from '@/lib/list-modules'
 import type { RecentlyClassified, RowCategory } from '@/lib/row-signals'
 
 import type { RailData } from './use-rail-data'
@@ -107,29 +107,40 @@ const HAPPENINGS: Happening[] = [
   happening('h_pact', "Vorne's pact", 'e_48'),
 ]
 
-// Sixty replies, the first thirty in a closed chapter: e_48 lands in Current, e_10 in Earlier.
-const ENTRIES: EntryIndex = new Map(
-  Array.from({ length: 60 }, (_, i): [string, EntryRef] => {
-    const position = i + 1
-    return [
-      `e_${position}`,
-      {
-        id: `e_${position}`,
-        position,
-        kind: 'ai_reply',
-        chapterId: position <= 30 ? 'chap_1' : null,
-        excerpt: `Entry ${position}`,
-      },
-    ]
-  }),
-)
+// Sixty replies, newest first, the first thirty in a closed chapter: e_48 lands in Current, e_10
+// in Earlier.
+const ENTRIES: readonly EntryRef[] = Array.from({ length: 60 }, (_, i): EntryRef => {
+  const position = 60 - i
+  return {
+    id: `e_${position}`,
+    position,
+    kind: 'ai_reply',
+    chapterId: position <= 30 ? 'chap_1' : null,
+    excerpt: `Entry ${position}`,
+  }
+})
+
+/** A new tail entry on the fixture branch: hydrating it keys a fresh entry-index read. */
+export function railFixtureTurn(position: number): StoryEntry {
+  return {
+    id: `e_${position}`,
+    branchId: BRANCH,
+    position,
+    kind: 'ai_reply',
+    content: '',
+    chapterId: null,
+    metadata: null,
+    createdAt: position,
+  }
+}
+
+/** The fixture branch's entry read, for `EntryIndexReadProvider`. */
+export const readRailFixtureEntries: EntryIndexRead = async () => ENTRIES
 
 const ENTITY_LIST_SIGNALS: EntityListSignals = {
   leadId: 'char_kael',
   inScene: new Set(['char_kael', 'char_mira', 'item_blade', 'loc_hollow']),
 }
-
-const PLOT_LIST_SIGNALS: PlotListSignals = { entries: ENTRIES, hasClosedChapters: true }
 
 const ROW_TINTS: ReadonlyMap<string, RecentlyClassified> = new Map([
   ['char_mira', 'fresh'],
@@ -143,20 +154,8 @@ const CATEGORY_TINT: ReadonlyMap<RowCategory, RecentlyClassified> = new Map([
   ['thread', 'fading'],
 ])
 
-/**
- * `strip` and `chipTint` follow the merged `entities`, `entityListSignals` and `categoryTint`
- * unless overridden themselves.
- */
 export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
-  const entities = overrides.entities ?? ENTITIES
   const entityListSignals = overrides.entityListSignals ?? ENTITY_LIST_SIGNALS
-  const categoryTint = overrides.categoryTint ?? CATEGORY_TINT
-  // An unread index holds no entries; override `plotListSignals` for another pairing.
-  const plotListSignals =
-    overrides.plotListSignals ??
-    (overrides.entryIndex?.ready === false
-      ? { ...PLOT_LIST_SIGNALS, entries: new Map<string, EntryRef>() }
-      : PLOT_LIST_SIGNALS)
   const { leadId, inScene } = entityListSignals
   const rowSignals = (id: string): Omit<RowSignals, 'collision'> => ({
     lead: id === leadId ? 'you' : null,
@@ -164,17 +163,15 @@ export function railDataFixture(overrides: Partial<RailData> = {}): RailData {
     recentlyClassified: ROW_TINTS.get(id),
   })
   return {
-    entities,
+    branchId: BRANCH,
+    entities: ENTITIES,
     lore: LORE,
     threads: THREADS,
     happenings: HAPPENINGS,
     entityListSignals,
-    plotListSignals,
-    entryIndex: { ready: true, failed: false, retry: () => {} },
+    hasClosedChapters: true,
     rowSignals,
-    strip: railStripModel({ inScene, entities, byCategory: categoryTint }),
-    categoryTint,
-    chipTint: aggregateTint(categoryTint),
+    categoryTint: CATEGORY_TINT,
     ...overrides,
   }
 }

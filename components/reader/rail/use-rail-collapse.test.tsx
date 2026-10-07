@@ -32,6 +32,14 @@ function deferred() {
   return { promise, resolve }
 }
 
+function renderRecording(seen: boolean[]) {
+  return renderHook(() => {
+    const rail = useRailCollapse()
+    seen.push(rail.collapsed)
+    return rail
+  })
+}
+
 beforeEach(() => {
   readerRailStore.__reset()
   appSettingsStore.__reset()
@@ -135,14 +143,70 @@ describe('useRailCollapse', () => {
     expect(result.current.collapsed).toBe(false)
   })
 
+  // Two stacked readers each mount the hook; the pending toggle they show is shared.
+  it('keeps an expand on every instance when the collapse lands and the expand fails', async () => {
+    const first = deferred()
+    const second = deferred()
+    writeRailPreference
+      .mockImplementationOnce(async (next: boolean) => {
+        await first.promise
+        await storeRailPreference(next)
+      })
+      .mockImplementationOnce(async () => {
+        await second.promise
+        throw new Error('disk full')
+      })
+    const error = vi.spyOn(logger, 'error')
+    const seen: boolean[] = []
+    const front = renderRecording(seen)
+    const back = renderRecording(seen)
+
+    act(() => front.result.current.setCollapsed(true))
+    act(() => front.result.current.setCollapsed(false))
+    seen.length = 0
+
+    await act(async () => {
+      first.resolve()
+      await writeRailPreference.mock.results[0].value
+    })
+    expect(appSettingsStore.getAppSettings().appearance.readerRailCollapsed).toBe(true)
+    act(() => second.resolve())
+    await waitFor(() => expect(error).toHaveBeenCalledTimes(1))
+
+    expect(seen).not.toContain(true)
+    expect(front.result.current.collapsed).toBe(false)
+    expect(back.result.current.collapsed).toBe(false)
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(false)
+  })
+
+  it('retires the pending toggle once a retry after a failed write lands', async () => {
+    writeRailPreference
+      .mockRejectedValueOnce(new Error('disk full'))
+      .mockImplementationOnce(async (next: boolean) => storeRailPreference(next))
+    const error = vi.spyOn(logger, 'error')
+    const { result } = renderHook(() => useRailCollapse())
+
+    act(() => result.current.setCollapsed(true))
+    await waitFor(() => expect(error).toHaveBeenCalledTimes(1))
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    act(() => result.current.setCollapsed(true))
+    await act(async () => {
+      await writeRailPreference.mock.results[1].value
+    })
+    expect(appSettingsStore.getAppSettings().appearance.readerRailCollapsed).toBe(true)
+    await waitFor(() => expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull())
+    expect(result.current.collapsed).toBe(true)
+  })
+
   it('keeps the toggled display and logs when the write fails', async () => {
     writeRailPreference.mockRejectedValue(new Error('disk full'))
-    const warn = vi.spyOn(logger, 'warn')
+    const error = vi.spyOn(logger, 'error')
     const { result } = renderHook(() => useRailCollapse())
 
     act(() => result.current.setCollapsed(true))
     await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('reader.rail_pref_write_failed', {
+      expect(error).toHaveBeenCalledWith('reader.rail_pref_write_failed', {
         collapsed: true,
         error: 'disk full',
       }),
@@ -154,7 +218,7 @@ describe('useRailCollapse', () => {
 
   it('lets a manual expand beat a viewport-forced collapse', async () => {
     writeRailPreference.mockResolvedValue(undefined)
-    readerRailStore.seedViewport(850)
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
     const { result } = renderHook(() => useRailCollapse())
     expect(result.current.collapsed).toBe(true)
 

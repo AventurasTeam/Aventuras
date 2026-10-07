@@ -152,6 +152,12 @@
     .reader-rail-full { display: block; }
   }
 
+  /* Phone (< 640): no rail column — the chip strip's Browse chip opens the rail as a Sheet. */
+  @container (max-width: 639px) {
+    .reader-body { grid-template-columns: 1fr; }
+    .reader-rail-strip { display: none; }
+  }
+
   /* ===========================================================
      World / Plot master-detail — list + detail.
      Phone (< 640): show list by default; tap row → detail-route.
@@ -286,11 +292,11 @@
             <div class="reader-narrative">
               <h4>Narrative + composer</h4>
               <p>Primary content area. Always visible at every tier; takes full width on phone.</p>
-              <p>Phone: rail collapsed to 28-px edge strip on the right. Tap strip to open the rail's content as a bottom Sheet (per session 3 layout primitives).</p>
+              <p>Phone: no rail column. The chip strip's [☰ Browse] chip opens the rail's content as a bottom Sheet (per session 3 layout primitives).</p>
               <p>Tablet (≥ 640, &lt; 1024): rail still collapsed-to-strip — the existing rail spec forces collapse below ~900 px viewport. iPad portrait (820), iPad mini (744), Galaxy Fold main (~904) all land here. Tap-strip on tablet expands the rail in place (no sheet — there's room).</p>
               <p>Desktop (≥ 1024): rail open inline as the secondary column.</p>
             </div>
-            <div class="reader-rail-strip" title="Tap to expand (in-place on tablet/desktop, sheet on phone)">RAIL</div>
+            <div class="reader-rail-strip" title="Tap to expand in place (tablet / desktop)">RAIL</div>
             <div class="reader-rail-full">
               <h4>Browse rail</h4>
               <div class="row">▾ Characters</div>

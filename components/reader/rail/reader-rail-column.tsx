@@ -1,3 +1,6 @@
+import { useMemo, useRef } from 'react'
+import type { View } from 'react-native'
+
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { matchesRailToggleShortcut, type RailCategory } from '@/lib/reader-rail'
 import { readerRailStore } from '@/lib/stores'
@@ -6,7 +9,7 @@ import { BrowseRail } from './browse-rail'
 import { RailColumn } from './rail-column'
 import { RailStrip } from './rail-strip'
 import { useRailCollapse } from './use-rail-collapse'
-import type { RailData } from './use-rail-data'
+import { railStripOf, type RailData } from './use-rail-data'
 
 export type ReaderRailColumnProps = {
   data: RailData
@@ -18,6 +21,9 @@ export type ReaderRailColumnProps = {
 export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColumnProps) {
   const view = readerRailStore.useView()
   const { collapsed, setCollapsed } = useRailCollapse()
+  const strip = useMemo(() => railStripOf(data), [data])
+  const collapseRef = useRef<View>(null)
+  const expandRef = useRef<View>(null)
   // reader-composer.md: the shortcut toggles regardless of focus, a text field included. Capture
   // phase: RN-Web's TextInput stops every keydown from bubbling.
   useGlobalHotkey(matchesRailToggleShortcut, () => setCollapsed(!collapsed), {
@@ -28,6 +34,8 @@ export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColu
   return (
     <RailColumn
       collapsed={collapsed}
+      expandedToggleRef={collapseRef}
+      stripToggleRef={expandRef}
       expanded={
         <BrowseRail
           data={data}
@@ -36,11 +44,13 @@ export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColu
           onCategoryChange={(category) => readerRailStore.setCategory(category)}
           onRowPress={onRowPress}
           onCollapse={() => setCollapsed(true)}
+          collapseRef={collapseRef}
         />
       }
       strip={
         <RailStrip
-          model={data.strip}
+          model={strip}
+          expandRef={expandRef}
           onExpand={() => setCollapsed(false)}
           onExpandTo={(category) => {
             readerRailStore.setCategory(category)

@@ -16,17 +16,19 @@ again and must do the same.**
 ## Libraries in `node_modules` are prebundled without the plugin
 
 The `pluginReactOptions.babel.plugins` wiring above reaches app source only. A dependency that relies on worklet
-autoworkletization (a prebuilt lib with no `__closure`) is prebundled by Vite's dependency
-optimizer past that plugin, so on web its `useAnimatedReaction` subscribes only to its deps array
-and never re-fires. `@gorhom/bottom-sheet`'s backdrop froze at `pointer-events: none`. Storybook
-now transforms `@gorhom/bottom-sheet` explicitly through a `rolldownOptions` plugin in
-`optimizeDeps` (`.storybook/main.ts`), for the dev server and the vitest lane; `storybook build`
-does no dependency prebundling, so a static build keeps the frozen scrim. Vite 8 prebundles
-with rolldown, and `esbuildOptions` plugins are deprecated and didn't take effect here. A new
-dependency with this shape needs the same entry. Vite hashes optimizer plugins by name only, so
-the plugin's name carries a version token to bump on any change, and a stale prebundle clears
-with `node_modules/.cache/storybook`. Metro compiles `node_modules` through `babel-preset-expo`,
-so the app is unaffected.
+autoworkletization (a prebuilt lib with no `__closure`) never meets that plugin: the dev server
+and the vitest lane serve it from Vite's dependency prebundle, and in a build the React plugin's
+Babel pass skips `node_modules`. On web its `useAnimatedReaction` then subscribes only to its
+deps array and never re-fires. `@gorhom/bottom-sheet`'s backdrop froze at `pointer-events: none`.
+Storybook now runs one explicit transform over `@gorhom/bottom-sheet` (`.storybook/main.ts`),
+registered twice: as a `rolldownOptions` plugin in `optimizeDeps` for the dev server and the
+vitest lane, and as a build-only Vite plugin, because `storybook build` does no dependency
+prebundling and gorhom reaches the regular plugin pipeline there. Vite 8 prebundles with
+rolldown, and `esbuildOptions` plugins are deprecated and didn't take effect here. A new
+dependency with this shape needs both entries. Vite hashes optimizer plugins by name only, so the optimizer plugin's
+name carries a version token to bump on any change to the transform, and a stale prebundle
+clears with `node_modules/.cache/storybook`. Metro compiles `node_modules` through
+`babel-preset-expo`, so the app is unaffected.
 
 ## Why it stayed hidden
 

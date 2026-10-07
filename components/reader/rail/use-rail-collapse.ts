@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 
 import { setReaderRailCollapsed } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { isRailCollapsed } from '@/lib/reader-rail'
 import { appSettingsStore, readerRailStore } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
@@ -14,29 +13,26 @@ export function useRailCollapse(): {
   setCollapsed: (collapsed: boolean) => void
 } {
   const stored = appSettingsStore.useAppSettings((s) => s.appearance.readerRailCollapsed)
-  const pending = readerRailStore.useDisplay((display) => display.pendingCollapsed)
-  const collapsed = readerRailStore.useDisplay((display) => isRailCollapsed(display, stored))
-  const [writesInFlight, setWritesInFlight] = useState(0)
+  const settledPending = readerRailStore.useSettledPending()
+  const collapsed = readerRailStore.useCollapsed(stored)
 
-  // Retire only once the store reaches `pending` with every write settled: a resolved write doesn't
-  // prove a re-hydrate (failed reads report config-corrupt); an earlier one can match by chance.
+  // Retire once the store matches with every write settled: a resolved write may not have
+  // re-hydrated (failed reads report config-corrupt), and an earlier write can match by chance.
   useEffect(() => {
-    if (writesInFlight === 0 && pending !== null && stored === pending) {
+    if (settledPending !== null && stored === settledPending) {
       readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: stored })
     }
-  }, [writesInFlight, pending, stored])
+  }, [settledPending, stored])
 
   const setCollapsed = useCallback((next: boolean) => {
-    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: next })
-    setWritesInFlight((count) => count + 1)
-    void setReaderRailCollapsed(next, ctx)
+    void readerRailStore
+      .writeCollapsed(next, () => setReaderRailCollapsed(next, ctx))
       .catch((error: unknown) =>
-        logger.warn('reader.rail_pref_write_failed', {
+        logger.error('reader.rail_pref_write_failed', {
           collapsed: next,
           error: error instanceof Error ? error.message : String(error),
         }),
       )
-      .finally(() => setWritesInFlight((count) => count - 1))
   }, [])
 
   return { collapsed, setCollapsed }

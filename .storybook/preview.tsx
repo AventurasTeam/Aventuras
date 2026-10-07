@@ -1,10 +1,12 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
 import { PortalHost } from '@rn-primitives/portal'
 import type { Preview } from '@storybook/react-native-web-vite'
-import { useEffect, type ReactNode } from 'react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { useEffect, useState, type ReactNode } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
+import { createQueryClient } from '@/lib/cache'
 import { DensityProvider, useDensity, type DensitySetting } from '@/lib/density'
 import { themes as registryThemes, ThemeProvider, useTheme } from '@/lib/themes'
 
@@ -39,6 +41,13 @@ function BodyLockReset({ children }: { children: ReactNode }) {
     return clear
   }, [])
   return <>{children}</>
+}
+
+// Above BottomSheetModalProvider, as in app/_layout: a story-level provider doesn't reach
+// content gorhom portals out of the story's tree.
+function StoryQueryClient({ children }: { children: ReactNode }) {
+  const [client] = useState(createQueryClient)
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
 const themeOptions = registryThemes.map((t) => ({ value: t.id, title: t.name }))
@@ -111,23 +120,25 @@ const preview: Preview = {
               work in Storybook. BottomSheetModalProvider sits inside
               ThemeProvider so theme context propagates through the
               sheet's internal portal. */}
-          <GestureHandlerRootView style={STORYBOOK_GH_ROOT_STYLE}>
-            <SafeAreaProvider initialMetrics={STORYBOOK_SAFE_AREA_METRICS}>
-              <ThemeProvider>
-                <DensityProvider>
-                  <ThemeApplier themeId={themeId}>
-                    <DensityApplier setting={densitySetting}>
-                      <BottomSheetModalProvider>
-                        <Story />
-                        {/* @rn-primitives/portal host for popover consumers. */}
-                        <PortalHost />
-                      </BottomSheetModalProvider>
-                    </DensityApplier>
-                  </ThemeApplier>
-                </DensityProvider>
-              </ThemeProvider>
-            </SafeAreaProvider>
-          </GestureHandlerRootView>
+          <StoryQueryClient key={context.id}>
+            <GestureHandlerRootView style={STORYBOOK_GH_ROOT_STYLE}>
+              <SafeAreaProvider initialMetrics={STORYBOOK_SAFE_AREA_METRICS}>
+                <ThemeProvider>
+                  <DensityProvider>
+                    <ThemeApplier themeId={themeId}>
+                      <DensityApplier setting={densitySetting}>
+                        <BottomSheetModalProvider>
+                          <Story />
+                          {/* @rn-primitives/portal host for popover consumers. */}
+                          <PortalHost />
+                        </BottomSheetModalProvider>
+                      </DensityApplier>
+                    </ThemeApplier>
+                  </DensityProvider>
+                </ThemeProvider>
+              </SafeAreaProvider>
+            </GestureHandlerRootView>
+          </StoryQueryClient>
         </BodyLockReset>
       )
     },

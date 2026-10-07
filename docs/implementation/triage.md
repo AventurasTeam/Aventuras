@@ -318,6 +318,14 @@ slice-planning gate forces its resolution before that slice is planned.
   `BackHandler` and discards it, and bottom Sheets bind no Esc on web. On
   desktop and tablet the same edits run in `EntryCard`'s Radix Dialogs, which
   drop the input on an outside click. Raised in 4.5a planning, 2026-10-07.
+  The canonical Sheet API
+  ([`overlays.md → Sheet — API surface`](../ui/patterns/overlays.md#sheet--api-surface))
+  names the switch `dismissable` and has it gate drag-down, tap-outside and
+  system back / Esc together; the primitive's prop is `enablePanDownToClose`,
+  which since 4.5a gates drag-down and the scrim tap but not Android back. The
+  fix lands the canon name and the back / Esc gating together; until then
+  `component-inventory.md`'s "every shipped primitive matches its spec" is
+  untrue for `Sheet`. Added in 4.5a's slice review, 2026-10-07.
 - **Narrative reflow on Browse rail toggle jumps the reading position.**
   Measured by hand on desktop at a 1050 px window, hero story scrolled to
   about 45% (`scrollTop` 3548, unchanged by the toggle): the narrative
@@ -337,10 +345,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
   trap Tab focus; the primitive neither focuses into the Sheet nor restores
   focus to the trigger. Raised in 4.5a review, 2026-10-07.
-- **Bottom Sheets aren't modal for screen readers on Android.** The scrim is
-  `accessible={false}` and nothing hides the content beneath, so TalkBack can
-  likely reach the controls under it, the Browse chip included. Inferred from
-  the code, not checked with TalkBack. Raised in 4.5a review, 2026-10-07.
 - **Overlay scrims are off canon (0.4 light, 0.6 dark).**
   `components/ui/dialog.tsx:31` and `alert-dialog.tsx:37` use `bg-black/50`,
   and the right-anchored Sheet (`sheet.tsx` near line 444) uses `bg-black/40`
@@ -391,11 +395,10 @@ slice-planning gate forces its resolution before that slice is planned.
   `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
   2026-10-07.
 - **`useRailData` runs in the uncompiled reader route.** The route
-  re-renders on lore, thread, happening and chapter writes, and
-  `useEntryIndex`'s `tailId` selector loops all entries on every render, each
-  stream chunk. Unmeasured. Options: each connected rail component calls
-  `useRailData` itself, memoized, or a `useReaderRail(branchId)` hook. Raised
-  in 4.5a review, 2026-10-07.
+  re-renders on lore, thread, happening and chapter writes. Unmeasured.
+  Options: each connected rail component calls `useRailData` itself,
+  memoized, or a `useReaderRail(branchId)` hook. Raised in 4.5a review,
+  2026-10-07.
 - **`ROW_CATEGORIES` duplicates a list `lib/list-modules` already has.**
   `lib/row-signals/types.ts:3-11` spells out what
   `[...WORLD_CATEGORIES, ...PLOT_KINDS]` gives. Raised in 4.5a review,
@@ -408,22 +411,50 @@ slice-planning gate forces its resolution before that slice is planned.
 - **The rail likely flashes expanded, then slides closed, on a narrow reader
   mount.** When the reader route mounts in the same commit as
   `RailViewportWatcher` under 900 px (a web or dev reload of the reader route),
-  `ReaderRailColumn` first renders from an unseeded store, so `RailColumn`
-  starts at 300 px and the watcher's seed then forces a collapse. Reasoned, not
-  observed; normal launches reach the reader after home, so the store is
-  already seeded. Fix idea: set the width without `withTiming` for a
-  `collapsed` change before first layout, or have `ReaderRailColumn` wait for
-  the seed. Raised in 4.5a's final review, 2026-10-07.
+  `ReaderRailColumn` first renders before the first window width reaches the
+  store, so `RailColumn` starts at 300 px and the watcher's first resize then
+  forces a collapse. Reasoned, not observed; normal launches reach the reader
+  after home, so the store already holds a width. Fix idea: set the width
+  without `withTiming` for a `collapsed` change before first layout, or have
+  `ReaderRailColumn` wait for the first width. Raised in 4.5a's final review,
+  2026-10-07.
 - **The happening filter-reset layout effect is duplicated.**
-  `components/reader/rail/rail-list.tsx:75-82` repeats
+  `components/reader/rail/rail-list.tsx:88-95` repeats
   `components/plot/plot-list-pane.tsx:98-103`, same comment and same reset. A
   small shared hook (e.g. `useOfferedFilterReset`) would remove the copy; it
   fits the same pass as the filed `EntryIndexStatus` and collapse-defaults
   extractions. Raised in 4.5a's final review, 2026-10-07.
 - **A medium Sheet can be lifted under the status bar by a tall keyboard.**
-  `components/ui/sheet.tsx:322` gives Sheets smaller than `tall`
+  `components/ui/sheet.tsx` gives bottom Sheets smaller than `tall`
   `keyboardBehavior='interactive'` with no `topInset`, so on a small phone a
   medium (60 %) Sheet can rise until its head sits under the status bar.
   Inferred from the code, not observed; the rail Sheet (medium, a search field
   right under its head) is the likeliest place to see it. Raised in 4.5a's
   final review, 2026-10-07.
+- **The rail's `+ Import from Vault` footer has no owner.** 4.5a ships it
+  disabled with the reason "Vault lands in M8"
+  (`reader:rail.importFromVaultReason`), and the 4.5a slice doc routes vault
+  import to M8.3, but
+  [roadmap M8.3](./roadmap.md#m8--translation--vault-parent-shell) scopes
+  only the vault shell, vault-level import / export is parked, and the vault
+  holds no entity content type
+  ([`parked.md → Vault parent shell`](../parked.md#vault-parent-shell)).
+  Decide who builds importing from the vault into a story, or drop the footer
+  and its copy. Raised in 4.5a's slice review, 2026-10-07.
+- **The phone scene editor's sections have no gaps.**
+  `components/compounds/scene-edit-form.tsx` sets
+  `contentContainerClassName="gap-3 pb-3"` on gorhom's
+  `BottomSheetScrollView`, which NativeWind never registered, so inside the
+  bottom Sheet both classes drop (measured in a story: `rowGap: normal` and
+  `paddingBottom: 0px`, against `rowGap: 12px` outside a Sheet). Put the
+  classes on an inner `View`, as `components/wizard/ai-assist.tsx` does.
+  Predates 4.5a, and the `ScrollComponentContext` move filed above wouldn't
+  fix it. Raised in 4.5a's slice review, 2026-10-07.
+- **A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
+  native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
+  a closing Sheet's scrim keeps catching touches until its animation ends
+  (gorhom's backdrop turns `pointerEvents` off only at index -1). A host that
+  closes a Sheet and opens a Dialog in one press, like the phone
+  `OverflowMenu`, would show the Dialog under the fading scrim for about
+  250 ms and lose a tap in that window. Inferred from the code, not observed
+  on a device. Raised in 4.5a's slice review, 2026-10-07.

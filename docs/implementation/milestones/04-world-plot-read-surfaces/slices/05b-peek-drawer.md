@@ -163,8 +163,9 @@ Sheet.
 - **`Open in panel →` needs `ReaderBrowseChip`'s `setOpen`**, so
   `renderPeek` stays owned by `ReaderBrowseChip` rather than moving into
   `RailSheet`, which holds the peek state.
-- **The lead label is derived in three places.** The mode to `LeadLabel`
-  ternary lives in `app/world/[branchId].tsx:152-153` and
+- **The lead label is derived in two places, and the peek would make
+  three.** The mode to `LeadLabel` ternary lives in
+  `app/world/[branchId].tsx:152-153` and
   `components/reader/rail/use-rail-data.ts`; the peek head would be a
   third copy. Add a `leadLabelFor(mode)` helper as part of this slice.
 

@@ -10,7 +10,7 @@ import { worldHref } from '@/components/world/world-selection'
 import { t } from '@/lib/i18n'
 import type { RailCategory } from '@/lib/reader-rail'
 
-export type RailModuleMap = {
+type RailModuleMap = {
   character: EntityListModule
   location: EntityListModule
   item: EntityListModule
@@ -20,7 +20,7 @@ export type RailModuleMap = {
   happening: HappeningListModule
 }
 
-// The panels' own module objects, never copies: a divergence is a prop (milestone C2).
+// The panels' own module objects, never copies: a divergence is a prop (M4 C2).
 export const RAIL_MODULES: RailModuleMap = {
   character: entityListModule('character'),
   location: entityListModule('location'),
@@ -43,7 +43,7 @@ export function railEmptySubtext(category: RailCategory): string {
     : t('reader:rail.empty.classifierBody')
 }
 
-/** The owning panel with the row pre-selected (milestone C6). */
+/** The owning panel with the row pre-selected (M4 C6). */
 export function railRowHref(branchId: string, category: RailCategory, id: string): string {
   if (category === 'thread' || category === 'happening') {
     return plotHref(branchId, { kind: category, id })

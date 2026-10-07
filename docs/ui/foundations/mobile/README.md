@@ -37,8 +37,8 @@ link.
   primitive across viewport tiers.
 - [`collapse.md`](./collapse.md) — collapse rule for multi-pane
   surfaces. Master-detail (World, Plot, Settings) collapses
-  list-first on phone; Reader collapses to narrative-only with
-  rail-strip-tap opening rail content as a bottom Sheet on phone.
+  list-first on phone; Reader collapses to narrative-only, with the
+  Browse chip opening rail content as a bottom Sheet on phone.
 - [`collapse.html`](./collapse.html) — interactive demo: surface
   toggle crossed with viewport toggle.
 - [`touch.md`](./touch.md) — touch grammar: minimal-translation

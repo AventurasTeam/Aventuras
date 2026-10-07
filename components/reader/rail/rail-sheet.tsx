@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react-native'
 import { useEffect, useState, type ReactNode } from 'react'
 import { View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
@@ -22,6 +23,19 @@ import { railCategoryLabel } from './rail-modules'
 import { RailSheetCategories } from './rail-sheet-categories'
 import type { RailData } from './use-rail-data'
 
+/** A row press does exactly one thing: routes out, or opens the peek in place. */
+type RailSheetRowPress =
+  | {
+      /** Routes the row out to its panel. */
+      onRowPress: (category: RailCategory, id: string) => void
+      renderPeek?: never
+    }
+  | {
+      /** Peek slot, shown at the tall detent. Called inline only while peeking, so no hooks. */
+      renderPeek: (peek: RailPeek, back: () => void) => ReactNode
+      onRowPress?: never
+    }
+
 export type RailSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -29,14 +43,7 @@ export type RailSheetProps = {
   view: RailView
   onViewChange: (view: RailView) => void
   onCategoryChange: (category: RailCategory) => void
-  /** A row press when no `renderPeek` is given: the row's panel. */
-  onRowPress: (category: RailCategory, id: string) => void
-  /**
-   * Peek slot: with it, a row press swaps the list for the peek at the tall detent. Called inline
-   * at the peek level only, so it returns an element and must not call hooks.
-   */
-  renderPeek?: (peek: RailPeek, back: () => void) => ReactNode
-}
+} & RailSheetRowPress
 
 export function RailSheet({
   open,
@@ -48,6 +55,7 @@ export function RailSheet({
   onRowPress,
   renderPeek,
 }: RailSheetProps) {
+  const insets = useSafeAreaInsets()
   const [sheet, setSheet] = useState<RailSheetState>(RAIL_SHEET_OPENED)
   const send = (event: RailSheetEvent) => setSheet((current) => reduceRailSheet(current, event))
 
@@ -66,7 +74,13 @@ export function RailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={t('reader:rail.label')}>
-      <SheetContent anchor="bottom" size={sheet.size} className="p-0">
+      <SheetContent
+        anchor="bottom"
+        size={sheet.size}
+        className="p-0"
+        // The primitive pads the inset plus p-6's 24px inline, which p-0 can't override.
+        style={{ paddingBottom: insets.bottom }}
+      >
         {sheet.content === 'categories' ? (
           <RailSheetCategories
             value={view.category}

@@ -1,5 +1,5 @@
 import { ChevronLeft } from 'lucide-react-native'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 
 import { useTapTooltipTrigger } from '@/components/compounds/truncated-text'
@@ -14,12 +14,10 @@ import { formatStripCount, type RailStripModel, type StripCategory } from '@/lib
 import type { RecentlyClassified } from '@/lib/row-signals'
 import { cn } from '@/lib/utils'
 
-import { TintLayer } from './tint-layer'
+import { TintLayer, UNDER_CONTENT_STYLE } from './tint-layer'
 
 export const RAIL_STRIP_WIDTH_PX = 32
 
-// Like the tint layer: under the glyph, and later in the DOM, so above the tint.
-const HOVER_STYLE = { ...POINTER_EVENTS_NONE, zIndex: -1 } satisfies ViewStyle
 const STRIP_WIDTH_STYLE = { width: RAIL_STRIP_WIDTH_PX } satisfies ViewStyle
 
 export type RailStripProps = {
@@ -28,12 +26,15 @@ export type RailStripProps = {
   onExpand: () => void
   /** A cell: expand and switch to its category. */
   onExpandTo: (category: StripCategory) => void
+  /** The chevron, for the column to hand focus to after a collapse. */
+  expandRef?: Ref<View>
 }
 
-export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
+export function RailStrip({ model, onExpand, onExpandTo, expandRef }: RailStripProps) {
   return (
-    <View testID="rail-strip" className="flex-1 bg-bg-sunken pt-1" style={STRIP_WIDTH_STYLE}>
-      <StripCell label={t('reader:rail.expand')} onPress={onExpand}>
+    <View testID="rail-strip" className="flex-1 bg-bg-sunken" style={STRIP_WIDTH_STYLE}>
+      <EmptyRegion className="h-1" onPress={onExpand} />
+      <StripCell ref={expandRef} label={t('reader:rail.expand')} onPress={onExpand}>
         <Icon as={ChevronLeft} size="sm" />
       </StripCell>
       {model.counted.map((cell) => (
@@ -51,7 +52,7 @@ export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
           </Text>
         </StripCell>
       ))}
-      <View aria-hidden className="h-1.5" />
+      <EmptyRegion className="h-1.5" onPress={onExpand} />
       {model.quickAccess.map((cell) => (
         <StripCell
           key={cell.category}
@@ -64,17 +65,26 @@ export function RailStrip({ model, onExpand, onExpandTo }: RailStripProps) {
           <Icon as={KIND_GLYPHS[cell.category]} size="sm" />
         </StripCell>
       ))}
-      {/* Pointer-only: it repeats the chevron's action, so assistive tech meets one expand control. */}
-      <Pressable
-        testID="rail-strip-empty"
-        accessible={false}
-        tabIndex={-1}
-        onPress={onExpand}
-        className={cn('group relative flex-1', Platform.select({ web: 'cursor-pointer' }))}
-      >
-        <HoverLayer />
-      </Pressable>
+      <EmptyRegion testID="rail-strip-empty" className="flex-1" onPress={onExpand} />
     </View>
+  )
+}
+
+type EmptyRegionProps = { testID?: string; className: string; onPress: () => void }
+
+// Every strip area outside a cell: a tap that misses expands. Pointer-only, since it repeats the
+// chevron's action, so assistive tech meets one expand control.
+function EmptyRegion({ testID, className, onPress }: EmptyRegionProps) {
+  return (
+    <Pressable
+      testID={testID}
+      accessible={false}
+      tabIndex={-1}
+      onPress={onPress}
+      className={cn('group relative', Platform.select({ web: 'cursor-pointer' }), className)}
+    >
+      <HoverLayer />
+    </Pressable>
   )
 }
 
@@ -85,6 +95,7 @@ type StripCellProps = {
   tint?: RecentlyClassified
   tintTestID?: string
   hoverTestID?: string
+  ref?: Ref<View>
   children: ReactNode
 }
 
@@ -124,6 +135,7 @@ function NativeStripCell(props: StripCellProps) {
 }
 
 function CellPressable({
+  ref,
   label,
   onPress,
   onLongPress,
@@ -134,6 +146,7 @@ function CellPressable({
 }: StripCellProps & { onLongPress?: () => void }) {
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       aria-label={label}
       onPress={onPress}
@@ -152,7 +165,8 @@ function CellPressable({
   )
 }
 
-// Over the tint, never instead of it: hover is feedback, the tint is information.
+// Over the tint, never instead of it: hover is feedback, the tint is information. Same z as the
+// tint and later in the DOM, so above it and still under the glyph.
 function HoverLayer({ testID }: { testID?: string }) {
   if (Platform.OS !== 'web') return null
   return (
@@ -160,7 +174,7 @@ function HoverLayer({ testID }: { testID?: string }) {
       testID={testID}
       aria-hidden
       className="absolute inset-0 group-hover:bg-tint-hover"
-      style={HOVER_STYLE}
+      style={UNDER_CONTENT_STYLE}
     />
   )
 }

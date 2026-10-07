@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactElement, type ReactNode } from 'react'
 import { View } from 'react-native'
 
 import { Toolbar, type ToolbarSearchProps } from '@/components/compounds/toolbar'
@@ -46,7 +46,7 @@ type EntityListPaneProps = {
    * Replaces the list and its empty state; the header and toolbar stay mounted. Omit for the
    * list or, when `isEmpty`, the empty state.
    */
-  body?: ReactNode
+  body?: ReactElement
 
   /**
    * Consumer derives. Shell uses this to switch list vs empty

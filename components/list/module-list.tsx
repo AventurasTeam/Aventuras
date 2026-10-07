@@ -1,4 +1,4 @@
-import { useContext, useMemo, type ReactNode } from 'react'
+import { useContext, useMemo, type ReactElement, type ReactNode } from 'react'
 import { View, type ViewStyle } from 'react-native'
 
 import { EntityListPane, type EntityListPaneSurface } from '@/components/shells/entity-list-pane'
@@ -36,18 +36,16 @@ export type ModuleListProps<
   addSlot: ReactNode
   listSignals: Signals
   rowSignals: (id: string) => RowSignals
-  /** Rows counted by a collapsed group's `⚠ N` badge; omit for a kind with no flagged rows. */
-  flagged?: { has: (id: string) => boolean }
+  /**
+   * A collapsed group's `⚠ N` badge counts its `flagged` rows; a press hands `onReveal` the first
+   * (the owner widens the view, expands the group, sends `reveal`). Omit for a kind with none.
+   */
+  badge?: { flagged: { has: (id: string) => boolean }; onReveal: (id: string) => void }
   selectedId: string | null
   onSelect: (id: string) => void
   /** Group keys the All view shows collapsed; the owner persists changes. */
   collapsed: ReadonlySet<string>
   onCollapsedChange: (key: Key, collapsed: boolean) => void
-  /**
-   * A badge press; the owner widens the view, expands the group and sends `reveal`. Without it
-   * no `⚠ N` badge renders, whatever `flagged` holds.
-   */
-  onReveal?: (id: string) => void
   reveal?: RevealRequest | null
   /** A change scrolls the list back to the top, unless a reveal lands with it. */
   resetKey: string
@@ -56,7 +54,7 @@ export type ModuleListProps<
   /** Replaces the module's empty-state subtext, for a surface whose add affordance differs. */
   emptySubtext?: string
   /** Replaces the list and its empty state; the header and toolbar stay mounted. */
-  body?: ReactNode
+  body?: ReactElement
   /** Forwarded to the pane; `transparent` inside a Sheet. */
   surface?: EntityListPaneSurface
 }
@@ -83,12 +81,11 @@ export function ModuleList<
   addSlot,
   listSignals,
   rowSignals,
-  flagged,
+  badge,
   selectedId,
   onSelect,
   collapsed,
   onCollapsedChange,
-  onReveal,
   reveal = null,
   resetKey,
   density = 'default',
@@ -98,7 +95,6 @@ export function ModuleList<
 }: ModuleListProps<Row, Filter, Key, Signals>) {
   const { scrollRef, contentRef, rowRef, focusRef } = useRevealScroll(reveal, resetKey)
   const Scroll = useContext(ScrollComponentContext)
-  const badge = flagged != null && onReveal != null ? { flagged, onReveal } : null
 
   const { visible, grouped } = useMemo(
     () => arrangeRows(listModule, rows, { search, filter }, listSignals),
@@ -123,8 +119,9 @@ export function ModuleList<
     </View>
   )
 
+  // Building a row reads its signals and registers its reveal refs; a `body` shows none of them.
   const list =
-    grouped == null ? (
+    body != null ? null : grouped == null ? (
       visible.map(renderRow)
     ) : (
       <>

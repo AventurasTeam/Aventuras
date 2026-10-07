@@ -4,6 +4,7 @@ import { createStore } from 'zustand/vanilla'
 import {
   DEFAULT_RAIL_VIEW,
   initialRailDisplay,
+  isRailCollapsed,
   railViewFor,
   reduceRailDisplay,
   type RailCategory,
@@ -12,21 +13,22 @@ import {
   type RailView,
 } from '@/lib/reader-rail'
 
-// Session-scoped, never persisted (collapse.md → State preservation on reflow): the view and
-// display survive a collapse, a reader remount and a phone ↔ tablet reflow.
+// Session-scoped, never persisted (collapse.md → State preservation on reflow): within a branch
+// the view survives a collapse, a reader remount and a phone ↔ tablet reflow.
 type ReaderRailState = {
   view: RailView
   display: RailDisplayState
-  /** False until the first real window width lands; until then nothing is forced. */
-  seeded: boolean
+  /** A token per preference write in flight; one settling after a reset finds nothing to drop. */
+  writes: ReadonlySet<symbol>
   /** The branch the reader last entered; `null` until the first. */
   branchId: string | null
 }
 
 const INITIAL: ReaderRailState = {
   view: DEFAULT_RAIL_VIEW,
+  // From +Infinity the first real width is a downward cross when narrow, so it forces a collapse.
   display: initialRailDisplay(Number.POSITIVE_INFINITY),
-  seeded: false,
+  writes: new Set(),
   branchId: null,
 }
 
@@ -39,14 +41,8 @@ function isFreshView(view: RailView): boolean {
   return Object.keys(fresh).every((k) => fresh[k] === current[k])
 }
 
-function seed(width: number): void {
-  store.setState({ display: initialRailDisplay(width), seeded: true })
-}
-
 export const readerRailStore = {
   useView: (): RailView => useStore(store, (s) => s.view),
-  /** A primitive, so a filter or search edit doesn't re-render the caller. */
-  useCategory: (): RailCategory => useStore(store, (s) => s.view.category),
   getView: (): RailView => store.getState().view,
   /** A switch resets filter and search, as World and Plot do; the current category is a no-op. */
   setCategory: (category: RailCategory): void =>
@@ -63,24 +59,35 @@ export const readerRailStore = {
             display: reduceRailDisplay(s.display, { type: 'closePeek' }),
           },
     ),
-  /** `selector` must return a stable value (a field or a primitive), as zustand requires. */
-  useDisplay: <T>(selector: (display: RailDisplayState) => T): T =>
-    useStore(store, (s) => selector(s.display)),
+  /** The shown collapse: a forced collapse wins, then a pending toggle, then `stored`. */
+  useCollapsed: (stored: boolean): boolean =>
+    useStore(store, (s) => isRailCollapsed(s.display, stored)),
   getDisplay: (): RailDisplayState => store.getState().display,
-  /** Seeds the display from the window width once per app session; later calls are no-ops. */
-  seedViewport: (width: number): void => {
-    if (!store.getState().seeded) seed(width)
+  /** The pending toggle once every preference write has settled; `null` while one is in flight. */
+  useSettledPending: (): boolean | null =>
+    useStore(store, (s) => (s.writes.size === 0 ? s.display.pendingCollapsed : null)),
+  /** Shows `collapsed` now, pending until all in-flight writes settle; settles as `write` does. */
+  writeCollapsed: (collapsed: boolean, write: () => Promise<void>): Promise<void> => {
+    const token = Symbol('rail-collapse-write')
+    store.setState((s) => ({
+      display: reduceRailDisplay(s.display, { type: 'setCollapsed', collapsed }),
+      writes: new Set(s.writes).add(token),
+    }))
+    return write().finally(() =>
+      store.setState((s) => {
+        if (!s.writes.has(token)) return s
+        const writes = new Set(s.writes)
+        writes.delete(token)
+        return { writes }
+      }),
+    )
   },
-  /** A resize before any seed seeds instead: a width with no prior one is not a cross. */
-  dispatchDisplay: (event: RailDisplayEvent): void => {
-    if (event.type === 'resize' && !store.getState().seeded) {
-      seed(event.width)
-      return
-    }
+  /** Drops a `persisted` while a write is in flight: that write may still override it. */
+  dispatchDisplay: (event: RailDisplayEvent): void =>
     store.setState((s) => {
+      if (event.type === 'persisted' && s.writes.size > 0) return s
       const display = reduceRailDisplay(s.display, event)
       return display === s.display ? s : { display }
-    })
-  },
+    }),
   __reset: (): void => store.setState(INITIAL),
 }

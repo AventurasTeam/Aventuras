@@ -37,7 +37,8 @@ const SEVEN_CATEGORIES: readonly RailCategory[] = [
   'happening',
 ]
 
-// Under the ~900 px collapse threshold, over the 640 px phone tier: the rail column stays mounted.
+// Under the ~900 px collapse threshold, over the 640 px phone tier: the side rail shows its strip
+// rather than giving way to the phone's browse chip.
 const NARROW_WIDTH = 820
 
 const RAIL_PREFERENCE_SQL = `SELECT json_extract(appearance, '$.readerRailCollapsed') FROM app_settings WHERE id = 'singleton'`

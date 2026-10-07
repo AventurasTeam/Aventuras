@@ -21,7 +21,7 @@ export const RAIL_GROUPS = {
 export type RailGroup = keyof typeof RAIL_GROUPS
 
 export function railGroupOf(category: RailCategory): RailGroup {
-  return (RAIL_GROUPS.plot as readonly RailCategory[]).includes(category) ? 'plot' : 'world'
+  return isPlotKind(category) ? 'plot' : 'world'
 }
 
 export function isRailCategory(value: unknown): value is RailCategory {
@@ -29,10 +29,10 @@ export function isRailCategory(value: unknown): value is RailCategory {
 }
 
 export type RailView =
-  | { category: EntityKind; filter: EntityFilter; search: string }
-  | { category: 'lore'; search: string }
-  | { category: 'thread'; filter: ThreadFilter; search: string }
-  | { category: 'happening'; filter: HappeningFilter; search: string }
+  | { readonly category: EntityKind; readonly filter: EntityFilter; readonly search: string }
+  | { readonly category: 'lore'; readonly search: string }
+  | { readonly category: 'thread'; readonly filter: ThreadFilter; readonly search: string }
+  | { readonly category: 'happening'; readonly filter: HappeningFilter; readonly search: string }
 
 /** The view a switch to `category` lands on: filter `all`, search empty. */
 export function railViewFor(category: RailCategory): RailView {
@@ -45,6 +45,6 @@ export function railViewFor(category: RailCategory): RailView {
 }
 
 /** The row a peek shows. */
-export type RailPeek = { category: RailCategory; id: string }
+export type RailPeek = { readonly category: RailCategory; readonly id: string }
 
 export const DEFAULT_RAIL_VIEW: RailView = railViewFor('character')

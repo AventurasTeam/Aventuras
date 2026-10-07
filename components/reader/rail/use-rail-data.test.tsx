@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
@@ -12,43 +12,22 @@ import {
   type Lore,
   type Thread,
 } from '@/lib/db'
-import type { EntryIndex } from '@/lib/entry-refs'
 import {
   chaptersStore,
   currentStoryStore,
   entitiesStore,
   happeningsStore,
   loreStore,
-  readerRailStore,
   resetAllStores,
   threadsStore,
 } from '@/lib/stores'
 
-import { useRailData } from './use-rail-data'
+import { railChipTintOf, railStripOf, useRailData } from './use-rail-data'
 
-const harness = vi.hoisted(() => ({
-  signals: null as RowSignalsSnapshot | null,
-  index: new Map() as EntryIndex,
-  ready: true,
-  failed: false,
-  retry: vi.fn(),
-  indexOptions: vi.fn(),
-}))
+const harness = vi.hoisted(() => ({ signals: null as RowSignalsSnapshot | null }))
 
-// Row signals and the entry index read the DB; the hook only composes them.
+// Row signals read the DB; the hook only composes them.
 vi.mock('@/hooks/use-row-signals', () => ({ useRowSignals: () => harness.signals }))
-vi.mock('@/hooks/use-entry-index', () => ({
-  useEntryIndex: (branchId: string, options?: { enabled?: boolean }) => {
-    harness.indexOptions(branchId, options)
-    return {
-      entries: [],
-      index: harness.index,
-      ready: harness.ready,
-      failed: harness.failed,
-      retry: harness.retry,
-    }
-  },
-}))
 
 function entity(id: string, kind: Entity['kind'], extra: Partial<Entity> = {}): Entity {
   return {
@@ -172,10 +151,6 @@ const ENTITIES = [
 
 beforeEach(() => {
   resetAllStores()
-  harness.ready = true
-  harness.failed = false
-  harness.retry.mockReset()
-  harness.indexOptions.mockReset()
   harness.signals = {
     inScene: new Set(['char_kael', 'char_mira', 'item_blade', 'loc_hollow']),
     recentlyClassified: {
@@ -207,6 +182,7 @@ describe('useRailData', () => {
     expect(result.current.lore.map((r) => r.id)).toEqual(['lore_1'])
     expect(result.current.threads.map((r) => r.id)).toEqual(['t_1'])
     expect(result.current.happenings.map((r) => r.id)).toEqual(['h_1'])
+    expect(result.current.branchId).toBe('br_1')
   })
 
   it('labels the lead `you` in adventure and `protagonist` in creative', () => {
@@ -259,16 +235,17 @@ describe('useRailData', () => {
 
   it('builds the strip and the chip tint from the per-kind aggregate', () => {
     const { result } = renderHook(() => useRailData('br_1'))
-    expect(result.current.strip.counted).toEqual([
+    const strip = railStripOf(result.current)
+    expect(strip.counted).toEqual([
       { category: 'character', count: 2, tint: 'fresh' },
       { category: 'item', count: 1, tint: 'fading' },
     ])
-    expect(result.current.strip.quickAccess).toEqual([
+    expect(strip.quickAccess).toEqual([
       { category: 'location', tint: undefined },
       { category: 'faction', tint: undefined },
     ])
     expect(result.current.categoryTint).toBe(harness.signals?.recentlyClassified.byCategory)
-    expect(result.current.chipTint).toBe('fresh')
+    expect(railChipTintOf(result.current)).toBe('fresh')
   })
 
   it('leaves the chip untinted when no kind has a classifier write', () => {
@@ -277,38 +254,16 @@ describe('useRailData', () => {
       recentlyClassified: { rows: new Map(), byCategory: new Map() },
     }
     const { result } = renderHook(() => useRailData('br_1'))
-    expect(result.current.chipTint).toBeUndefined()
+    expect(railChipTintOf(result.current)).toBeUndefined()
   })
 
   it('offers chapter-scoped happenings only once this branch closed a chapter', () => {
     chaptersStore.hydrate('br_1', [chapter('chap_x', 'br_2')])
     const before = renderHook(() => useRailData('br_1'))
-    expect(before.result.current.plotListSignals).toEqual({
-      entries: harness.index,
-      hasClosedChapters: false,
-    })
+    expect(before.result.current.hasClosedChapters).toBe(false)
     before.unmount()
     chaptersStore.hydrate('br_1', [chapter('chap_1', 'br_1')])
     const after = renderHook(() => useRailData('br_1'))
-    expect(after.result.current.plotListSignals.hasClosedChapters).toBe(true)
-    expect(after.result.current.plotListSignals.entries).toBe(harness.index)
-  })
-
-  it('reads the entry index only while the happening list is the rail’s category', () => {
-    const { result } = renderHook(() => useRailData('br_1'))
-    expect(harness.indexOptions).toHaveBeenLastCalledWith('br_1', { enabled: false })
-    act(() => readerRailStore.setCategory('happening'))
-    expect(harness.indexOptions).toHaveBeenLastCalledWith('br_1', { enabled: true })
-    expect(result.current.entryIndex.ready).toBe(true)
-  })
-
-  it('passes the entry index’s ready, failed and retry through', () => {
-    harness.ready = false
-    harness.failed = true
-    const { result } = renderHook(() => useRailData('br_1'))
-    expect(result.current.entryIndex.ready).toBe(false)
-    expect(result.current.entryIndex.failed).toBe(true)
-    result.current.entryIndex.retry()
-    expect(harness.retry).toHaveBeenCalledTimes(1)
+    expect(after.result.current.hasClosedChapters).toBe(true)
   })
 })

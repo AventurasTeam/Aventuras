@@ -53,6 +53,8 @@ describe('readerRailStore view', () => {
 })
 
 describe('readerRailStore display', () => {
+  const PEEK = { category: 'thread', id: 'thr_1' } as const
+
   beforeEach(() => {
     readerRailStore.__reset()
   })
@@ -67,30 +69,9 @@ describe('readerRailStore display', () => {
     expect(isRailCollapsed(readerRailStore.getDisplay(), false)).toBe(false)
   })
 
-  it('seeds from the first width only', () => {
-    readerRailStore.seedViewport(850)
-    expect(readerRailStore.getDisplay()).toEqual({
-      lastWidth: 850,
-      forced: true,
-      pendingCollapsed: null,
-      peek: null,
-    })
-    readerRailStore.seedViewport(1200)
-    expect(readerRailStore.getDisplay().lastWidth).toBe(850)
-    expect(readerRailStore.getDisplay().forced).toBe(true)
-  })
-
-  it('seeds a wide window unforced', () => {
-    readerRailStore.seedViewport(1200)
-    expect(readerRailStore.getDisplay()).toEqual({
-      lastWidth: 1200,
-      forced: false,
-      pendingCollapsed: null,
-      peek: null,
-    })
-  })
-
-  it('treats a resize before any seed as the seed, not a cross', () => {
+  it('treats a first width under the collapse threshold as a cross: forced, peek closed', () => {
+    readerRailStore.dispatchDisplay({ type: 'openPeek', peek: PEEK, storedCollapsed: false })
+    expect(readerRailStore.getDisplay().peek).toEqual(PEEK)
     readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
     expect(readerRailStore.getDisplay()).toEqual({
       lastWidth: 850,
@@ -98,52 +79,115 @@ describe('readerRailStore display', () => {
       pendingCollapsed: null,
       peek: null,
     })
-    readerRailStore.seedViewport(1200)
-    expect(readerRailStore.getDisplay().lastWidth).toBe(850)
   })
 
-  it('reduces other events before the seed, and the seed drops them', () => {
-    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true })
-    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
-    readerRailStore.seedViewport(1200)
+  it('leaves a wide first width unforced, keeping an open peek', () => {
+    readerRailStore.dispatchDisplay({ type: 'openPeek', peek: PEEK, storedCollapsed: false })
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 })
     expect(readerRailStore.getDisplay()).toEqual({
       lastWidth: 1200,
       forced: false,
       pendingCollapsed: null,
-      peek: null,
+      peek: PEEK,
     })
   })
 
-  it('runs every other event through the reducer', () => {
-    readerRailStore.seedViewport(1200)
-    const seeded = readerRailStore.getDisplay()
+  it('keeps a toggle made before the first width', () => {
+    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true })
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
+    expect(readerRailStore.getDisplay()).toMatchObject({ forced: true, pendingCollapsed: true })
+  })
+
+  it('runs every event through the reducer', () => {
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 })
+    const wide = readerRailStore.getDisplay()
     readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true })
     expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
     expect(readerRailStore.getDisplay()).toEqual(
-      reduceRailDisplay(seeded, { type: 'setCollapsed', collapsed: true }),
+      reduceRailDisplay(wide, { type: 'setCollapsed', collapsed: true }),
     )
     readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
     expect(readerRailStore.getDisplay().forced).toBe(true)
     expect(readerRailStore.getDisplay().lastWidth).toBe(850)
   })
 
-  it('__reset restores the unseeded state', () => {
-    readerRailStore.seedViewport(850)
+  // After a manual expand at 850, the same width is no cross; after a reset it is a first width.
+  it('__reset restores the display from before the first width', () => {
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
+    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: false })
     readerRailStore.setCategory('lore')
     readerRailStore.__reset()
     expect(readerRailStore.getView()).toBe(DEFAULT_RAIL_VIEW)
-    expect(readerRailStore.getDisplay().forced).toBe(false)
-    readerRailStore.seedViewport(1200)
-    expect(readerRailStore.getDisplay().lastWidth).toBe(1200)
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull()
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
+    expect(readerRailStore.getDisplay().forced).toBe(true)
   })
 
   it('is cleared by resetAllStores', () => {
-    readerRailStore.seedViewport(850)
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
+    readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: false })
     readerRailStore.setCategory('thread')
     resetAllStores()
     expect(readerRailStore.getView()).toBe(DEFAULT_RAIL_VIEW)
-    readerRailStore.seedViewport(1200)
-    expect(readerRailStore.getDisplay().forced).toBe(false)
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 850 })
+    expect(readerRailStore.getDisplay().forced).toBe(true)
+  })
+})
+
+describe('readerRailStore writeCollapsed', () => {
+  function deferred() {
+    let resolve!: () => void
+    let reject!: (error: Error) => void
+    const promise = new Promise<void>((settle, fail) => {
+      resolve = settle
+      reject = fail
+    })
+    return { promise, resolve, reject }
+  }
+
+  beforeEach(() => {
+    readerRailStore.__reset()
+  })
+
+  it('shows the toggle at once and holds a persisted until every write settles', async () => {
+    const first = deferred()
+    const second = deferred()
+    const firstWrite = readerRailStore.writeCollapsed(true, () => first.promise)
+    const secondWrite = readerRailStore.writeCollapsed(true, () => second.promise)
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    first.resolve()
+    await firstWrite
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
+
+    second.reject(new Error('disk full'))
+    await expect(secondWrite).rejects.toThrow('disk full')
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: true })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull()
+  })
+
+  it('ignores a write that settles after a reset', async () => {
+    const before = deferred()
+    const after = deferred()
+    const beforeWrite = readerRailStore.writeCollapsed(true, () => before.promise)
+    readerRailStore.__reset()
+    const afterWrite = readerRailStore.writeCollapsed(false, () => after.promise)
+
+    before.resolve()
+    await beforeWrite
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: false })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBe(false)
+
+    after.resolve()
+    await afterWrite
+    readerRailStore.dispatchDisplay({ type: 'persisted', collapsed: false })
+    expect(readerRailStore.getDisplay().pendingCollapsed).toBeNull()
   })
 })
 

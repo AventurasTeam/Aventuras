@@ -1,7 +1,12 @@
 import type { Locator, Page } from '@playwright/test'
 
 import type { ThreadFilter } from '@/lib/list-modules'
-import type { RailCategory, StripCategory } from '@/lib/reader-rail'
+import type {
+  RailCategory,
+  StripCategory,
+  StripCountedCategory,
+  StripGlyphCategory,
+} from '@/lib/reader-rail'
 
 import { t } from '../harness/i18n'
 
@@ -19,6 +24,13 @@ function stripCellName(category: StripCategory, count: number | undefined): stri
   if (count !== undefined) return t(key, { count })
   const [before, after = ''] = t(key, { count: COUNT_SENTINEL }).split(COUNT_SENTINEL)
   return new RegExp(`^${escapeRegExp(before)}\\d+\\+?${escapeRegExp(after)}$`)
+}
+
+// A glyph cell shows no count, so it takes none.
+function stripCell(page: Page, category: StripCountedCategory, count?: number): Locator
+function stripCell(page: Page, category: StripGlyphCategory): Locator
+function stripCell(page: Page, category: StripCategory, count?: number): Locator {
+  return rail.strip(page).getByRole('button', { name: stripCellName(category, count), exact: true })
 }
 
 // The list copy lowercases the rail's own label, so `location` reads "Search places…".
@@ -56,6 +68,5 @@ export const rail = {
     rail.column(page).getByRole('button', { name: t('reader:rail.collapse'), exact: true }),
   expand: (page: Page): Locator =>
     rail.strip(page).getByRole('button', { name: t('reader:rail.expand'), exact: true }),
-  stripCell: (page: Page, category: StripCategory, count?: number): Locator =>
-    rail.strip(page).getByRole('button', { name: stripCellName(category, count), exact: true }),
+  stripCell,
 }

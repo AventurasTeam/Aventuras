@@ -7,6 +7,7 @@ import type { RailStripModel, StripCategory } from '@/lib/reader-rail'
 
 import { railDataFixture } from './rail-story-fixtures'
 import { RAIL_STRIP_WIDTH_PX, RailStrip } from './rail-strip'
+import { railStripOf } from './use-rail-data'
 
 const MIXED: RailStripModel = {
   counted: [
@@ -66,15 +67,29 @@ function topmostAt(
 const overGlyph = (r: DOMRect): [number, number] => [r.left + r.width / 2, r.top + r.height / 2]
 const besideGlyph = (r: DOMRect): [number, number] => [r.left - 2, r.top + r.height / 2]
 
-/** Over the glyph the svg itself must be hit, so the tint never washes it out. */
-function glyphIsTopmost(category: StripCategory): boolean {
-  const { hit, glyph } = topmostAt([`rail-strip-tint-${category}`], overGlyph)
+/** Over the glyph the svg itself must be hit, so no probed layer washes it out. */
+function glyphIsTopmost(...testIDs: string[]): boolean {
+  const { hit, glyph } = topmostAt(testIDs, overGlyph)
   return hit != null && glyph.contains(hit)
 }
 
-/** Beside the glyph the topmost layer is the first id: hover above tint, tint above the strip. */
+/** The topmost of the probed layers just left of the glyph; callers list the expected top first. */
 function topLayerBesideGlyph(...testIDs: string[]): Element | null {
   return topmostAt(testIDs, besideGlyph).hit
+}
+
+// Points in the strip's top padding and in the gap between its groups, relative to the strip.
+function missPoints(): { x: number; y: number }[] {
+  const strip = screen.getByTestId('rail-strip').getBoundingClientRect()
+  const rect = (name: string) => screen.getByRole('button', { name }).getBoundingClientRect()
+  const chevron = rect(t('reader:rail.expand'))
+  const item = rect(t('reader:rail.strip.item', { count: 1 }))
+  const location = rect(t('reader:rail.strip.location'))
+  if (chevron.top <= strip.top || location.top <= item.bottom) throw new Error('No miss area')
+  return [(strip.top + chevron.top) / 2, (item.bottom + location.top) / 2].map((y) => ({
+    x: strip.width / 2,
+    y: y - strip.top,
+  }))
 }
 
 const meta: Meta<typeof RailStrip> = {
@@ -95,7 +110,7 @@ export default meta
 type Story = StoryObj<typeof RailStrip>
 
 export const FromFixture: Story = {
-  args: { model: railDataFixture().strip },
+  args: { model: railStripOf(railDataFixture()) },
   play: async () => {
     await expect(screen.getByTestId('rail-strip')).toBeVisible()
     await expect(screen.getByRole('button', { name: t('reader:rail.expand') })).toBeVisible()
@@ -112,7 +127,7 @@ export const TintStates: Story = {
 
     // Full contrast: the glyph draws over the tint, never under it.
     for (const category of ['character', 'item', 'location'] as const) {
-      await expect(glyphIsTopmost(category)).toBe(true)
+      await expect(glyphIsTopmost(`rail-strip-tint-${category}`)).toBe(true)
     }
     // Beside the glyph the tint shows: it sits above the strip's own background.
     await expect(topLayerBesideGlyph('rail-strip-tint-character')).toBe(
@@ -176,6 +191,41 @@ export const HitZones: Story = {
   },
 }
 
+/** A miss above the chevron or between the groups lands on the empty region: expand, no switch. */
+export const MissesExpand: Story = {
+  play: async ({ args }) => {
+    const strip = screen.getByTestId('rail-strip').getBoundingClientRect()
+    for (const point of missPoints()) {
+      const target = document.elementFromPoint(strip.left + point.x, strip.top + point.y)
+      if (target == null) throw new Error('Nothing at the miss point')
+      await userEvent.click(target)
+    }
+    await expect(args.onExpand).toHaveBeenCalledTimes(2)
+    await expect(args.onExpandTo).not.toHaveBeenCalled()
+  },
+}
+
+/** Five Tab stops, the chevron then the cells; every part of the empty region is pointer-only. */
+export const TabOrder: Story = {
+  play: async () => {
+    const strip = screen.getByTestId('rail-strip')
+    const stops: (string | null)[] = []
+    for (let i = 0; i < 12; i += 1) {
+      await userEvent.tab()
+      const focused = document.activeElement
+      if (focused != null && strip.contains(focused)) stops.push(focused.getAttribute('aria-label'))
+      else if (stops.length > 0) break
+    }
+    await expect(stops).toEqual([
+      t('reader:rail.expand'),
+      t('reader:rail.strip.character', { count: 3 }),
+      t('reader:rail.strip.item', { count: 1 }),
+      t('reader:rail.strip.location'),
+      t('reader:rail.strip.faction'),
+    ])
+  },
+}
+
 /** Hover lights its own zone only, and leaves the tint under it untouched. */
 export const HoverPerZone: Story = {
   play: async () => {
@@ -190,15 +240,24 @@ export const HoverPerZone: Story = {
     const browser = await import('vitest/browser').catch(() => null)
     if (browser == null) return
 
+    // The top padding and the group gap belong to the empty region: no cell lights.
+    for (const position of missPoints()) {
+      await browser.userEvent.hover(screen.getByTestId('rail-strip'), { position })
+      for (const category of STRIP_CATEGORIES) await expect(hoverBg(category)).toBe(idle)
+    }
+
     await browser.userEvent.hover(
       screen.getByRole('button', { name: t('reader:rail.strip.character', { count: 3 }) }),
     )
     await expect(hoverBg('character')).not.toBe(idle)
     await expect(hoverBg('item')).toBe(idle)
     await expect(tintBg()).toBe(tintBefore)
-    // Over the tint, never instead of it.
+    // Over the tint, never instead of it, and under the glyph like the tint.
     await expect(
       topLayerBesideGlyph('rail-strip-hover-character', 'rail-strip-tint-character'),
     ).toBe(screen.getByTestId('rail-strip-hover-character'))
+    await expect(glyphIsTopmost('rail-strip-hover-character', 'rail-strip-tint-character')).toBe(
+      true,
+    )
   },
 }

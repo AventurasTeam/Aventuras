@@ -9,7 +9,7 @@ import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import { entriesStore, generationStore, resetAllStores, type RunState } from '@/lib/stores'
 
-import { useEntryIndex, type EntryIndexSnapshot } from './use-entry-index'
+import { EntryIndexReadProvider, useEntryIndex, type EntryIndexSnapshot } from './use-entry-index'
 
 const reads = vi.hoisted(() => ({ index: vi.fn() }))
 
@@ -57,18 +57,33 @@ function run(id: string): RunState {
 }
 
 let latest: EntryIndexSnapshot | null = null
-function Probe({ branchId = 'br_1', enabled }: { branchId?: string; enabled?: boolean }) {
-  latest = useEntryIndex(branchId, enabled === undefined ? undefined : { enabled })
+type ProbeProps = { branchId?: string; enabled?: boolean; seed?: boolean }
+function Probe({ branchId = 'br_1', enabled, seed }: ProbeProps) {
+  latest = useEntryIndex(
+    branchId,
+    enabled === undefined && seed === undefined ? undefined : { enabled, seedFromLastRead: seed },
+  )
   return null
 }
 
-function renderProbe(props: { branchId?: string; client?: QueryClient; enabled?: boolean } = {}) {
+function renderProbe(props: ProbeProps & { client?: QueryClient } = {}) {
   const client = props.client ?? createQueryClient()
   return render(
     <QueryClientProvider client={client}>
-      <Probe branchId={props.branchId} enabled={props.enabled} />
+      <Probe branchId={props.branchId} enabled={props.enabled} seed={props.seed} />
     </QueryClientProvider>,
   )
+}
+
+function deferredRead() {
+  let resolve!: (rows: EntryRef[]) => void
+  reads.index.mockImplementationOnce(
+    () =>
+      new Promise<EntryRef[]>((r) => {
+        resolve = r
+      }),
+  )
+  return (rows: EntryRef[]) => resolve(rows)
 }
 
 describe('useEntryIndex', () => {
@@ -86,12 +101,32 @@ describe('useEntryIndex', () => {
     reads.index.mockResolvedValue([ref('e2', 2), ref('e1', 1)])
 
     renderProbe()
+    // The first read shows nothing, so nothing is updating.
+    expect(latest?.ready).toBe(false)
+    expect(latest?.updating).toBe(false)
 
     await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(latest?.updating).toBe(false)
     expect(latest?.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
     expect(latest?.index.get('e1')?.position).toBe(1)
     expect(latest?.failed).toBe(false)
     expect(reads.index).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads through a provided read instead of the database', async () => {
+    const read = vi.fn(async () => [ref('e9', 9)])
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <EntryIndexReadProvider value={read}>
+          <Probe />
+        </EntryIndexReadProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(read).toHaveBeenCalledWith('br_1')
+    expect(latest?.entries.map((e) => e.id)).toEqual(['e9'])
+    expect(reads.index).not.toHaveBeenCalled()
   })
 
   it('reads nothing while disabled, then reads once enabled', async () => {
@@ -199,9 +234,112 @@ describe('useEntryIndex', () => {
     // The second read is still pending — the old entries must not blank out.
     expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
     expect(latest?.ready).toBe(true)
+    expect(latest?.updating).toBe(true)
 
     await act(async () => {
       resolveSecond([ref('e1', 1), ref('e2', 2)])
+    })
+    await waitFor(() => expect(latest?.updating).toBe(false))
+    expect(latest?.entries.map((e) => e.id)).toEqual(['e1', 'e2'])
+  })
+
+  describe('seedFromLastRead', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    // Mounts, reads [e1], unmounts and lets every collectable query go, then moves the tail.
+    async function readThenLeave(client: QueryClient, seed: boolean) {
+      entriesStore.hydrate('br_1', [entry('e1', 1)])
+      reads.index.mockResolvedValueOnce([ref('e1', 1)])
+      const first = renderProbe({ client, seed })
+      await waitFor(() => expect(latest?.ready).toBe(true))
+      vi.useFakeTimers()
+      first.unmount()
+      // Past the per-key reads' 30 s gc.
+      vi.advanceTimersByTime(60_000)
+      vi.useRealTimers()
+      act(() => entriesStore.hydrate('br_1', [entry('e1', 1), entry('e2', 2)]))
+    }
+
+    it('shows a remount the branch’s last read while it re-reads', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, true)
+      const land = deferredRead()
+
+      renderProbe({ client, seed: true })
+      expect(latest?.ready).toBe(true)
+      expect(latest?.updating).toBe(true)
+      expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
+      expect(latest?.index.get('e1')?.position).toBe(1)
+
+      await act(async () => {
+        land([ref('e2', 2), ref('e1', 1)])
+      })
+      await waitFor(() => expect(latest?.updating).toBe(false))
+      expect(latest?.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
+    })
+
+    it('shows the failure, not the seed, once a seeded re-read fails', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, true)
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      reads.index.mockRejectedValueOnce(new Error('boom'))
+
+      renderProbe({ client, seed: true })
+      expect(latest?.ready).toBe(true)
+      await waitFor(() => expect(latest?.failed).toBe(true))
+      expect(latest?.ready).toBe(false)
+      expect(latest?.updating).toBe(false)
+      expect(latest?.entries).toEqual([])
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+
+      reads.index.mockResolvedValueOnce([ref('e2', 2), ref('e1', 1)])
+      act(() => latest?.retry())
+      await waitFor(() => expect(latest?.ready).toBe(true))
+      expect(latest?.failed).toBe(false)
+      expect(latest?.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
+      warnSpy.mockRestore()
+    })
+
+    it('takes no seed from a hook without the option', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, false)
+      deferredRead()
+
+      renderProbe({ client, seed: true })
+      expect(latest?.ready).toBe(false)
+      expect(latest?.updating).toBe(false)
+    })
+
+    it('leaves a hook without the option reading not ready, as Plot expects', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, true)
+      deferredRead()
+
+      renderProbe({ client })
+      expect(latest?.ready).toBe(false)
+      expect(latest?.updating).toBe(false)
+    })
+
+    it('never seeds another branch', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, true)
+      entriesStore.hydrate('br_2', [entry('f1', 1, 'br_2')])
+      deferredRead()
+
+      renderProbe({ client, seed: true, branchId: 'br_2' })
+      expect(latest?.ready).toBe(false)
+      expect(latest?.entries).toEqual([])
+    })
+
+    it('seeds nothing while disabled', async () => {
+      const client = createQueryClient()
+      await readThenLeave(client, true)
+
+      renderProbe({ client, seed: true, enabled: false })
+      expect(latest?.ready).toBe(false)
+      expect(latest?.updating).toBe(false)
     })
   })
 

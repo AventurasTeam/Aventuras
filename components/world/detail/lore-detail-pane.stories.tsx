@@ -4,7 +4,6 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
-import { withQueryClient } from '@/components/history/with-query-client'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { LoreSaveResult } from '@/lib/actions'
@@ -149,7 +148,6 @@ const meta: Meta<typeof Harness> = {
         <Story />
       </HistoryLoaderProvider>
     ),
-    withQueryClient,
   ],
 }
 export default meta

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import type { RailCategory } from '@/lib/reader-rail'
@@ -6,7 +6,7 @@ import { readerRailStore } from '@/lib/stores'
 
 import { BrowseChip } from './browse-chip'
 import { RailSheet } from './rail-sheet'
-import type { RailData } from './use-rail-data'
+import { railChipTintOf, type RailData } from './use-rail-data'
 
 export type ReaderBrowseChipProps = {
   data: RailData
@@ -16,10 +16,11 @@ export type ReaderBrowseChipProps = {
 export function ReaderBrowseChip({ data, onRowPress }: ReaderBrowseChipProps) {
   const [open, setOpen] = useState(false)
   const view = readerRailStore.useView()
+  const tint = useMemo(() => railChipTintOf(data), [data])
   return (
     // One element: on native the Sheet's dialog root is a View that would join the chip row's gap.
     <View className="flex-row items-center">
-      <BrowseChip tint={data.chipTint} expanded={open} onPress={() => setOpen(true)} />
+      <BrowseChip tint={tint} expanded={open} onPress={() => setOpen(true)} />
       <RailSheet
         open={open}
         onOpenChange={setOpen}

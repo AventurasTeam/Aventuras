@@ -6,16 +6,20 @@ export type StripCountedCategory = 'character' | 'item'
 export type StripGlyphCategory = 'location' | 'faction'
 export type StripCategory = StripCountedCategory | StripGlyphCategory
 
-export type StripCountedCell = {
-  category: StripCountedCategory
+export type StripCountedCell<C extends StripCountedCategory = StripCountedCategory> = {
+  category: C
   count: number
   tint: RecentlyClassified | undefined
 }
-export type StripGlyphCell = { category: StripGlyphCategory; tint: RecentlyClassified | undefined }
+export type StripGlyphCell<C extends StripGlyphCategory = StripGlyphCategory> = {
+  category: C
+  tint: RecentlyClassified | undefined
+}
 
+// Canon fixes each slot's kind, and the view keys its cells by category.
 export type RailStripModel = {
-  counted: readonly [StripCountedCell, StripCountedCell]
-  quickAccess: readonly [StripGlyphCell, StripGlyphCell]
+  counted: readonly [StripCountedCell<'character'>, StripCountedCell<'item'>]
+  quickAccess: readonly [StripGlyphCell<'location'>, StripGlyphCell<'faction'>]
 }
 
 export const STRIP_COUNT_CAP = 9

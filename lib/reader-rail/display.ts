@@ -7,12 +7,12 @@ export const RAIL_RESTORE_ABOVE_PX = 980
 
 export type RailDisplayState = {
   /** The width the last resize reported; a cross is judged against it. */
-  lastWidth: number
+  readonly lastWidth: number
   /** Viewport-forced collapse; overrides the manual preference without replacing it. */
-  forced: boolean
+  readonly forced: boolean
   /** A toggle whose write hasn't landed; shown ahead of the stored preference. */
-  pendingCollapsed: boolean | null
-  peek: RailPeek | null
+  readonly pendingCollapsed: boolean | null
+  readonly peek: RailPeek | null
 }
 
 export type RailDisplayEvent =

@@ -1,10 +1,10 @@
 import type { RailPeek } from './categories'
 
-// milestone.md → C10: one Sheet whose content swaps in place; the detent follows the content.
+// reader-composer.md → Mobile expression: one Sheet; content swaps in place, the detent follows.
 export type RailSheetState =
-  | { content: 'categories'; size: 'medium' }
-  | { content: 'list'; size: 'medium' }
-  | { content: 'peek'; size: 'tall'; peek: RailPeek }
+  | { readonly content: 'categories'; readonly size: 'medium' }
+  | { readonly content: 'list'; readonly size: 'medium' }
+  | { readonly content: 'peek'; readonly size: 'tall'; readonly peek: RailPeek }
 
 export type RailSheetEvent =
   | { type: 'up' }
