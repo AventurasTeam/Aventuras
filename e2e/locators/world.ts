@@ -32,7 +32,9 @@ export const world = {
 
   // Select's trigger aria-label is fixed to "Category" (select.tsx: label always wins over text
   // content) — assert the selected value via visible text (toHaveText), not this locator's name.
-  categoryTrigger: (page: Page): Locator => page.getByLabel(t('world:categorySelect')),
+  // Exact: the reader's rail trigger, hidden under World, is labelled "Browse category".
+  categoryTrigger: (page: Page): Locator =>
+    page.getByLabel(t('world:categorySelect'), { exact: true }),
   categoryOption: (page: Page, category: string): Locator =>
     page.getByRole('option', { name: t(`world:categories.${category}`) }),
 
@@ -46,8 +48,9 @@ export const world = {
   // All-view group accordion header (module-list.tsx); matched via aria-expanded, since the
   // sibling filter Chip shares the same label text but sets aria-pressed instead (chip.tsx).
   // The header's name also folds in the row count, so it can't reuse `row`'s role+name pattern.
+  // Visible only: CSS also matches the reader rail's headers, hidden under World.
   tierHeader: (page: Page, tierLabel: string): Locator =>
-    page.locator('[aria-expanded]').filter({ hasText: tierLabel }),
+    page.locator('[aria-expanded]').filter({ hasText: tierLabel, visible: true }),
 
   // The collapsed-tier `⚠ N` badge (module-list.tsx); its accessible name scopes
   // the count to the tier, distinct from the top-bar reviewPill's.
