@@ -247,7 +247,7 @@ What's NOT preserved across tier transitions:
   transitions out of phone tier.** User opens the rail-sheet on
   phone, then unfolds Galaxy Fold; the sheet closes because the
   rail is now visible inline on tablet. Folding the device back
-  collapses the rail to strip; tap re-opens the sheet. Sheet
+  hides the rail column; the Browse chip re-opens the sheet. Sheet
   state is not persisted across the reflow.
 
 This is session-7 implementation guidance, not a foundations
