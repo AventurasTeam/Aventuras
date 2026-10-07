@@ -50,17 +50,27 @@ const relationship = (
   updatedAt: 1,
 })
 
-const involvement = (id: string, entityId: string, happeningId: string): HappeningInvolvement => ({
+const involvement = (
+  id: string,
+  entityId: string,
+  happeningId: string,
+  branchId = 'b1',
+): HappeningInvolvement => ({
   id,
-  branchId: 'b1',
+  branchId,
   happeningId,
   entityId,
   role: null,
 })
 
-const awareness = (id: string, characterId: string, happeningId: string): HappeningAwareness => ({
+const awareness = (
+  id: string,
+  characterId: string,
+  happeningId: string,
+  branchId = 'b1',
+): HappeningAwareness => ({
   id,
-  branchId: 'b1',
+  branchId,
   happeningId,
   characterId,
   learnedAtEntryId: null,
@@ -267,6 +277,10 @@ describe('loadLinkEnds', () => {
       .insert(characterRelationships)
       .values(relationship('rel_1', 'char_aria', 'char_kael', 'b2'))
     await db
+      .insert(happeningInvolvements)
+      .values(involvement('hinv_1', 'char_aria', 'hap_fire', 'b2'))
+    await db.insert(happeningAwareness).values(awareness('haw_1', 'char_aria', 'hap_fire', 'b2'))
+    await db
       .insert(deltas)
       .values(
         deleted(
@@ -276,11 +290,9 @@ describe('loadLinkEnds', () => {
           'b2',
         ),
       )
-    expect(await loadLinkEnds(db, 'b1', 'entities', 'char_aria')).toEqual({
-      links: [],
-      removals: [],
-      names: {},
-    })
+    const none = { links: [], removals: [], names: {} }
+    expect(await loadLinkEnds(db, 'b1', 'entities', 'char_aria')).toEqual(none)
+    expect(await loadLinkEnds(db, 'b1', 'happenings', 'hap_fire')).toEqual(none)
   })
 
   it("names each other end from the tab's branch, though another branch names the same id", async () => {

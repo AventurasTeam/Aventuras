@@ -611,6 +611,22 @@ describe('link-row union', () => {
     ])
   })
 
+  it("finds an involvement's and an awareness row's edits by their own labels, typed or summarised", async () => {
+    await write(involve('hinv_1', 'loc_keep', 'hap_fire', 'site'))
+    await write(recast('hinv_1', 'ruin'))
+    expect(await tab('loc_keep', { search: 'Modified Role' })).toEqual([
+      'happening_involvements update hap_fire',
+    ])
+    await write(aware('char_aria', 'hap_fire'))
+    await write(aware('char_aria', 'hap_fire', { decayResistance: 0.8 }))
+    expect(await tab('char_aria', { search: 'decay resistance' })).toEqual([
+      'happening_awareness update hap_fire',
+    ])
+    expect(await tab('char_aria', { search: 'Modified Decay resistance' })).toEqual([
+      'happening_awareness update hap_fire',
+    ])
+  })
+
   it("a merged pair: the canonical lists the moved rows' creates, the other ends keep the originals' history and the removal", async () => {
     await db
       .insert(entities)
@@ -726,6 +742,10 @@ describe('link-row union', () => {
         'happening_awareness create hap_fire',
       ])
       expect(await tab('char_aria', { search: 'ael' })).toEqual([])
+      expect(await tab('char_aria', { search: 'burns' })).toEqual([
+        'happening_awareness create hap_fire',
+      ])
+      expect(await tab('char_aria', { search: 'urns' })).toEqual([])
     })
 
     it("matches free text in a link update's payload", async () => {
