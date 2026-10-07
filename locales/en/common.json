@@ -150,6 +150,7 @@
     "canonicalSuffix": "{{label}} · Canonical",
     "olderSide": "Older · {{when}}",
     "newerSide": "Newer · {{when}}",
+    "choiceLabel": "{{caption}}: {{value}}",
     "divergentFields": "Divergent fields",
     "field": {
       "name": "Name",

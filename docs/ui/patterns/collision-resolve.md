@@ -352,7 +352,7 @@ phone. In the merge table, which stacks on these tiers, prose
 values (`description`, `retiredReason`) clamp to 3 lines, and
 tapping the prose expands that value in place, apart from its
 radio's tap target. Each radio shows an inline age caption under
-its value.
+its value, and is named by both (`Older · 3 days ago: active`).
 
 ## `CollisionListRow`
 

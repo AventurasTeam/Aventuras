@@ -682,7 +682,7 @@ function StackedChoice({
       <RadioGroupBase.Item
         {...keys}
         value={side}
-        aria-label={caption}
+        aria-label={t('collisionDialog.choiceLabel', { caption, value })}
         disabled={disabled}
         style={disabled ? GATED : undefined}
         className={cn(

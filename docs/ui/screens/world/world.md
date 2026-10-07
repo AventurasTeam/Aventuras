@@ -1004,7 +1004,9 @@ Field-level rules:
   the prose — the wall-clock relative time the canonical picker
   shows, since an entity records when it was created, not the turn.
   Each stacked field is one radio group named by the field. Each
-  radio is self-describing without relying on column position.
+  radio is self-describing without relying on column position: its
+  accessible name is the caption and the value
+  (`Older · 3 days ago: active`).
 
 A **relations summary** below the field table tells the user
 what the merge carries over and what it drops (read-only —

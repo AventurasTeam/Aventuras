@@ -264,9 +264,10 @@ export const PhoneRadioKeyboard: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
   play: async () => {
     await waitFor(() => expect(lineClamp(screen.getByText(entityA.description!))).toBe('3'))
-    const [older, newer] = within(screen.getByRole('radiogroup', { name: 'Status' })).getAllByRole(
-      'radio',
-    )
+    const status = within(screen.getByRole('radiogroup', { name: 'Status' }))
+    // Each radio names its side and its value, so it reads on its own.
+    const older = status.getByRole('radio', { name: /^Older · .+: active$/ })
+    const newer = status.getByRole('radio', { name: 'Newer · just now: staged' })
 
     newer.focus()
     await userEvent.keyboard(' ')
