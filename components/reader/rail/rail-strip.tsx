@@ -18,6 +18,8 @@ import { TintLayer } from './tint-layer'
 
 export const RAIL_STRIP_WIDTH_PX = 32
 
+// Like the tint layer: under the glyph, and later in the DOM, so above the tint.
+const HOVER_STYLE = { ...POINTER_EVENTS_NONE, zIndex: -1 } satisfies ViewStyle
 const STRIP_WIDTH_STYLE = { width: RAIL_STRIP_WIDTH_PX } satisfies ViewStyle
 
 export type RailStripProps = {
@@ -158,7 +160,7 @@ function HoverLayer({ testID }: { testID?: string }) {
       testID={testID}
       aria-hidden
       className="absolute inset-0 group-hover:bg-tint-hover"
-      style={POINTER_EVENTS_NONE}
+      style={HOVER_STYLE}
     />
   )
 }

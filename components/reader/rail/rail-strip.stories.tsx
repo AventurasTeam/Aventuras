@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, within } from 'storybook/test'
-import { userEvent as pointer } from 'vitest/browser'
 
 import { t } from '@/lib/i18n'
 import type { RailStripModel, StripCategory } from '@/lib/reader-rail'
@@ -54,23 +53,23 @@ function tintOpacity(category: StripCategory): string | null {
 function topmostAt(
   testIDs: string[],
   point: (glyph: DOMRect) => [number, number],
-): { hit: Element | null; layers: HTMLElement[] } {
+): { hit: Element | null; glyph: SVGElement } {
   const layers = testIDs.map((id) => screen.getByTestId(id))
   const glyph = (layers[0].parentElement as HTMLElement).querySelector('svg') as SVGElement
   const [x, y] = point(glyph.getBoundingClientRect())
   for (const layer of layers) layer.style.pointerEvents = 'auto'
   const hit = document.elementFromPoint(x, y)
   for (const layer of layers) layer.style.pointerEvents = 'none'
-  return { hit, layers }
+  return { hit, glyph }
 }
 
 const overGlyph = (r: DOMRect): [number, number] => [r.left + r.width / 2, r.top + r.height / 2]
 const besideGlyph = (r: DOMRect): [number, number] => [r.left - 2, r.top + r.height / 2]
 
-/** Over the glyph the svg must win, so the tint never washes it out. */
-function tintCoversGlyph(category: StripCategory): boolean {
-  const { hit, layers } = topmostAt([`rail-strip-tint-${category}`], overGlyph)
-  return hit === layers[0]
+/** Over the glyph the svg itself must be hit, so the tint never washes it out. */
+function glyphIsTopmost(category: StripCategory): boolean {
+  const { hit, glyph } = topmostAt([`rail-strip-tint-${category}`], overGlyph)
+  return hit != null && glyph.contains(hit)
 }
 
 /** Beside the glyph the topmost layer is the first id: hover above tint, tint above the strip. */
@@ -113,7 +112,7 @@ export const TintStates: Story = {
 
     // Full contrast: the glyph draws over the tint, never under it.
     for (const category of ['character', 'item', 'location'] as const) {
-      await expect(tintCoversGlyph(category)).toBe(false)
+      await expect(glyphIsTopmost(category)).toBe(true)
     }
     // Beside the glyph the tint shows: it sits above the strip's own background.
     await expect(topLayerBesideGlyph('rail-strip-tint-character')).toBe(
@@ -187,7 +186,11 @@ export const HoverPerZone: Story = {
     const idle = hoverBg('character')
     const tintBefore = tintBg()
 
-    await pointer.hover(
+    // Real pointer hover exists only under Vitest; the module throws on import anywhere else.
+    const browser = await import('vitest/browser').catch(() => null)
+    if (browser == null) return
+
+    await browser.userEvent.hover(
       screen.getByRole('button', { name: t('reader:rail.strip.character', { count: 3 }) }),
     )
     await expect(hoverBg('character')).not.toBe(idle)

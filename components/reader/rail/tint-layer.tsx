@@ -6,7 +6,6 @@ import type { RecentlyClassified } from '@/lib/row-signals'
 // zIndex -1 drops the layer under the control's in-flow content: on web the glyph svg is static and
 // an absolute sibling would paint over it whatever the JSX order.
 const TINT_STYLE = { ...POINTER_EVENTS_NONE, zIndex: -1 } satisfies ViewStyle
-// Opacity in style, not opacity-50, so a play reads it as a computed style rather than a class.
 const FADING_STYLE = { ...TINT_STYLE, opacity: 0.5 } satisfies ViewStyle
 
 export type TintLayerProps = { tint: RecentlyClassified | undefined; testID?: string }
