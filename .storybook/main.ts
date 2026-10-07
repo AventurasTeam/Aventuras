@@ -59,7 +59,8 @@ const config: StorybookConfig = {
     viteConfig.optimizeDeps.rolldownOptions.plugins = [
       ...[viteConfig.optimizeDeps.rolldownOptions.plugins ?? []].flat(),
       {
-        name: 'worklets-gorhom-bottom-sheet',
+        // Vite hashes optimizer plugins by name only; bump on any change.
+        name: 'worklets-gorhom-bottom-sheet@1',
         transform: {
           filter: { id: /@gorhom[\\/]bottom-sheet[\\/]lib[\\/]module[\\/].*\.js$/ },
           async handler(code: string, id: string) {
@@ -67,10 +68,10 @@ const config: StorybookConfig = {
               filename: id,
               babelrc: false,
               configFile: false,
-              sourceMaps: false,
+              sourceMaps: true,
               plugins: ['react-native-worklets/plugin'],
             })
-            return result?.code ?? null
+            return result?.code == null ? null : { code: result.code, map: result.map }
           },
         },
       },

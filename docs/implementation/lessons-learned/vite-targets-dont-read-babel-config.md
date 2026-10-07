@@ -15,14 +15,18 @@ again and must do the same.**
 
 ## Libraries in `node_modules` are prebundled without the plugin
 
-The `babel.config.js` wiring above reaches app source only. A dependency that relies on worklet
+The `pluginReactOptions.babel.plugins` wiring above reaches app source only. A dependency that relies on worklet
 autoworkletization (a prebuilt lib with no `__closure`) is prebundled by Vite's dependency
 optimizer past that plugin, so on web its `useAnimatedReaction` subscribes only to its deps array
 and never re-fires. `@gorhom/bottom-sheet`'s backdrop froze at `pointer-events: none`. Storybook
 now transforms `@gorhom/bottom-sheet` explicitly through a `rolldownOptions` plugin in
-`optimizeDeps` (`.storybook/main.ts`); Vite 8 prebundles with rolldown, so `esbuildOptions`
-plugins don't run. A new dependency with this shape needs the same entry. Metro compiles
-`node_modules` through `babel-preset-expo`, so the app is unaffected.
+`optimizeDeps` (`.storybook/main.ts`), for the dev server and the vitest lane; `storybook build`
+does no dependency prebundling, so a static build keeps the frozen scrim. Vite 8 prebundles
+with rolldown, and `esbuildOptions` plugins are deprecated and didn't take effect here. A new
+dependency with this shape needs the same entry. Vite hashes optimizer plugins by name only, so
+the plugin's name carries a version token to bump on any change, and a stale prebundle clears
+with `node_modules/.cache/storybook`. Metro compiles `node_modules` through `babel-preset-expo`,
+so the app is unaffected.
 
 ## Why it stayed hidden
 

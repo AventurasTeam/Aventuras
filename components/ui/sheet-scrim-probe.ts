@@ -9,7 +9,7 @@ const SCRIM_WAIT = { timeout: 3000 }
 const SCRIM_SETTLED = 0.39
 
 /** Longer than a dismissible sheet takes to close, so a close that was coming has landed. */
-export const SHEET_NO_CLOSE_MS = 1000
+export const SHEET_NO_CLOSE_MS = 2000
 
 export type SheetScrimHit = { scrim: HTMLElement; coords: { clientX: number; clientY: number } }
 

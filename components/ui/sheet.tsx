@@ -346,27 +346,28 @@ function BottomSheetContent({
             so focusing an Input inside a sheet triggers gorhom's translate-up
             behavior. Plain TextInput isn't tracked by the sheet's keyboard system. */}
         <InputComponentContext.Provider value={SheetInputComponent}>
-          <ScrollComponentContext.Provider value={SheetScrollComponent}>
-            {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
-                (dynamic sizing measures BottomSheetView's content height). Fixed-detent
-                sizes skip BottomSheetView because it captures vertical pan gestures and
-                blocks nested scrollables (e.g. BottomSheetSectionList in
-                SearchableOverlayList) from claiming them. */}
-            {/* Edge-to-edge draws the sheet under the system navigation bar, so
-                without this the last rows of a tall sheet sit behind it —
-                unreachable, and a scrollable reports itself fully scrolled. */}
-            {size === 'auto' ? (
-              <BottomSheetView>
-                <View
-                  className={cn('p-6', className)}
-                  {...webDialog}
-                  {...(contentProps as ComponentProps<typeof View>)}
-                  style={[safeBottomStyle(insets.bottom), style]}
-                >
-                  {children}
-                </View>
-              </BottomSheetView>
-            ) : (
+          {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
+              (dynamic sizing measures BottomSheetView's content height). Fixed-detent
+              sizes skip BottomSheetView because it captures vertical pan gestures and
+              blocks nested scrollables (e.g. BottomSheetSectionList in
+              SearchableOverlayList) from claiming them. */}
+          {/* Edge-to-edge draws the sheet under the system navigation bar, so
+              without this the last rows of a tall sheet sit behind it —
+              unreachable, and a scrollable reports itself fully scrolled. */}
+          {size === 'auto' ? (
+            <BottomSheetView>
+              <View
+                className={cn('p-6', className)}
+                {...webDialog}
+                {...(contentProps as ComponentProps<typeof View>)}
+                style={[safeBottomStyle(insets.bottom), style]}
+              >
+                {children}
+              </View>
+            </BottomSheetView>
+          ) : (
+            // Fixed detents only: a flex-1 scroll view can't size inside auto's BottomSheetView.
+            <ScrollComponentContext.Provider value={SheetScrollComponent}>
               <View
                 className={cn('flex-1 p-6', className)}
                 {...webDialog}
@@ -375,8 +376,8 @@ function BottomSheetContent({
               >
                 {children}
               </View>
-            )}
-          </ScrollComponentContext.Provider>
+            </ScrollComponentContext.Provider>
+          )}
         </InputComponentContext.Provider>
       </TextClassContext.Provider>
     </BottomSheetModal>

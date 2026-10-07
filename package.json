@@ -140,6 +140,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
     "@chromatic-com/storybook": "^5.1.2",
     "@playwright/test": "1.59.1",
     "@storybook/addon-a11y": "^10.3.5",
