@@ -1,4 +1,4 @@
-import { useContext, useMemo, type ReactNode } from 'react'
+import { useContext, useMemo, type ReactElement, type ReactNode } from 'react'
 import { View, type ViewStyle } from 'react-native'
 
 import { EntityListPane, type EntityListPaneSurface } from '@/components/shells/entity-list-pane'
@@ -55,7 +55,7 @@ export type ModuleListProps<
   /** Replaces the module's empty-state subtext, for a surface whose add affordance differs. */
   emptySubtext?: string
   /** Replaces the list and its empty state; the header and toolbar stay mounted. */
-  body?: ReactNode
+  body?: ReactElement
   /** Forwarded to the pane; `transparent` inside a Sheet. */
   surface?: EntityListPaneSurface
 }
