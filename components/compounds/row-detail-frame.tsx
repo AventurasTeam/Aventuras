@@ -57,7 +57,7 @@ export type RowDetailFrameProps<Draft extends FieldValues, Tab extends string> =
 
 async function exportRow(committed: RowDetailCommitted): Promise<void> {
   try {
-    // Inside the try: a serializer throw toasts the same as a failed save.
+    // Inside the try: a serializer throw toasts the same as a rejected hand-off.
     await saveAvtsFile(committed.exportFile())
   } catch (error) {
     logger.error('app.row_export_failed', {

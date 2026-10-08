@@ -8,7 +8,7 @@ import { t } from '@/lib/i18n'
 import { happeningImportDialog, threadImportDialog } from './plot-import'
 
 const EXPORTED_AT = new Date('2026-10-07T12:00:00.000Z')
-// Glyph-free: the banner renders the `⚠ ` in its own aria-hidden node (Task 8).
+// Glyph-free: the banner renders the `⚠ ` in its own aria-hidden node.
 const NEWER_VERSION = t('common:importDialog.meta.newerVersion')
 
 const AMULET: Thread = {

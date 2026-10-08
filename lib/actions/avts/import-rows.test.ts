@@ -511,7 +511,7 @@ describe('export → parse → import round trip', () => {
     },
   )
 
-  // Decisions D1: a same-story re-import must not run the one-position-per-item rule.
+  // Per-row payloads carry no branch-local ids, so a same-story re-import must not move the original's items (data-model.md → Aventuras file format).
   it('re-importing a character onto its own branch leaves the original holding its items', async () => {
     const { db, ctx } = await setup()
     await db
