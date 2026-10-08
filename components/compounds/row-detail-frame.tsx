@@ -32,7 +32,7 @@ export type RowDetailCommitted = {
 
 export type RowDetailFrameProps<Draft extends FieldValues, Tab extends string> = {
   session: RowSaveSession<Draft>
-  /** `name` for entities, `title` for lore, threads and happenings. */
+  /** The draft's string field the inline name edits. */
   nameField: FieldPathByValue<Draft, string>
   /** The committed name, which InlineEditableName's Escape restores. */
   savedName: string

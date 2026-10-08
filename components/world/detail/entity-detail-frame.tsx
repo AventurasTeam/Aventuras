@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { Control } from 'react-hook-form'
+import type { Control, FieldPathByValue } from 'react-hook-form'
 
 import { RowDetailFrame } from '@/components/compounds/row-detail-frame'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
@@ -19,13 +19,6 @@ export function asBaseControl<D extends EntityBaseDraft>(
   control: Control<D>,
 ): Control<EntityBaseDraft> {
   return control as unknown as Control<EntityBaseDraft>
-}
-
-// The same invariance through the session's form; the frame binds only the base draft's `name`.
-function asBaseSession<D extends EntityBaseDraft>(
-  session: RowSaveSession<D>,
-): RowSaveSession<EntityBaseDraft> {
-  return session as unknown as RowSaveSession<EntityBaseDraft>
 }
 
 function openingTab(
@@ -100,8 +93,8 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
         }
   return (
     <RowDetailFrame
-      session={asBaseSession(session)}
-      nameField="name"
+      session={session}
+      nameField={'name' as FieldPathByValue<Draft, string>}
       savedName={savedName}
       namePlaceholder={t('world:detail.namePlaceholder')}
       nameTestID="world-detail-name"
