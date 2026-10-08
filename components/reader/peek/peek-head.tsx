@@ -48,7 +48,7 @@ function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolea
         hitSlop={TAG_HIT_SLOP}
         className={cn(
           'shrink-0 rounded-sm px-1',
-          // touch.md → Touch-target floor: stretch to the head's 44px row, so the head never resizes.
+          // touch.md → Touch-target floor: fill the phone head's 44px group; web's reason wrapper opts out.
           isPhone && 'justify-center self-stretch',
           disabled
             ? 'opacity-50'
@@ -85,9 +85,9 @@ export function PeekHead({
       className={cn(
         'flex-row items-center border-b border-border',
         // Mobile expression: the phone head sits flush after its ←; desktop pushes × to the end.
-        leading != null
-          ? 'justify-start gap-2 px-3 pb-2.5 pt-2'
-          : 'justify-between gap-3 px-4 pb-2.5 pt-3',
+        leading != null ? 'justify-start gap-2 px-3' : 'justify-between gap-3 px-4',
+        // On phone the 44px group sets the height; elsewhere the head pads its own.
+        !isPhone && (leading != null ? 'pb-2.5 pt-2' : 'pb-2.5 pt-3'),
       )}
     >
       {leading}

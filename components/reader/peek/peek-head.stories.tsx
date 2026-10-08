@@ -62,6 +62,8 @@ export const Candidate: Story = {
   },
   play: async () => {
     const action = screen.getByRole('button', { name: 'Set as lead' })
+    // Phone-only floor: a prior mobile1 story's stale dimensions can linger a commit.
+    await waitFor(() => expect(action.getBoundingClientRect().height).toBeLessThan(44))
     await expect(action).not.toHaveAttribute('aria-disabled', 'true')
     await expect(screen.queryByText('You')).toBeNull()
     await userEvent.click(action)
@@ -114,19 +116,28 @@ export const Pending: Story = {
   },
 }
 
-/** touch.md → Touch-target floor: on phone the action fills a 44px head row, and the row holds. */
+/** touch.md → Touch-target floor: on phone the action fills a 44px head, which holds across lead states. */
 export const CandidatePhoneFloor: Story = {
   args: {
     name: 'Mira',
     lead: { state: 'candidate', onSetLead: fn(), disabledReason: undefined, pending: false },
   },
   globals: { viewport: { value: 'mobile1' } },
+  render: (args) => (
+    <View>
+      <PeekHead {...args} />
+      <PeekHead {...args} lead={{ state: 'lead', label: 'you' }} />
+    </View>
+  ),
   play: async () => {
     const action = screen.getByRole('button', { name: 'Set as lead' })
     await waitFor(() => expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44))
-    await expect(
-      screen.getByTestId('peek-head').getBoundingClientRect().height,
-    ).toBeGreaterThanOrEqual(44)
+    const [candidate, lead] = screen
+      .getAllByTestId('peek-head')
+      .map((head) => head.getBoundingClientRect().height)
+    await expect(candidate).toBe(lead)
+    // The 44px group sets the phone head's height: no padding stacked on top (44 + border).
+    await expect(candidate).toBeLessThan(50)
   },
 }
 
