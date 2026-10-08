@@ -609,3 +609,84 @@ slice-planning gate forces its resolution before that slice is planned.
     touches World's Vault entry.
 
   Raised in 4.6's slice review, 2026-10-08.
+
+- **A disabled control under focus drops focus to `<body>` on web.**
+  (2026-10-09) RN-Web renders a `role="button"` Pressable as a native
+  `<button>` and turns `disabled` into the native attribute, so Chromium
+  blurs it when it disables under focus (`Button`'s `loading`,
+  `components/ui/button.tsx:97-107`; any reason-bearing control that
+  disables while focused). `Button` also carries its disabled reason only
+  in `accessibilityHint`, which RN-Web ignores. The docblock of
+  `components/ui/reason-tooltip.tsx` (lines 10-25) puts the reason in AT
+  through that hint on native only, and its remount note (16-18) implies
+  an unconditional wrapper keeps focus across a flip to disabled; neither
+  helps on web, where the reason is a hover `title` and keyboard users
+  never see it. The peek keeps focus by refocusing its dialog from the
+  drawer instead
+  ([`color.md → Disabled`](../ui/foundations/color.md#disabled): disabled controls
+  aren't focusable). Candidate lessons-learned entry; pairs with M9.2's
+  disabledReason a11y work. Raised in 4.5b's review, 2026-10-09.
+- **Focus-ring canon drift.** (2026-10-09)
+  [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
+  ring with a 2px offset; none of the `focus-visible:ring-2` usages under
+  `components/` has an offset (no `ring-offset` anywhere). `Region`,
+  `EntityLink` and `StatusRow` in
+  `components/world/overview/overview-parts.tsx` have no focus ring at
+  all. Raised in 4.5b's review, 2026-10-09.
+- **Trigger-less overlay focus return isn't where canon says.**
+  (2026-10-09)
+  [`overlays.md → Sheet — ARIA contract`](../ui/patterns/overlays.md#sheet--aria-contract)
+  (lines 349-353) says a Sheet opened without a trigger returns focus to
+  the element focused before the open, "per rn-primitives / Radix
+  convention", but Radix's modal Dialog only returns focus to a
+  registered trigger (`@radix-ui/react-dialog` `dist/index.mjs:146-149`),
+  so every right-anchored Sheet opened through `open` drops focus to
+  `<body>` on close. 4.5b's `PeekDrawer` implements the return locally
+  (`onOpenAutoFocus` remembers, `onCloseAutoFocus` restores unless it
+  routed away); it belongs in `RightSheetContent`
+  (`components/ui/sheet.tsx:406`). Related: `demoteRadixDialog`
+  (`sheet.tsx:396`) leaves Radix's FocusScope fallback on the
+  role-stripped, unnamed wrapper; the gorhom `BottomSheetContent` has no
+  Tab trap on web though
+  [`layout.md`](../ui/foundations/mobile/layout.md) (line 216) says
+  sheets trap Tab; and 4.5a's list and categories swaps drop focus.
+  Known residual in the peek: after a successful `Set as lead` the lead
+  row re-parents into `ModuleList`'s pinned slot, so the remembered node
+  is disconnected and the next close drops focus to `<body>`. Fix by
+  re-finding the row by id (`ModuleList`'s `focusRef`), or at primitive
+  level as above. Raised in 4.5b's review, 2026-10-09.
+- **Reader shortcuts fire behind modal overlays.** (2026-10-09) The
+  reader's undo/redo and End handlers (`app/reader-composer/[branchId].tsx`
+  lines 1130-1132 and 1147-1149) gate on `isFocused` only, not on
+  `blockingOverlaysStore` (which the Actions menu and
+  `hooks/use-master-detail-back.ts` check), so Ctrl+Z with the peek
+  drawer or another reader dialog open undoes a turn behind the scrim.
+  Related: a toast fired while a modal Sheet is open is `aria-hidden` by
+  Radix's `hideOthers` (the `Toaster` renders in-tree,
+  `app/_layout.tsx:107`, `components/ui/toast.tsx:194`) and may sit under
+  the scrim; the peek's `Set as lead` refusal toast is a new instance.
+  Raised in 4.5b's review, 2026-10-09.
+- **Plot row semantics are hidden from assistive tech.** (2026-10-09)
+  Plot's `⊙` common-knowledge marker (`components/plot/happening-row.tsx:46`)
+  is a bare icon with no accessible name, and `ListRow` sets `aria-label`
+  to the title (`components/compounds/list-row.tsx:84`), so the
+  when-marker, `⊙` and category never reach AT on Plot rows.
+  (`plot:commonKnowledgeMarker` had no user before the 4.5b peek.) Raised
+  in 4.5b's review, 2026-10-09.
+- **Phone deep-link reveal can't scroll the hidden list.** (2026-10-09)
+  World's and Plot's mount-arrival `revealRow` opens the row's tier, but
+  on phone the list sits under the detail with `hidden`
+  (`components/shells/master-detail-layout.tsx:83`), so the scroll and
+  focus are a no-op and the first `←` shows the tier open with the list
+  at the top. Fix shape: reveal the selected row in `handleBack` in the
+  same guarded update as `select(null)`, as `onPillPress` does
+  (`app/world/[branchId].tsx:379`); applies to World and Plot, and
+  `openEntity` on phone has the same gap. Raised in 4.5b's review,
+  2026-10-09.
+- **Small duplications.** (2026-10-09) `'min-h-[44px] justify-center'` is
+  written out in three places (`PHONE_TOUCH_FLOOR`, private in
+  `overview-parts.tsx:35`; `components/compounds/breadcrumb.tsx:29`;
+  `components/reader/peek/peek-foot.tsx:26`). The two peek hosts
+  (`PeekDrawer`, `RailSheetPeek`) build the same `PeekLeadControl`, foot
+  href and region href; a `peekRouteOf`-style helper in `peek-model.ts`
+  would keep them from drifting. Raised in 4.5b's review, 2026-10-09.
