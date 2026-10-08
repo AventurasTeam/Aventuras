@@ -216,26 +216,29 @@ export const ExportRejectionToasts: Story = {
   },
 }
 
-/** A press while the hand-off is still pending starts no second one; once it settles, Export works. */
+/** A press mid hand-off starts no second export; once the first settles, Export works again. */
 export const ExportIgnoresAPressMidHandOff: Story = {
   play: async ({ args }) => {
     const downloads: string[] = []
-    let midHandOffPresses = 0
+    let pressedAgain = false
+    // Set only once the press returns: a throwing query is swallowed by the export's own catch.
+    let secondPressLanded = false
     const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
     const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
       downloads.push(this.download)
       // Web's hand-off settles in the click's own task, so the second tap lands inside it.
-      if (midHandOffPresses === 0) {
-        midHandOffPresses += 1
+      if (!pressedAgain) {
+        pressedAgain = true
         fireEvent.click(screen.getByRole('menuitem', { name: 'Export row as JSON' }))
+        secondPressLanded = true
       }
     })
     try {
       await openMenuEntry('Export row as JSON')
       await waitFor(() => expect(downloads).toEqual(['row-first-row.avts']), WAIT)
-      await expect(midHandOffPresses).toBe(1)
+      await expect(secondPressLanded).toBe(true)
       await expect(args.exportFile).toHaveBeenCalledTimes(1)
 
       await openMenuEntry('Export row as JSON')
