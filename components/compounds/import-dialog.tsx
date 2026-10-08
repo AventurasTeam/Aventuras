@@ -145,9 +145,8 @@ export function ImportDialog<TPayload>({
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const hiddenInputRef = useRef<HTMLInputElement | null>(null)
 
-  // Reset on every open ↔ closed transition: closing bumps the request id, so an in-flight read
-  // is discarded; opening drops a prior open's stale error. Not on mount, so a dialog mounted
-  // open keeps its forced `_initialState`.
+  // Closing discards an in-flight read and clears the error; opening covers a dialog mounted
+  // closed with a forced state. Never on mount, so a dialog mounted open keeps `_initialState`.
   const wasOpen = useRef(open)
   useEffect(() => {
     if (open !== wasOpen.current) {

@@ -444,20 +444,20 @@ are unaffected.
 One stories file at
 `components/compounds/import-dialog.stories.tsx`. Story matrix:
 
-| Story                      | State         | Notes                                                                                         |
-| -------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
-| `IdleCalendar`             | idle          | `aventuras-calendar` + `CalendarSystemSchema`; default open. Anchors visual reference.        |
-| `IdleStory`                | idle          | `aventuras-story` + `StoryImportSchema`; demonstrates title-copy variation.                   |
-| `IdleCalendar_Phone`       | idle          | Phone viewport; verifies button text doesn't truncate.                                        |
-| `Reading`                  | reading       | Forced via test seam; spinner on file button, both disabled.                                  |
-| `MetaError_NotAventuras`   | meta-error    | Forced via `_initialState`. Banner: `This isn’t an Aventuras file.`                           |
-| `MetaError_WrongKind`      | meta-error    | Forced via `_initialState`: an `aventuras-story` envelope into a `aventuras-calendar` dialog. |
-| `MetaError_NewerVersion`   | meta-error    | Forced via `_initialState`: `formatVersion: "2.0"` vs `supportedMajor: 1`.                    |
-| `MetaError_ClipboardEmpty` | meta-error    | Forced via `_initialState`: the empty-clipboard banner.                                       |
-| `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                              |
-| `PayloadError_Expanded`    | payload-error | Same as above; details open; demonstrates path-truncation + bounded scroll.                   |
-| `ClosedDuringRead`         | reading       | Stubbed clipboard read; Cancel mid-read, then resolve: `onValidated` never fires.             |
-| `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.                |
+| Story                      | State         | Notes                                                                                            |
+| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------ |
+| `IdleCalendar`             | idle          | `aventuras-calendar` + `CalendarSystemSchema`; default open. Anchors visual reference.           |
+| `IdleStory`                | idle          | `aventuras-story` + `StoryImportSchema`; demonstrates title-copy variation.                      |
+| `IdleCalendar_Phone`       | idle          | Renders as `IdleCalendar`; resize the canvas below 640px to verify button text doesn't truncate. |
+| `Reading`                  | reading       | Forced via test seam; spinner on file button, both disabled.                                     |
+| `MetaError_NotAventuras`   | meta-error    | Forced via `_initialState`. Banner: `This isn’t an Aventuras file.`                              |
+| `MetaError_WrongKind`      | meta-error    | Forced via `_initialState`: an `aventuras-story` envelope into a `aventuras-calendar` dialog.    |
+| `MetaError_NewerVersion`   | meta-error    | Forced via `_initialState`: `formatVersion: "2.0"` vs `supportedMajor: 1`.                       |
+| `MetaError_ClipboardEmpty` | meta-error    | Forced via `_initialState`: the empty-clipboard banner.                                          |
+| `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                                 |
+| `PayloadError_Expanded`    | payload-error | Same shape with 11 issues; click `Show details` to open the list and see the bounded scroll.     |
+| `ClosedDuringRead`         | reading       | Stubbed clipboard read; Cancel mid-read, then resolve: `onValidated` never fires.                |
+| `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.                   |
 
 ### Forced-state test seam
 
