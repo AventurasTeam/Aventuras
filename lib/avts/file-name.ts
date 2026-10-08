@@ -11,6 +11,12 @@ const UNSPLITTABLE: Record<string, string> = {
   ð: 'd',
   þ: 'th',
   ı: 'i',
+  ħ: 'h',
+  ŧ: 't',
+  ŋ: 'ng',
+  ə: 'e',
+  ĸ: 'k',
+  ʒ: 'zh',
 }
 
 export type AvtsFileName = `${string}.avts`

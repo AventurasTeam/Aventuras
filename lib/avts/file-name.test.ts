@@ -20,6 +20,13 @@ describe('avtsFileName', () => {
     ['location', 'Straße', 'location-strasse.avts'],
     ['character', 'Þórr', 'character-thorr.avts'],
     ['character', 'Œdipus Đorđe Ðan Kırık', 'character-oedipus-dorde-dan-kirik.avts'],
+    ['location', 'Ħal Saflieni', 'location-hal-saflieni.avts'],
+    ['lore', 'Saħħa', 'lore-sahha.avts'],
+    ['character', 'Ŧuoddi', 'character-tuoddi.avts'],
+    ['character', 'Ŋuolle', 'character-nguolle.avts'],
+    ['character', 'Əli', 'character-eli.avts'],
+    ['location', 'ĸalâleĸ', 'location-kalalek.avts'],
+    ['character', 'Ʒana Ǯeme', 'character-zhana-zheme.avts'],
   ])('%s %j → %s', (prefix, name, expected) => {
     expect(avtsFileName(prefix, name)).toBe(expected)
   })
