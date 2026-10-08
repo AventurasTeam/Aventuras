@@ -91,7 +91,10 @@ The overflow menu holds rare-but-important actions:
   not already the lead — a staged or retired character can't lead,
   per
   [wizard.md → Status field](../wizard/wizard.md#status-field--active--staged))
-- **Export entity as JSON** (single-entity export)
+- **Export entity as JSON** (the row as an `aventuras-entity` `.avts`
+  file: a download on desktop and web, the OS share sheet on native;
+  the file carries no branch-local ids; read-only, so it stays live
+  during generation)
 - **View raw JSON** (debug/dev affordance)
 - **Delete entity** (destructive; confirms — see [Delete](#delete);
   disabled for the lead)
@@ -699,7 +702,10 @@ Mirrors the [entity detail head pattern](#detail-head-structure):
   lore-management agent (per
   [`data-model.md → Chapters / memory system`](../../../data-model.md#chapters--memory-system));
   the same accent rule applies.
-- **Overflow menu (⋯)**: `Export lore as JSON`, `View raw JSON`,
+- **Overflow menu (⋯)**: `Export lore as JSON` (the row as an
+  `aventuras-lore` `.avts` file: a download on desktop and web, the OS
+  share sheet on native; no branch-local ids; read-only, so live during
+  generation), `View raw JSON`,
   [`Delete`](#delete). **No `Set as lead`** — lead is a character-only concept
   per [`principles → Mode, lead, and narration`](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 

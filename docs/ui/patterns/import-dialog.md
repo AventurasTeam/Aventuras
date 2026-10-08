@@ -295,58 +295,31 @@ fix and re-pick / re-paste.
 ### World per-row entity import
 
 ```tsx
-const [importOpen, setImportOpen] = useState(false)
-const activeKind = useActiveEntityKind() // from EntityListPane
+// One slot per dialog; the host holds an entity slot and a lore slot.
+const entityImport = useRowImport<EntityImport>({
+  blocked: editBlocked, // isUserEditBlocked: refused while generation is in flight
+  guard, // the surface's leave guard
+  commit: (payload) => importEntity(branchId, payload, ctx),
+  onImported, // guard(() => select(id)); toast.success(t('world:import.imported'))
+  onRejected: (code) => toast.error(importRejectionText(code)),
+  onFailed: (error) => toast.error(importFailureText()),
+})
 
-// Kind-narrowed schema — required to prevent cross-kind misemits.
-const schema = useMemo(
-  () =>
-    EntityImportSchema.refine((e) => e.kind === activeKind, {
-      message: `Expected a ${activeKind}.`,
-      path: ['kind'],
-    }),
-  [activeKind]
-)
-
-<ImporterMenu
-  label={kindLabel} // 'New character' / 'New location' / …
-  options={[
-    {
-      key: 'blank',
-      label: 'Blank',
-      onPress: () => openCreateForm({ kind: activeKind, prefill: null }),
-    },
-    {
-      key: 'from-json',
-      label: 'From JSON file…',
-      onPress: () => setImportOpen(true),
-    },
-    {
-      key: 'from-vault',
-      label: 'From Vault…',
-      disabled: true,
-      disabledReason: 'Vault lands in M8.',
-    },
-  ]}
-/>
-
-<ImportDialog
-  open={importOpen}
-  onOpenChange={setImportOpen}
-  format="aventuras-entity"
-  supportedMajor={1}
-  payloadKey="entity"
-  schema={schema}
-  title={`Import ${kindLabel.toLowerCase()}`}
-  onValidated={(entity) => {
-    importEntityAction(branchId, entity).then((newId) => selectRow(newId))
-  }}
+<ImportDialog<EntityImport>
+  {...entityImportDialog(category)} // format, schema narrowed to the kind, t('world:import.title.<kind>')
+  open={entityImport.open && focused}
+  onOpenChange={entityImport.onOpenChange}
+  onValidated={entityImport.onValidated}
 />
 ```
 
-Lore is the parallel case with `format="aventuras-lore"`,
-`payloadKey="lore"`, `schema={LoreImportSchema}`, and its own
-state pair.
+The importer menu's `From JSON file…` option calls `request()`, which
+opens the dialog through the leave guard and is refused
+while generation is in flight. The dialog has already closed itself
+when `onValidated` fires, so the host reports the outcome: `Imported.`
+and selects the new row through the leave guard, or the refusal /
+failure toast. Lore is the parallel case with `loreImportDialog()` and
+its own slot.
 
 **Kind-narrowing is mandatory** for `aventuras-entity` consumers.
 Without the `.refine` on `kind`, a `kind: 'location'` JSON
