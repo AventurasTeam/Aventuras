@@ -94,6 +94,7 @@
       "timeAnchorExclusive": "occurredAtEntryId and temporal can’t both be set.",
       "priorityRange": "Enter a whole number from 0 to 100.",
       "stackableKeyRequired": "A quantity needs a name.",
+      "tooLong": "This is longer than the field allows.",
       "duplicateStackable": "This quantity is listed twice.",
       "expectedKind": {
         "character": "Expected a character.",

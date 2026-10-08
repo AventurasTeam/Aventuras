@@ -257,6 +257,18 @@ describe('EntityImportSchema', () => {
       ['state', 'stackables', ' '],
       'A quantity needs a name.',
     ],
+    [
+      'a 41-character quantity name',
+      { state: { stackables: { ['k'.repeat(41)]: 1 } } },
+      ['state', 'stackables', 'k'.repeat(41)],
+      'This is longer than the field allows.',
+    ],
+    [
+      'a quantity name 41 characters long once trimmed',
+      { state: { stackables: { [` ${'k'.repeat(41)} `]: 1 } } },
+      ['state', 'stackables', ` ${'k'.repeat(41)} `],
+      'This is longer than the field allows.',
+    ],
   ])('refuses %s with one issue and its copy', (_case, patch, path, message) => {
     expect(issuesOf(EntityImportSchema, { kind: 'character', ...MINIMAL, ...patch })).toEqual([
       { path, message },
@@ -290,14 +302,32 @@ describe('EntityImportSchema', () => {
       { state: { stackables: { rope: -1 } } },
       ['state', 'stackables', 'rope'],
     ],
-    [
-      'a 41-character quantity name',
-      { state: { stackables: { ['k'.repeat(41)]: 1 } } },
-      ['state', 'stackables', 'k'.repeat(41)],
-    ],
   ])('refuses %s at its path', (_case, patch, path) => {
     const issues = issuesOf(EntityImportSchema, { kind: 'character', ...MINIMAL, ...patch })
     expect(issues.map((issue) => issue.path)).toEqual([path])
+  })
+
+  it('reads a quantity name as the pane does, 40 characters once trimmed', () => {
+    const key = `  ${'k'.repeat(40)}`
+    const entity = EntityImportSchema.parse({
+      kind: 'character',
+      ...MINIMAL,
+      state: { stackables: { [key]: 3 } },
+    })
+    expect(entity).toMatchObject({ state: { stackables: { [key]: 3 } } })
+  })
+
+  it('reports a too-long quantity name and a repeated one in the same file', () => {
+    const stackables = { ['k'.repeat(41)]: 1, Rope: 1, rope: 2 }
+    expect(
+      issuesOf(EntityImportSchema, { kind: 'character', ...MINIMAL, state: { stackables } }),
+    ).toEqual([
+      {
+        path: ['state', 'stackables', 'k'.repeat(41)],
+        message: 'This is longer than the field allows.',
+      },
+      { path: ['state', 'stackables', 'rope'], message: 'This quantity is listed twice.' },
+    ])
   })
 
   it.each([

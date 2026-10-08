@@ -51,9 +51,12 @@ const locationState = entityStateSchemaForKind('location') as StateSchemaWith<'p
 const itemState = entityStateSchemaForKind('item') as StateSchemaWith<'at_location_id'>
 const factionState = entityStateSchemaForKind('faction') as StateSchemaWith<'standing'>
 
-// The pane draft refuses a blank or repeated quantity name; saving would drop or merge it silently.
+const STACKABLE_KEY_MAX = 40
+
+// The pane draft refuses a blank, repeated or (once trimmed) over-long quantity name;
+// saving would drop a blank one, or keep only one of a repeated one's counts.
 const stackablesField = z
-  .record(z.string().max(40), characterState.shape.stackables.unwrap().valueType)
+  .record(z.string(), characterState.shape.stackables.unwrap().valueType)
   .superRefine((stackables, ctx) => {
     const seen = new Set<string>()
     for (const raw of Object.keys(stackables)) {
@@ -64,6 +67,8 @@ const stackablesField = z
           path: [raw],
           message: t('common:avts.issue.stackableKeyRequired'),
         })
+      } else if (raw.trim().length > STACKABLE_KEY_MAX) {
+        ctx.addIssue({ code: 'custom', path: [raw], message: t('common:avts.issue.tooLong') })
       } else if (seen.has(key)) {
         ctx.addIssue({
           code: 'custom',
