@@ -1413,6 +1413,21 @@ own.
   recently-classified in needing the hidden-text primitive. The row's
   `description` line (a happening's category, a lore excerpt) is hidden
   too. Widened 2026-09-22 by Slice 4.3.
+- **M9.4 — A failed desktop save of an `.avts` file goes unreported.**
+  On desktop and web, `saveAvtsFile` (`lib/avts/save-file.ts`) hands
+  the file over as an anchor download and resolves at the hand-off.
+  Electron then shows its own Save dialog, and `electron/` has no
+  `will-download` listener, so a download interrupted after that dialog
+  (an unwritable folder, a full disk) reaches neither a toast nor
+  `app.row_export_failed`. The story export reuses this path with much
+  larger files. Fix: a main-process `will-download` watcher reports an
+  interrupted download to the renderer over a new `native:` channel,
+  and the renderer toasts and logs `app.row_export_failed`; the
+  renderer download and the E2E's own `will-download` capture keep
+  working. Cost: main, preload and both bridge-type copies, plus one
+  renderer listener. Not verified: whether Electron shows any UI of its
+  own for an interrupted download. Raised by Slice 4.6's review
+  (2026-10-08); the developer accepted the gap until this slice.
 - **M9.5 — No navigation landmark anywhere.** No `navigation` landmark
   role exists in the app. Breadcrumb is the natural first one, but
   World renders two (the top-bar title and the sub-header), so a role

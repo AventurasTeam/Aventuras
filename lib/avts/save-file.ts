@@ -1,6 +1,9 @@
 import type { AvtsFile } from './envelope'
 
-/** Resolves once the browser takes the download; a cancelled or failed save never rejects. */
+/**
+ * Resolves at the download hand-off: a cancelled or failed write never rejects, so a failed desktop
+ * save goes unreported (the main-process fix is docs/implementation/roadmap.md → M9.4).
+ */
 export async function saveAvtsFile(file: AvtsFile): Promise<void> {
   const url = URL.createObjectURL(new Blob([file.contents], { type: 'application/json' }))
   try {

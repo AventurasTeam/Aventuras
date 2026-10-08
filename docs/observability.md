@@ -274,7 +274,10 @@ convention, and the expectation that subsystems route through
   `row_export_failed` (`components/compounds/row-detail-frame.tsx` —
   a `⋯ → Export … as JSON` whose file build (the row's serializer)
   threw or whose `saveAvtsFile` rejected; the user sees
-  `Couldn’t export the file.`), `import_read_failed` (warn,
+  `Couldn’t export the file.` A desktop download that fails after the
+  hand-off never rejects, so it isn't logged until
+  [M9.4](./implementation/roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate)),
+  `import_read_failed` (warn,
   `components/compounds/import-dialog-pipeline.ts` — an `ImportDialog`
   file or clipboard read that threw, other than a cancelled picker or
   an empty clipboard; the user sees the read-error banner),
