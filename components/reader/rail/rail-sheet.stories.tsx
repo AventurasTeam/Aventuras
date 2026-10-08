@@ -78,6 +78,8 @@ type HarnessProps = {
   onRowPress?: (category: RailCategory, id: string) => void
   withPeek?: boolean
   onNavigate?: (href: string) => void
+  blocked?: boolean
+  blockedReason?: string
 }
 
 function SheetHarness({ data = DATA, onRowPress = () => {}, withPeek = false }: HarnessProps) {
@@ -114,7 +116,11 @@ function setChipData(data: RailData) {
   chipData.set(data)
 }
 
-function ChipHarness({ onNavigate = () => {} }: Pick<HarnessProps, 'onNavigate'>) {
+function ChipHarness({
+  onNavigate = () => {},
+  blocked = false,
+  blockedReason,
+}: Pick<HarnessProps, 'onNavigate' | 'blocked' | 'blockedReason'>) {
   const [data, setData] = useState(DATA)
   useEffect(() => {
     chipData.set = setData
@@ -133,8 +139,8 @@ function ChipHarness({ onNavigate = () => {} }: Pick<HarnessProps, 'onNavigate'>
         <ReaderBrowseChip
           data={data}
           storyId={null}
-          blocked={false}
-          blockedReason={undefined}
+          blocked={blocked}
+          blockedReason={blockedReason}
           onNavigate={onNavigate}
         />
       </View>
@@ -370,7 +376,7 @@ export const PeekReopenStartsAtList: Story = {
 
 export const ReaderChipOpensOnLastCategory: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   beforeEach: () => {
     readerRailStore.setCategory('lore')
   },
@@ -397,7 +403,7 @@ export const ReaderChipOpensOnLastCategory: Story = {
 /** A pick goes through the store. */
 export const ReaderChipPickSetsStoreCategory: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
     await waitFor(() => expect(railDialog()).toBeVisible())
@@ -412,7 +418,7 @@ export const ReaderChipPickSetsStoreCategory: Story = {
 /** Filter and search edits in the Sheet land in the store, so they survive a reopen or reflow. */
 export const ReaderChipViewEditsSetStoreView: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
     await waitFor(() => expect(railDialog()).toBeVisible())
@@ -435,7 +441,7 @@ export const ReaderChipViewEditsSetStoreView: Story = {
 /** C10 filled: a row tap grows the one Sheet to tall on that row's peek; `←` returns to the list. */
 export const ReaderChipRowOpensPeek: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async ({ args }) => {
     await openChipSheet()
     const mira = entityNamed('Mira')
@@ -457,7 +463,7 @@ export const ReaderChipRowOpensPeek: Story = {
 /** The scrim dismisses the whole Sheet from the peek level, not just the peek. */
 export const ReaderChipBackdropClosesPeek: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async ({ args }) => {
     await openChipSheet()
     await peekRow(entityNamed('Mira').name)
@@ -471,7 +477,7 @@ export const ReaderChipBackdropClosesPeek: Story = {
 /** layout.md → Stacking: the Sheet dismisses, then routes; a press during the close routes nothing. */
 export const ReaderChipOpenInPanelNavigatesOnce: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async ({ args }) => {
     await openChipSheet()
     const mira = entityNamed('Mira')
@@ -492,7 +498,7 @@ export const ReaderChipOpenInPanelNavigatesOnce: Story = {
 /** An Overview region routes to its own World tab (M4 C6's `tab`), closing the Sheet first. */
 export const ReaderChipRegionOpensItsWorldTab: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async ({ args }) => {
     await openChipSheet()
     const mira = entityNamed('Mira')
@@ -510,7 +516,7 @@ export const ReaderChipRegionOpensItsWorldTab: Story = {
 /** A peeked row deleted under the Sheet sends it back to the list, holding no id to reopen. */
 export const ReaderChipRemovedRowReturnsToList: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async () => {
     await openChipSheet()
     const mira = entityNamed('Mira')
@@ -529,10 +535,37 @@ export const ReaderChipRemovedRowReturnsToList: Story = {
   },
 }
 
+/** The peek's lead control: the lead wears the badge; a gated non-lead's `Set as lead` is disabled. */
+export const ReaderChipPeekLeadControl: Story = {
+  globals: PHONE,
+  args: { blocked: true, blockedReason: t('common:generationGate.chapterClose') },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    await openChipSheet()
+    await peekRow(leadOf(DATA).name)
+    await expect(within(railDialog()).getByText(t('world:lead.you'))).toBeVisible()
+    await expect(
+      within(railDialog()).queryByRole('button', { name: t('reader:peek.setLead') }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(peekBack())
+    await headIs('character')
+    await peekRow(entityNamed('Mira').name)
+    const name = t('common:disabledWithReason', {
+      label: t('reader:peek.setLead'),
+      reason: t('common:generationGate.chapterClose'),
+    })
+    await expect(within(railDialog()).getByRole('button', { name })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  },
+}
+
 /** The scrim covers the whole window, chip included, and a press on it closes the list level. */
 export const ReaderChipBackdropClosesList: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async ({ args }) => {
     const chip = await screen.findByTestId('browse-chip')
     await userEvent.click(chip)
@@ -548,7 +581,7 @@ export const ReaderChipBackdropClosesList: Story = {
 /** A scrim press closes the categories level too. */
 export const ReaderChipBackdropClosesCategories: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  render: (args) => <ChipHarness {...args} />,
   play: async ({ args }) => {
     const chip = await screen.findByTestId('browse-chip')
     await userEvent.click(chip)
@@ -588,7 +621,7 @@ export const ReaderChipClosedSheetReadsNothing: Story = {
   render: (args) => (
     <>
       <QueryClientProbe />
-      <ChipHarness onNavigate={args.onNavigate} />
+      <ChipHarness {...args} />
     </>
   ),
   beforeEach: () => {
