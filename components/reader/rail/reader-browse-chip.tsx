@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { View } from 'react-native'
 
-import type { RailCategory } from '@/lib/reader-rail'
+import { RailSheetPeek } from '@/components/reader/peek/rail-sheet-peek'
 import { readerRailStore } from '@/lib/stores'
 
 import { BrowseChip } from './browse-chip'
@@ -10,13 +10,30 @@ import { railChipTintOf, type RailData } from './use-rail-data'
 
 export type ReaderBrowseChipProps = {
   data: RailData
-  onRowPress: (category: RailCategory, id: string) => void
+  storyId: string | null
+  blocked: boolean
+  blockedReason: string | undefined
+  /** Routes after the Sheet has started closing. */
+  onNavigate: (href: string) => void
 }
 
-export function ReaderBrowseChip({ data, onRowPress }: ReaderBrowseChipProps) {
+export function ReaderBrowseChip({
+  data,
+  storyId,
+  blocked,
+  blockedReason,
+  onNavigate,
+}: ReaderBrowseChipProps) {
   const [open, setOpen] = useState(false)
   const view = readerRailStore.useView()
   const tint = useMemo(() => railChipTintOf(data), [data])
+  const openInPanel = (href: string) => {
+    // The peek stays pressable while the Sheet animates out; a second press must not navigate again.
+    if (!open) return
+    // layout.md → Stacking: dismiss the Sheet, then navigate.
+    setOpen(false)
+    onNavigate(href)
+  }
   return (
     // One element: on native the Sheet's dialog root is a View that would join the chip row's gap.
     <View className="flex-row items-center">
@@ -28,13 +45,17 @@ export function ReaderBrowseChip({ data, onRowPress }: ReaderBrowseChipProps) {
         view={view}
         onViewChange={(next) => readerRailStore.setView(next)}
         onCategoryChange={(category) => readerRailStore.setCategory(category)}
-        onRowPress={(category, id) => {
-          // Rows stay pressable while the Sheet animates out; a second tap must not navigate again.
-          if (!open) return
-          // layout.md → Stacking: dismiss the Sheet, then navigate.
-          setOpen(false)
-          onRowPress(category, id)
-        }}
+        renderPeek={(peek, back) => (
+          <RailSheetPeek
+            peek={peek}
+            data={data}
+            storyId={storyId}
+            blocked={blocked}
+            blockedReason={blockedReason}
+            onBack={back}
+            onOpenInPanel={openInPanel}
+          />
+        )}
       />
     </View>
   )

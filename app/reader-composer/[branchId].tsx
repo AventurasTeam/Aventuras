@@ -13,7 +13,6 @@ import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/compos
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
-import { railRowHref } from '@/components/reader/rail/rail-modules'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
 import { useRailData } from '@/components/reader/rail/use-rail-data'
@@ -99,7 +98,6 @@ import {
   SUGGESTION_REFRESH_KIND,
   type PipelineError,
 } from '@/lib/pipeline'
-import type { RailCategory } from '@/lib/reader-rail'
 import {
   appSettingsStore,
   awaitRunTerminal,
@@ -1202,12 +1200,9 @@ export default function ReaderComposerRoute() {
     readerRailStore.enterBranch(branchId)
   }, [branchId])
 
-  // One read for whichever tier's rail mounts: the column on tablet / desktop, the chip on phone.
+  // One read for whichever tier's rail mounts: the column and its peek drawer on tablet / desktop,
+  // the chip's Sheet on phone.
   const railData = useRailData(branchId)
-  const handleRailRowPress = useCallback(
-    (category: RailCategory, id: string) => surfaceNavigate(railRowHref(branchId, category, id)),
-    [surfaceNavigate, branchId],
-  )
 
   const placeholder = readerPlaceholder({
     hydrationSucceeded,
@@ -1251,7 +1246,13 @@ export default function ReaderComposerRoute() {
       chapterProgress={openRegionPct}
       mobileChipAction={
         tier === 'phone' ? (
-          <ReaderBrowseChip data={railData} onRowPress={handleRailRowPress} />
+          <ReaderBrowseChip
+            data={railData}
+            storyId={storyId}
+            blocked={actionsBlocked}
+            blockedReason={gateReason}
+            onNavigate={surfaceNavigate}
+          />
         ) : undefined
       }
       onBack={() => router.back()}

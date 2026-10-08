@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react-native'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { IconAction } from '@/components/ui/icon-action'
@@ -47,6 +47,13 @@ function leadOf(data: RailData) {
   return lead
 }
 
+// The peek stories use Mira, an active non-lead: her row sits in the Active tier, which starts open.
+function entityNamed(name: string) {
+  const entity = DATA.entities.find((e) => e.name === name)
+  if (entity == null) throw new Error(`railDataFixture() has no entity named ${name}`)
+  return entity
+}
+
 // gorhom's container fills this stage, so a detent is a share of the stage's height.
 function Stage({ children }: { children: ReactNode }) {
   const { height } = useWindowDimensions()
@@ -70,6 +77,7 @@ type HarnessProps = {
   data?: RailData
   onRowPress?: (category: RailCategory, id: string) => void
   withPeek?: boolean
+  onNavigate?: (href: string) => void
 }
 
 function SheetHarness({ data = DATA, onRowPress = () => {}, withPeek = false }: HarnessProps) {
@@ -98,11 +106,37 @@ function SheetHarness({ data = DATA, onRowPress = () => {}, withPeek = false }: 
   )
 }
 
-function ChipHarness({ onRowPress = () => {} }: Pick<HarnessProps, 'onRowPress'>) {
+// The chip's data, swapped from a play: the scrim covers every button in the stage.
+const chipData: { set: ((data: RailData) => void) | null } = { set: null }
+
+function setChipData(data: RailData) {
+  if (chipData.set == null) throw new Error('ChipHarness is not mounted')
+  chipData.set(data)
+}
+
+function ChipHarness({ onNavigate = () => {} }: Pick<HarnessProps, 'onNavigate'>) {
+  const [data, setData] = useState(DATA)
+  useEffect(() => {
+    chipData.set = setData
+    return () => {
+      chipData.set = null
+    }
+  }, [])
   return (
     <Stage>
+      {/* Above the tall detent's top edge, where only the scrim can be: the chip sits under it. */}
+      <View
+        testID="scrim-landmark"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 12 }}
+      />
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-        <ReaderBrowseChip data={DATA} onRowPress={onRowPress} />
+        <ReaderBrowseChip
+          data={data}
+          storyId={null}
+          blocked={false}
+          blockedReason={undefined}
+          onNavigate={onNavigate}
+        />
       </View>
     </Stage>
   )
@@ -112,6 +146,7 @@ const railDialog = () => screen.getByRole('dialog', { name: t('reader:rail.label
 const queryRailDialog = () => screen.queryByRole('dialog', { name: t('reader:rail.label') })
 const backToCategories = () =>
   screen.getByRole('button', { name: t('reader:rail.backToCategories') })
+const peekBack = () => screen.getByRole('button', { name: t('reader:peek.back') })
 
 async function headIs(category: RailCategory) {
   await waitFor(() =>
@@ -160,13 +195,28 @@ async function waitForSheetOpening(landmark: HTMLElement) {
   await findSheetScrim(landmark)
 }
 
+/** Opens the chip's Sheet on the Characters list, settled at the medium detent. */
+async function openChipSheet() {
+  await userEvent.click(await screen.findByTestId('browse-chip'))
+  await waitFor(() => expect(railDialog()).toBeVisible())
+  await headIs('character')
+  await waitForMediumDetent()
+}
+
+/** Taps the named list row and waits for its peek at the tall detent. */
+async function peekRow(name: string) {
+  await userEvent.click(screen.getByRole('button', { name }))
+  await waitFor(() => expect(screen.getByRole('heading', { name })).toBeVisible())
+  await waitFor(() => expect(sheetCoverage()).toBeGreaterThan(0.85), ANIMATION)
+}
+
 const openRailButton = () => screen.getByRole('button', { name: 'Open rail' })
 
 const meta: Meta<typeof SheetHarness> = {
   title: 'Compounds/Reader/RailSheet',
   component: SheetHarness,
   parameters: { layout: 'fullscreen' },
-  args: { onRowPress: fn() },
+  args: { onRowPress: fn(), onNavigate: fn() },
   beforeEach: () => {
     listCollapseStore.__reset()
     readerRailStore.__reset()
@@ -320,7 +370,7 @@ export const PeekReopenStartsAtList: Story = {
 
 export const ReaderChipOpensOnLastCategory: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
   beforeEach: () => {
     readerRailStore.setCategory('lore')
   },
@@ -347,7 +397,7 @@ export const ReaderChipOpensOnLastCategory: Story = {
 /** A pick goes through the store. */
 export const ReaderChipPickSetsStoreCategory: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
     await waitFor(() => expect(railDialog()).toBeVisible())
@@ -362,7 +412,7 @@ export const ReaderChipPickSetsStoreCategory: Story = {
 /** Filter and search edits in the Sheet land in the store, so they survive a reopen or reflow. */
 export const ReaderChipViewEditsSetStoreView: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
     await waitFor(() => expect(railDialog()).toBeVisible())
@@ -382,31 +432,107 @@ export const ReaderChipViewEditsSetStoreView: Story = {
   },
 }
 
-/** Without a peek renderer a row routes out: the Sheet closes and the press reaches the host. */
-export const ReaderChipRowPressClosesSheet: Story = {
+/** C10 filled: a row tap grows the one Sheet to tall on that row's peek; `←` returns to the list. */
+export const ReaderChipRowOpensPeek: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
   play: async ({ args }) => {
-    await userEvent.click(await screen.findByRole('button', { name: t('reader:rail.browse') }))
-    await waitFor(() => expect(railDialog()).toBeVisible())
-    await headIs('character')
-    await waitForSheetOpening(screen.getByTestId('browse-chip'))
+    await openChipSheet()
+    const mira = entityNamed('Mira')
+    await peekRow(mira.name)
+    await expect(within(railDialog()).getByTestId('peek-content')).toBeVisible()
+    await expect(
+      screen.queryByRole('heading', { name: railCategoryLabel('character') }),
+    ).not.toBeInTheDocument()
+    await expect(screen.getAllByRole('dialog')).toHaveLength(1)
 
-    const lead = leadOf(DATA)
-    const row = screen.getByRole('button', { name: lead.name })
-    // A second tap while the Sheet animates out must not route twice.
-    await userEvent.click(row)
-    await userEvent.click(row)
-    await expect(args.onRowPress).toHaveBeenCalledTimes(1)
-    await expect(args.onRowPress).toHaveBeenCalledWith('character', lead.id)
+    await userEvent.click(peekBack())
+    await headIs('character')
+    await expect(screen.getByRole('button', { name: mira.name })).toBeVisible()
+    await waitForMediumDetent()
+    await expect(args.onNavigate).not.toHaveBeenCalled()
+  },
+}
+
+/** The scrim dismisses the whole Sheet from the peek level, not just the peek. */
+export const ReaderChipBackdropClosesPeek: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  play: async ({ args }) => {
+    await openChipSheet()
+    await peekRow(entityNamed('Mira').name)
+
+    await pressBackdropOver(screen.getByTestId('scrim-landmark'))
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
+    await expect(args.onNavigate).not.toHaveBeenCalled()
+  },
+}
+
+/** layout.md → Stacking: the Sheet dismisses, then routes; a press during the close routes nothing. */
+export const ReaderChipOpenInPanelNavigatesOnce: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  play: async ({ args }) => {
+    await openChipSheet()
+    const mira = entityNamed('Mira')
+    await peekRow(mira.name)
+
+    const openInWorld = screen.getByRole('link', { name: t('reader:peek.openInWorld') })
+    await userEvent.click(openInWorld)
+    await userEvent.click(openInWorld)
+    await expect(args.onNavigate).toHaveBeenCalledTimes(1)
+    // Spelled out rather than built by railRowHref: the expectation must not be the code under test.
+    await expect(args.onNavigate).toHaveBeenCalledWith(
+      `/world/${DATA.branchId}?kind=character&id=${mira.id}`,
+    )
+    await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
+  },
+}
+
+/** An Overview region routes to its own World tab (M4 C6's `tab`), closing the Sheet first. */
+export const ReaderChipRegionOpensItsWorldTab: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  play: async ({ args }) => {
+    await openChipSheet()
+    const mira = entityNamed('Mira')
+    await peekRow(mira.name)
+
+    await userEvent.click(within(railDialog()).getByTestId('overview-visual'))
+    await expect(args.onNavigate).toHaveBeenCalledTimes(1)
+    await expect(args.onNavigate).toHaveBeenCalledWith(
+      `/world/${DATA.branchId}?kind=character&id=${mira.id}&tab=identity`,
+    )
+    await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
+  },
+}
+
+/** A peeked row deleted under the Sheet sends it back to the list, holding no id to reopen. */
+export const ReaderChipRemovedRowReturnsToList: Story = {
+  globals: PHONE,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
+  play: async () => {
+    await openChipSheet()
+    const mira = entityNamed('Mira')
+    await peekRow(mira.name)
+
+    setChipData(railDataFixture({ entities: DATA.entities.filter((e) => e.id !== mira.id) }))
+    await headIs('character')
+    await expect(screen.queryByRole('button', { name: mira.name })).not.toBeInTheDocument()
+    await expect(railDialog()).toBeVisible()
+    await waitForMediumDetent()
+
+    // An undo that restores the row lands it in the list; the peek it left can't come back.
+    setChipData(DATA)
+    await waitFor(() => expect(screen.getByRole('button', { name: mira.name })).toBeVisible())
+    await expect(screen.queryByRole('heading', { name: mira.name })).not.toBeInTheDocument()
   },
 }
 
 /** The scrim covers the whole window, chip included, and a press on it closes the list level. */
 export const ReaderChipBackdropClosesList: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
   play: async ({ args }) => {
     const chip = await screen.findByTestId('browse-chip')
     await userEvent.click(chip)
@@ -415,14 +541,14 @@ export const ReaderChipBackdropClosesList: Story = {
 
     await pressBackdropOver(chip)
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
-    await expect(args.onRowPress).not.toHaveBeenCalled()
+    await expect(args.onNavigate).not.toHaveBeenCalled()
   },
 }
 
 /** A scrim press closes the categories level too. */
 export const ReaderChipBackdropClosesCategories: Story = {
   globals: PHONE,
-  render: (args) => <ChipHarness onRowPress={args.onRowPress} />,
+  render: (args) => <ChipHarness onNavigate={args.onNavigate} />,
   play: async ({ args }) => {
     const chip = await screen.findByTestId('browse-chip')
     await userEvent.click(chip)
@@ -432,7 +558,7 @@ export const ReaderChipBackdropClosesCategories: Story = {
 
     await pressBackdropOver(chip)
     await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
-    await expect(args.onRowPress).not.toHaveBeenCalled()
+    await expect(args.onNavigate).not.toHaveBeenCalled()
   },
 }
 
@@ -462,7 +588,7 @@ export const ReaderChipClosedSheetReadsNothing: Story = {
   render: (args) => (
     <>
       <QueryClientProbe />
-      <ChipHarness onRowPress={args.onRowPress} />
+      <ChipHarness onNavigate={args.onNavigate} />
     </>
   ),
   beforeEach: () => {
