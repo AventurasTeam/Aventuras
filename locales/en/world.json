@@ -18,9 +18,18 @@
   "addMenu": {
     "blank": "Blank",
     "fromJson": "From JSON file…",
-    "fromJsonReason": "Lands in Slice 4.6",
     "fromVault": "From Vault…",
     "fromVaultReason": "Vault lands in M8"
+  },
+  "import": {
+    "title": {
+      "character": "Import character",
+      "location": "Import location",
+      "item": "Import item",
+      "faction": "Import faction",
+      "lore": "Import lore"
+    },
+    "imported": "Imported."
   },
   "actions": {
     "addEntity": "Add entity…",

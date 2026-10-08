@@ -215,7 +215,7 @@ function Harness({
           <ImporterMenu
             trigger="icon"
             label={worldAddLabel(category)}
-            options={worldAddOptions(() => {}, {})}
+            options={worldAddOptions({ onBlank: () => {}, onJson: () => {} }, {})}
             open={addOpen}
             onOpenChange={setAddOpen}
           />
@@ -500,13 +500,16 @@ export const Empty: Story = {
   },
 }
 
-/** The `[+]` menu on an entity category: Blank is live; From JSON / From Vault stay disabled. */
+/** The `[+]` menu on an entity category: Blank and From JSON are live; From Vault stays disabled. */
 export const AddMenuDisabledEntries: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New character' }))
-    expect(await screen.findByTitle('Lands in Slice 4.6')).toBeInTheDocument()
-    expect(screen.getByTitle('Vault lands in M8')).toBeInTheDocument()
+    expect(await screen.findByTitle('Vault lands in M8')).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Blank' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.getByRole('menuitem', { name: 'From JSON file…' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
     )

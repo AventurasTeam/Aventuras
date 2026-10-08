@@ -1,22 +1,27 @@
 import type { ImporterMenuOption } from '@/components/compounds/importer-menu'
 import { t } from '@/lib/i18n'
 
-type BlankGate = { disabled?: boolean; disabledReason?: string }
+type AddGate = { disabled?: boolean; disabledReason?: string }
 
-export function plotAddOptions(onBlank: () => void, blank: BlankGate): ImporterMenuOption[] {
+/** plot.md → Manual creation + per-row import: Blank and From JSON share the in-flight gate. */
+export function plotAddOptions(
+  { onBlank, onJson }: { onBlank: () => void; onJson: () => void },
+  gate: AddGate,
+): ImporterMenuOption[] {
   return [
     {
       key: 'blank',
       label: t('plot:addMenu.blank'),
-      disabled: blank.disabled,
-      disabledReason: blank.disabledReason,
+      disabled: gate.disabled,
+      disabledReason: gate.disabledReason,
       onPress: onBlank,
     },
     {
       key: 'json',
       label: t('plot:addMenu.fromJson'),
-      disabled: true,
-      disabledReason: t('plot:addMenu.fromJsonReason'),
+      disabled: gate.disabled,
+      disabledReason: gate.disabledReason,
+      onPress: onJson,
     },
     {
       key: 'vault',

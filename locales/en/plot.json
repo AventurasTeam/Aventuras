@@ -12,9 +12,15 @@
   "addMenu": {
     "blank": "Blank",
     "fromJson": "From JSON file…",
-    "fromJsonReason": "Lands in Slice 4.6",
     "fromVault": "From Vault…",
     "fromVaultReason": "Vault lands in M8"
+  },
+  "import": {
+    "title": {
+      "thread": "Import thread",
+      "happening": "Import happening"
+    },
+    "imported": "Imported."
   },
   "actions": {
     "addThread": "Add thread…",
