@@ -194,26 +194,17 @@ export default function PlotRoute() {
     (payload: HappeningImport) => importHappening(branchId, payload, ctx),
     [branchId],
   )
-  const threadImport = useRowImport<ThreadImport>({
+  const importHost = {
     blocked: editBlocked,
     focused,
     guard,
     select,
-    commit: commitThread,
     onImported,
     onRejected: onImportRejected,
     onFailed: onImportFailed,
-  })
-  const happeningImport = useRowImport<HappeningImport>({
-    blocked: editBlocked,
-    focused,
-    guard,
-    select,
-    commit: commitHappening,
-    onImported,
-    onRejected: onImportRejected,
-    onFailed: onImportFailed,
-  })
+  }
+  const threadImport = useRowImport<ThreadImport>({ ...importHost, commit: commitThread })
+  const happeningImport = useRowImport<HappeningImport>({ ...importHost, commit: commitHappening })
   const activeImport = kind === 'thread' ? threadImport : happeningImport
   const setThreadImportOpen = threadImport.onOpenChange
   const setHappeningImportOpen = happeningImport.onOpenChange

@@ -257,26 +257,17 @@ export default function WorldRoute() {
     (payload: LoreImport) => importLore(branchId, payload, ctx),
     [branchId],
   )
-  const entityImport = useRowImport<EntityImport>({
+  const importHost = {
     blocked: editBlocked,
     focused,
     guard,
     select,
-    commit: commitEntity,
     onImported,
     onRejected: onImportRejected,
     onFailed: onImportFailed,
-  })
-  const loreImport = useRowImport<LoreImport>({
-    blocked: editBlocked,
-    focused,
-    guard,
-    select,
-    commit: commitLore,
-    onImported,
-    onRejected: onImportRejected,
-    onFailed: onImportFailed,
-  })
+  }
+  const entityImport = useRowImport<EntityImport>({ ...importHost, commit: commitEntity })
+  const loreImport = useRowImport<LoreImport>({ ...importHost, commit: commitLore })
   const activeImport = isEntityCategory(category) ? entityImport : loreImport
   const setEntityImportOpen = entityImport.onOpenChange
   const setLoreImportOpen = loreImport.onOpenChange
