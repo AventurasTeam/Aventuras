@@ -64,6 +64,13 @@ export const Candidate: Story = {
     const action = screen.getByRole('button', { name: 'Set as lead' })
     // Phone-only floor: a prior mobile1 story's stale dimensions can linger a commit.
     await waitFor(() => expect(action.getBoundingClientRect().height).toBeLessThan(44))
+    // Off phone the group takes no floor and the head keeps its padding.
+    const group = screen.getByRole('heading', { name: 'Mira' }).parentElement
+    if (group == null) throw new Error('no head group')
+    const groupHeight = group.getBoundingClientRect().height
+    const headHeight = screen.getByTestId('peek-head').getBoundingClientRect().height
+    await expect(groupHeight).toBeLessThan(44)
+    await expect(headHeight - groupHeight).toBeGreaterThanOrEqual(20)
     await expect(action).not.toHaveAttribute('aria-disabled', 'true')
     await expect(screen.queryByText('You')).toBeNull()
     await userEvent.click(action)
@@ -116,7 +123,7 @@ export const Pending: Story = {
   },
 }
 
-/** touch.md → Touch-target floor: on phone the action fills a 44px head, which holds across lead states. */
+/** touch.md → Touch-target floor: on phone the action fills a 44px head in every lead state. */
 export const CandidatePhoneFloor: Story = {
   args: {
     name: 'Mira',
