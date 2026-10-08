@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { View } from 'react-native'
+import type { ComponentProps, Ref } from 'react'
+import { ScrollView, View } from 'react-native'
 import { expect, fn, screen, userEvent, within } from 'storybook/test'
 
+import type { GlyphKind } from '@/components/entity/entity-kind-icon'
+import { PlotIcon } from '@/components/plot/plot-icon'
+import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { EntityOverview } from '@/components/world/overview/entity-overview'
 import type { RegionPress } from '@/components/world/overview/overview-parts'
 import { formatEntryRef, indexEntryRefs, type EntryIndex, type EntryRef } from '@/lib/entry-refs'
@@ -184,6 +188,33 @@ function regionIds(root: HTMLElement): string[] {
   ).sort()
 }
 
+const peekHead = (root: HTMLElement) => within(root).getByTestId('peek-head')
+
+async function expectKindGlyph(root: HTMLElement, kind: GlyphKind) {
+  const glyph = within(peekHead(root)).getByRole('img', { name: t(`kinds.${kind}`) })
+  await expect(glyph).toBeInTheDocument()
+}
+
+// PlotIcon has no accessible name, so the head's glyph is compared with a hidden reference.
+async function expectPlotGlyph(root: HTMLElement) {
+  const paths = (el: HTMLElement) => el.querySelector('svg')?.innerHTML
+  const head = paths(peekHead(root))
+  await expect(head).toBeTruthy()
+  await expect(head).toBe(paths(screen.getByTestId('glyph-reference')))
+}
+
+function scrollAncestor(el: HTMLElement, root: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node != null && node !== root; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if (overflowY === 'auto' || overflowY === 'scroll') return node
+  }
+  return null
+}
+
+function HostScroll({ ref, ...props }: ComponentProps<ScrollComponent>) {
+  return <ScrollView {...props} ref={ref as Ref<ScrollView>} testID="host-scroll" />
+}
+
 /** Decision: unlike lore's ten-line clamp, a thread's or happening's description shows in full. */
 async function expectUnclamped(text: HTMLElement) {
   const style = getComputedStyle(text)
@@ -260,6 +291,7 @@ export const Location: Story = {
   play: async ({ args }) => {
     const root = await findPeek()
     await expect(within(root).getByRole('heading', { name: "Veil's Hollow" })).toBeVisible()
+    await expectKindGlyph(root, 'location')
     await expectNoLeadAffordance(root)
     await pressFoot(root, 'world', args.onOpenInPanel)
   },
@@ -270,6 +302,7 @@ export const Item: Story = {
   play: async ({ args }) => {
     const root = await findPeek()
     await expect(within(root).getByRole('heading', { name: 'Courier blade' })).toBeVisible()
+    await expectKindGlyph(root, 'item')
     await expect(within(root).getByText(t('reader:peek.recentlyClassified'))).toBeVisible()
     await expectNoLeadAffordance(root)
     await pressFoot(root, 'world', args.onOpenInPanel)
@@ -281,6 +314,7 @@ export const Faction: Story = {
   play: async ({ args }) => {
     const root = await findPeek()
     await expect(within(root).getByRole('heading', { name: 'The Watch' })).toBeVisible()
+    await expectKindGlyph(root, 'faction')
     await expectNoLeadAffordance(root)
     await pressFoot(root, 'world', args.onOpenInPanel)
   },
@@ -292,6 +326,9 @@ export const LoreClamped: Story = {
   play: async ({ args }) => {
     const lore = loreOf(CHARTER)
     const root = await findPeek()
+    const head = within(peekHead(root))
+    await expect(head.getByRole('heading', { name: lore.title })).toBeVisible()
+    await expectKindGlyph(root, 'lore')
     const body = within(root).getByTestId('lore-peek-body')
     const text = within(body).getByTestId('lore-peek-text')
     const style = getComputedStyle(text)
@@ -337,10 +374,19 @@ export const LoreNoSignals: Story = {
 /** Decision — thread peek: status, the non-default injection chip, category, full description. */
 export const ThreadWithInjection: Story = {
   args: { model: OATH },
+  render: (args) => (
+    <View>
+      <PeekHarness {...args} />
+      <View testID="glyph-reference" className="hidden">
+        <PlotIcon kind="thread" icon={threadOf(OATH).icon} />
+      </View>
+    </View>
+  ),
   play: async ({ args }) => {
     const thread = threadOf(OATH)
     const root = await findPeek()
     await expect(within(root).getByRole('heading', { name: thread.title })).toBeVisible()
+    await expectPlotGlyph(root)
     const body = within(root).getByTestId('thread-peek-body')
     await expect(within(body).getByText(t('plot:status.active'))).toBeVisible()
     await expect(within(body).getByText(t('world:overview.injectionChip.always'))).toBeVisible()
@@ -364,9 +410,19 @@ export const ThreadLongDescription: Story = {
 /** Decision — happening peek: when-marker, category, description, involved and aware counts. */
 export const HappeningAnchored: Story = {
   args: { model: AMBUSH },
+  render: (args) => (
+    <View>
+      <PeekHarness {...args} />
+      <View testID="glyph-reference" className="hidden">
+        <PlotIcon kind="happening" icon={happeningOf(AMBUSH).icon} />
+      </View>
+    </View>
+  ),
   play: async ({ args }) => {
     const row = happeningOf(AMBUSH)
     const root = await findPeek()
+    await expect(within(peekHead(root)).getByRole('heading', { name: row.title })).toBeVisible()
+    await expectPlotGlyph(root)
     const body = within(root).getByTestId('happening-peek-body')
     await expect(within(body).getByText(formatEntryRef(10))).toBeVisible()
     await expect(within(body).getByText(row.category ?? '')).toBeVisible()
@@ -446,6 +502,39 @@ export const HappeningTemporal: Story = {
     const row = happeningOf(FOUNDING)
     const body = within(await findPeek()).getByTestId('happening-peek-body')
     await expect(within(body).getByText(row.temporal ?? '')).toBeVisible()
+  },
+}
+
+/** A long Overview scrolls inside the peek, and the foot link stays in its frame. */
+export const LongBodyScrolls: Story = {
+  args: { model: KAEL, height: 360 },
+  play: async () => {
+    const root = await findPeek()
+    const scroller = scrollAncestor(within(root).getByTestId('overview-status'), root)
+    if (scroller == null) throw new Error('The peek body has no scroll container')
+    await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+    const foot = within(root).getByRole('link', { name: OPEN_IN_WORLD })
+    await expect(foot.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      root.getBoundingClientRect().bottom,
+    )
+  },
+}
+
+/** The phone Sheet's scroll component, when a host provides one, carries the body. */
+export const HostScrollComponent: Story = {
+  args: { model: KAEL },
+  decorators: [
+    (Story) => (
+      <ScrollComponentContext.Provider value={HostScroll}>
+        <Story />
+      </ScrollComponentContext.Provider>
+    ),
+  ],
+  play: async () => {
+    const root = await findPeek()
+    await expect(screen.getByTestId('host-scroll')).toContainElement(
+      within(root).getByTestId('overview-status'),
+    )
   },
 }
 
