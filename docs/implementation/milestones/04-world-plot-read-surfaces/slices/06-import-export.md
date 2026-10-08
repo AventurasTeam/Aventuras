@@ -246,3 +246,24 @@ bind a later slice. Canon carries the detail; each line points to it.
 - **Zod's own issue messages stay English;** only this slice's custom
   messages go through `t()`. When a second locale lands, switch Zod's
   locale in `lib/i18n` with the app language, not schema by schema.
+
+Decided at the slice review (developer, 2026-10-08):
+
+- **Per-row export stays live during generation.** It reads one
+  committed row, like `View raw JSON`; the gate's backup / export
+  entry is the story-level one (the Actions menu, Story Settings). A
+  file exported mid-turn can hold a state a cancel then reverses,
+  which is accepted; see
+  [`principles.md → What's not gated`](../../../../ui/principles.md#whats-not-gated).
+- **A failed desktop save stays unreported until M9.4.**
+  `saveAvtsFile` resolves at the download hand-off, and `electron/`
+  has no `will-download` listener. The main-process watcher is an M9.4
+  entry in the
+  [roadmap's M9 carried deferrals](../../../roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
+- **An export with unsaved edits says so.** While the draft is dirty,
+  `RowDetailFrame` toasts that the file holds the saved row once the
+  file is handed off, so all four panes share it. Provisional: the
+  toast; the alternative is the `⋯` entry while the draft is dirty.
+- **The clipboard-import E2E runs on its own:** its own app, seed and
+  hand-authored file, so a failure in the export or file-import legs
+  can't skip it.
