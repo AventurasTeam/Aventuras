@@ -5,12 +5,12 @@ const stats = {
   checks: 2431,
   normalizations: 2,
   normalizedChars: 38400,
-  normalizeMs: 0.8,
+  savedMs: 972,
   elapsedMs: 12.4,
 }
 
 describe('matchingStepDetail', () => {
-  it('prices the reused checks at the average normalization', () => {
+  it('reports the time the reused checks saved', () => {
     expect(matchingStepDetail(stats)).toBe(
       '2431 checks · 12 ms · 38.4k chars normalized 2× · memo saved ~972 ms (est.)',
     )
@@ -23,9 +23,15 @@ describe('matchingStepDetail', () => {
         checks: 0,
         normalizations: 0,
         normalizedChars: 0,
-        normalizeMs: 0,
+        savedMs: 0,
       }),
     ).toBe('0 checks · 12 ms')
+  })
+
+  it('reports the saving when a run reused a haystack and normalized nothing', () => {
+    expect(
+      matchingStepDetail({ ...stats, normalizations: 0, normalizedChars: 0, savedMs: 50 }),
+    ).toBe('2431 checks · 12 ms · memo saved ~50 ms (est.)')
   })
 
   it('shows no saving when every check normalized', () => {

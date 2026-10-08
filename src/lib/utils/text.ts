@@ -96,24 +96,27 @@ export interface MatchingStats {
   normalizations: number
   /** Characters normalized across those normalizations. */
   normalizedChars: number
-  normalizeMs: number
+  /** Normalization time the reused checks skipped, each priced at its haystack's own cost. */
+  savedMs: number
   /** Wall time of the whole run. */
   elapsedMs: number
 }
 
-const haystackCounters = { checks: 0, normalizations: 0, normalizedChars: 0, normalizeMs: 0 }
-let lastHaystack = { raw: '', key: '' }
+const haystackCounters = { checks: 0, normalizations: 0, normalizedChars: 0, savedMs: 0 }
+let lastHaystack = { raw: '', key: '', ms: 0 }
 
 /** `termKey(text)`, reusing the last result: a match loop passes one haystack for every term. */
 function haystackKey(text: string): string {
   haystackCounters.checks++
-  if (text === lastHaystack.raw) return lastHaystack.key
+  if (text === lastHaystack.raw) {
+    haystackCounters.savedMs += lastHaystack.ms
+    return lastHaystack.key
+  }
   const start = performance.now()
   const key = termKey(text)
-  haystackCounters.normalizeMs += performance.now() - start
   haystackCounters.normalizations++
   haystackCounters.normalizedChars += text.length
-  lastHaystack = { raw: text, key }
+  lastHaystack = { raw: text, key, ms: performance.now() - start }
   return key
 }
 
@@ -129,7 +132,7 @@ export function measureMatching<T>(run: () => T): { result: T; stats: MatchingSt
       checks: haystackCounters.checks - before.checks,
       normalizations: haystackCounters.normalizations - before.normalizations,
       normalizedChars: haystackCounters.normalizedChars - before.normalizedChars,
-      normalizeMs: haystackCounters.normalizeMs - before.normalizeMs,
+      savedMs: haystackCounters.savedMs - before.savedMs,
       elapsedMs,
     },
   }

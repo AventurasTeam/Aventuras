@@ -9,18 +9,16 @@ function formatChars(chars: number): string {
 }
 
 /**
- * The activity detail for a Tier 2 keyword-matching run. The saving is an estimate: the checks
- * that reused a haystack, each priced at the run's own average normalization.
+ * The activity detail for a Tier 2 keyword-matching run. The saving is an estimate: each check
+ * that reused a haystack, priced at what that haystack cost to normalize.
  */
 export function matchingStepDetail(stats: MatchingStats): string {
   const parts = [`${stats.checks} checks`, formatMs(stats.elapsedMs)]
   if (stats.normalizations > 0) {
     parts.push(`${formatChars(stats.normalizedChars)} normalized ${stats.normalizations}×`)
-    const reused = stats.checks - stats.normalizations
-    if (reused > 0) {
-      const saved = reused * (stats.normalizeMs / stats.normalizations)
-      parts.push(`memo saved ~${formatMs(saved)} (est.)`)
-    }
+  }
+  if (stats.checks > stats.normalizations) {
+    parts.push(`memo saved ~${formatMs(stats.savedMs)} (est.)`)
   }
   return parts.join(' · ')
 }

@@ -146,6 +146,16 @@ describe('entityNameMatches — haystack memo', () => {
     expect(stats.normalizedChars).toBe(haystack.length)
   })
 
+  it('carries a haystack across runs and prices each reused check at its normalization', () => {
+    const haystack = 'The Weathered Keep loomed over Thornfield.'
+    const terms = ['Keep', 'Thornfield', 'Bren', 'loomed']
+    const first = measureMatching(() => terms.map((term) => entityNameMatches(term, haystack)))
+    const second = measureMatching(() => terms.map((term) => entityNameMatches(term, haystack)))
+    expect(first.stats).toMatchObject({ checks: 4, normalizations: 1 })
+    expect(second.stats).toMatchObject({ checks: 4, normalizations: 0, normalizedChars: 0 })
+    expect(second.stats.savedMs).toBeCloseTo((first.stats.savedMs / 3) * 4)
+  })
+
   it('counts no check for a term too short to match', () => {
     const { stats } = measureMatching(() => entityNameMatches('A', 'A long haystack'))
     expect(stats.checks).toBe(0)
