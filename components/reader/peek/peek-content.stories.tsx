@@ -10,6 +10,7 @@ import { EntityOverview } from '@/components/world/overview/entity-overview'
 import type { RegionPress } from '@/components/world/overview/overview-parts'
 import { formatEntryRef, indexEntryRefs, type EntryIndex, type EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
+import type { PlotKind } from '@/lib/list-modules'
 import type { LeadLabel } from '@/lib/world'
 
 import { PeekContent } from './peek-content'
@@ -203,6 +204,20 @@ async function expectPlotGlyph(root: HTMLElement) {
   await expect(head).toBe(paths(screen.getByTestId('glyph-reference')))
 }
 
+// PlotIcon ignores `kind` once `icon` resolves, so each kind needs a play with and without one.
+function withGlyphReference(kind: PlotKind, icon: string | null) {
+  return function GlyphReference(args: HarnessProps) {
+    return (
+      <View>
+        <PeekHarness {...args} />
+        <View testID="glyph-reference" className="hidden">
+          <PlotIcon kind={kind} icon={icon} />
+        </View>
+      </View>
+    )
+  }
+}
+
 function scrollAncestor(el: HTMLElement, root: HTMLElement): HTMLElement | null {
   for (let node = el.parentElement; node != null && node !== root; node = node.parentElement) {
     const { overflowY } = getComputedStyle(node)
@@ -374,14 +389,7 @@ export const LoreNoSignals: Story = {
 /** Decision — thread peek: status, the non-default injection chip, category, full description. */
 export const ThreadWithInjection: Story = {
   args: { model: OATH },
-  render: (args) => (
-    <View>
-      <PeekHarness {...args} />
-      <View testID="glyph-reference" className="hidden">
-        <PlotIcon kind="thread" icon="shield" />
-      </View>
-    </View>
-  ),
+  render: withGlyphReference('thread', 'shield'),
   play: async ({ args }) => {
     const thread = threadOf(OATH)
     const root = await findPeek()
@@ -401,8 +409,11 @@ export const ThreadWithInjection: Story = {
 /** A description several lines long at 440 px renders whole. */
 export const ThreadLongDescription: Story = {
   args: { model: LEDGER_THREAD },
+  render: withGlyphReference('thread', null),
   play: async () => {
-    const body = within(await findPeek()).getByTestId('thread-peek-body')
+    const root = await findPeek()
+    await expectPlotGlyph(root)
+    const body = within(root).getByTestId('thread-peek-body')
     await expectUnclamped(within(body).getByText(threadOf(LEDGER_THREAD).description ?? ''))
   },
 }
@@ -410,14 +421,7 @@ export const ThreadLongDescription: Story = {
 /** Decision — happening peek: when-marker, category, description, involved and aware counts. */
 export const HappeningAnchored: Story = {
   args: { model: AMBUSH },
-  render: (args) => (
-    <View>
-      <PeekHarness {...args} />
-      <View testID="glyph-reference" className="hidden">
-        <PlotIcon kind="happening" icon={null} />
-      </View>
-    </View>
-  ),
+  render: withGlyphReference('happening', null),
   play: async ({ args }) => {
     const row = happeningOf(AMBUSH)
     const root = await findPeek()
@@ -463,8 +467,10 @@ export const HappeningDanglingAnchor: Story = {
 /** Common knowledge: the ⊙ marker, and `Common knowledge` where the aware count would be. */
 export const HappeningCommonKnowledge: Story = {
   args: { model: ECLIPSE },
+  render: withGlyphReference('happening', 'eye'),
   play: async ({ args }) => {
     const root = await findPeek()
+    await expectPlotGlyph(root)
     const body = within(root).getByTestId('happening-peek-body')
     await expect(within(body).getByRole('img', { name: CK_MARKER })).toBeInTheDocument()
     const counts = within(body).getByTestId('happening-peek-counts')
