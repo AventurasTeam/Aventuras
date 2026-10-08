@@ -3,7 +3,7 @@ import { t } from '@/lib/i18n'
 
 type AddGate = { disabled?: boolean; disabledReason?: string }
 
-/** plot.md → Manual creation + per-row import: Blank and From JSON share the in-flight gate. */
+/** import-dialog.md → Host gating during in-flight generation: Blank and From JSON share it. */
 export function plotAddOptions(
   { onBlank, onJson }: { onBlank: () => void; onJson: () => void },
   gate: AddGate,
