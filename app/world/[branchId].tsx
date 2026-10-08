@@ -357,7 +357,11 @@ export default function WorldRoute() {
   const [linkMount, setLinkMount] = useState(0)
   const followLink = useCallback(
     (target: WorldSelection, atMount: boolean) => {
-      if (atMount) return
+      // The linked row may sit in a collapsed tier or below the fold: reveal it, as Plot does.
+      if (atMount) {
+        listRef.current?.revealRow(target.id)
+        return
+      }
       guard(() => {
         if (target.category !== category) switchCategory(target.category)
         select(target.id)
