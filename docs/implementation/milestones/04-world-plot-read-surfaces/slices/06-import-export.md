@@ -133,8 +133,8 @@ exported file to the user.
   alone and drops them (vitest on schema and action).
 - A lore file with an empty `body` fails at Stage 3 (vitest).
 - A `formatVersion: "2.0"` file fails at Stage 2 with the newer-version
-  banner in every host (component test through the dialog's forced
-  seam).
+  banner in every host (a story per host pastes the file through a
+  stubbed clipboard into the dialog with that host's shipped config).
 - `From JSON file…` is disabled with the in-flight tooltip during a
   turn (component test).
 - The clipboard import path creates the row on desktop (E2E asserting
@@ -192,5 +192,57 @@ exported file to the user.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Decisions settled at planning (developer, 2026-10-07) and routes that
+bind a later slice. Canon carries the detail; each line points to it.
+
+- **Per-row payloads carry no branch-local id.** Export leaves out
+  every entity and entry reference in an entity's `state`, a thread's
+  or happening's entry references, and every link row; import drops
+  those keys rather than rejecting them. On another story the refs
+  would dangle, and on the same story a re-imported copy would run
+  World's one-position-per-item rule and strip the original's items;
+  see
+  [`data-model.md → Aventuras file format`](../../../../data-model.md#aventuras-file-format-avts).
+- **Payload keys are camelCase**, the Drizzle row keys the raw JSON
+  viewer and every delta `undoPayload` already use, so M9.4's story
+  export, which carries the delta log verbatim, stays consistent. The
+  brief's snake_case names were column references; an entity's
+  `state` keeps its stored keys.
+- **An imported entity keeps its status** (`staged`, `active` or
+  `retired`, with `retiredReason`).
+- **Import and `[+] Blank` share one create path:** the import actions
+  build the pane's draft and call the existing save action with no
+  row, so the fresh id, the single create delta, `user_edit` and C12's
+  keyword clean-up come from the arms that already exist.
+- **One `RowDetailFrame` behind the four detail heads** (World entity
+  and lore, Plot thread and happening), so export is wired once. It
+  fixed the Plot panes' JSON viewer staying open across a row switch;
+  see
+  [`data.md → Raw JSON viewer`](../../../../ui/patterns/data.md#raw-json-viewer--shared-modal-pattern).
+  Export always reads the committed row, never the draft: exporting a
+  row with unsaved edits exports the saved version.
+- **The host flow M8.3 and M9.4 copy:** one `useRowImport` per import
+  slot, opened through the leave guard, refused and closed while
+  generation is in flight, and closed when the screen loses focus or
+  the category switches. The dialog closes itself before the commit
+  resolves, so the host toasts the outcome with import copy and
+  selects the new row through the leave guard; see
+  [`import-dialog.md → World per-row entity import`](../../../../ui/patterns/import-dialog.md#world-per-row-entity-import)
+  and
+  [`→ Host gating during in-flight generation`](../../../../ui/patterns/import-dialog.md#host-gating-during-in-flight-generation).
+- **`ImportDialog` changed under its first consumers:** its copy
+  routes through `t()` (`common:importDialog.*`), it never resets on
+  mount (forced story states had been rendering idle), and closing it
+  discards an in-flight read, as canon already said.
+- **Export file names** are `<prefix>-<slug>.avts` (prefix the entity
+  kind, else `lore`, `thread` or `happening`) from `avtsFileName` in
+  `lib/avts`, which M9.4 reuses. The fold transliterates letters NFKD
+  can't split (`ß`, `æ`, `ø`, `ł`, `þ` and kin) instead of dropping
+  them.
+- **Native export** writes to the cache directory and opens the share
+  sheet through `expo-sharing`, imported lazily so a dev client built
+  before it fails only on export. The Android share sheet and the
+  desktop native Save dialog are still manual checks.
+- **Zod's own issue messages stay English;** only this slice's custom
+  messages go through `t()`. When a second locale lands, switch Zod's
+  locale in `lib/i18n` with the app language, not schema by schema.
