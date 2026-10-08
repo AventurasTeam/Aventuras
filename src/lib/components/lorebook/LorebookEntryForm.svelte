@@ -26,7 +26,7 @@
     CollapsibleTrigger,
   } from '$lib/components/ui/collapsible'
   import { cn } from '$lib/utils/cn'
-  import { termKey } from '$lib/utils/text'
+  import { uniqueTerms } from '$lib/utils/text'
 
   interface Props {
     entry?: Entry | null
@@ -132,10 +132,7 @@
   }
 
   function addAlias() {
-    const trimmed = newAlias.trim()
-    if (trimmed && !aliases.some((a) => termKey(a) === termKey(trimmed))) {
-      aliases = [...aliases, trimmed]
-    }
+    aliases = uniqueTerms([...aliases, newAlias])
     newAlias = ''
   }
 
@@ -144,10 +141,7 @@
   }
 
   function addKeyword() {
-    const trimmed = newKeyword.trim()
-    if (trimmed && !keywords.some((k) => termKey(k) === termKey(trimmed))) {
-      keywords = [...keywords, trimmed]
-    }
+    keywords = uniqueTerms([...keywords, newKeyword])
     newKeyword = ''
   }
 
