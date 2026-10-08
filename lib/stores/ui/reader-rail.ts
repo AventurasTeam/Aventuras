@@ -10,6 +10,7 @@ import {
   type RailCategory,
   type RailDisplayEvent,
   type RailDisplayState,
+  type RailPeek,
   type RailView,
 } from '@/lib/reader-rail'
 
@@ -63,6 +64,8 @@ export const readerRailStore = {
   useCollapsed: (stored: boolean): boolean =>
     useStore(store, (s) => isRailCollapsed(s.display, stored)),
   getDisplay: (): RailDisplayState => store.getState().display,
+  /** The row the desktop peek drawer shows; null while it's closed. */
+  usePeek: (): RailPeek | null => useStore(store, (s) => s.display.peek),
   /** The pending toggle once every preference write has settled; `null` while one is in flight. */
   useSettledPending: (): boolean | null =>
     useStore(store, (s) => (s.writes.size === 0 ? s.display.pendingCollapsed : null)),
