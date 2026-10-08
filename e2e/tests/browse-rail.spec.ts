@@ -7,6 +7,7 @@ import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { setWindowWidth } from '../harness/window'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { peek } from '../locators/peek'
@@ -60,16 +61,6 @@ async function inSceneCount(page: Page, branchId: string, kind: EntityKind): Pro
     [branchId, kind, JSON.stringify(ids)],
   )
   return Number(count)
-}
-
-// Resizes the real BrowserWindow, as a user's drag would. Returns the width it replaced.
-function setWindowWidth(app: LaunchedApp, width: number): Promise<number> {
-  return app.app.evaluate(({ BrowserWindow }, next) => {
-    const win = BrowserWindow.getAllWindows()[0]
-    const [previous, height] = win.getSize()
-    win.setSize(next, height)
-    return previous
-  }, width)
 }
 
 const innerWidth = (page: Page): Promise<number> => page.evaluate(() => window.innerWidth)

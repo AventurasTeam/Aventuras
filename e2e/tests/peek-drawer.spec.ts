@@ -149,6 +149,9 @@ test.describe.serial('Peek drawer', () => {
     ).toBeDisabled()
 
     const fullHeight = await setWindowHeight(app, SHORT_WINDOW_HEIGHT)
+    await expect
+      .poll(() => page.evaluate(() => window.innerHeight))
+      .toBeLessThanOrEqual(SHORT_WINDOW_HEIGHT)
     await peek.openInWorld(page, STAGED_CHARACTER).click()
     await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${sage}`))
     await expect(world.detailName(page)).toHaveText(STAGED_CHARACTER)
