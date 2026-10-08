@@ -51,7 +51,7 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   kind: EntityKind
   row: Entity | null
   session: RowSaveSession<Draft>
-  /** The committed name, which InlineEditableName's Escape restores. */
+  /** The committed name; a save landing mid-edit is what InlineEditableName's Escape restores. */
   savedName: string
   tab: EntityTab
   onTabChange: (tab: EntityTab) => void

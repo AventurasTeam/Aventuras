@@ -138,7 +138,7 @@ export const JsonViewerClosesOnRowSwitch: Story = {
   },
 }
 
-/** A file that can't be built or saved toasts the export failure. */
+/** A file that can't be built toasts the export failure. */
 export const ExportFailureToasts: Story = {
   args: {
     exportFile: fn((): AvtsFile => {
@@ -254,7 +254,7 @@ export const ExportIgnoresAPressMidHandOff: Story = {
   },
 }
 
-/** world.md → Detail head structure: Export is read-only, so a run blocking edits leaves it live. */
+/** world.md → Detail head structure: Export is read-only, so a blocked frame leaves it live. */
 export const ExportStaysLiveWhileBlocked: Story = {
   args: { blocked: true, blockedReason: 'Generation is in flight. Cancel to edit.' },
   play: async () => {

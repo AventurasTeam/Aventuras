@@ -34,7 +34,7 @@ export type RowDetailFrameProps<Draft extends FieldValues, Tab extends string> =
   session: RowSaveSession<Draft>
   /** The draft's string field the inline name edits. */
   nameField: FieldPathByValue<Draft, string>
-  /** The committed name, which InlineEditableName's Escape restores. */
+  /** The committed name; a save landing mid-edit is what InlineEditableName's Escape restores. */
   savedName: string
   namePlaceholder: string
   nameTestID?: string
@@ -68,7 +68,7 @@ async function exportRow(committed: RowDetailCommitted): Promise<void> {
   }
 }
 
-/** world.md → Detail head structure, for every row pane: name, badge, `⋯`, tabs, save chrome. */
+/** world.md → Detail head structure (name, badge, `⋯`), plus the pane's tabs and save chrome. */
 export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
   session,
   nameField,
@@ -91,7 +91,7 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
   const rowId = committed?.id ?? null
   const exporting = useRef(false)
   const [jsonOpen, setJsonOpen] = useState(false)
-  // Synced during render: the viewer never paints a frame over the next row.
+  // Reset in render, not an effect: no commit pairs an open viewer with the next row.
   const [jsonRowId, setJsonRowId] = useState(rowId)
   if (rowId !== jsonRowId) {
     setJsonRowId(rowId)
