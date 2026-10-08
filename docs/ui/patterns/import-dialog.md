@@ -216,7 +216,7 @@ for the open question on whether to surface this to the user.
 ```
 
 String keys joined by `.`, numeric indices wrapped in `[]`.
-Helper lives inside `import-dialog.tsx`; not a published
+Helper lives in `import-dialog-pipeline.ts`; not a published
 primitive.
 
 Path-truncation rule: each rendered line trims path to ≤ 40 chars
@@ -353,8 +353,9 @@ Without the `.refine` on `kind`, a `kind: 'location'` JSON
 imported via the Characters selector would validate against the
 base entity schema and emit a wrong-kind payload to the
 character creation handler. The narrowed schema surfaces the
-mismatch as `⚠ Invalid — 1 issue: kind — Expected a character.`
-(payload-error level), giving the user a clear redirect.
+mismatch as the payload-error banner `⚠ Invalid format — 1 issue.`
+whose `[Show details]` line reads `kind — Expected a character.`,
+giving the user a clear redirect.
 
 ### Plot per-row import
 
@@ -443,31 +444,30 @@ are unaffected.
 One stories file at
 `components/compounds/import-dialog.stories.tsx`. Story matrix:
 
-| Story                      | State         | Notes                                                                                   |
-| -------------------------- | ------------- | --------------------------------------------------------------------------------------- |
-| `IdleCalendar`             | idle          | `aventuras-calendar` + `CalendarSystemSchema`; default open. Anchors visual reference.  |
-| `IdleStory`                | idle          | `aventuras-story` + `StoryImportSchema`; demonstrates title-copy variation.             |
-| `IdleCalendar_Phone`       | idle          | Phone viewport; verifies button text doesn't truncate.                                  |
-| `Reading`                  | reading       | Forced via test seam; spinner on file button, both disabled.                            |
-| `MetaError_NotAventuras`   | meta-error    | Forced via mock clipboard: `{"hello":"world"}`. Banner: `This isn’t an Aventuras file.` |
-| `MetaError_WrongKind`      | meta-error    | Mock clipboard: an `aventuras-story` envelope into a `aventuras-calendar` dialog.       |
-| `MetaError_NewerVersion`   | meta-error    | Mock clipboard: `formatVersion: "2.0"` vs `supportedMajor: 1`.                          |
-| `MetaError_ClipboardEmpty` | meta-error    | Mock clipboard returns `""`.                                                            |
-| `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                        |
-| `PayloadError_Expanded`    | payload-error | Same as above; details open; demonstrates path-truncation + bounded scroll.             |
-| `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.          |
+| Story                      | State         | Notes                                                                                         |
+| -------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
+| `IdleCalendar`             | idle          | `aventuras-calendar` + `CalendarSystemSchema`; default open. Anchors visual reference.        |
+| `IdleStory`                | idle          | `aventuras-story` + `StoryImportSchema`; demonstrates title-copy variation.                   |
+| `IdleCalendar_Phone`       | idle          | Phone viewport; verifies button text doesn't truncate.                                        |
+| `Reading`                  | reading       | Forced via test seam; spinner on file button, both disabled.                                  |
+| `MetaError_NotAventuras`   | meta-error    | Forced via `_initialState`. Banner: `This isn’t an Aventuras file.`                           |
+| `MetaError_WrongKind`      | meta-error    | Forced via `_initialState`: an `aventuras-story` envelope into a `aventuras-calendar` dialog. |
+| `MetaError_NewerVersion`   | meta-error    | Forced via `_initialState`: `formatVersion: "2.0"` vs `supportedMajor: 1`.                    |
+| `MetaError_ClipboardEmpty` | meta-error    | Forced via `_initialState`: the empty-clipboard banner.                                       |
+| `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                              |
+| `PayloadError_Expanded`    | payload-error | Same as above; details open; demonstrates path-truncation + bounded scroll.                   |
+| `ClosedDuringRead`         | reading       | Stubbed clipboard read; Cancel mid-read, then resolve: `onValidated` never fires.             |
+| `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.                |
 
 ### Forced-state test seam
 
 Transient states (`reading`, the various error variants) are
-forced via an internal `useImportPipeline(props, _initialState?)`
-hook with an optional `_initialState` argument that defaults to
-`'idle'`. The hook is **internal-only** (not exported from the
-compound's public API); Storybook imports it through a parallel
-internals path under
-`components/compounds/import-dialog/internals`. Keeps the
-public API surface clean while giving stories deterministic
-state coverage.
+forced via an optional `_initialState` prop on `ImportDialog`
+(`import-dialog.tsx`), which it passes to `useImportPipeline` in
+`import-dialog-pipeline.ts`; it defaults to `{ kind: 'idle' }`.
+The underscore prefix marks it test-only. The dialog resets the
+pipeline on open ↔ closed transitions, never on mount, so a dialog
+mounted open keeps its forced state.
 
 ## Accessibility
 
