@@ -3,6 +3,7 @@
  */
 
 import type { Entry, EntryType, EntryInjectionMode } from '$lib/types'
+import type { BranchScope } from '$lib/utils/branchScope'
 
 // ===== Import Types =====
 
@@ -49,7 +50,7 @@ export type ImportProgress = {
 }
 
 export type ImportOptions = {
-  storyId: string
+  scope: BranchScope
   useAIClassification: boolean
   storyMode: import('$lib/types').StoryMode
   onProgress?: (progress: ImportProgress) => void

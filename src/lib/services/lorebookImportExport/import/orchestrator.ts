@@ -12,7 +12,7 @@ export async function importEntries(
   parseResult: LorebookImportResult,
   options: ImportOptions,
 ): Promise<ImportResult> {
-  const { storyId, useAIClassification, storyMode, onProgress } = options
+  const { scope, useAIClassification, storyMode, onProgress } = options
   const errors: string[] = []
   const warnings: string[] = [...parseResult.warnings]
 
@@ -70,7 +70,8 @@ export async function importEntries(
         const entry: Entry = {
           ...entryData,
           id: crypto.randomUUID(),
-          storyId,
+          storyId: scope.storyId,
+          branchId: scope.branchId,
         }
         await database.addEntry(entry)
         insertedCount++

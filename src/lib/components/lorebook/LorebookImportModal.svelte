@@ -108,14 +108,15 @@
   }
 
   async function handleImport() {
-    if (!parseResult || !story.currentStory) return
+    const scope = story.currentScope
+    if (!parseResult || !story.currentStory || !scope) return
 
     importing = true
     importProgress = null
 
     try {
       const result = await LorebookImportExport.importEntries(parseResult, {
-        storyId: story.currentStory.id,
+        scope,
         useAIClassification,
         storyMode: story.currentStory.mode ?? 'adventure',
         onProgress: (progress) => {
