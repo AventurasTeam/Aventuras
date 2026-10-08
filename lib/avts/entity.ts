@@ -144,8 +144,10 @@ function namesAnEntityKind(value: unknown): boolean {
   return typeof value.kind === 'string' && Object.hasOwn(expectedKind, value.kind)
 }
 
-function narrowedTo(kind: EntityKind): z.ZodType<EntityImport> {
-  return EntityImportSchema.refine((entity) => entity.kind === kind, {
+export type EntityImportOf<K extends EntityKind> = Extract<EntityImport, { kind: K }>
+
+function narrowedTo<K extends EntityKind>(kind: K): z.ZodType<EntityImportOf<K>> {
+  return EntityImportSchema.refine((entity): entity is EntityImportOf<K> => entity.kind === kind, {
     path: ['kind'],
     error: expectedKind[kind],
     // Zod skips a refine once a field has a type error; a wrong-slot file should say so regardless.
@@ -153,7 +155,7 @@ function narrowedTo(kind: EntityKind): z.ZodType<EntityImport> {
   })
 }
 
-const NARROWED: Record<EntityKind, z.ZodType<EntityImport>> = {
+const NARROWED: { [K in EntityKind]: z.ZodType<EntityImportOf<K>> } = {
   character: narrowedTo('character'),
   location: narrowedTo('location'),
   item: narrowedTo('item'),
@@ -161,7 +163,7 @@ const NARROWED: Record<EntityKind, z.ZodType<EntityImport>> = {
 }
 
 /** The per-kind slot's schema: a wrong-kind payload fails with one issue at `kind`. */
-export function entityImportSchemaFor(kind: EntityKind): z.ZodType<EntityImport> {
+export function entityImportSchemaFor<K extends EntityKind>(kind: K): z.ZodType<EntityImportOf<K>> {
   return NARROWED[kind]
 }
 

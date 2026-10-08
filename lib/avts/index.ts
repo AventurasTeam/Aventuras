@@ -11,6 +11,7 @@ export { EntityImportSchema, entityExport, entityImportSchemaFor } from './entit
 export type {
   CharacterImportState,
   EntityImport,
+  EntityImportOf,
   FactionImportState,
   ItemImportState,
   LocationImportState,

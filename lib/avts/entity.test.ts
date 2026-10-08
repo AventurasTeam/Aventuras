@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { z } from 'zod'
 
-import type { Entity } from '@/lib/db'
+import type { Entity, EntityKind } from '@/lib/db'
 
-import { EntityImportSchema, entityExport, entityImportSchemaFor } from './entity'
+import {
+  EntityImportSchema,
+  entityExport,
+  entityImportSchemaFor,
+  type EntityImport,
+} from './entity'
 
 const EXPORTED_AT = new Date(Date.UTC(2026, 9, 7, 9, 30))
 
@@ -354,5 +359,14 @@ describe('entityImportSchemaFor', () => {
 
   it('hands every caller the same schema for a kind', () => {
     expect(entityImportSchemaFor('location')).toBe(entityImportSchemaFor('location'))
+  })
+
+  it('types a literal slot’s payload as its own kind, a plain EntityKind’s as the union', () => {
+    expectTypeOf(entityImportSchemaFor('item').parse).returns.toEqualTypeOf<
+      Extract<EntityImport, { kind: 'item' }>
+    >()
+    expectTypeOf(
+      entityImportSchemaFor<EntityKind>('item').parse,
+    ).returns.toEqualTypeOf<EntityImport>()
   })
 })
