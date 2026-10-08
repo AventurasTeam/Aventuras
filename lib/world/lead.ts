@@ -1,4 +1,17 @@
-import type { Entity } from '@/lib/db'
+import type { Entity, StoryMode } from '@/lib/db'
+
+/** The lead badge's copy key (`world:lead.<label>`). */
+export type LeadLabel = 'you' | 'protagonist'
+
+/** `you` in adventure, `protagonist` in creative. */
+export function leadLabelFor(mode: StoryMode): LeadLabel {
+  switch (mode) {
+    case 'adventure':
+      return 'you'
+    case 'creative':
+      return 'protagonist'
+  }
+}
 
 /**
  * The lead's row on this branch, or null. The lead is story-level while entities are per branch,

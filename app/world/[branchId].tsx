@@ -86,7 +86,13 @@ import {
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { branchWorldTime, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
+import {
+  branchWorldTime,
+  leadLabelFor,
+  resolveLead,
+  type EntitySaveInput,
+  type LoreDraft,
+} from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -167,8 +173,7 @@ export default function WorldRoute() {
     () => resolveLead(open?.definition.leadEntityId, entityRows, branchId)?.id ?? null,
     [open, entityRows, branchId],
   )
-  const leadLabel =
-    open == null ? null : open.definition.mode === 'adventure' ? 'you' : 'protagonist'
+  const leadLabel = open == null ? null : leadLabelFor(open.definition.mode)
 
   const { selectedId, selection, select, startCreate } = useWorldSelection({
     initialId: initialSelection?.id ?? null,

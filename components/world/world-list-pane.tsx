@@ -9,7 +9,7 @@ import {
 
 import { entityListModule } from '@/components/entity/entity-list-module'
 import { LORE_FILTER, loreListModule } from '@/components/entity/lore-list-module'
-import type { LeadLabel, RowSignals } from '@/components/list/list-module'
+import type { RowSignals } from '@/components/list/list-module'
 import { ModuleList } from '@/components/list/module-list'
 import { planReveal, type RevealPlan } from '@/components/list/reveal-plan'
 import type { RevealRequest } from '@/components/list/use-reveal-scroll'
@@ -27,6 +27,7 @@ import {
   type WorldCategory,
 } from '@/lib/list-modules'
 import { listCollapseStore } from '@/lib/stores'
+import type { LeadLabel } from '@/lib/world'
 
 import type { CollisionTarget } from './collisions'
 import { worldCategoryLabel } from './world-selection'
