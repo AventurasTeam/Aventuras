@@ -23,7 +23,7 @@
  */
 
 import type { Character, Entry, Item, Location } from '$lib/types'
-import { containsWholeUnit } from '$lib/utils/text'
+import { containsWholeUnit, uniqueTerms } from '$lib/utils/text'
 
 /** Where a field's value came from, which is what the preview shows next to it. */
 export type FieldOrigin =
@@ -121,7 +121,7 @@ function scalarField(
 
 /** A list field: every value from every source, deduplicated. Nothing to decide. */
 function unionField(key: string, label: string, sources: Source[]): MergeField {
-  const merged = [...new Set(sources.flatMap((s) => (s.value as string[] | undefined) ?? []))]
+  const merged = uniqueTerms(sources.flatMap((s) => (s.value as string[] | undefined) ?? []))
   return {
     key,
     label,

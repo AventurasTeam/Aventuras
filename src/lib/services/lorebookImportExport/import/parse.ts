@@ -5,6 +5,7 @@
 import { createLogger } from '$lib/log'
 import type { EntryInjectionMode } from '$lib/types'
 import { classifyExchange } from '$lib/services/exchange'
+import { uniqueTerms } from '$lib/utils/text'
 import type { ImportedEntry, LorebookImportResult, SillyTavernEntry } from '../types'
 import { inferEntryType } from './inferType'
 
@@ -66,9 +67,7 @@ function parseSillyTavern(data: { entries?: unknown; name?: string }): LorebookI
           result.warnings.push(`Entry UID ${entry.uid} has no name, using "${name}"`)
         }
 
-        const keywords = [...(entry.key || []), ...(entry.keysecondary || [])].filter(
-          (k) => k && k.trim(),
-        )
+        const keywords = uniqueTerms([...(entry.key || []), ...(entry.keysecondary || [])])
 
         const importedEntry: ImportedEntry = {
           name,
