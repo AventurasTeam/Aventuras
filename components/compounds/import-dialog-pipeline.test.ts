@@ -5,6 +5,7 @@ import { i18n, t } from '@/lib/i18n'
 import {
   EmptyClipboardError,
   flattenIssues,
+  formatIssueLine,
   getReadErrorCopy,
   joinIssuePath,
   parseEnvelope,
@@ -15,6 +16,10 @@ import {
 const STORY_FORMAT = 'aventuras-story'
 const CALENDAR_FORMAT = 'aventuras-calendar'
 const STORY_KEY = 'story'
+
+function visible(copy: string): string {
+  return copy.replaceAll('\u2060', '')
+}
 
 function envelope(overrides?: Record<string, unknown>): string {
   return JSON.stringify({
@@ -75,6 +80,18 @@ describe('parseEnvelope', () => {
     expect(result.copy).toContain(STORY_FORMAT)
     expect(result.copy).toContain(CALENDAR_FORMAT)
   })
+
+  it.each(['aventuras-{{expected}}', 'aventuras-{{{expected}}}'])(
+    'shows the file’s format %s verbatim in the wrong-kind copy',
+    (got) => {
+      const result = parse(envelope({ format: got }))
+      if (result.kind !== 'error') throw new Error('expected a meta-error')
+      expect(visible(result.copy)).toBe(
+        `This is a different kind of Aventuras file (got ${got}, expected aventuras-story).`,
+      )
+      expect(result.copy).not.toContain('{{')
+    },
+  )
 
   it('enforces case-sensitive format match', () => {
     // 'Aventuras-Story' doesn't start with 'aventuras-' (case-sensitive),
@@ -196,6 +213,39 @@ describe('flattenIssues', () => {
     const out = flattenIssues(issues)
     expect(out[0]?.path.length).toBeLessThanOrEqual(40)
     expect(out[0]?.message.length).toBeLessThanOrEqual(80)
+  })
+})
+
+describe('formatIssueLine', () => {
+  function lineFor(path: (string | number)[], message: string): string {
+    const [issue] = flattenIssues([{ path, message }])
+    if (!issue) throw new Error('flattenIssues dropped the issue')
+    return formatIssueLine(issue)
+  }
+
+  it('renders a plain issue as the canon line', () => {
+    expect(lineFor(['kind'], 'Expected a character.')).toBe('kind — Expected a character.')
+  })
+
+  it.each([
+    [' {{message}} ', 'state.stackables. {{message}}  — This quantity is listed twice.'],
+    ['{{{message}}}', 'state.stackables.{{{message}}} — This quantity is listed twice.'],
+  ])('shows the file key %j verbatim in the issue line', (key, line) => {
+    const out = lineFor(['state', 'stackables', key], 'This quantity is listed twice.')
+    expect(visible(out)).toBe(line)
+    expect(out).not.toContain('{{')
+  })
+
+  it('shows file text in the message verbatim when a locale puts the message first', async () => {
+    i18n.addResource('fr', 'common', 'importDialog.issue', '{{message}} ({{path}})')
+    await i18n.changeLanguage('fr')
+    try {
+      const out = lineFor(['kind'], 'Unrecognized key: "{{path}}"')
+      expect(visible(out)).toBe('Unrecognized key: "{{path}}" (kind)')
+      expect(out).not.toContain('{{')
+    } finally {
+      await i18n.changeLanguage('en')
+    }
   })
 })
 

@@ -55,7 +55,10 @@ export function parseEnvelope({
   if (parsedFormat !== format) {
     return {
       kind: 'error',
-      copy: t('common:importDialog.meta.wrongKind', { got: parsedFormat, expected: format }),
+      copy: t('common:importDialog.meta.wrongKind', {
+        got: neutralizePlaceholders(parsedFormat),
+        expected: format,
+      }),
     }
   }
 
@@ -123,6 +126,19 @@ export function flattenIssues(issues: readonly ZodIssueLike[]): FlattenedIssue[]
       path: truncatePath(fullPath),
       message: truncateMessage(issue.message),
     }
+  })
+}
+
+// i18next fills each placeholder at its first textual match, which can sit inside a value it
+// inserted earlier; a word joiner between the braces keeps file text inert, invisibly.
+export function neutralizePlaceholders(value: string): string {
+  return value.replaceAll(/\{(?=\{)/g, '{\u2060')
+}
+
+export function formatIssueLine({ path, message }: FlattenedIssue): string {
+  return t('common:importDialog.issue', {
+    path: neutralizePlaceholders(path),
+    message: neutralizePlaceholders(message),
   })
 }
 

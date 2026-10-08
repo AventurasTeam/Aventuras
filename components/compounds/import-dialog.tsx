@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import {
   EmptyClipboardError,
   FilePickerCancelledError,
+  formatIssueLine,
   useImportPipeline,
   type FlattenedIssue,
   type ImportState,
@@ -373,7 +374,7 @@ function PayloadIssueList({
     <View className="mt-2 flex-col gap-1">
       {issues.map((issue, idx) => (
         <Text key={`${issue.path}-${idx}`} size="xs" className="text-warning">
-          • {t('common:importDialog.issue', { path: issue.path, message: issue.message })}
+          • {formatIssueLine(issue)}
         </Text>
       ))}
     </View>
