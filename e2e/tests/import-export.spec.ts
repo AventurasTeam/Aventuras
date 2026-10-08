@@ -99,9 +99,13 @@ function swapClipboardText(app: LaunchedApp, text: string): Promise<string> {
   }, text)
 }
 
-async function openWorld(page: Page, title: string): Promise<void> {
+async function openReader(page: Page, title: string): Promise<void> {
   await home.openStory(page, title).click()
   await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+}
+
+async function openWorld(page: Page, title: string): Promise<void> {
+  await openReader(page, title)
   await goToWorld(page)
 }
 
@@ -126,13 +130,12 @@ async function expectLoneCreate(page: Page, branchId: string, id: string): Promi
   ).toEqual([[1]])
 }
 
-// Serial, one shared app: test 2 imports test 1's export; test 3 reuses the story test 2 left open.
-test.describe.serial('Per-row .avts export and import', () => {
+// Serial, one shared app: the file import reads the export's file.
+test.describe.serial('Per-row .avts export and file import', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   let downloadDir: string
   let heroKael: { id: string; description: string }
-  let clipboardBefore: string | undefined
 
   test.beforeAll(async () => {
     const seeded = createSeededUserDataDir()
@@ -144,14 +147,10 @@ test.describe.serial('Per-row .avts export and import', () => {
 
   test.afterAll(async () => {
     try {
-      if (clipboardBefore !== undefined) await swapClipboardText(app, clipboardBefore)
+      await app?.close()
     } finally {
-      try {
-        await app?.close()
-      } finally {
-        removeUserDataDir(userDataDir)
-        if (downloadDir) rmSync(downloadDir, { recursive: true, force: true })
-      }
+      removeUserDataDir(userDataDir)
+      if (downloadDir) rmSync(downloadDir, { recursive: true, force: true })
     }
   })
 
@@ -240,10 +239,42 @@ test.describe.serial('Per-row .avts export and import', () => {
     })
     await expectLoneCreate(page, branchId, id)
   })
+})
+
+// Its own app and hand-authored file, so a failure in the export or file legs can't skip it.
+test.describe('Per-row .avts clipboard import', () => {
+  let app: LaunchedApp
+  let userDataDir: string | undefined
+  let clipboardBefore: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    try {
+      if (clipboardBefore !== undefined) await swapClipboardText(app, clipboardBefore)
+    } finally {
+      try {
+        await app?.close()
+      } finally {
+        removeUserDataDir(userDataDir)
+      }
+    }
+  })
 
   test('imports a hand-authored happening from the clipboard on Plot, the row alone', async () => {
     const page = app.window
+    await openReader(page, TARGET_TITLE)
     const branchId = await currentBranchId(page, TARGET_STORY)
+    expect(
+      await queryApp(page, `SELECT count(*) FROM happenings WHERE branch_id = ? AND title = ?`, [
+        branchId,
+        HAPPENING_TITLE,
+      ]),
+    ).toEqual([[0]])
     await chrome.actionsTrigger(page).click()
     await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
