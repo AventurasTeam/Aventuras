@@ -96,6 +96,96 @@ describe('traits a row stores with repeats load without them', () => {
   })
 })
 
+describe('lorebook terms a row stores with repeats load without them', () => {
+  beforeEach(async () => {
+    await database.close()
+    vi.clearAllMocks()
+  })
+
+  afterEach(async () => {
+    await database.close()
+  })
+
+  const entryRow = (overrides: Record<string, unknown>) => ({
+    id: 'e1',
+    story_id: 's1',
+    name: 'Keep',
+    type: 'location',
+    description: '',
+    ...overrides,
+  })
+
+  it('entry aliases and keywords, keeping the rest of the injection', async () => {
+    mocks.select.mockResolvedValueOnce([
+      entryRow({
+        aliases: REPEATED,
+        injection: JSON.stringify({ mode: 'always', keywords: JSON.parse(REPEATED), priority: 7 }),
+      }),
+    ])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.aliases).toEqual(CLEAN)
+    expect(entry.injection).toEqual({ mode: 'always', keywords: CLEAN, priority: 7 })
+  })
+
+  it('an injection stored without keywords', async () => {
+    mocks.select.mockResolvedValueOnce([
+      entryRow({ injection: JSON.stringify({ mode: 'never', priority: 3 }) }),
+    ])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.injection).toEqual({ mode: 'never', keywords: [], priority: 3 })
+  })
+
+  it('a row with no injection or aliases', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({})])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.aliases).toEqual([])
+    expect(entry.injection).toEqual({ mode: 'keyword', keywords: [], priority: 0 })
+  })
+
+  it('entry previews', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({ aliases: REPEATED })])
+
+    const [preview] = await database.getEntryPreviews('s1')
+
+    expect(preview.aliases).toEqual(CLEAN)
+  })
+
+  it('vault lorebook entries', async () => {
+    mocks.select.mockResolvedValueOnce([
+      {
+        id: 'l1',
+        name: 'Lore',
+        entries: JSON.stringify([
+          {
+            name: 'Keep',
+            keywords: JSON.parse(REPEATED),
+            aliases: JSON.parse(REPEATED),
+            priority: 2,
+          },
+        ]),
+      },
+    ])
+
+    const [lorebook] = await database.getVaultLorebooks()
+
+    expect(lorebook.entries[0]).toMatchObject({ keywords: CLEAN, aliases: CLEAN, priority: 2 })
+  })
+
+  it('terms that differ beyond case and padding stay apart', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({ aliases: JSON.stringify(['Élan', 'Elan']) })])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.aliases).toEqual(['Élan', 'Elan'])
+  })
+})
+
 describe('traits are stored without repeats', () => {
   const REPEATED_LIST = ['honest', 'Honest ']
 

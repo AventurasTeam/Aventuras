@@ -23,6 +23,7 @@ import type {
   EmbeddedImageStatus,
   VaultCharacter,
   VaultLorebook,
+  VaultLorebookEntry,
   VaultScenario,
   VaultTag,
   VaultType,
@@ -171,6 +172,20 @@ function migrateVisualDescriptors(data: unknown): VisualDescriptors {
 
   // Empty or unknown format
   return {}
+}
+
+function parseInjection(raw: string | null): Entry['injection'] {
+  const injection = raw ? JSON.parse(raw) : { mode: 'keyword', priority: 0 }
+  return { ...injection, keywords: uniqueTerms(injection.keywords) }
+}
+
+function parseVaultEntries(raw: string | null): VaultLorebookEntry[] {
+  const entries: VaultLorebookEntry[] = raw ? JSON.parse(raw) : []
+  return entries.map((e) => ({
+    ...e,
+    keywords: uniqueTerms(e.keywords),
+    aliases: uniqueTerms(e.aliases),
+  }))
 }
 
 class DatabaseService {
@@ -2177,7 +2192,7 @@ class DatabaseService {
       name: row.name,
       type: row.type,
       description: row.description || '',
-      aliases: row.aliases ? JSON.parse(row.aliases) : [],
+      aliases: row.aliases ? uniqueTerms(JSON.parse(row.aliases)) : [],
     }))
   }
 
@@ -2931,13 +2946,11 @@ class DatabaseService {
       type: row.type,
       description: row.description || '',
       hiddenInfo: row.hidden_info,
-      aliases: row.aliases ? JSON.parse(row.aliases) : [],
+      aliases: row.aliases ? uniqueTerms(JSON.parse(row.aliases)) : [],
       state: row.state ? JSON.parse(row.state) : { type: row.type },
       adventureState: row.adventure_state ? JSON.parse(row.adventure_state) : null,
       creativeState: row.creative_state ? JSON.parse(row.creative_state) : null,
-      injection: row.injection
-        ? JSON.parse(row.injection)
-        : { mode: 'keyword', keywords: [], priority: 0 },
+      injection: parseInjection(row.injection),
       createdBy: row.created_by || 'user',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -3167,7 +3180,7 @@ class DatabaseService {
       id: row.id,
       name: row.name,
       description: row.description,
-      entries: row.entries ? JSON.parse(row.entries) : [],
+      entries: parseVaultEntries(row.entries),
       tags: row.tags ? JSON.parse(row.tags) : [],
       favorite: row.favorite === 1,
       source: row.source || 'import',
