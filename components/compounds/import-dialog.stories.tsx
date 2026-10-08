@@ -1,19 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 import { z } from 'zod'
 
+import { happeningImportDialog, threadImportDialog } from '@/components/plot/plot-import'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { entityImportDialog, loreImportDialog } from '@/components/world/world-import'
 import { t } from '@/lib/i18n'
 
-import { ImportDialog } from './import-dialog'
+import { ImportDialog, type ImportDialogConfig } from './import-dialog'
 import type { ImportState } from './import-dialog-pipeline'
 
-// Stand-in schemas. Real consumer schemas (CalendarSystemSchema,
-// StoryImportSchema, EntityImportSchema, …) land with their owning domain
-// implementations; the dialog is generic over TPayload so any zod schema works.
+// Stand-ins for the calendar and story hosts, whose schemas land with Vault calendars (M8.3) and
+// story import (M9.4). The Host* stories at the bottom mount World's and Plot's shipped configs.
 const CalendarStubSchema = z.object({
   units: z.array(z.object({ name: z.string().min(1), length: z.number().positive() })),
   eras: z.array(z.string()).min(1),
@@ -413,4 +414,148 @@ export const Closed: Story = {
       schema={StoryStubSchema}
     />
   ),
+}
+
+function envelope(format: string, formatVersion: string, payloadKey: string, payload: unknown) {
+  return JSON.stringify({
+    format,
+    formatVersion,
+    exportedAt: '2026-10-07T00:00:00.000Z',
+    [payloadKey]: payload,
+  })
+}
+
+function HostDialog<TPayload>({ config }: { config: ImportDialogConfig<TPayload> }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <View className="p-4">
+      <ImportDialog<TPayload>
+        {...config}
+        open={open}
+        onOpenChange={setOpen}
+        onValidated={() => {}}
+      />
+    </View>
+  )
+}
+
+type HostSlot<TPayload> = {
+  config: () => ImportDialogConfig<TPayload>
+  title: () => string
+  /** From data-model.md's kinds table, never read from the config under test. */
+  format: `aventuras-${string}`
+  payloadKey: string
+}
+
+// The clipboard read is stubbed, so the meta-check and the banner are the real pipeline's, run on
+// the host's own config.
+async function pasteIntoHost(title: string, raw: string): Promise<HTMLElement> {
+  const read = spyOn(navigator.clipboard, 'readText').mockResolvedValue(raw)
+  try {
+    const dialog = await screen.findByRole('dialog', { name: title }, WAIT)
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('common:importDialog.fromClipboard') }),
+    )
+    const alert = await within(dialog).findByRole('alert', {}, WAIT)
+    expect(read).toHaveBeenCalledTimes(1)
+    return alert
+  } finally {
+    read.mockRestore()
+  }
+}
+
+/** import-dialog.md → Stage 2: every host turns a `formatVersion: "2.0"` file away. */
+function newerVersionStory<TPayload>(slot: HostSlot<TPayload>): Story {
+  return {
+    render: () => <HostDialog config={slot.config()} />,
+    play: async () => {
+      const alert = await pasteIntoHost(
+        slot.title(),
+        envelope(slot.format, '2.0', slot.payloadKey, {}),
+      )
+      await waitFor(() => {
+        expect(alert).toHaveTextContent(t('common:importDialog.meta.newerVersion'))
+      }, WAIT)
+    },
+  }
+}
+
+export const HostCharacters_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('character'),
+  title: () => t('world:import.title.character'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostLocations_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('location'),
+  title: () => t('world:import.title.location'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostItems_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('item'),
+  title: () => t('world:import.title.item'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostFactions_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('faction'),
+  title: () => t('world:import.title.faction'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostLore_NewerVersion = newerVersionStory({
+  config: loreImportDialog,
+  title: () => t('world:import.title.lore'),
+  format: 'aventuras-lore',
+  payloadKey: 'lore',
+})
+
+export const HostThreads_NewerVersion = newerVersionStory({
+  config: threadImportDialog,
+  title: () => t('plot:import.title.thread'),
+  format: 'aventuras-thread',
+  payloadKey: 'thread',
+})
+
+export const HostHappenings_NewerVersion = newerVersionStory({
+  config: happeningImportDialog,
+  title: () => t('plot:import.title.happening'),
+  format: 'aventuras-happening',
+  payloadKey: 'happening',
+})
+
+// import-dialog.md → World per-row entity import: a valid location in the Characters slot is a
+// payload error with one issue at `kind`, never a wrong-kind row.
+export const HostCharacters_WrongKind: Story = {
+  render: () => <HostDialog config={entityImportDialog('character')} />,
+  play: async () => {
+    const location = {
+      kind: 'location',
+      name: 'The Drowned Market',
+      status: 'active',
+      injectionMode: 'auto',
+    }
+    const alert = await pasteIntoHost(
+      t('world:import.title.character'),
+      envelope('aventuras-entity', '1.0', 'entity', location),
+    )
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(t('common:importDialog.invalidFormat', { count: 1 }))
+    }, WAIT)
+    await userEvent.click(
+      within(alert).getByRole('button', { name: t('common:importDialog.showDetails') }),
+    )
+    const line = t('common:importDialog.issue', {
+      path: 'kind',
+      message: t('common:avts.issue.expectedKind.character'),
+    })
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(line)
+    }, WAIT)
+  },
 }
