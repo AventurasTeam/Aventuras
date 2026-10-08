@@ -14,6 +14,9 @@ import { deleteDisabledReason } from '../delete-copy'
 import { entityMenuEntries } from '../world-copy'
 import { entityTabs, type EntityTab } from './entity-tabs'
 
+// A path on the generic Draft can't be resolved, so the key is checked against the base draft.
+const NAME_FIELD = 'name' satisfies FieldPathByValue<EntityBaseDraft, string>
+
 /** Every kind's draft extends the base; RHF's Control is invariant in its values type. */
 export function asBaseControl<D extends EntityBaseDraft>(
   control: Control<D>,
@@ -94,7 +97,7 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   return (
     <RowDetailFrame
       session={session}
-      nameField={'name' as FieldPathByValue<Draft, string>}
+      nameField={NAME_FIELD as FieldPathByValue<Draft, string>}
       savedName={savedName}
       namePlaceholder={t('world:detail.namePlaceholder')}
       nameTestID="world-detail-name"
