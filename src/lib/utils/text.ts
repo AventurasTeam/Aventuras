@@ -90,9 +90,9 @@ export interface EntityNameMatchOptions {
 
 /**
  * Checks whether `name` (a character/location/item/entry name, alias, or keyword)
- * appears in `searchText`. Both sides are compared as `termKey` does: case and
- * composed/decomposed forms of one glyph match, accents stay distinct. The caller does not
- * have to normalize anything first. Strategies, in order:
+ * appears in `searchText`. Both sides are compared as `termKey` does: case, runs of
+ * whitespace and composed/decomposed forms of one glyph match, accents stay distinct. The
+ * caller does not have to normalize anything first. Strategies, in order:
  * 1. Non-space-separated scripts (CJK, Thai, Lao, Khmer, Burmese) have no word
  *    boundaries to anchor a regex on, so these fall back to plain substring matching.
  * 2. Unicode-aware word-boundary match for space-separated languages (avoids
@@ -116,7 +116,7 @@ export function entityNameMatches(
   // Normalized here rather than trusted from the caller: the prefix branch compares raw
   // strings, so text passed as written would lose every prefix match ("ari" vs "Aria").
   // `inspect_world_state` passes entity names and descriptions straight through.
-  const haystack = searchText.normalize('NFC').toLowerCase()
+  const haystack = termKey(searchText)
 
   // CJK, Hangul, Thai, Lao, Khmer, Burmese ranges (no spaces between words in these scripts)
   const isNonSpaceSeparated =
@@ -649,11 +649,12 @@ export function foldName(raw: string): string {
 }
 
 /**
- * The identity of a trait or keyword: trimmed, NFC-normalised and lowercased, so case, padding and
- * composed/decomposed forms of one glyph merge; width forms, accents and punctuation stay distinct.
+ * The identity of a trait or keyword: trimmed, NFC-normalised, lowercased and with each run of
+ * whitespace read as one space, so case, padding and composed/decomposed forms of one glyph merge;
+ * width forms, accents and punctuation stay distinct.
  */
 export function termKey(term: string): string {
-  return term.trim().normalize('NFC').toLowerCase()
+  return term.trim().normalize('NFC').toLowerCase().replace(/\s+/gu, ' ')
 }
 
 /**

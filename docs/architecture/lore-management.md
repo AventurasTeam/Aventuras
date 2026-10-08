@@ -44,7 +44,7 @@ dropped a description silently whenever both rows had one, and it put `status` o
 user's reach entirely — any non-`active` value from any row won, so merging a character the
 story had brought back marked them dead again whichever row was kept. For the lorebook the
 absorbed names still become **aliases** on the survivor, which is what stops the same
-duplicate being re-created — except one that differs from the survivor's name only by case.
+duplicate being re-created — except one the survivor's name already matches by `termKey`.
 
 **A dismissal is remembered, in `kept_separate`** (migration 037), keyed by normalized
 **name pair** and scoped to a branch. Names rather than ids, so a later rename cannot

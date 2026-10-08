@@ -65,6 +65,12 @@ describe('cleanKeywords', () => {
     expect(value).toEqual(['spymaster', 'Stygia'])
   })
 
+  it('drops a keyword that differs from another only by a run of whitespace', () => {
+    const { value, dropped } = cleanKeywords('Pento', [], ['Iron Gate', 'Iron  Gate'])
+    expect(value).toEqual(['Iron Gate'])
+    expect(dropped[0].reason).toBe('duplicate')
+  })
+
   it('keeps a spelling the name or an alias does not match', () => {
     expect(cleanKeywords("Kaelen's", ['Kaelens'], ['Kaelens']).value).toEqual([])
     expect(cleanKeywords("Kaelen's", [], ['Kaelens']).value).toEqual(['Kaelens'])

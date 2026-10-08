@@ -110,6 +110,21 @@ describe('entityNameMatches — Unicode normalization', () => {
   })
 })
 
+describe('entityNameMatches — whitespace runs', () => {
+  it('matches a double-spaced name against single-spaced text', () => {
+    expect(entityNameMatches('Iron  Gate', 'the iron gate opened')).toBe(true)
+  })
+
+  it('matches a single-spaced name against text with a run of whitespace', () => {
+    expect(entityNameMatches('Iron Gate', 'the iron  gate opened')).toBe(true)
+    expect(entityNameMatches('Iron Gate', 'the iron\ngate opened')).toBe(true)
+  })
+
+  it('finds a stored double-spaced term when it is the text searched', () => {
+    expect(entityNameMatches('iron gate', 'Iron  Gate')).toBe(true)
+  })
+})
+
 describe('findTextMatches', () => {
   it('ignores case by default', () => {
     expect(findTextMatches('She lost all hope.', 'HOPE')).toHaveLength(1)
@@ -464,6 +479,11 @@ describe('termKey', () => {
     expect(termKey('e\u0301')).toBe(termKey('\u00e9'))
   })
 
+  it('folds a run of whitespace to one space', () => {
+    expect(termKey('Iron  Gate')).toBe('iron gate')
+    expect(termKey('iron\t\n gate')).toBe('iron gate')
+  })
+
   it('keeps width forms, accents, punctuation and kana voicing distinct', () => {
     const pairs = [
       ['ｂｒａｖｅ', 'brave'],
@@ -482,6 +502,10 @@ describe('uniqueTerms', () => {
   it('drops a repeat and keeps the first spelling and position', () => {
     expect(uniqueTerms(['a', 'b', 'A', 'c', 'a'])).toEqual(['a', 'b', 'c'])
     expect(uniqueTerms(['Brave', 'brave', 'ｂｒａｖｅ'])).toEqual(['Brave', 'ｂｒａｖｅ'])
+  })
+
+  it('treats a run of whitespace as one space', () => {
+    expect(uniqueTerms(['Iron Gate', 'Iron  Gate'])).toEqual(['Iron Gate'])
   })
 
   it('keeps terms that differ beyond case and canonical form', () => {
