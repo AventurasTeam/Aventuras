@@ -54,7 +54,7 @@ import {
   importThread,
   saveHappening,
   saveThread,
-  type RowSaveRejectionCode,
+  type ImportRejectionCode,
 } from '@/lib/actions'
 import type { HappeningImport, ThreadImport } from '@/lib/avts'
 import { db, runInTransaction, type Entity } from '@/lib/db'
@@ -179,7 +179,7 @@ export default function PlotRoute() {
     [guard, select],
   )
   const onImportRejected = useCallback(
-    (code: RowSaveRejectionCode) => toast.error(importRejectionText(code)),
+    (code: ImportRejectionCode) => toast.error(importRejectionText(code)),
     [],
   )
   const onImportFailed = useCallback(

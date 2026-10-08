@@ -68,7 +68,7 @@ import {
   saveEntity,
   saveLore,
   setStoryLead,
-  type RowSaveRejectionCode,
+  type ImportRejectionCode,
 } from '@/lib/actions'
 import type { EntityImport, LoreImport } from '@/lib/avts'
 import { DEFAULT_CALENDAR_ID, resolveCalendar } from '@/lib/calendar'
@@ -242,7 +242,7 @@ export default function WorldRoute() {
     [guard, select],
   )
   const onImportRejected = useCallback(
-    (code: RowSaveRejectionCode) => toast.error(importRejectionText(code)),
+    (code: ImportRejectionCode) => toast.error(importRejectionText(code)),
     [],
   )
   const onImportFailed = useCallback(

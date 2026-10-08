@@ -4,7 +4,7 @@ import {
   type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
 import type { SelectOption } from '@/components/ui/select'
-import { PLOT_REJECTION, type RowSaveRejectionCode } from '@/lib/actions'
+import { PLOT_REJECTION, type ImportRejectionCode, type RowSaveRejectionCode } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 import { isPlotIssue, type HappeningDraft, type PlotIssue, type ThreadDraft } from '@/lib/plot'
@@ -38,16 +38,13 @@ export function saveFailureText(): string {
   return t('plot:save.failed')
 }
 
-// Import strips every row ref, so the parent codes can't arise; they read as the generic failure.
-const IMPORT_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
+const IMPORT_REJECTION_TEXT: Record<ImportRejectionCode, () => string> = {
   [PLOT_REJECTION.inFlight]: () => t('plot:import.inFlight'),
-  [PLOT_REJECTION.parentCycle]: () => t('plot:import.failed'),
-  [PLOT_REJECTION.parentChainBroken]: () => t('plot:import.failed'),
   [PLOT_REJECTION.failed]: () => t('plot:import.failed'),
 }
 
 /** A refused import's text; the dialog has closed, so unlike a save nothing is kept to retry. */
-export function importRejectionText(code: RowSaveRejectionCode): string {
+export function importRejectionText(code: ImportRejectionCode): string {
   return IMPORT_REJECTION_TEXT[code]()
 }
 

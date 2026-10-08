@@ -1,15 +1,31 @@
 import type { EntityImport, HappeningImport, LoreImport, ThreadImport } from '@/lib/avts'
 import type { HappeningDraft, ThreadDraft } from '@/lib/plot'
-import type { CharacterDraft, EntityBaseDraft, LoreDraft } from '@/lib/world'
+import type { CharacterDraft, EntityBaseDraft, EntitySaveInput, LoreDraft } from '@/lib/world'
 
 import { saveHappening } from '../plot/save-happening'
 import { saveThread } from '../plot/save-thread'
-import type { RowSaveResult } from '../row-save/commit-row-save'
+import { ROW_SAVE_REJECTION, type RowSaveResult } from '../row-save/commit-row-save'
 import type { DbCtx } from '../types'
 import { saveEntity } from '../world/save-entity'
 import { saveLore } from '../world/save-lore'
 
-export type ImportRowResult = RowSaveResult
+export type ImportRejectionCode =
+  | typeof ROW_SAVE_REJECTION.inFlight
+  | typeof ROW_SAVE_REJECTION.failed
+
+export type ImportRowResult =
+  | { status: 'ok'; id: string }
+  | { status: 'rejected'; reason: string; code: ImportRejectionCode }
+
+// An import writes no parent location, so a parent code can't arise; one that did is a failure.
+function importResult(result: RowSaveResult): ImportRowResult {
+  if (result.status === 'ok') return result
+  const code =
+    result.code === ROW_SAVE_REJECTION.inFlight
+      ? ROW_SAVE_REJECTION.inFlight
+      : ROW_SAVE_REJECTION.failed
+  return { ...result, code }
+}
 
 type CharacterImport = Extract<EntityImport, { kind: 'character' }>
 
@@ -48,66 +64,58 @@ function characterDraft(payload: CharacterImport): CharacterDraft {
   }
 }
 
+// data-model.md → Aventuras file format: branch-local refs never travel.
+function entityInput(payload: EntityImport): EntitySaveInput {
+  const create = { keywordsBase: [] }
+  switch (payload.kind) {
+    case 'character':
+      return {
+        ...create,
+        kind: 'character',
+        draft: characterDraft(payload),
+        relationships: [],
+        relationshipsBase: [],
+      }
+    case 'location':
+      return {
+        ...create,
+        kind: 'location',
+        draft: {
+          ...baseDraft(payload),
+          parentLocationId: null,
+          condition: payload.state.condition ?? '',
+        },
+      }
+    case 'item':
+      return {
+        ...create,
+        kind: 'item',
+        draft: {
+          ...baseDraft(payload),
+          atLocationId: null,
+          condition: payload.state.condition ?? '',
+        },
+      }
+    case 'faction':
+      return {
+        ...create,
+        kind: 'faction',
+        draft: {
+          ...baseDraft(payload),
+          standing: payload.state.standing ?? '',
+          agenda: [...(payload.state.agenda ?? [])],
+        },
+      }
+  }
+}
+
 /** Creates the payload's entity on `branchId` through the World pane's create path. */
 export function importEntity(
   branchId: string,
   payload: EntityImport,
   ctx: DbCtx,
 ): Promise<ImportRowResult> {
-  // data-model.md → Aventuras file format: branch-local refs never travel.
-  const create = { branchId, row: null, keywordsBase: [] }
-  switch (payload.kind) {
-    case 'character':
-      return saveEntity(
-        {
-          ...create,
-          kind: 'character',
-          draft: characterDraft(payload),
-          relationships: [],
-          relationshipsBase: [],
-        },
-        ctx,
-      )
-    case 'location':
-      return saveEntity(
-        {
-          ...create,
-          kind: 'location',
-          draft: {
-            ...baseDraft(payload),
-            parentLocationId: null,
-            condition: payload.state.condition ?? '',
-          },
-        },
-        ctx,
-      )
-    case 'item':
-      return saveEntity(
-        {
-          ...create,
-          kind: 'item',
-          draft: {
-            ...baseDraft(payload),
-            atLocationId: null,
-            condition: payload.state.condition ?? '',
-          },
-        },
-        ctx,
-      )
-    case 'faction':
-      return saveEntity(
-        {
-          ...create,
-          kind: 'faction',
-          draft: {
-            ...baseDraft(payload),
-            standing: payload.state.standing ?? '',
-            agenda: [...(payload.state.agenda ?? [])],
-          },
-        },
-        ctx,
-      )
-  }
+  return saveEntity({ branchId, row: null, ...entityInput(payload) }, ctx).then(importResult)
 }
 
 /** Creates the payload's lore row on `branchId` through the lore pane's create path. */
@@ -125,7 +133,7 @@ export function importLore(
     keywords: [...payload.keywords],
     tags: [...payload.tags],
   }
-  return saveLore({ branchId, row: null, draft }, ctx)
+  return saveLore({ branchId, row: null, draft }, ctx).then(importResult)
 }
 
 /** Creates the payload's thread on `branchId` through the Plot pane's create path. */
@@ -142,7 +150,7 @@ export function importThread(
     status: payload.status,
     injectionMode: payload.injectionMode,
   }
-  return saveThread({ branchId, row: null, draft }, ctx)
+  return saveThread({ branchId, row: null, draft }, ctx).then(importResult)
 }
 
 /** Creates the payload's happening on `branchId` alone: no entry anchor, no link rows. */
@@ -165,5 +173,5 @@ export function importHappening(
   return saveHappening(
     { branchId, row: null, links: { involvements: [], awareness: [] }, draft },
     ctx,
-  )
+  ).then(importResult)
 }

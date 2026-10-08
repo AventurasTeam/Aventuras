@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 
-import type { ImportRowResult, RowSaveRejectionCode } from '@/lib/actions'
+import type { ImportRejectionCode, ImportRowResult } from '@/lib/actions'
 
 export type UseRowImportArgs<P> = {
   /** `isUserEditBlocked`: the request is refused and an open dialog closes. */
@@ -9,7 +9,7 @@ export type UseRowImportArgs<P> = {
   guard: (proceed: () => void) => void
   commit: (payload: P) => Promise<ImportRowResult>
   onImported: (id: string) => void
-  onRejected: (code: RowSaveRejectionCode) => void
+  onRejected: (code: ImportRejectionCode) => void
   onFailed: (error: unknown) => void
 }
 

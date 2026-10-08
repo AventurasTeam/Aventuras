@@ -340,9 +340,7 @@ describe('import failure copy', () => {
     expect(importRejectionText('in-flight')).toBe(
       "Couldn't import while generation is in flight. Try again when it finishes.",
     )
-    for (const code of ['failed', 'parent-cycle', 'parent-chain-broken'] as const) {
-      expect(importRejectionText(code)).toBe("Couldn't import that file. Try again.")
-    }
+    expect(importRejectionText('failed')).toBe("Couldn't import that file. Try again.")
     expect(importFailureText()).toBe("Couldn't import that file. Try again.")
   })
 })

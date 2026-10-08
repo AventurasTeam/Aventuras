@@ -60,7 +60,19 @@ import { registerHappenings } from '../happenings/register-happenings'
 import { registerHappeningInvolvements } from '../happenings/register-involvements'
 import { registerLore } from '../lore/register'
 import { registerCharacterRelationships } from '../relationships/register'
+import type { commitRowSave as CommitRowSave, RowSaveResult } from '../row-save/commit-row-save'
 import { registerThreads } from '../threads/register'
+
+// A forced save result reaches each import's own mapping; codes no import can raise need it.
+const rowSave = vi.hoisted(() => ({ forced: null as RowSaveResult | null }))
+vi.mock('../row-save/commit-row-save', async (importOriginal) => {
+  const real = (await importOriginal()) as { commitRowSave: typeof CommitRowSave }
+  return {
+    ...real,
+    commitRowSave: (...args: Parameters<typeof CommitRowSave>) =>
+      rowSave.forced != null ? Promise.resolve(rowSave.forced) : real.commitRowSave(...args),
+  }
+})
 
 // br_1 is the exporting story's branch, br_2 a different story's: per-row files cross stories.
 async function setup() {
@@ -91,6 +103,7 @@ type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
 const EXPORTED_AT = new Date('2026-10-07T12:00:00.000Z')
 
 afterEach(() => {
+  rowSave.forced = null
   vi.restoreAllMocks()
 })
 
@@ -369,14 +382,14 @@ describe('importLore / importThread / importHappening', () => {
   })
 })
 
-describe('in-flight refusal', () => {
-  const IMPORTS: readonly (readonly [string, (ctx: Ctx) => Promise<ImportRowResult>])[] = [
-    ['importEntity', (ctx) => importEntity('br_2', entityPayload('character', 'Kael'), ctx)],
-    ['importLore', (ctx) => importLore('br_2', LORE, ctx)],
-    ['importThread', (ctx) => importThread('br_2', THREAD, ctx)],
-    ['importHappening', (ctx) => importHappening('br_2', HAPPENING, ctx)],
-  ]
+const IMPORTS: readonly (readonly [string, (ctx: Ctx) => Promise<ImportRowResult>])[] = [
+  ['importEntity', (ctx) => importEntity('br_2', entityPayload('character', 'Kael'), ctx)],
+  ['importLore', (ctx) => importLore('br_2', LORE, ctx)],
+  ['importThread', (ctx) => importThread('br_2', THREAD, ctx)],
+  ['importHappening', (ctx) => importHappening('br_2', HAPPENING, ctx)],
+]
 
+describe('in-flight refusal', () => {
   it.each(IMPORTS)(
     '%s refuses while generation is in flight and writes nothing',
     async (_, run) => {
@@ -389,6 +402,26 @@ describe('in-flight refusal', () => {
       expect(await db.select().from(lore)).toEqual([])
       expect(await db.select().from(threads)).toEqual([])
       expect(await db.select().from(happenings)).toEqual([])
+    },
+  )
+})
+
+describe('rejection codes', () => {
+  const CODES = [
+    ['parent-cycle', 'failed'],
+    ['parent-chain-broken', 'failed'],
+    ['failed', 'failed'],
+    ['in-flight', 'in-flight'],
+  ] as const
+
+  it.each(IMPORTS)(
+    '%s keeps in-flight and reads every other refusal as a failure',
+    async (_, run) => {
+      const { ctx } = await setup()
+      for (const [code, expected] of CODES) {
+        rowSave.forced = { status: 'rejected', reason: 'refused', code }
+        expect(await run(ctx)).toEqual({ status: 'rejected', reason: 'refused', code: expected })
+      }
     },
   )
 })

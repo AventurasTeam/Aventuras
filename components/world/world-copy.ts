@@ -7,6 +7,7 @@ import {
 import {
   ENTITY_REJECTION,
   LEAD_REJECTION,
+  type ImportRejectionCode,
   type LeadRejectionCode,
   type RowSaveRejectionCode,
 } from '@/lib/actions'
@@ -93,16 +94,13 @@ export function saveFailureText(): string {
   return t('world:save.failed')
 }
 
-// Import strips every row ref, so the parent codes can't arise; they read as the generic failure.
-const IMPORT_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
+const IMPORT_REJECTION_TEXT: Record<ImportRejectionCode, () => string> = {
   [ENTITY_REJECTION.inFlight]: () => t('world:import.inFlight'),
-  [ENTITY_REJECTION.parentCycle]: () => t('world:import.failed'),
-  [ENTITY_REJECTION.parentChainBroken]: () => t('world:import.failed'),
   [ENTITY_REJECTION.failed]: () => t('world:import.failed'),
 }
 
 /** A refused import's text; the dialog has closed, so unlike a save nothing is kept to retry. */
-export function importRejectionText(code: RowSaveRejectionCode): string {
+export function importRejectionText(code: ImportRejectionCode): string {
   return IMPORT_REJECTION_TEXT[code]()
 }
 
