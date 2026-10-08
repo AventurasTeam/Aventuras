@@ -93,6 +93,24 @@ export function saveFailureText(): string {
   return t('world:save.failed')
 }
 
+// Exhaustive: a new RowSaveRejectionCode fails typecheck until it has text here. Import strips
+// every row ref, so the parent codes can't arise; they read as the generic failure.
+const IMPORT_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
+  [ENTITY_REJECTION.inFlight]: () => t('world:import.inFlight'),
+  [ENTITY_REJECTION.parentCycle]: () => t('world:import.failed'),
+  [ENTITY_REJECTION.parentChainBroken]: () => t('world:import.failed'),
+  [ENTITY_REJECTION.failed]: () => t('world:import.failed'),
+}
+
+/** A refused import's text; the dialog has closed, so unlike a save nothing is kept to retry. */
+export function importRejectionText(code: RowSaveRejectionCode): string {
+  return IMPORT_REJECTION_TEXT[code]()
+}
+
+export function importFailureText(): string {
+  return t('world:import.failed')
+}
+
 // Exhaustive: a new LeadRejectionCode fails typecheck until it has text here.
 const LEAD_REJECTION_TEXT: Record<LeadRejectionCode, () => string> = {
   [LEAD_REJECTION.inFlight]: () => t('world:lead.inFlight'),

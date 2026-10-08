@@ -38,6 +38,24 @@ export function saveFailureText(): string {
   return t('plot:save.failed')
 }
 
+// Exhaustive: a new RowSaveRejectionCode fails typecheck until it has text here. Import strips
+// every row ref, so the parent codes can't arise; they read as the generic failure.
+const IMPORT_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
+  [PLOT_REJECTION.inFlight]: () => t('plot:import.inFlight'),
+  [PLOT_REJECTION.parentCycle]: () => t('plot:import.failed'),
+  [PLOT_REJECTION.parentChainBroken]: () => t('plot:import.failed'),
+  [PLOT_REJECTION.failed]: () => t('plot:import.failed'),
+}
+
+/** A refused import's text; the dialog has closed, so unlike a save nothing is kept to retry. */
+export function importRejectionText(code: RowSaveRejectionCode): string {
+  return IMPORT_REJECTION_TEXT[code]()
+}
+
+export function importFailureText(): string {
+  return t('plot:import.failed')
+}
+
 /** The category Autocomplete's create-tail row. */
 export function categoryTailLabel(value: string): string {
   return t('plot:fields.categoryAdd', { value })

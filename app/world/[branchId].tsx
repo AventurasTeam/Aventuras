@@ -38,8 +38,8 @@ import {
 import { worldAddOptions } from '@/components/world/world-add-options'
 import {
   leadRejectionText,
-  saveFailureText,
-  saveRejectionText,
+  importFailureText,
+  importRejectionText,
 } from '@/components/world/world-copy'
 import { WorldDetailPlaceholder } from '@/components/world/world-detail-placeholder'
 import { entityImportDialog, loreImportDialog } from '@/components/world/world-import'
@@ -242,7 +242,7 @@ export default function WorldRoute() {
     [guard, select],
   )
   const onImportRejected = useCallback(
-    (code: RowSaveRejectionCode) => toast.error(saveRejectionText(code)),
+    (code: RowSaveRejectionCode) => toast.error(importRejectionText(code)),
     [],
   )
   const onImportFailed = useCallback(
@@ -252,7 +252,7 @@ export default function WorldRoute() {
         category,
         error: error instanceof Error ? error.message : String(error),
       })
-      toast.error(saveFailureText())
+      toast.error(importFailureText())
     },
     [branchId, category],
   )

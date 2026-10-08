@@ -11,7 +11,7 @@ import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { HappeningDetailPane } from '@/components/plot/happening-detail-pane'
 import { plotAddOptions } from '@/components/plot/plot-add-options'
-import { saveFailureText, saveRejectionText } from '@/components/plot/plot-copy'
+import { importFailureText, importRejectionText } from '@/components/plot/plot-copy'
 import { PlotDetailEmpty } from '@/components/plot/plot-detail-empty'
 import { happeningImportDialog, threadImportDialog } from '@/components/plot/plot-import'
 import { PlotListPane, type PlotListPaneHandle } from '@/components/plot/plot-list-pane'
@@ -179,7 +179,7 @@ export default function PlotRoute() {
     [guard, select],
   )
   const onImportRejected = useCallback(
-    (code: RowSaveRejectionCode) => toast.error(saveRejectionText(code)),
+    (code: RowSaveRejectionCode) => toast.error(importRejectionText(code)),
     [],
   )
   const onImportFailed = useCallback(
@@ -189,7 +189,7 @@ export default function PlotRoute() {
         kind,
         error: error instanceof Error ? error.message : String(error),
       })
-      toast.error(saveFailureText())
+      toast.error(importFailureText())
     },
     [branchId, kind],
   )

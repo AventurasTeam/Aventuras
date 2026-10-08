@@ -10,6 +10,8 @@ import {
   entityFieldLabel,
   entityIssueText,
   entityMenuEntries,
+  importFailureText,
+  importRejectionText,
   itemPositionHint,
   lastSeenDetail,
   lastSeenLine,
@@ -330,5 +332,17 @@ describe('itemPositionHint', () => {
       state: { at_location_id: 'loc_gone' },
     })
     expect(itemPositionHint(orphan, [orphan], null)).toBe('Entity no longer exists')
+  })
+})
+
+describe('import failure copy', () => {
+  it("names generation in flight, otherwise the generic failure, and doesn't claim kept changes", () => {
+    expect(importRejectionText('in-flight')).toBe(
+      "Couldn't import while generation is in flight. Try again when it finishes.",
+    )
+    for (const code of ['failed', 'parent-cycle', 'parent-chain-broken'] as const) {
+      expect(importRejectionText(code)).toBe("Couldn't import that file. Try again.")
+    }
+    expect(importFailureText()).toBe("Couldn't import that file. Try again.")
   })
 })
