@@ -193,11 +193,13 @@ that repeats the name or an alias. Neither can ever add a match. `lorebook/entry
 them on the way through `create_entry`/`update_entry` and reports what it dropped in the tool
 result, so the model reads the rule applied to its own output; nothing is rejected, because
 losing a whole call over one redundant keyword is the failure this file exists to avoid. The
-comparison is `foldName`, which folds case and punctuation but keeps articles — `"The Citadel"`
-and `"Citadel"` are the same subject but not the same trigger, which is `normalizeName`'s
-distinction to make, not this one's. `foldName` is also what `create_entry`'s duplicate refusal
-matches on, deliberately and not `normalizeName`: the detector is lenient because being wrong
-there costs one question, while being wrong in a hard refusal costs an entry.
+comparison is `termKey`, the one `entityNameMatches` uses, so the cleaner can never be coarser
+than matching: `"Kaelen's"` and `"Kaelens"` match different prose and both stay, and so do
+`"The Citadel"` and `"Citadel"`, which is `normalizeName`'s distinction to make, not this one's.
+A term with no letter or digit is dropped as empty. `foldName` is what `create_entry`'s duplicate
+refusal matches on, deliberately and not `normalizeName`: that question is entity identity, not
+triggers, and the detector is lenient because being wrong there costs one question, while being
+wrong in a hard refusal costs an entry.
 
 Both fold on `\p{L}\p{N}`, not `a-z0-9`. An ASCII class folds every Cyrillic, Greek and CJK
 name to the empty string, and empty compares equal to every other one — which made two

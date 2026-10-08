@@ -13,7 +13,10 @@
  * Plain TypeScript, no SDK or store imports.
  */
 
-import { foldName } from '$lib/utils/text'
+import { termKey } from '$lib/utils/text'
+
+/** A term with no letter or digit is dead or fires on ordinary punctuation. */
+const hasWord = (term: string) => /[\p{L}\p{N}]/u.test(term)
 
 /** A term that was removed, with the reason to hand back to the model. */
 export interface DroppedTerm {
@@ -29,19 +32,19 @@ export interface CleanedField {
 /**
  * Drop empties, self-references and duplicates from a list of alternative names.
  *
- * Comparison is `foldName`, which folds spelling but keeps articles: `"Citadel"` and
- * `"citadel"` are one alias, `"The Citadel"` is a second one, because as a trigger it is a
- * different phrase. The spelling kept is the one written first.
+ * Comparison is `termKey`, the one matching uses: `"Citadel"` and `"citadel"` are one alias,
+ * `"The Citadel"` and `"Kaelens"` against `"Kaelen's"` are different triggers. The spelling
+ * kept is the one written first.
  */
 export function cleanAliases(name: string, aliases: string[] | undefined): CleanedField {
-  const entryName = foldName(name)
+  const entryName = termKey(name)
   const seen = new Set<string>()
   const value: string[] = []
   const dropped: DroppedTerm[] = []
 
   for (const alias of aliases ?? []) {
-    const normalized = foldName(alias)
-    if (!normalized) {
+    const normalized = termKey(alias)
+    if (!hasWord(alias)) {
       dropped.push({ term: alias, reason: 'empty' })
     } else if (normalized === entryName) {
       dropped.push({ term: alias, reason: 'same-as-name' })
@@ -67,15 +70,15 @@ export function cleanKeywords(
   aliases: string[],
   keywords: string[] | undefined,
 ): CleanedField {
-  const entryName = foldName(name)
-  const aliasSet = new Set(aliases.map(foldName).filter(Boolean))
+  const entryName = termKey(name)
+  const aliasSet = new Set(aliases.map(termKey))
   const seen = new Set<string>()
   const value: string[] = []
   const dropped: DroppedTerm[] = []
 
   for (const keyword of keywords ?? []) {
-    const normalized = foldName(keyword)
-    if (!normalized) {
+    const normalized = termKey(keyword)
+    if (!hasWord(keyword)) {
       dropped.push({ term: keyword, reason: 'empty' })
     } else if (normalized === entryName) {
       dropped.push({ term: keyword, reason: 'same-as-name' })
