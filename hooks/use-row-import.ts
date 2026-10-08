@@ -20,10 +20,7 @@ export type RowImport<P> = {
   onValidated: (payload: P) => void
 }
 
-/**
- * import-dialog.md → Host gating during in-flight generation: one `From JSON file…` dialog's open
- * state, opened through the surface's leave guard, and the commit its validated payload runs.
- */
+/** import-dialog.md → Host gating during in-flight generation, for one `From JSON file…` dialog. */
 export function useRowImport<P>({
   blocked,
   guard,

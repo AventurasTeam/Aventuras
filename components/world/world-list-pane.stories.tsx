@@ -500,7 +500,7 @@ export const Empty: Story = {
   },
 }
 
-/** The `[+]` menu on an entity category: Blank and From JSON stay enabled; only From Vault is disabled. */
+/** The `[+]` menu on an entity category: only From Vault stays disabled. */
 export const AddMenuDisabledEntries: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New character' }))

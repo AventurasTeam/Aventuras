@@ -219,7 +219,7 @@ describe('getReadErrorCopy', () => {
   })
 })
 
-// import-dialog.md → Validation pipeline / Dialog body: the English copy, minus the ⚠ the banner adds.
+// import-dialog.md → Validation pipeline / Dialog body: English copy, minus the banner's ⚠.
 const CANON_COPY = [
   ['common:importDialog.chooseFile', 'Choose .avts file…'],
   ['common:importDialog.fromClipboard', 'Import from clipboard'],

@@ -38,8 +38,7 @@ export function saveFailureText(): string {
   return t('plot:save.failed')
 }
 
-// Exhaustive: a new RowSaveRejectionCode fails typecheck until it has text here. Import strips
-// every row ref, so the parent codes can't arise; they read as the generic failure.
+// Import strips every row ref, so the parent codes can't arise; they read as the generic failure.
 const IMPORT_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
   [PLOT_REJECTION.inFlight]: () => t('plot:import.inFlight'),
   [PLOT_REJECTION.parentCycle]: () => t('plot:import.failed'),

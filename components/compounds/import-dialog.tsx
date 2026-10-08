@@ -298,9 +298,8 @@ function MetaErrorBanner({ copy }: { copy: string }) {
   )
 }
 
-// import-dialog.md → Accessibility: visual emphasis only. Web hides this span; native keeps a
-// nested span's text, so the parent Text carries a glyph-free accessibilityLabel instead.
-// Nested, so it repeats the parent's classes: a bare Text falls back to text-fg-primary.
+// Emphasis only (import-dialog.md → Accessibility): native keeps nested text, so the parent Text
+// carries a glyph-free label. Repeats the parent's classes: a bare Text is text-fg-primary.
 function WarningGlyph() {
   return (
     <Text size="sm" className="text-warning" aria-hidden>

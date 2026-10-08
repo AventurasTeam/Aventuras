@@ -13,8 +13,7 @@ import { t } from '@/lib/i18n'
 import { ImportDialog, type ImportDialogConfig } from './import-dialog'
 import type { ImportState } from './import-dialog-pipeline'
 
-// Stand-ins for the calendar and story hosts, whose schemas land with Vault calendars (M8.3) and
-// story import (M9.4). The Host* stories at the bottom mount World's and Plot's shipped configs.
+// Stand-ins: the calendar and story hosts ship no schema yet; Host* stories mount shipped configs.
 const CalendarStubSchema = z.object({
   units: z.array(z.object({ name: z.string().min(1), length: z.number().positive() })),
   eras: z.array(z.string()).min(1),
@@ -447,8 +446,7 @@ type HostSlot<TPayload> = {
   payloadKey: string
 }
 
-// The clipboard read is stubbed, so the meta-check and the banner are the real pipeline's, run on
-// the host's own config.
+// Clipboard read stubbed; the meta-check and banner are the real pipeline's, on the host's config.
 async function pasteIntoHost(title: string, raw: string): Promise<HTMLElement> {
   const read = spyOn(navigator.clipboard, 'readText').mockResolvedValue(raw)
   try {

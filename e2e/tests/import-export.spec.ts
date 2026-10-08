@@ -16,9 +16,8 @@ import { reader } from '../locators/reader'
 import { toast } from '../locators/toast'
 import { world } from '../locators/world'
 
-// world.md → Per-row import at the seams only the running app reaches: a renderer download through
-// Electron's session, the file chooser and the clipboard. Payload rules: lib/avts/*.test.ts; the
-// create path: lib/actions/avts/import-rows.test.ts. See docs/testing.md → Coverage.
+// world.md → Per-row import, at the seams only the running app reaches: download, file chooser,
+// clipboard. Unit-covered elsewhere: lib/avts/*.test.ts, lib/actions/avts/import-rows.test.ts.
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
@@ -72,7 +71,7 @@ type EntityFile = {
   entity: Record<string, unknown> & { state: Record<string, unknown> }
 }
 
-// With no will-download handler Electron raises its native Save dialog, which nothing here can drive.
+// Without a will-download handler Electron raises a native Save dialog nothing here can drive.
 async function captureDownloads(app: LaunchedApp, dir: string): Promise<void> {
   await app.app.evaluate(({ session }, saveDir) => {
     const spy = globalThis as DownloadSpy
@@ -118,8 +117,7 @@ async function expectLoneCreate(page: Page, branchId: string, id: string): Promi
   ).toEqual([[1]])
 }
 
-// Serial suite, one shared app: test 2 imports the file test 1 exported, and test 3 runs on the
-// story test 2 left open.
+// Serial, one shared app: test 2 imports test 1's export; test 3 reuses the story test 2 left open.
 test.describe.serial('Per-row .avts export and import', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined

@@ -33,10 +33,7 @@ type HarnessProps = {
   exportFile: () => AvtsFile
 }
 
-/**
- * A pane over the frame with a real row save session. Capture-phase F2 switches to SECOND, as a
- * list-row pick would; capture phase because the open JSON sheet holds focus.
- */
+/** Capture-phase F2 (the open JSON sheet holds focus) switches to SECOND, as a list-row pick. */
 function Harness({ row: initialRow, exportFile }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [tab, setTab] = useState<Tab>('overview')
@@ -108,10 +105,7 @@ async function openMenuEntry(name: string) {
   await userEvent.click(entry)
 }
 
-/**
- * data.md → Raw JSON viewer: the viewer belongs to the row it opened on, so a row switch closes
- * it rather than re-rendering it over the next row.
- */
+/** data.md → Raw JSON viewer: switching rows closes the viewer instead of showing the next row. */
 export const JsonViewerClosesOnRowSwitch: Story = {
   play: async () => {
     await openMenuEntry('View raw JSON')

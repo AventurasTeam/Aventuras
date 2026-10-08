@@ -93,8 +93,7 @@ export function saveFailureText(): string {
   return t('world:save.failed')
 }
 
-// Exhaustive: a new RowSaveRejectionCode fails typecheck until it has text here. Import strips
-// every row ref, so the parent codes can't arise; they read as the generic failure.
+// Import strips every row ref, so the parent codes can't arise; they read as the generic failure.
 const IMPORT_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
   [ENTITY_REJECTION.inFlight]: () => t('world:import.inFlight'),
   [ENTITY_REJECTION.parentCycle]: () => t('world:import.failed'),

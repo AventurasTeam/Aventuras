@@ -84,14 +84,12 @@ export const world = {
 
   detailName: (page: Page): Locator => page.getByTestId('world-detail-name'),
 
-  // The detail pane's recently-classified badge (row-detail-frame.tsx) — a plain Tag, no role of
-  // its own.
+  // Detail pane's recently-classified badge (row-detail-frame.tsx): a plain Tag, no role.
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
 
   // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name appends its
-  // reason — From Vault always, Blank and From JSON while an edit is blocked
-  // (world-add-options.ts) — so assert the visible label text instead.
+  // reason (world-add-options.ts), so match the visible label text.
   addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
 
@@ -115,7 +113,7 @@ export const world = {
   addMenuFromJson: (page: Page): Locator =>
     page.getByRole('menuitem', { name: t('world:addMenu.fromJson'), exact: true }),
 
-  // ImportDialog (import-dialog.tsx), named by the per-kind title World passes it (world-import.ts).
+  // ImportDialog (import-dialog.tsx), named by the per-kind title from world-import.ts.
   importDialog: (page: Page, category: WorldCategory): Locator =>
     page.getByRole('dialog', { name: t(`world:import.title.${category}`), exact: true }),
   importFromFile: (page: Page, category: WorldCategory): Locator =>

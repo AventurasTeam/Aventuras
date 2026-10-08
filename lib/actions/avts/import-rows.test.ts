@@ -511,7 +511,8 @@ describe('export → parse → import round trip', () => {
     },
   )
 
-  // Per-row payloads carry no branch-local ids, so a same-story re-import must not move the original's items (data-model.md → Aventuras file format).
+  // Per-row payloads carry no branch-local ids, so a same-story re-import must not move the
+  // original's items (data-model.md → Aventuras file format).
   it('re-importing a character onto its own branch leaves the original holding its items', async () => {
     const { db, ctx } = await setup()
     await db

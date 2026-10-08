@@ -54,7 +54,7 @@ export function importEntity(
   payload: EntityImport,
   ctx: DbCtx,
 ): Promise<ImportRowResult> {
-  // data-model.md → Aventuras file format: branch-local refs never travel, so the copy starts with none.
+  // data-model.md → Aventuras file format: branch-local refs never travel.
   const create = { branchId, row: null, keywordsBase: [] }
   switch (payload.kind) {
     case 'character':

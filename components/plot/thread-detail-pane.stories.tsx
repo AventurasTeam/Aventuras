@@ -109,9 +109,8 @@ type HarnessProps = {
 }
 
 /**
- * Mimics the route: an update's store patch lands mid-save; a create's new row is selected from
- * `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave via `onSession`;
- * F4 is a repeat `[+] Blank` (a new create `seq`); F6 selects TRUST, as a list-row pick would.
+ * Mimics the route: an update's patch lands mid-save; a create's row is selected from `onSaved`.
+ * Capture-phase: F2 flips `blocked`, F3 requests a leave, F4 repeats `[+] Blank`, F6 selects TRUST.
  */
 function Harness({
   row: initialRow,
