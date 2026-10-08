@@ -3,6 +3,7 @@
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Label } from '$lib/components/ui/label'
+  import TermsInput from '$lib/components/shared/TermsInput.svelte'
   import SelectTrigger from '../ui/select/select-trigger.svelte'
   import { Select, SelectContent, SelectItem } from '../ui/select'
   import type { EntryType, EntryInjectionMode } from '$lib/types'
@@ -68,13 +69,10 @@
 
   <div class="space-y-2 {changed('keywords')}">
     <Label>Keywords</Label>
-    <Input
-      value={data.keywords?.join(', ') ?? ''}
-      oninput={(e) => {
-        data.keywords = e.currentTarget.value
-          .split(',')
-          .map((k) => k.trim())
-          .filter(Boolean)
+    <TermsInput
+      value={data.keywords}
+      onChange={(terms) => {
+        data.keywords = terms
         handleInput()
       }}
       placeholder="Comma-separated keywords..."
@@ -86,13 +84,10 @@
 
   <div class="space-y-2 {changed('aliases')}">
     <Label>Aliases</Label>
-    <Input
-      value={data.aliases?.join(', ') ?? ''}
-      oninput={(e) => {
-        data.aliases = e.currentTarget.value
-          .split(',')
-          .map((k) => k.trim())
-          .filter(Boolean)
+    <TermsInput
+      value={data.aliases}
+      onChange={(terms) => {
+        data.aliases = terms
         handleInput()
       }}
       placeholder="Comma-separated alternative names..."
