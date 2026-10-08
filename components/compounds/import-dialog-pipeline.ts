@@ -72,10 +72,7 @@ export function parseEnvelope({
     return { kind: 'error', copy: t('common:importDialog.meta.olderVersion') }
   }
   if (major > supportedMajor) {
-    return {
-      kind: 'error',
-      copy: t('common:importDialog.meta.newerVersion'),
-    }
+    return { kind: 'error', copy: t('common:importDialog.meta.newerVersion') }
   }
 
   if (!(payloadKey in env)) {
