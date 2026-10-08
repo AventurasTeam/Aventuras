@@ -120,6 +120,12 @@ export const JsonViewerClosesOnRowSwitch: Story = {
     ).toBeVisible()
     await expect(screen.getByText(/"row_first"/)).toBeInTheDocument()
 
+    // A flash of the next row's JSON is gone by the time the viewer reads as closed.
+    let flashed = false
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('"row_second"')) flashed = true
+    })
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true })
     await userEvent.keyboard('{F2}')
     await waitFor(
       () =>
@@ -128,9 +134,10 @@ export const JsonViewerClosesOnRowSwitch: Story = {
         ).not.toBeInTheDocument(),
       WAIT,
     )
+    observer.disconnect()
     // The switch landed: the head names the second row, and its JSON never showed.
     await expect(await screen.findByRole('button', { name: 'Edit Second row' }, WAIT)).toBeVisible()
-    await expect(screen.queryByText(/"row_second"/)).not.toBeInTheDocument()
+    expect(flashed).toBe(false)
   },
 }
 

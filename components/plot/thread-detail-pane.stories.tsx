@@ -599,6 +599,12 @@ export const JsonViewerClosesOnRowSwitch: Story = {
     expect(await screen.findByRole('button', { name: 'Close raw JSON viewer' }, WAIT)).toBeVisible()
     expect(screen.getByText(/"thread_amulet"/)).toBeInTheDocument()
 
+    // A flash of the next row's JSON is gone by the time the viewer reads as closed.
+    let flashed = false
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('"thread_trust"')) flashed = true
+    })
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true })
     await userEvent.keyboard('{F6}')
     await waitFor(
       () =>
@@ -607,9 +613,10 @@ export const JsonViewerClosesOnRowSwitch: Story = {
         ).not.toBeInTheDocument(),
       WAIT,
     )
+    observer.disconnect()
     // The switch landed: the head names TRUST, and its JSON never showed.
     expect(await screen.findByRole('button', { name: `Edit ${TRUST.title}` }, WAIT)).toBeVisible()
-    expect(screen.queryByText(/"thread_trust"/)).not.toBeInTheDocument()
+    expect(flashed).toBe(false)
   },
 }
 
