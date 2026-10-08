@@ -74,7 +74,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  // Restores the mock the module-missing case replaces; vi.doUnmock would drop it, loading the real one.
+  // Restores the mock the module-missing case replaces; vi.doUnmock would load the real one.
   vi.doMock('expo-sharing', sharingMock)
 })
 

@@ -27,7 +27,7 @@ export const HappeningImportSchema: z.ZodType<HappeningImport> = z
       .union([z.literal(0), z.literal(1), z.boolean()])
       .default(0)
       .transform((value): 0 | 1 => (value === 1 || value === true ? 1 : 0)),
-    // Read only for data-model.md's time-anchor exclusivity, then dropped: entry ids are branch-local.
+    // Only for data-model.md's time-anchor exclusivity, then dropped: entry ids are branch-local.
     occurredAtEntryId: optionalText,
   })
   .refine((happening) => !(happening.occurredAtEntryId != null && happening.temporal != null), {

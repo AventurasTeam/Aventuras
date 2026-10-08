@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// jsdom supplies `document` and `HTMLAnchorElement`; the tests stub URL.createObjectURL and revokeObjectURL.
+// jsdom supplies `document` and `HTMLAnchorElement`.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import type { AvtsFile } from './envelope'

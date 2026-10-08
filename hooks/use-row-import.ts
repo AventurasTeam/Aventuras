@@ -5,7 +5,7 @@ import type { ImportRejectionCode, ImportRowResult } from '@/lib/actions'
 export type UseRowImportArgs<P> = {
   /** `isUserEditBlocked`: the request is refused and an open dialog closes. */
   blocked: boolean
-  /** Screen focus; unfocused acts as `blocked` (a portaled dialog would paint over a pushed screen). */
+  /** Screen focus; unfocused acts as `blocked` (a portaled dialog would cover a pushed screen). */
   focused: boolean
   /** The surface's leave guard; opening the dialog and selecting the new row both resolve it. */
   guard: (proceed: () => void) => void
