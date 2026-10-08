@@ -90,6 +90,15 @@ function downloads(app: LaunchedApp): Promise<Download[] | undefined> {
   return app.app.evaluate(() => (globalThis as DownloadSpy).e2eDownloads)
 }
 
+// Off the Xvfb display this is the developer's clipboard, so the caller restores what it returns.
+function swapClipboardText(app: LaunchedApp, text: string): Promise<string> {
+  return app.app.evaluate(({ clipboard }, next) => {
+    const previous = clipboard.readText()
+    clipboard.writeText(next)
+    return previous
+  }, text)
+}
+
 async function openWorld(page: Page, title: string): Promise<void> {
   await home.openStory(page, title).click()
   await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
@@ -123,6 +132,7 @@ test.describe.serial('Per-row .avts export and import', () => {
   let userDataDir: string | undefined
   let downloadDir: string
   let heroKael: { id: string; description: string }
+  let clipboardBefore: string | undefined
 
   test.beforeAll(async () => {
     const seeded = createSeededUserDataDir()
@@ -134,10 +144,14 @@ test.describe.serial('Per-row .avts export and import', () => {
 
   test.afterAll(async () => {
     try {
-      await app?.close()
+      if (clipboardBefore !== undefined) await swapClipboardText(app, clipboardBefore)
     } finally {
-      removeUserDataDir(userDataDir)
-      if (downloadDir) rmSync(downloadDir, { recursive: true, force: true })
+      try {
+        await app?.close()
+      } finally {
+        removeUserDataDir(userDataDir)
+        if (downloadDir) rmSync(downloadDir, { recursive: true, force: true })
+      }
     }
   })
 
@@ -238,7 +252,7 @@ test.describe.serial('Per-row .avts export and import', () => {
     await plot.addMenuFromJson(page).click()
     await expect(plot.importDialog(page, 'happening')).toBeVisible()
 
-    await app.app.evaluate(({ clipboard }, text) => clipboard.writeText(text), HAPPENING_FILE)
+    clipboardBefore = await swapClipboardText(app, HAPPENING_FILE)
     await plot.importFromClipboard(page, 'happening').click()
 
     await expect(plot.subHeader(page)).toContainText(HAPPENING_TITLE, { timeout: 15_000 })
