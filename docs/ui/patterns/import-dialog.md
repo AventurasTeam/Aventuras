@@ -125,7 +125,7 @@ accept=".avts,.json">` lives inside the dialog body, clicked
 ['application/json', 'application/octet-stream'] })`. Android
   doesn't reliably MIME-type `.avts`; the dual MIME accept-list
   plus extension dispatch covers it. URI returned →
-  `expo-file-system.readAsStringAsync(uri)`.
+  `readAsStringAsync(uri)` from `expo-file-system/legacy`.
 - **Web clipboard.** `navigator.clipboard.readText()`. Available
   on HTTPS / localhost / Electron contexts. Feature-detect on
   mount; if absent, the `📋` Button renders disabled with
@@ -304,7 +304,14 @@ const entityImport = useRowImport<EntityImport>({
   commit: (payload) => importEntity(branchId, payload, ctx),
   onImported: () => toast.success(t('world:import.imported')),
   onRejected: (code) => toast.error(importRejectionText(code)),
-  onFailed: (error) => toast.error(importFailureText()),
+  onFailed: (error) => {
+    logger.error('app.world_import_failed', {
+      branchId,
+      category,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    toast.error(importFailureText())
+  },
 })
 
 <ImportDialog<EntityImport>
@@ -317,12 +324,12 @@ const entityImport = useRowImport<EntityImport>({
 
 The importer menu's `From JSON file…` option calls `request()`, which
 opens the dialog through the leave guard and is refused
-while generation is in flight. The dialog has already closed itself
-when `onValidated` fires, so the outcome is reported outside it: on
-success the hook selects the new row through the leave guard and the
-host toasts `Imported.`; otherwise the host shows the refusal / failure
-toast. Lore is the parallel case with `loreImportDialog()` and its own
-slot.
+while generation is in flight. The dialog closes itself as it hands
+the payload to `onValidated`, before the commit settles, so the
+outcome is reported outside it: on success the hook selects the new
+row through the leave guard and the host toasts `Imported.`;
+otherwise the host shows the refusal / failure toast. Lore is the
+parallel case with `loreImportDialog()` and its own slot.
 
 **Kind-narrowing is mandatory** for `aventuras-entity` consumers.
 Without the `.refine` on `kind`, a `kind: 'location'` JSON
@@ -435,7 +442,7 @@ One stories file at
 | `MetaError_NewerVersion`   | meta-error    | Forced via `_initialState`: `formatVersion: "2.0"` vs `supportedMajor: 1`.                                                                                                |
 | `MetaError_ClipboardEmpty` | meta-error    | Forced via `_initialState`: the empty-clipboard banner.                                                                                                                   |
 | `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                                                                                                          |
-| `PayloadError_Expanded`    | payload-error | Same shape with 11 issues; click `Show details` to open the list and see the bounded scroll.                                                                              |
+| `PayloadError_Expanded`    | payload-error | Same shape with 10 issues; click `Show details` to open the list and see the bounded scroll.                                                                              |
 | `ClosedDuringRead`         | reading       | Stubbed clipboard read; Cancel mid-read, then resolve: `onValidated` never fires.                                                                                         |
 | `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.                                                                                            |
 | `Host<Slot>_NewerVersion`  | meta-error    | One per host slot (World Characters, Locations, Items, Factions, Lore; Plot Threads, Happenings) with that host's shipped config. Mock clipboard: `formatVersion: "2.0"`. |
@@ -485,7 +492,9 @@ The dialog's native dependencies are installed and in use:
 
 - `expo-document-picker` — the native file picker
   (`getDocumentAsync`).
-- `expo-file-system` — `readAsStringAsync` loads the picked file.
+- `expo-file-system` — `readAsStringAsync` loads the picked file. It
+  is imported from the `expo-file-system/legacy` subpath: in SDK 55
+  the package root's copy throws when called.
 - `expo-clipboard` — the native clipboard read.
 
 The dialog loads all three lazily, on first use, so a dev client
