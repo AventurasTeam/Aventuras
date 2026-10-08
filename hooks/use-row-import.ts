@@ -46,6 +46,11 @@ export function useRowImport<P>({
     guard(() => setOpen(true))
   }, [blocked, guard])
 
+  const onOpenChange = useCallback(
+    (next: boolean) => (next ? request() : setOpen(false)),
+    [request],
+  )
+
   const onValidated = useCallback(
     (payload: P) => {
       // Two-argument `then`: a throw inside `select` or `onImported` must not route to `onFailed`.
@@ -65,5 +70,5 @@ export function useRowImport<P>({
     [commit],
   )
 
-  return { open, request, onOpenChange: setOpen, onValidated }
+  return { open, request, onOpenChange, onValidated }
 }

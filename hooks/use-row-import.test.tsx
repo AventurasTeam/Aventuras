@@ -111,6 +111,22 @@ describe('useRowImport — opening', () => {
     expect(committed.filter((c) => c.blocked && c.open)).toEqual([])
   })
 
+  it('opens through onOpenChange(true) only as request() would: past the guard', () => {
+    const initial = args({ guard: vi.fn() })
+    const { result } = setup(initial)
+    act(() => result.current.onOpenChange(true))
+    expect(initial.guard).toHaveBeenCalledTimes(1)
+    expect(result.current.open).toBe(false)
+  })
+
+  it('refuses onOpenChange(true) while generation is in flight', () => {
+    const initial = args({ blocked: true })
+    const { result } = setup(initial)
+    act(() => result.current.onOpenChange(true))
+    expect(initial.guard).not.toHaveBeenCalled()
+    expect(result.current.open).toBe(false)
+  })
+
   it('closes through onOpenChange, as the dialog does after a success or a dismiss', () => {
     const { result } = setup(args())
     act(() => result.current.request())
