@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
@@ -907,9 +907,10 @@ export const Menu: Story = {
     await userEvent.click(await pane().findByRole('button', { name: 'More actions' }))
     const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' })
     await waitFor(() => expect(viewJson).toBeVisible(), WAIT)
-    expect(
-      screen.getByRole('menuitem', { name: 'Export happening as JSON, Lands in Slice 4.6' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('menuitem', { name: 'Export happening as JSON' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(screen.getByRole('menuitem', { name: 'Delete happening' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
@@ -941,6 +942,43 @@ export const Menu: Story = {
     await waitFor(() => expect(remove).toBeVisible(), WAIT)
     await userEvent.click(remove)
     await expect(args.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: AMBUSH.id }))
+  },
+}
+
+/** Export writes the committed row, not the unsaved draft. */
+export const ExportHandsTheCommittedRow: Story = {
+  play: async () => {
+    let blob: Blob | null = null
+    const downloads: string[] = []
+    const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      blob = b as Blob
+      return 'blob:story'
+    })
+    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download)
+    })
+    try {
+      await userEvent.click(
+        await pane().findByRole('button', { name: 'Edit The alley ambush' }, WAIT),
+      )
+      await userEvent.keyboard(' (draft){Enter}')
+      // The draft must differ from the committed row, or the title check below proves nothing.
+      await waitFor(() => expect(screen.getByTestId('save-bar')).toBeVisible(), WAIT)
+      await userEvent.click(await pane().findByRole('button', { name: 'More actions' }, WAIT))
+      const entry = await screen.findByRole('menuitem', { name: 'Export happening as JSON' }, WAIT)
+      await waitFor(() => expect(entry).toBeVisible(), WAIT)
+      await userEvent.click(entry)
+      await waitFor(() => expect(downloads).toEqual(['happening-the-alley-ambush.avts']), WAIT)
+      const file = JSON.parse(await (blob as unknown as Blob).text()) as {
+        happening: { title: string }
+      }
+      await expect(file.happening.title).toBe('The alley ambush')
+    } finally {
+      url.mockRestore()
+      click.mockRestore()
+    }
   },
 }
 

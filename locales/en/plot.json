@@ -84,7 +84,6 @@
       "label": "More actions",
       "exportThread": "Export thread as JSON",
       "exportHappening": "Export happening as JSON",
-      "exportReason": "Lands in Slice 4.6",
       "viewJson": "View raw JSON",
       "deleteThread": "Delete thread",
       "deleteHappening": "Delete happening"

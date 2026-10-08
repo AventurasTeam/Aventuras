@@ -96,10 +96,14 @@ export function happeningIssueText(message: string): string {
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
 }
 
+/** plot.md → Detail-head overflow menu: World's order, minus `Set as lead`. */
 export function plotMenuEntries(
   kind: PlotKind,
-  onViewJson: () => void,
-  remove?: RemoveEntry,
+  {
+    onViewJson,
+    onExport,
+    remove,
+  }: { onViewJson: () => void; onExport: () => void; remove?: RemoveEntry },
 ): OverflowMenuEntry[] {
   return [
     {
@@ -108,9 +112,7 @@ export function plotMenuEntries(
         kind === 'thread'
           ? t('plot:detail.menu.exportThread')
           : t('plot:detail.menu.exportHappening'),
-      disabled: true,
-      disabledReason: t('plot:detail.menu.exportReason'),
-      onPress: () => {},
+      onPress: onExport,
     },
     { key: 'json', label: t('plot:detail.menu.viewJson'), onPress: onViewJson },
     ...deleteEntry(
