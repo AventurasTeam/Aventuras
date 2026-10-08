@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,9 @@ function ControlledDialog<TPayload>({
   title,
   payloadKey,
   schema,
+  onValidated = (payload) => {
+    console.log('[import-dialog story] validated:', payload)
+  },
 }: {
   initialOpen: boolean
   initialState?: ImportState
@@ -38,6 +41,7 @@ function ControlledDialog<TPayload>({
   title: string
   payloadKey: string
   schema: z.ZodType<TPayload>
+  onValidated?: (payload: TPayload) => void
 }) {
   const [open, setOpen] = useState(initialOpen)
   return (
@@ -53,9 +57,7 @@ function ControlledDialog<TPayload>({
         payloadKey={payloadKey}
         schema={schema}
         title={title}
-        onValidated={(payload) => {
-          console.log('[import-dialog story] validated:', payload)
-        }}
+        onValidated={onValidated}
         _initialState={initialState}
       />
     </View>
@@ -169,6 +171,25 @@ export const MetaError_NotAventuras: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  // A forced error survives mount but not a close and reopen.
+  play: async () => {
+    const dialog = await findDialog()
+    await waitFor(() => {
+      expect(within(dialog).getByRole('alert')).toBeVisible()
+    }, WAIT)
+    await userEvent.click(within(dialog).getByRole('button', { name: t('common:cancel') }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    }, WAIT)
+    await userEvent.click(screen.getByRole('button', { name: 'Open import dialog' }))
+    const reopened = await findDialog()
+    await waitFor(() => {
+      expect(
+        within(reopened).getByRole('button', { name: t('common:importDialog.chooseFile') }),
+      ).toBeVisible()
+    }, WAIT)
+    expect(within(reopened).queryByRole('alert')).toBeNull()
+  },
 }
 
 // Meta-error: wrong kind — Story envelope into a Calendar dialog.
@@ -320,6 +341,56 @@ export const PayloadError_Expanded: Story = {
           'Click `Show details` in the banner to open the issues list. On desktop / tablet the list scrolls inside a 200px cap; on phone the whole dialog body scrolls.',
       },
     },
+  },
+}
+
+const closedDuringReadSpy = fn()
+
+// Cancel while the clipboard read is pending: the late result must not reach the host.
+export const ClosedDuringRead: Story = {
+  render: () => (
+    <ControlledDialog
+      initialOpen
+      format="aventuras-calendar"
+      title="Import calendar"
+      payloadKey="calendar"
+      schema={CalendarStubSchema}
+      onValidated={closedDuringReadSpy}
+    />
+  ),
+  play: async () => {
+    closedDuringReadSpy.mockClear()
+    let resolveRead: (text: string) => void = () => {}
+    const readText = fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve
+        }),
+    )
+    Object.defineProperty(navigator, 'clipboard', { value: { readText }, configurable: true })
+    try {
+      const dialog = await findDialog()
+      await userEvent.click(
+        await within(dialog).findByRole('button', { name: t('common:importDialog.fromClipboard') }),
+      )
+      await waitFor(() => expect(readText).toHaveBeenCalled(), WAIT)
+      await userEvent.click(within(dialog).getByRole('button', { name: t('common:cancel') }))
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).toBeNull()
+      }, WAIT)
+      resolveRead(
+        JSON.stringify({
+          format: 'aventuras-calendar',
+          formatVersion: '1.0',
+          calendar: { units: [{ name: 'day', length: 1 }], eras: ['Age'] },
+        }),
+      )
+      // Let the pipeline's settle handlers run before asserting nothing happened.
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(closedDuringReadSpy).not.toHaveBeenCalled()
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard')
+    }
   },
 }
 
