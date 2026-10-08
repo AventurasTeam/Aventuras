@@ -3202,6 +3202,18 @@ payload-error rather than emitting a wrong-kind payload — see the
 [ImportDialog per-host integration](./ui/patterns/import-dialog.md#world-per-row-entity-import)
 for the pattern.
 
+Per-row payloads carry one row's portable columns under the keys the
+app itself uses (camelCase, as the raw JSON viewer shows them; an
+entity's `state` keeps its stored keys). They leave out the
+server-owned columns (`id`, `branch_id`, `embedding_stale`,
+`name_collision_flag`, the timestamps) and every branch-local id:
+the entity and entry references inside an entity's `state`, a
+thread's or happening's entry references, and link rows such as
+involvements, awareness and relationships. A per-row file is meant
+to land on any story, where those ids would dangle. On import such
+keys are dropped, not rejected, and the row is created with a fresh
+id.
+
 Future kinds (`aventuras-pack`, `aventuras-scenario`, etc.) follow
 the same envelope as those features ship.
 
