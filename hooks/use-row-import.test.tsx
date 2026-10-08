@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useLayoutEffect } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ImportRowResult } from '@/lib/actions'
 
@@ -261,4 +261,36 @@ describe('useRowImport — committing', () => {
     expect(initial.onRejected).not.toHaveBeenCalled()
     expect(initial.onFailed).not.toHaveBeenCalled()
   })
+})
+
+describe('useRowImport — a throw after an ok commit', () => {
+  // A listener of our own makes vitest leave the expected rejection to the test.
+  const rejections: unknown[] = []
+  const onRejection = (reason: unknown) => {
+    rejections.push(reason)
+  }
+  beforeEach(() => {
+    rejections.length = 0
+    process.on('unhandledRejection', onRejection)
+  })
+  afterEach(() => {
+    process.off('unhandledRejection', onRejection)
+  })
+
+  it.each(['select', 'onImported'] as const)(
+    'surfaces a throw from %s instead of handing it to onFailed',
+    async (name) => {
+      const boom = new Error(`${name} threw`)
+      const throwing = vi.fn(() => {
+        throw boom
+      })
+      const initial = args(name === 'select' ? { select: throwing } : { onImported: throwing })
+      const { result } = setup(initial)
+      act(() => result.current.onValidated(PAYLOAD))
+      await vi.waitFor(() => expect(throwing).toHaveBeenCalledTimes(1))
+      expect(initial.onFailed).not.toHaveBeenCalled()
+      await vi.waitFor(() => expect(rejections).toEqual([boom]))
+      expect(initial.onFailed).not.toHaveBeenCalled()
+    },
+  )
 })
