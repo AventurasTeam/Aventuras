@@ -12,6 +12,7 @@ import type { HistoryChunk } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import type { HappeningDraft, HappeningLinks } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { HappeningDetailPane } from './happening-detail-pane'
 import type { HappeningTab } from './plot-selection'
@@ -945,9 +946,16 @@ export const Menu: Story = {
   },
 }
 
-/** Export writes the committed row, not the unsaved draft. */
+/** Export writes the committed row, not the unsaved draft, and a toast says so. */
 export const ExportHandsTheCommittedRow: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
   play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
     let blob: Blob | null = null
     const downloads: string[] = []
     const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
@@ -975,7 +983,15 @@ export const ExportHandsTheCommittedRow: Story = {
         happening: { title: string }
       }
       await expect(file.happening.title).toBe('The alley ambush')
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['info', t('common:avts.exportedSaved')],
+          ]),
+        WAIT,
+      )
     } finally {
+      stop()
       url.mockRestore()
       click.mockRestore()
     }

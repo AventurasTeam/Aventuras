@@ -9,8 +9,10 @@ import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
+import { t } from '@/lib/i18n'
 import type { ThreadDraft } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
 import type { ThreadTab } from './plot-selection'
 import { ThreadDetailPane } from './thread-detail-pane'
@@ -619,9 +621,16 @@ export const JsonViewerClosesOnRowSwitch: Story = {
   },
 }
 
-/** Export writes the committed row, not the unsaved draft. */
+/** Export writes the committed row, not the unsaved draft, and a toast says so. */
 export const ExportHandsTheCommittedRow: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
   play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
     let blob: Blob | null = null
     const downloads: string[] = []
     const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
@@ -649,7 +658,15 @@ export const ExportHandsTheCommittedRow: Story = {
         thread: { title: string }
       }
       await expect(file.thread.title).toBe('What the amulet wants')
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['info', t('common:avts.exportedSaved')],
+          ]),
+        WAIT,
+      )
     } finally {
+      stop()
       url.mockRestore()
       click.mockRestore()
     }

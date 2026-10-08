@@ -95,7 +95,9 @@ The overflow menu holds rare-but-important actions:
   file: a download on desktop and web, the OS share sheet on native;
   the file carries no branch-local ids; a read of the committed row,
   like `View raw JSON`, so it stays live during generation, per
-  [`principles.md → What's not gated`](../../principles.md#whats-not-gated))
+  [`principles.md → What's not gated`](../../principles.md#whats-not-gated);
+  with unsaved edits in the pane, the file holds the saved row and a
+  toast says so)
 - **View raw JSON** (debug/dev affordance)
 - **Delete entity** (destructive; confirms — see [Delete](#delete);
   disabled for the lead)
@@ -705,8 +707,9 @@ Mirrors the [entity detail head pattern](#detail-head-structure):
   the same accent rule applies.
 - **Overflow menu (⋯)**: `Export lore as JSON` (the row as an
   `aventuras-lore` `.avts` file: a download on desktop and web, the OS
-  share sheet on native; no branch-local ids; live during generation,
-  like the entity export), `View raw JSON`,
+  share sheet on native; no branch-local ids; like the entity export,
+  live during generation, and with unsaved edits the file holds the
+  saved row and a toast says so), `View raw JSON`,
   [`Delete`](#delete). **No `Set as lead`** — lead is a character-only concept
   per [`principles → Mode, lead, and narration`](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 

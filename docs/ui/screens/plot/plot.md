@@ -328,6 +328,8 @@ minus `Set as lead` (threads and happenings have no lead concept):
   A read of the committed row, like `View raw JSON`, so it stays live
   during generation, per
   [`principles.md → What's not gated`](../../principles.md#whats-not-gated).
+  With unsaved edits in the pane, the file holds the saved row and a
+  toast says so.
 - `View raw JSON` — live; a happening's viewer merges its
   involvements and awareness rows, per
   [Detail pane — raw JSON viewer](#detail-pane--raw-json-viewer) above.

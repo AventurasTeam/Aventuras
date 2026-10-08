@@ -11,6 +11,8 @@ import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
+import { t } from '@/lib/i18n'
+import { toastStore, type ToastItem } from '@/lib/toast'
 import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
@@ -971,9 +973,16 @@ export const DeleteHandsUpTheRow: Story = {
   },
 }
 
-/** Export writes the committed row, not the unsaved draft. */
+/** Export writes the committed row, not the unsaved draft, and a toast says so. */
 export const ExportHandsTheCommittedRow: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
   play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
     let blob: Blob | null = null
     const downloads: string[] = []
     const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
@@ -1009,7 +1018,15 @@ export const ExportHandsTheCommittedRow: Story = {
           tags: ['protagonist'],
         }),
       )
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['info', t('common:avts.exportedSaved')],
+          ]),
+        WAIT,
+      )
     } finally {
+      stop()
       url.mockRestore()
       click.mockRestore()
     }

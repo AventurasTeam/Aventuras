@@ -9,7 +9,9 @@ import { Text } from '@/components/ui/text'
 import type { LoreSaveResult } from '@/lib/actions'
 import type { Lore } from '@/lib/db'
 import type { HistoryChunk } from '@/lib/history'
+import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
+import { toastStore, type ToastItem } from '@/lib/toast'
 import type { LoreDraft } from '@/lib/world'
 
 import { LoreDetailPane } from './lore-detail-pane'
@@ -476,9 +478,16 @@ export const PickedCategoryKeepsItsCasing: Story = {
   },
 }
 
-/** Export writes the committed row, not the unsaved draft. */
+/** Export writes the committed row, not the unsaved draft, and a toast says so. */
 export const ExportHandsTheCommittedRow: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
   play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
     let blob: Blob | null = null
     const downloads: string[] = []
     const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
@@ -502,7 +511,15 @@ export const ExportHandsTheCommittedRow: Story = {
       await waitFor(() => expect(downloads).toEqual(['lore-the-aetherium.avts']), WAIT)
       const file = JSON.parse(await (blob as unknown as Blob).text()) as { lore: { title: string } }
       await expect(file.lore.title).toBe('The Aetherium')
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['info', t('common:avts.exportedSaved')],
+          ]),
+        WAIT,
+      )
     } finally {
+      stop()
       url.mockRestore()
       click.mockRestore()
     }

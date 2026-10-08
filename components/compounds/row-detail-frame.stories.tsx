@@ -216,6 +216,72 @@ export const ExportRejectionToasts: Story = {
   },
 }
 
+/** Captures anchor downloads and toasts for an export play; `stop` restores both. */
+function watchExport() {
+  const downloads: string[] = []
+  let toasts: ToastItem[] = []
+  const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
+  const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloads.push(this.download)
+  })
+  const unsubscribe = toastStore.subscribe((next) => {
+    toasts = next
+  })
+  return {
+    downloads,
+    toasts: () => toasts.map((item) => [item.severity, item.message]),
+    stop: () => {
+      unsubscribe()
+      url.mockRestore()
+      click.mockRestore()
+    },
+  }
+}
+
+/** Export reads the committed row, so with unsaved edits a toast says the file holds the saved one. */
+export const ExportWithUnsavedEditsSaysSo: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
+  play: async () => {
+    const watch = watchExport()
+    try {
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit First row' }, WAIT))
+      await userEvent.keyboard(' (draft){Enter}')
+      await waitFor(() => expect(screen.getByTestId('save-bar')).toBeVisible(), WAIT)
+      await openMenuEntry('Export row as JSON')
+      await waitFor(() => expect(watch.downloads).toEqual(['row-first-row.avts']), WAIT)
+      await waitFor(
+        () => expect(watch.toasts()).toEqual([['info', t('common:avts.exportedSaved')]]),
+        WAIT,
+      )
+    } finally {
+      watch.stop()
+    }
+  },
+}
+
+/** A clean draft is the saved row, so its export says nothing. */
+export const ExportWhileCleanStaysQuiet: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
+  play: async () => {
+    const watch = watchExport()
+    try {
+      await openMenuEntry('Export row as JSON')
+      await waitFor(() => expect(watch.downloads).toEqual(['row-first-row.avts']), WAIT)
+      // A notice would follow the hand-off within microtasks; one macrotask outlasts them.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(watch.toasts()).toEqual([])
+    } finally {
+      watch.stop()
+    }
+  },
+}
+
 /** world.md → Detail head structure: Export is read-only, so a blocked frame leaves it live. */
 export const ExportStaysLiveWhileBlocked: Story = {
   args: { blocked: true, blockedReason: 'Generation is in flight. Cancel to edit.' },

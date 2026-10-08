@@ -103,7 +103,8 @@
         "faction": "Expected a faction."
       }
     },
-    "exportFailed": "Couldn’t export the file."
+    "exportFailed": "Couldn’t export the file.",
+    "exportedSaved": "The file holds the saved version; your unsaved changes aren’t in it."
   },
   "chrome": {
     "appSettings": "App Settings",

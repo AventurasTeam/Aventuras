@@ -9,6 +9,7 @@ import { Tag } from '@/components/ui/tag'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
 import { saveAvtsFile, type AvtsFile } from '@/lib/avts'
 import { t } from '@/lib/i18n'
+import { toast } from '@/lib/toast'
 import { runAction } from '@/lib/utils'
 
 import { DetailTabs } from './detail-tabs'
@@ -55,12 +56,14 @@ export type RowDetailFrameProps<Draft extends FieldValues, Tab extends string> =
 }
 
 // Async, so a serializer throw rejects and runAction reports it like a failed hand-off.
-async function saveExport(committed: RowDetailCommitted): Promise<void> {
+async function saveExport(committed: RowDetailCommitted, unsavedEdits: boolean): Promise<void> {
   await saveAvtsFile(committed.exportFile())
+  // Export reads the committed row, never the draft on screen.
+  if (unsavedEdits) toast.info(t('common:avts.exportedSaved'))
 }
 
-function exportRow(committed: RowDetailCommitted): void {
-  runAction(saveExport(committed), {
+function exportRow(committed: RowDetailCommitted, unsavedEdits: boolean): void {
+  runAction(saveExport(committed, unsavedEdits), {
     event: 'app.row_export_failed',
     toastMessage: t('common:avts.exportFailed'),
     context: { id: committed.id },
@@ -129,7 +132,7 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
               entries={menuEntries({
                 onViewJson: () => setJsonOpen(true),
                 onExport: () => {
-                  if (committed != null) exportRow(committed)
+                  if (committed != null) exportRow(committed, session.dirty)
                 },
               })}
               disabled={committed == null}
