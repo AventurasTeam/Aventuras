@@ -68,10 +68,18 @@ describe('useSetLead', () => {
     expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.error).toHaveBeenCalledWith('Only an active character can be the lead.')
     expect(toast.success).not.toHaveBeenCalled()
+
+    // A lock left held after the refusal would make this press a silent no-op.
+    act(() => result.current.setLead('char_mira'))
+    expect(setStoryLead).toHaveBeenCalledTimes(2)
+    expect(setStoryLead).toHaveBeenLastCalledWith(STORY, 'char_mira', expect.anything())
+    await waitFor(() => expect(result.current.pending).toBe(false))
   })
 
   it('logs and toasts when the action throws', async () => {
-    setStoryLead.mockRejectedValue(new Error('disk full'))
+    setStoryLead
+      .mockRejectedValueOnce(new Error('disk full'))
+      .mockResolvedValue({ status: 'ok' } satisfies SetStoryLeadResult)
     const error = vi.spyOn(logger, 'error')
     const { result } = renderHook(() => useSetLead(STORY))
 
@@ -84,6 +92,12 @@ describe('useSetLead', () => {
       error: 'disk full',
     })
     expect(toast.error).toHaveBeenCalledWith("Couldn't change the lead.")
+
+    // A lock left held after the throw would make this press a silent no-op.
+    act(() => result.current.setLead('char_vorne'))
+    expect(setStoryLead).toHaveBeenCalledTimes(2)
+    expect(setStoryLead).toHaveBeenLastCalledWith(STORY, 'char_vorne', expect.anything())
+    await waitFor(() => expect(result.current.pending).toBe(false))
   })
 
   it('ignores a press while a call is in flight, then takes the next', async () => {
@@ -114,6 +128,7 @@ describe('useSetLead', () => {
   })
 
   it('does nothing without an open story', () => {
+    setStoryLead.mockResolvedValue({ status: 'ok' } satisfies SetStoryLeadResult)
     const { result } = renderHook(() => useSetLead(null))
 
     act(() => result.current.setLead('char_mira'))
