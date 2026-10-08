@@ -88,10 +88,61 @@ export interface EntityNameMatchOptions {
   allowPrefix?: boolean
 }
 
+/** What the `entityNameMatches` calls inside one `measureMatching` run cost. */
+export interface MatchingStats {
+  /** Calls that matched a term against a haystack. */
+  checks: number
+  /** Of those, how many normalized it rather than reusing the previous call's. */
+  normalizations: number
+  /** Characters normalized across those normalizations. */
+  normalizedChars: number
+  /** Normalization time the reused checks skipped, each priced at its haystack's own cost. */
+  savedMs: number
+  /** Wall time of the whole run. */
+  elapsedMs: number
+}
+
+const haystackCounters = { checks: 0, normalizations: 0, normalizedChars: 0, savedMs: 0 }
+let lastHaystack = { raw: '', key: '', ms: 0 }
+
+/** `termKey(text)`, reusing the last result: a match loop passes one haystack for every term. */
+function haystackKey(text: string): string {
+  haystackCounters.checks++
+  if (text === lastHaystack.raw) {
+    haystackCounters.savedMs += lastHaystack.ms
+    return lastHaystack.key
+  }
+  const start = performance.now()
+  const key = termKey(text)
+  haystackCounters.normalizations++
+  haystackCounters.normalizedChars += text.length
+  lastHaystack = { raw: text, key, ms: performance.now() - start }
+  return key
+}
+
+/** Run a synchronous match loop and report what its `entityNameMatches` calls cost. */
+export function measureMatching<T>(run: () => T): { result: T; stats: MatchingStats } {
+  const before = { ...haystackCounters }
+  const start = performance.now()
+  const result = run()
+  const elapsedMs = performance.now() - start
+  return {
+    result,
+    stats: {
+      checks: haystackCounters.checks - before.checks,
+      normalizations: haystackCounters.normalizations - before.normalizations,
+      normalizedChars: haystackCounters.normalizedChars - before.normalizedChars,
+      savedMs: haystackCounters.savedMs - before.savedMs,
+      elapsedMs,
+    },
+  }
+}
+
 /**
  * Checks whether `name` (a character/location/item/entry name, alias, or keyword)
- * appears in `searchText`. Matching is case-insensitive; the caller does not have to
- * lowercase anything first. Strategies, in order:
+ * appears in `searchText`. Both sides are compared as `termKey` does: case, runs of
+ * whitespace and composed/decomposed forms of one glyph match, accents stay distinct. The
+ * caller does not have to normalize anything first. Strategies, in order:
  * 1. Non-space-separated scripts (CJK, Thai, Lao, Khmer, Burmese) have no word
  *    boundaries to anchor a regex on, so these fall back to plain substring matching.
  * 2. Unicode-aware word-boundary match for space-separated languages (avoids
@@ -109,16 +160,13 @@ export function entityNameMatches(
   options: EntityNameMatchOptions = {},
 ): boolean {
   const { allowPrefix = false } = options
-  const normalizedName = name.toLowerCase().trim()
+  const normalizedName = termKey(name)
   if (normalizedName.length < 2) return false
 
-  // Lowercased here rather than trusted from the caller. The word-boundary regex below
-  // carries the `i` flag and so never cared, but the prefix branch compares raw strings --
-  // so a caller passing text as written silently lost every prefix match ("ari" did not
-  // match "Aria", only "aria"). `inspect_world_state` passes entity names and descriptions
-  // straight through, which is exactly that case, and it is the one tool whose whole job
-  // is finding an entity by a partial name.
-  const haystack = searchText.toLowerCase()
+  // Normalized here rather than trusted from the caller: the prefix branch compares raw
+  // strings, so text passed as written would lose every prefix match ("ari" vs "Aria").
+  // `inspect_world_state` passes entity names and descriptions straight through.
+  const haystack = haystackKey(searchText)
 
   // CJK, Hangul, Thai, Lao, Khmer, Burmese ranges (no spaces between words in these scripts)
   const isNonSpaceSeparated =
@@ -632,21 +680,13 @@ export function expandRangeBidirectional(
 }
 
 /**
- * Fold away spelling only: case, accents, punctuation, repeated spaces.
+ * The entity-identity fold: case, accents, punctuation and repeated spaces are folded away,
+ * articles are kept (`normalizeName` is the one that strips them).
  *
- * Articles are kept, and that is the whole difference from `normalizeName`. Two names that
- * differ by an article are the same *subject* but not the same *trigger*: matching is
- * literal and whole-word, so the alias "The Citadel" fires on that two-word phrase while
- * the keyword "Citadel" fires on the bare word, and neither makes the other redundant.
- * Lorebook-entry *identity* is judged by `normalizeName`, which does strip them.
+ * `\p{L}\p{N}`, not `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the
+ * empty string, and empty compares equal to every other one.
  *
- * The character class is `\p{L}\p{N}`, like the rest of this file, and deliberately not
- * `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the empty string,
- * and empty compares equal to every other one.
- *
- * **An apostrophe is removed, not spaced.** It joins rather than divides — a possessive or
- * an elision — so spacing it split one word into two: `Kaelen's Rest` did not match
- * `Kaelens Rest`, nor `Vor'koth` match `Vorkoth`.
+ * An apostrophe is removed rather than spaced, because it joins: `Vor'koth` folds to `vorkoth`.
  */
 export function foldName(raw: string): string {
   return raw
@@ -659,11 +699,12 @@ export function foldName(raw: string): string {
 }
 
 /**
- * The identity of a trait or keyword: trimmed, NFC-normalised and lowercased, so case, padding and
- * composed/decomposed forms of one glyph merge; width forms, accents and punctuation stay distinct.
+ * The identity of a trait or keyword: trimmed, NFC-normalised, lowercased and with each run of
+ * whitespace read as one space, so case, padding and composed/decomposed forms of one glyph merge;
+ * width forms, accents and punctuation stay distinct.
  */
 export function termKey(term: string): string {
-  return term.trim().normalize('NFC').toLowerCase()
+  return term.trim().normalize('NFC').toLowerCase().replace(/\s+/gu, ' ')
 }
 
 /**

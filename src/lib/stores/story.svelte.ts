@@ -90,6 +90,7 @@ import {
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
+import { withUniqueEntryTerms } from '$lib/utils/lorebookTerms'
 import { applyTermChanges, sameEntityName, uniqueTerms } from '$lib/utils/text'
 import { storyDetailsUpdate } from '$lib/utils/storyDetails'
 import { grammarService } from '$lib/services/grammar'
@@ -2563,7 +2564,7 @@ class StoryStore {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const now = Date.now()
-    const entry: Entry = {
+    const entry: Entry = withUniqueEntryTerms({
       ...entryData,
       id: entryData.id ?? crypto.randomUUID(),
       storyId: this.currentStory.id,
@@ -2571,7 +2572,7 @@ class StoryStore {
       updatedAt: now,
       // Use provided branchId or default to current branch
       branchId: entryData.branchId ?? this.currentStory.currentBranchId,
-    }
+    })
 
     await database.addEntry(entry)
     this.lorebookEntries = [...this.lorebookEntries, entry]
@@ -2589,14 +2590,16 @@ class StoryStore {
     const now = Date.now()
     const branchId = this.currentStory.currentBranchId
     const storyId = this.currentStory.id
-    const entries: Entry[] = entriesData.map((entryData) => ({
-      ...entryData,
-      id: crypto.randomUUID(),
-      storyId,
-      createdAt: now,
-      updatedAt: now,
-      branchId,
-    }))
+    const entries: Entry[] = entriesData.map((entryData) =>
+      withUniqueEntryTerms({
+        ...entryData,
+        id: crypto.randomUUID(),
+        storyId,
+        createdAt: now,
+        updatedAt: now,
+        branchId,
+      }),
+    )
 
     await database.bulkInsertEntries(entries)
     this.lorebookEntries = [...this.lorebookEntries, ...entries]
@@ -2618,7 +2621,7 @@ class StoryStore {
     const { entity: owned } = await this.cowLorebookEntry(existing)
 
     const updatesWithTimestamp = {
-      ...updates,
+      ...withUniqueEntryTerms(updates),
       updatedAt: Date.now(),
     }
 

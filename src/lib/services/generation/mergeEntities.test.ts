@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import type { Character, Item, Location } from '$lib/types'
+import type { Character, Entry, Item, Location } from '$lib/types'
 import {
   APPEND,
   applyMergePlan,
   hasConflicts,
   planCharacterMerge,
+  planEntryMerge,
   planItemMerge,
   planLocationMerge,
   type MergePlan,
@@ -104,6 +105,28 @@ describe('what the plan says about each field', () => {
     ])
     expect(field(plan, 'traits').origin).toBe('union')
     expect(applyMergePlan(plan).traits).toEqual(['proud', 'cruel', 'patient'])
+  })
+
+  it('unions entry aliases and keywords by termKey', () => {
+    const entry = (id: string, aliases: string[], keywords: string[]) =>
+      ({ id, name: id, aliases, injection: { mode: 'keyword', keywords, priority: 0 } }) as Entry
+    const plan = planEntryMerge(entry('a', ['Keep'], ['Ward']), [
+      entry('b', ['keep', ' KEEP '], ['ward', 'Gate']),
+    ])
+    const merged = applyMergePlan(plan)
+    expect(merged.aliases).toEqual(['Keep', 'b'])
+    expect(merged.keywords).toEqual(['Ward', 'Gate'])
+  })
+
+  it('leaves out an alias or keyword the entry name or an alias already matches', () => {
+    const entry = (id: string, name: string, aliases: string[], keywords: string[]) =>
+      ({ id, name, aliases, injection: { mode: 'keyword', keywords, priority: 0 } }) as Entry
+    const plan = planEntryMerge(entry('a', 'Keep', ['Hold'], ['Ward']), [
+      entry('b', 'keep', ['KEEP', 'Tower'], ['keep', 'hold', 'tower', 'Gate']),
+    ])
+    const merged = applyMergePlan(plan)
+    expect(merged.aliases).toEqual(['Hold', 'Tower'])
+    expect(merged.keywords).toEqual(['Ward', 'Gate'])
   })
 
   it('fills missing appearance keys without overriding the kept row’s', () => {

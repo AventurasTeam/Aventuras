@@ -27,6 +27,24 @@ describe('cleanAliases', () => {
   it('keeps a genuine second name', () => {
     expect(cleanAliases('Pento', ['Lord Vael', 'Vael']).value).toEqual(['Lord Vael', 'Vael'])
   })
+
+  it('keeps a spelling that matches different prose', () => {
+    expect(cleanAliases("Kaelen's", ['Kaelens']).value).toEqual(['Kaelens'])
+    expect(cleanAliases('Pento', ["Kaelen's", 'Kaelens']).value).toEqual(["Kaelen's", 'Kaelens'])
+    expect(cleanAliases('Elan', ['Élan']).value).toEqual(['Élan'])
+  })
+
+  it('drops a composed/decomposed repeat', () => {
+    const { value, dropped } = cleanAliases('Pento', ['Élan', 'Élan'])
+    expect(value).toEqual(['Élan'])
+    expect(dropped[0].reason).toBe('duplicate')
+  })
+
+  it('drops a term with no letter or digit', () => {
+    const { value, dropped } = cleanAliases('Pento', ['--', '-', 'Vael'])
+    expect(value).toEqual(['Vael'])
+    expect(dropped.map((d) => d.reason)).toEqual(['empty', 'empty'])
+  })
 })
 
 describe('cleanKeywords', () => {
@@ -45,6 +63,17 @@ describe('cleanKeywords', () => {
   it('drops repeats and empties', () => {
     const { value } = cleanKeywords('Nyx', [], ['spymaster', '  ', 'Spymaster', 'Stygia'])
     expect(value).toEqual(['spymaster', 'Stygia'])
+  })
+
+  it('drops a keyword that differs from another only by a run of whitespace', () => {
+    const { value, dropped } = cleanKeywords('Pento', [], ['Iron Gate', 'Iron  Gate'])
+    expect(value).toEqual(['Iron Gate'])
+    expect(dropped[0].reason).toBe('duplicate')
+  })
+
+  it('keeps a spelling the name or an alias does not match', () => {
+    expect(cleanKeywords("Kaelen's", ['Kaelens'], ['Kaelens']).value).toEqual([])
+    expect(cleanKeywords("Kaelen's", [], ['Kaelens']).value).toEqual(['Kaelens'])
   })
 
   it('leaves a judgement call alone — a generic keyword is the prompt’s problem', () => {

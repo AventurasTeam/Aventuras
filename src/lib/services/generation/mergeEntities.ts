@@ -11,7 +11,8 @@
  * The rules that survive as defaults are only the ones a machine can justify:
  *
  * - a field only one row has is that row's, and is not a decision;
- * - lists (traits, aliases, keywords) are unioned, so nothing is dropped;
+ * - lists (traits, aliases, keywords) are unioned; a lorebook alias or keyword the entry's
+ *   name or aliases already match is left out, as it can never add a match;
  * - everything else defaults to the row the user chose to keep, and is **marked** as a
  *   conflict when the rows disagree.
  *
@@ -23,7 +24,7 @@
  */
 
 import type { Character, Entry, Item, Location } from '$lib/types'
-import { containsWholeUnit } from '$lib/utils/text'
+import { containsWholeUnit, termKey, uniqueTerms } from '$lib/utils/text'
 
 /** Where a field's value came from, which is what the preview shows next to it. */
 export type FieldOrigin =
@@ -119,9 +120,20 @@ function scalarField(
   }
 }
 
-/** A list field: every value from every source, deduplicated. Nothing to decide. */
-function unionField(key: string, label: string, sources: Source[]): MergeField {
-  const merged = [...new Set(sources.flatMap((s) => (s.value as string[] | undefined) ?? []))]
+/**
+ * A list field: every value from every source, deduplicated, minus the `exclude` terms by
+ * `termKey`. Nothing to decide.
+ */
+function unionField(
+  key: string,
+  label: string,
+  sources: Source[],
+  exclude: readonly string[] = [],
+): MergeField {
+  const excluded = new Set(exclude.map(termKey))
+  const merged = uniqueTerms(
+    sources.flatMap((s) => (s.value as string[] | undefined) ?? []),
+  ).filter((term) => !excluded.has(termKey(term)))
   return {
     key,
     label,
@@ -262,6 +274,21 @@ export function planItemMerge(primary: Item, others: Item[]): MergePlan {
 export function planEntryMerge(primary: Entry, others: Entry[]): MergePlan {
   const all = order(primary, others)
   const src = (value: (e: Entry) => unknown) => sourcesOf(all, (e) => e.name, value)
+
+  // The absorbed names join the aliases: that is what stops the same duplicate being
+  // re-created, and what makes the entry match when the story uses that form.
+  const aliasesField = unionField(
+    'aliases',
+    'Aliases',
+    sourcesOf(
+      all,
+      (e) => e.name,
+      (e) => [...(e.aliases ?? []), ...(e.id === primary.id ? [] : [e.name])],
+    ),
+    [primary.name],
+  )
+  const aliases = aliasesField.unionValue as string[]
+
   return {
     primaryId: primary.id,
     absorbing: all.slice(1).map((e) => e.name),
@@ -278,21 +305,12 @@ export function planEntryMerge(primary: Entry, others: Entry[]): MergePlan {
         src((e) => e.hiddenInfo),
         { appendable: true },
       ),
-      // The absorbed names join the aliases: that is what stops the same duplicate being
-      // re-created, and what makes the entry match when the story uses that form.
-      unionField(
-        'aliases',
-        'Aliases',
-        sourcesOf(
-          all,
-          (e) => e.name,
-          (e) => [...(e.aliases ?? []), ...(e.id === primary.id ? [] : [e.name])],
-        ),
-      ),
+      aliasesField,
       unionField(
         'keywords',
         'Keywords',
         src((e) => e.injection.keywords),
+        [primary.name, ...aliases],
       ),
     ],
   }

@@ -229,7 +229,7 @@
       </div>
 
       <div class="grid grid-cols-1 gap-3">
-        {#each supportingCharacters as char (char.name + char.role + char.description)}
+        {#each supportingCharacters as char, i (i)}
           <Card.Root>
             <Card.Content class="p-3">
               <div class="flex gap-4">

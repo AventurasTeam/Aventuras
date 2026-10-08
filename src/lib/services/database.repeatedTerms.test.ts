@@ -96,6 +96,122 @@ describe('traits a row stores with repeats load without them', () => {
   })
 })
 
+describe('lorebook terms a row stores with repeats load without them', () => {
+  beforeEach(async () => {
+    await database.close()
+    vi.clearAllMocks()
+  })
+
+  afterEach(async () => {
+    await database.close()
+  })
+
+  const entryRow = (overrides: Record<string, unknown>) => ({
+    id: 'e1',
+    story_id: 's1',
+    name: 'Keep',
+    type: 'location',
+    description: '',
+    ...overrides,
+  })
+
+  it('entry aliases and keywords, keeping the rest of the injection', async () => {
+    mocks.select.mockResolvedValueOnce([
+      entryRow({
+        aliases: REPEATED,
+        injection: JSON.stringify({ mode: 'always', keywords: JSON.parse(REPEATED), priority: 7 }),
+      }),
+    ])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.aliases).toEqual(CLEAN)
+    expect(entry.injection).toEqual({ mode: 'always', keywords: CLEAN, priority: 7 })
+  })
+
+  it('an injection stored without keywords', async () => {
+    mocks.select.mockResolvedValueOnce([
+      entryRow({ injection: JSON.stringify({ mode: 'never', priority: 3 }) }),
+    ])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.injection).toEqual({ mode: 'never', keywords: [], priority: 3 })
+  })
+
+  it('a row with no injection or aliases', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({})])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.aliases).toEqual([])
+    expect(entry.injection).toEqual({ mode: 'keyword', keywords: [], priority: 0 })
+  })
+
+  it('entry previews', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({ aliases: REPEATED })])
+
+    const [preview] = await database.getEntryPreviews('s1')
+
+    expect(preview.aliases).toEqual(CLEAN)
+  })
+
+  it('vault lorebook entries', async () => {
+    mocks.select.mockResolvedValueOnce([
+      {
+        id: 'l1',
+        name: 'Lore',
+        entries: JSON.stringify([
+          {
+            name: 'Keep',
+            keywords: JSON.parse(REPEATED),
+            aliases: JSON.parse(REPEATED),
+            priority: 2,
+          },
+        ]),
+      },
+    ])
+
+    const [lorebook] = await database.getVaultLorebooks()
+
+    expect(lorebook.entries[0]).toMatchObject({ keywords: CLEAN, aliases: CLEAN, priority: 2 })
+  })
+
+  it('an injection stored as JSON null reads as the default', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({ injection: 'null' })])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.injection).toEqual({ mode: 'keyword', keywords: [], priority: 0 })
+  })
+
+  it('vault entries stored as something other than a list read as empty', async () => {
+    mocks.select.mockResolvedValueOnce([{ id: 'l1', name: 'Lore', entries: '{}' }])
+
+    const [lorebook] = await database.getVaultLorebooks()
+
+    expect(lorebook.entries).toEqual([])
+  })
+
+  it('a vault entry stored as null is skipped', async () => {
+    mocks.select.mockResolvedValueOnce([
+      { id: 'l1', name: 'Lore', entries: JSON.stringify([null, { name: 'Keep', keywords: [] }]) },
+    ])
+
+    const [lorebook] = await database.getVaultLorebooks()
+
+    expect(lorebook.entries.map((e) => e.name)).toEqual(['Keep'])
+  })
+
+  it('terms that differ beyond case and padding stay apart', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({ aliases: JSON.stringify(['Élan', 'Elan']) })])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.aliases).toEqual(['Élan', 'Elan'])
+  })
+})
+
 describe('traits are stored without repeats', () => {
   const REPEATED_LIST = ['honest', 'Honest ']
 
@@ -183,5 +299,119 @@ describe('traits are stored without repeats', () => {
     await database.updateVaultCharacter('v1', { traits: REPEATED_LIST })
 
     expect(lastCall()[1]).toContain('["honest"]')
+  })
+})
+
+describe('lorebook terms are stored without repeats', () => {
+  beforeEach(async () => {
+    await database.close()
+    vi.clearAllMocks()
+  })
+
+  afterEach(async () => {
+    await database.close()
+  })
+
+  const lastCall = () => {
+    const calls = mocks.execute.mock.calls as unknown as [string, unknown[]][]
+    return calls[calls.length - 1]
+  }
+
+  const ALIASES = '["Keep"]'
+  const INJECTION = '{"mode":"always","keywords":["Ward"],"priority":3}'
+  const entry = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: 'e1',
+      storyId: 's1',
+      name: 'Keep',
+      type: 'location',
+      description: '',
+      hiddenInfo: null,
+      aliases: ['Keep', 'keep '],
+      state: { type: 'location' },
+      injection: { mode: 'always', keywords: ['Ward', 'ward'], priority: 3 },
+      ...overrides,
+    }) as any
+
+  it('adding an entry', async () => {
+    await database.addEntry(entry())
+
+    const values = lastCall()[1]
+    expect(values).toContain(ALIASES)
+    expect(values).toContain(INJECTION)
+  })
+
+  it('adding entries in bulk', async () => {
+    await database.bulkInsertEntries([entry()])
+
+    const values = lastCall()[1]
+    expect(values).toContain(ALIASES)
+    expect(values).toContain(INJECTION)
+  })
+
+  it('binds one placeholder per column for every row of a bulk insert', async () => {
+    await database.bulkInsertEntries([entry(), entry({ id: 'e2' })])
+
+    const [sql, values] = lastCall()
+    const columns = sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').length
+    const groups = sql.slice(sql.indexOf('VALUES')).match(/\([?,]+\)/g) ?? []
+
+    expect(groups).toHaveLength(2)
+    for (const group of groups) expect(group.split('?').length - 1).toBe(columns)
+    expect(values).toHaveLength(columns * 2)
+  })
+
+  it('adding an entry that has no injection, as an imported file can', async () => {
+    await database.addEntry(entry({ injection: undefined }))
+
+    expect(lastCall()[1][10]).toBeUndefined()
+  })
+
+  it('updating an entry', async () => {
+    await database.updateEntry('e1', entry())
+
+    const values = lastCall()[1]
+    expect(values).toContain(ALIASES)
+    expect(values).toContain(INJECTION)
+  })
+
+  it('updating only the aliases leaves the injection alone', async () => {
+    await database.updateEntry('e1', { aliases: ['Keep', 'keep '] })
+
+    const [sql, values] = lastCall()
+    expect(values).toContain(ALIASES)
+    expect(sql).not.toContain('injection')
+  })
+
+  const vaultEntries = [
+    { name: 'Keep', keywords: ['Ward', 'ward'], aliases: ['Keep', 'keep '], priority: 2 },
+  ]
+  const STORED_VAULT_ENTRIES = JSON.stringify([
+    { name: 'Keep', keywords: ['Ward'], aliases: ['Keep'], priority: 2 },
+  ])
+
+  it('adding a vault lorebook', async () => {
+    await database.addVaultLorebook({
+      id: 'l1',
+      name: 'Lore',
+      description: null,
+      entries: vaultEntries,
+      tags: [],
+      favorite: false,
+      source: 'import',
+      originalFilename: null,
+      originalStoryId: null,
+      metadata: null,
+      createdAt: 1,
+      updatedAt: 1,
+    } as any)
+
+    expect(lastCall()[1]).toContain(STORED_VAULT_ENTRIES)
+  })
+
+  it('updating a vault lorebook', async () => {
+    await database.updateVaultLorebook('l1', { entries: vaultEntries as any })
+
+    expect(lastCall()[1]).toContain(STORED_VAULT_ENTRIES)
   })
 })

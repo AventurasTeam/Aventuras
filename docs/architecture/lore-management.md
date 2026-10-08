@@ -33,16 +33,18 @@ field carries where its value came from — `only` (one row had it), `agreed`, `
 
 Only the defaults a machine can justify survive: a field one row has is that row's, lists
 (traits, aliases, keywords) are unioned, and everything else defaults to the row the user
-chose to keep. There is deliberately **no "the newer row wins"** — `characters`, `locations`
-and `items` have no creation timestamp, so which of two conflicting values is more recent is
-a question the data cannot answer.
+chose to keep. The one exception to the union is a lorebook alias or keyword that the entry's
+name or aliases already match by `termKey`: it can never add a match, so it is left out. There
+is deliberately **no "the newer row wins"** — `characters`, `locations` and `items` have no
+creation timestamp, so which of two conflicting values is more recent is a question the data
+cannot answer.
 
 The first version returned a finished object and preferred the primary field by field. It
 dropped a description silently whenever both rows had one, and it put `status` outside the
 user's reach entirely — any non-`active` value from any row won, so merging a character the
 story had brought back marked them dead again whichever row was kept. For the lorebook the
 absorbed names still become **aliases** on the survivor, which is what stops the same
-duplicate being re-created.
+duplicate being re-created — except one the survivor's name already matches by `termKey`.
 
 **A dismissal is remembered, in `kept_separate`** (migration 037), keyed by normalized
 **name pair** and scoped to a branch. Names rather than ids, so a later rename cannot
@@ -193,16 +195,19 @@ that repeats the name or an alias. Neither can ever add a match. `lorebook/entry
 them on the way through `create_entry`/`update_entry` and reports what it dropped in the tool
 result, so the model reads the rule applied to its own output; nothing is rejected, because
 losing a whole call over one redundant keyword is the failure this file exists to avoid. The
-comparison is `foldName`, which folds case and punctuation but keeps articles — `"The Citadel"`
-and `"Citadel"` are the same subject but not the same trigger, which is `normalizeName`'s
-distinction to make, not this one's. `foldName` is also what `create_entry`'s duplicate refusal
-matches on, deliberately and not `normalizeName`: the detector is lenient because being wrong
-there costs one question, while being wrong in a hard refusal costs an entry.
+comparison is `termKey`, the one `entityNameMatches` uses, so the cleaner can never be coarser
+than matching: `"Kaelen's"` and `"Kaelens"` match different prose and both stay, and so do
+`"The Citadel"` and `"Citadel"`, which is `normalizeName`'s distinction to make, not this one's.
+A term with no letter or digit is dropped as empty. `foldName` is what `create_entry`'s duplicate
+refusal matches on, deliberately and not `normalizeName`: that question is entity identity, not
+triggers, and the detector is lenient because being wrong there costs one question, while being
+wrong in a hard refusal costs an entry.
 
-Both fold on `\p{L}\p{N}`, not `a-z0-9`. An ASCII class folds every Cyrillic, Greek and CJK
-name to the empty string, and empty compares equal to every other one — which made two
-unrelated characters read as duplicates, and, through `sameEntityName`, collapsed the whole
-world-state cast of a non-Latin story into its first member.
+`foldName`, and `normalizeName` through it, fold on `\p{L}\p{N}`, not `a-z0-9`. An ASCII class
+folds every Cyrillic, Greek and CJK name to the empty string, and empty compares equal to every
+other one — which made two unrelated characters read as duplicates, and, through
+`sameEntityName`, collapsed the whole world-state cast of a non-Latin story into its first
+member.
 
 Everything requiring judgement stays in the prompt, where the field contract is written out: a
 name is the form the story actually uses (never `Name / Title`), other forms are aliases, and a

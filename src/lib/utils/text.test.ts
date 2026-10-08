@@ -4,6 +4,7 @@ import {
   entityNameMatches,
   foldName,
   findTextMatches,
+  measureMatching,
   paragraphMatches,
   applyTermChanges,
   parseTerms,
@@ -82,6 +83,82 @@ describe('entityNameMatches — non-space-separated scripts', () => {
 
   it('ignores allowPrefix for those scripts (substring already covers it)', () => {
     expect(entityNameMatches('서울', '그는 서울역에 도착했다')).toBe(true)
+  })
+})
+
+describe('entityNameMatches — Unicode normalization', () => {
+  const composed = 'Élan'
+  const decomposed = 'Élan'
+
+  it('matches a composed name against decomposed text, and the reverse', () => {
+    expect(entityNameMatches(composed, `${decomposed} spoke`)).toBe(true)
+    expect(entityNameMatches(decomposed, `${composed} spoke`)).toBe(true)
+  })
+
+  it('does so on the prefix branch too', () => {
+    expect(entityNameMatches('Éla', `${decomposed}ra spoke`, { allowPrefix: true })).toBe(true)
+    expect(entityNameMatches('Éla', `${composed}ra spoke`, { allowPrefix: true })).toBe(true)
+  })
+
+  it('keeps accents distinct', () => {
+    expect(entityNameMatches('Élan', 'elan spoke')).toBe(false)
+    expect(entityNameMatches('Elan', `${composed} spoke`)).toBe(false)
+  })
+
+  it('no longer matches an unaccented name inside a decomposed accent', () => {
+    expect(entityNameMatches('cafe', 'a café downtown')).toBe(false)
+    expect(entityNameMatches('cafe', 'a cafe downtown')).toBe(true)
+  })
+})
+
+describe('entityNameMatches — whitespace runs', () => {
+  it('matches a double-spaced name against single-spaced text', () => {
+    expect(entityNameMatches('Iron  Gate', 'the iron gate opened')).toBe(true)
+  })
+
+  it('matches a single-spaced name against text with a run of whitespace', () => {
+    expect(entityNameMatches('Iron Gate', 'the iron  gate opened')).toBe(true)
+    expect(entityNameMatches('Iron Gate', 'the iron\ngate opened')).toBe(true)
+  })
+
+  it('finds a stored double-spaced term when it is the text searched', () => {
+    expect(entityNameMatches('iron gate', 'Iron  Gate')).toBe(true)
+  })
+})
+
+describe('entityNameMatches — haystack memo', () => {
+  it('re-normalizes when the haystack changes, never serving the previous one', () => {
+    expect(entityNameMatches('Aria', 'Aria walked in')).toBe(true)
+    expect(entityNameMatches('Aria', 'Bren walked in')).toBe(false)
+    expect(entityNameMatches('Bren', 'Bren walked in')).toBe(true)
+    expect(entityNameMatches('Aria', 'Aria walked in')).toBe(true)
+  })
+
+  it('normalizes one haystack once across a loop of terms', () => {
+    const haystack = 'The   Iron Gate stood open; Aria waited.'
+    const terms = ['Iron Gate', 'Aria', 'Bren', 'gate']
+    const { result, stats } = measureMatching(() =>
+      terms.filter((term) => entityNameMatches(term, haystack)),
+    )
+    expect(result).toEqual(['Iron Gate', 'Aria', 'gate'])
+    expect(stats.checks).toBe(4)
+    expect(stats.normalizations).toBe(1)
+    expect(stats.normalizedChars).toBe(haystack.length)
+  })
+
+  it('carries a haystack across runs and prices each reused check at its normalization', () => {
+    const haystack = 'The Weathered Keep loomed over Thornfield.'
+    const terms = ['Keep', 'Thornfield', 'Bren', 'loomed']
+    const first = measureMatching(() => terms.map((term) => entityNameMatches(term, haystack)))
+    const second = measureMatching(() => terms.map((term) => entityNameMatches(term, haystack)))
+    expect(first.stats).toMatchObject({ checks: 4, normalizations: 1 })
+    expect(second.stats).toMatchObject({ checks: 4, normalizations: 0, normalizedChars: 0 })
+    expect(second.stats.savedMs).toBeCloseTo((first.stats.savedMs / 3) * 4)
+  })
+
+  it('counts no check for a term too short to match', () => {
+    const { stats } = measureMatching(() => entityNameMatches('A', 'A long haystack'))
+    expect(stats.checks).toBe(0)
   })
 })
 
@@ -439,6 +516,11 @@ describe('termKey', () => {
     expect(termKey('e\u0301')).toBe(termKey('\u00e9'))
   })
 
+  it('folds a run of whitespace to one space', () => {
+    expect(termKey('Iron  Gate')).toBe('iron gate')
+    expect(termKey('iron\t\n gate')).toBe('iron gate')
+  })
+
   it('keeps width forms, accents, punctuation and kana voicing distinct', () => {
     const pairs = [
       ['ｂｒａｖｅ', 'brave'],
@@ -457,6 +539,10 @@ describe('uniqueTerms', () => {
   it('drops a repeat and keeps the first spelling and position', () => {
     expect(uniqueTerms(['a', 'b', 'A', 'c', 'a'])).toEqual(['a', 'b', 'c'])
     expect(uniqueTerms(['Brave', 'brave', 'ｂｒａｖｅ'])).toEqual(['Brave', 'ｂｒａｖｅ'])
+  })
+
+  it('treats a run of whitespace as one space', () => {
+    expect(uniqueTerms(['Iron Gate', 'Iron  Gate'])).toEqual(['Iron Gate'])
   })
 
   it('keeps terms that differ beyond case and canonical form', () => {

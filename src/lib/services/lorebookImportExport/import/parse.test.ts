@@ -35,6 +35,24 @@ describe('lorebookImportExport / parse', () => {
     expect(res.entries[0].injectionMode).toBe('keyword')
   })
 
+  it('drops repeated and blank SillyTavern keywords across both key lists', () => {
+    const res = parse(
+      JSON.stringify({
+        name: 'Test World',
+        entries: {
+          '1': {
+            uid: 1,
+            key: ['Keep', 'keep', ''],
+            keysecondary: [' KEEP ', 'ward'],
+            comment: 'The Keep',
+            content: 'A fortress.',
+          },
+        },
+      }),
+    )
+    expect(res.entries[0].keywords).toEqual(['Keep', 'ward'])
+  })
+
   it('parses an Aventuras lorebook export literally, with its lorebook-level fields', () => {
     const text = JSON.stringify({
       format: EXCHANGE_FORMAT,
