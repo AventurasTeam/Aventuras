@@ -4,7 +4,7 @@ import type { AvtsFile } from './envelope'
 
 const SHARE_OPTIONS = { mimeType: 'application/json', UTI: 'public.json' } as const
 
-/** Resolves once handed to the OS (even if the dialog is dismissed); rejects if hand-off fails. */
+/** Resolves when the share sheet closes, shared or not; rejects if the file or the sheet fails. */
 export async function saveAvtsFile(file: AvtsFile): Promise<void> {
   // Loaded on demand: a dev client built before expo-sharing fails here, not at module load.
   const Sharing = await import('expo-sharing')

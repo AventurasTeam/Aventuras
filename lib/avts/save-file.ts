@@ -1,6 +1,6 @@
 import type { AvtsFile } from './envelope'
 
-/** Resolves once handed to the OS (even if the dialog is dismissed); rejects if hand-off fails. */
+/** Resolves once the browser takes the download; a cancelled or failed save never rejects. */
 export async function saveAvtsFile(file: AvtsFile): Promise<void> {
   const url = URL.createObjectURL(new Blob([file.contents], { type: 'application/json' }))
   try {
