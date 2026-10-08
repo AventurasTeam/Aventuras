@@ -13,6 +13,11 @@ const FILE: AvtsFile = {
 let createObjectURL: Mock<(blob: Blob) => string>
 let revokeObjectURL: Mock<(url: string) => void>
 
+const URL_STATICS = {
+  createObjectURL: Object.getOwnPropertyDescriptor(URL, 'createObjectURL'),
+  revokeObjectURL: Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL'),
+}
+
 beforeEach(() => {
   createObjectURL = vi.fn((_blob: Blob) => 'blob:avts-1')
   revokeObjectURL = vi.fn()
@@ -30,6 +35,11 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  for (const [name, descriptor] of Object.entries(URL_STATICS)) {
+    // jsdom's URL inherits some statics; deleting the stub re-exposes the inherited one.
+    if (descriptor == null) Reflect.deleteProperty(URL, name)
+    else Object.defineProperty(URL, name, descriptor)
+  }
 })
 
 describe('saveAvtsFile (web)', () => {

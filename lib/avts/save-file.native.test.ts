@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AvtsFile } from './envelope'
 // Separate from save-file.test.ts: eslint resolves `./save-file` and `./save-file.native`
@@ -28,7 +28,7 @@ vi.mock('expo-file-system', () => {
   return { File, Paths: { cache: { uri: 'file:///cache' } } }
 })
 
-vi.mock('expo-sharing', () => ({
+const sharingMock = vi.hoisted(() => () => ({
   isAvailableAsync: () => Promise.resolve(harness.available),
   shareAsync: (url: string, options: unknown) => {
     harness.calls.push(`share ${url}`)
@@ -36,6 +36,8 @@ vi.mock('expo-sharing', () => ({
     return harness.shareError == null ? Promise.resolve() : Promise.reject(harness.shareError)
   },
 }))
+
+vi.mock('expo-sharing', sharingMock)
 
 const FILE: AvtsFile = {
   fileName: 'character-kael.avts',
@@ -47,6 +49,11 @@ beforeEach(() => {
   harness.shareOptions = undefined
   harness.available = true
   harness.shareError = undefined
+})
+
+afterEach(() => {
+  // Restores the mock the module-missing case replaces; vi.doUnmock would drop it, loading the real one.
+  vi.doMock('expo-sharing', sharingMock)
 })
 
 describe('saveAvtsFile (native)', () => {
