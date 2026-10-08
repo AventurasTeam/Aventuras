@@ -33,7 +33,7 @@ export function useRowImport<P>({
   onFailed,
 }: UseRowImportArgs<P>): RowImport<P> {
   const [open, setOpen] = useState(false)
-  // In render, not an effect: it also closes a request the leave guard released mid-run.
+  // In render, not an effect: the dialog never commits open while blocked.
   if (blocked && open) setOpen(false)
 
   const request = useCallback(() => {
@@ -43,10 +43,13 @@ export function useRowImport<P>({
 
   const onValidated = useCallback(
     (payload: P) => {
-      commit(payload).then((result) => {
-        if (result.status === 'ok') onImported(result.id)
-        else onRejected(result.code)
-      }, onFailed)
+      // Two-argument `then`: a throw inside `onImported` must not route to `onFailed`.
+      Promise.resolve()
+        .then(() => commit(payload))
+        .then((result) => {
+          if (result.status === 'ok') onImported(result.id)
+          else onRejected(result.code)
+        }, onFailed)
     },
     [commit, onImported, onRejected, onFailed],
   )

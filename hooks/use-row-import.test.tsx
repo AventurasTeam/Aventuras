@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { useLayoutEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ImportRowResult } from '@/lib/actions'
@@ -84,6 +85,31 @@ describe('useRowImport — opening', () => {
     expect(result.current.open).toBe(false)
   })
 
+  it('never commits an open dialog while blocked, even for a request released late', () => {
+    const committed: { blocked: boolean; open: boolean }[] = []
+    let release = () => {}
+    const initial = args({
+      guard: vi.fn((proceed: () => void) => {
+        release = proceed
+      }),
+    })
+    const { result, rerender } = renderHook(
+      (props: UseRowImportArgs<Payload>) => {
+        const row = useRowImport(props)
+        useLayoutEffect(() => {
+          committed.push({ blocked: props.blocked, open: row.open })
+        })
+        return row
+      },
+      { initialProps: initial },
+    )
+    act(() => result.current.request())
+    rerender({ ...initial, blocked: true })
+    act(() => release())
+    expect(committed.length).toBeGreaterThan(1)
+    expect(committed.filter((c) => c.blocked && c.open)).toEqual([])
+  })
+
   it('closes through onOpenChange, as the dialog does after a success or a dismiss', () => {
     const { result } = setup(args())
     act(() => result.current.request())
@@ -118,6 +144,20 @@ describe('useRowImport — committing', () => {
     await vi.waitFor(() => expect(initial.onRejected).toHaveBeenCalledWith('in-flight'))
     expect(initial.onImported).not.toHaveBeenCalled()
     expect(initial.onFailed).not.toHaveBeenCalled()
+  })
+
+  it('hands a synchronous throw from commit to onFailed', async () => {
+    const failure = new Error('commit threw before returning a promise')
+    const initial = args({
+      commit: vi.fn((): Promise<ImportRowResult> => {
+        throw failure
+      }),
+    })
+    const { result } = setup(initial)
+    act(() => result.current.onValidated(PAYLOAD))
+    await vi.waitFor(() => expect(initial.onFailed).toHaveBeenCalledWith(failure))
+    expect(initial.onImported).not.toHaveBeenCalled()
+    expect(initial.onRejected).not.toHaveBeenCalled()
   })
 
   it('hands a failed write to onFailed', async () => {
