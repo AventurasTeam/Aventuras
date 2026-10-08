@@ -14,7 +14,7 @@ import { isPlotKind } from '@/lib/list-modules'
 import type { RailCategory } from '@/lib/reader-rail'
 import { cn } from '@/lib/utils'
 
-import type { PeekLead } from './peek-model'
+import { isLeadActionDisabled, type PeekLead } from './peek-model'
 
 export type PeekHeadProps = {
   kind: RailCategory
@@ -35,7 +35,7 @@ type LeadCandidate = Extract<PeekLead, { state: 'candidate' }>
 function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolean }) {
   const label = t('reader:peek.setLead')
   const reason = lead.disabledReason
-  const disabled = reason != null || lead.pending
+  const disabled = isLeadActionDisabled(lead)
   return (
     <ReasonTooltip reason={reason}>
       <Pressable

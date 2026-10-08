@@ -108,6 +108,11 @@ export type PeekLead =
       pending: boolean
     }
 
+/** Whether `Set as lead` can't be pressed: the head and the drawer's focus effect share it. */
+export function isLeadActionDisabled(lead: PeekLead | undefined): boolean {
+  return lead?.state === 'candidate' && (lead.disabledReason != null || lead.pending)
+}
+
 /** The head's lead affordance: characters only. */
 export function peekLeadOf(model: PeekModel, control: PeekLeadControl): PeekLead | undefined {
   if (model.kind !== 'entity' || model.row.kind !== 'character') return undefined

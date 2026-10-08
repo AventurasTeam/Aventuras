@@ -8,9 +8,11 @@ import type { RecentlyClassified } from '@/lib/row-signals'
 import type { LeadLabel } from '@/lib/world'
 
 import {
+  isLeadActionDisabled,
   peekLeadOf,
   peekModelOf,
   peekNameOf,
+  type PeekLead,
   type PeekLeadControl,
   type PeekLinks,
   type PeekModel,
@@ -304,5 +306,32 @@ describe('peekNameOf', () => {
     expect(peekNameOf(modelOf('lore', 'lore_veil'))).toBe('The Veil')
     expect(peekNameOf(modelOf('thread', 't_amulet'))).toBe('What the amulet wants')
     expect(peekNameOf(modelOf('happening', 'h_ambush'))).toBe('The alley ambush')
+  })
+})
+
+describe('isLeadActionDisabled', () => {
+  const candidate = (over: Partial<Extract<PeekLead, { state: 'candidate' }>> = {}): PeekLead => ({
+    state: 'candidate',
+    onSetLead: vi.fn<() => void>(),
+    disabledReason: undefined,
+    pending: false,
+    ...over,
+  })
+
+  it('is true for a candidate with a reason', () => {
+    expect(isLeadActionDisabled(candidate({ disabledReason: 'Already the lead' }))).toBe(true)
+  })
+
+  it('is true for a pending candidate with no reason', () => {
+    expect(isLeadActionDisabled(candidate({ pending: true }))).toBe(true)
+  })
+
+  it('is false for an enabled candidate', () => {
+    expect(isLeadActionDisabled(candidate())).toBe(false)
+  })
+
+  it('is false for the lead badge and for no affordance', () => {
+    expect(isLeadActionDisabled({ state: 'lead', label: 'you' })).toBe(false)
+    expect(isLeadActionDisabled(undefined)).toBe(false)
   })
 })

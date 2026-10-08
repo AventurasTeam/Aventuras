@@ -9,7 +9,7 @@ import { t } from '@/lib/i18n'
 import type { RailPeek } from '@/lib/reader-rail'
 
 import { PeekContent } from './peek-content'
-import { peekLeadOf, peekNameOf, type PeekLeadControl } from './peek-model'
+import { isLeadActionDisabled, peekLeadOf, peekNameOf, type PeekLeadControl } from './peek-model'
 import { usePeekView } from './use-peek-view'
 import { useSetLead } from './use-set-lead'
 
@@ -52,9 +52,7 @@ export function PeekDrawer({
   }
   const leadAffordance = model == null ? undefined : peekLeadOf(model, control)
   const isLead = leadAffordance?.state === 'lead'
-  const leadActionDisabled =
-    leadAffordance?.state === 'candidate' &&
-    (leadAffordance.disabledReason != null || leadAffordance.pending)
+  const leadActionDisabled = isLeadActionDisabled(leadAffordance)
   const dialogRef = useRef<View>(null)
 
   // A dead id left in the store would reopen the peek when an undo restores the row.
@@ -62,8 +60,8 @@ export function PeekDrawer({
     if (gone) onClose()
   }, [gone, onClose])
 
-  // A disabled or swapped `Set as lead` drops focus outside the dialog: Chromium blurs a disabled
-  // button, and Radix then focuses its unnamed wrapper once the badge replaces it.
+  // A disabled `Set as lead` loses its tab stop and the browser blurs it; a swap for the badge
+  // sends Radix's focus to its unnamed wrapper. Either way focus must return to the dialog.
   useEffect(() => {
     if (Platform.OS !== 'web' || !open) return
     const dialog = dialogRef.current as unknown as HTMLElement | null
