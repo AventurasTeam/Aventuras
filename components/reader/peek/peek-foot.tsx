@@ -24,7 +24,9 @@ export function PeekFoot({
           'rounded-sm px-2 py-1 active:bg-tint-press',
           // touch.md → Touch-target floor.
           isPhone && 'min-h-[44px] justify-center',
-          Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
+          Platform.select({
+            web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-focus-ring',
+          }),
         )}
       >
         <Text size="sm" className="font-medium">

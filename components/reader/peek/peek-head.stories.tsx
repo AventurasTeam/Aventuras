@@ -114,12 +114,30 @@ export const Pending: Story = {
   },
 }
 
+/** touch.md → Touch-target floor: on phone the action fills a 44px head row, and the row holds. */
+export const CandidatePhoneFloor: Story = {
+  args: {
+    name: 'Mira',
+    lead: { state: 'candidate', onSetLead: fn(), disabledReason: undefined, pending: false },
+  },
+  globals: { viewport: { value: 'mobile1' } },
+  play: async () => {
+    const action = screen.getByRole('button', { name: 'Set as lead' })
+    await waitFor(() => expect(action.getBoundingClientRect().height).toBeGreaterThanOrEqual(44))
+    await expect(
+      screen.getByTestId('peek-head').getBoundingClientRect().height,
+    ).toBeGreaterThanOrEqual(44)
+  },
+}
+
 /** Non-character kinds get no lead affordance; entity kinds and lore take their kind glyph. */
 export const Location: Story = {
   args: { kind: 'location', name: "Veil's Hollow" },
   play: async () => {
     await expect(screen.getByRole('img', { name: 'Location' })).toBeInTheDocument()
-    await expect(screen.getByRole('heading', { name: "Veil's Hollow" })).toBeInTheDocument()
+    await expect(
+      screen.getByRole('heading', { name: "Veil's Hollow", level: 3 }),
+    ).toBeInTheDocument()
     await expect(setLeadButton()).toBeNull()
     await expect(screen.queryByText('You')).toBeNull()
   },
@@ -213,6 +231,16 @@ export const FootWorld: Story = {
     await expect(screen.queryByRole('link', { name: 'Open in Plot panel →' })).toBeNull()
     await userEvent.click(screen.getByRole('link', { name: 'Open in World panel →' }))
     await waitFor(() => expect(onOpenWorld).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** touch.md → Touch-target floor: the phone foot link is at least 44px tall. */
+export const FootPhoneFloor: Story = {
+  render: () => <PeekFoot category="character" onOpenInPanel={fn()} />,
+  globals: { viewport: { value: 'mobile1' } },
+  play: async () => {
+    const link = screen.getByRole('link', { name: 'Open in World panel →' })
+    await waitFor(() => expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44))
   },
 }
 

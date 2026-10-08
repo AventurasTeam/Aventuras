@@ -8,6 +8,7 @@ import { Heading } from '@/components/ui/heading'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Tag, TAG_HIT_SLOP } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { isPlotKind } from '@/lib/list-modules'
 import type { RailCategory } from '@/lib/reader-rail'
@@ -31,7 +32,7 @@ export type PeekHeadProps = {
 
 type LeadCandidate = Extract<PeekLead, { state: 'candidate' }>
 
-function SetLeadAction({ lead }: { lead: LeadCandidate }) {
+function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolean }) {
   const label = t('reader:peek.setLead')
   const reason = lead.disabledReason
   const disabled = reason != null || lead.pending
@@ -42,17 +43,20 @@ function SetLeadAction({ lead }: { lead: LeadCandidate }) {
         // WCAG 2.5.3: the accessible name still leads with the visible label.
         aria-label={reason != null ? t('common:disabledWithReason', { label, reason }) : label}
         aria-busy={lead.pending || undefined}
-        accessibilityHint={reason}
         disabled={disabled}
         onPress={lead.onSetLead}
         hitSlop={TAG_HIT_SLOP}
         className={cn(
           'shrink-0 rounded-sm px-1',
+          // touch.md → Touch-target floor: stretch to the head's 44px row, so the head never resizes.
+          isPhone && 'justify-center self-stretch',
           disabled
             ? 'opacity-50'
             : cn(
                 'active:bg-tint-press',
-                Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
+                Platform.select({
+                  web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-focus-ring',
+                }),
               ),
         )}
       >
@@ -74,6 +78,7 @@ export function PeekHead({
   leading,
   trailing,
 }: PeekHeadProps) {
+  const isPhone = useTier() === 'phone'
   return (
     <View
       testID="peek-head"
@@ -86,7 +91,7 @@ export function PeekHead({
       )}
     >
       {leading}
-      <View className="min-w-0 shrink flex-row items-center gap-2">
+      <View className={cn('min-w-0 shrink flex-row items-center gap-2', isPhone && 'min-h-[44px]')}>
         {isPlotKind(kind) ? <PlotIcon kind={kind} icon={icon} /> : <EntityKindIcon kind={kind} />}
         <Heading level={3} numberOfLines={1} className="min-w-0 shrink">
           {name}
@@ -95,7 +100,7 @@ export function PeekHead({
           <Tag tone="recently-classified">{t('reader:peek.recentlyClassified')}</Tag>
         ) : null}
         {lead?.state === 'lead' ? <LeadTag label={lead.label} /> : null}
-        {lead?.state === 'candidate' ? <SetLeadAction lead={lead} /> : null}
+        {lead?.state === 'candidate' ? <SetLeadAction lead={lead} isPhone={isPhone} /> : null}
       </View>
       {trailing}
     </View>
