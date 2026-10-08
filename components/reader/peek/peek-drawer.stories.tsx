@@ -36,6 +36,11 @@ const MIRA: RailPeek = { category: 'character', id: 'char_mira' }
 
 // The rows the harness renders; a play swaps them to delete the peeked row under the open drawer.
 const harnessData = createStore<{ data: RailData }>()(() => ({ data: DATA }))
+// The reader's generation gate, flippable under an open drawer.
+const harnessGate = createStore<{ blocked: boolean; reason: string | undefined }>()(() => ({
+  blocked: false,
+  reason: undefined,
+}))
 
 function involvement(id: string, happeningId: string, entityId: string): HappeningInvolvement {
   return { id, branchId: DATA.branchId, happeningId, entityId, role: null }
@@ -73,6 +78,7 @@ function DrawerHarness({
   onOpenInPanel,
 }: HarnessProps) {
   const data = useStore(harnessData, (s) => s.data)
+  const gate = useStore(harnessGate)
   const [peek, setPeek] = useState(initialPeek)
   return (
     <EntryIndexReadProvider value={readRailFixtureEntries}>
@@ -84,8 +90,8 @@ function DrawerHarness({
         visible={visible}
         peek={peek}
         storyId={null}
-        blocked={blocked}
-        blockedReason={blockedReason}
+        blocked={blocked || gate.blocked}
+        blockedReason={gate.reason ?? blockedReason}
         onClose={() => {
           onClose()
           setPeek(null)
@@ -103,6 +109,7 @@ const meta: Meta<typeof DrawerHarness> = {
   args: { initialPeek: KAEL, visible: true, blocked: false, onClose: fn(), onOpenInPanel: fn() },
   beforeEach: () => {
     harnessData.setState({ data: DATA })
+    harnessGate.setState({ blocked: false, reason: undefined })
   },
 }
 
@@ -164,6 +171,40 @@ export const FocusStaysAfterLeadFlips: Story = {
     )
     await settle()
     await expect(drawer).toHaveFocus()
+  },
+}
+
+/** The gate disabling the focused action drops focus; the drawer takes it back. */
+export const FocusStaysWhenGateBlocks: Story = {
+  args: { initialPeek: MIRA },
+  play: async () => {
+    const drawer = await findDrawer('Mira')
+    await waitFor(() => expect(drawer).toHaveFocus(), WAIT)
+    await userEvent.tab()
+    const label = t('reader:peek.setLead')
+    await expect(within(drawer).getByRole('button', { name: label })).toHaveFocus()
+    harnessGate.setState({ blocked: true, reason: t('common:generationGate.chapterClose') })
+    await waitFor(() => {
+      const blockedName = t('common:disabledWithReason', {
+        label,
+        reason: t('common:generationGate.chapterClose'),
+      })
+      expect(within(drawer).getByRole('button', { name: blockedName })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+    }, WAIT)
+    await settle()
+    await expect(drawer).toHaveFocus()
+    harnessGate.setState({ blocked: false, reason: undefined })
+    await waitFor(
+      () =>
+        expect(within(drawer).getByRole('button', { name: label })).not.toHaveAttribute(
+          'aria-disabled',
+          'true',
+        ),
+      WAIT,
+    )
   },
 }
 

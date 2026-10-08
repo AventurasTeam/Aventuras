@@ -9,7 +9,7 @@ import { t } from '@/lib/i18n'
 import type { RailPeek } from '@/lib/reader-rail'
 
 import { PeekContent } from './peek-content'
-import { peekNameOf } from './peek-model'
+import { peekLeadOf, peekNameOf, type PeekLeadControl } from './peek-model'
 import { usePeekView } from './use-peek-view'
 import { useSetLead } from './use-set-lead'
 
@@ -43,7 +43,18 @@ export function PeekDrawer({
   const { pending, setLead } = useSetLead(storyId)
   const gone = peek != null && model == null
   const open = visible && model != null
-  const isLead = model?.kind === 'entity' && model.leadLabel != null
+  const control: PeekLeadControl = {
+    leadId: data.entityListSignals.leadId,
+    blocked,
+    blockedReason,
+    pending,
+    onSetLead: setLead,
+  }
+  const leadAffordance = model == null ? undefined : peekLeadOf(model, control)
+  const isLead = leadAffordance?.state === 'lead'
+  const leadActionDisabled =
+    leadAffordance?.state === 'candidate' &&
+    (leadAffordance.disabledReason != null || leadAffordance.pending)
   const dialogRef = useRef<View>(null)
 
   // A dead id left in the store would reopen the peek when an undo restores the row.
@@ -51,13 +62,13 @@ export function PeekDrawer({
     if (gone) onClose()
   }, [gone, onClose])
 
-  // The lead flip swaps the focused `Set as lead` for the badge; Radix then focuses its unnamed
-  // wrapper. Pull focus back into the dialog.
+  // A disabled or swapped `Set as lead` drops focus outside the dialog: Chromium blurs a disabled
+  // button, and Radix then focuses its unnamed wrapper once the badge replaces it.
   useEffect(() => {
     if (Platform.OS !== 'web' || !open) return
     const dialog = dialogRef.current as unknown as HTMLElement | null
     if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
-  }, [open, isLead])
+  }, [open, isLead, leadActionDisabled])
 
   return (
     <Sheet
@@ -85,13 +96,7 @@ export function PeekDrawer({
             model={model}
             entityContext={entityContext}
             entryIndex={entryIndex}
-            lead={{
-              leadId: data.entityListSignals.leadId,
-              blocked,
-              blockedReason,
-              pending,
-              onSetLead: setLead,
-            }}
+            lead={control}
             chrome={{ kind: 'close', onClose }}
             onOpenInPanel={() => onOpenInPanel(railRowHref(data.branchId, peek.category, peek.id))}
             onRegionPress={(tab) => {

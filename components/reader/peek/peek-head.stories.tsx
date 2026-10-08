@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { ArrowLeft, X } from 'lucide-react-native'
-import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -96,7 +95,7 @@ export const StagedCandidate: Story = {
     const action = screen.getByRole('button', { name: `Set as lead, ${INACTIVE}` })
     await expect(action).toHaveAttribute('aria-disabled', 'true')
     await expect(action.closest('[title]')).toHaveAttribute('title', INACTIVE)
-    // A disabled action stays in the DOM and focusable; a press must still do nothing.
+    // RN-Web gives a disabled Pressable pointer-events: none; dispatch the click anyway.
     await userEvent.click(action, { pointerEventsCheck: 0 })
     await expect(onSetLeadStaged).not.toHaveBeenCalled()
   },
@@ -121,37 +120,6 @@ export const Pending: Story = {
     await expect(action).toHaveAttribute('aria-busy', 'true')
     await userEvent.click(action, { pointerEventsCheck: 0 })
     await expect(onSetLeadPending).not.toHaveBeenCalled()
-  },
-}
-
-/** The press itself starts the call, so the focused action turns pending under the key. */
-function PressStartsCall(args: ComponentProps<typeof PeekHead>) {
-  const [pending, setPending] = useState(false)
-  return (
-    <PeekHead
-      {...args}
-      lead={{
-        state: 'candidate',
-        onSetLead: () => setPending(true),
-        disabledReason: undefined,
-        pending,
-      }}
-    />
-  )
-}
-
-/** A disabled action stays focusable: keyboard users keep their place while a call is in flight. */
-export const FocusSurvivesPending: Story = {
-  args: { name: 'Mira' },
-  render: (args) => <PressStartsCall {...args} />,
-  play: async () => {
-    const action = screen.getByRole('button', { name: 'Set as lead' })
-    await userEvent.tab()
-    await expect(action).toHaveFocus()
-    await userEvent.keyboard('{Enter}')
-    await waitFor(() => expect(action).toHaveAttribute('aria-busy', 'true'))
-    await expect(action).toHaveAttribute('aria-disabled', 'true')
-    await expect(action).toHaveFocus()
   },
 }
 
