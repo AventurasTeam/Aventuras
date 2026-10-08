@@ -36,7 +36,8 @@ import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { WORLD_STATE_INJECTION_DEFAULTS } from '../core/defaults'
 import { createLogger } from '$lib/log'
-import { entityNameMatches } from '$lib/utils/text'
+import { entityNameMatches, measureMatching } from '$lib/utils/text'
+import { activity } from '$lib/stores/activity.svelte'
 import {
   runTier3Selection,
   resolveTier3Selection,
@@ -50,6 +51,7 @@ import type { ActivationTracker } from '../retrieval/EntryRetrievalService'
 import { resolveStickiness } from '../retrieval/stickiness'
 import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
 import { secondPassHaystack } from '../retrieval/tier2SecondPass'
+import { matchingStepDetail } from '../retrieval/matchingStep'
 
 const log = createLogger('WorldStateInjector')
 
@@ -220,7 +222,17 @@ export class WorldStateInjector extends BaseAIService {
     const tier1Ids = new Set(tier1.map((e) => e.id))
 
     // Tier 2: Name matching - fuzzy match against input and recent messages
-    const tier2 = this.getTier2Entries(worldState, userInput, recentEntries, tier1Ids)
+    const { result: tier2, stats: matching } = measureMatching(() =>
+      this.getTier2Entries(worldState, userInput, recentEntries, tier1Ids),
+    )
+    if (options.activityParentId) {
+      activity.recordStep('Keyword matching', {
+        parentId: options.activityParentId,
+        startedAt: Date.now() - matching.elapsedMs,
+        durationMs: matching.elapsedMs,
+        detail: matchingStepDetail(matching),
+      })
+    }
     log('Tier 2 entries:', tier2.length)
 
     // Get IDs in tier 1 + 2

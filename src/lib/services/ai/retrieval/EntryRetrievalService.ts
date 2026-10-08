@@ -24,12 +24,14 @@ import { settings, type ServiceId } from '$lib/stores/settings.svelte'
  * `WorldStateInjector` is code reuse, not a shared responsibility.
  */
 
-import { entityNameMatches } from '$lib/utils/text'
+import { entityNameMatches, measureMatching } from '$lib/utils/text'
+import { activity } from '$lib/stores/activity.svelte'
 import type { Entry, EntryType, StoryEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { runTier3Selection, resolveTier3Selection, countWholesaleWords } from './tier3Selection'
 import { secondPassHaystack } from './tier2SecondPass'
+import { matchingStepDetail } from './matchingStep'
 import { resolveStickiness } from './stickiness'
 import { ENTRY_RETRIEVAL_DEFAULTS } from '../core/defaults'
 import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
@@ -283,7 +285,17 @@ export class EntryRetrievalService extends BaseAIService {
     )
 
     // Tier 2: keyword matching, in two passes. See `getTier2Entries`.
-    const tier2 = this.getTier2Entries(candidateEntries, searchContent, sceneEntities)
+    const { result: tier2, stats: matching } = measureMatching(() =>
+      this.getTier2Entries(candidateEntries, searchContent, sceneEntities),
+    )
+    if (options.activityParentId) {
+      activity.recordStep('Keyword matching', {
+        parentId: options.activityParentId,
+        startedAt: Date.now() - matching.elapsedMs,
+        durationMs: matching.elapsedMs,
+        detail: matchingStepDetail(matching),
+      })
+    }
     log(
       'Tier 2 entries (keyword matched):',
       tier2.length,

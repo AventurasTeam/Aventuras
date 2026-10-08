@@ -88,6 +88,53 @@ export interface EntityNameMatchOptions {
   allowPrefix?: boolean
 }
 
+/** What the `entityNameMatches` calls inside one `measureMatching` run cost. */
+export interface MatchingStats {
+  /** Calls that matched a term against a haystack. */
+  checks: number
+  /** Of those, how many normalized it rather than reusing the previous call's. */
+  normalizations: number
+  /** Characters normalized across those normalizations. */
+  normalizedChars: number
+  normalizeMs: number
+  /** Wall time of the whole run. */
+  elapsedMs: number
+}
+
+const haystackCounters = { checks: 0, normalizations: 0, normalizedChars: 0, normalizeMs: 0 }
+let lastHaystack = { raw: '', key: '' }
+
+/** `termKey(text)`, reusing the last result: a match loop passes one haystack for every term. */
+function haystackKey(text: string): string {
+  haystackCounters.checks++
+  if (text === lastHaystack.raw) return lastHaystack.key
+  const start = performance.now()
+  const key = termKey(text)
+  haystackCounters.normalizeMs += performance.now() - start
+  haystackCounters.normalizations++
+  haystackCounters.normalizedChars += text.length
+  lastHaystack = { raw: text, key }
+  return key
+}
+
+/** Run a synchronous match loop and report what its `entityNameMatches` calls cost. */
+export function measureMatching<T>(run: () => T): { result: T; stats: MatchingStats } {
+  const before = { ...haystackCounters }
+  const start = performance.now()
+  const result = run()
+  const elapsedMs = performance.now() - start
+  return {
+    result,
+    stats: {
+      checks: haystackCounters.checks - before.checks,
+      normalizations: haystackCounters.normalizations - before.normalizations,
+      normalizedChars: haystackCounters.normalizedChars - before.normalizedChars,
+      normalizeMs: haystackCounters.normalizeMs - before.normalizeMs,
+      elapsedMs,
+    },
+  }
+}
+
 /**
  * Checks whether `name` (a character/location/item/entry name, alias, or keyword)
  * appears in `searchText`. Both sides are compared as `termKey` does: case, runs of
@@ -116,7 +163,7 @@ export function entityNameMatches(
   // Normalized here rather than trusted from the caller: the prefix branch compares raw
   // strings, so text passed as written would lose every prefix match ("ari" vs "Aria").
   // `inspect_world_state` passes entity names and descriptions straight through.
-  const haystack = termKey(searchText)
+  const haystack = haystackKey(searchText)
 
   // CJK, Hangul, Thai, Lao, Khmer, Burmese ranges (no spaces between words in these scripts)
   const isNonSpaceSeparated =

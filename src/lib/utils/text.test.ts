@@ -4,6 +4,7 @@ import {
   entityNameMatches,
   foldName,
   findTextMatches,
+  measureMatching,
   paragraphMatches,
   applyTermChanges,
   parseTerms,
@@ -122,6 +123,32 @@ describe('entityNameMatches — whitespace runs', () => {
 
   it('finds a stored double-spaced term when it is the text searched', () => {
     expect(entityNameMatches('iron gate', 'Iron  Gate')).toBe(true)
+  })
+})
+
+describe('entityNameMatches — haystack memo', () => {
+  it('re-normalizes when the haystack changes, never serving the previous one', () => {
+    expect(entityNameMatches('Aria', 'Aria walked in')).toBe(true)
+    expect(entityNameMatches('Aria', 'Bren walked in')).toBe(false)
+    expect(entityNameMatches('Bren', 'Bren walked in')).toBe(true)
+    expect(entityNameMatches('Aria', 'Aria walked in')).toBe(true)
+  })
+
+  it('normalizes one haystack once across a loop of terms', () => {
+    const haystack = 'The   Iron Gate stood open; Aria waited.'
+    const terms = ['Iron Gate', 'Aria', 'Bren', 'gate']
+    const { result, stats } = measureMatching(() =>
+      terms.filter((term) => entityNameMatches(term, haystack)),
+    )
+    expect(result).toEqual(['Iron Gate', 'Aria', 'gate'])
+    expect(stats.checks).toBe(4)
+    expect(stats.normalizations).toBe(1)
+    expect(stats.normalizedChars).toBe(haystack.length)
+  })
+
+  it('counts no check for a term too short to match', () => {
+    const { stats } = measureMatching(() => entityNameMatches('A', 'A long haystack'))
+    expect(stats.checks).toBe(0)
   })
 })
 

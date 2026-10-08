@@ -61,6 +61,13 @@ indistinguishable from one. Governed by **Match Against What Is in the Scene** (
 seed set is every active character, item, quest and the current location, which on a mature story is
 most of what a lorebook is about.
 
+**A pass normalizes its haystack once.** `entityNameMatches` reads both sides through `termKey`, and
+a pass calls it for every name, alias and keyword against one haystack, so the haystack's `termKey`
+is memoized on the last string seen; normalizing it per term cost about 17× the whole pass on a
+2,500-term lorebook. Each service records a **Keyword matching** activity step under its own
+Lorebook or World state step, whose detail gives the checks, the measured time, how often the
+haystack was normalized, and an estimate of what the memo saved.
+
 `tier3Selection.ts` caches the last selection per caller. The key is complete by content — caller,
 candidate pool in order, player action, and the ids of the recent entries the prompt was built from
 — because two situations sharing a repeated action and an unmoved pool are otherwise the same
