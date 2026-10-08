@@ -10,6 +10,12 @@ export const AVTS_FORMATS = {
   happening: { format: 'aventuras-happening', payloadKey: 'happening' },
 } as const satisfies Record<AvtsKind, { format: `aventuras-${string}`; payloadKey: string }>
 
+/** One import slot's envelope contract: the format, payload key and major of a single kind. */
+export function avtsImportSlot<K extends AvtsKind>(kind: K) {
+  const { format, payloadKey } = AVTS_FORMATS[kind]
+  return { format, payloadKey, supportedMajor: AVTS_SUPPORTED_MAJOR }
+}
+
 /** A serialized export, ready for `saveAvtsFile`. */
 export type AvtsFile = { readonly fileName: string; readonly contents: string }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AVTS_FORMAT_VERSION, AVTS_SUPPORTED_MAJOR, avtsEnvelope } from './envelope'
+import { AVTS_FORMAT_VERSION, AVTS_SUPPORTED_MAJOR, avtsEnvelope, avtsImportSlot } from './envelope'
 
 const EXPORTED_AT = new Date(Date.UTC(2026, 9, 7, 9, 30))
 
@@ -31,6 +31,17 @@ describe('avtsEnvelope', () => {
     expect(Object.keys(parsed)).toEqual(['format', 'formatVersion', 'exportedAt', kind])
     expect(parsed.format).toBe(format)
     expect(parsed[kind]).toEqual(payload)
+  })
+})
+
+describe('avtsImportSlot', () => {
+  it.each([
+    ['entity', 'aventuras-entity', 'entity'],
+    ['lore', 'aventuras-lore', 'lore'],
+    ['thread', 'aventuras-thread', 'thread'],
+    ['happening', 'aventuras-happening', 'happening'],
+  ] as const)('reads a %s slot as %s under %s, at major 1', (kind, format, payloadKey) => {
+    expect(avtsImportSlot(kind)).toEqual({ format, payloadKey, supportedMajor: 1 })
   })
 })
 
