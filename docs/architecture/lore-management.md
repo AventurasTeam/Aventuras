@@ -201,10 +201,11 @@ refusal matches on, deliberately and not `normalizeName`: that question is entit
 triggers, and the detector is lenient because being wrong there costs one question, while being
 wrong in a hard refusal costs an entry.
 
-Both fold on `\p{L}\p{N}`, not `a-z0-9`. An ASCII class folds every Cyrillic, Greek and CJK
-name to the empty string, and empty compares equal to every other one — which made two
-unrelated characters read as duplicates, and, through `sameEntityName`, collapsed the whole
-world-state cast of a non-Latin story into its first member.
+`foldName`, and `normalizeName` through it, fold on `\p{L}\p{N}`, not `a-z0-9`. An ASCII class
+folds every Cyrillic, Greek and CJK name to the empty string, and empty compares equal to every
+other one — which made two unrelated characters read as duplicates, and, through
+`sameEntityName`, collapsed the whole world-state cast of a non-Latin story into its first
+member.
 
 Everything requiring judgement stays in the prompt, where the field contract is written out: a
 name is the form the story actually uses (never `Name / Title`), other forms are aliases, and a

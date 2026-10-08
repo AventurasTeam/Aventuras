@@ -630,21 +630,13 @@ export function expandRangeBidirectional(
 }
 
 /**
- * Fold away spelling only: case, accents, punctuation, repeated spaces.
+ * The entity-identity fold: case, accents, punctuation and repeated spaces are folded away,
+ * articles are kept (`normalizeName` is the one that strips them).
  *
- * Articles are kept, and that is the whole difference from `normalizeName`. Two names that
- * differ by an article are the same *subject* but not the same *trigger*: matching is
- * literal and whole-word, so the alias "The Citadel" fires on that two-word phrase while
- * the keyword "Citadel" fires on the bare word, and neither makes the other redundant.
- * Lorebook-entry *identity* is judged by `normalizeName`, which does strip them.
+ * `\p{L}\p{N}`, not `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the
+ * empty string, and empty compares equal to every other one.
  *
- * The character class is `\p{L}\p{N}`, like the rest of this file, and deliberately not
- * `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the empty string,
- * and empty compares equal to every other one.
- *
- * **An apostrophe is removed, not spaced.** It joins rather than divides — a possessive or
- * an elision — so spacing it split one word into two: `Kaelen's Rest` did not match
- * `Kaelens Rest`, nor `Vor'koth` match `Vorkoth`.
+ * An apostrophe is removed rather than spaced, because it joins: `Vor'koth` folds to `vorkoth`.
  */
 export function foldName(raw: string): string {
   return raw
