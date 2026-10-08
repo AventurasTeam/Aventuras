@@ -2211,11 +2211,30 @@ class DatabaseService {
     // pool, so BEGIN/COMMIT across separate execute() calls is unsafe (different
     // pool connections). A single multi-row INSERT is atomically guaranteed by
     // SQLite itself. Modern SQLite (3.32+, bundled with sqlx) supports up to
-    // 32,766 bind variables — at 21 params/row that's ~1,560 entries, well beyond
+    // 32,766 bind variables — at 18 params/row that's ~1,820 entries, well beyond
     // any realistic lorebook size.
-    const valuePlaceholders = entries
-      .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-      .join(',')
+    const columns = [
+      'id',
+      'story_id',
+      'name',
+      'type',
+      'description',
+      'hidden_info',
+      'aliases',
+      'state',
+      'adventure_state',
+      'creative_state',
+      'injection',
+      'created_by',
+      'created_at',
+      'updated_at',
+      'lore_management_blacklisted',
+      'branch_id',
+      'overrides_id',
+      'deleted',
+    ]
+    const rowPlaceholder = `(${columns.map(() => '?').join(',')})`
+    const valuePlaceholders = entries.map(() => rowPlaceholder).join(',')
     const values: unknown[] = []
 
     for (const entry of entries) {
@@ -2243,11 +2262,7 @@ class DatabaseService {
     }
 
     await db.execute(
-      `INSERT INTO entries (
-        id, story_id, name, type, description, hidden_info, aliases,
-        state, adventure_state, creative_state, injection, created_by,
-        created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
-      ) VALUES ${valuePlaceholders}`,
+      `INSERT INTO entries (${columns.join(', ')}) VALUES ${valuePlaceholders}`,
       values,
     )
   }

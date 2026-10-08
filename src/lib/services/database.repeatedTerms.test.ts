@@ -323,6 +323,18 @@ describe('lorebook terms are stored without repeats', () => {
     expect(values).toContain(INJECTION)
   })
 
+  it('binds one placeholder per column for every row of a bulk insert', async () => {
+    await database.bulkInsertEntries([entry(), entry({ id: 'e2' })])
+
+    const [sql, values] = lastCall()
+    const columns = sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').length
+    const groups = sql.slice(sql.indexOf('VALUES')).match(/\([?,]+\)/g) ?? []
+
+    expect(groups).toHaveLength(2)
+    for (const group of groups) expect(group.split('?').length - 1).toBe(columns)
+    expect(values).toHaveLength(columns * 2)
+  })
+
   it('adding an entry that has no injection, as an imported file can', async () => {
     await database.addEntry(entry({ injection: undefined }))
 
