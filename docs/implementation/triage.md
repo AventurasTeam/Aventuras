@@ -458,3 +458,77 @@ slice-planning gate forces its resolution before that slice is planned.
   `OverflowMenu`, would show the Dialog under the fading scrim for about
   250 ms and lose a tap in that window. Inferred from the code, not observed
   on a device. Raised in 4.5a's slice review, 2026-10-07.
+- **`ImporterMenu` is a Popover on phone.** (2026-09-11)
+  [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
+  wants a short Sheet on phone but it's a Popover at every size. The
+  surface binding it cites has no `ImporterMenu` row, so that sentence
+  is the only canon. This slice re-plumbs the menu to host
+  `ImportDialog`; a Sheet there makes it the third caller of the phone
+  wrap, which is the extraction trigger in
+  [the parked tier-wrap entry](../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
+  The controlled-open seam drives the trigger ref, so a Sheet needs it
+  re-plumbed.
+  Moved from Slice 4.6's Open questions (2026-10-07): 4.6 does not
+  touch `components/compounds/importer-menu.tsx` — the import dialog
+  mounts in the World and Plot routes beside the menu — so "this
+  slice" above no longer makes 4.6 the cheaper home.
+- **Four hand-copied menu-item rows.** (2026-09-22)
+  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
+  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
+  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
+  the cast-list inline row (`components/wizard/cast-list.tsx`) each
+  reimplement the same pressable-row shape. Their disabled naming was
+  aligned to `label, reason` on 2026-09-23, but the shapes still
+  differ: only the first two have a disabled state, and `StoryCard`'s
+  row is `py-row-y-sm` with no phone `min-h`. This slice re-plumbs
+  `ImporterMenu` anyway, which makes it the cheapest place to extract
+  one shared `MenuItem`. The rows' role stays with
+  [Nested dialog roles in Popover](../parked.md#nested-dialog-roles-in-popover).
+  Moved from Slice 4.6's Open questions (2026-10-07): 4.6 does not
+  touch `components/compounds/importer-menu.tsx` — the import dialog
+  mounts in the World and Plot routes beside the menu — so "this
+  slice" above no longer makes 4.6 the cheaper home.
+- **A legacy entity row exports a file its own import refuses.**
+  (2026-10-08) `lib/piggyback/apply.ts:199-200` says rows holding `Gold`
+  beside `gold` in `stackables` exist until a transfer folds them. Such a
+  row's `.avts` export fails the import's `duplicateStackable` check, the
+  same shape as the lore null-body risk in the slice's Monitor list. Fix
+  idea: fold stackables on export the way `normalizedStackables` in
+  `lib/world/entity-actions.ts` does. Found in Slice 4.6 review.
+- **A stackable key's length is checked before it is normalized.**
+  (2026-10-08) `lib/world/entity-draft.ts:69` applies `max(40)` before
+  `normalizeTerm`, and `'İ'.toLowerCase()` grows, so a key of forty `İ`
+  passes the draft and the `.avts` import, then fails the stored
+  `max(40)` in `lib/actions/entities/register.ts:137`. Found in Slice 4.6
+  review.
+- **Entity register writes the raw state, not the parsed one.**
+  (2026-10-08) `lib/actions/entities/register.ts:137-152` and `:213-220`
+  `safeParse` the state but write the raw `row` / `patch.state`, so unknown
+  state keys persist, and per-row export carries them out. Found in Slice
+  4.6 review.
+- **A stackable key named `__proto__` vanishes on import.** (2026-10-08)
+  In `lib/avts/entity.ts` the key passes validation and is absent from the
+  parsed output, so it is dropped without a message. A pathological
+  hand-written file; low priority. Found in Slice 4.6 review.
+- **No lint rule catches a dropped `await`.** (2026-10-08)
+  `eslint.config.js` has no type-aware promise rules (`no-floating-promises`,
+  `return-await`), so a missing `await` passes lint repo-wide. Task 9's
+  review proved it on the export path, and a story now pins that one. Found
+  in Slice 4.6 review.
+- **The JSON viewer is a portaled overlay not gated on screen focus.**
+  (2026-10-08) It now lives in `components/compounds/row-detail-frame.tsx`,
+  so it stays open when the screen loses focus
+  ([lesson](lessons-learned/portaled-overlay-outlives-screen-focus.md)).
+  Pre-existing in all four detail heads; low risk because it is modal.
+  Found in Slice 4.6 review.
+- **A toast intercepts clicks across the top strip on web.** (2026-10-08)
+  `components/ui/toast.tsx:200-208`: the toast's full-width fixed container
+  catches clicks on whatever sits under it (e.g. the Actions trigger) for
+  the 3-7 s the toast is up, despite `POINTER_EVENTS_BOX_NONE`; the toast's
+  own box doesn't overlap them. A real user bug from M3.12b; the 4.6 E2E's
+  third test waits about 3 s on it. Found in Slice 4.6 review.
+- **`import-dialog.stories.tsx` now imports the World and Plot import
+  configs.** (2026-10-08) When M8.3 / M9.4 add more host stories, consider
+  domain-owned `world-import.stories.tsx` / `plot-import.stories.tsx` next
+  to the configs' tests instead of growing a compound's stories. Found in
+  Slice 4.6 review.

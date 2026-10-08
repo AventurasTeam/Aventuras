@@ -160,39 +160,24 @@ exported file to the user.
 - **Clipboard permission under Playwright plus Electron.** No existing
   spec drives `navigator.clipboard.readText()`; prove the seam at
   planning before committing to the E2E, else the import happy path is
-  manual smoke.
+  manual smoke. Resolved in 4.6 planning (2026-10-07): proven under the
+  harness; the E2E drives the clipboard, the file chooser and the
+  download.
 - **Web download mechanics under Electron.** A data-URL anchor click
   works in the renderer; confirm the Electron main process does not
   intercept downloads, or route through a `dialog.showSaveDialog` IPC
   if it does (nothing in the E2E harness can observe a download
-  either way).
+  either way). Resolved in 4.6 planning (2026-10-07): Electron main
+  installs no download handler, `will-navigate` doesn't block an
+  anchor download, and Electron shows its own Save dialog; no IPC
+  route.
 - **Export filename slug.** Name-derived, ASCII-folded, kind-prefixed
   (`character-kael.avts`) is the default; the story export in M9.4
-  should match.
+  should match. Resolved in 4.6 planning (2026-10-07):
+  `<kind>-<slug>.avts`, ASCII-folded, helper in `lib/avts` for M9.4.
 - **Import of a `staged` entity.** Status travels; confirm a staged
-  import is what the user expects versus forcing `active`.
-- **`ImporterMenu` is a Popover on phone.** (2026-09-11)
-  [`world.md → Mobile expression`](../../../../ui/screens/world/world.md#mobile-expression)
-  wants a short Sheet on phone but it's a Popover at every size. The
-  surface binding it cites has no `ImporterMenu` row, so that sentence
-  is the only canon. This slice re-plumbs the menu to host
-  `ImportDialog`; a Sheet there makes it the third caller of the phone
-  wrap, which is the extraction trigger in
-  [the parked tier-wrap entry](../../../../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
-  The controlled-open seam drives the trigger ref, so a Sheet needs it
-  re-plumbed.
-- **Four hand-copied menu-item rows.** (2026-09-22)
-  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
-  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
-  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
-  the cast-list inline row (`components/wizard/cast-list.tsx`) each
-  reimplement the same pressable-row shape. Their disabled naming was
-  aligned to `label, reason` on 2026-09-23, but the shapes still
-  differ: only the first two have a disabled state, and `StoryCard`'s
-  row is `py-row-y-sm` with no phone `min-h`. This slice re-plumbs
-  `ImporterMenu` anyway, which makes it the cheapest place to extract
-  one shared `MenuItem`. The rows' role stays with
-  [Nested dialog roles in Popover](../../../../parked.md#nested-dialog-roles-in-popover).
+  import is what the user expects versus forcing `active`. Resolved in
+  4.6 planning (2026-10-07): status travels verbatim.
 - **Four hand-copied detail-pane heads.** (2026-09-28, routed from
   triage 2026-10-04) `LoreDetailPane` duplicates `EntityDetailFrame`:
   the head, tab list, menu and JSON viewer wiring are a near-copy of
@@ -202,7 +187,8 @@ exported file to the user.
   2026-10-04 — and still don't close the JSON viewer on a row switch.
   This slice's export wiring is the next change that lands in all four
   heads, which makes it the cheapest place to generalize the frame; the
-  tab reset already lives in `hooks/use-create-reset-tab.ts`.
+  tab reset already lives in `hooks/use-create-reset-tab.ts`. Resolved
+  in 4.6: one `RowDetailFrame` compound behind all four heads.
 
 ## Implementation notes
 
