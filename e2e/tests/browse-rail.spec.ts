@@ -9,6 +9,7 @@ import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
+import { peek } from '../locators/peek'
 import { plot } from '../locators/plot'
 import { rail } from '../locators/rail'
 import { reader } from '../locators/reader'
@@ -90,7 +91,7 @@ test.describe.serial('Browse rail', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('lists the branch rows under all seven categories and lands Plot on a pressed thread', async () => {
+  test("lists the branch rows under all seven categories and lands Plot from a thread's peek", async () => {
     const page = app.window
     await home.openStory(page, HERO_TITLE).click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
@@ -115,6 +116,8 @@ test.describe.serial('Browse rail', () => {
       [branchId, SEEDED_THREAD],
     )
     await rail.row(page, SEEDED_THREAD).click()
+    await expect(peek.drawer(page, SEEDED_THREAD)).toBeVisible()
+    await peek.openInPlot(page, SEEDED_THREAD).click()
     await page.waitForURL(new RegExp(`/plot/${branchId}\\?kind=thread&id=${threadId as string}`))
     await expect(plot.subHeader(page)).toContainText(t('plot:kinds.thread'))
     await expect(plot.subHeader(page)).toContainText(SEEDED_THREAD)
@@ -122,6 +125,7 @@ test.describe.serial('Browse rail', () => {
     await chrome.back(page).click()
     await page.waitForURL(/\/reader-composer\//)
     await expect(rail.column(page)).toBeVisible()
+    await expect(peek.drawer(page, SEEDED_THREAD)).toHaveCount(0)
   })
 
   test('the chevron collapses to the strip, which counts the scene, and stores the preference', async () => {
