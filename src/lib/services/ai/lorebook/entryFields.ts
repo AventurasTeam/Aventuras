@@ -30,36 +30,6 @@ export interface CleanedField {
 }
 
 /**
- * Drop empties, self-references and duplicates from a list of alternative names.
- *
- * Comparison is `termKey`, the one matching uses: `"Citadel"` and `"citadel"` are one alias,
- * `"The Citadel"` and `"Kaelens"` against `"Kaelen's"` are different triggers. The spelling
- * kept is the one written first.
- */
-export function cleanAliases(name: string, aliases: string[] | undefined): CleanedField {
-  const entryName = termKey(name)
-  const seen = new Set<string>()
-  const value: string[] = []
-  const dropped: DroppedTerm[] = []
-
-  for (const alias of aliases ?? []) {
-    const normalized = termKey(alias)
-    if (!hasWord(alias)) {
-      dropped.push({ term: alias, reason: 'empty' })
-    } else if (normalized === entryName) {
-      dropped.push({ term: alias, reason: 'same-as-name' })
-    } else if (seen.has(normalized)) {
-      dropped.push({ term: alias, reason: 'duplicate' })
-    } else {
-      seen.add(normalized)
-      value.push(alias.trim())
-    }
-  }
-
-  return { value, dropped }
-}
-
-/**
  * Drop empties, duplicates, and anything the name or an alias already matches.
  *
  * Takes the *cleaned* aliases: a keyword is redundant against the aliases that will
@@ -93,6 +63,17 @@ export function cleanKeywords(
   }
 
   return { value, dropped }
+}
+
+/**
+ * Drop empties, self-references and duplicates from a list of alternative names.
+ *
+ * Comparison is `termKey`, the one matching uses: `"Citadel"` and `"citadel"` are one alias,
+ * `"The Citadel"` and `"Kaelens"` against `"Kaelen's"` are different triggers. The spelling
+ * kept is the one written first.
+ */
+export function cleanAliases(name: string, aliases: string[] | undefined): CleanedField {
+  return cleanKeywords(name, [], aliases)
 }
 
 const REASON_TEXT: Record<DroppedTerm['reason'], string> = {
