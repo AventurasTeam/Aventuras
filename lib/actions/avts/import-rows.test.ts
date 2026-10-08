@@ -272,6 +272,14 @@ describe('importEntity', () => {
     })
   })
 
+  it('imports a staged faction as staged, not active', async () => {
+    const { db, ctx } = await setup()
+    const id = okId(
+      await importEntity('br_2', { ...entityPayload('faction', 'Wardens'), status: 'staged' }, ctx),
+    )
+    expect((await entityRow(db, id)).status).toBe('staged')
+  })
+
   it('normalizes keywords through the C12 dedupe on entity and lore imports', async () => {
     const { db, ctx } = await setup()
     const entityId = okId(
