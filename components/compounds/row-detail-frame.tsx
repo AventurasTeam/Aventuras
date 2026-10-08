@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Controller, type FieldPathByValue, type FieldValues } from 'react-hook-form'
 import { View } from 'react-native'
 
@@ -89,6 +89,7 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
   children,
 }: RowDetailFrameProps<Draft, Tab>): ReactNode {
   const rowId = committed?.id ?? null
+  const exporting = useRef(false)
   const [jsonOpen, setJsonOpen] = useState(false)
   // Synced during render: the viewer never paints a frame over the next row.
   const [jsonRowId, setJsonRowId] = useState(rowId)
@@ -130,7 +131,12 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
               entries={menuEntries({
                 onViewJson: () => setJsonOpen(true),
                 onExport: () => {
-                  if (committed != null) void exportRow(committed)
+                  // expo-sharing throws on a second share while one is open (a double tap).
+                  if (committed == null || exporting.current) return
+                  exporting.current = true
+                  void exportRow(committed).finally(() => {
+                    exporting.current = false
+                  })
                 },
               })}
               disabled={committed == null}

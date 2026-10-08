@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
+import { expect, fireEvent, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 import { z } from 'zod'
 
 import { TabsContent } from '@/components/ui/tabs'
@@ -209,6 +209,41 @@ export const ExportRejectionToasts: Story = {
       })
     } finally {
       stop()
+    }
+  },
+}
+
+/** A press while the hand-off is still pending starts no second one; once it settles, Export works. */
+export const ExportIgnoresAPressMidHandOff: Story = {
+  play: async ({ args }) => {
+    const downloads: string[] = []
+    let midHandOffPresses = 0
+    const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
+    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download)
+      // Web's hand-off settles in the click's own task, so the second tap lands inside it.
+      if (midHandOffPresses === 0) {
+        midHandOffPresses += 1
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Export row as JSON' }))
+      }
+    })
+    try {
+      await openMenuEntry('Export row as JSON')
+      await waitFor(() => expect(downloads).toEqual(['row-first-row.avts']), WAIT)
+      await expect(midHandOffPresses).toBe(1)
+      await expect(args.exportFile).toHaveBeenCalledTimes(1)
+
+      await openMenuEntry('Export row as JSON')
+      await waitFor(
+        () => expect(downloads).toEqual(['row-first-row.avts', 'row-first-row.avts']),
+        WAIT,
+      )
+      await expect(args.exportFile).toHaveBeenCalledTimes(2)
+    } finally {
+      url.mockRestore()
+      click.mockRestore()
     }
   },
 }
