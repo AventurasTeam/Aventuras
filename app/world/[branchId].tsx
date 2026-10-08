@@ -233,14 +233,7 @@ export default function WorldRoute() {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
 
-  // The dialog has closed itself by now; a draft dirtied since resolves through the leave guard.
-  const onImported = useCallback(
-    (id: string) => {
-      guard(() => select(id))
-      toast.success(t('world:import.imported'))
-    },
-    [guard, select],
-  )
+  const onImported = useCallback(() => toast.success(t('world:import.imported')), [])
   const onImportRejected = useCallback(
     (code: ImportRejectionCode) => toast.error(importRejectionText(code)),
     [],
@@ -267,6 +260,7 @@ export default function WorldRoute() {
   const entityImport = useRowImport<EntityImport>({
     blocked: editBlocked,
     guard,
+    select,
     commit: commitEntity,
     onImported,
     onRejected: onImportRejected,
@@ -275,6 +269,7 @@ export default function WorldRoute() {
   const loreImport = useRowImport<LoreImport>({
     blocked: editBlocked,
     guard,
+    select,
     commit: commitLore,
     onImported,
     onRejected: onImportRejected,

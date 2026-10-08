@@ -299,8 +299,9 @@ fix and re-pick / re-paste.
 const entityImport = useRowImport<EntityImport>({
   blocked: editBlocked, // isUserEditBlocked: refused while generation is in flight
   guard, // the surface's leave guard
+  select, // an ok commit runs guard(() => select(id)), then onImported
   commit: (payload) => importEntity(branchId, payload, ctx),
-  onImported, // guard(() => select(id)); toast.success(t('world:import.imported'))
+  onImported: () => toast.success(t('world:import.imported')),
   onRejected: (code) => toast.error(importRejectionText(code)),
   onFailed: (error) => toast.error(importFailureText()),
 })
@@ -316,10 +317,11 @@ const entityImport = useRowImport<EntityImport>({
 The importer menu's `From JSON file…` option calls `request()`, which
 opens the dialog through the leave guard and is refused
 while generation is in flight. The dialog has already closed itself
-when `onValidated` fires, so the host reports the outcome: `Imported.`
-and selects the new row through the leave guard, or the refusal /
-failure toast. Lore is the parallel case with `loreImportDialog()` and
-its own slot.
+when `onValidated` fires, so the outcome is reported outside it: on
+success the hook selects the new row through the leave guard and the
+host toasts `Imported.`; otherwise the host shows the refusal / failure
+toast. Lore is the parallel case with `loreImportDialog()` and its own
+slot.
 
 **Kind-narrowing is mandatory** for `aventuras-entity` consumers.
 Without the `.refine` on `kind`, a `kind: 'location'` JSON

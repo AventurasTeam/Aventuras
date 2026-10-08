@@ -170,14 +170,7 @@ export default function PlotRoute() {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
 
-  // The dialog has closed itself by now; a draft dirtied since resolves through the leave guard.
-  const onImported = useCallback(
-    (id: string) => {
-      guard(() => select(id))
-      toast.success(t('plot:import.imported'))
-    },
-    [guard, select],
-  )
+  const onImported = useCallback(() => toast.success(t('plot:import.imported')), [])
   const onImportRejected = useCallback(
     (code: ImportRejectionCode) => toast.error(importRejectionText(code)),
     [],
@@ -204,6 +197,7 @@ export default function PlotRoute() {
   const threadImport = useRowImport<ThreadImport>({
     blocked: editBlocked,
     guard,
+    select,
     commit: commitThread,
     onImported,
     onRejected: onImportRejected,
@@ -212,6 +206,7 @@ export default function PlotRoute() {
   const happeningImport = useRowImport<HappeningImport>({
     blocked: editBlocked,
     guard,
+    select,
     commit: commitHappening,
     onImported,
     onRejected: onImportRejected,

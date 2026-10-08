@@ -5,10 +5,12 @@ import type { ImportRejectionCode, ImportRowResult } from '@/lib/actions'
 export type UseRowImportArgs<P> = {
   /** `isUserEditBlocked`: the request is refused and an open dialog closes. */
   blocked: boolean
-  /** The surface's leave guard; a dirty draft resolves before the dialog opens. */
+  /** The surface's leave guard; opening the dialog and selecting the new row both resolve it. */
   guard: (proceed: () => void) => void
+  select: (id: string) => void
   commit: (payload: P) => Promise<ImportRowResult>
-  onImported: (id: string) => void
+  /** After an ok commit, once the new row's select has gone to `guard`. */
+  onImported: () => void
   onRejected: (code: ImportRejectionCode) => void
   onFailed: (error: unknown) => void
 }
@@ -24,6 +26,7 @@ export type RowImport<P> = {
 export function useRowImport<P>({
   blocked,
   guard,
+  select,
   commit,
   onImported,
   onRejected,
@@ -31,10 +34,10 @@ export function useRowImport<P>({
 }: UseRowImportArgs<P>): RowImport<P> {
   const [open, setOpen] = useState(false)
   // The commit outlives the render that started it; its outcome goes to the latest callbacks.
-  const callbacks = useRef({ onImported, onRejected, onFailed })
+  const callbacks = useRef({ guard, select, onImported, onRejected, onFailed })
   useLayoutEffect(() => {
-    callbacks.current = { onImported, onRejected, onFailed }
-  }, [onImported, onRejected, onFailed])
+    callbacks.current = { guard, select, onImported, onRejected, onFailed }
+  }, [guard, select, onImported, onRejected, onFailed])
   // In render, not an effect: the dialog never commits open while blocked.
   if (blocked && open) setOpen(false)
 
@@ -45,13 +48,16 @@ export function useRowImport<P>({
 
   const onValidated = useCallback(
     (payload: P) => {
-      // Two-argument `then`: a throw inside `onImported` must not route to `onFailed`.
+      // Two-argument `then`: a throw inside `select` or `onImported` must not route to `onFailed`.
       Promise.resolve()
         .then(() => commit(payload))
         .then(
           (result) => {
-            if (result.status === 'ok') callbacks.current.onImported(result.id)
-            else callbacks.current.onRejected(result.code)
+            const current = callbacks.current
+            if (result.status === 'ok') {
+              current.guard(() => current.select(result.id))
+              current.onImported()
+            } else current.onRejected(result.code)
           },
           (error: unknown) => callbacks.current.onFailed(error),
         )

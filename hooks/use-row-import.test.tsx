@@ -14,6 +14,7 @@ function args(overrides: Partial<UseRowImportArgs<Payload>> = {}): UseRowImportA
   return {
     blocked: false,
     guard: vi.fn((proceed: () => void) => proceed()),
+    select: vi.fn(),
     commit: vi.fn(async (): Promise<ImportRowResult> => ({ status: 'ok', id: 'char_new' })),
     onImported: vi.fn(),
     onRejected: vi.fn(),
@@ -119,14 +120,36 @@ describe('useRowImport — opening', () => {
 })
 
 describe('useRowImport — committing', () => {
-  it('commits the validated payload and hands the new id to onImported', async () => {
+  it('commits the validated payload, selects the new row through the guard, then reports it', async () => {
     const initial = args()
     const { result } = setup(initial)
     act(() => result.current.onValidated(PAYLOAD))
-    await vi.waitFor(() => expect(initial.onImported).toHaveBeenCalledWith('char_new'))
+    await vi.waitFor(() => expect(initial.onImported).toHaveBeenCalledTimes(1))
     expect(initial.commit).toHaveBeenCalledWith(PAYLOAD)
+    expect(initial.guard).toHaveBeenCalledTimes(1)
+    expect(initial.select).toHaveBeenCalledWith('char_new')
+    expect(initial.onImported).toHaveBeenCalledWith()
+    expect(vi.mocked(initial.select).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(initial.onImported).mock.invocationCallOrder[0],
+    )
     expect(initial.onRejected).not.toHaveBeenCalled()
     expect(initial.onFailed).not.toHaveBeenCalled()
+  })
+
+  it('selects nothing while the guard withholds proceed, and still reports the import', async () => {
+    let release = () => {}
+    const initial = args({
+      guard: vi.fn((proceed: () => void) => {
+        release = proceed
+      }),
+    })
+    const { result } = setup(initial)
+    act(() => result.current.onValidated(PAYLOAD))
+    await vi.waitFor(() => expect(initial.onImported).toHaveBeenCalledTimes(1))
+    expect(initial.guard).toHaveBeenCalledTimes(1)
+    expect(initial.select).not.toHaveBeenCalled()
+    act(() => release())
+    expect(initial.select).toHaveBeenCalledWith('char_new')
   })
 
   it('hands a refusal code to onRejected', async () => {
@@ -187,10 +210,21 @@ describe('useRowImport — committing', () => {
     const { result, rerender } = setup(initial)
     act(() => result.current.onValidated(PAYLOAD))
     await vi.waitFor(() => expect(initial.commit).toHaveBeenCalledTimes(1))
-    const next = { ...initial, onImported: vi.fn(), onRejected: vi.fn(), onFailed: vi.fn() }
+    const next = {
+      ...initial,
+      guard: vi.fn((proceed: () => void) => proceed()),
+      select: vi.fn(),
+      onImported: vi.fn(),
+      onRejected: vi.fn(),
+      onFailed: vi.fn(),
+    }
     rerender(next)
     finish({ status: 'ok', id: 'char_new' })
-    await vi.waitFor(() => expect(next.onImported).toHaveBeenCalledWith('char_new'))
+    await vi.waitFor(() => expect(next.onImported).toHaveBeenCalledTimes(1))
+    expect(next.guard).toHaveBeenCalledTimes(1)
+    expect(next.select).toHaveBeenCalledWith('char_new')
+    expect(initial.guard).not.toHaveBeenCalled()
+    expect(initial.select).not.toHaveBeenCalled()
     expect(initial.onImported).not.toHaveBeenCalled()
   })
 
