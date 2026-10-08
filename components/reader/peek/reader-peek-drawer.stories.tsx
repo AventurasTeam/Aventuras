@@ -114,6 +114,8 @@ export const OpenInPanelClosesThenRoutes: Story = {
     await expect(navigate).toHaveBeenLastCalledWith('/world/br_1?kind=character&id=char_mira')
     await expect(peekAtNavigate).toEqual([null])
     await waitFor(() => expect(queryDrawer()).toBeNull(), ANIMATION)
+    // Radix's close focus runs a tick after unmount; wait it out before checking.
+    await settle()
     // Routing away leaves focus alone: the reader under the new screen must not take it.
     await expect(screen.getByRole('button', { name: 'Mira' })).not.toHaveFocus()
   },
