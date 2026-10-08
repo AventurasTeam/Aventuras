@@ -9,7 +9,7 @@ import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import type { CalendarSystem } from '@/lib/calendar'
-import type { Entity } from '@/lib/db'
+import type { Entity, InjectionMode } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { ChipPreview } from '@/lib/world'
@@ -246,6 +246,20 @@ export function ChipRow({ preview }: { preview: ChipPreview }) {
   )
 }
 
+/** world.md → Overview: the non-default injection chip; nothing for `auto`. */
+export function InjectionModeChip({ mode }: { mode: InjectionMode }) {
+  if (mode === 'auto') return null
+  return (
+    <ReasonTooltip reason={t(`world:fields.injection.${mode}Help`)}>
+      <Tag>
+        <Text className="font-semibold uppercase tracking-widest">
+          {t(`world:overview.injectionChip.${mode}`)}
+        </Text>
+      </Tag>
+    </ReasonTooltip>
+  )
+}
+
 /** Status pill, `retired_reason` inline, and the non-default injection chip; routes to Settings. */
 export function StatusRow({
   entity,
@@ -275,15 +289,7 @@ export function StatusRow({
           {t('world:overview.retiredReason', { reason })}
         </Text>
       ) : null}
-      {entity.injectionMode !== 'auto' ? (
-        <ReasonTooltip reason={t(`world:fields.injection.${entity.injectionMode}Help`)}>
-          <Tag>
-            <Text className="font-semibold uppercase tracking-widest">
-              {t(`world:overview.injectionChip.${entity.injectionMode}`)}
-            </Text>
-          </Tag>
-        </ReasonTooltip>
-      ) : null}
+      <InjectionModeChip mode={entity.injectionMode} />
     </Pressable>
   )
 }
