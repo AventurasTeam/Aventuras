@@ -435,7 +435,11 @@ Per
 [`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation),
 edits to active-story content are gated during generation.
 Per-row imports into the active story should be gated by the
-host (host doesn't mount the trigger, or mounts it disabled).
+host (host doesn't mount the trigger, or mounts it disabled). A
+dialog already open when the gate engages closes, discarding any
+in-flight read, and stays closed when the gate lifts. The World and
+Plot hosts also close it when their screen loses focus or the
+category / segment switches.
 Vault calendars (global) and story-list story-import (new story)
 are unaffected.
 
@@ -444,20 +448,22 @@ are unaffected.
 One stories file at
 `components/compounds/import-dialog.stories.tsx`. Story matrix:
 
-| Story                      | State         | Notes                                                                                            |
-| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------ |
-| `IdleCalendar`             | idle          | `aventuras-calendar` + `CalendarSystemSchema`; default open. Anchors visual reference.           |
-| `IdleStory`                | idle          | `aventuras-story` + `StoryImportSchema`; demonstrates title-copy variation.                      |
-| `IdleCalendar_Phone`       | idle          | Renders as `IdleCalendar`; resize the canvas below 640px to verify button text doesn't truncate. |
-| `Reading`                  | reading       | Forced via test seam; spinner on file button, both disabled.                                     |
-| `MetaError_NotAventuras`   | meta-error    | Forced via `_initialState`. Banner: `This isn’t an Aventuras file.`                              |
-| `MetaError_WrongKind`      | meta-error    | Forced via `_initialState`: an `aventuras-story` envelope into a `aventuras-calendar` dialog.    |
-| `MetaError_NewerVersion`   | meta-error    | Forced via `_initialState`: `formatVersion: "2.0"` vs `supportedMajor: 1`.                       |
-| `MetaError_ClipboardEmpty` | meta-error    | Forced via `_initialState`: the empty-clipboard banner.                                          |
-| `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                                 |
-| `PayloadError_Expanded`    | payload-error | Same shape with 11 issues; click `Show details` to open the list and see the bounded scroll.     |
-| `ClosedDuringRead`         | reading       | Stubbed clipboard read; Cancel mid-read, then resolve: `onValidated` never fires.                |
-| `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.                   |
+| Story                      | State         | Notes                                                                                                                                                                     |
+| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IdleCalendar`             | idle          | `aventuras-calendar` + `CalendarStubSchema`; default open. Anchors visual reference.                                                                                      |
+| `IdleStory`                | idle          | `aventuras-story` + `StoryStubSchema`; demonstrates title-copy variation.                                                                                                 |
+| `IdleCalendar_Phone`       | idle          | Renders as `IdleCalendar`; resize the canvas below 640px to verify button text doesn't truncate.                                                                          |
+| `Reading`                  | reading       | Forced via test seam; spinner on file button, both disabled.                                                                                                              |
+| `MetaError_NotAventuras`   | meta-error    | Forced via `_initialState`. Banner: `This isn’t an Aventuras file.`                                                                                                       |
+| `MetaError_WrongKind`      | meta-error    | Forced via `_initialState`: an `aventuras-story` envelope into a `aventuras-calendar` dialog.                                                                             |
+| `MetaError_NewerVersion`   | meta-error    | Forced via `_initialState`: `formatVersion: "2.0"` vs `supportedMajor: 1`.                                                                                                |
+| `MetaError_ClipboardEmpty` | meta-error    | Forced via `_initialState`: the empty-clipboard banner.                                                                                                                   |
+| `PayloadError_Collapsed`   | payload-error | Forced; multi-issue zod failure; details hidden.                                                                                                                          |
+| `PayloadError_Expanded`    | payload-error | Same shape with 11 issues; click `Show details` to open the list and see the bounded scroll.                                                                              |
+| `ClosedDuringRead`         | reading       | Stubbed clipboard read; Cancel mid-read, then resolve: `onValidated` never fires.                                                                                         |
+| `Closed`                   | n/a           | Story with a Button that toggles `open`; demonstrates host wiring at a glance.                                                                                            |
+| `Host<Slot>_NewerVersion`  | meta-error    | One per host slot (World Characters, Locations, Items, Factions, Lore; Plot Threads, Happenings) with that host's shipped config. Mock clipboard: `formatVersion: "2.0"`. |
+| `HostCharacters_WrongKind` | payload-error | Mock clipboard: a valid location in the Characters slot; one issue at `kind`, `Expected a character.`                                                                     |
 
 ### Forced-state test seam
 
@@ -499,24 +505,19 @@ file…`. The Dialog primitive returns focus to the trigger on
 
 ## Implementation prerequisites
 
-Native deps not currently in `package.json`:
+The dialog's native dependencies are installed and in use:
 
-- `expo-document-picker` — file picker on iOS / Android.
-- `expo-file-system` — `readAsStringAsync` to load the picked
-  file.
+- `expo-document-picker` — the native file picker
+  (`getDocumentAsync`).
+- `expo-file-system` — `readAsStringAsync` loads the picked file.
+- `expo-clipboard` — the native clipboard read.
 
-`expo-clipboard` is already present.
-
-Both new modules carry native code; per the project's native-dep
-convention, `pnpm add` alone is insufficient — the consuming
-slice (M4 first) needs a dev-client rebuild before the import
-runs at runtime. Slice prep should:
-
-1. `pnpm add expo-document-picker expo-file-system`.
-2. Trigger a dev-client rebuild (`eas build --profile
-development` or local prebuild + native build, depending on
-   the slice's setup).
-3. Reinstall the dev client on test devices before running.
+The dialog loads all three lazily, on first use, so a dev client
+built before one was added fails only when that path runs. Each
+carries native code: per
+[`lessons-learned/native-dep-expo-link.md`](../../implementation/lessons-learned/native-dep-expo-link.md),
+adding such a module needs a dev-client rebuild before it runs on a
+device.
 
 Web has no native-build step — `<input type="file">` and
 `navigator.clipboard.readText()` are standard browser APIs and

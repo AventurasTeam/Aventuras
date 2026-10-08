@@ -266,7 +266,15 @@ convention, and the expectation that subsystems route through
   `deleteRow` threw rather than refused), `plot_delete_failed`
   (`components/plot/use-plot-delete.ts` — its Plot twin, a confirmed
   `⋯ → Delete thread` / `Delete happening` whose `deleteRow` threw
-  rather than refused), `plot_link_revalidate_failed`
+  rather than refused), `world_import_failed` (`app/world/[branchId].tsx`
+  — a `From JSON file…` import whose `importEntity` / `importLore`
+  threw rather than refused; the dialog has already closed, so the
+  user sees a toast) and its Plot twin `plot_import_failed`
+  (`app/plot/[branchId].tsx`, `importThread` / `importHappening`),
+  `row_export_failed` (`components/compounds/row-detail-frame.tsx` —
+  a `⋯ → Export … as JSON` whose `saveAvtsFile` rejected; the user
+  sees `Couldn’t export the file.`),
+  `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) and
   its World twins `world_relationships_revalidate_failed`
