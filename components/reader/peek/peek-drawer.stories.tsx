@@ -134,14 +134,12 @@ export const FocusLandsOnTheDrawer: Story = {
   args: { initialPeek: MIRA },
   play: async () => {
     const drawer = await findDrawer('Mira')
-    // Radix focuses its own wrapper, the named dialog's parent; the lead button is deeper.
-    await waitFor(
-      () => expect([drawer, drawer.parentElement]).toContain(document.activeElement),
-      WAIT,
-    )
-    await expect(
-      within(drawer).getByRole('button', { name: t('reader:peek.setLead') }),
-    ).not.toHaveFocus()
+    await waitFor(() => expect(drawer).toHaveFocus(), WAIT)
+    const setLead = within(drawer).getByRole('button', { name: t('reader:peek.setLead') })
+    await expect(setLead).not.toHaveFocus()
+    // The dialog is a tab stop in front of the content, not a dead end.
+    await userEvent.tab()
+    await expect(setLead).toHaveFocus()
   },
 }
 

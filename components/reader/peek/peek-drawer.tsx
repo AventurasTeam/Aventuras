@@ -57,13 +57,16 @@ export function PeekDrawer({
         if (!open) onClose()
       }}
       ariaLabel={model == null ? '' : t('reader:peek.label', { name: peekName(model) })}
-      // Land on the drawer, not its first button: a stray Enter or Space must not set the lead.
+      // Land on the named dialog, not its first button: a stray Enter or Space must not set the
+      // lead. currentTarget is Radix's wrapper, which has no role or name; the dialog is inside.
       onOpenAutoFocus={(event) => {
         event.preventDefault()
-        ;(event.currentTarget as HTMLElement | null)?.focus()
+        ;(event.currentTarget as HTMLElement | null)
+          ?.querySelector<HTMLElement>('[role="dialog"]')
+          ?.focus()
       }}
     >
-      <SheetContent anchor="right" className="p-0" testID="peek-drawer">
+      <SheetContent anchor="right" className="p-0" testID="peek-drawer" tabIndex={-1}>
         {model != null && peek != null ? (
           <PeekContent
             model={model}
