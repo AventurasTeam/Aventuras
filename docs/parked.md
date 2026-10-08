@@ -2916,6 +2916,18 @@ rule when this lands. Only `locales/en` ships.
 Parked 2026-09-27 from triage; the signal is the first non-English
 locale.
 
+#### Zod's built-in issue messages are English
+
+The per-row `.avts` import schemas (`lib/avts`) route only their own
+issue messages through `t()`; Zod's built-in ones ("Invalid input:
+expected string, received number") reach the import dialog's issue list
+in English. When a second locale ships, switch Zod's locale with the app
+language in `lib/i18n` (`z.config(z.locales.<lang>())`) rather than
+schema by schema. Only `locales/en` ships today.
+
+Raised in Slice 4.6 (2026-10-08); the signal is the first non-English
+locale.
+
 #### Category-label lowercasing
 
 The list panes' search placeholder and empty-list title lowercase
