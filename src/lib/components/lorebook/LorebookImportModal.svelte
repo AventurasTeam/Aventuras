@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { database } from '$lib/services/database'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
@@ -108,14 +107,16 @@
   }
 
   async function handleImport() {
-    if (!parseResult || !story.currentStory) return
+    const scope = story.currentScope
+    if (!parseResult || !story.currentStory || !scope) return
 
+    const aventura = isAventuraExport
     importing = true
     importProgress = null
 
     try {
       const result = await LorebookImportExport.importEntries(parseResult, {
-        storyId: story.currentStory.id,
+        scope,
         useAIClassification,
         storyMode: story.currentStory.mode ?? 'adventure',
         onProgress: (progress) => {
@@ -124,11 +125,10 @@
       })
 
       if (result.success) {
-        // Reload entries into store
-        story.lorebookEntries = await database.getEntries(story.currentStory.id)
+        story.appendImportedLorebookEntries(result.entries, scope)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
-        if (isAventuraExport) {
+        if (aventura) {
           for (const warning of result.warnings) ui.showToast(warning, 'warning', 8000)
         }
         ui.closeLorebookImport()
@@ -149,8 +149,16 @@
   }
 </script>
 
-<ResponsiveModal.Root open={true} onOpenChange={(open) => !open && close()}>
-  <ResponsiveModal.Content class="flex max-h-[90vh] max-w-lg flex-col gap-0 p-0">
+<ResponsiveModal.Root
+  open={true}
+  dismissible={!importing}
+  onOpenChange={(open) => !open && !importing && close()}
+>
+  <ResponsiveModal.Content
+    class="flex max-h-[90vh] max-w-lg flex-col gap-0 p-0"
+    interactOutsideBehavior={importing ? 'ignore' : 'close'}
+    escapeKeydownBehavior={importing ? 'ignore' : 'close'}
+  >
     <ResponsiveModal.Header class="border-b px-6 py-4">
       <div class="flex items-center gap-2">
         <Download class="text-primary h-5 w-5" />
@@ -248,6 +256,7 @@
         <Button
           variant="link"
           class="h-auto p-0 text-xs"
+          disabled={importing}
           onclick={() => {
             parseResult = null
           }}
