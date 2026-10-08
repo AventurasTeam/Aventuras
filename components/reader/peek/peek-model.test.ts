@@ -10,6 +10,7 @@ import type { LeadLabel } from '@/lib/world'
 import {
   peekLeadOf,
   peekModelOf,
+  peekNameOf,
   type PeekLeadControl,
   type PeekLinks,
   type PeekModel,
@@ -294,5 +295,14 @@ describe('peekLeadOf', () => {
       state: 'candidate',
       disabledReason: 'Already the lead',
     })
+  })
+})
+
+describe('peekNameOf', () => {
+  it('names an entity by its name and the other kinds by their title', () => {
+    expect(peekNameOf(modelOf('character', 'char_mira'))).toBe('Mira')
+    expect(peekNameOf(modelOf('lore', 'lore_veil'))).toBe('The Veil')
+    expect(peekNameOf(modelOf('thread', 't_amulet'))).toBe('What the amulet wants')
+    expect(peekNameOf(modelOf('happening', 'h_ambush'))).toBe('The alley ambush')
   })
 })

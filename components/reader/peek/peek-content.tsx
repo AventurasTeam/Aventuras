@@ -12,7 +12,7 @@ import type { RailCategory } from '@/lib/reader-rail'
 import { PeekBody } from './peek-body'
 import { PeekFoot } from './peek-foot'
 import { PeekHead } from './peek-head'
-import { peekLeadOf, type PeekLeadControl, type PeekModel } from './peek-model'
+import { peekLeadOf, peekNameOf, type PeekLeadControl, type PeekModel } from './peek-model'
 import type { PeekEntityContext } from './use-peek-view'
 
 /** Desktop / tablet close with `×`; phone goes back to the rail Sheet's list with `←`. */
@@ -33,18 +33,18 @@ export type PeekContentProps = {
 // In the phone Sheet the scroll view is gorhom's Animated one, which NativeWind never styles.
 const FILL = { flex: 1 } satisfies ViewStyle
 
-type PeekIdentity = { category: RailCategory; name: string; icon?: string | null }
+type PeekIdentity = { category: RailCategory; icon?: string | null }
 
 function identityOf(model: PeekModel): PeekIdentity {
   switch (model.kind) {
     case 'entity':
-      return { category: model.row.kind, name: model.row.name }
+      return { category: model.row.kind }
     case 'lore':
-      return { category: 'lore', name: model.row.title }
+      return { category: 'lore' }
     case 'thread':
-      return { category: 'thread', name: model.row.title, icon: model.row.icon }
+      return { category: 'thread', icon: model.row.icon }
     case 'happening':
-      return { category: 'happening', name: model.row.title, icon: model.row.icon }
+      return { category: 'happening', icon: model.row.icon }
   }
 }
 
@@ -61,7 +61,8 @@ export function PeekContent({
   // A plain context read with a ScrollView default: no provider needed above the right Sheet's
   // Portal; the phone Sheet provides gorhom's inside its own tree.
   const Scroll = useContext(ScrollComponentContext)
-  const { category, name, icon } = identityOf(model)
+  const { category, icon } = identityOf(model)
+  const name = peekNameOf(model)
   return (
     <View testID="peek-content" className="flex-1">
       <PeekHead

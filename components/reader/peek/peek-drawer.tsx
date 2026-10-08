@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { Platform, type View } from 'react-native'
 
 import { railRowHref } from '@/components/reader/rail/rail-modules'
 import type { RailData } from '@/components/reader/rail/use-rail-data'
@@ -8,7 +9,7 @@ import { t } from '@/lib/i18n'
 import type { RailPeek } from '@/lib/reader-rail'
 
 import { PeekContent } from './peek-content'
-import type { PeekModel } from './peek-model'
+import { peekNameOf } from './peek-model'
 import { usePeekView } from './use-peek-view'
 import { useSetLead } from './use-set-lead'
 
@@ -20,13 +21,10 @@ export type PeekDrawerProps = {
   storyId: string | null
   blocked: boolean
   blockedReason: string | undefined
+  /** The host clears `peek`; also called when the peeked row stops resolving. */
   onClose: () => void
   /** The C6 route for the peeked row or one of its Overview tabs; the host closes, then routes. */
   onOpenInPanel: (href: string) => void
-}
-
-function peekName(model: PeekModel): string {
-  return model.kind === 'entity' ? model.row.name : model.row.title
 }
 
 /** layout.md → Sheet: the desktop / tablet peek, a right Sheet over a scrim. */
@@ -44,29 +42,44 @@ export function PeekDrawer({
   const { model, entityContext, entryIndex } = usePeekView(peek, data)
   const { pending, setLead } = useSetLead(storyId)
   const gone = peek != null && model == null
+  const open = visible && model != null
+  const isLead = model?.kind === 'entity' && model.leadLabel != null
+  const dialogRef = useRef<View>(null)
 
   // A dead id left in the store would reopen the peek when an undo restores the row.
   useEffect(() => {
     if (gone) onClose()
   }, [gone, onClose])
 
+  // The focused `Set as lead` goes disabled, then is swapped for the badge: focus falls to body or
+  // Radix's unnamed wrapper. Pull it back into the dialog.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !open) return
+    const dialog = dialogRef.current as unknown as HTMLElement | null
+    if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
+  }, [open, pending, isLead])
+
   return (
     <Sheet
-      open={visible && model != null}
+      open={open}
       onOpenChange={(open) => {
         if (!open) onClose()
       }}
-      ariaLabel={model == null ? '' : t('reader:peek.label', { name: peekName(model) })}
+      ariaLabel={model == null ? '' : t('reader:peek.label', { name: peekNameOf(model) })}
       // Land on the named dialog, not its first button: a stray Enter or Space must not set the
-      // lead. currentTarget is Radix's wrapper, which has no role or name; the dialog is inside.
+      // lead.
       onOpenAutoFocus={(event) => {
         event.preventDefault()
-        ;(event.currentTarget as HTMLElement | null)
-          ?.querySelector<HTMLElement>('[role="dialog"]')
-          ?.focus()
+        dialogRef.current?.focus()
       }}
     >
-      <SheetContent anchor="right" className="p-0" testID="peek-drawer" tabIndex={-1}>
+      <SheetContent
+        ref={dialogRef}
+        anchor="right"
+        className="p-0"
+        testID="peek-drawer"
+        tabIndex={Platform.OS === 'web' ? -1 : undefined}
+      >
         {model != null && peek != null ? (
           <PeekContent
             model={model}

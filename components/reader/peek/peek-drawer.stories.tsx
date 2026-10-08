@@ -22,6 +22,9 @@ import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/store
 import { PeekDrawer } from './peek-drawer'
 
 const DATA = railDataFixture()
+const MIRA_LEADS = railDataFixture({
+  entityListSignals: { leadId: 'char_mira', inScene: DATA.entityListSignals.inScene },
+})
 const WITHOUT_KAEL = railDataFixture({
   entities: DATA.entities.filter((entity) => entity.id !== 'char_kael'),
 })
@@ -137,9 +140,30 @@ export const FocusLandsOnTheDrawer: Story = {
     await waitFor(() => expect(drawer).toHaveFocus(), WAIT)
     const setLead = within(drawer).getByRole('button', { name: t('reader:peek.setLead') })
     await expect(setLead).not.toHaveFocus()
-    // The dialog is a tab stop in front of the content, not a dead end.
+    // Focus on the dialog hands Tab to the first control.
     await userEvent.tab()
     await expect(setLead).toHaveFocus()
+  },
+}
+
+/** The button is swapped for the lead badge under the focused key; focus must stay in the dialog. */
+export const FocusStaysAfterLeadFlips: Story = {
+  args: { initialPeek: MIRA },
+  play: async () => {
+    const drawer = await findDrawer('Mira')
+    await waitFor(() => expect(drawer).toHaveFocus(), WAIT)
+    await userEvent.tab()
+    await expect(
+      within(drawer).getByRole('button', { name: t('reader:peek.setLead') }),
+    ).toHaveFocus()
+    harnessData.setState({ data: MIRA_LEADS })
+    await waitFor(
+      () =>
+        expect(within(drawer).queryByRole('button', { name: t('reader:peek.setLead') })).toBeNull(),
+      WAIT,
+    )
+    await settle()
+    await expect(drawer).toHaveFocus()
   },
 }
 
@@ -249,6 +273,16 @@ export const RowMissingOnOpen: Story = {
     await settle()
     await expect(args.onClose).toHaveBeenCalledTimes(1)
     await expect(screen.queryByRole('dialog')).toBeNull()
+  },
+}
+
+/** The clear-on-gone effect runs hidden too: a dead id must not wait for the gate to open. */
+export const RowMissingWhileHidden: Story = {
+  args: { initialPeek: { category: 'character', id: 'char_ghost' }, visible: false },
+  play: async ({ args }) => {
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
+    await settle()
+    await expect(args.onClose).toHaveBeenCalledTimes(1)
   },
 }
 

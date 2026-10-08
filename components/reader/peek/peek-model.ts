@@ -83,6 +83,11 @@ export function peekModelOf(peek: RailPeek, data: RailData, links: PeekLinks): P
   }
 }
 
+/** What the peek calls the row: an entity's name, the other kinds' title. */
+export function peekNameOf(model: PeekModel): string {
+  return model.kind === 'entity' ? model.row.name : model.row.title
+}
+
 export type PeekLeadControl = {
   /** `RailData.entityListSignals.leadId`. */
   leadId: string | null
