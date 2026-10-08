@@ -93,7 +93,7 @@ const TINTS: ReadonlyMap<string, RecentlyClassified> = new Map([
   ['h_ambush', 'fading'],
 ])
 
-/** Kael leads under `label`; null labels no row, as when the story isn't open on this branch. */
+/** Kael leads under `label`; null labels no row: synthetic, to pin `peekLeadOf`'s own `leadId` check. */
 function railData(label: LeadLabel | null = 'you'): RailData {
   return {
     branchId: BRANCH,
