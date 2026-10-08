@@ -272,8 +272,9 @@ convention, and the expectation that subsystems route through
   user sees a toast) and its Plot twin `plot_import_failed`
   (`app/plot/[branchId].tsx`, `importThread` / `importHappening`),
   `row_export_failed` (`components/compounds/row-detail-frame.tsx` —
-  a `⋯ → Export … as JSON` whose `saveAvtsFile` rejected; the user
-  sees `Couldn’t export the file.`), `import_read_failed` (warn,
+  a `⋯ → Export … as JSON` whose file build (the row's serializer)
+  threw or whose `saveAvtsFile` rejected; the user sees
+  `Couldn’t export the file.`), `import_read_failed` (warn,
   `components/compounds/import-dialog-pipeline.ts` — an `ImportDialog`
   file or clipboard read that threw, other than a cancelled picker or
   an empty clipboard; the user sees the read-error banner),
