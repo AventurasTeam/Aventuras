@@ -311,8 +311,10 @@ state, `injection_mode`), happenings, awareness links, lore,
 threads, branch operations (rollback, switch, branch creation),
 translations, story settings, app settings that feed
 `generationContext`, calendar swap, lead switch, mode switch,
-narration switch, manual `worldTime` correction, backup / export
-when reachable from inside the story.
+narration switch, manual `worldTime` correction, story-level
+backup / export when reachable from inside the story (the Actions
+menu, Story Settings; see
+[`parked.md → Backup / export consistency`](../parked.md#backup--export-consistency)).
 
 ### What's not gated
 
@@ -321,6 +323,12 @@ when reachable from inside the story.
   itself. Reads of the live store during pipeline writes are
   accepted; the user sees state in motion as the pipeline
   progresses.
+- **Per-row export** — `⋯ → Export … as JSON` on a World or Plot
+  detail head reads one committed row, like `View raw JSON`, so it
+  stays live. A file exported mid-turn can hold a state that a
+  cancel later reverses; the file carries one row and no links, so
+  no cross-row consistency is at stake, and exporting again fixes
+  it.
 - **Composing the next turn** — the composer's text and its mode
   picker stay live for the whole gate. Neither writes anything: the
   draft is component state and the composer mode is a send-time

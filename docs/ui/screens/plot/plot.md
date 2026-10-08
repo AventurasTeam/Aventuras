@@ -325,7 +325,9 @@ minus `Set as lead` (threads and happenings have no lead concept):
   `aventuras-thread` or `aventuras-happening` `.avts` file: a download
   on desktop and web, the OS share sheet on native. A happening's file
   carries the row alone; its links show only in the raw JSON viewer.
-  Read-only, so it stays live during generation.
+  A read of the committed row, like `View raw JSON`, so it stays live
+  during generation, per
+  [`principles.md → What's not gated`](../../principles.md#whats-not-gated).
 - `View raw JSON` — live; a happening's viewer merges its
   involvements and awareness rows, per
   [Detail pane — raw JSON viewer](#detail-pane--raw-json-viewer) above.

@@ -1873,8 +1873,10 @@ is revisitable.
 
 A backup run reads the entire story state. Per
 [`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation),
-backup / export reachable from inside the story (Actions menu,
-Story Settings) is gated and disabled during a transaction. Backup
+story-level backup / export reachable from inside the story
+(Actions menu, Story Settings) is gated and disabled during a
+transaction; per-row export reads one committed row and stays live
+([`What's not gated`](./ui/principles.md#whats-not-gated)). Backup
 from app-level surfaces (App Settings → Data tab) requires leaving
 the story, which routes through the abort-confirm modal — also
 safe.
