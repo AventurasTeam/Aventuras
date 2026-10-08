@@ -263,7 +263,7 @@
 
                 <ScrollArea class="bg-background h-45 w-full rounded-md border">
                   <div class="space-y-1 p-2">
-                    {#each lorebook.entries.slice(0, 10) as entry (entry.name)}
+                    {#each lorebook.entries.slice(0, 10) as entry, i (i)}
                       <div
                         class="hover:bg-muted/50 flex items-center gap-2 rounded-sm p-2 text-sm transition-colors"
                       >

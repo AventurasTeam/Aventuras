@@ -397,7 +397,7 @@
       {#if expandedSetting.keyLocations.length > 0}
         <div class="flex flex-wrap gap-2 text-xs">
           <span class="text-foreground py-0.5 font-medium">Locations:</span>
-          {#each expandedSetting.keyLocations as loc (loc.name)}
+          {#each expandedSetting.keyLocations as loc, i (i)}
             <Badge variant="secondary" class="font-normal">{loc.name}</Badge>
           {/each}
         </div>

@@ -148,7 +148,7 @@
                 <div class="text-muted-foreground ml-12 text-xs">
                   <span class="font-medium">Extracted NPCs:</span>
                   <ul class="mt-1 ml-4 list-disc space-y-0.5">
-                    {#each cardImportResult.npcs as npc (npc.name)}
+                    {#each cardImportResult.npcs as npc, i (i)}
                       <li>{npc.name}</li>
                     {/each}
                   </ul>
