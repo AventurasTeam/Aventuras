@@ -118,6 +118,17 @@ describe('what the plan says about each field', () => {
     expect(merged.keywords).toEqual(['Ward', 'Gate'])
   })
 
+  it('leaves out an alias or keyword the entry name or an alias already matches', () => {
+    const entry = (id: string, name: string, aliases: string[], keywords: string[]) =>
+      ({ id, name, aliases, injection: { mode: 'keyword', keywords, priority: 0 } }) as Entry
+    const plan = planEntryMerge(entry('a', 'Keep', ['Hold'], ['Ward']), [
+      entry('b', 'keep', ['KEEP', 'Tower'], ['keep', 'hold', 'tower', 'Gate']),
+    ])
+    const merged = applyMergePlan(plan)
+    expect(merged.aliases).toEqual(['Hold', 'Tower'])
+    expect(merged.keywords).toEqual(['Ward', 'Gate'])
+  })
+
   it('fills missing appearance keys without overriding the kept row’s', () => {
     const plan = planCharacterMerge(character('a', { visualDescriptors: { hair: 'black' } }), [
       character('b', { visualDescriptors: { hair: 'white', eyes: 'amber' } }),

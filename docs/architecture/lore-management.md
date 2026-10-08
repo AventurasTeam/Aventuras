@@ -33,16 +33,18 @@ field carries where its value came from — `only` (one row had it), `agreed`, `
 
 Only the defaults a machine can justify survive: a field one row has is that row's, lists
 (traits, aliases, keywords) are unioned, and everything else defaults to the row the user
-chose to keep. There is deliberately **no "the newer row wins"** — `characters`, `locations`
-and `items` have no creation timestamp, so which of two conflicting values is more recent is
-a question the data cannot answer.
+chose to keep. The one exception to the union is a lorebook alias or keyword that the entry's
+name or aliases already match by `termKey`: it can never add a match, so it is left out. There
+is deliberately **no "the newer row wins"** — `characters`, `locations` and `items` have no
+creation timestamp, so which of two conflicting values is more recent is a question the data
+cannot answer.
 
 The first version returned a finished object and preferred the primary field by field. It
 dropped a description silently whenever both rows had one, and it put `status` outside the
 user's reach entirely — any non-`active` value from any row won, so merging a character the
 story had brought back marked them dead again whichever row was kept. For the lorebook the
 absorbed names still become **aliases** on the survivor, which is what stops the same
-duplicate being re-created.
+duplicate being re-created — except one that differs from the survivor's name only by case.
 
 **A dismissal is remembered, in `kept_separate`** (migration 037), keyed by normalized
 **name pair** and scoped to a branch. Names rather than ids, so a later rename cannot
