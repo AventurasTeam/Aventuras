@@ -5,6 +5,8 @@ import type { ImportRejectionCode, ImportRowResult } from '@/lib/actions'
 export type UseRowImportArgs<P> = {
   /** `isUserEditBlocked`: the request is refused and an open dialog closes. */
   blocked: boolean
+  /** Screen focus; unfocused acts as `blocked` (a portaled dialog would paint over a pushed screen). */
+  focused: boolean
   /** The surface's leave guard; opening the dialog and selecting the new row both resolve it. */
   guard: (proceed: () => void) => void
   select: (id: string) => void
@@ -25,6 +27,7 @@ export type RowImport<P> = {
 /** import-dialog.md → Host gating during in-flight generation, for one `From JSON file…` dialog. */
 export function useRowImport<P>({
   blocked,
+  focused,
   guard,
   select,
   commit,
@@ -38,13 +41,14 @@ export function useRowImport<P>({
   useLayoutEffect(() => {
     callbacks.current = { guard, select, onImported, onRejected, onFailed }
   }, [guard, select, onImported, onRejected, onFailed])
-  // In render, not an effect: the dialog never commits open while blocked.
-  if (blocked && open) setOpen(false)
+  const gated = blocked || !focused
+  // In render, not an effect: the dialog never commits open while gated.
+  if (gated && open) setOpen(false)
 
   const request = useCallback(() => {
-    if (blocked) return
+    if (gated) return
     guard(() => setOpen(true))
-  }, [blocked, guard])
+  }, [gated, guard])
 
   const onOpenChange = useCallback(
     (next: boolean) => (next ? request() : setOpen(false)),

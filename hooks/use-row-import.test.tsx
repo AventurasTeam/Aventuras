@@ -13,6 +13,7 @@ const PAYLOAD: Payload = { name: 'Kael' }
 function args(overrides: Partial<UseRowImportArgs<Payload>> = {}): UseRowImportArgs<Payload> {
   return {
     blocked: false,
+    focused: true,
     guard: vi.fn((proceed: () => void) => proceed()),
     select: vi.fn(),
     commit: vi.fn(async (): Promise<ImportRowResult> => ({ status: 'ok', id: 'char_new' })),
@@ -109,6 +110,52 @@ describe('useRowImport — opening', () => {
     act(() => release())
     expect(committed.length).toBeGreaterThan(1)
     expect(committed.filter((c) => c.blocked && c.open)).toEqual([])
+  })
+
+  it('closes an open dialog when the screen loses focus, and keeps it closed when focus returns', () => {
+    const initial = args()
+    const { result, rerender } = setup(initial)
+    act(() => result.current.request())
+    expect(result.current.open).toBe(true)
+    rerender({ ...initial, focused: false })
+    expect(result.current.open).toBe(false)
+    rerender({ ...initial, focused: true })
+    expect(result.current.open).toBe(false)
+  })
+
+  it('refuses a request while the screen is unfocused, without asking the guard', () => {
+    const initial = args({ focused: false })
+    const { result } = setup(initial)
+    act(() => result.current.request())
+    expect(initial.guard).not.toHaveBeenCalled()
+    expect(result.current.open).toBe(false)
+  })
+
+  it('never commits an open dialog while unfocused, even for a request released late', () => {
+    const committed: { focused: boolean; open: boolean }[] = []
+    let release = () => {}
+    const initial = args({
+      guard: vi.fn((proceed: () => void) => {
+        release = proceed
+      }),
+    })
+    const { result, rerender } = renderHook(
+      (props: UseRowImportArgs<Payload>) => {
+        const row = useRowImport(props)
+        useLayoutEffect(() => {
+          committed.push({ focused: props.focused, open: row.open })
+        })
+        return row
+      },
+      { initialProps: initial },
+    )
+    act(() => result.current.request())
+    rerender({ ...initial, focused: false })
+    act(() => release())
+    expect(committed.length).toBeGreaterThan(1)
+    expect(committed.filter((c) => !c.focused && c.open)).toEqual([])
+    rerender({ ...initial, focused: true })
+    expect(result.current.open).toBe(false)
   })
 
   it('opens through onOpenChange(true) only as request() would: past the guard', () => {

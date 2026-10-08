@@ -298,6 +298,7 @@ fix and re-pick / re-paste.
 // One slot per dialog; the host holds an entity slot and a lore slot.
 const entityImport = useRowImport<EntityImport>({
   blocked: editBlocked, // isUserEditBlocked: refused while generation is in flight
+  focused, // screen focus: losing it closes the dialog, which stays closed when it returns
   guard, // the surface's leave guard
   select, // an ok commit runs guard(() => select(id)), then onImported
   commit: (payload) => importEntity(branchId, payload, ctx),
@@ -308,7 +309,7 @@ const entityImport = useRowImport<EntityImport>({
 
 <ImportDialog<EntityImport>
   {...entityImportDialog(category)} // format, schema narrowed to the kind, t('world:import.title.<kind>')
-  open={entityImport.open && focused}
+  open={entityImport.open}
   onOpenChange={entityImport.onOpenChange}
   onValidated={entityImport.onValidated}
 />

@@ -196,6 +196,7 @@ export default function PlotRoute() {
   )
   const threadImport = useRowImport<ThreadImport>({
     blocked: editBlocked,
+    focused,
     guard,
     select,
     commit: commitThread,
@@ -205,6 +206,7 @@ export default function PlotRoute() {
   })
   const happeningImport = useRowImport<HappeningImport>({
     blocked: editBlocked,
+    focused,
     guard,
     select,
     commit: commitHappening,
@@ -219,10 +221,6 @@ export default function PlotRoute() {
     setThreadImportOpen(false)
     setHappeningImportOpen(false)
   }, [setThreadImportOpen, setHappeningImportOpen])
-  // The dialog is portaled: left open, it would paint over the screen pushed on top.
-  useEffect(() => {
-    if (!focused) closeImports()
-  }, [focused, closeImports])
 
   const switchKind = useCallback(
     (next: PlotKind) => {
@@ -538,14 +536,14 @@ export default function PlotRoute() {
       {kind === 'thread' ? (
         <ImportDialog<ThreadImport>
           {...threadImportDialog()}
-          open={threadImport.open && focused}
+          open={threadImport.open}
           onOpenChange={threadImport.onOpenChange}
           onValidated={threadImport.onValidated}
         />
       ) : (
         <ImportDialog<HappeningImport>
           {...happeningImportDialog()}
-          open={happeningImport.open && focused}
+          open={happeningImport.open}
           onOpenChange={happeningImport.onOpenChange}
           onValidated={happeningImport.onValidated}
         />

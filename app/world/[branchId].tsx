@@ -259,6 +259,7 @@ export default function WorldRoute() {
   )
   const entityImport = useRowImport<EntityImport>({
     blocked: editBlocked,
+    focused,
     guard,
     select,
     commit: commitEntity,
@@ -268,6 +269,7 @@ export default function WorldRoute() {
   })
   const loreImport = useRowImport<LoreImport>({
     blocked: editBlocked,
+    focused,
     guard,
     select,
     commit: commitLore,
@@ -282,10 +284,6 @@ export default function WorldRoute() {
     setEntityImportOpen(false)
     setLoreImportOpen(false)
   }, [setEntityImportOpen, setLoreImportOpen])
-  // The dialog is portaled: left open, it would paint over the screen pushed on top.
-  useEffect(() => {
-    if (!focused) closeImports()
-  }, [focused, closeImports])
   const collision = useCollisionResolve(branchId, ctx, guard)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
@@ -679,14 +677,14 @@ export default function WorldRoute() {
       {isEntityCategory(category) ? (
         <ImportDialog<EntityImport>
           {...entityImportDialog(category)}
-          open={entityImport.open && focused}
+          open={entityImport.open}
           onOpenChange={entityImport.onOpenChange}
           onValidated={entityImport.onValidated}
         />
       ) : (
         <ImportDialog<LoreImport>
           {...loreImportDialog()}
-          open={loreImport.open && focused}
+          open={loreImport.open}
           onOpenChange={loreImport.onOpenChange}
           onValidated={loreImport.onValidated}
         />
