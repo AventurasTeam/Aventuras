@@ -146,7 +146,7 @@ export const FocusLandsOnTheDrawer: Story = {
   },
 }
 
-/** The button is swapped for the lead badge under the focused key; focus must stay in the dialog. */
+/** A lead flip that swaps the focused button for the badge leaves focus on the dialog. */
 export const FocusStaysAfterLeadFlips: Story = {
   args: { initialPeek: MIRA },
   play: async () => {

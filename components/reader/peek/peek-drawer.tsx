@@ -51,13 +51,13 @@ export function PeekDrawer({
     if (gone) onClose()
   }, [gone, onClose])
 
-  // The focused `Set as lead` goes disabled, then is swapped for the badge: focus falls to body or
-  // Radix's unnamed wrapper. Pull it back into the dialog.
+  // The lead flip swaps the focused `Set as lead` for the badge; Radix then focuses its unnamed
+  // wrapper. Pull focus back into the dialog.
   useEffect(() => {
     if (Platform.OS !== 'web' || !open) return
     const dialog = dialogRef.current as unknown as HTMLElement | null
     if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
-  }, [open, pending, isLead])
+  }, [open, isLead])
 
   return (
     <Sheet

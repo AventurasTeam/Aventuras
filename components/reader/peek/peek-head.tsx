@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
@@ -36,6 +36,15 @@ function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolea
   const label = t('reader:peek.setLead')
   const reason = lead.disabledReason
   const disabled = reason != null || lead.pending
+  const ref = useRef<View>(null)
+  // RN-Web's Pressable overwrites `aria-disabled` with its `disabled` prop, which also sets the
+  // <button>'s `disabled` and makes Chromium drop focus. Set the attribute directly instead.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const node = ref.current as unknown as HTMLElement | null
+    if (disabled) node?.setAttribute('aria-disabled', 'true')
+    else node?.removeAttribute('aria-disabled')
+  }, [disabled])
   return (
     <ReasonTooltip reason={reason}>
       <Pressable
@@ -43,21 +52,23 @@ function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolea
         // WCAG 2.5.3: the accessible name still leads with the visible label.
         aria-label={reason != null ? t('common:disabledWithReason', { label, reason }) : label}
         aria-busy={lead.pending || undefined}
-        disabled={disabled}
-        onPress={lead.onSetLead}
+        ref={ref}
+        // Not `disabled`: a reason-bearing control stays focusable so keyboard and screen-reader
+        // users can reach it and hear why.
+        aria-disabled={disabled || undefined}
+        onPress={disabled ? undefined : lead.onSetLead}
         hitSlop={TAG_HIT_SLOP}
         className={cn(
           'shrink-0 rounded-sm px-1',
-          // touch.md floor: fill the phone head's 44px group (web's disabled wrapper doesn't).
+          // touch.md floor: fill the phone head's 44px group.
           isPhone && 'justify-center self-stretch',
-          disabled
-            ? 'opacity-50'
-            : cn(
-                'active:bg-tint-press',
-                Platform.select({
-                  web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-focus-ring',
-                }),
-              ),
+          disabled ? 'opacity-50' : 'active:bg-tint-press',
+          Platform.select({
+            web: cn(
+              'outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+              !disabled && 'cursor-pointer hover:bg-tint-hover',
+            ),
+          }),
         )}
       >
         <Text size="xs" className="font-medium underline decoration-dashed">
