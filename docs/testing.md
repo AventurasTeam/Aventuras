@@ -232,6 +232,33 @@ can produce that state — every entry point navigates only after
 spec that wants a URL needs the same two-part justification in a
 comment, or it does not get one.
 
+### Clipboard, file chooser and downloads
+
+Three renderer paths leave the page for the OS, and each needs a
+harness-side counterpart.
+[`e2e/tests/import-export.spec.ts`](../e2e/tests/import-export.spec.ts)
+is the worked example of all three.
+
+- **Clipboard.** The renderer reads with `navigator.clipboard.readText()`,
+  which works only because `electron/main.ts` sets no permission
+  request or check handler, and Electron approves every permission
+  when a session has none. A future handler must grant
+  `clipboard-read`, or the clipboard path breaks. A spec writes the
+  text from main (`clipboard.writeText` through `app.evaluate`). Off
+  the [virtual display](#virtual-display) that write lands on the
+  developer's own clipboard, so the spec keeps the text it replaced
+  and writes it back in `afterAll`, before the app closes.
+- **Downloads.** A renderer anchor download fires the session's
+  `will-download` event. With no handler setting the save path,
+  Electron opens its native Save dialog, which the harness can't
+  drive. A spec that triggers a download installs a handler through
+  `app.evaluate` that calls `item.setSavePath` into a temp dir and
+  records the `done` state for the spec to poll.
+- **File chooser.** The hidden `<input type="file">` is driven with
+  Playwright's `filechooser` event: arm the `waitForEvent` before the
+  click that opens the picker, then call `setFiles` on the chooser.
+  Playwright intercepts the picker only while that listener is armed.
+
 ## Fixture + seed contract
 
 Fixtures are **built at test time**, not checked in. Per run (per
