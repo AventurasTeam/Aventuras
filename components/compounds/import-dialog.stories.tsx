@@ -233,8 +233,13 @@ export const MetaError_NewerVersion: Story = {
     await waitFor(() => {
       expect(within(alert).getByText(t('common:importDialog.meta.newerVersion'))).toBeVisible()
     }, WAIT)
-    // import-dialog.md → Accessibility: the ⚠ is visual emphasis only.
+    // import-dialog.md → Accessibility: the ⚠ is visual emphasis only. Web hides the glyph
+    // span; native reads the parent's glyph-free label.
     expect(within(alert).getByText('⚠')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(alert).getByText(t('common:importDialog.meta.newerVersion'))).toHaveAttribute(
+      'aria-label',
+      t('common:importDialog.meta.newerVersion'),
+    )
   },
 }
 
@@ -279,6 +284,9 @@ export const PayloadError_Collapsed: Story = {
       ).toBeVisible()
     }, WAIT)
     expect(within(alert).getByText('⚠')).toHaveAttribute('aria-hidden', 'true')
+    expect(
+      within(alert).getByText(t('common:importDialog.invalidFormat', { count: 3 })),
+    ).toHaveAttribute('aria-label', t('common:importDialog.invalidFormat', { count: 3 }))
     await userEvent.click(
       within(alert).getByRole('button', { name: t('common:importDialog.showDetails') }),
     )

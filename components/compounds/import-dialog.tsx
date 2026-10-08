@@ -291,7 +291,7 @@ function MetaErrorBanner({ copy }: { copy: string }) {
         aria-hidden
         style={POINTER_EVENTS_NONE}
       />
-      <Text size="sm" className="text-warning">
+      <Text size="sm" className="text-warning" accessibilityLabel={copy}>
         <WarningGlyph />
         {copy}
       </Text>
@@ -299,7 +299,8 @@ function MetaErrorBanner({ copy }: { copy: string }) {
   )
 }
 
-// import-dialog.md → Accessibility: visual emphasis only, so accessible text skips it.
+// import-dialog.md → Accessibility: visual emphasis only. Web hides this span; native keeps a
+// nested span's text, so the parent Text carries a glyph-free accessibilityLabel instead.
 // Nested, so it repeats the parent's classes: a bare Text falls back to text-fg-primary.
 function WarningGlyph() {
   return (
@@ -322,6 +323,7 @@ function PayloadErrorBanner({
   onToggleExpand,
   isPhone,
 }: PayloadErrorBannerProps) {
+  const summary = t('common:importDialog.invalidFormat', { count: issues.length })
   return (
     <View
       role="alert"
@@ -334,9 +336,9 @@ function PayloadErrorBanner({
         style={POINTER_EVENTS_NONE}
       />
       <View className="flex-row items-center justify-between gap-2">
-        <Text size="sm" className="text-warning">
+        <Text size="sm" className="text-warning" accessibilityLabel={summary}>
           <WarningGlyph />
-          {t('common:importDialog.invalidFormat', { count: issues.length })}
+          {summary}
         </Text>
         <Pressable
           accessibilityRole="button"
