@@ -54,8 +54,12 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 └───────────────────────────────────────┴───────────────────────┘
 ```
 
-(Right-side peek drawer slides in over the rail + narrative when an
-entity row is clicked.)
+(Clicking a rail row opens the peek drawer. On desktop and tablet it
+is a right [Sheet](../../foundations/mobile/layout.md#sheet), ~440px
+wide, sliding in over the rail and narrative above a scrim, which
+leaves both inert while it is open; Esc, `×` or a click outside
+closes it. On phone it is the rail Sheet's peek level, per
+[Mobile expression](#mobile-expression).)
 
 Rail rows carry no collision strip and no collapsed-group `⚠ N`
 badge: the World panel is the only surface that resolves a name
@@ -1233,10 +1237,13 @@ For non-character kinds (location / item / faction / lore / threads /
 happenings) the peek-head is unchanged — the affordance does not
 apply.
 
-**Thumbnail tap.** Character (or any kind's) portrait thumbnail in
-the peek head opens the
-[full-size image preview](../../patterns/image-preview.md) on
-click / tap — same universal pattern World uses.
+**Thumbnail tap.** The portrait sits in the peek body, not the head:
+an entity's is the Overview's own portrait, projected with it (per
+[`entity.md → Why portrait lives only on Overview`](../../patterns/entity.md#why-portrait-lives-only-on-overview)).
+A click / tap on it opens the
+[full-size image preview](../../patterns/image-preview.md) — same
+universal pattern World uses. Until the asset gallery lands the
+portrait is a placeholder and the tap is inert, as on World.
 
 No confirmation modal. Lead-switching is a first-class action per
 [principles → Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts);
@@ -1290,6 +1297,29 @@ Peek is read-mostly. The lead-character mutation above is the only
 inline mutation surface (character-only; doesn't apply to lore or
 other non-character kinds). Deep edits route to the World panel
 via the existing `Open in World panel →` foot link.
+
+### State-field composition — thread and happening peek
+
+Threads and happenings have no World Overview to project; their
+detail lives in the Plot panel. The peek body is a read-only
+summary, top-down at 440px width:
+
+- **Thread** — a chip row: the status chip, the
+  [non-default `injection_mode` chip](../world/world.md#overview--glance-summary-read-mostly)
+  (as on the entity and lore peeks) and the category chip when
+  set; then the full description.
+- **Happening** — a chip row: the when-marker (`entry #N`, the
+  dangling state, or the free-text `temporal`, per
+  [`plot.md → Happenings side`](../plot/plot.md#happenings-side)),
+  `⊙` when common knowledge, and the category chip when set; then
+  the full description; then a muted `N involved · N aware` line.
+  A common-knowledge happening reads `Common knowledge` in place of
+  the aware count: it records no awareness rows, so the count would
+  always read 0.
+
+Nothing in either body is pressable. The foot link
+`Open in Plot panel →` is the escalation, and the peek-head carries
+no lead affordance.
 
 ## Mobile expression
 
