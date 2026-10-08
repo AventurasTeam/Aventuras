@@ -93,7 +93,7 @@ const TINTS: ReadonlyMap<string, RecentlyClassified> = new Map([
   ['h_ambush', 'fading'],
 ])
 
-/** Kael leads under `label`; null (synthetic) labels no row, so only `control.leadId` marks the lead. */
+/** Kael leads under `label`; a null label is synthetic: only `control.leadId` marks the lead. */
 function railData(label: LeadLabel | null = 'you'): RailData {
   return {
     branchId: BRANCH,
