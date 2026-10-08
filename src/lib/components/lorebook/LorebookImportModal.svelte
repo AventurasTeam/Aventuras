@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { database } from '$lib/services/database'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
@@ -125,8 +124,7 @@
       })
 
       if (result.success) {
-        // Reload entries into store
-        story.lorebookEntries = await database.getEntries(story.currentStory.id)
+        story.appendImportedLorebookEntries(result.entries, scope)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
         if (isAventuraExport) {

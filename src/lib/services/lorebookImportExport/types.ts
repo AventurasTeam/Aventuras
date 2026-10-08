@@ -59,6 +59,8 @@ export type ImportOptions = {
 export type ImportResult = {
   success: boolean
   entriesImported: number
+  /** The rows that were written; an entry that failed to save is absent. */
+  entries: Entry[]
   errors: string[]
   warnings: string[]
 }

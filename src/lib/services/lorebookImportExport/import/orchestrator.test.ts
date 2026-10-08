@@ -86,4 +86,31 @@ describe('lorebookImportExport / importEntries', () => {
     expect(saved.storyId).toBe('story-2')
     expect(saved.branchId).toBe('branch-1')
   })
+
+  it('returns the rows with the terms the database stores', async () => {
+    const dup = result('aventura')
+    dup.entries[0].keywords = ['pell', 'Pell ']
+    const res = await importEntries(dup, {
+      scope: { storyId: 'story-2', branchId: 'branch-1' },
+      useAIClassification: false,
+      storyMode: 'adventure',
+    })
+    expect(res.entries[0].injection.keywords).toEqual(['pell'])
+    expect(vi.mocked(database.addEntry).mock.calls[0][0]).toBe(res.entries[0])
+  })
+
+  it('returns only the rows that were saved', async () => {
+    const two = result('aventura')
+    two.entries.push({ ...two.entries[0], name: 'Mara' })
+    vi.mocked(database.addEntry).mockRejectedValueOnce(new Error('disk full'))
+    const res = await importEntries(two, {
+      scope: { storyId: 'story-2', branchId: 'branch-1' },
+      useAIClassification: false,
+      storyMode: 'adventure',
+    })
+    expect(res.entriesImported).toBe(1)
+    expect(res.entries.map((e) => e.name)).toEqual(['Mara'])
+    expect(res.entries[0].branchId).toBe('branch-1')
+    expect(res.errors).toHaveLength(1)
+  })
 })

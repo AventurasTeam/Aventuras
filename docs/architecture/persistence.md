@@ -40,8 +40,9 @@ The database, the native layer that moves bytes around it, and the settings blob
   and on load: the `entries` and `lorebook_vault` writers in `database.ts` dedupe an entry's
   `aliases` and `injection.keywords` (the vault entry's `aliases` and `keywords`), and `mapEntry`,
   `getEntryPreviews` and `mapVaultLorebook` dedupe legacy rows. The story and vault stores run the
-  same pass on what they keep in memory, including the vault's three import paths, so the list on
-  screen is the list that was stored. It is per list: a keyword that repeats the entry's name or an
+  same pass on what they keep in memory, including the vault's three import paths, and the lorebook
+  file import returns the rows it stored with the pass applied, so the list on screen is the list
+  that was stored. It is per list: a keyword that repeats the entry's name or an
   alias is the cleaner's and the merge's to drop, not the writers'. A stored `injection` that is not
   an object reads as the default, and vault `entries` that are not a list read as `[]`.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —

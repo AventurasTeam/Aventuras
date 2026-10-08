@@ -3,6 +3,7 @@
  */
 
 import { database } from '$lib/services/database'
+import { withUniqueEntryTerms } from '$lib/utils/lorebookTerms'
 import type { Entry } from '$lib/types'
 import type { ImportOptions, ImportResult, LorebookImportResult } from '../types'
 import { classifyEntries } from '../classify/classify'
@@ -64,23 +65,23 @@ export async function importEntries(
       message: 'Saving entries to database...',
     })
 
-    let insertedCount = 0
+    const inserted: Entry[] = []
     for (const entryData of entries) {
       try {
-        const entry: Entry = {
+        const entry: Entry = withUniqueEntryTerms({
           ...entryData,
           id: crypto.randomUUID(),
           storyId: scope.storyId,
           branchId: scope.branchId,
-        }
+        })
         await database.addEntry(entry)
-        insertedCount++
+        inserted.push(entry)
 
         onProgress?.({
           phase: 'inserting',
-          current: insertedCount,
+          current: inserted.length,
           total: entries.length,
-          message: `Saving entries (${insertedCount}/${entries.length})...`,
+          message: `Saving entries (${inserted.length}/${entries.length})...`,
         })
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error'
@@ -91,14 +92,15 @@ export async function importEntries(
     // Complete
     onProgress?.({
       phase: 'complete',
-      current: insertedCount,
+      current: inserted.length,
       total: entries.length,
-      message: `Imported ${insertedCount} entries`,
+      message: `Imported ${inserted.length} entries`,
     })
 
     return {
-      success: insertedCount > 0,
-      entriesImported: insertedCount,
+      success: inserted.length > 0,
+      entriesImported: inserted.length,
+      entries: inserted,
       errors,
       warnings,
     }
@@ -109,6 +111,7 @@ export async function importEntries(
     return {
       success: false,
       entriesImported: 0,
+      entries: [],
       errors,
       warnings,
     }
