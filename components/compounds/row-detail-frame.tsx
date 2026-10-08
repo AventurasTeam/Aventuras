@@ -8,9 +8,8 @@ import { Tabs } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
 import { saveAvtsFile, type AvtsFile } from '@/lib/avts'
-import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { toast } from '@/lib/toast'
+import { runAction } from '@/lib/utils'
 
 import { DetailTabs } from './detail-tabs'
 import { JSONViewer } from './json-viewer'
@@ -55,17 +54,17 @@ export type RowDetailFrameProps<Draft extends FieldValues, Tab extends string> =
   children: ReactNode
 }
 
-async function exportRow(committed: RowDetailCommitted): Promise<void> {
-  try {
-    // Inside the try: a serializer throw toasts the same as a rejected hand-off.
-    await saveAvtsFile(committed.exportFile())
-  } catch (error) {
-    logger.error('app.row_export_failed', {
-      id: committed.id,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    toast.error(t('common:avts.exportFailed'))
-  }
+// Async, so a serializer throw rejects and runAction reports it like a failed hand-off.
+async function saveExport(committed: RowDetailCommitted): Promise<void> {
+  await saveAvtsFile(committed.exportFile())
+}
+
+function exportRow(committed: RowDetailCommitted): void {
+  runAction(saveExport(committed), {
+    event: 'app.row_export_failed',
+    toastMessage: t('common:avts.exportFailed'),
+    context: { id: committed.id },
+  })
 }
 
 /** world.md → Detail head structure (name, badge, `⋯`), plus the pane's tabs and save chrome. */
@@ -130,7 +129,7 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
               entries={menuEntries({
                 onViewJson: () => setJsonOpen(true),
                 onExport: () => {
-                  if (committed != null) void exportRow(committed)
+                  if (committed != null) exportRow(committed)
                 },
               })}
               disabled={committed == null}
