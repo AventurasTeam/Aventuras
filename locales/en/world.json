@@ -131,7 +131,6 @@
       "setLeadInactive": "Only an active character can be the lead",
       "exportEntity": "Export entity as JSON",
       "exportLore": "Export lore as JSON",
-      "exportReason": "Lands in Slice 4.6",
       "viewJson": "View raw JSON",
       "deleteEntity": "Delete entity",
       "deleteLore": "Delete"

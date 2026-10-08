@@ -186,72 +186,94 @@ describe('leadRejectionText', () => {
 })
 
 describe('overflow menu', () => {
-  it('offers Set as lead only on characters, with export disabled and delete enabled calling onDelete', () => {
+  const noop = () => {}
+
+  it('offers Set as lead only on characters, with Export live and Delete enabled', () => {
+    const onViewJson = vi.fn()
+    const onExport = vi.fn()
     const onDelete = vi.fn()
     const character = entityMenuEntries('character', {
-      onViewJson: () => {},
-      lead: { onSetLead: () => {} },
+      onViewJson,
+      onExport,
+      lead: { onSetLead: noop },
       remove: { onDelete },
     })
-    expect(character.map((e) => [e.key, e.disabled ?? false, e.disabledReason])).toEqual([
-      ['lead', false, undefined],
-      ['export', true, 'Lands in Slice 4.6'],
-      ['json', false, undefined],
-      ['delete', false, undefined],
+    expect(character.map((e) => [e.key, e.label, e.disabled ?? false, e.disabledReason])).toEqual([
+      ['lead', 'Set as lead', false, undefined],
+      ['export', 'Export entity as JSON', false, undefined],
+      ['json', 'View raw JSON', false, undefined],
+      ['delete', 'Delete entity', false, undefined],
     ])
-    character.find((e) => e.key === 'delete')?.onPress?.()
+    character.find((e) => e.key === 'export')?.onPress()
+    expect(onExport).toHaveBeenCalledTimes(1)
+    expect(onViewJson).not.toHaveBeenCalled()
+    character.find((e) => e.key === 'json')?.onPress()
+    expect(onViewJson).toHaveBeenCalledTimes(1)
+    expect(onExport).toHaveBeenCalledTimes(1)
+    character.find((e) => e.key === 'delete')?.onPress()
     expect(onDelete).toHaveBeenCalledTimes(1)
     expect(
       entityMenuEntries('location', {
-        onViewJson: () => {},
-        lead: { onSetLead: () => {} },
-        remove: { onDelete: () => {} },
+        onViewJson: noop,
+        onExport: noop,
+        lead: { onSetLead: noop },
+        remove: { onDelete: noop },
       }).map((e) => e.key),
     ).toEqual(['export', 'json', 'delete'])
-    expect(entityMenuEntries('character', { onViewJson: () => {} }).map((e) => e.key)).toEqual([
-      'export',
-      'json',
-    ])
+    expect(
+      entityMenuEntries('character', { onViewJson: noop, onExport: noop }).map((e) => e.key),
+    ).toEqual(['export', 'json'])
   })
 
   it('disables delete with its reason when the row is the lead', () => {
     const entries = entityMenuEntries('character', {
-      onViewJson: () => {},
-      remove: { onDelete: () => {}, disabledReason: "The story's lead can't be deleted" },
+      onViewJson: noop,
+      onExport: noop,
+      remove: { onDelete: noop, disabledReason: "The story's lead can't be deleted" },
     })
     const remove = entries.find((e) => e.key === 'delete')
     expect(remove?.disabled).toBe(true)
     expect(remove?.disabledReason).toBe("The story's lead can't be deleted")
   })
 
-  it('offers lore no Set as lead: export disabled with its reason, View raw JSON, and Delete', () => {
+  it('offers lore no Set as lead: Export live, View raw JSON, and Delete', () => {
     const onViewJson = vi.fn()
+    const onExport = vi.fn()
     const onDelete = vi.fn()
-    const entries = loreMenuEntries({ onViewJson, remove: { onDelete } })
+    const entries = loreMenuEntries({ onViewJson, onExport, remove: { onDelete } })
     expect(entries.map((e) => [e.key, e.label, e.disabled ?? false, e.disabledReason])).toEqual([
-      ['export', 'Export lore as JSON', true, 'Lands in Slice 4.6'],
+      ['export', 'Export lore as JSON', false, undefined],
       ['json', 'View raw JSON', false, undefined],
       ['delete', 'Delete', false, undefined],
     ])
-    entries.find((e) => e.key === 'json')?.onPress?.()
+    entries.find((e) => e.key === 'export')?.onPress()
+    expect(onExport).toHaveBeenCalledTimes(1)
+    expect(onViewJson).not.toHaveBeenCalled()
+    entries.find((e) => e.key === 'json')?.onPress()
     expect(onViewJson).toHaveBeenCalledTimes(1)
-    entries.find((e) => e.key === 'delete')?.onPress?.()
+    entries.find((e) => e.key === 'delete')?.onPress()
     expect(onDelete).toHaveBeenCalledTimes(1)
-    expect(loreMenuEntries({ onViewJson: () => {} }).map((e) => e.key)).toEqual(['export', 'json'])
+    expect(loreMenuEntries({ onViewJson: noop, onExport: noop }).map((e) => e.key)).toEqual([
+      'export',
+      'json',
+    ])
   })
 
   it('disables the lead entry with its reason, and omits it for non-characters', () => {
     const entries = entityMenuEntries('character', {
-      onViewJson: () => {},
-      lead: { onSetLead: () => {}, disabledReason: 'Already the lead' },
+      onViewJson: noop,
+      onExport: noop,
+      lead: { onSetLead: noop, disabledReason: 'Already the lead' },
     })
     const lead = entries.find((e) => e.key === 'lead')
     expect(lead?.disabled).toBe(true)
     expect(lead?.disabledReason).toBe('Already the lead')
     expect(
-      entityMenuEntries('faction', { onViewJson: () => {}, lead: { onSetLead: () => {} } }).some(
-        (e) => e.key === 'lead',
-      ),
+      entityMenuEntries('faction', {
+        onViewJson: noop,
+        onExport: noop,
+        lead: { onSetLead: noop },
+      }).some((e) => e.key === 'lead'),
     ).toBe(false)
   })
 

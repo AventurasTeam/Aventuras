@@ -171,7 +171,7 @@ export const Populated: Story = {
     // The popover fades in; the role alone can outrace opacity settling.
     const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' }, WAIT)
     await waitFor(() => expect(viewJson).toBeVisible(), WAIT)
-    await expect(screen.getByRole('menuitem', { name: /^Export lore as JSON/ })).toHaveAttribute(
+    await expect(screen.getByRole('menuitem', { name: 'Export lore as JSON' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
     )

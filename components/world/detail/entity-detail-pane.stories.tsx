@@ -939,7 +939,7 @@ export const ParentChainBrokenFieldError: Story = {
   },
 }
 
-/** Set as lead (characters only), plus Export disabled and Delete enabled. */
+/** Set as lead (characters only), plus Export live and Delete enabled. */
 export const OverflowMenuForAnActiveCharacter: Story = {
   args: { row: MIRA },
   play: async ({ args }) => {
@@ -948,8 +948,8 @@ export const OverflowMenuForAnActiveCharacter: Story = {
     // The popover fades in; the role query can outrace opacity settling.
     await waitFor(() => expect(setLead).toBeVisible(), WAIT)
     await expect(
-      screen.getByRole('menuitem', { name: 'Export entity as JSON, Lands in Slice 4.6' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+      screen.getByRole('menuitem', { name: 'Export entity as JSON' }),
+    ).not.toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByRole('menuitem', { name: 'Delete entity' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
