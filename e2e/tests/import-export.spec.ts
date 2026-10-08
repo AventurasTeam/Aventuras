@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
+import { goToWorld } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -93,9 +94,7 @@ function downloads(app: LaunchedApp): Promise<Download[] | undefined> {
 async function openWorld(page: Page, title: string): Promise<void> {
   await home.openStory(page, title).click()
   await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-  await chrome.actionsTrigger(page).click()
-  await chrome.goToWorldRow(page).click()
-  await page.waitForURL(/\/world\//)
+  await goToWorld(page)
 }
 
 // GO TO pops to the reader already on the stack; the reader's back returns to the story list.
@@ -136,9 +135,12 @@ test.describe.serial('Per-row .avts export and import', () => {
   })
 
   test.afterAll(async () => {
-    await app?.close()
-    removeUserDataDir(userDataDir)
-    if (downloadDir) rmSync(downloadDir, { recursive: true, force: true })
+    try {
+      await app?.close()
+    } finally {
+      removeUserDataDir(userDataDir)
+      if (downloadDir) rmSync(downloadDir, { recursive: true, force: true })
+    }
   })
 
   test('exports a character as an aventuras-entity file without branch-local keys', async () => {

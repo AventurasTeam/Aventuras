@@ -89,7 +89,7 @@ export const world = {
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
 
-  // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name resolves to its
+  // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name appends its
   // reason — From Vault always, Blank and From JSON while an edit is blocked
   // (world-add-options.ts) — so assert the visible label text instead.
   addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
