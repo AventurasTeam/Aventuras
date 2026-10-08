@@ -110,6 +110,7 @@
     const scope = story.currentScope
     if (!parseResult || !story.currentStory || !scope) return
 
+    const aventura = isAventuraExport
     importing = true
     importProgress = null
 
@@ -127,7 +128,7 @@
         story.appendImportedLorebookEntries(result.entries, scope)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
-        if (isAventuraExport) {
+        if (aventura) {
           for (const warning of result.warnings) ui.showToast(warning, 'warning', 8000)
         }
         ui.closeLorebookImport()
@@ -255,6 +256,7 @@
         <Button
           variant="link"
           class="h-auto p-0 text-xs"
+          disabled={importing}
           onclick={() => {
             parseResult = null
           }}
