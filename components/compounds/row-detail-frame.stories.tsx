@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fireEvent, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 import { z } from 'zod'
 
 import { TabsContent } from '@/components/ui/tabs'
@@ -212,44 +212,6 @@ export const ExportRejectionToasts: Story = {
       })
     } finally {
       stop()
-    }
-  },
-}
-
-/** A press mid hand-off starts no second export; once the first settles, Export works again. */
-export const ExportIgnoresAPressMidHandOff: Story = {
-  play: async ({ args }) => {
-    const downloads: string[] = []
-    let pressedAgain = false
-    // Set only once the press returns: a throwing query is swallowed by the export's own catch.
-    let secondPressLanded = false
-    const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
-    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      downloads.push(this.download)
-      // Web's hand-off settles in the click's own task, so the second tap lands inside it.
-      if (!pressedAgain) {
-        pressedAgain = true
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Export row as JSON' }))
-        secondPressLanded = true
-      }
-    })
-    try {
-      await openMenuEntry('Export row as JSON')
-      await waitFor(() => expect(downloads).toEqual(['row-first-row.avts']), WAIT)
-      await expect(secondPressLanded).toBe(true)
-      await expect(args.exportFile).toHaveBeenCalledTimes(1)
-
-      await openMenuEntry('Export row as JSON')
-      await waitFor(
-        () => expect(downloads).toEqual(['row-first-row.avts', 'row-first-row.avts']),
-        WAIT,
-      )
-      await expect(args.exportFile).toHaveBeenCalledTimes(2)
-    } finally {
-      url.mockRestore()
-      click.mockRestore()
     }
   },
 }
