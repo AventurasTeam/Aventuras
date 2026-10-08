@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import { z } from 'zod'
 
+import { logger } from '@/lib/diagnostics'
 import { i18n, t } from '@/lib/i18n'
 
 import {
   EmptyClipboardError,
+  FilePickerCancelledError,
   flattenIssues,
   formatIssueLine,
   getReadErrorCopy,
@@ -11,6 +16,8 @@ import {
   parseEnvelope,
   truncateMessage,
   truncatePath,
+  useImportPipeline,
+  type ReadSource,
 } from './import-dialog-pipeline'
 
 const STORY_FORMAT = 'aventuras-story'
@@ -266,6 +273,96 @@ describe('getReadErrorCopy', () => {
     expect(getReadErrorCopy('clipboard', new Error('permission'))).toBe(
       t('common:importDialog.read.clipboardDenied'),
     )
+  })
+})
+
+describe('useImportPipeline read failures', () => {
+  let warnSpy: MockInstance<typeof logger.warn>
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  function renderPipeline() {
+    return renderHook(() =>
+      useImportPipeline({
+        format: STORY_FORMAT,
+        supportedMajor: 1,
+        payloadKey: STORY_KEY,
+        schema: z.object({ title: z.string() }),
+        onSuccess: () => {},
+      }),
+    )
+  }
+
+  async function settleRead(
+    pipeline: ReturnType<typeof renderPipeline>,
+    source: ReadSource,
+    error: unknown,
+  ) {
+    await act(async () => {
+      await pipeline.result.current.runPipeline(source, () => Promise.reject(error))
+    })
+  }
+
+  it.each(['file', 'clipboard'] as const)(
+    'logs a %s read that threw, once, with its source',
+    async (source) => {
+      const pipeline = renderPipeline()
+      await settleRead(pipeline, source, new TypeError("Cannot find native module 'ExpoClipboard'"))
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith('app.import_read_failed', {
+        source,
+        error: "Cannot find native module 'ExpoClipboard'",
+      })
+      expect(pipeline.result.current.state.kind).toBe('meta-error')
+    },
+  )
+
+  it('stays silent on a cancelled file picker', async () => {
+    const pipeline = renderPipeline()
+    await settleRead(pipeline, 'file', new FilePickerCancelledError())
+    expect(pipeline.result.current.state).toEqual({ kind: 'idle' })
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('stays silent on an empty clipboard', async () => {
+    const pipeline = renderPipeline()
+    await settleRead(pipeline, 'clipboard', new EmptyClipboardError())
+    expect(pipeline.result.current.state).toEqual({
+      kind: 'meta-error',
+      copy: 'Clipboard is empty.',
+    })
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('stays silent on a read that reset() discarded', async () => {
+    const pipeline = renderPipeline()
+    let failRead: (error: unknown) => void = () => {}
+    let run: Promise<void> = Promise.resolve()
+    act(() => {
+      run = pipeline.result.current.runPipeline(
+        'clipboard',
+        () =>
+          new Promise<string>((_, reject) => {
+            failRead = reject
+          }),
+      )
+    })
+    act(() => {
+      pipeline.result.current.reset()
+    })
+    await act(async () => {
+      failRead(new Error('Clipboard read failed late.'))
+      await run
+    })
+    expect(pipeline.result.current.state).toEqual({ kind: 'idle' })
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 })
 

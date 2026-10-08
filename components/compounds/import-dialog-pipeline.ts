@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import type { ZodType } from 'zod'
 
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 
 export type ReadSource = 'file' | 'clipboard'
@@ -217,6 +218,12 @@ export function useImportPipeline<T>({
         if (error instanceof FilePickerCancelledError) {
           setState({ kind: 'idle' })
           return
+        }
+        if (!(error instanceof EmptyClipboardError)) {
+          logger.warn('app.import_read_failed', {
+            source,
+            error: error instanceof Error ? error.message : String(error),
+          })
         }
         setState({ kind: 'meta-error', copy: getReadErrorCopy(source, error) })
         return

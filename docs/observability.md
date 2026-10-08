@@ -273,7 +273,10 @@ convention, and the expectation that subsystems route through
   (`app/plot/[branchId].tsx`, `importThread` / `importHappening`),
   `row_export_failed` (`components/compounds/row-detail-frame.tsx` —
   a `⋯ → Export … as JSON` whose `saveAvtsFile` rejected; the user
-  sees `Couldn’t export the file.`),
+  sees `Couldn’t export the file.`), `import_read_failed` (warn,
+  `components/compounds/import-dialog-pipeline.ts` — an `ImportDialog`
+  file or clipboard read that threw, other than a cancelled picker or
+  an empty clipboard; the user sees the read-error banner),
   `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) and
