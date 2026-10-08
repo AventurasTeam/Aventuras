@@ -369,19 +369,18 @@ export const ClosedDuringRead: Story = {
   play: async () => {
     closedDuringReadSpy.mockClear()
     let resolveRead: (text: string) => void = () => {}
-    const readText = fn(
+    const read = spyOn(navigator.clipboard, 'readText').mockImplementation(
       () =>
         new Promise<string>((resolve) => {
           resolveRead = resolve
         }),
     )
-    Object.defineProperty(navigator, 'clipboard', { value: { readText }, configurable: true })
     try {
       const dialog = await findDialog()
       await userEvent.click(
         await within(dialog).findByRole('button', { name: t('common:importDialog.fromClipboard') }),
       )
-      await waitFor(() => expect(readText).toHaveBeenCalled(), WAIT)
+      await waitFor(() => expect(read).toHaveBeenCalled(), WAIT)
       await userEvent.click(within(dialog).getByRole('button', { name: t('common:cancel') }))
       await waitFor(() => {
         expect(screen.queryByRole('dialog')).toBeNull()
@@ -397,7 +396,7 @@ export const ClosedDuringRead: Story = {
       await new Promise((resolve) => setTimeout(resolve, 100))
       expect(closedDuringReadSpy).not.toHaveBeenCalled()
     } finally {
-      Reflect.deleteProperty(navigator, 'clipboard')
+      read.mockRestore()
     }
   },
 }
