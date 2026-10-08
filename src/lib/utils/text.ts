@@ -90,8 +90,9 @@ export interface EntityNameMatchOptions {
 
 /**
  * Checks whether `name` (a character/location/item/entry name, alias, or keyword)
- * appears in `searchText`. Matching is case-insensitive; the caller does not have to
- * lowercase anything first. Strategies, in order:
+ * appears in `searchText`. Both sides are compared as `termKey` does: case and
+ * composed/decomposed forms of one glyph match, accents stay distinct. The caller does not
+ * have to normalize anything first. Strategies, in order:
  * 1. Non-space-separated scripts (CJK, Thai, Lao, Khmer, Burmese) have no word
  *    boundaries to anchor a regex on, so these fall back to plain substring matching.
  * 2. Unicode-aware word-boundary match for space-separated languages (avoids
@@ -109,16 +110,13 @@ export function entityNameMatches(
   options: EntityNameMatchOptions = {},
 ): boolean {
   const { allowPrefix = false } = options
-  const normalizedName = name.toLowerCase().trim()
+  const normalizedName = termKey(name)
   if (normalizedName.length < 2) return false
 
-  // Lowercased here rather than trusted from the caller. The word-boundary regex below
-  // carries the `i` flag and so never cared, but the prefix branch compares raw strings --
-  // so a caller passing text as written silently lost every prefix match ("ari" did not
-  // match "Aria", only "aria"). `inspect_world_state` passes entity names and descriptions
-  // straight through, which is exactly that case, and it is the one tool whose whole job
-  // is finding an entity by a partial name.
-  const haystack = searchText.toLowerCase()
+  // Normalized here rather than trusted from the caller: the prefix branch compares raw
+  // strings, so text passed as written would lose every prefix match ("ari" vs "Aria").
+  // `inspect_world_state` passes entity names and descriptions straight through.
+  const haystack = searchText.normalize('NFC').toLowerCase()
 
   // CJK, Hangul, Thai, Lao, Khmer, Burmese ranges (no spaces between words in these scripts)
   const isNonSpaceSeparated =

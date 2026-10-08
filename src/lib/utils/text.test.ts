@@ -85,6 +85,31 @@ describe('entityNameMatches — non-space-separated scripts', () => {
   })
 })
 
+describe('entityNameMatches — Unicode normalization', () => {
+  const composed = 'Élan'
+  const decomposed = 'Élan'
+
+  it('matches a composed name against decomposed text, and the reverse', () => {
+    expect(entityNameMatches(composed, `${decomposed} spoke`)).toBe(true)
+    expect(entityNameMatches(decomposed, `${composed} spoke`)).toBe(true)
+  })
+
+  it('does so on the prefix branch too', () => {
+    expect(entityNameMatches('Éla', `${decomposed}ra spoke`, { allowPrefix: true })).toBe(true)
+    expect(entityNameMatches('Éla', `${composed}ra spoke`, { allowPrefix: true })).toBe(true)
+  })
+
+  it('keeps accents distinct', () => {
+    expect(entityNameMatches('Élan', 'elan spoke')).toBe(false)
+    expect(entityNameMatches('Elan', `${composed} spoke`)).toBe(false)
+  })
+
+  it('no longer matches an unaccented name inside a decomposed accent', () => {
+    expect(entityNameMatches('cafe', 'a café downtown')).toBe(false)
+    expect(entityNameMatches('cafe', 'a cafe downtown')).toBe(true)
+  })
+})
+
 describe('findTextMatches', () => {
   it('ignores case by default', () => {
     expect(findTextMatches('She lost all hope.', 'HOPE')).toHaveLength(1)
