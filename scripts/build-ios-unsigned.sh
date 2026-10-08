@@ -95,8 +95,10 @@ echo "🚀 Building unsigned iOS archive (aarch64)..."
 # Info.plist was written after this point qualifies, so a stale archive left in
 # a reused workspace (while the fresh one lands in DerivedData) can never be
 # packaged by mistake.
+# --ignore-version-mismatches: a minor-version skew between the tauri npm packages
+# and crates is an error here, and the shared lockfiles are not this script's to fix.
 BUILD_START="$(mktemp)"
-npx tauri ios build --target aarch64 --archive-only "$@"
+npx tauri ios build --target aarch64 --archive-only --ignore-version-mismatches "$@"
 
 # cargo-mobile2 sometimes archives into DerivedData instead of gen/apple/build,
 # so search both in one pass. An archive qualifies only through a file written
