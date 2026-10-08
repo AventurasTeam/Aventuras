@@ -378,7 +378,7 @@ export const ThreadWithInjection: Story = {
     <View>
       <PeekHarness {...args} />
       <View testID="glyph-reference" className="hidden">
-        <PlotIcon kind="thread" icon={threadOf(OATH).icon} />
+        <PlotIcon kind="thread" icon="shield" />
       </View>
     </View>
   ),
@@ -414,7 +414,7 @@ export const HappeningAnchored: Story = {
     <View>
       <PeekHarness {...args} />
       <View testID="glyph-reference" className="hidden">
-        <PlotIcon kind="happening" icon={happeningOf(AMBUSH).icon} />
+        <PlotIcon kind="happening" icon={null} />
       </View>
     </View>
   ),
