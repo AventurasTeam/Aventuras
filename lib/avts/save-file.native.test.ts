@@ -70,4 +70,16 @@ describe('saveAvtsFile (native)', () => {
     harness.shareError = new Error('share failed')
     await expect(saveAvtsFile(FILE)).rejects.toThrow('share failed')
   })
+
+  it('loads the module and fails only on export when the native module is missing', async () => {
+    vi.resetModules()
+    vi.doMock('expo-sharing', () => {
+      throw new Error('Cannot find native module')
+    })
+    const { saveAvtsFile: saveWithoutNativeModule } = await import('./save-file.native')
+    await expect(saveWithoutNativeModule(FILE)).rejects.toMatchObject({
+      cause: { message: 'Cannot find native module' },
+    })
+    expect(harness.calls).toEqual([])
+  })
 })

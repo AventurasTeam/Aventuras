@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The unit project runs under node; the download needs a DOM anchor and Blob.
+// jsdom supplies `document` and `HTMLAnchorElement`; Blob and URL.createObjectURL are Node globals.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { saveAvtsFile } from './save-file'
