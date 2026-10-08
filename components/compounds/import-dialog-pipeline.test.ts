@@ -366,7 +366,8 @@ describe('useImportPipeline read failures', () => {
   })
 })
 
-// import-dialog.md → Validation pipeline / Dialog body: English copy, minus the banner's ⚠.
+// import-dialog.md → Validation pipeline / Dialog body, and States / Error UI for the details
+// toggle: English copy, minus the banner's ⚠.
 const CANON_COPY = [
   ['common:importDialog.chooseFile', 'Choose .avts file…'],
   ['common:importDialog.fromClipboard', 'Import from clipboard'],
