@@ -36,10 +36,12 @@ The database, the native layer that moves bytes around it, and the settings blob
   `character_vault` writers in `database.ts` dedupe, and the row mappers dedupe legacy rows.
   A stored or imported value that is not an array reads as `[]`, except `translated_traits`,
   which reads as `null` so the panel falls back to `traits`.
-- **Lorebook aliases and keywords are normalized by `termKey` on load only.** `mapEntry`,
-  `getEntryPreviews` and `mapVaultLorebook` dedupe an entry's `aliases` and `injection.keywords`
-  (the vault entry's `aliases` and `keywords`); the write path does not, because the editors, the
-  agent cleaner and the merge/import sources already do.
+- **Lorebook aliases and keywords are normalized by `termKey`** (`utils/lorebookTerms.ts`) on write
+  and on load: the `entries` and `lorebook_vault` writers in `database.ts` and the story and vault
+  stores dedupe an entry's `aliases` and `injection.keywords` (the vault entry's `aliases` and
+  `keywords`), and `mapEntry`, `getEntryPreviews` and `mapVaultLorebook` dedupe legacy rows. It is
+  per list: a keyword that repeats the entry's name or an alias is the cleaner's and the merge's to
+  drop, not the writers'.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
   `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way.
   `branchId` names the branch the snapshot was taken on, and a restore onto any other branch is

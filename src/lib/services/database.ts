@@ -48,6 +48,11 @@ import {
 import type { PackExport } from '$lib/services/packs/validation'
 import { readStorySettings } from '$lib/utils/storySettings'
 import { uniqueTerms } from '$lib/utils/text'
+import {
+  uniqueInjectionTerms,
+  withUniqueEntryTerms,
+  withUniqueVaultEntryTerms,
+} from '$lib/utils/lorebookTerms'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -175,17 +180,12 @@ function migrateVisualDescriptors(data: unknown): VisualDescriptors {
 }
 
 function parseInjection(raw: string | null): Entry['injection'] {
-  const injection = raw ? JSON.parse(raw) : { mode: 'keyword', priority: 0 }
-  return { ...injection, keywords: uniqueTerms(injection.keywords) }
+  return uniqueInjectionTerms(raw ? JSON.parse(raw) : { mode: 'keyword', priority: 0 })
 }
 
 function parseVaultEntries(raw: string | null): VaultLorebookEntry[] {
   const entries: VaultLorebookEntry[] = raw ? JSON.parse(raw) : []
-  return entries.map((e) => ({
-    ...e,
-    keywords: uniqueTerms(e.keywords),
-    aliases: uniqueTerms(e.aliases),
-  }))
+  return entries.map((e) => withUniqueVaultEntryTerms(e))
 }
 
 class DatabaseService {
@@ -2219,6 +2219,7 @@ class DatabaseService {
     const values: unknown[] = []
 
     for (const entry of entries) {
+      const { aliases, injection } = withUniqueEntryTerms(entry)
       values.push(
         entry.id,
         entry.storyId,
@@ -2226,11 +2227,11 @@ class DatabaseService {
         entry.type,
         entry.description,
         entry.hiddenInfo,
-        JSON.stringify(entry.aliases),
+        JSON.stringify(aliases),
         JSON.stringify(entry.state),
         entry.adventureState ? JSON.stringify(entry.adventureState) : null,
         entry.creativeState ? JSON.stringify(entry.creativeState) : null,
-        JSON.stringify(entry.injection),
+        JSON.stringify(injection),
         entry.createdBy,
         entry.createdAt,
         entry.updatedAt,
@@ -2253,6 +2254,7 @@ class DatabaseService {
 
   async addEntry(entry: Entry): Promise<void> {
     const db = await this.getDb()
+    const { aliases, injection } = withUniqueEntryTerms(entry)
     await db.execute(
       `INSERT INTO entries (
         id, story_id, name, type, description, hidden_info, aliases,
@@ -2266,11 +2268,11 @@ class DatabaseService {
         entry.type,
         entry.description,
         entry.hiddenInfo,
-        JSON.stringify(entry.aliases),
+        JSON.stringify(aliases),
         JSON.stringify(entry.state),
         entry.adventureState ? JSON.stringify(entry.adventureState) : null,
         entry.creativeState ? JSON.stringify(entry.creativeState) : null,
-        JSON.stringify(entry.injection),
+        JSON.stringify(injection),
         entry.createdBy,
         entry.createdAt,
         entry.updatedAt,
@@ -2284,6 +2286,7 @@ class DatabaseService {
 
   async updateEntry(id: string, updates: Partial<Entry>): Promise<void> {
     const db = await this.getDb()
+    const { aliases, injection } = withUniqueEntryTerms(updates)
     const setClauses: string[] = ['updated_at = ?']
     const values: any[] = [Date.now()]
 
@@ -2303,9 +2306,9 @@ class DatabaseService {
       setClauses.push('hidden_info = ?')
       values.push(updates.hiddenInfo)
     }
-    if (updates.aliases !== undefined) {
+    if (aliases !== undefined) {
       setClauses.push('aliases = ?')
-      values.push(JSON.stringify(updates.aliases))
+      values.push(JSON.stringify(aliases))
     }
     if (updates.state !== undefined) {
       setClauses.push('state = ?')
@@ -2319,9 +2322,9 @@ class DatabaseService {
       setClauses.push('creative_state = ?')
       values.push(updates.creativeState ? JSON.stringify(updates.creativeState) : null)
     }
-    if (updates.injection !== undefined) {
+    if (injection !== undefined) {
       setClauses.push('injection = ?')
-      values.push(JSON.stringify(updates.injection))
+      values.push(JSON.stringify(injection))
     }
     if (updates.loreManagementBlacklisted !== undefined) {
       setClauses.push('lore_management_blacklisted = ?')
@@ -3111,7 +3114,7 @@ class DatabaseService {
         lorebook.id,
         lorebook.name,
         lorebook.description,
-        JSON.stringify(lorebook.entries),
+        JSON.stringify(lorebook.entries.map((e) => withUniqueVaultEntryTerms(e))),
         JSON.stringify(lorebook.tags),
         lorebook.favorite ? 1 : 0,
         lorebook.source,
@@ -3139,7 +3142,7 @@ class DatabaseService {
     }
     if (updates.entries !== undefined) {
       setClauses.push('entries = ?')
-      values.push(JSON.stringify(updates.entries))
+      values.push(JSON.stringify(updates.entries.map((e) => withUniqueVaultEntryTerms(e))))
     }
     if (updates.tags !== undefined) {
       setClauses.push('tags = ?')

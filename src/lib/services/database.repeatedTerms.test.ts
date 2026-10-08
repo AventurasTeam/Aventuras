@@ -275,3 +275,105 @@ describe('traits are stored without repeats', () => {
     expect(lastCall()[1]).toContain('["honest"]')
   })
 })
+
+describe('lorebook terms are stored without repeats', () => {
+  beforeEach(async () => {
+    await database.close()
+    vi.clearAllMocks()
+  })
+
+  afterEach(async () => {
+    await database.close()
+  })
+
+  const lastCall = () => {
+    const calls = mocks.execute.mock.calls as unknown as [string, unknown[]][]
+    return calls[calls.length - 1]
+  }
+
+  const ALIASES = '["Keep"]'
+  const INJECTION = '{"mode":"always","keywords":["Ward"],"priority":3}'
+  const entry = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: 'e1',
+      storyId: 's1',
+      name: 'Keep',
+      type: 'location',
+      description: '',
+      hiddenInfo: null,
+      aliases: ['Keep', 'keep '],
+      state: { type: 'location' },
+      injection: { mode: 'always', keywords: ['Ward', 'ward'], priority: 3 },
+      ...overrides,
+    }) as any
+
+  it('adding an entry', async () => {
+    await database.addEntry(entry())
+
+    const values = lastCall()[1]
+    expect(values).toContain(ALIASES)
+    expect(values).toContain(INJECTION)
+  })
+
+  it('adding entries in bulk', async () => {
+    await database.bulkInsertEntries([entry()])
+
+    const values = lastCall()[1]
+    expect(values).toContain(ALIASES)
+    expect(values).toContain(INJECTION)
+  })
+
+  it('adding an entry that has no injection, as an imported file can', async () => {
+    await database.addEntry(entry({ injection: undefined }))
+
+    expect(lastCall()[1][10]).toBeUndefined()
+  })
+
+  it('updating an entry', async () => {
+    await database.updateEntry('e1', entry())
+
+    const values = lastCall()[1]
+    expect(values).toContain(ALIASES)
+    expect(values).toContain(INJECTION)
+  })
+
+  it('updating only the aliases leaves the injection alone', async () => {
+    await database.updateEntry('e1', { aliases: ['Keep', 'keep '] })
+
+    const [sql, values] = lastCall()
+    expect(values).toContain(ALIASES)
+    expect(sql).not.toContain('injection')
+  })
+
+  const vaultEntries = [
+    { name: 'Keep', keywords: ['Ward', 'ward'], aliases: ['Keep', 'keep '], priority: 2 },
+  ]
+  const STORED_VAULT_ENTRIES = JSON.stringify([
+    { name: 'Keep', keywords: ['Ward'], aliases: ['Keep'], priority: 2 },
+  ])
+
+  it('adding a vault lorebook', async () => {
+    await database.addVaultLorebook({
+      id: 'l1',
+      name: 'Lore',
+      description: null,
+      entries: vaultEntries,
+      tags: [],
+      favorite: false,
+      source: 'import',
+      originalFilename: null,
+      originalStoryId: null,
+      metadata: null,
+      createdAt: 1,
+      updatedAt: 1,
+    } as any)
+
+    expect(lastCall()[1]).toContain(STORED_VAULT_ENTRIES)
+  })
+
+  it('updating a vault lorebook', async () => {
+    await database.updateVaultLorebook('l1', { entries: vaultEntries as any })
+
+    expect(lastCall()[1]).toContain(STORED_VAULT_ENTRIES)
+  })
+})

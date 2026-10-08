@@ -3,6 +3,7 @@ import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { exchangeToVaultLorebook, hasStorySideFields } from '$lib/services/exchange'
+import { withUniqueVaultEntryTerms } from '$lib/utils/lorebookTerms'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
 
@@ -41,6 +42,7 @@ class LorebookVaultStore {
     const now = Date.now()
     const lorebook: VaultLorebook = {
       ...input,
+      entries: input.entries.map((e) => withUniqueVaultEntryTerms(e)),
       id: input.id || crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -52,7 +54,10 @@ class LorebookVaultStore {
     return lorebook
   }
 
-  async update(id: string, updates: Partial<VaultLorebook>): Promise<void> {
+  async update(id: string, changes: Partial<VaultLorebook>): Promise<void> {
+    const updates = changes.entries
+      ? { ...changes, entries: changes.entries.map((e) => withUniqueVaultEntryTerms(e)) }
+      : changes
     await database.updateVaultLorebook(id, updates)
     this.lorebooks = this.lorebooks.map((lb) =>
       lb.id === id ? { ...lb, ...updates, updatedAt: Date.now() } : lb,
