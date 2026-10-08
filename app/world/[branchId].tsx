@@ -37,9 +37,9 @@ import {
 } from '@/components/world/use-world-selection'
 import { worldAddOptions } from '@/components/world/world-add-options'
 import {
-  leadRejectionText,
   importFailureText,
   importRejectionText,
+  leadRejectionText,
 } from '@/components/world/world-copy'
 import { WorldDetailPlaceholder } from '@/components/world/world-detail-placeholder'
 import { entityImportDialog, loreImportDialog } from '@/components/world/world-import'
