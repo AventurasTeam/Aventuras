@@ -31,10 +31,12 @@ type HarnessProps = {
   /** Null is create mode. */
   row: Row | null
   exportFile: () => AvtsFile
+  blocked?: boolean
+  blockedReason?: string
 }
 
 /** Capture-phase F2 (the open JSON sheet holds focus) switches to SECOND, as a list-row pick. */
-function Harness({ row: initialRow, exportFile }: HarnessProps) {
+function Harness({ row: initialRow, exportFile, blocked = false, blockedReason }: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [tab, setTab] = useState<Tab>('overview')
 
@@ -74,7 +76,8 @@ function Harness({ row: initialRow, exportFile }: HarnessProps) {
         tabs={TABS}
         tabSelectLabel="Section"
         committed={row == null ? null : { id: row.id, name: row.title, json: row, exportFile }}
-        blocked={false}
+        blocked={blocked}
+        blockedReason={blockedReason}
         hotkeysEnabled
       >
         <TabsContent value="overview">
@@ -241,6 +244,34 @@ export const ExportIgnoresAPressMidHandOff: Story = {
         WAIT,
       )
       await expect(args.exportFile).toHaveBeenCalledTimes(2)
+    } finally {
+      url.mockRestore()
+      click.mockRestore()
+    }
+  },
+}
+
+/** world.md → Detail head structure: Export is read-only, so a run blocking edits leaves it live. */
+export const ExportStaysLiveWhileBlocked: Story = {
+  args: { blocked: true, blockedReason: 'Generation is in flight. Cancel to edit.' },
+  play: async () => {
+    const downloads: string[] = []
+    const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
+    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download)
+    })
+    try {
+      await expect(await screen.findByRole('button', { name: 'More actions' }, WAIT)).toBeEnabled()
+      // The gate reached the frame: the blocked name drops its edit button.
+      await expect(screen.queryByRole('button', { name: 'Edit First row' })).toBeNull()
+      await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      const entry = await screen.findByRole('menuitem', { name: 'Export row as JSON' }, WAIT)
+      await waitFor(() => expect(entry).toBeVisible(), WAIT)
+      await expect(entry).not.toHaveAttribute('aria-disabled', 'true')
+      await userEvent.click(entry)
+      await waitFor(() => expect(downloads).toEqual(['row-first-row.avts']), WAIT)
     } finally {
       url.mockRestore()
       click.mockRestore()
