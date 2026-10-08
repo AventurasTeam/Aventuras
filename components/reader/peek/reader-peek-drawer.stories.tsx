@@ -87,6 +87,20 @@ export const RowOpensPeek: Story = {
   },
 }
 
+/** overlays.md: closing returns focus to what was focused before the open, here the pressed row. */
+export const EscapeReturnsFocusToRow: Story = {
+  play: async () => {
+    const row = await screen.findByRole('button', { name: 'Mira' }, ANIMATION)
+    row.focus()
+    await userEvent.keyboard('{Enter}')
+    await screen.findByRole('dialog', { name: peekLabel('Mira') }, ANIMATION)
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(queryDrawer()).toBeNull(), ANIMATION)
+    await expect(readerRailStore.getDisplay().peek).toBeNull()
+    await waitFor(() => expect(row).toHaveFocus(), ANIMATION)
+  },
+}
+
 /** layout.md → Stacking: `Open in World panel →` closes the peek, then routes once. */
 export const OpenInPanelClosesThenRoutes: Story = {
   play: async () => {
@@ -100,6 +114,8 @@ export const OpenInPanelClosesThenRoutes: Story = {
     await expect(navigate).toHaveBeenLastCalledWith('/world/br_1?kind=character&id=char_mira')
     await expect(peekAtNavigate).toEqual([null])
     await waitFor(() => expect(queryDrawer()).toBeNull(), ANIMATION)
+    // Routing away leaves focus alone: the reader under the new screen must not take it.
+    await expect(screen.getByRole('button', { name: 'Mira' })).not.toHaveFocus()
   },
 }
 
@@ -134,6 +150,8 @@ export const CollapsedRefusesPeek: Story = {
   play: async () => {
     await screen.findByTestId('rail-strip', {}, ANIMATION)
     readerRailStore.dispatchDisplay({ type: 'openPeek', peek: MIRA, storedCollapsed: false })
+    // Straight after the dispatch: a peek opened then cleared by the drawer would pass later.
+    await expect(readerRailStore.getDisplay().peek).toBeNull()
     await settle()
     await expect(readerRailStore.getDisplay().peek).toBeNull()
     await expect(queryDrawer()).toBeNull()

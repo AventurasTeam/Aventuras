@@ -54,6 +54,14 @@ export function PeekDrawer({
   const isLead = leadAffordance?.state === 'lead'
   const leadActionDisabled = isLeadActionDisabled(leadAffordance)
   const dialogRef = useRef<View>(null)
+  // Radix returns focus only to a registered DialogTrigger, and this drawer opens from the
+  // store: without these refs every close would drop the keyboard on <body>.
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+  const routedAway = useRef(false)
+  const routeOut = (href: string) => {
+    routedAway.current = true
+    onOpenInPanel(href)
+  }
 
   // A dead id left in the store would reopen the peek when an undo restores the row.
   useEffect(() => {
@@ -79,7 +87,20 @@ export function PeekDrawer({
       // lead.
       onOpenAutoFocus={(event) => {
         event.preventDefault()
+        routedAway.current = false
+        if (Platform.OS === 'web') returnFocusTo.current = document.activeElement as HTMLElement
         dialogRef.current?.focus()
+      }}
+      // Routing away focuses nothing: the reader under the new screen must not take it.
+      onCloseAutoFocus={(event) => {
+        event.preventDefault()
+        const target = returnFocusTo.current
+        returnFocusTo.current = null
+        if (routedAway.current) {
+          routedAway.current = false
+        } else if (target?.isConnected) {
+          target.focus()
+        }
       }}
     >
       <SheetContent
@@ -96,10 +117,10 @@ export function PeekDrawer({
             entryIndex={entryIndex}
             lead={control}
             chrome={{ kind: 'close', onClose }}
-            onOpenInPanel={() => onOpenInPanel(railRowHref(data.branchId, peek.category, peek.id))}
+            onOpenInPanel={() => routeOut(railRowHref(data.branchId, peek.category, peek.id))}
             onRegionPress={(tab) => {
               if (model.kind !== 'entity') return
-              onOpenInPanel(
+              routeOut(
                 worldHref(data.branchId, { category: model.row.kind, id: model.row.id, tab }),
               )
             }}
