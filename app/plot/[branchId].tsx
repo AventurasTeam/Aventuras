@@ -170,7 +170,7 @@ export default function PlotRoute() {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
 
-  // The dialog has closed itself by now; `guard` keeps a draft dirtied since from being dropped.
+  // The dialog has closed itself by now; a draft dirtied since resolves through the leave guard.
   const onImported = useCallback(
     (id: string) => {
       guard(() => select(id))

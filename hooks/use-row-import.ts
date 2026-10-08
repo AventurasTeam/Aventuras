@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 import type { ImportRowResult, RowSaveRejectionCode } from '@/lib/actions'
 
@@ -33,6 +33,11 @@ export function useRowImport<P>({
   onFailed,
 }: UseRowImportArgs<P>): RowImport<P> {
   const [open, setOpen] = useState(false)
+  // The commit outlives the render that started it; its outcome goes to the latest callbacks.
+  const callbacks = useRef({ onImported, onRejected, onFailed })
+  useLayoutEffect(() => {
+    callbacks.current = { onImported, onRejected, onFailed }
+  }, [onImported, onRejected, onFailed])
   // In render, not an effect: the dialog never commits open while blocked.
   if (blocked && open) setOpen(false)
 
@@ -46,12 +51,15 @@ export function useRowImport<P>({
       // Two-argument `then`: a throw inside `onImported` must not route to `onFailed`.
       Promise.resolve()
         .then(() => commit(payload))
-        .then((result) => {
-          if (result.status === 'ok') onImported(result.id)
-          else onRejected(result.code)
-        }, onFailed)
+        .then(
+          (result) => {
+            if (result.status === 'ok') callbacks.current.onImported(result.id)
+            else callbacks.current.onRejected(result.code)
+          },
+          (error: unknown) => callbacks.current.onFailed(error),
+        )
     },
-    [commit, onImported, onRejected, onFailed],
+    [commit],
   )
 
   return { open, request, onOpenChange: setOpen, onValidated }

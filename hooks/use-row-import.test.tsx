@@ -173,4 +173,58 @@ describe('useRowImport — committing', () => {
     expect(initial.onImported).not.toHaveBeenCalled()
     expect(initial.onRejected).not.toHaveBeenCalled()
   })
+
+  it('calls the callbacks from the latest render when the commit resolves', async () => {
+    let finish: (r: ImportRowResult) => void = () => {}
+    const initial = args({
+      commit: vi.fn(
+        () =>
+          new Promise<ImportRowResult>((resolve) => {
+            finish = resolve
+          }),
+      ),
+    })
+    const { result, rerender } = setup(initial)
+    act(() => result.current.onValidated(PAYLOAD))
+    await vi.waitFor(() => expect(initial.commit).toHaveBeenCalledTimes(1))
+    const next = { ...initial, onImported: vi.fn(), onRejected: vi.fn(), onFailed: vi.fn() }
+    rerender(next)
+    finish({ status: 'ok', id: 'char_new' })
+    await vi.waitFor(() => expect(next.onImported).toHaveBeenCalledWith('char_new'))
+    expect(initial.onImported).not.toHaveBeenCalled()
+  })
+
+  it('routes a refusal and a failure to the latest callbacks too', async () => {
+    let finish: (r: ImportRowResult) => void = () => {}
+    let fail: (e: unknown) => void = () => {}
+    const initial = args({
+      commit: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<ImportRowResult>((resolve) => {
+              finish = resolve
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<ImportRowResult>((_, reject) => {
+              fail = reject
+            }),
+        ),
+    })
+    const { result, rerender } = setup(initial)
+    act(() => result.current.onValidated(PAYLOAD))
+    act(() => result.current.onValidated(PAYLOAD))
+    await vi.waitFor(() => expect(initial.commit).toHaveBeenCalledTimes(2))
+    const next = { ...initial, onImported: vi.fn(), onRejected: vi.fn(), onFailed: vi.fn() }
+    rerender(next)
+    finish({ status: 'rejected', reason: 'generation in flight', code: 'in-flight' })
+    const failure = new Error('boom')
+    fail(failure)
+    await vi.waitFor(() => expect(next.onRejected).toHaveBeenCalledWith('in-flight'))
+    await vi.waitFor(() => expect(next.onFailed).toHaveBeenCalledWith(failure))
+    expect(initial.onRejected).not.toHaveBeenCalled()
+    expect(initial.onFailed).not.toHaveBeenCalled()
+  })
 })
