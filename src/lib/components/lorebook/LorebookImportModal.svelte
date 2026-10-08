@@ -148,8 +148,16 @@
   }
 </script>
 
-<ResponsiveModal.Root open={true} onOpenChange={(open) => !open && close()}>
-  <ResponsiveModal.Content class="flex max-h-[90vh] max-w-lg flex-col gap-0 p-0">
+<ResponsiveModal.Root
+  open={true}
+  dismissible={!importing}
+  onOpenChange={(open) => !open && !importing && close()}
+>
+  <ResponsiveModal.Content
+    class="flex max-h-[90vh] max-w-lg flex-col gap-0 p-0"
+    interactOutsideBehavior={importing ? 'ignore' : 'close'}
+    escapeKeydownBehavior={importing ? 'ignore' : 'close'}
+  >
     <ResponsiveModal.Header class="border-b px-6 py-4">
       <div class="flex items-center gap-2">
         <Download class="text-primary h-5 w-5" />
