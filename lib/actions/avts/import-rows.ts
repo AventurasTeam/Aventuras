@@ -1,4 +1,10 @@
-import type { EntityImport, HappeningImport, LoreImport, ThreadImport } from '@/lib/avts'
+import type {
+  EntityImport,
+  EntityImportOf,
+  HappeningImport,
+  LoreImport,
+  ThreadImport,
+} from '@/lib/avts'
 import type { HappeningDraft, ThreadDraft } from '@/lib/plot'
 import type { CharacterDraft, EntityBaseDraft, EntitySaveInput, LoreDraft } from '@/lib/world'
 
@@ -27,8 +33,6 @@ function importResult(result: RowSaveResult): ImportRowResult {
   return { ...result, code }
 }
 
-type CharacterImport = Extract<EntityImport, { kind: 'character' }>
-
 function baseDraft(payload: EntityImport): EntityBaseDraft {
   return {
     name: payload.name,
@@ -42,7 +46,7 @@ function baseDraft(payload: EntityImport): EntityBaseDraft {
   }
 }
 
-function characterDraft(payload: CharacterImport): CharacterDraft {
+function characterDraft(payload: EntityImportOf<'character'>): CharacterDraft {
   const { state } = payload
   return {
     ...baseDraft(payload),
