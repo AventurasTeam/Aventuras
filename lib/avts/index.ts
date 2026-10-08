@@ -7,6 +7,7 @@ export {
 } from './envelope'
 export type { AvtsFile, AvtsKind } from './envelope'
 export { avtsFileName } from './file-name'
+export type { AvtsFileName } from './file-name'
 export { EntityImportSchema, entityExport, entityImportSchemaFor } from './entity'
 export type {
   CharacterImportState,

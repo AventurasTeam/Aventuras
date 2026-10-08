@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { AvtsFile } from './envelope'
 // Separate from save-file.test.ts: eslint resolves `./save-file` and `./save-file.native`
 // to one module, so import/no-duplicates would merge an import of both into the web one.
 import { saveAvtsFile } from './save-file.native'
@@ -36,7 +37,10 @@ vi.mock('expo-sharing', () => ({
   },
 }))
 
-const FILE = { fileName: 'character-kael.avts', contents: '{"format":"aventuras-entity"}' }
+const FILE: AvtsFile = {
+  fileName: 'character-kael.avts',
+  contents: '{"format":"aventuras-entity"}',
+}
 
 beforeEach(() => {
   harness.calls.length = 0

@@ -1,3 +1,5 @@
+import type { AvtsFileName } from './file-name'
+
 export const AVTS_FORMAT_VERSION = '1.0'
 export const AVTS_SUPPORTED_MAJOR = 1
 
@@ -17,7 +19,7 @@ export function avtsImportSlot<K extends AvtsKind>(kind: K) {
 }
 
 /** A serialized export, ready for `saveAvtsFile`. */
-export type AvtsFile = { readonly fileName: string; readonly contents: string }
+export type AvtsFile = { readonly fileName: AvtsFileName; readonly contents: string }
 
 /** `{ format, formatVersion, exportedAt, [payloadKey]: payload }`, pretty-printed (2-space). */
 export function avtsEnvelope(kind: AvtsKind, payload: unknown, exportedAt: Date): string {

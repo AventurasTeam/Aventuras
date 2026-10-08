@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { avtsFileName } from './file-name'
+import { avtsFileName, type AvtsFileName } from './file-name'
 
 describe('avtsFileName', () => {
   it.each([
@@ -30,5 +30,10 @@ describe('avtsFileName', () => {
 
   it('drops a separator the cap leaves at the end', () => {
     expect(avtsFileName('lore', `${'a'.repeat(59)} bcd`)).toBe(`lore-${'a'.repeat(59)}.avts`)
+  })
+
+  it('types every name as ending in .avts', () => {
+    expectTypeOf(avtsFileName('lore', 'Old Roads')).toEqualTypeOf<AvtsFileName>()
+    expectTypeOf<AvtsFileName>().toEqualTypeOf<`${string}.avts`>()
   })
 })

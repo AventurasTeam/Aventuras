@@ -2,9 +2,13 @@
 // jsdom supplies `document` and `HTMLAnchorElement`; Blob and URL.createObjectURL are Node globals.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
+import type { AvtsFile } from './envelope'
 import { saveAvtsFile } from './save-file'
 
-const FILE = { fileName: 'character-kael.avts', contents: '{"format":"aventuras-entity"}' }
+const FILE: AvtsFile = {
+  fileName: 'character-kael.avts',
+  contents: '{"format":"aventuras-entity"}',
+}
 
 let createObjectURL: Mock<(blob: Blob) => string>
 let revokeObjectURL: Mock<(url: string) => void>

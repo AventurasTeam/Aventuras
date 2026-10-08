@@ -13,8 +13,10 @@ const UNSPLITTABLE: Record<string, string> = {
   ı: 'i',
 }
 
+export type AvtsFileName = `${string}.avts`
+
 /** `<prefix>-<slug>.avts`, or `<prefix>.avts` when the name folds to nothing. */
-export function avtsFileName(prefix: string, name: string): string {
+export function avtsFileName(prefix: string, name: string): AvtsFileName {
   const slug = name
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
