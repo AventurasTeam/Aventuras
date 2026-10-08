@@ -133,8 +133,8 @@ exported file to the user.
   alone and drops them (vitest on schema and action).
 - A lore file with an empty `body` fails at Stage 3 (vitest).
 - A `formatVersion: "2.0"` file fails at Stage 2 with the newer-version
-  banner in every host (component test through the dialog's forced
-  seam).
+  banner in every host (a story per host pastes the file through a
+  stubbed clipboard into the dialog with that host's shipped config).
 - `From JSON file…` is disabled with the in-flight tooltip during a
   turn (component test).
 - The clipboard import path creates the row on desktop (E2E asserting
@@ -160,39 +160,24 @@ exported file to the user.
 - **Clipboard permission under Playwright plus Electron.** No existing
   spec drives `navigator.clipboard.readText()`; prove the seam at
   planning before committing to the E2E, else the import happy path is
-  manual smoke.
+  manual smoke. Resolved in 4.6 planning (2026-10-07): proven under the
+  harness; the E2E drives the clipboard, the file chooser and the
+  download.
 - **Web download mechanics under Electron.** A data-URL anchor click
   works in the renderer; confirm the Electron main process does not
   intercept downloads, or route through a `dialog.showSaveDialog` IPC
   if it does (nothing in the E2E harness can observe a download
-  either way).
+  either way). Resolved in 4.6 planning (2026-10-07): Electron main
+  installs no download handler, `will-navigate` doesn't block an
+  anchor download, and Electron shows its own Save dialog; no IPC
+  route.
 - **Export filename slug.** Name-derived, ASCII-folded, kind-prefixed
   (`character-kael.avts`) is the default; the story export in M9.4
-  should match.
+  should match. Resolved in 4.6 planning (2026-10-07):
+  `<kind>-<slug>.avts`, ASCII-folded, helper in `lib/avts` for M9.4.
 - **Import of a `staged` entity.** Status travels; confirm a staged
-  import is what the user expects versus forcing `active`.
-- **`ImporterMenu` is a Popover on phone.** (2026-09-11)
-  [`world.md → Mobile expression`](../../../../ui/screens/world/world.md#mobile-expression)
-  wants a short Sheet on phone but it's a Popover at every size. The
-  surface binding it cites has no `ImporterMenu` row, so that sentence
-  is the only canon. This slice re-plumbs the menu to host
-  `ImportDialog`; a Sheet there makes it the third caller of the phone
-  wrap, which is the extraction trigger in
-  [the parked tier-wrap entry](../../../../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
-  The controlled-open seam drives the trigger ref, so a Sheet needs it
-  re-plumbed.
-- **Four hand-copied menu-item rows.** (2026-09-22)
-  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
-  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
-  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
-  the cast-list inline row (`components/wizard/cast-list.tsx`) each
-  reimplement the same pressable-row shape. Their disabled naming was
-  aligned to `label, reason` on 2026-09-23, but the shapes still
-  differ: only the first two have a disabled state, and `StoryCard`'s
-  row is `py-row-y-sm` with no phone `min-h`. This slice re-plumbs
-  `ImporterMenu` anyway, which makes it the cheapest place to extract
-  one shared `MenuItem`. The rows' role stays with
-  [Nested dialog roles in Popover](../../../../parked.md#nested-dialog-roles-in-popover).
+  import is what the user expects versus forcing `active`. Resolved in
+  4.6 planning (2026-10-07): status travels verbatim.
 - **Four hand-copied detail-pane heads.** (2026-09-28, routed from
   triage 2026-10-04) `LoreDetailPane` duplicates `EntityDetailFrame`:
   the head, tab list, menu and JSON viewer wiring are a near-copy of
@@ -202,9 +187,83 @@ exported file to the user.
   2026-10-04 — and still don't close the JSON viewer on a row switch.
   This slice's export wiring is the next change that lands in all four
   heads, which makes it the cheapest place to generalize the frame; the
-  tab reset already lives in `hooks/use-create-reset-tab.ts`.
+  tab reset already lives in `hooks/use-create-reset-tab.ts`. Resolved
+  in 4.6: one `RowDetailFrame` compound behind all four heads.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Decisions settled at planning (developer, 2026-10-07) and routes that
+bind a later slice. Canon carries the detail; each line points to it.
+
+- **Per-row payloads carry no branch-local id.** Export leaves out
+  every entity and entry reference in an entity's `state`, a thread's
+  or happening's entry references, and every link row; import drops
+  those keys rather than rejecting them. On another story the refs
+  would dangle, and on the same story a re-imported copy would run
+  World's one-position-per-item rule and strip the original's items;
+  see
+  [`data-model.md → Aventuras file format`](../../../../data-model.md#aventuras-file-format-avts).
+- **Payload keys are camelCase**, the Drizzle row keys the raw JSON
+  viewer and every delta `undoPayload` already use, so M9.4's story
+  export, which carries the delta log verbatim, stays consistent. The
+  brief's snake_case names were column references; an entity's
+  `state` keeps its stored keys.
+- **An imported entity keeps its status** (`staged`, `active` or
+  `retired`, with `retiredReason`).
+- **Import and `[+] Blank` share one create path:** the import actions
+  build the pane's draft and call the existing save action with no
+  row, so the fresh id, the single create delta, `user_edit` and C12's
+  keyword clean-up come from the arms that already exist.
+- **One `RowDetailFrame` behind the four detail heads** (World entity
+  and lore, Plot thread and happening), so export is wired once. It
+  fixed the Plot panes' JSON viewer staying open across a row switch;
+  see
+  [`data.md → Raw JSON viewer`](../../../../ui/patterns/data.md#raw-json-viewer--shared-modal-pattern).
+  Export always reads the committed row, never the draft: exporting a
+  row with unsaved edits exports the saved version.
+- **The host flow M8.3 and M9.4 copy:** one `useRowImport` per import
+  slot, opened through the leave guard, refused and closed while
+  generation is in flight, and closed when the screen loses focus or
+  the category switches. The dialog closes itself before the commit
+  resolves, so the host toasts the outcome with import copy and
+  selects the new row through the leave guard; see
+  [`import-dialog.md → World per-row entity import`](../../../../ui/patterns/import-dialog.md#world-per-row-entity-import)
+  and
+  [`→ Host gating during in-flight generation`](../../../../ui/patterns/import-dialog.md#host-gating-during-in-flight-generation).
+- **`ImportDialog` changed under its first consumers:** its copy
+  routes through `t()` (`common:importDialog.*`), it never resets on
+  mount (forced story states had been rendering idle), and closing it
+  discards an in-flight read, as canon already said.
+- **Export file names** are `<prefix>-<slug>.avts` (prefix the entity
+  kind, else `lore`, `thread` or `happening`) from `avtsFileName` in
+  `lib/avts`, which M9.4 reuses. The fold transliterates letters NFKD
+  can't split (`ß`, `æ`, `ø`, `ł`, `þ` and kin) instead of dropping
+  them.
+- **Native export** writes to the cache directory and opens the share
+  sheet through `expo-sharing`, imported lazily so a dev client built
+  before it fails only on export. The Android share sheet and the
+  desktop native Save dialog are still manual checks.
+- **Zod's own issue messages stay English;** only this slice's custom
+  messages go through `t()`. When a second locale lands, switch Zod's
+  locale in `lib/i18n` with the app language, not schema by schema.
+
+Decided at the slice review (developer, 2026-10-08):
+
+- **Per-row export stays live during generation.** It reads one
+  committed row, like `View raw JSON`; the gate's backup / export
+  entry is the story-level one (the Actions menu, Story Settings). A
+  file exported mid-turn can hold a state a cancel then reverses,
+  which is accepted; see
+  [`principles.md → What's not gated`](../../../../ui/principles.md#whats-not-gated).
+- **A failed desktop save stays unreported until M9.4.**
+  `saveAvtsFile` resolves at the download hand-off, and `electron/`
+  has no `will-download` listener. The main-process watcher is an M9.4
+  entry in the
+  [roadmap's M9 carried deferrals](../../../roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
+- **An export with unsaved edits says so.** While the draft is dirty,
+  `RowDetailFrame` toasts that the file holds the saved row once the
+  file is handed off, so all four panes share it. Provisional: the
+  toast; the alternative is the `⋯` entry while the draft is dirty.
+- **The clipboard-import E2E runs on its own:** its own app, seed and
+  hand-authored file, so a failure in the export or file-import legs
+  can't skip it.

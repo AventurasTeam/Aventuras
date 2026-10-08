@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
 import type { EntityTab } from '@/components/world/detail/entity-tabs'
+import type { WorldCategory } from '@/lib/list-modules'
 
 import { t } from '../harness/i18n'
 
@@ -83,14 +84,12 @@ export const world = {
 
   detailName: (page: Page): Locator => page.getByTestId('world-detail-name'),
 
-  // The detail pane's recently-classified badge (entity-detail-frame.tsx, lore-detail-pane.tsx)
-  // — a plain Tag, no role of its own.
+  // Detail pane's recently-classified badge (row-detail-frame.tsx): a plain Tag, no role.
   recentlyClassifiedBadge: (page: Page): Locator =>
     page.getByText(t('world:detail.recentlyClassified'), { exact: true }),
 
-  // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name resolves to its
-  // reason, and From JSON / From vault are always disabled, Blank while an edit is blocked
-  // (world-add-options.ts) — assert the visible label text instead.
+  // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name appends its
+  // reason (world-add-options.ts), so match the visible label text.
   addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
 
@@ -110,6 +109,17 @@ export const world = {
     page.getByRole('button', { name: t(`world:add.${category}`), exact: true }),
   addMenuBlank: (page: Page): Locator =>
     page.getByRole('menuitem', { name: t('world:addMenu.blank'), exact: true }),
+  // Exact, so it matches only while enabled: a disabled option's name appends its reason.
+  addMenuFromJson: (page: Page): Locator =>
+    page.getByRole('menuitem', { name: t('world:addMenu.fromJson'), exact: true }),
+
+  // ImportDialog (import-dialog.tsx), named by the per-kind title from world-import.ts.
+  importDialog: (page: Page, category: WorldCategory): Locator =>
+    page.getByRole('dialog', { name: t(`world:import.title.${category}`), exact: true }),
+  importFromFile: (page: Page, category: WorldCategory): Locator =>
+    world
+      .importDialog(page, category)
+      .getByRole('button', { name: t('common:importDialog.chooseFile'), exact: true }),
 
   // InlineEditableName: empty and not editing, a button named by its placeholder.
   nameTrigger: (page: Page): Locator =>
@@ -118,8 +128,10 @@ export const world = {
 
   moreActions: (page: Page): Locator =>
     page.getByRole('button', { name: t('world:detail.menu.label'), exact: true }),
-  menuItem: (page: Page, key: 'setLead' | 'viewJson' | 'deleteLore'): Locator =>
-    page.getByRole('menuitem', { name: t(`world:detail.menu.${key}`), exact: true }),
+  menuItem: (
+    page: Page,
+    key: 'setLead' | 'viewJson' | 'deleteLore' | 'exportEntity' | 'exportLore',
+  ): Locator => page.getByRole('menuitem', { name: t(`world:detail.menu.${key}`), exact: true }),
 
   // The list row's lead Tag (entity-row.tsx meta slot).
   leadTag: (page: Page, name: string): Locator =>

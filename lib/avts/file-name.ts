@@ -1,0 +1,36 @@
+const SLUG_MAX = 60
+
+// Lowercase letters NFKD does not decompose, so the fold would otherwise drop them.
+const UNSPLITTABLE: Record<string, string> = {
+  ß: 'ss',
+  æ: 'ae',
+  œ: 'oe',
+  ø: 'o',
+  ł: 'l',
+  đ: 'd',
+  ð: 'd',
+  þ: 'th',
+  ı: 'i',
+  ħ: 'h',
+  ŧ: 't',
+  ŋ: 'ng',
+  ə: 'e',
+  ĸ: 'k',
+  ʒ: 'zh',
+}
+
+export type AvtsFileName = `${string}.avts`
+
+/** `<prefix>-<slug>.avts`, or `<prefix>.avts` when the name folds to nothing. */
+export function avtsFileName(prefix: string, name: string): AvtsFileName {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, (ch) => UNSPLITTABLE[ch] ?? ch)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, SLUG_MAX)
+    .replace(/-+$/, '')
+  return slug === '' ? `${prefix}.avts` : `${prefix}-${slug}.avts`
+}

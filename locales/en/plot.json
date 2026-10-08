@@ -12,9 +12,17 @@
   "addMenu": {
     "blank": "Blank",
     "fromJson": "From JSON file…",
-    "fromJsonReason": "Lands in Slice 4.6",
     "fromVault": "From Vault…",
     "fromVaultReason": "Vault lands in M8"
+  },
+  "import": {
+    "title": {
+      "thread": "Import thread",
+      "happening": "Import happening"
+    },
+    "imported": "Imported.",
+    "failed": "Couldn't import that file. Try again.",
+    "inFlight": "Couldn't import while generation is in flight. Try again when it finishes."
   },
   "actions": {
     "addThread": "Add thread…",
@@ -84,7 +92,6 @@
       "label": "More actions",
       "exportThread": "Export thread as JSON",
       "exportHappening": "Export happening as JSON",
-      "exportReason": "Lands in Slice 4.6",
       "viewJson": "View raw JSON",
       "deleteThread": "Delete thread",
       "deleteHappening": "Delete happening"

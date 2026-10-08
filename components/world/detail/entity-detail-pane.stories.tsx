@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fireEvent, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,8 @@ import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
+import { t } from '@/lib/i18n'
+import { toastStore, type ToastItem } from '@/lib/toast'
 import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
@@ -939,7 +941,7 @@ export const ParentChainBrokenFieldError: Story = {
   },
 }
 
-/** Set as lead (characters only), plus Export disabled and Delete enabled. */
+/** Set as lead (characters only), plus Export live and Delete enabled. */
 export const OverflowMenuForAnActiveCharacter: Story = {
   args: { row: MIRA },
   play: async ({ args }) => {
@@ -948,8 +950,8 @@ export const OverflowMenuForAnActiveCharacter: Story = {
     // The popover fades in; the role query can outrace opacity settling.
     await waitFor(() => expect(setLead).toBeVisible(), WAIT)
     await expect(
-      screen.getByRole('menuitem', { name: 'Export entity as JSON, Lands in Slice 4.6' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+      screen.getByRole('menuitem', { name: 'Export entity as JSON' }),
+    ).not.toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByRole('menuitem', { name: 'Delete entity' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
@@ -968,6 +970,66 @@ export const DeleteHandsUpTheRow: Story = {
     await waitFor(() => expect(remove).toBeVisible(), WAIT)
     await userEvent.click(remove)
     await expect(args.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'char_mira' }))
+  },
+}
+
+/** Export writes the committed row, not the unsaved draft, and a toast says so. */
+export const ExportHandsTheCommittedRow: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
+  play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
+    let blob: Blob | null = null
+    const downloads: string[] = []
+    const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      blob = b as Blob
+      return 'blob:story'
+    })
+    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download)
+    })
+    try {
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit Kael' }, WAIT))
+      await userEvent.keyboard(' (draft){Enter}')
+      // The draft must differ from the committed row, or the name check below proves nothing.
+      await waitFor(() => expect(saveBar()).toBeVisible(), WAIT)
+      await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      const entry = await screen.findByRole('menuitem', { name: 'Export entity as JSON' }, WAIT)
+      await waitFor(() => expect(entry).toBeVisible(), WAIT)
+      await userEvent.click(entry)
+      await waitFor(() => expect(downloads).toEqual(['character-kael.avts']), WAIT)
+      const file = JSON.parse(await (blob as unknown as Blob).text()) as {
+        format: string
+        entity: Record<string, unknown>
+      }
+      await expect(file.format).toBe('aventuras-entity')
+      await expect(file.entity).toEqual(
+        expect.objectContaining({
+          kind: 'character',
+          name: 'Kael',
+          description: 'A courier turned fugitive.',
+          injectionMode: 'always',
+          tags: ['protagonist'],
+        }),
+      )
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['info', t('common:avts.exportedSaved')],
+          ]),
+        WAIT,
+      )
+    } finally {
+      stop()
+      url.mockRestore()
+      click.mockRestore()
+    }
   },
 }
 

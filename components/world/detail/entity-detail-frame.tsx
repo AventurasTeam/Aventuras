@@ -1,17 +1,10 @@
-import { useState, type ReactNode } from 'react'
-import { Controller, type Control } from 'react-hook-form'
-import { View } from 'react-native'
+import type { ReactNode } from 'react'
+import type { Control, FieldPathByValue } from 'react-hook-form'
 
-import { DetailTabs } from '@/components/compounds/detail-tabs'
-import { JSONViewer } from '@/components/compounds/json-viewer'
-import { OverflowMenu } from '@/components/compounds/overflow-menu'
-import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
-import { DetailPane } from '@/components/shells/detail-pane'
-import { InlineEditableName } from '@/components/ui/inline-editable-name'
-import { Tabs } from '@/components/ui/tabs'
-import { Tag } from '@/components/ui/tag'
+import { RowDetailFrame } from '@/components/compounds/row-detail-frame'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
+import { entityExport } from '@/lib/avts'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
@@ -20,6 +13,9 @@ import type { EntityBaseDraft } from '@/lib/world'
 import { deleteDisabledReason } from '../delete-copy'
 import { entityMenuEntries } from '../world-copy'
 import { entityTabs, type EntityTab } from './entity-tabs'
+
+// A path on the generic Draft can't be resolved, so the key is checked against the base draft.
+const NAME_FIELD = 'name' satisfies FieldPathByValue<EntityBaseDraft, string>
 
 /** Every kind's draft extends the base; RHF's Control is invariant in its values type. */
 export function asBaseControl<D extends EntityBaseDraft>(
@@ -55,7 +51,7 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   kind: EntityKind
   row: Entity | null
   session: RowSaveSession<Draft>
-  /** The committed name, which InlineEditableName's Escape restores. */
+  /** The committed name; a save landing mid-edit is what InlineEditableName's Escape restores. */
   savedName: string
   tab: EntityTab
   onTabChange: (tab: EntityTab) => void
@@ -91,13 +87,6 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   hotkeysEnabled,
   children,
 }: EntityDetailFrameProps<Draft>) {
-  const rowId = row?.id ?? null
-  const [jsonOpen, setJsonOpen] = useState(false)
-  const [jsonRowId, setJsonRowId] = useState(rowId)
-  if (rowId !== jsonRowId) {
-    setJsonRowId(rowId)
-    setJsonOpen(false)
-  }
   const remove =
     row == null
       ? undefined
@@ -105,75 +94,41 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
           onDelete: () => onDelete(row),
           disabledReason: deleteDisabledReason(row, leadId, blocked, blockedReason),
         }
-  const baseControl = asBaseControl(session.form.control)
-  const changeTab = (value: string) => onTabChange(value as EntityTab)
   return (
-    <View className="flex-1">
-      <Tabs value={tab} onValueChange={changeTab} className="flex-1 gap-0">
-        <DetailPane
-          nameSlot={
-            <View testID="world-detail-name">
-              <Controller
-                control={baseControl}
-                name="name"
-                render={({ field }) => (
-                  <InlineEditableName
-                    value={field.value}
-                    onChange={field.onChange}
-                    savedValue={savedName}
-                    placeholder={t('world:detail.namePlaceholder')}
-                    size="lg"
-                    disabled={blocked}
-                    disabledReason={blockedReason}
-                  />
-                )}
-              />
-            </View>
-          }
-          badges={
-            recentlyClassified != null ? (
-              <Tag tone="recently-classified">{t('world:detail.recentlyClassified')}</Tag>
-            ) : undefined
-          }
-          overflowMenu={
-            <OverflowMenu
-              label={t('world:detail.menu.label')}
-              entries={entityMenuEntries(kind, {
-                onViewJson: () => setJsonOpen(true),
-                lead,
-                remove,
-              })}
-              disabled={row == null}
-            />
-          }
-          tabs={
-            <DetailTabs
-              tabs={entityTabs(kind).map((value) => ({
-                value,
-                label: t(`world:detail.tabs.${value}`),
-                count: tabCounts[value],
-              }))}
-              value={tab}
-              onValueChange={changeTab}
-              selectLabel={t('world:detail.tabSelect')}
-            />
-          }
-          saveBar={
-            <RowSaveBar
-              session={session}
-              enabled={hotkeysEnabled}
-              blocked={blocked}
-              blockedReason={blockedReason}
-            />
-          }
-        >
-          {children}
-        </DetailPane>
-      </Tabs>
-      <RowLeaveDialog session={session} blocked={blocked} blockedReason={blockedReason} />
-      {row != null ? (
-        <JSONViewer open={jsonOpen} onOpenChange={setJsonOpen} name={row.name} data={row} />
-      ) : null}
-    </View>
+    <RowDetailFrame
+      session={session}
+      nameField={NAME_FIELD as FieldPathByValue<Draft, string>}
+      savedName={savedName}
+      namePlaceholder={t('world:detail.namePlaceholder')}
+      nameTestID="world-detail-name"
+      recentlyClassifiedLabel={
+        recentlyClassified != null ? t('world:detail.recentlyClassified') : undefined
+      }
+      menuLabel={t('world:detail.menu.label')}
+      menuEntries={(actions) => entityMenuEntries(kind, { ...actions, lead, remove })}
+      tab={tab}
+      onTabChange={onTabChange}
+      tabs={entityTabs(kind).map((value) => ({
+        value,
+        label: t(`world:detail.tabs.${value}`),
+        count: tabCounts[value],
+      }))}
+      tabSelectLabel={t('world:detail.tabSelect')}
+      committed={
+        row == null
+          ? null
+          : {
+              id: row.id,
+              name: row.name,
+              json: row,
+              exportFile: () => entityExport(row, new Date()),
+            }
+      }
+      blocked={blocked}
+      blockedReason={blockedReason}
+      hotkeysEnabled={hotkeysEnabled}
+    >
+      {children}
+    </RowDetailFrame>
   )
 }

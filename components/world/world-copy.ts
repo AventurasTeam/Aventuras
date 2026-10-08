@@ -7,6 +7,7 @@ import {
 import {
   ENTITY_REJECTION,
   LEAD_REJECTION,
+  type ImportRejectionCode,
   type LeadRejectionCode,
   type RowSaveRejectionCode,
 } from '@/lib/actions'
@@ -91,6 +92,20 @@ export function saveRejectionText(code: RowSaveRejectionCode): string {
 
 export function saveFailureText(): string {
   return t('world:save.failed')
+}
+
+const IMPORT_REJECTION_TEXT: Record<ImportRejectionCode, () => string> = {
+  [ENTITY_REJECTION.inFlight]: () => t('world:import.inFlight'),
+  [ENTITY_REJECTION.failed]: () => t('world:import.failed'),
+}
+
+/** A refused import's text; the dialog has closed, so unlike a save nothing is kept to retry. */
+export function importRejectionText(code: ImportRejectionCode): string {
+  return IMPORT_REJECTION_TEXT[code]()
+}
+
+export function importFailureText(): string {
+  return t('world:import.failed')
 }
 
 // Exhaustive: a new LeadRejectionCode fails typecheck until it has text here.
@@ -189,7 +204,12 @@ type LeadEntry = { onSetLead: () => void; disabledReason?: string }
 /** world.md → Detail head structure. */
 export function entityMenuEntries(
   kind: EntityKind,
-  { onViewJson, lead, remove }: { onViewJson: () => void; lead?: LeadEntry; remove?: RemoveEntry },
+  {
+    onViewJson,
+    onExport,
+    lead,
+    remove,
+  }: { onViewJson: () => void; onExport: () => void; lead?: LeadEntry; remove?: RemoveEntry },
 ): OverflowMenuEntry[] {
   const leadEntries: OverflowMenuEntry[] =
     kind === 'character' && lead != null
@@ -205,13 +225,7 @@ export function entityMenuEntries(
       : []
   return [
     ...leadEntries,
-    {
-      key: 'export',
-      label: t('world:detail.menu.exportEntity'),
-      disabled: true,
-      disabledReason: t('world:detail.menu.exportReason'),
-      onPress: () => {},
-    },
+    { key: 'export', label: t('world:detail.menu.exportEntity'), onPress: onExport },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
     ...deleteEntry(t('world:detail.menu.deleteEntity'), remove),
   ]
@@ -220,19 +234,15 @@ export function entityMenuEntries(
 /** world.md → Detail head — lore: no `Set as lead`. */
 export function loreMenuEntries({
   onViewJson,
+  onExport,
   remove,
 }: {
   onViewJson: () => void
+  onExport: () => void
   remove?: RemoveEntry
 }): OverflowMenuEntry[] {
   return [
-    {
-      key: 'export',
-      label: t('world:detail.menu.exportLore'),
-      disabled: true,
-      disabledReason: t('world:detail.menu.exportReason'),
-      onPress: () => {},
-    },
+    { key: 'export', label: t('world:detail.menu.exportLore'), onPress: onExport },
     { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
     ...deleteEntry(t('world:detail.menu.deleteLore'), remove),
   ]

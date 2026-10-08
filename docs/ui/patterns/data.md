@@ -57,7 +57,8 @@ component reused everywhere; no per-surface variants.
 **Read-only in v1.** Edit-mode (raw-edit + zod-validate on save) is
 deferred to a follow-up.
 
-Esc / × closes the drawer.
+Esc / × closes the drawer. The viewer belongs to the row it opened
+on, so switching to another row closes it.
 
 ### JSON content block — inline use
 

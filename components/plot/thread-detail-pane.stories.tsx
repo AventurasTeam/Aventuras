@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
@@ -9,8 +9,10 @@ import type { PlotSaveResult } from '@/lib/actions'
 import type { Thread } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
+import { t } from '@/lib/i18n'
 import type { ThreadDraft } from '@/lib/plot'
 import type { RecentlyClassified } from '@/lib/row-signals'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
 import type { ThreadTab } from './plot-selection'
 import { ThreadDetailPane } from './thread-detail-pane'
@@ -109,9 +111,8 @@ type HarnessProps = {
 }
 
 /**
- * Mimics the route: an update's store patch lands mid-save; a create's new row is selected from
- * `onSaved`. Capture-phase F2 flips `blocked` (mid-edit run); F3 requests a leave via `onSession`;
- * F4 is a repeat `[+] Blank` (a new create `seq`).
+ * Mimics the route: an update's patch lands mid-save; a create's row is selected from `onSaved`.
+ * Capture-phase: F2 flips `blocked`, F3 requests a leave, F4 repeats `[+] Blank`, F6 selects TRUST.
  */
 function Harness({
   row: initialRow,
@@ -143,6 +144,7 @@ function Harness({
         setRow(null)
         setCreateSeq((n) => n + 1)
       }
+      if (e.key === 'F6') setRow(TRUST)
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -564,9 +566,10 @@ export const Menu: Story = {
     const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' })
     await waitFor(() => expect(viewJson).toBeVisible(), WAIT)
     expect(viewJson).not.toHaveAttribute('aria-disabled', 'true')
-    expect(
-      screen.getByRole('menuitem', { name: 'Export thread as JSON, Lands in Slice 4.6' }),
-    ).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('menuitem', { name: 'Export thread as JSON' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(screen.getByRole('menuitem', { name: 'Delete thread' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
@@ -584,6 +587,89 @@ export const Menu: Story = {
     await expect(args.onDelete).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'thread_amulet' }),
     )
+  },
+}
+
+/** data.md → Raw JSON viewer: switching rows closes the viewer instead of showing the next row. */
+export const JsonViewerClosesOnRowSwitch: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+    const viewJson = await screen.findByRole('menuitem', { name: 'View raw JSON' }, WAIT)
+    await waitFor(() => expect(viewJson).toBeVisible(), WAIT)
+    await userEvent.click(viewJson)
+    expect(await screen.findByRole('button', { name: 'Close raw JSON viewer' }, WAIT)).toBeVisible()
+    expect(screen.getByText(/"thread_amulet"/)).toBeInTheDocument()
+
+    // A flash of the next row's JSON is gone by the time the viewer reads as closed.
+    let flashed = false
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('"thread_trust"')) flashed = true
+    })
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true })
+    await userEvent.keyboard('{F6}')
+    await waitFor(
+      () =>
+        expect(
+          screen.queryByRole('button', { name: 'Close raw JSON viewer' }),
+        ).not.toBeInTheDocument(),
+      WAIT,
+    )
+    observer.disconnect()
+    // The switch landed: the head names TRUST, and its JSON never showed.
+    expect(await screen.findByRole('button', { name: `Edit ${TRUST.title}` }, WAIT)).toBeVisible()
+    expect(flashed).toBe(false)
+  },
+}
+
+/** Export writes the committed row, not the unsaved draft, and a toast says so. */
+export const ExportHandsTheCommittedRow: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+  },
+  play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
+    let blob: Blob | null = null
+    const downloads: string[] = []
+    const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      blob = b as Blob
+      return 'blob:story'
+    })
+    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download)
+    })
+    try {
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Edit What the amulet wants' }, WAIT),
+      )
+      await userEvent.keyboard(' (draft){Enter}')
+      // The draft must differ from the committed row, or the title check below proves nothing.
+      await waitFor(() => expect(screen.getByTestId('save-bar')).toBeVisible(), WAIT)
+      await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
+      const entry = await screen.findByRole('menuitem', { name: 'Export thread as JSON' }, WAIT)
+      await waitFor(() => expect(entry).toBeVisible(), WAIT)
+      await userEvent.click(entry)
+      await waitFor(() => expect(downloads).toEqual(['thread-what-the-amulet-wants.avts']), WAIT)
+      const file = JSON.parse(await (blob as unknown as Blob).text()) as {
+        thread: { title: string }
+      }
+      await expect(file.thread.title).toBe('What the amulet wants')
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['info', t('common:avts.exportedSaved')],
+          ]),
+        WAIT,
+      )
+    } finally {
+      stop()
+      url.mockRestore()
+      click.mockRestore()
+    }
   },
 }
 

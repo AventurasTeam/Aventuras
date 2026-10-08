@@ -2,29 +2,37 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { worldAddOptions } from './world-add-options'
 
+const IN_FLIGHT = 'Generation is in flight. Cancel to edit.'
+
+const handlers = () => ({ onBlank: vi.fn(), onJson: vi.fn() })
+
 describe('worldAddOptions', () => {
-  it('enables Blank and runs it; the file and Vault options stay disabled', () => {
-    const onBlank = vi.fn()
-    const options = worldAddOptions(onBlank, {})
+  it('offers Blank and From JSON live; From Vault stays disabled', () => {
+    const options = worldAddOptions(handlers(), {})
     expect(options.map((o) => [o.key, o.label, o.disabled ?? false, o.disabledReason])).toEqual([
       ['blank', 'Blank', false, undefined],
-      ['json', 'From JSON file…', true, 'Lands in Slice 4.6'],
+      ['json', 'From JSON file…', false, undefined],
       ['vault', 'From Vault…', true, 'Vault lands in M8'],
     ])
-    options[0].onPress?.()
-    expect(onBlank).toHaveBeenCalledTimes(1)
   })
 
-  it('gates Blank while generation is in flight', () => {
-    const [blank] = worldAddOptions(() => {}, { disabled: true, disabledReason: 'busy' })
-    expect([blank.disabled, blank.disabledReason]).toEqual([true, 'busy'])
+  it('runs each live option through its own handler', () => {
+    const h = handlers()
+    const options = worldAddOptions(h, {})
+    options.find((o) => o.key === 'json')?.onPress?.()
+    expect(h.onJson).toHaveBeenCalledTimes(1)
+    expect(h.onBlank).not.toHaveBeenCalled()
+    options.find((o) => o.key === 'blank')?.onPress?.()
+    expect(h.onBlank).toHaveBeenCalledTimes(1)
+    expect(h.onJson).toHaveBeenCalledTimes(1)
   })
 
-  it('is enabled and fires onBlank', () => {
-    const onBlank = vi.fn()
-    const [blank] = worldAddOptions(onBlank, {})
-    expect(blank).toMatchObject({ key: 'blank', disabled: undefined })
-    blank.onPress?.()
-    expect(onBlank).toHaveBeenCalledTimes(1)
+  it('disables Blank and From JSON with the in-flight reason during a turn', () => {
+    const options = worldAddOptions(handlers(), { disabled: true, disabledReason: IN_FLIGHT })
+    expect(options.map((o) => [o.key, o.disabled ?? false, o.disabledReason])).toEqual([
+      ['blank', true, IN_FLIGHT],
+      ['json', true, IN_FLIGHT],
+      ['vault', true, 'Vault lands in M8'],
+    ])
   })
 })

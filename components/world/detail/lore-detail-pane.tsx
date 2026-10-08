@@ -1,26 +1,21 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Controller, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
-import { DetailTabs } from '@/components/compounds/detail-tabs'
 import { EmbedWindowTextarea } from '@/components/compounds/embed-window-textarea'
 import { FormRow } from '@/components/compounds/form-row'
 import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
-import { JSONViewer } from '@/components/compounds/json-viewer'
 import { NumberInput } from '@/components/compounds/number-input'
-import { OverflowMenu } from '@/components/compounds/overflow-menu'
-import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
+import { RowDetailFrame } from '@/components/compounds/row-detail-frame'
 import { HistoryTab } from '@/components/history/history-tab'
-import { DetailPane } from '@/components/shells/detail-pane'
 import { Autocomplete } from '@/components/ui/autocomplete'
-import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Select } from '@/components/ui/select'
-import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { Tag } from '@/components/ui/tag'
+import { TabsContent } from '@/components/ui/tabs'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { LoreSaveResult } from '@/lib/actions'
+import { loreExport } from '@/lib/avts'
 import { INJECTION_MODES, type Lore } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
@@ -91,100 +86,66 @@ export function LoreDetailPane({
   })
   const { control } = session.form
   const [tab, setTab] = useCreateResetTab<LoreTab>(createSeq, 'body', 'body')
-  const changeTab = (value: string) => setTab(value as LoreTab)
-  const rowId = row?.id ?? null
-  const [jsonOpen, setJsonOpen] = useState(false)
-  const [jsonRowId, setJsonRowId] = useState(rowId)
-  if (rowId !== jsonRowId) {
-    setJsonRowId(rowId)
-    setJsonOpen(false)
-  }
   const gate = { blocked, blockedReason }
 
   return (
-    <View className="flex-1">
-      <Tabs value={tab} onValueChange={changeTab} className="flex-1 gap-0">
-        <DetailPane
-          nameSlot={
-            <View testID="world-detail-name">
-              <Controller
-                control={control}
-                name="title"
-                render={({ field }) => (
-                  <InlineEditableName
-                    value={field.value}
-                    onChange={field.onChange}
-                    savedValue={values.title}
-                    placeholder={t('world:detail.namePlaceholder')}
-                    size="lg"
-                    disabled={blocked}
-                    disabledReason={blockedReason}
-                  />
-                )}
-              />
-            </View>
-          }
-          badges={
-            recentlyClassified != null ? (
-              <Tag tone="recently-classified">{t('world:detail.recentlyClassified')}</Tag>
-            ) : undefined
-          }
-          overflowMenu={
-            <OverflowMenu
-              label={t('world:detail.menu.label')}
-              entries={loreMenuEntries({
-                onViewJson: () => setJsonOpen(true),
-                remove:
-                  row == null
-                    ? undefined
-                    : {
-                        onDelete: () => onDelete(row),
-                        disabledReason: gateDisabledReason(blocked, blockedReason),
-                      },
-              })}
-              disabled={row == null}
-            />
-          }
-          tabs={
-            <DetailTabs
-              tabs={LORE_TABS.map((value) => ({ value, label: t(`world:lore.tabs.${value}`) }))}
-              value={tab}
-              onValueChange={changeTab}
-              selectLabel={t('world:detail.tabSelect')}
-            />
-          }
-          saveBar={
-            <RowSaveBar
-              session={session}
-              enabled={hotkeysEnabled}
-              blocked={blocked}
-              blockedReason={blockedReason}
-            />
-          }
-        >
-          <TabsContent value="body">
-            <LoreBody control={control} categories={categories} {...gate} />
-          </TabsContent>
-          <TabsContent value="settings">
-            <LoreSettings control={control} {...gate} />
-          </TabsContent>
-          <TabsContent value="history">
-            {row == null ? (
-              <PlaceholderTab
-                title={t('history:tab.afterSave')}
-                body={t('history:tab.afterSaveBody')}
-              />
-            ) : (
-              <HistoryTab branchId={branchId} targetTable="lore" targetId={row.id} />
-            )}
-          </TabsContent>
-        </DetailPane>
-      </Tabs>
-      <RowLeaveDialog session={session} blocked={blocked} blockedReason={blockedReason} />
-      {row != null ? (
-        <JSONViewer open={jsonOpen} onOpenChange={setJsonOpen} name={row.title} data={row} />
-      ) : null}
-    </View>
+    <RowDetailFrame
+      session={session}
+      nameField="title"
+      savedName={values.title}
+      namePlaceholder={t('world:detail.namePlaceholder')}
+      nameTestID="world-detail-name"
+      recentlyClassifiedLabel={
+        recentlyClassified != null ? t('world:detail.recentlyClassified') : undefined
+      }
+      menuLabel={t('world:detail.menu.label')}
+      menuEntries={(actions) =>
+        loreMenuEntries({
+          ...actions,
+          remove:
+            row == null
+              ? undefined
+              : {
+                  onDelete: () => onDelete(row),
+                  disabledReason: gateDisabledReason(blocked, blockedReason),
+                },
+        })
+      }
+      tab={tab}
+      onTabChange={setTab}
+      tabs={LORE_TABS.map((value) => ({ value, label: t(`world:lore.tabs.${value}`) }))}
+      tabSelectLabel={t('world:detail.tabSelect')}
+      committed={
+        row == null
+          ? null
+          : {
+              id: row.id,
+              name: row.title,
+              json: row,
+              exportFile: () => loreExport(row, new Date()),
+            }
+      }
+      blocked={blocked}
+      blockedReason={blockedReason}
+      hotkeysEnabled={hotkeysEnabled}
+    >
+      <TabsContent value="body">
+        <LoreBody control={control} categories={categories} {...gate} />
+      </TabsContent>
+      <TabsContent value="settings">
+        <LoreSettings control={control} {...gate} />
+      </TabsContent>
+      <TabsContent value="history">
+        {row == null ? (
+          <PlaceholderTab
+            title={t('history:tab.afterSave')}
+            body={t('history:tab.afterSaveBody')}
+          />
+        ) : (
+          <HistoryTab branchId={branchId} targetTable="lore" targetId={row.id} />
+        )}
+      </TabsContent>
+    </RowDetailFrame>
   )
 }
 

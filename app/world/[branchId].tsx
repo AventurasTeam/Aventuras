@@ -7,6 +7,7 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { CollisionResolveDialog } from '@/components/compounds/collision-resolve-dialog'
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
+import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { distinctCategories } from '@/components/plot/plot-route-data'
@@ -35,8 +36,13 @@ import {
   type WorldDetailSelection,
 } from '@/components/world/use-world-selection'
 import { worldAddOptions } from '@/components/world/world-add-options'
-import { leadRejectionText } from '@/components/world/world-copy'
+import {
+  importFailureText,
+  importRejectionText,
+  leadRejectionText,
+} from '@/components/world/world-copy'
 import { WorldDetailPlaceholder } from '@/components/world/world-detail-placeholder'
+import { entityImportDialog, loreImportDialog } from '@/components/world/world-import'
 import { WorldListPane, type WorldListPaneHandle } from '@/components/world/world-list-pane'
 import { involvementsFor, relationshipLinksFor } from '@/components/world/world-route-data'
 import {
@@ -52,10 +58,19 @@ import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRouteLink } from '@/hooks/use-route-link'
+import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useTier } from '@/hooks/use-tier'
-import { saveEntity, saveLore, setStoryLead } from '@/lib/actions'
+import {
+  importEntity,
+  importLore,
+  saveEntity,
+  saveLore,
+  setStoryLead,
+  type ImportRejectionCode,
+} from '@/lib/actions'
+import type { EntityImport, LoreImport } from '@/lib/avts'
 import { DEFAULT_CALENDAR_ID, resolveCalendar } from '@/lib/calendar'
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -217,6 +232,49 @@ export default function WorldRoute() {
   useEffect(() => {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
+
+  const onImported = useCallback(() => toast.success(t('world:import.imported')), [])
+  const onImportRejected = useCallback(
+    (code: ImportRejectionCode) => toast.error(importRejectionText(code)),
+    [],
+  )
+  const onImportFailed = useCallback(
+    (error: unknown) => {
+      logger.error('app.world_import_failed', {
+        branchId,
+        category,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      toast.error(importFailureText())
+    },
+    [branchId, category],
+  )
+  const commitEntity = useCallback(
+    (payload: EntityImport) => importEntity(branchId, payload, ctx),
+    [branchId],
+  )
+  const commitLore = useCallback(
+    (payload: LoreImport) => importLore(branchId, payload, ctx),
+    [branchId],
+  )
+  const importHost = {
+    blocked: editBlocked,
+    focused,
+    guard,
+    select,
+    onImported,
+    onRejected: onImportRejected,
+    onFailed: onImportFailed,
+  }
+  const entityImport = useRowImport<EntityImport>({ ...importHost, commit: commitEntity })
+  const loreImport = useRowImport<LoreImport>({ ...importHost, commit: commitLore })
+  const activeImport = isEntityCategory(category) ? entityImport : loreImport
+  const setEntityImportOpen = entityImport.onOpenChange
+  const setLoreImportOpen = loreImport.onOpenChange
+  const closeImports = useCallback(() => {
+    setEntityImportOpen(false)
+    setLoreImportOpen(false)
+  }, [setEntityImportOpen, setLoreImportOpen])
   const collision = useCollisionResolve(branchId, ctx, guard)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
@@ -238,12 +296,13 @@ export default function WorldRoute() {
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
+      closeImports()
       setCategory(next)
       select(null)
       setFilter('all')
       setSearch('')
     },
-    [select],
+    [select, closeImports],
   )
   const selectCategory = useCallback(
     (next: WorldCategory) => guard(() => switchCategory(next)),
@@ -570,10 +629,10 @@ export default function WorldRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={worldAddLabel(category)}
-                    options={worldAddOptions(() => guard(startCreate), {
-                      disabled: editBlocked,
-                      disabledReason: gateReason,
-                    })}
+                    options={worldAddOptions(
+                      { onBlank: () => guard(startCreate), onJson: activeImport.request },
+                      { disabled: editBlocked, disabledReason: gateReason },
+                    )}
                     open={addOpen}
                     onOpenChange={setAddOpen}
                   />
@@ -606,6 +665,21 @@ export default function WorldRoute() {
           blockedReason={collisionBlocked}
         />
       ) : null}
+      {isEntityCategory(category) ? (
+        <ImportDialog<EntityImport>
+          {...entityImportDialog(category)}
+          open={entityImport.open}
+          onOpenChange={entityImport.onOpenChange}
+          onValidated={entityImport.onValidated}
+        />
+      ) : (
+        <ImportDialog<LoreImport>
+          {...loreImportDialog()}
+          open={loreImport.open}
+          onOpenChange={loreImport.onOpenChange}
+          onValidated={loreImport.onValidated}
+        />
+      )}
     </ScreenShell>
   )
 }

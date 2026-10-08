@@ -1873,8 +1873,10 @@ is revisitable.
 
 A backup run reads the entire story state. Per
 [`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation),
-backup / export reachable from inside the story (Actions menu,
-Story Settings) is gated and disabled during a transaction. Backup
+story-level backup / export reachable from inside the story
+(Actions menu, Story Settings) is gated and disabled during a
+transaction; per-row export reads one committed row and stays live
+([`What's not gated`](./ui/principles.md#whats-not-gated)). Backup
 from app-level surfaces (App Settings → Data tab) requires leaving
 the story, which routes through the abort-confirm modal — also
 safe.
@@ -2914,6 +2916,18 @@ requires `t()` but says nothing against composing fragments; add that
 rule when this lands. Only `locales/en` ships.
 
 Parked 2026-09-27 from triage; the signal is the first non-English
+locale.
+
+#### Zod's built-in issue messages are English
+
+The per-row `.avts` import schemas (`lib/avts`) route only their own
+issue messages through `t()`; Zod's built-in ones ("Invalid input:
+expected string, received number") reach the import dialog's issue list
+in English. When a second locale ships, switch Zod's locale with the app
+language in `lib/i18n` (`z.config(z.locales.<lang>())`) rather than
+schema by schema. Only `locales/en` ships today.
+
+Raised in Slice 4.6 (2026-10-08); the signal is the first non-English
 locale.
 
 #### Category-label lowercasing

@@ -1,17 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 import { z } from 'zod'
 
+import { happeningImportDialog, threadImportDialog } from '@/components/plot/plot-import'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { entityImportDialog, loreImportDialog } from '@/components/world/world-import'
+import { t } from '@/lib/i18n'
 
-import { ImportDialog } from './import-dialog'
+import { ImportDialog, type ImportDialogConfig } from './import-dialog'
 import type { ImportState } from './import-dialog-pipeline'
 
-// Stand-in schemas. Real consumer schemas (CalendarSystemSchema,
-// StoryImportSchema, EntityImportSchema, …) land with their owning domain
-// implementations; the dialog is generic over TPayload so any zod schema works.
+// Stand-ins: the calendar and story hosts ship no schema yet; Host* stories mount shipped configs.
 const CalendarStubSchema = z.object({
   units: z.array(z.object({ name: z.string().min(1), length: z.number().positive() })),
   eras: z.array(z.string()).min(1),
@@ -29,6 +31,9 @@ function ControlledDialog<TPayload>({
   title,
   payloadKey,
   schema,
+  onValidated = (payload) => {
+    console.log('[import-dialog story] validated:', payload)
+  },
 }: {
   initialOpen: boolean
   initialState?: ImportState
@@ -36,6 +41,7 @@ function ControlledDialog<TPayload>({
   title: string
   payloadKey: string
   schema: z.ZodType<TPayload>
+  onValidated?: (payload: TPayload) => void
 }) {
   const [open, setOpen] = useState(initialOpen)
   return (
@@ -51,9 +57,7 @@ function ControlledDialog<TPayload>({
         payloadKey={payloadKey}
         schema={schema}
         title={title}
-        onValidated={(payload) => {
-          console.log('[import-dialog story] validated:', payload)
-        }}
+        onValidated={onValidated}
         _initialState={initialState}
       />
     </View>
@@ -70,6 +74,13 @@ export default meta
 
 type Story = StoryObj<typeof ImportDialog>
 
+// CI runs story plays several times slower than local; the default 1s find timeout flakes there.
+const WAIT = { timeout: 5000 }
+
+function findDialog() {
+  return screen.findByRole('dialog', { name: 'Import calendar' }, WAIT)
+}
+
 // Idle — calendar import; default open.
 export const IdleCalendar: Story = {
   render: () => (
@@ -81,6 +92,19 @@ export const IdleCalendar: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  play: async () => {
+    const dialog = await findDialog()
+    await waitFor(() => {
+      expect(
+        within(dialog).getByRole('button', { name: t('common:importDialog.chooseFile') }),
+      ).toBeVisible()
+      expect(
+        within(dialog).getByRole('button', { name: t('common:importDialog.fromClipboard') }),
+      ).toBeVisible()
+      expect(within(dialog).getByText(t('common:importDialog.hint'))).toBeVisible()
+      expect(within(dialog).getByRole('button', { name: t('common:cancel') })).toBeVisible()
+    }, WAIT)
+  },
 }
 
 // Idle — story import; title-copy variation.
@@ -140,13 +164,32 @@ export const MetaError_NotAventuras: Story = {
   render: () => (
     <ControlledDialog
       initialOpen
-      initialState={{ kind: 'meta-error', copy: '⚠ This isn’t an Aventuras file.' }}
+      initialState={{ kind: 'meta-error', copy: t('common:importDialog.meta.notAventuras') }}
       format="aventuras-calendar"
       title="Import calendar"
       payloadKey="calendar"
       schema={CalendarStubSchema}
     />
   ),
+  // A forced error survives mount but not a close and reopen.
+  play: async () => {
+    const dialog = await findDialog()
+    await waitFor(() => {
+      expect(within(dialog).getByRole('alert')).toBeVisible()
+    }, WAIT)
+    await userEvent.click(within(dialog).getByRole('button', { name: t('common:cancel') }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    }, WAIT)
+    await userEvent.click(screen.getByRole('button', { name: 'Open import dialog' }))
+    const reopened = await findDialog()
+    await waitFor(() => {
+      expect(
+        within(reopened).getByRole('button', { name: t('common:importDialog.chooseFile') }),
+      ).toBeVisible()
+    }, WAIT)
+    expect(within(reopened).queryByRole('alert')).toBeNull()
+  },
 }
 
 // Meta-error: wrong kind — Story envelope into a Calendar dialog.
@@ -156,7 +199,10 @@ export const MetaError_WrongKind: Story = {
       initialOpen
       initialState={{
         kind: 'meta-error',
-        copy: '⚠ This is a different kind of Aventuras file (got aventuras-story, expected aventuras-calendar).',
+        copy: t('common:importDialog.meta.wrongKind', {
+          got: 'aventuras-story',
+          expected: 'aventuras-calendar',
+        }),
       }}
       format="aventuras-calendar"
       title="Import calendar"
@@ -173,7 +219,7 @@ export const MetaError_NewerVersion: Story = {
       initialOpen
       initialState={{
         kind: 'meta-error',
-        copy: '⚠ This file is from a newer version. Update Aventuras to import.',
+        copy: t('common:importDialog.meta.newerVersion'),
       }}
       format="aventuras-calendar"
       title="Import calendar"
@@ -181,6 +227,20 @@ export const MetaError_NewerVersion: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  play: async () => {
+    const dialog = await findDialog()
+    const alert = within(dialog).getByRole('alert')
+    await waitFor(() => {
+      expect(within(alert).getByText(t('common:importDialog.meta.newerVersion'))).toBeVisible()
+    }, WAIT)
+    // import-dialog.md → Accessibility: the ⚠ is visual emphasis only. Web hides the glyph
+    // span; native reads the parent's glyph-free label.
+    expect(within(alert).getByText('⚠')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(alert).getByText(t('common:importDialog.meta.newerVersion'))).toHaveAttribute(
+      'aria-label',
+      t('common:importDialog.meta.newerVersion'),
+    )
+  },
 }
 
 // Meta-error: clipboard returned an empty string.
@@ -188,7 +248,7 @@ export const MetaError_ClipboardEmpty: Story = {
   render: () => (
     <ControlledDialog
       initialOpen
-      initialState={{ kind: 'meta-error', copy: '⚠ Clipboard is empty.' }}
+      initialState={{ kind: 'meta-error', copy: t('common:importDialog.read.clipboardEmpty') }}
       format="aventuras-calendar"
       title="Import calendar"
       payloadKey="calendar"
@@ -215,6 +275,32 @@ export const PayloadError_Collapsed: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  play: async () => {
+    const dialog = await findDialog()
+    const alert = within(dialog).getByRole('alert')
+    await waitFor(() => {
+      expect(
+        within(alert).getByText(t('common:importDialog.invalidFormat', { count: 3 })),
+      ).toBeVisible()
+    }, WAIT)
+    expect(within(alert).getByText('⚠')).toHaveAttribute('aria-hidden', 'true')
+    expect(
+      within(alert).getByText(t('common:importDialog.invalidFormat', { count: 3 })),
+    ).toHaveAttribute('aria-label', t('common:importDialog.invalidFormat', { count: 3 }))
+    await userEvent.click(
+      within(alert).getByRole('button', { name: t('common:importDialog.showDetails') }),
+    )
+    const line = t('common:importDialog.issue', {
+      path: 'calendar.units[0].name',
+      message: 'Required.',
+    })
+    await waitFor(() => {
+      expect(within(alert).getByText(`• ${line}`)).toBeVisible()
+    }, WAIT)
+    expect(
+      within(alert).getByRole('button', { name: t('common:importDialog.hideDetails') }),
+    ).toHaveAttribute('aria-expanded', 'true')
+  },
 }
 
 // Payload-error expanded — defaults open by clicking the toggle in this story.
@@ -266,6 +352,55 @@ export const PayloadError_Expanded: Story = {
   },
 }
 
+const closedDuringReadSpy = fn()
+
+// Cancel while the clipboard read is pending: the late result must not reach the host.
+export const ClosedDuringRead: Story = {
+  render: () => (
+    <ControlledDialog
+      initialOpen
+      format="aventuras-calendar"
+      title="Import calendar"
+      payloadKey="calendar"
+      schema={CalendarStubSchema}
+      onValidated={closedDuringReadSpy}
+    />
+  ),
+  play: async () => {
+    closedDuringReadSpy.mockClear()
+    let resolveRead: (text: string) => void = () => {}
+    const read = spyOn(navigator.clipboard, 'readText').mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve
+        }),
+    )
+    try {
+      const dialog = await findDialog()
+      await userEvent.click(
+        await within(dialog).findByRole('button', { name: t('common:importDialog.fromClipboard') }),
+      )
+      await waitFor(() => expect(read).toHaveBeenCalled(), WAIT)
+      await userEvent.click(within(dialog).getByRole('button', { name: t('common:cancel') }))
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).toBeNull()
+      }, WAIT)
+      resolveRead(
+        JSON.stringify({
+          format: 'aventuras-calendar',
+          formatVersion: '1.0',
+          calendar: { units: [{ name: 'day', length: 1 }], eras: ['Age'] },
+        }),
+      )
+      // Let the pipeline's settle handlers run before asserting nothing happened.
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(closedDuringReadSpy).not.toHaveBeenCalled()
+    } finally {
+      read.mockRestore()
+    }
+  },
+}
+
 // Closed — host wiring demo; user clicks Button to open.
 export const Closed: Story = {
   render: () => (
@@ -277,4 +412,147 @@ export const Closed: Story = {
       schema={StoryStubSchema}
     />
   ),
+}
+
+function envelope(format: string, formatVersion: string, payloadKey: string, payload: unknown) {
+  return JSON.stringify({
+    format,
+    formatVersion,
+    exportedAt: '2026-10-07T00:00:00.000Z',
+    [payloadKey]: payload,
+  })
+}
+
+function HostDialog<TPayload>({ config }: { config: ImportDialogConfig<TPayload> }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <View className="p-4">
+      <ImportDialog<TPayload>
+        {...config}
+        open={open}
+        onOpenChange={setOpen}
+        onValidated={() => {}}
+      />
+    </View>
+  )
+}
+
+type HostSlot<TPayload> = {
+  config: () => ImportDialogConfig<TPayload>
+  title: () => string
+  /** From data-model.md's kinds table, never read from the config under test. */
+  format: `aventuras-${string}`
+  payloadKey: string
+}
+
+// Clipboard read stubbed; the meta-check and banner are the real pipeline's, on the host's config.
+async function pasteIntoHost(title: string, raw: string): Promise<HTMLElement> {
+  const read = spyOn(navigator.clipboard, 'readText').mockResolvedValue(raw)
+  try {
+    const dialog = await screen.findByRole('dialog', { name: title }, WAIT)
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('common:importDialog.fromClipboard') }),
+    )
+    const alert = await within(dialog).findByRole('alert', {}, WAIT)
+    expect(read).toHaveBeenCalledTimes(1)
+    return alert
+  } finally {
+    read.mockRestore()
+  }
+}
+
+/** import-dialog.md → Stage 2: every host turns a `formatVersion: "2.0"` file away. */
+function newerVersionStory<TPayload>(slot: HostSlot<TPayload>): Story {
+  return {
+    render: () => <HostDialog config={slot.config()} />,
+    play: async () => {
+      const alert = await pasteIntoHost(
+        slot.title(),
+        envelope(slot.format, '2.0', slot.payloadKey, {}),
+      )
+      await waitFor(() => {
+        expect(alert).toHaveTextContent(t('common:importDialog.meta.newerVersion'))
+      }, WAIT)
+    },
+  }
+}
+
+export const HostCharacters_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('character'),
+  title: () => t('world:import.title.character'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostLocations_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('location'),
+  title: () => t('world:import.title.location'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostItems_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('item'),
+  title: () => t('world:import.title.item'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostFactions_NewerVersion = newerVersionStory({
+  config: () => entityImportDialog('faction'),
+  title: () => t('world:import.title.faction'),
+  format: 'aventuras-entity',
+  payloadKey: 'entity',
+})
+
+export const HostLore_NewerVersion = newerVersionStory({
+  config: loreImportDialog,
+  title: () => t('world:import.title.lore'),
+  format: 'aventuras-lore',
+  payloadKey: 'lore',
+})
+
+export const HostThreads_NewerVersion = newerVersionStory({
+  config: threadImportDialog,
+  title: () => t('plot:import.title.thread'),
+  format: 'aventuras-thread',
+  payloadKey: 'thread',
+})
+
+export const HostHappenings_NewerVersion = newerVersionStory({
+  config: happeningImportDialog,
+  title: () => t('plot:import.title.happening'),
+  format: 'aventuras-happening',
+  payloadKey: 'happening',
+})
+
+// import-dialog.md → World per-row entity import: a valid location in the Characters slot is a
+// payload error with one issue at `kind`, never a wrong-kind row.
+export const HostCharacters_WrongKind: Story = {
+  render: () => <HostDialog config={entityImportDialog('character')} />,
+  play: async () => {
+    const location = {
+      kind: 'location',
+      name: 'The Drowned Market',
+      status: 'active',
+      injectionMode: 'auto',
+    }
+    const alert = await pasteIntoHost(
+      t('world:import.title.character'),
+      envelope('aventuras-entity', '1.0', 'entity', location),
+    )
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(t('common:importDialog.invalidFormat', { count: 1 }))
+    }, WAIT)
+    await userEvent.click(
+      within(alert).getByRole('button', { name: t('common:importDialog.showDetails') }),
+    )
+    const line = t('common:importDialog.issue', {
+      path: 'kind',
+      message: t('common:avts.issue.expectedKind.character'),
+    })
+    await waitFor(() => {
+      expect(alert).toHaveTextContent(line)
+    }, WAIT)
+  },
 }

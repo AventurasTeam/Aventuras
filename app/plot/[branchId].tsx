@@ -6,11 +6,14 @@ import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
+import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { HappeningDetailPane } from '@/components/plot/happening-detail-pane'
 import { plotAddOptions } from '@/components/plot/plot-add-options'
+import { importFailureText, importRejectionText } from '@/components/plot/plot-copy'
 import { PlotDetailEmpty } from '@/components/plot/plot-detail-empty'
+import { happeningImportDialog, threadImportDialog } from '@/components/plot/plot-import'
 import { PlotListPane, type PlotListPaneHandle } from '@/components/plot/plot-list-pane'
 import { distinctCategories, happeningLinksFor } from '@/components/plot/plot-route-data'
 import {
@@ -42,11 +45,20 @@ import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useRouteLink } from '@/hooks/use-route-link'
+import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import { useTier } from '@/hooks/use-tier'
-import { saveHappening, saveThread } from '@/lib/actions'
+import {
+  importHappening,
+  importThread,
+  saveHappening,
+  saveThread,
+  type ImportRejectionCode,
+} from '@/lib/actions'
+import type { HappeningImport, ThreadImport } from '@/lib/avts'
 import { db, runInTransaction, type Entity } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import type { HappeningFilter, PlotKind, PlotListSignals, ThreadFilter } from '@/lib/list-modules'
 import {
@@ -158,15 +170,59 @@ export default function PlotRoute() {
     if (!focused) cancelDelete()
   }, [focused, cancelDelete])
 
+  const onImported = useCallback(() => toast.success(t('plot:import.imported')), [])
+  const onImportRejected = useCallback(
+    (code: ImportRejectionCode) => toast.error(importRejectionText(code)),
+    [],
+  )
+  const onImportFailed = useCallback(
+    (error: unknown) => {
+      logger.error('app.plot_import_failed', {
+        branchId,
+        kind,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      toast.error(importFailureText())
+    },
+    [branchId, kind],
+  )
+  const commitThread = useCallback(
+    (payload: ThreadImport) => importThread(branchId, payload, ctx),
+    [branchId],
+  )
+  const commitHappening = useCallback(
+    (payload: HappeningImport) => importHappening(branchId, payload, ctx),
+    [branchId],
+  )
+  const importHost = {
+    blocked: editBlocked,
+    focused,
+    guard,
+    select,
+    onImported,
+    onRejected: onImportRejected,
+    onFailed: onImportFailed,
+  }
+  const threadImport = useRowImport<ThreadImport>({ ...importHost, commit: commitThread })
+  const happeningImport = useRowImport<HappeningImport>({ ...importHost, commit: commitHappening })
+  const activeImport = kind === 'thread' ? threadImport : happeningImport
+  const setThreadImportOpen = threadImport.onOpenChange
+  const setHappeningImportOpen = happeningImport.onOpenChange
+  const closeImports = useCallback(() => {
+    setThreadImportOpen(false)
+    setHappeningImportOpen(false)
+  }, [setThreadImportOpen, setHappeningImportOpen])
+
   const switchKind = useCallback(
     (next: PlotKind) => {
+      closeImports()
       setKind(next)
       select(null)
       setThreadFilter('all')
       setHappeningFilter('all')
       setSearch('')
     },
-    [select],
+    [select, closeImports],
   )
   const selectKind = useCallback(
     (next: PlotKind) => guard(() => switchKind(next)),
@@ -444,10 +500,10 @@ export default function PlotRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={plotAddLabel(kind)}
-                    options={plotAddOptions(() => guard(startCreate), {
-                      disabled: editBlocked,
-                      disabledReason: gateReason,
-                    })}
+                    options={plotAddOptions(
+                      { onBlank: () => guard(startCreate), onJson: activeImport.request },
+                      { disabled: editBlocked, disabledReason: gateReason },
+                    )}
                     open={addOpen}
                     onOpenChange={setAddOpen}
                   />
@@ -468,6 +524,21 @@ export default function PlotRoute() {
           onConfirm={plotDelete.confirm}
         />
       ) : null}
+      {kind === 'thread' ? (
+        <ImportDialog<ThreadImport>
+          {...threadImportDialog()}
+          open={threadImport.open}
+          onOpenChange={threadImport.onOpenChange}
+          onValidated={threadImport.onValidated}
+        />
+      ) : (
+        <ImportDialog<HappeningImport>
+          {...happeningImportDialog()}
+          open={happeningImport.open}
+          onOpenChange={happeningImport.onOpenChange}
+          onValidated={happeningImport.onValidated}
+        />
+      )}
     </ScreenShell>
   )
 }

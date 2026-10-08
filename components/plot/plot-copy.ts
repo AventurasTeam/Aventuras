@@ -4,7 +4,7 @@ import {
   type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
 import type { SelectOption } from '@/components/ui/select'
-import { PLOT_REJECTION, type RowSaveRejectionCode } from '@/lib/actions'
+import { PLOT_REJECTION, type ImportRejectionCode, type RowSaveRejectionCode } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 import { isPlotIssue, type HappeningDraft, type PlotIssue, type ThreadDraft } from '@/lib/plot'
@@ -36,6 +36,20 @@ export function saveRejectionText(code: RowSaveRejectionCode): string {
 
 export function saveFailureText(): string {
   return t('plot:save.failed')
+}
+
+const IMPORT_REJECTION_TEXT: Record<ImportRejectionCode, () => string> = {
+  [PLOT_REJECTION.inFlight]: () => t('plot:import.inFlight'),
+  [PLOT_REJECTION.failed]: () => t('plot:import.failed'),
+}
+
+/** A refused import's text; the dialog has closed, so unlike a save nothing is kept to retry. */
+export function importRejectionText(code: ImportRejectionCode): string {
+  return IMPORT_REJECTION_TEXT[code]()
+}
+
+export function importFailureText(): string {
+  return t('plot:import.failed')
 }
 
 /** The category Autocomplete's create-tail row. */
@@ -96,10 +110,14 @@ export function happeningIssueText(message: string): string {
     : t('plot:validation.inTab', { tab: happeningFieldLabel(tab), issue: text })
 }
 
+/** plot.md → Detail-head overflow menu: World's order, minus `Set as lead`. */
 export function plotMenuEntries(
   kind: PlotKind,
-  onViewJson: () => void,
-  remove?: RemoveEntry,
+  {
+    onViewJson,
+    onExport,
+    remove,
+  }: { onViewJson: () => void; onExport: () => void; remove?: RemoveEntry },
 ): OverflowMenuEntry[] {
   return [
     {
@@ -108,9 +126,7 @@ export function plotMenuEntries(
         kind === 'thread'
           ? t('plot:detail.menu.exportThread')
           : t('plot:detail.menu.exportHappening'),
-      disabled: true,
-      disabledReason: t('plot:detail.menu.exportReason'),
-      onPress: () => {},
+      onPress: onExport,
     },
     { key: 'json', label: t('plot:detail.menu.viewJson'), onPress: onViewJson },
     ...deleteEntry(

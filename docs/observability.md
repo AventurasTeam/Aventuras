@@ -266,7 +266,22 @@ convention, and the expectation that subsystems route through
   `deleteRow` threw rather than refused), `plot_delete_failed`
   (`components/plot/use-plot-delete.ts` — its Plot twin, a confirmed
   `⋯ → Delete thread` / `Delete happening` whose `deleteRow` threw
-  rather than refused), `plot_link_revalidate_failed`
+  rather than refused), `world_import_failed` (`app/world/[branchId].tsx`
+  — a `From JSON file…` import whose `importEntity` / `importLore`
+  threw rather than refused; the dialog has already closed, so the
+  user sees a toast) and its Plot twin `plot_import_failed`
+  (`app/plot/[branchId].tsx`, `importThread` / `importHappening`),
+  `row_export_failed` (`components/compounds/row-detail-frame.tsx` —
+  a `⋯ → Export … as JSON` whose file build (the row's serializer)
+  threw or whose `saveAvtsFile` rejected; the user sees
+  `Couldn’t export the file.` A desktop download that fails after the
+  hand-off never rejects, so it isn't logged until
+  [M9.4](./implementation/roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate)),
+  `import_read_failed` (warn,
+  `components/compounds/import-dialog-pipeline.ts` — an `ImportDialog`
+  file or clipboard read that threw, other than a cancelled picker or
+  an empty clipboard; the user sees the read-error banner),
+  `plot_link_revalidate_failed`
   (`components/plot/link-card.tsx` — the revalidation after a link row's
   removal rejected, leaving a stale duplicate error blocking Save) and
   its World twins `world_relationships_revalidate_failed`

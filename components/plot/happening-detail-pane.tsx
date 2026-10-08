@@ -1,31 +1,26 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleDot } from 'lucide-react-native'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Controller, useWatch, type Control } from 'react-hook-form'
 import { View } from 'react-native'
 
-import { DetailTabs } from '@/components/compounds/detail-tabs'
 import { EntryRefPicker } from '@/components/compounds/entry-ref-picker'
 import { FormRow } from '@/components/compounds/form-row'
 import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
-import { JSONViewer } from '@/components/compounds/json-viewer'
-import { OverflowMenu } from '@/components/compounds/overflow-menu'
-import { RowLeaveDialog, RowSaveBar } from '@/components/compounds/row-save-session-chrome'
+import { RowDetailFrame } from '@/components/compounds/row-detail-frame'
 import { SwitchRow } from '@/components/compounds/switch-row'
 import { HistoryTab } from '@/components/history/history-tab'
-import { DetailPane } from '@/components/shells/detail-pane'
 import { Autocomplete } from '@/components/ui/autocomplete'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Icon } from '@/components/ui/icon'
-import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { Tag } from '@/components/ui/tag'
+import { TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
+import { happeningExport } from '@/lib/avts'
 import type { Entity, Happening } from '@/lib/db'
 import type { EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
@@ -145,8 +140,11 @@ export function HappeningDetailPane({
   })
   const { control, trigger } = session.form
 
-  const [tab, setTab] = useCreateResetTab<string>(createSeq, 'overview', initialTab ?? 'overview')
-  const [jsonOpen, setJsonOpen] = useState(false)
+  const [tab, setTab] = useCreateResetTab<HappeningTab>(
+    createSeq,
+    'overview',
+    initialTab ?? 'overview',
+  )
   const commonKnowledge = useWatch({ control, name: 'commonKnowledge' })
   // Lengths only, so typing in a link row doesn't re-render the whole pane.
   const involvementCount = useWatch({ control, name: 'involvements', compute: (r) => r.length })
@@ -158,127 +156,94 @@ export function HappeningDetailPane({
   }
 
   return (
-    <View className="flex-1">
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 gap-0">
-        <DetailPane
-          nameSlot={
-            <Controller
-              control={control}
-              name="title"
-              render={({ field }) => (
-                <InlineEditableName
-                  value={field.value}
-                  onChange={field.onChange}
-                  savedValue={values.title}
-                  placeholder={t('plot:detail.namePlaceholder')}
-                  size="lg"
-                  disabled={blocked}
-                  disabledReason={blockedReason}
-                />
-              )}
-            />
-          }
-          // plot.md → Self-documenting: the row's ⊙ mirrors beside the Overview toggle, not here.
-          badges={
-            recentlyClassified != null ? (
-              <Tag tone="recently-classified">{t('plot:detail.recentlyClassified')}</Tag>
-            ) : undefined
-          }
-          overflowMenu={
-            <OverflowMenu
-              label={t('plot:detail.menu.label')}
-              entries={plotMenuEntries(
-                'happening',
-                () => setJsonOpen(true),
-                row == null
-                  ? undefined
-                  : {
-                      onDelete: () => onDelete(row),
-                      disabledReason: gateDisabledReason(blocked, blockedReason),
-                    },
-              )}
-              disabled={row == null}
-            />
-          }
-          tabs={
-            <DetailTabs
-              tabs={HAPPENING_TABS.map((value) => ({
-                value,
-                label: t(`plot:detail.tabs.${value}`),
-                count: tabCounts[value],
-              }))}
-              value={tab}
-              onValueChange={setTab}
-              selectLabel={t('plot:detail.tabSelect')}
-            />
-          }
-          saveBar={
-            <RowSaveBar
-              session={session}
-              enabled={hotkeysEnabled}
-              blocked={blocked}
-              blockedReason={blockedReason}
-            />
-          }
-        >
-          <TabsContent value="overview">
-            <HappeningOverviewForm
-              control={control}
-              row={row}
-              entries={entries}
-              categories={categories}
-              blocked={blocked}
-              blockedReason={blockedReason}
-            />
-          </TabsContent>
-          <TabsContent value="involvements">
-            <InvolvementsEditor
-              control={control}
-              trigger={trigger}
-              entities={entities}
-              blocked={blocked}
-              blockedReason={blockedReason}
-              onOpenEntity={onOpenEntity}
-            />
-          </TabsContent>
-          <TabsContent value="awareness">
-            {/* The rows stay in the draft, still validated and saved; toggling off shows them again. */}
-            {commonKnowledge ? (
-              <CommonKnowledgeNotice />
-            ) : (
-              <AwarenessEditor
-                control={control}
-                trigger={trigger}
-                entities={entities}
-                entries={entries}
-                blocked={blocked}
-                blockedReason={blockedReason}
-                onOpenEntity={onOpenEntity}
-              />
-            )}
-          </TabsContent>
-          <TabsContent value="history">
-            {row == null ? (
-              <EmptyState
-                title={t('history:tab.afterSave')}
-                subtext={t('history:tab.afterSaveBody')}
-              />
-            ) : (
-              <HistoryTab branchId={branchId} targetTable="happenings" targetId={row.id} />
-            )}
-          </TabsContent>
-        </DetailPane>
-      </Tabs>
-      <RowLeaveDialog session={session} blocked={blocked} blockedReason={blockedReason} />
-      {row != null ? (
-        <JSONViewer
-          open={jsonOpen}
-          onOpenChange={setJsonOpen}
-          name={row.title}
-          data={rawHappening(row, links)}
+    <RowDetailFrame
+      session={session}
+      nameField="title"
+      savedName={values.title}
+      namePlaceholder={t('plot:detail.namePlaceholder')}
+      // plot.md → Self-documenting: the row's ⊙ mirrors beside the Overview toggle, not here.
+      recentlyClassifiedLabel={
+        recentlyClassified != null ? t('plot:detail.recentlyClassified') : undefined
+      }
+      menuLabel={t('plot:detail.menu.label')}
+      menuEntries={(actions) =>
+        plotMenuEntries('happening', {
+          ...actions,
+          remove:
+            row == null
+              ? undefined
+              : {
+                  onDelete: () => onDelete(row),
+                  disabledReason: gateDisabledReason(blocked, blockedReason),
+                },
+        })
+      }
+      tab={tab}
+      onTabChange={setTab}
+      tabs={HAPPENING_TABS.map((value) => ({
+        value,
+        label: t(`plot:detail.tabs.${value}`),
+        count: tabCounts[value],
+      }))}
+      tabSelectLabel={t('plot:detail.tabSelect')}
+      committed={
+        row == null
+          ? null
+          : {
+              id: row.id,
+              name: row.title,
+              json: rawHappening(row, links),
+              exportFile: () => happeningExport(row, new Date()),
+            }
+      }
+      blocked={blocked}
+      blockedReason={blockedReason}
+      hotkeysEnabled={hotkeysEnabled}
+    >
+      <TabsContent value="overview">
+        <HappeningOverviewForm
+          control={control}
+          row={row}
+          entries={entries}
+          categories={categories}
+          blocked={blocked}
+          blockedReason={blockedReason}
         />
-      ) : null}
-    </View>
+      </TabsContent>
+      <TabsContent value="involvements">
+        <InvolvementsEditor
+          control={control}
+          trigger={trigger}
+          entities={entities}
+          blocked={blocked}
+          blockedReason={blockedReason}
+          onOpenEntity={onOpenEntity}
+        />
+      </TabsContent>
+      <TabsContent value="awareness">
+        {/* The rows stay in the draft, still validated and saved; toggling off shows them again. */}
+        {commonKnowledge ? (
+          <CommonKnowledgeNotice />
+        ) : (
+          <AwarenessEditor
+            control={control}
+            trigger={trigger}
+            entities={entities}
+            entries={entries}
+            blocked={blocked}
+            blockedReason={blockedReason}
+            onOpenEntity={onOpenEntity}
+          />
+        )}
+      </TabsContent>
+      <TabsContent value="history">
+        {row == null ? (
+          <EmptyState title={t('history:tab.afterSave')} subtext={t('history:tab.afterSaveBody')} />
+        ) : (
+          <HistoryTab branchId={branchId} targetTable="happenings" targetId={row.id} />
+        )}
+      </TabsContent>
+    </RowDetailFrame>
   )
 }
 

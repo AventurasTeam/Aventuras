@@ -1,22 +1,27 @@
 import type { ImporterMenuOption } from '@/components/compounds/importer-menu'
 import { t } from '@/lib/i18n'
 
-type BlankGate = { disabled?: boolean; disabledReason?: string }
+type AddGate = { disabled?: boolean; disabledReason?: string }
 
-export function worldAddOptions(onBlank: () => void, blank: BlankGate): ImporterMenuOption[] {
+/** import-dialog.md → Host gating during in-flight generation: Blank and From JSON share it. */
+export function worldAddOptions(
+  { onBlank, onJson }: { onBlank: () => void; onJson: () => void },
+  gate: AddGate,
+): ImporterMenuOption[] {
   return [
     {
       key: 'blank',
       label: t('world:addMenu.blank'),
-      disabled: blank.disabled,
-      disabledReason: blank.disabledReason,
+      disabled: gate.disabled,
+      disabledReason: gate.disabledReason,
       onPress: onBlank,
     },
     {
       key: 'json',
       label: t('world:addMenu.fromJson'),
-      disabled: true,
-      disabledReason: t('world:addMenu.fromJsonReason'),
+      disabled: gate.disabled,
+      disabledReason: gate.disabledReason,
+      onPress: onJson,
     },
     {
       key: 'vault',

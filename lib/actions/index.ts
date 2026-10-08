@@ -1,4 +1,12 @@
 export {
+  importEntity,
+  importHappening,
+  importLore,
+  importThread,
+  type ImportRejectionCode,
+  type ImportRowResult,
+} from './avts/import-rows'
+export {
   readClassifierStatus,
   resetStuckClassifierRunState,
   unprocessedEntryCount,

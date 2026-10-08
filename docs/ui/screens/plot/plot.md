@@ -321,8 +321,15 @@ Same compound and menu order as
 [World's detail-head `⋯`](../world/world.md#detail-head-structure),
 minus `Set as lead` (threads and happenings have no lead concept):
 
-- `Export thread as JSON` / `Export happening as JSON` — disabled,
-  reason "Lands in Slice 4.6".
+- `Export thread as JSON` / `Export happening as JSON` — the row as an
+  `aventuras-thread` or `aventuras-happening` `.avts` file: a download
+  on desktop and web, the OS share sheet on native. A happening's file
+  carries the row alone; its links show only in the raw JSON viewer.
+  A read of the committed row, like `View raw JSON`, so it stays live
+  during generation, per
+  [`principles.md → What's not gated`](../../principles.md#whats-not-gated).
+  With unsaved edits in the pane, the file holds the saved row and a
+  toast says so.
 - `View raw JSON` — live; a happening's viewer merges its
   involvements and awareness rows, per
   [Detail pane — raw JSON viewer](#detail-pane--raw-json-viewer) above.

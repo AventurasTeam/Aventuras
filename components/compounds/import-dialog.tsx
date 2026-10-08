@@ -16,11 +16,13 @@ import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 import {
   EmptyClipboardError,
   FilePickerCancelledError,
+  formatIssueLine,
   useImportPipeline,
   type FlattenedIssue,
   type ImportState,
@@ -48,6 +50,12 @@ type ImportDialogProps<TPayload> = {
   // reaches in response to async I/O.
   _initialState?: ImportState
 }
+
+/** What a host supplies per import slot; it adds `open`, `onOpenChange` and `onValidated`. */
+export type ImportDialogConfig<TPayload> = Pick<
+  ImportDialogProps<TPayload>,
+  'format' | 'supportedMajor' | 'payloadKey' | 'schema' | 'title'
+>
 
 const PAYLOAD_DETAILS_MAX_HEIGHT = 200
 const FILE_ACCEPT = '.avts,.json'
@@ -138,13 +146,15 @@ export function ImportDialog<TPayload>({
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const hiddenInputRef = useRef<HTMLInputElement | null>(null)
 
-  // Reset pipeline + details disclosure each time the dialog opens — picking up
-  // mid-failure from a prior open would surface stale errors.
+  // Closing discards an in-flight read and clears the error; opening covers a dialog mounted
+  // closed with a forced state. Never on mount, so a dialog mounted open keeps `_initialState`.
+  const wasOpen = useRef(open)
   useEffect(() => {
-    if (open) {
+    if (open !== wasOpen.current) {
       pipeline.reset()
       setDetailsExpanded(false)
     }
+    wasOpen.current = open
     // pipeline.reset is stable (useCallback []); avoid re-firing on hook recreation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -198,29 +208,31 @@ export function ImportDialog<TPayload>({
 
         <View className="flex-col gap-2">
           <SourceButton
-            label="Choose .avts file…"
+            label={t('common:importDialog.chooseFile')}
             icon={FileText}
             disabled={isReading}
             loading={readingSource === 'file'}
             onPress={handleFilePress}
           />
           <SourceButton
-            label="Import from clipboard"
+            label={t('common:importDialog.fromClipboard')}
             icon={Clipboard}
             disabled={isReading || !CLIPBOARD_AVAILABLE}
-            disabledReason={CLIPBOARD_AVAILABLE ? undefined : 'Clipboard access not available.'}
+            disabledReason={
+              CLIPBOARD_AVAILABLE ? undefined : t('common:importDialog.clipboardUnavailable')
+            }
             loading={readingSource === 'clipboard'}
             onPress={handleClipboardPress}
           />
         </View>
 
         <Text size="xs" variant="muted">
-          .avts and .json files supported.
+          {t('common:importDialog.hint')}
         </Text>
 
         <DialogFooter>
           <Button variant="ghost" onPress={() => onOpenChange(false)}>
-            <Text>Cancel</Text>
+            <Text>{t('common:cancel')}</Text>
           </Button>
         </DialogFooter>
 
@@ -279,10 +291,21 @@ function MetaErrorBanner({ copy }: { copy: string }) {
         aria-hidden
         style={POINTER_EVENTS_NONE}
       />
-      <Text size="sm" className="text-warning">
+      <Text size="sm" className="text-warning" accessibilityLabel={copy}>
+        <WarningGlyph />
         {copy}
       </Text>
     </View>
+  )
+}
+
+// Emphasis only (import-dialog.md → Accessibility): native keeps nested text, so the parent Text
+// carries a glyph-free label. Repeats the parent's classes: a bare Text is text-fg-primary.
+function WarningGlyph() {
+  return (
+    <Text size="sm" className="text-warning" aria-hidden>
+      {'⚠ '}
+    </Text>
   )
 }
 
@@ -299,7 +322,7 @@ function PayloadErrorBanner({
   onToggleExpand,
   isPhone,
 }: PayloadErrorBannerProps) {
-  const countCopy = issues.length === 1 ? '1 issue.' : `${issues.length} issues.`
+  const summary = t('common:importDialog.invalidFormat', { count: issues.length })
   return (
     <View
       role="alert"
@@ -312,8 +335,9 @@ function PayloadErrorBanner({
         style={POINTER_EVENTS_NONE}
       />
       <View className="flex-row items-center justify-between gap-2">
-        <Text size="sm" className="text-warning">
-          ⚠ Invalid format — {countCopy}
+        <Text size="sm" className="text-warning" accessibilityLabel={summary}>
+          <WarningGlyph />
+          {summary}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -329,7 +353,7 @@ function PayloadErrorBanner({
           )}
         >
           <Text size="xs" className="text-warning">
-            {expanded ? 'Hide details' : 'Show details'}
+            {expanded ? t('common:importDialog.hideDetails') : t('common:importDialog.showDetails')}
           </Text>
           <Icon as={expanded ? ChevronUp : ChevronDown} size="sm" className="text-warning" />
         </Pressable>
@@ -350,7 +374,7 @@ function PayloadIssueList({
     <View className="mt-2 flex-col gap-1">
       {issues.map((issue, idx) => (
         <Text key={`${issue.path}-${idx}`} size="xs" className="text-warning">
-          • {issue.path} — {issue.message}
+          • {formatIssueLine(issue)}
         </Text>
       ))}
     </View>

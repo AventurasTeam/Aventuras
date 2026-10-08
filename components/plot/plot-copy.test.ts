@@ -4,6 +4,8 @@ import {
   happeningIssueText,
   iconFromOption,
   iconOptionValue,
+  importFailureText,
+  importRejectionText,
   plotIconOptions,
   plotMenuEntries,
   saveRejectionText,
@@ -60,16 +62,44 @@ describe('saveRejectionText', () => {
   })
 })
 
+describe('import failure copy', () => {
+  it("names generation in flight, otherwise the generic failure, and doesn't claim kept changes", () => {
+    expect(importRejectionText('in-flight')).toBe(
+      "Couldn't import while generation is in flight. Try again when it finishes.",
+    )
+    expect(importRejectionText('failed')).toBe("Couldn't import that file. Try again.")
+    expect(importFailureText()).toBe("Couldn't import that file. Try again.")
+  })
+})
+
 describe('plotMenuEntries', () => {
-  it('has no delete entry while there is no row yet', () => {
-    const entries = plotMenuEntries('thread', vi.fn())
-    expect(entries.find((e) => e.key === 'delete')).toBeUndefined()
+  const actions = () => ({ onViewJson: vi.fn(), onExport: vi.fn() })
+
+  it('offers a live Export and View raw JSON, and no Delete while there is no row yet', () => {
+    const entries = plotMenuEntries('thread', actions())
+    expect(entries.map((e) => [e.key, e.label, e.disabled ?? false, e.disabledReason])).toEqual([
+      ['export', 'Export thread as JSON', false, undefined],
+      ['json', 'View raw JSON', false, undefined],
+    ])
+  })
+
+  it('routes Export and View raw JSON to their own handlers', () => {
+    const handlers = actions()
+    const entries = plotMenuEntries('happening', handlers)
+    const exportEntry = entries.find((e) => e.key === 'export')
+    expect(exportEntry?.label).toBe('Export happening as JSON')
+    exportEntry?.onPress()
+    expect(handlers.onExport).toHaveBeenCalledTimes(1)
+    expect(handlers.onViewJson).not.toHaveBeenCalled()
+    entries.find((e) => e.key === 'json')?.onPress()
+    expect(handlers.onViewJson).toHaveBeenCalledTimes(1)
+    expect(handlers.onExport).toHaveBeenCalledTimes(1)
   })
 
   it('disables the delete entry with the given reason', () => {
-    const entries = plotMenuEntries('happening', vi.fn(), {
-      onDelete: vi.fn(),
-      disabledReason: 'Generation is in flight. Cancel to edit.',
+    const entries = plotMenuEntries('happening', {
+      ...actions(),
+      remove: { onDelete: vi.fn(), disabledReason: 'Generation is in flight. Cancel to edit.' },
     })
     const remove = entries.find((e) => e.key === 'delete')
     expect(remove?.label).toBe('Delete happening')
@@ -79,7 +109,7 @@ describe('plotMenuEntries', () => {
 
   it('enables the delete entry and calls onDelete otherwise', () => {
     const onDelete = vi.fn()
-    const entries = plotMenuEntries('thread', vi.fn(), { onDelete })
+    const entries = plotMenuEntries('thread', { ...actions(), remove: { onDelete } })
     const remove = entries.find((e) => e.key === 'delete')
     expect(remove?.label).toBe('Delete thread')
     expect(remove?.disabled).toBe(false)
