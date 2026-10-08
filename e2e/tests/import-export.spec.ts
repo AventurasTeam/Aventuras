@@ -16,8 +16,9 @@ import { reader } from '../locators/reader'
 import { toast } from '../locators/toast'
 import { world } from '../locators/world'
 
-// world.md → Per-row import, at the seams only the running app reaches: download, file chooser,
-// clipboard. Unit-covered elsewhere: lib/avts/*.test.ts, lib/actions/avts/import-rows.test.ts.
+// world.md → Per-row import and plot.md → Manual creation + per-row import, at the seams only the
+// running app reaches: download, file chooser, clipboard. Unit-covered elsewhere:
+// lib/avts/*.test.ts, lib/actions/avts/import-rows.test.ts.
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
