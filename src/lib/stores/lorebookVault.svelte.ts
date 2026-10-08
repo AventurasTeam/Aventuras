@@ -42,7 +42,7 @@ class LorebookVaultStore {
     const now = Date.now()
     const lorebook: VaultLorebook = {
       ...input,
-      entries: input.entries.map((e) => withUniqueVaultEntryTerms(e)),
+      entries: input.entries.map(withUniqueVaultEntryTerms),
       id: input.id || crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -56,7 +56,7 @@ class LorebookVaultStore {
 
   async update(id: string, changes: Partial<VaultLorebook>): Promise<void> {
     const updates = changes.entries
-      ? { ...changes, entries: changes.entries.map((e) => withUniqueVaultEntryTerms(e)) }
+      ? { ...changes, entries: changes.entries.map(withUniqueVaultEntryTerms) }
       : changes
     await database.updateVaultLorebook(id, updates)
     this.lorebooks = this.lorebooks.map((lb) =>
@@ -324,7 +324,7 @@ class LorebookVaultStore {
 
     const vaultEntries = entries.map((e) => {
       const { originalData: _originalData, ...rest } = e
-      return rest
+      return withUniqueVaultEntryTerms(rest)
     })
 
     const entryBreakdown: Record<EntryType, number> = {
@@ -425,7 +425,7 @@ class LorebookVaultStore {
 
     const vaultEntries = entries.map((e) => {
       const { originalData: _originalData, ...rest } = e
-      return rest
+      return withUniqueVaultEntryTerms(rest)
     })
 
     const entryBreakdown: Record<EntryType, number> = {
@@ -470,10 +470,11 @@ class LorebookVaultStore {
     file: File,
     parsed: LorebookImportExport.LorebookImportResult,
   ): Promise<void> {
-    const finalData = exchangeToVaultLorebook(
+    const imported = exchangeToVaultLorebook(
       { ...parsed.lorebook!, entries: parsed.entries },
       { id: tempId, originalFilename: file.name },
     )
+    const finalData = { ...imported, entries: imported.entries.map(withUniqueVaultEntryTerms) }
 
     await database.addVaultLorebook(finalData)
     this.lorebooks = this.lorebooks.map((lb) => (lb.id === tempId ? finalData : lb))
