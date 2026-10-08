@@ -583,3 +583,11 @@ slice-planning gate forces its resolution before that slice is planned.
   so a deferral per
   [`code-conventions.md → Type design`](../code-conventions.md#type-design).
   Raised in 4.6's slice review, 2026-10-08.
+- **The World route's collision-dialog blur comment gives the wrong
+  reason.** (2026-10-08) In `app/world/[branchId].tsx`, "The dialog is
+  portaled: left open, it would paint over the screen pushed on top" sits
+  above the effect that closes the collision dialog on focus loss, but
+  `open={focused}` already hides it; what the effect does is keep the
+  dialog from reopening when focus returns. 4.6 moved its import dialogs'
+  copy of the rule into `useRowImport`. Predates 4.6. Raised in 4.6's
+  slice review, 2026-10-08.
