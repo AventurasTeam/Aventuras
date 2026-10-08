@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import type { ZodType } from 'zod'
 
+import { t } from '@/lib/i18n'
+
 export type ReadSource = 'file' | 'clipboard'
 
 export type FlattenedIssue = { path: string; message: string }
@@ -8,6 +10,7 @@ export type FlattenedIssue = { path: string; message: string }
 export type ImportState =
   | { kind: 'idle' }
   | { kind: 'reading'; source: ReadSource }
+  // `copy` is the categorical line without its ⚠; the banner renders the glyph.
   | { kind: 'meta-error'; copy: string }
   | { kind: 'payload-error'; issues: readonly FlattenedIssue[] }
 
@@ -38,41 +41,41 @@ export function parseEnvelope({
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return { kind: 'error', copy: '⚠ This file isn’t valid JSON.' }
+    return { kind: 'error', copy: t('common:importDialog.meta.invalidJson') }
   }
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { kind: 'error', copy: '⚠ This file isn’t valid JSON.' }
+    return { kind: 'error', copy: t('common:importDialog.meta.invalidJson') }
   }
   const env = parsed as Record<string, unknown>
 
   const parsedFormat = env.format
   if (typeof parsedFormat !== 'string' || !parsedFormat.startsWith('aventuras-')) {
-    return { kind: 'error', copy: '⚠ This isn’t an Aventuras file.' }
+    return { kind: 'error', copy: t('common:importDialog.meta.notAventuras') }
   }
   if (parsedFormat !== format) {
     return {
       kind: 'error',
-      copy: `⚠ This is a different kind of Aventuras file (got ${parsedFormat}, expected ${format}).`,
+      copy: t('common:importDialog.meta.wrongKind', { got: parsedFormat, expected: format }),
     }
   }
 
   const parsedVersion = env.formatVersion
   if (typeof parsedVersion !== 'string' || !FORMAT_VERSION_PATTERN.test(parsedVersion)) {
-    return { kind: 'error', copy: '⚠ This file is missing version information.' }
+    return { kind: 'error', copy: t('common:importDialog.meta.missingVersion') }
   }
   const major = Number(parsedVersion.split('.')[0])
   if (major < supportedMajor) {
-    return { kind: 'error', copy: '⚠ This file is from an older version of Aventuras.' }
+    return { kind: 'error', copy: t('common:importDialog.meta.olderVersion') }
   }
   if (major > supportedMajor) {
     return {
       kind: 'error',
-      copy: '⚠ This file is from a newer version. Update Aventuras to import.',
+      copy: t('common:importDialog.meta.newerVersion'),
     }
   }
 
   if (!(payloadKey in env)) {
-    return { kind: 'error', copy: `⚠ This file is missing its ${payloadKey} data.` }
+    return { kind: 'error', copy: t('common:importDialog.meta.missingPayload', { payloadKey }) }
   }
 
   return { kind: 'ok', payload: env[payloadKey] }
@@ -125,10 +128,10 @@ export function flattenIssues(issues: readonly ZodIssueLike[]): FlattenedIssue[]
 
 export function getReadErrorCopy(source: ReadSource, error: unknown): string {
   if (source === 'clipboard') {
-    if (error instanceof EmptyClipboardError) return '⚠ Clipboard is empty.'
-    return '⚠ Clipboard access denied.'
+    if (error instanceof EmptyClipboardError) return t('common:importDialog.read.clipboardEmpty')
+    return t('common:importDialog.read.clipboardDenied')
   }
-  return '⚠ Could not read file.'
+  return t('common:importDialog.read.fileFailed')
 }
 
 // Sentinel thrown by the clipboard reader when the OS returns an empty string —

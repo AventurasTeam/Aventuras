@@ -219,6 +219,31 @@
     "keepBody": "Both \"{{name}}\" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.",
     "failed": "Resolution failed"
   },
+  "importDialog": {
+    "chooseFile": "Choose .avts file…",
+    "fromClipboard": "Import from clipboard",
+    "clipboardUnavailable": "Clipboard access not available.",
+    "hint": ".avts and .json files supported.",
+    "invalidFormat_one": "Invalid format — {{count}} issue.",
+    "invalidFormat_other": "Invalid format — {{count}} issues.",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
+    "issue": "{{path}} — {{message}}",
+    "read": {
+      "fileFailed": "Could not read file.",
+      "clipboardDenied": "Clipboard access denied.",
+      "clipboardEmpty": "Clipboard is empty."
+    },
+    "meta": {
+      "invalidJson": "This file isn’t valid JSON.",
+      "notAventuras": "This isn’t an Aventuras file.",
+      "wrongKind": "This is a different kind of Aventuras file (got {{got}}, expected {{expected}}).",
+      "missingVersion": "This file is missing version information.",
+      "olderVersion": "This file is from an older version of Aventuras.",
+      "newerVersion": "This file is from a newer version. Update Aventuras to import.",
+      "missingPayload": "This file is missing its {{payloadKey}} data."
+    }
+  },
   "modelPicker": {
     "placeholder": "Pick a model",
     "searchPlaceholder": "Search models…",

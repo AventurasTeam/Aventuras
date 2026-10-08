@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 
 import { ImportDialog } from './import-dialog'
 import type { ImportState } from './import-dialog-pipeline'
@@ -70,6 +72,13 @@ export default meta
 
 type Story = StoryObj<typeof ImportDialog>
 
+// CI runs story plays several times slower than local; the default 1s find timeout flakes there.
+const WAIT = { timeout: 5000 }
+
+function findDialog() {
+  return screen.findByRole('dialog', { name: 'Import calendar' }, WAIT)
+}
+
 // Idle — calendar import; default open.
 export const IdleCalendar: Story = {
   render: () => (
@@ -81,6 +90,19 @@ export const IdleCalendar: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  play: async () => {
+    const dialog = await findDialog()
+    await waitFor(() => {
+      expect(
+        within(dialog).getByRole('button', { name: t('common:importDialog.chooseFile') }),
+      ).toBeVisible()
+      expect(
+        within(dialog).getByRole('button', { name: t('common:importDialog.fromClipboard') }),
+      ).toBeVisible()
+      expect(within(dialog).getByText(t('common:importDialog.hint'))).toBeVisible()
+      expect(within(dialog).getByRole('button', { name: t('common:cancel') })).toBeVisible()
+    }, WAIT)
+  },
 }
 
 // Idle — story import; title-copy variation.
@@ -140,7 +162,7 @@ export const MetaError_NotAventuras: Story = {
   render: () => (
     <ControlledDialog
       initialOpen
-      initialState={{ kind: 'meta-error', copy: '⚠ This isn’t an Aventuras file.' }}
+      initialState={{ kind: 'meta-error', copy: t('common:importDialog.meta.notAventuras') }}
       format="aventuras-calendar"
       title="Import calendar"
       payloadKey="calendar"
@@ -156,7 +178,10 @@ export const MetaError_WrongKind: Story = {
       initialOpen
       initialState={{
         kind: 'meta-error',
-        copy: '⚠ This is a different kind of Aventuras file (got aventuras-story, expected aventuras-calendar).',
+        copy: t('common:importDialog.meta.wrongKind', {
+          got: 'aventuras-story',
+          expected: 'aventuras-calendar',
+        }),
       }}
       format="aventuras-calendar"
       title="Import calendar"
@@ -173,7 +198,7 @@ export const MetaError_NewerVersion: Story = {
       initialOpen
       initialState={{
         kind: 'meta-error',
-        copy: '⚠ This file is from a newer version. Update Aventuras to import.',
+        copy: t('common:importDialog.meta.newerVersion'),
       }}
       format="aventuras-calendar"
       title="Import calendar"
@@ -181,6 +206,15 @@ export const MetaError_NewerVersion: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  play: async () => {
+    const dialog = await findDialog()
+    const alert = within(dialog).getByRole('alert')
+    await waitFor(() => {
+      expect(within(alert).getByText(t('common:importDialog.meta.newerVersion'))).toBeVisible()
+    }, WAIT)
+    // import-dialog.md → Accessibility: the ⚠ is visual emphasis only.
+    expect(within(alert).getByText('⚠')).toHaveAttribute('aria-hidden', 'true')
+  },
 }
 
 // Meta-error: clipboard returned an empty string.
@@ -188,7 +222,7 @@ export const MetaError_ClipboardEmpty: Story = {
   render: () => (
     <ControlledDialog
       initialOpen
-      initialState={{ kind: 'meta-error', copy: '⚠ Clipboard is empty.' }}
+      initialState={{ kind: 'meta-error', copy: t('common:importDialog.read.clipboardEmpty') }}
       format="aventuras-calendar"
       title="Import calendar"
       payloadKey="calendar"
@@ -215,6 +249,29 @@ export const PayloadError_Collapsed: Story = {
       schema={CalendarStubSchema}
     />
   ),
+  play: async () => {
+    const dialog = await findDialog()
+    const alert = within(dialog).getByRole('alert')
+    await waitFor(() => {
+      expect(
+        within(alert).getByText(t('common:importDialog.invalidFormat', { count: 3 })),
+      ).toBeVisible()
+    }, WAIT)
+    expect(within(alert).getByText('⚠')).toHaveAttribute('aria-hidden', 'true')
+    await userEvent.click(
+      within(alert).getByRole('button', { name: t('common:importDialog.showDetails') }),
+    )
+    const line = t('common:importDialog.issue', {
+      path: 'calendar.units[0].name',
+      message: 'Required.',
+    })
+    await waitFor(() => {
+      expect(within(alert).getByText(`• ${line}`)).toBeVisible()
+    }, WAIT)
+    expect(
+      within(alert).getByRole('button', { name: t('common:importDialog.hideDetails') }),
+    ).toHaveAttribute('aria-expanded', 'true')
+  },
 }
 
 // Payload-error expanded — defaults open by clicking the toggle in this story.

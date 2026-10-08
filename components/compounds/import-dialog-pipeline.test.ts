@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+import { i18n, t } from '@/lib/i18n'
+
 import {
+  EmptyClipboardError,
   flattenIssues,
   getReadErrorCopy,
   joinIssuePath,
   parseEnvelope,
   truncateMessage,
   truncatePath,
-  EmptyClipboardError,
 } from './import-dialog-pipeline'
 
 const STORY_FORMAT = 'aventuras-story'
@@ -23,141 +25,111 @@ function envelope(overrides?: Record<string, unknown>): string {
   })
 }
 
+function parse(raw: string) {
+  return parseEnvelope({ raw, format: STORY_FORMAT, supportedMajor: 1, payloadKey: STORY_KEY })
+}
+
 describe('parseEnvelope', () => {
   it('returns the payload sub-object on a well-formed envelope', () => {
-    const result = parseEnvelope({
-      raw: envelope(),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
-    })
-    expect(result).toEqual({ kind: 'ok', payload: { title: 'Untitled' } })
+    expect(parse(envelope())).toEqual({ kind: 'ok', payload: { title: 'Untitled' } })
   })
 
   it('flags non-JSON input as an invalid-JSON meta-error', () => {
-    const result = parseEnvelope({
-      raw: 'not json {',
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
+    expect(parse('not json {')).toEqual({
+      kind: 'error',
+      copy: t('common:importDialog.meta.invalidJson'),
     })
-    expect(result).toEqual({ kind: 'error', copy: '⚠ This file isn’t valid JSON.' })
   })
 
   it('flags an array root as invalid JSON (envelope must be a plain object)', () => {
-    const result = parseEnvelope({
-      raw: '[1,2,3]',
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
+    expect(parse('[1,2,3]')).toEqual({
+      kind: 'error',
+      copy: t('common:importDialog.meta.invalidJson'),
     })
-    expect(result).toEqual({ kind: 'error', copy: '⚠ This file isn’t valid JSON.' })
   })
 
   it('flags missing format as not-an-Aventuras-file', () => {
-    const result = parseEnvelope({
-      raw: JSON.stringify({ hello: 'world' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
+    expect(parse(JSON.stringify({ hello: 'world' }))).toEqual({
+      kind: 'error',
+      copy: t('common:importDialog.meta.notAventuras'),
     })
-    expect(result).toEqual({ kind: 'error', copy: '⚠ This isn’t an Aventuras file.' })
   })
 
   it('flags non-aventuras format prefix as not-an-Aventuras-file', () => {
-    const result = parseEnvelope({
-      raw: JSON.stringify({ format: 'something-else', formatVersion: '1.0' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
+    expect(parse(JSON.stringify({ format: 'something-else', formatVersion: '1.0' }))).toEqual({
+      kind: 'error',
+      copy: t('common:importDialog.meta.notAventuras'),
     })
-    expect(result).toEqual({ kind: 'error', copy: '⚠ This isn’t an Aventuras file.' })
   })
 
-  it('flags format mismatch with both expected + got values in the copy', () => {
-    const result = parseEnvelope({
-      raw: envelope({ format: CALENDAR_FORMAT }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
+  it('flags format mismatch with both expected and got values in the copy', () => {
+    const result = parse(envelope({ format: CALENDAR_FORMAT }))
+    expect(result).toEqual({
+      kind: 'error',
+      copy: t('common:importDialog.meta.wrongKind', {
+        got: CALENDAR_FORMAT,
+        expected: STORY_FORMAT,
+      }),
     })
-    expect(result.kind).toBe('error')
     if (result.kind !== 'error') return
     expect(result.copy).toContain(STORY_FORMAT)
     expect(result.copy).toContain(CALENDAR_FORMAT)
   })
 
   it('enforces case-sensitive format match', () => {
-    const result = parseEnvelope({
-      raw: envelope({ format: 'Aventuras-Story' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
-    })
     // 'Aventuras-Story' doesn't start with 'aventuras-' (case-sensitive),
     // so it falls into the not-an-Aventuras-file branch rather than mismatch.
-    expect(result).toEqual({ kind: 'error', copy: '⚠ This isn’t an Aventuras file.' })
+    expect(parse(envelope({ format: 'Aventuras-Story' }))).toEqual({
+      kind: 'error',
+      copy: t('common:importDialog.meta.notAventuras'),
+    })
   })
 
   it('rejects single-component or v-prefixed versions', () => {
     for (const bad of ['1', '1.0.0', 'v1.0', '', 'major.minor']) {
-      const result = parseEnvelope({
-        raw: envelope({ formatVersion: bad }),
-        format: STORY_FORMAT,
-        supportedMajor: 1,
-        payloadKey: STORY_KEY,
+      expect(parse(envelope({ formatVersion: bad }))).toEqual({
+        kind: 'error',
+        copy: t('common:importDialog.meta.missingVersion'),
       })
-      expect(result).toEqual({ kind: 'error', copy: '⚠ This file is missing version information.' })
     }
   })
 
   it('flags older-major as older-version meta-error', () => {
-    const result = parseEnvelope({
-      raw: envelope({ formatVersion: '0.9' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
-    })
-    expect(result).toEqual({
+    expect(parse(envelope({ formatVersion: '0.9' }))).toEqual({
       kind: 'error',
-      copy: '⚠ This file is from an older version of Aventuras.',
+      copy: t('common:importDialog.meta.olderVersion'),
     })
   })
 
   it('flags newer-major as newer-version meta-error', () => {
-    const result = parseEnvelope({
-      raw: envelope({ formatVersion: '2.0' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
-    })
-    expect(result).toEqual({
+    expect(parse(envelope({ formatVersion: '2.0' }))).toEqual({
       kind: 'error',
-      copy: '⚠ This file is from a newer version. Update Aventuras to import.',
+      copy: t('common:importDialog.meta.newerVersion'),
     })
   })
 
   it('accepts higher-minor on the supported major (forward-compat strip behavior)', () => {
-    const result = parseEnvelope({
-      raw: envelope({ formatVersion: '1.5' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
-    })
-    expect(result.kind).toBe('ok')
+    expect(parse(envelope({ formatVersion: '1.5' })).kind).toBe('ok')
   })
 
   it('flags missing payload key with the key name in the copy', () => {
-    const result = parseEnvelope({
-      raw: JSON.stringify({ format: STORY_FORMAT, formatVersion: '1.0' }),
-      format: STORY_FORMAT,
-      supportedMajor: 1,
-      payloadKey: STORY_KEY,
-    })
+    const result = parse(JSON.stringify({ format: STORY_FORMAT, formatVersion: '1.0' }))
     expect(result).toEqual({
       kind: 'error',
-      copy: '⚠ This file is missing its story data.',
+      copy: t('common:importDialog.meta.missingPayload', { payloadKey: STORY_KEY }),
     })
+    if (result.kind !== 'error') return
+    expect(result.copy).toContain(STORY_KEY)
+  })
+
+  it('resolves its copy when the check fails, in the language active then', async () => {
+    i18n.addResource('fr', 'common', 'importDialog.meta.invalidJson', 'Pas un JSON valide.')
+    await i18n.changeLanguage('fr')
+    try {
+      expect(parse('not json {')).toEqual({ kind: 'error', copy: 'Pas un JSON valide.' })
+    } finally {
+      await i18n.changeLanguage('en')
+    }
   })
 })
 
@@ -229,16 +201,72 @@ describe('flattenIssues', () => {
 
 describe('getReadErrorCopy', () => {
   it('returns the file-read copy for the file source', () => {
-    expect(getReadErrorCopy('file', new Error('I/O'))).toBe('⚠ Could not read file.')
+    expect(getReadErrorCopy('file', new Error('I/O'))).toBe(
+      t('common:importDialog.read.fileFailed'),
+    )
   })
 
   it('returns the empty-clipboard copy when the sentinel is thrown', () => {
-    expect(getReadErrorCopy('clipboard', new EmptyClipboardError())).toBe('⚠ Clipboard is empty.')
+    expect(getReadErrorCopy('clipboard', new EmptyClipboardError())).toBe(
+      t('common:importDialog.read.clipboardEmpty'),
+    )
   })
 
   it('returns access-denied for generic clipboard failures', () => {
     expect(getReadErrorCopy('clipboard', new Error('permission'))).toBe(
-      '⚠ Clipboard access denied.',
+      t('common:importDialog.read.clipboardDenied'),
     )
+  })
+})
+
+// import-dialog.md → Validation pipeline / Dialog body: the English copy, minus the ⚠ the banner adds.
+const CANON_COPY = [
+  ['common:importDialog.chooseFile', 'Choose .avts file…'],
+  ['common:importDialog.fromClipboard', 'Import from clipboard'],
+  ['common:importDialog.clipboardUnavailable', 'Clipboard access not available.'],
+  ['common:importDialog.hint', '.avts and .json files supported.'],
+  ['common:importDialog.showDetails', 'Show details'],
+  ['common:importDialog.hideDetails', 'Hide details'],
+  ['common:importDialog.read.fileFailed', 'Could not read file.'],
+  ['common:importDialog.read.clipboardDenied', 'Clipboard access denied.'],
+  ['common:importDialog.read.clipboardEmpty', 'Clipboard is empty.'],
+  ['common:importDialog.meta.invalidJson', 'This file isn’t valid JSON.'],
+  ['common:importDialog.meta.notAventuras', 'This isn’t an Aventuras file.'],
+  ['common:importDialog.meta.missingVersion', 'This file is missing version information.'],
+  ['common:importDialog.meta.olderVersion', 'This file is from an older version of Aventuras.'],
+  [
+    'common:importDialog.meta.newerVersion',
+    'This file is from a newer version. Update Aventuras to import.',
+  ],
+] as const
+
+// `t` is typed to literal keys; this table's keys are what the assertions check.
+const tKey = t as unknown as (key: string) => string
+
+describe('importDialog copy', () => {
+  it.each(CANON_COPY)('%s reads as the canon line', (key, line) => {
+    expect(tKey(key)).toBe(line)
+  })
+
+  it('interpolates the wrong-kind, missing-payload and issue lines', () => {
+    expect(
+      t('common:importDialog.meta.wrongKind', {
+        got: 'aventuras-story',
+        expected: 'aventuras-calendar',
+      }),
+    ).toBe(
+      'This is a different kind of Aventuras file (got aventuras-story, expected aventuras-calendar).',
+    )
+    expect(t('common:importDialog.meta.missingPayload', { payloadKey: 'entity' })).toBe(
+      'This file is missing its entity data.',
+    )
+    expect(t('common:importDialog.issue', { path: 'kind', message: 'Expected a character.' })).toBe(
+      'kind — Expected a character.',
+    )
+  })
+
+  it('pluralizes the payload-error summary', () => {
+    expect(t('common:importDialog.invalidFormat', { count: 1 })).toBe('Invalid format — 1 issue.')
+    expect(t('common:importDialog.invalidFormat', { count: 3 })).toBe('Invalid format — 3 issues.')
   })
 })
