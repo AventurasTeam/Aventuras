@@ -145,6 +145,9 @@ class UIStore {
   // Gallery image cache - persists across component unmounts
   private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
 
+  // Persists across GalleryTab unmounts.
+  galleryNewestFirst = $state(false)
+
   // Streaming state
   streamingContent = $state('')
   streamingReasoning = $state('')
@@ -398,6 +401,13 @@ class UIStore {
     database
       .setSetting('sidebar_open', this.sidebarOpen.toString())
       .catch((err) => console.warn('[UI] Failed to persist sidebar state:', err))
+  }
+
+  toggleGalleryOrder() {
+    this.galleryNewestFirst = !this.galleryNewestFirst
+    database
+      .setSetting('gallery_newest_first', this.galleryNewestFirst.toString())
+      .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
   }
 
   /**

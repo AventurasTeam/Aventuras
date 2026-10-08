@@ -15,6 +15,8 @@
     ChevronLeft,
     ChevronRight,
     RotateCcw,
+    ClockArrowDown,
+    ClockArrowUp,
   } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
@@ -24,7 +26,9 @@
 
   const SWIPE_THRESHOLD = 50
 
-  let images = $state<EmbeddedImageMeta[]>([])
+  // Always chronological, as loaded and cached in `ui`; `images` is the display order.
+  let loadedImages = $state<EmbeddedImageMeta[]>([])
+  const images = $derived(ui.galleryNewestFirst ? loadedImages.toReversed() : loadedImages)
   // Lazy-loaded base64 payloads, keyed by image id. The grid/lightbox only loads the
   // pixels that are actually visible, so a story with many images never pulls all of
   // them through the SQL/IPC bridge at once (which caused Android OOM crashes).
@@ -160,11 +164,11 @@
     try {
       const loaded = await database.getEmbeddedImageMetaForStory(storyId)
       ui.setGalleryImages(storyId, loaded)
-      images = loaded
+      loadedImages = loaded
     } catch (error) {
       console.error('[Gallery] Failed to load images:', error)
       ui.showToast('Failed to load gallery images', 'error')
-      images = []
+      loadedImages = []
     } finally {
       isLoading = false
     }
@@ -187,13 +191,13 @@
     if (storyId) {
       const cached = ui.getGalleryImages(storyId)
       if (cached) {
-        images = cached
+        loadedImages = cached
         isLoading = false
       } else {
         loadImagesForStory(storyId)
       }
     } else {
-      images = []
+      loadedImages = []
       isLoading = false
     }
   })
@@ -380,6 +384,26 @@
 
       {#if images.length > 0 && !isLoading}
         <div class="flex items-center gap-1.5">
+          <!-- Order toggle -->
+          <Button
+            variant="ghost"
+            size="icon"
+            onclick={() => ui.toggleGalleryOrder()}
+            title={ui.galleryNewestFirst
+              ? 'Newest first (click for oldest first)'
+              : 'Oldest first (click for newest first)'}
+            aria-label={ui.galleryNewestFirst
+              ? 'Newest first (click for oldest first)'
+              : 'Oldest first (click for newest first)'}
+            class="h-8 w-8"
+          >
+            {#if ui.galleryNewestFirst}
+              <ClockArrowDown class="h-3.5 w-3.5" />
+            {:else}
+              <ClockArrowUp class="h-3.5 w-3.5" />
+            {/if}
+          </Button>
+
           <!-- Refresh button -->
           <Button
             variant="ghost"

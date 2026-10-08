@@ -1644,6 +1644,9 @@ class SettingsStore {
       const navPanelOpen = await database.getSetting('nav_panel_open')
       if (navPanelOpen !== null) ui.navPanelOpen = navPanelOpen === 'true'
 
+      const galleryNewestFirst = await database.getSetting('gallery_newest_first')
+      if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
+
       const manualMode = await database.getSetting('advanced_manual_mode')
       if (manualMode !== null) {
         this.advancedRequestSettings.manualMode = manualMode === 'true'
