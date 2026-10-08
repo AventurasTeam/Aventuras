@@ -89,7 +89,7 @@ function ConnectedStage({
   return (
     <EntryIndexReadProvider value={readEntries}>
       <Stage>
-        <ReaderRailColumn data={DATA} isFocused={isFocused} onRowPress={() => {}} />
+        <ReaderRailColumn data={DATA} isFocused={isFocused} />
       </Stage>
     </EntryIndexReadProvider>
   )

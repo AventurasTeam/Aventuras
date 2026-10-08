@@ -12,6 +12,7 @@ import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { railRowHref } from '@/components/reader/rail/rail-modules'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
@@ -1362,7 +1363,17 @@ export default function ReaderComposerRoute() {
           </View>
         </KeyboardInsetColumn>
         {showRail ? (
-          <ReaderRailColumn data={railData} isFocused={isFocused} onRowPress={handleRailRowPress} />
+          <>
+            <ReaderRailColumn data={railData} isFocused={isFocused} />
+            <ReaderPeekDrawer
+              data={railData}
+              isFocused={isFocused}
+              storyId={storyId}
+              blocked={actionsBlocked}
+              blockedReason={gateReason}
+              onNavigate={surfaceNavigate}
+            />
+          </>
         ) : null}
       </View>
       {rollback ? (
