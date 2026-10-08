@@ -87,10 +87,13 @@ macOS-only (guards on `uname`, repo root, tool availability). Steps:
    `CODE_SIGN_STYLE: Manual` into the `aventura_iOS` target's `settings.base`, then
    regenerate the `.xcodeproj` with `xcodegen generate`. This is **the** thing that
    actually disables signing — see §6, failure #4, for why nothing else worked.
-2. **`tauri ios build --target aarch64 --archive-only`** — `aarch64` is the CLI's
-   shorthand for the iOS-device target (`aarch64-sim` and `x86_64` are the others);
-   `--archive-only` stops after `xcodebuild archive`, skipping the CLI's IPA-export
-   phase that requires signing assets. All extra arguments (`--config …` from the
+2. **`tauri ios build --target aarch64 --archive-only --ignore-version-mismatches`** —
+   `aarch64` is the CLI's shorthand for the iOS-device target (`aarch64-sim` and
+   `x86_64` are the others); `--archive-only` stops after `xcodebuild archive`, skipping
+   the CLI's IPA-export phase that requires signing assets. `--ignore-version-mismatches`
+   keeps a minor-version skew between the `@tauri-apps/*` npm packages and the Rust
+   crates (e.g. `@tauri-apps/api` 2.12 vs `tauri` 2.11) from failing the build; aligning
+   them is a lockfile change shared by every platform. All extra arguments (`--config …` from the
    build-version action) are forwarded verbatim, so the CI version rule stays in one
    place.
 3. **Locate the archive** — newest `*_iOS.xcarchive` under

@@ -368,8 +368,10 @@ The `.ipa` is written to the repo root as
 Mechanics worth knowing:
 
 - The script temporarily patches `project.yml` with the four signing-disabled settings and
-  runs `tauri ios build --target aarch64 --archive-only`, which stops after `xcodebuild
-  archive` and skips the CLI's IPA-export phase (the part that requires signing). Do not
+  runs `tauri ios build --target aarch64 --archive-only --ignore-version-mismatches`, which
+  stops after `xcodebuild archive` and skips the CLI's IPA-export phase (the part that
+  requires signing); the last flag stops an npm/crate minor-version skew of the Tauri
+  packages from failing the iOS leg. Do not
   rely on the CLI's own `CODE_SIGNING_*` defaults or xcodebuild runner args for this:
   neither reaches the signing validation inside `xcodebuild archive` — the patch is what
   disables signing, and it is restored on exit.
