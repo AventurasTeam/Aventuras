@@ -180,12 +180,16 @@ function migrateVisualDescriptors(data: unknown): VisualDescriptors {
 }
 
 function parseInjection(raw: string | null): Entry['injection'] {
-  return uniqueInjectionTerms(raw ? JSON.parse(raw) : { mode: 'keyword', priority: 0 })
+  const stored = raw ? JSON.parse(raw) : null
+  return uniqueInjectionTerms(
+    stored && typeof stored === 'object' ? stored : { mode: 'keyword', keywords: [], priority: 0 },
+  )
 }
 
 function parseVaultEntries(raw: string | null): VaultLorebookEntry[] {
-  const entries: VaultLorebookEntry[] = raw ? JSON.parse(raw) : []
-  return entries.map((e) => withUniqueVaultEntryTerms(e))
+  const stored: unknown = raw ? JSON.parse(raw) : []
+  if (!Array.isArray(stored)) return []
+  return stored.filter((e) => e && typeof e === 'object').map(withUniqueVaultEntryTerms)
 }
 
 class DatabaseService {
@@ -3129,7 +3133,7 @@ class DatabaseService {
         lorebook.id,
         lorebook.name,
         lorebook.description,
-        JSON.stringify(lorebook.entries.map((e) => withUniqueVaultEntryTerms(e))),
+        JSON.stringify(lorebook.entries.map(withUniqueVaultEntryTerms)),
         JSON.stringify(lorebook.tags),
         lorebook.favorite ? 1 : 0,
         lorebook.source,
@@ -3157,7 +3161,7 @@ class DatabaseService {
     }
     if (updates.entries !== undefined) {
       setClauses.push('entries = ?')
-      values.push(JSON.stringify(updates.entries.map((e) => withUniqueVaultEntryTerms(e))))
+      values.push(JSON.stringify(updates.entries.map(withUniqueVaultEntryTerms)))
     }
     if (updates.tags !== undefined) {
       setClauses.push('tags = ?')

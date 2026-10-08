@@ -177,6 +177,32 @@ describe('lorebook terms a row stores with repeats load without them', () => {
     expect(lorebook.entries[0]).toMatchObject({ keywords: CLEAN, aliases: CLEAN, priority: 2 })
   })
 
+  it('an injection stored as JSON null reads as the default', async () => {
+    mocks.select.mockResolvedValueOnce([entryRow({ injection: 'null' })])
+
+    const [entry] = await database.getEntries('s1')
+
+    expect(entry.injection).toEqual({ mode: 'keyword', keywords: [], priority: 0 })
+  })
+
+  it('vault entries stored as something other than a list read as empty', async () => {
+    mocks.select.mockResolvedValueOnce([{ id: 'l1', name: 'Lore', entries: '{}' }])
+
+    const [lorebook] = await database.getVaultLorebooks()
+
+    expect(lorebook.entries).toEqual([])
+  })
+
+  it('a vault entry stored as null is skipped', async () => {
+    mocks.select.mockResolvedValueOnce([
+      { id: 'l1', name: 'Lore', entries: JSON.stringify([null, { name: 'Keep', keywords: [] }]) },
+    ])
+
+    const [lorebook] = await database.getVaultLorebooks()
+
+    expect(lorebook.entries.map((e) => e.name)).toEqual(['Keep'])
+  })
+
   it('terms that differ beyond case and padding stay apart', async () => {
     mocks.select.mockResolvedValueOnce([entryRow({ aliases: JSON.stringify(['Élan', 'Elan']) })])
 
