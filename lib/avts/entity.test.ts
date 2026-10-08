@@ -302,6 +302,7 @@ describe('EntityImportSchema', () => {
       { state: { stackables: { rope: -1 } } },
       ['state', 'stackables', 'rope'],
     ],
+    ['null quantities', { state: { stackables: null } }, ['state', 'stackables']],
   ])('refuses %s at its path', (_case, patch, path) => {
     const issues = issuesOf(EntityImportSchema, { kind: 'character', ...MINIMAL, ...patch })
     expect(issues.map((issue) => issue.path)).toEqual([path])
@@ -327,6 +328,24 @@ describe('EntityImportSchema', () => {
         message: 'This is longer than the field allows.',
       },
       { path: ['state', 'stackables', 'rope'], message: 'This quantity is listed twice.' },
+    ])
+  })
+
+  it('reports a quantity name’s issues beside another quantity’s mistyped count', () => {
+    const stackables = { ['k'.repeat(41)]: 1, Rope: 1, rope: '2' }
+    const issues = issuesOf(EntityImportSchema, {
+      kind: 'character',
+      ...MINIMAL,
+      state: { stackables },
+    })
+    expect(issues.map((issue) => issue.path)).toEqual([
+      ['state', 'stackables', 'rope'],
+      ['state', 'stackables', 'k'.repeat(41)],
+      ['state', 'stackables', 'rope'],
+    ])
+    expect(issues.slice(1).map((issue) => issue.message)).toEqual([
+      'This is longer than the field allows.',
+      'This quantity is listed twice.',
     ])
   })
 

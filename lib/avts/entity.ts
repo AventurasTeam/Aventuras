@@ -53,6 +53,13 @@ const factionState = entityStateSchemaForKind('faction') as StateSchemaWith<'sta
 
 const STACKABLE_KEY_MAX = 40
 
+// The key checks read only keys, so a mistyped count needn't hide them; a fractional
+// count still does, as zod's `.int()` aborts explicitly and that overrides `when`.
+const stackableKeyCheckGate = {
+  when: (payload: { value: unknown }) =>
+    typeof payload.value === 'object' && payload.value !== null,
+}
+
 // The pane draft refuses a blank, repeated or (once trimmed) over-long quantity name;
 // saving would drop a blank one, or keep only one of a repeated one's counts.
 const stackablesField = z
@@ -78,7 +85,7 @@ const stackablesField = z
       }
       seen.add(key)
     }
-  })
+  }, stackableKeyCheckGate)
   .optional()
 
 const characterImportState = characterState
