@@ -493,6 +493,8 @@ export const ExportHandsTheCommittedRow: Story = {
     try {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit The Aetherium' }, WAIT))
       await userEvent.keyboard(' (draft){Enter}')
+      // The draft must differ from the committed row, or the title check below proves nothing.
+      await waitFor(() => expect(screen.getByTestId('save-bar')).toBeVisible(), WAIT)
       await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
       const entry = await screen.findByRole('menuitem', { name: 'Export lore as JSON' }, WAIT)
       await waitFor(() => expect(entry).toBeVisible(), WAIT)
