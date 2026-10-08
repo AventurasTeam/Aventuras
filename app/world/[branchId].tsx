@@ -281,6 +281,16 @@ export default function WorldRoute() {
     onFailed: onImportFailed,
   })
   const activeImport = isEntityCategory(category) ? entityImport : loreImport
+  const setEntityImportOpen = entityImport.onOpenChange
+  const setLoreImportOpen = loreImport.onOpenChange
+  const closeImports = useCallback(() => {
+    setEntityImportOpen(false)
+    setLoreImportOpen(false)
+  }, [setEntityImportOpen, setLoreImportOpen])
+  // The dialog is portaled: left open, it would paint over the screen pushed on top.
+  useEffect(() => {
+    if (!focused) closeImports()
+  }, [focused, closeImports])
   const collision = useCollisionResolve(branchId, ctx, guard)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
@@ -302,12 +312,13 @@ export default function WorldRoute() {
 
   const switchCategory = useCallback(
     (next: WorldCategory) => {
+      closeImports()
       setCategory(next)
       select(null)
       setFilter('all')
       setSearch('')
     },
-    [select],
+    [select, closeImports],
   )
   const selectCategory = useCallback(
     (next: WorldCategory) => guard(() => switchCategory(next)),

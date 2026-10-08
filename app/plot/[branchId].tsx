@@ -218,16 +218,27 @@ export default function PlotRoute() {
     onFailed: onImportFailed,
   })
   const activeImport = kind === 'thread' ? threadImport : happeningImport
+  const setThreadImportOpen = threadImport.onOpenChange
+  const setHappeningImportOpen = happeningImport.onOpenChange
+  const closeImports = useCallback(() => {
+    setThreadImportOpen(false)
+    setHappeningImportOpen(false)
+  }, [setThreadImportOpen, setHappeningImportOpen])
+  // The dialog is portaled: left open, it would paint over the screen pushed on top.
+  useEffect(() => {
+    if (!focused) closeImports()
+  }, [focused, closeImports])
 
   const switchKind = useCallback(
     (next: PlotKind) => {
+      closeImports()
       setKind(next)
       select(null)
       setThreadFilter('all')
       setHappeningFilter('all')
       setSearch('')
     },
-    [select],
+    [select, closeImports],
   )
   const selectKind = useCallback(
     (next: PlotKind) => guard(() => switchKind(next)),
