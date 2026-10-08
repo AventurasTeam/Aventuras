@@ -2,13 +2,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 import { z } from 'zod'
 
 import { TabsContent } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
 import { useRowSaveSession } from '@/hooks/use-row-save-session'
 import type { AvtsFile } from '@/lib/avts'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
@@ -171,5 +172,42 @@ export const CreateModeDisablesTheMenu: Story = {
   play: async () => {
     await expect(await screen.findByRole('button', { name: 'More actions' }, WAIT)).toBeDisabled()
     await expect(screen.getByRole('button', { name: 'Untitled' })).toBeVisible()
+  },
+}
+
+/** A save hand-off that rejects logs the failure and toasts it. */
+export const ExportRejectionToasts: Story = {
+  beforeEach: () => {
+    toastStore.__reset()
+    const blob = spyOn(URL, 'createObjectURL').mockImplementation(() => {
+      throw new Error('blob refused')
+    })
+    const log = spyOn(logger, 'error').mockImplementation(() => {})
+    return () => {
+      blob.mockRestore()
+      log.mockRestore()
+    }
+  },
+  play: async () => {
+    let toasts: ToastItem[] = []
+    const stop = toastStore.subscribe((next) => {
+      toasts = next
+    })
+    try {
+      await openMenuEntry('Export row as JSON')
+      await waitFor(
+        () =>
+          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
+            ['error', t('common:avts.exportFailed')],
+          ]),
+        WAIT,
+      )
+      await expect(logger.error).toHaveBeenCalledWith('app.row_export_failed', {
+        id: 'row_first',
+        error: 'blob refused',
+      })
+    } finally {
+      stop()
+    }
   },
 }
