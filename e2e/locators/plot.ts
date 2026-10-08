@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import type { HappeningFilter, ThreadFilter } from '@/lib/list-modules'
+import type { HappeningFilter, PlotKind, ThreadFilter } from '@/lib/list-modules'
 
 import { t } from '../harness/i18n'
 
@@ -45,6 +45,17 @@ export const plot = {
     page.getByRole('button', { name: t(`plot:add.${kind}`), exact: true }),
   addMenuBlank: (page: Page): Locator =>
     page.getByRole('menuitem', { name: t('plot:addMenu.blank'), exact: true }),
+  // Exact, so it matches only while enabled: a disabled option's name appends its reason.
+  addMenuFromJson: (page: Page): Locator =>
+    page.getByRole('menuitem', { name: t('plot:addMenu.fromJson'), exact: true }),
+
+  // ImportDialog (import-dialog.tsx), named by the per-kind title Plot passes it (plot-import.ts).
+  importDialog: (page: Page, kind: PlotKind): Locator =>
+    page.getByRole('dialog', { name: t(`plot:import.title.${kind}`), exact: true }),
+  importFromClipboard: (page: Page, kind: PlotKind): Locator =>
+    plot
+      .importDialog(page, kind)
+      .getByRole('button', { name: t('common:importDialog.fromClipboard'), exact: true }),
 
   // Tab triggers carry a count suffix on the link tabs.
   tab: (page: Page, tab: 'overview' | 'involvements' | 'awareness' | 'history'): Locator =>
