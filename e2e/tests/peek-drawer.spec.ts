@@ -6,6 +6,7 @@ import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
+import { setWindowHeight } from '../harness/window'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { peek } from '../locators/peek'
@@ -27,6 +28,9 @@ const STAGED_CHARACTER = 'The Ashen Sage'
 // Anchored to an entry in a closed chapter, so the rail files it under Earlier chapters.
 const ANCHORED_HAPPENING = 'The alley ambush'
 const REPLY_MARKER = 'E2E-PEEK-REPLY'
+// Short enough that the Staged tier sits below World's fold once it opens, so only the reveal's
+// scroll can bring the row into view; at the default window it is already on screen.
+const SHORT_WINDOW_HEIGHT = 420
 
 // Seeded ids under a substitutable prefix become `prefix_<uuid>` (docs/testing.md → Substitutable
 // IDs must be real UUIDs), so every id the spec asserts is read by name or title.
@@ -139,7 +143,12 @@ test.describe.serial('Peek drawer', () => {
       peek.setLeadDisabled(page, STAGED_CHARACTER, t('world:detail.menu.setLeadInactive')),
     ).toBeVisible()
     await expect(peek.setLead(page, STAGED_CHARACTER)).toHaveCount(0)
+    // Native-disabled, not merely absent from the accessibility tree by name.
+    await expect(
+      peek.setLeadDisabled(page, STAGED_CHARACTER, t('world:detail.menu.setLeadInactive')),
+    ).toBeDisabled()
 
+    const fullHeight = await setWindowHeight(app, SHORT_WINDOW_HEIGHT)
     await peek.openInWorld(page, STAGED_CHARACTER).click()
     await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${sage}`))
     await expect(world.detailName(page)).toHaveText(STAGED_CHARACTER)
@@ -147,6 +156,7 @@ test.describe.serial('Peek drawer', () => {
     await expect(world.row(page, STAGED_CHARACTER)).toHaveAttribute('aria-selected', 'true')
     await expect(world.row(page, STAGED_CHARACTER)).toBeInViewport()
 
+    await setWindowHeight(app, fullHeight)
     await chrome.back(page).click()
     await page.waitForURL(/\/reader-composer\//)
   })
@@ -180,16 +190,20 @@ test.describe.serial('Peek drawer', () => {
 
     await rail.categoryTrigger(page).click()
     await rail.categoryOption(page, 'happening').click()
-    await rail.tierHeader(page, t('plot:buckets.earlier')).click()
+    const earlier = rail.tierHeader(page, t('plot:buckets.earlier'))
+    await expect(earlier).toHaveAttribute('aria-expanded', 'false')
+    await earlier.click()
     await rail.row(page, ANCHORED_HAPPENING).click()
 
     await expect(peek.region(page, ANCHORED_HAPPENING, 'happening-peek-body')).toContainText(
       t('common:entryRef', { n: Number(position) }),
     )
-    // The counts line alone, so a description that happens to say "2 aware" can't satisfy it.
-    const counts = peek.region(page, ANCHORED_HAPPENING, 'happening-peek-counts')
-    await expect(counts).toContainText(t('reader:peek.involved', { count: involved }))
-    await expect(counts).toContainText(t('reader:peek.aware', { count: aware }))
+    // The whole counts line, so a description that says "2 aware" can't satisfy it and "12
+    // involved" can't pass for "2 involved". Equal seeded counts leave a swap of the two numbers
+    // undetected here; peek-content.stories.tsx seeds distinct ones.
+    await expect(peek.region(page, ANCHORED_HAPPENING, 'happening-peek-counts')).toHaveText(
+      `${t('reader:peek.involved', { count: involved })} · ${t('reader:peek.aware', { count: aware })}`,
+    )
 
     await peek.openInPlot(page, ANCHORED_HAPPENING).click()
     await page.waitForURL(
