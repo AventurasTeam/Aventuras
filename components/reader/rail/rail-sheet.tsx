@@ -69,7 +69,8 @@ export function RailSheet({
 
   // The list's viewport at the list level. The tall peek detent would grow it, and a list
   // scrolled to its end clamps its offset to the bigger viewport; capping the list at its old
-  // height until the Sheet is back down keeps the offset.
+  // height keeps the offset. The cap outlives `←`: it equals the list level's height, and
+  // releasing it relayouts the list mid-settle, when gorhom's scroll lock resets the offset.
   const listHeight = useRef(0)
   const { height: windowHeight } = useWindowDimensions()
   const [cap, setCap] = useState<{ height: number; windowHeight: number } | null>(null)
@@ -123,10 +124,7 @@ export function RailSheet({
           <View
             className="flex-1"
             onLayout={(event) => {
-              const { height } = event.nativeEvent.layout
-              if (heightCap == null) listHeight.current = height
-              // Back down: the Sheet no longer outgrows the cap, which can go.
-              else if (!peeking && height <= heightCap + 1) setCap(null)
+              if (heightCap == null) listHeight.current = event.nativeEvent.layout.height
             }}
           >
             {/* Mounted under the peek so `←` finds the list as it was left, scroll included. */}

@@ -643,8 +643,8 @@ export const ReaderChipBackKeepsScrollMidList: Story = {
   },
 }
 
-/** The cap that holds the offset through the peek is released after `←`. */
-export const ReaderChipCapReleasedAfterBack: Story = {
+/** The cap that holds the offset through the peek outlives `←`, and goes when the Sheet reopens. */
+export const ReaderChipReopenClearsCap: Story = {
   globals: PHONE,
   args: { initialData: LONG_ROSTER },
   render: (args) => <ChipHarness {...args} />,
@@ -653,8 +653,17 @@ export const ReaderChipCapReleasedAfterBack: Story = {
     await peekRow('Zed 02')
     await userEvent.click(peekBack())
     await headIs('character')
+    await waitForMediumDetent()
     await listFillsSheet()
-    await waitFor(() => expect(getComputedStyle(listLayer()).maxHeight).toBe('none'), ANIMATION)
+    // Past the settle: releasing it on `←` relayouts the list while the Sheet settles, which on
+    // native resets the offset of a list scrolled to its end.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await expect(getComputedStyle(listLayer()).maxHeight).not.toBe('none')
+
+    await pressBackdropOver(screen.getByTestId('browse-chip'))
+    await waitFor(() => expect(queryRailDialog()).toBeNull(), ANIMATION)
+    await openChipSheet()
+    await expect(getComputedStyle(listLayer()).maxHeight).toBe('none')
   },
 }
 
