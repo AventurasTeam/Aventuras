@@ -101,12 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   left: on a 30k-delta branch whose tab row has only old deltas, a
   first chunk or search keystroke still takes about 9 ms while the
   next chunk takes under 1 ms (`pnpm bench:history`).
-- **Plot's awareness upsert type duplicates the arm's payload.**
-  `lib/plot/happening-draft.ts` declares a local `AwarenessUpsert` type
-  instead of deriving it from the `upsertHappeningAwareness` payload in
-  `PipelineActionMap`. It is compatible today and can drift silently
-  (4.2c added `retrievalCount` to the arm). Found in 4.2c's Task 3
-  review (2026-10-06).
 - **Undo and redo of a story entry's metadata skip its metadata lock.**
   `withEntryMetadataLock` has four callers (scene fields, world time,
   entity delete, 4.2c's merge); the undo and redo paths for an
