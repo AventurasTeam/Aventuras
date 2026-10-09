@@ -1644,6 +1644,15 @@ class SettingsStore {
       const navPanelOpen = await database.getSetting('nav_panel_open')
       if (navPanelOpen !== null) ui.navPanelOpen = navPanelOpen === 'true'
 
+      const navShowChapters = await database.getSetting('nav_show_chapters')
+      if (navShowChapters !== null) ui.navShowChapters = navShowChapters === 'true'
+
+      const navShowCheckpoints = await database.getSetting('nav_show_checkpoints')
+      if (navShowCheckpoints !== null) ui.navShowCheckpoints = navShowCheckpoints === 'true'
+
+      const navShowFirstLast = await database.getSetting('nav_show_first_last')
+      if (navShowFirstLast !== null) ui.navShowFirstLast = navShowFirstLast === 'true'
+
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
 
@@ -3161,6 +3170,9 @@ class SettingsStore {
     await this.setActivityReporting(this.uiSettings.activityReporting)
     await ui.setNavPanelOpen(false)
     await ui.setGalleryNewestFirst(false)
+    await ui.setNavShowFirstLast(true)
+    await ui.setNavShowChapters(true)
+    await ui.setNavShowCheckpoints(true)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')

@@ -149,6 +149,12 @@ class UIStore {
   private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
 
   galleryNewestFirst = $state(false)
+  /** Whether the landmark list shows chapter starts and where the story continues past the last. */
+  navShowChapters = $state(true)
+  /** Whether the landmark list shows the first and last entry of the branch. */
+  navShowFirstLast = $state(true)
+  /** Whether the landmark list shows checkpoints, and the origin a branch was forked from. */
+  navShowCheckpoints = $state(true)
 
   // Streaming state
   streamingContent = $state('')
@@ -414,6 +420,27 @@ class UIStore {
     return database
       .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
+  }
+
+  setNavShowChapters(show: boolean): Promise<void> {
+    this.navShowChapters = show
+    return database
+      .setSetting('nav_show_chapters', show.toString())
+      .catch((err) => console.warn('[UI] Failed to persist landmark filter:', err))
+  }
+
+  setNavShowCheckpoints(show: boolean): Promise<void> {
+    this.navShowCheckpoints = show
+    return database
+      .setSetting('nav_show_checkpoints', show.toString())
+      .catch((err) => console.warn('[UI] Failed to persist landmark filter:', err))
+  }
+
+  setNavShowFirstLast(show: boolean): Promise<void> {
+    this.navShowFirstLast = show
+    return database
+      .setSetting('nav_show_first_last', show.toString())
+      .catch((err) => console.warn('[UI] Failed to persist landmark filter:', err))
   }
 
   /**
