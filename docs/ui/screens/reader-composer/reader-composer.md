@@ -1337,6 +1337,13 @@ summary, top-down at 440px width:
   the aware count: such a happening skips awareness rows, and any
   that survived a toggle don't apply, so a count would mislead.
 
+Until the peek has read the branch's entries, an anchored
+when-marker shows nothing, since it can't yet be told from a dangling
+one (a `temporal` still shows). If that read fails, an anchored
+happening without a `temporal` shows a warning chip,
+`Couldn't read this branch's entries.`, in the marker's place; the
+entries are read again when the next turn settles.
+
 Nothing in either body is pressable. The foot link
 `Open in Plot panel →` is the escalation, and the peek-head carries
 no lead affordance.
