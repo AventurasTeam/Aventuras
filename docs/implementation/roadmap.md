@@ -347,6 +347,15 @@ DB-backed `openRegionTokens` resolves all of them.
   awareness on rows it didn't create (max decay resistance, sources
   concatenated), so M5.2 decides whether a user-written awareness row
   keeps its values. Found in 4.2c's slice review (2026-10-07).
+- **M5.2 — A lore row with a null body exports a file its own import
+  refuses.** `lore.body` is nullable (`lib/db/lore/lore.table.ts`),
+  `loreExport` writes it as `''`, and the import refuses a lore file
+  without a body. No writer stores a null body today (the lore pane, the
+  wizard and the seed all require one), so a new lore writer is what
+  would surface it, and the close's lore-mgmt phase is the first. Either
+  that writer requires a body, or export and import agree on an empty
+  one. Split from a Slice 4.6 review entry; routed from triage
+  2026-10-09.
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
@@ -1278,6 +1287,14 @@ each names.
   carries a Gregorian calendar section for a 360-day calendar, and
   it starts describing the real one the moment the registry consults
   `vault_calendars`.
+- **M8.3 — `import-dialog.stories.tsx` now imports the World and Plot import
+  configs.** (2026-10-08) When M8.3 / M9.4 add more host stories, consider
+  domain-owned `world-import.stories.tsx` / `plot-import.stories.tsx` next
+  to the configs' tests instead of growing a compound's stories. Found in
+  Slice 4.6 review. M8.3's vault calendars are the first likely new host;
+  no canon rule bans a compound's stories importing domain configs, and
+  this is the only compound story that does. Routed from triage
+  2026-10-09.
 
 **Gates.** M7 (settings surfaces translation toggles).
 

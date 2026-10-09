@@ -311,17 +311,6 @@ slice-planning gate forces its resolution before that slice is planned.
   touch `components/compounds/importer-menu.tsx` — the import dialog
   mounts in the World and Plot routes beside the menu — so "this
   slice" above no longer makes 4.6 the cheaper home.
-- **A legacy entity row exports a file its own import refuses.**
-  (2026-10-08) `lib/piggyback/apply.ts:199-200` says rows holding `Gold`
-  beside `gold` in `stackables` exist until a transfer folds them. Such a
-  row's `.avts` export fails the import's `duplicateStackable` check. A
-  lore row with a null body is the same shape: `lore.body` is nullable
-  (`lib/db/lore/lore-schema.ts`), `loreExport` writes it as `''`, and the
-  import refuses a lore file without a body. No writer stores a null body
-  today (the lore pane, the wizard and the seed all require one), so a new
-  lore writer is what would surface it. Fix idea: fold stackables on
-  export the way `normalizedStackables` in `lib/world/entity-actions.ts`
-  does. Found in Slice 4.6 review.
 - **No lint rule catches a dropped `await`.** (2026-10-08)
   `eslint.config.js` has no type-aware promise rules (`no-floating-promises`,
   `return-await`), so a missing `await` passes lint repo-wide. Task 9's
@@ -333,11 +322,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([lesson](lessons-learned/portaled-overlay-outlives-screen-focus.md)).
   Pre-existing in all four detail heads; low risk because it is modal.
   Found in Slice 4.6 review.
-- **`import-dialog.stories.tsx` now imports the World and Plot import
-  configs.** (2026-10-08) When M8.3 / M9.4 add more host stories, consider
-  domain-owned `world-import.stories.tsx` / `plot-import.stories.tsx` next
-  to the configs' tests instead of growing a compound's stories. Found in
-  Slice 4.6 review.
 - **The wrong-kind banner prints the file's `format` uncapped.**
   (2026-10-08) `parseEnvelope` in
   `components/compounds/import-dialog-pipeline.ts` puts the envelope's
