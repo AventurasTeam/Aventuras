@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { useRailCollapse } from '@/components/reader/rail/use-rail-collapse'
+import { useRailShowsCollapsed } from '@/components/reader/rail/use-rail-collapse'
 import type { RailData } from '@/components/reader/rail/use-rail-data'
 import { useRailPeek } from '@/components/reader/rail/use-rail-peek'
 
@@ -26,7 +26,7 @@ export function ReaderPeekDrawer({
   onNavigate,
 }: ReaderPeekDrawerProps) {
   const { peek, closePeek } = useRailPeek()
-  const { collapsed } = useRailCollapse()
+  const collapsed = useRailShowsCollapsed()
 
   // Peek implies rail open. The reducer closes the peek on collapse, but a preference flipped
   // outside it (a settings import) would leave one to resurface on the next expand.
