@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { OverviewTab } from '@/components/world/detail/common-tabs'
+import type { EntityPaneData } from '@/components/world/detail/entity-pane-props'
 import { EntityOverview } from '@/components/world/overview/entity-overview'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { Happening, Thread } from '@/lib/db'
@@ -18,6 +20,10 @@ vi.mock('@/components/world/overview/entity-overview', () => ({ EntityOverview: 
 vi.mock('./lore-peek-body', () => ({ LorePeekBody: () => null }))
 vi.mock('./thread-peek-body', () => ({ ThreadPeekBody: () => null }))
 vi.mock('./happening-peek-body', () => ({ HappeningPeekBody: () => null }))
+vi.mock('@/components/history/history-tab', () => ({ HistoryTab: () => null }))
+vi.mock('@/components/ui/tabs', () => ({ TabsContent: () => null }))
+vi.mock('@/components/world/tabs/involvements-tab', () => ({ InvolvementsTab: () => null }))
+vi.mock('@/components/world/tabs/placeholder-tab', () => ({ PlaceholderTab: () => null }))
 
 const KAEL = makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael' })
 const VEIL = makeLore({ id: 'lore_veil', title: 'The Veil' })
@@ -27,13 +33,27 @@ const AMBUSH = { id: 'h_ambush', title: 'The alley ambush' } as Happening
 const CONTEXT: PeekEntityContext = { entities: [KAEL], worldTime: 120, calendar: EARTH_GREGORIAN }
 const INDEX: EntryIndex = new Map()
 
+const PANE_DATA: EntityPaneData = {
+  branchId: 'br_1',
+  entities: [KAEL],
+  relationships: [],
+  involvements: [],
+  entryIndex: INDEX,
+  worldTime: 120,
+  calendar: EARTH_GREGORIAN,
+  leadId: null,
+}
+
 function props(model: PeekBodyProps['model'], entryIndex: EntryIndex | null = INDEX) {
   return { model, entityContext: CONTEXT, entryIndex, onRegionPress: vi.fn() }
 }
 
 describe('PEEK_ENTITY_BODY', () => {
+  // OverviewTab calls no hooks either: its TabsContent's child is what World mounts.
   it('is the Overview component World’s Overview tab mounts', () => {
-    expect(PEEK_ENTITY_BODY).toBe(EntityOverview)
+    const tab = OverviewTab({ row: KAEL, data: PANE_DATA, onRegionPress: vi.fn() })
+    expect(tab.props.value).toBe('overview')
+    expect(tab.props.children.type).toBe(PEEK_ENTITY_BODY)
   })
 })
 
