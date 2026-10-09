@@ -86,21 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   namesake the classifier actually compared rather than guessing by
   name. Both need a schema column. Found during 4.2c planning
   (2026-10-06).
-- **SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
-  `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
-  indexes without statistics. Measured while planning 4.2c's History
-  link-row union: on a 30k-delta branch (node:sqlite, desktop) a
-  History chunk takes about 9 ms because the union's OR keeps SQLite off
-  `deltas_chain_idx`, and about 2 ms after `ANALYZE`. That's accepted
-  for 4.2c. Running `PRAGMA optimize` at boot or on close is
-  cross-cutting (desktop main process and the mobile expo-sqlite
-  connection), so it's routed here rather than into the slice. Revisit
-  if History or another log-shaped query feels slow on a long story,
-  Android first. Found during 4.2c planning (2026-10-06). Once the
-  History tab reused its link-end scan (#581), this is most of what is
-  left: on a 30k-delta branch whose tab row has only old deltas, a
-  first chunk or search keystroke still takes about 9 ms while the
-  next chunk takes under 1 ms (`pnpm bench:history`).
 - **Segment Select clips a label that wraps past two lines.**
   `SegmentBranch` (`components/ui/select.tsx`) gives each option a fixed
   `h-control-md` height with `overflow-hidden` and no line limit, so a
@@ -223,10 +208,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the Sheet stays open while the host holds `open=false`. Fix idea: hold the
   dismiss until gorhom reports the opening animation (`onAnimate` or
   `onChange`). Raised in 4.5a review, 2026-10-07.
-- **Bottom Sheets on web move no focus in and return none on close.**
-  [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
-  trap Tab focus; the primitive neither focuses into the Sheet nor restores
-  focus to the trigger. Raised in 4.5a review, 2026-10-07.
 - **Overlay scrims are off canon (0.4 light, 0.6 dark).**
   `components/ui/dialog.tsx:31` and `alert-dialog.tsx:37` use `bg-black/50`,
   and the right-anchored Sheet (`sheet.tsx` near line 444) uses `bg-black/40`
@@ -259,21 +240,11 @@ slice-planning gate forces its resolution before that slice is planned.
   `railCollapseDefaults` and imports two pane modules to build it. A
   `defaultCollapsed` on `ListModule` would remove both. Raised in 4.5a review,
   2026-10-07.
-- **`useRowSignals` returns new `rowTints` and `inScene` identities on
-  unrelated writes.** `hooks/use-row-signals.ts:107-131` changes them on lore,
-  thread and entry writes, so rail lists re-render through a classifier
-  burst; keep the old value when the contents are equal. Raised in 4.5a
-  review, 2026-10-07.
 - **The World and Plot `search` locators match the hidden reader rail's search
   box.** `e2e/locators/world.ts:60` and `e2e/locators/plot.ts:28` match the
   rail's identical placeholder whenever the rail shows the same category
   (World's default `Characters`), a latent strict-mode trap. Scope them like
   `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
-  2026-10-07.
-- **`useRailData` runs in the uncompiled reader route.** The route
-  re-renders on lore, thread, happening and chapter writes. Unmeasured.
-  Options: each connected rail component calls `useRailData` itself,
-  memoized, or a `useReaderRail(branchId)` hook. Raised in 4.5a review,
   2026-10-07.
 - **`chrome.back` matches its name as a substring.** `e2e/locators/chrome.ts:8`
   has no `exact: true`, so the phone rail Sheet's "Back to categories"
@@ -353,14 +324,6 @@ slice-planning gate forces its resolution before that slice is planned.
   classes on an inner `View`, as `components/wizard/ai-assist.tsx` does.
   Predates 4.5a, and the `ScrollComponentContext` move filed above wouldn't
   fix it. Raised in 4.5a's slice review, 2026-10-07.
-- **A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
-  native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
-  a closing Sheet's scrim keeps catching touches until its animation ends
-  (gorhom's backdrop turns `pointerEvents` off only at index -1). A host that
-  closes a Sheet and opens a Dialog in one press, like the phone
-  `OverflowMenu`, would show the Dialog under the fading scrim for about
-  250 ms and lose a tap in that window. Inferred from the code, not observed
-  on a device. Raised in 4.5a's slice review, 2026-10-07.
 - **`ImporterMenu` is a Popover on phone.** (2026-09-11)
   [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
   wants a short Sheet on phone but it's a Popover at every size. The
@@ -498,38 +461,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `EntityLink` and `StatusRow` in
   `components/world/overview/overview-parts.tsx` have no focus ring at
   all. Raised in 4.5b's review, 2026-10-09.
-- **Trigger-less overlay focus return isn't where canon says.**
-  (2026-10-09)
-  [`overlays.md → Sheet — ARIA contract`](../ui/patterns/overlays.md#sheet--aria-contract)
-  (lines 349-353) says a Sheet opened without a trigger returns focus to
-  the element focused before the open, "per rn-primitives / Radix
-  convention", but Radix's modal Dialog only returns focus to a
-  registered trigger (`@radix-ui/react-dialog` `dist/index.mjs:146-149`),
-  so every right-anchored Sheet opened through `open` drops focus to
-  `<body>` on close. 4.5b's `PeekDrawer` implements the return locally
-  (`onOpenAutoFocus` remembers, `onCloseAutoFocus` restores unless it
-  routed away); it belongs in `RightSheetContent`
-  (`components/ui/sheet.tsx:413`). Related: `demoteRadixDialog`
-  (`sheet.tsx:403`) leaves Radix's FocusScope fallback on the
-  role-stripped, unnamed wrapper; the bottom Sheet's focus on web is its
-  own entry above, "Bottom Sheets on web move no focus in and return
-  none on close"; and 4.5a's list and categories swaps drop focus, as
-  does the phone row-to-peek swap on web (Chromium blurs the row when its
-  layer turns `visibility: hidden`) and the way back, since `←`
-  unmounts with the peek level it sits in.
-  Known residual in the peek: after a successful `Set as lead` the lead
-  row re-parents into `ModuleList`'s pinned slot, so the remembered node
-  is disconnected and the next close drops focus to `<body>`; canon
-  carves this out ("unless the row has moved"). Fix by
-  re-finding the row by id (`ModuleList`'s `focusRef`), or at primitive
-  level as above. Raised in 4.5b's review, 2026-10-09.
-- **A toast fired under a modal Sheet may be hidden from assistive
-  tech.** (2026-10-09) Radix's `hideOthers` marks everything outside a
-  modal Sheet `aria-hidden`, and the `Toaster` renders in-tree
-  (`app/_layout.tsx:107`, `components/ui/toast.tsx:194`), so a toast
-  fired while the peek drawer or another modal Sheet is open may sit
-  under the scrim and go unannounced; the peek's `Set as lead` refusal
-  toast is a new instance. Raised in 4.5b's review, 2026-10-09.
 - **A failed story-id read leaves the reader's actions silently
   inert.** (2026-10-09) The reader reads its branch's `storyId` on mount
   (`app/reader-composer/[branchId].tsx`, the `branches` select routed

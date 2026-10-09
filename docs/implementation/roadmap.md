@@ -1609,6 +1609,130 @@ own.
   `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
   review (2026-10-05); the two wider scans were found when it was
   routed.
+- **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
+  `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
+  indexes without statistics. Measured while planning 4.2c's History
+  link-row union: on a 30k-delta branch (node:sqlite, desktop) a
+  History chunk takes about 9 ms because the union's OR keeps SQLite off
+  `deltas_chain_idx`, and about 2 ms after `ANALYZE`. That's accepted
+  for 4.2c. Running `PRAGMA optimize` at boot or on close is
+  cross-cutting (desktop main process and the mobile expo-sqlite
+  connection), so it's routed here rather than into the slice. Revisit
+  if History or another log-shaped query feels slow on a long story,
+  Android first. Found during 4.2c planning (2026-10-06). Once the
+  History tab reused its link-end scan (#581), this is most of what is
+  left: on a 30k-delta branch whose tab row has only old deltas, a
+  first chunk or search keystroke still takes about 9 ms while the
+  next chunk takes under 1 ms (`pnpm bench:history`). Re-measured
+  2026-10-09 (Node 24.14, SQLite 3.51.2): first chunk 7.5–9.7 ms, search
+  8.1–8.9 ms, next chunk under 1 ms. Plain `PRAGMA optimize` doesn't
+  deliver the gain: its approximate statistics underestimate how many
+  rows share a branch on `deltas_chain_idx`, and the chunk stays at
+  8.5 ms. `PRAGMA optimize=0x10002` or a full `ANALYZE` brings it to
+  about 1.2 ms, on a single-branch fixture. Two queries are written
+  around the missing statistics (`lib/history/link-ends.ts`,
+  `lib/retrieval/source-rows.ts`) and need their plans re-checked once
+  statistics exist. Measure on one bench with the reversal-selection
+  entry above, whose index migration shifts the same `deltas` plans.
+  Routed from triage 2026-10-09.
+- **M9.5 — `useRailData` runs in the uncompiled reader route.** The route
+  re-renders on lore, thread, happening and chapter writes. Unmeasured.
+  Options: each connected rail component calls `useRailData` itself,
+  memoized, or a `useReaderRail(branchId)` hook. Raised in 4.5a review,
+  2026-10-07. Verified 2026-10-09: the React Compiler bails on the route
+  (listed in `scripts/compiler-bailouts.baseline.json` since 2026-09-24)
+  over two `try … finally` blocks, and with those removed still bails
+  on value blocks inside a try. A third option: a small provider that
+  calls `useRailData` and wraps the shell's children, so its re-renders
+  reach context consumers only; calling the hook in each consumer
+  doubles the work on desktop, where the rail column and the peek both
+  mount. Profile a classifier burst first. Routed from triage
+  2026-10-09.
+- **M9.5 — `useRowSignals` returns new `rowTints` and `inScene` identities on
+  unrelated writes.** `hooks/use-row-signals.ts:107-131` changes them on lore,
+  thread and entry writes, so rail lists re-render through a classifier
+  burst; keep the old value when the contents are equal. Raised in 4.5a
+  review, 2026-10-07. Verified 2026-10-09: `rowTints` is `useRailData`'s
+  name for `recentlyClassified.rows`, rebuilt on any lore, thread,
+  happening or entity write on any branch; `inScene` on entry and entity
+  writes. `useRailData`'s own arrays change on the same writes, so this
+  spares row-level re-renders only. One budget with the entry above.
+  Routed from triage 2026-10-09.
+- **M9.5 — A toast fired under a modal Sheet may be hidden from assistive
+  tech.** (2026-10-09) Radix's `hideOthers` marks everything outside a
+  modal Sheet `aria-hidden`, and the `Toaster` renders in-tree
+  (`app/_layout.tsx:107`, `components/ui/toast.tsx:194`), so a toast
+  fired while the peek drawer or another modal Sheet is open may sit
+  under the scrim and go unannounced; the peek's `Set as lead` refusal
+  toast is a new instance. Raised in 4.5b's review, 2026-10-09. Verified
+  statically the same day, and wider: the `Toaster` renders nothing while
+  empty and puts `aria-live` on each toast, so a Radix modal (Dialog,
+  AlertDialog or right Sheet) that opens with no toast showing hides the
+  app root, and a toast mounted after inherits it. An always-rendered,
+  empty live region would be spared by `hideOthers`. The observation in
+  [`parked.md → Background content behind AlertDialog is not aria-hidden`](../parked.md#background-content-behind-alertdialog-is-not-aria-hidden)
+  contradicts this; one browser probe settles both. Routed from triage
+  2026-10-09.
+- **M9.5 — A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
+  native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
+  a closing Sheet's scrim keeps catching touches until its animation ends
+  (gorhom's backdrop turns `pointerEvents` off only at index -1). A host that
+  closes a Sheet and opens a Dialog in one press, like the phone
+  `OverflowMenu`, would show the Dialog under the fading scrim for about
+  250 ms and lose a tap in that window. Inferred from the code, not observed
+  on a device. Raised in 4.5a's slice review, 2026-10-07. Wider, verified
+  statically 2026-10-09: on native any Dialog opened over an open bottom
+  Sheet renders under it, though
+  [`layout.md → Stacking`](../ui/foundations/mobile/layout.md#stacking)
+  allows a modal over a Sheet. A shipped instance is World and Plot's
+  phone `⋯` → Delete, which closes the menu Sheet and opens the delete
+  AlertDialog in one press. Observe it on a device first; deferring the
+  action to the Sheet's `onDismiss` is the likelier fix, since lifting the
+  `PortalHost` above gorhom would put Select's phone sheet under any
+  Dialog. Routed from triage 2026-10-09.
+- **M9.5 — Bottom Sheets on web move no focus in and return none on close.**
+  [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
+  trap Tab focus; the primitive neither focuses into the Sheet nor restores
+  focus to the trigger. Raised in 4.5a review, 2026-10-07. Verified
+  2026-10-09; the fuller canon is
+  [`overlays.md → Sheet — ARIA contract`](../ui/patterns/overlays.md#sheet--aria-contract)
+  (focus moves in on open and back on close). The bottom path passes
+  neither autofocus hook, gorhom has none, and nothing sets `aria-modal`,
+  so the page behind stays tabbable. Reached on web at phone tier: a
+  narrow desktop window, or the web build. One item with the next entry,
+  and with the native side in
+  [`parked.md → Android bottom sheets are not dialogs for TalkBack`](../parked.md#android-bottom-sheets-are-not-dialogs-for-talkback).
+  Routed from triage 2026-10-09.
+- **M9.5 — Trigger-less overlay focus return isn't where canon says.**
+  (2026-10-09)
+  [`overlays.md → Sheet — ARIA contract`](../ui/patterns/overlays.md#sheet--aria-contract)
+  (lines 353-358) says a Sheet opened without a trigger returns focus to
+  the element focused before the open, "per rn-primitives / Radix
+  convention", but Radix's modal Dialog only returns focus to a
+  registered trigger (`@radix-ui/react-dialog` `dist/index.mjs:146-149`),
+  so every right-anchored Sheet opened through `open` drops focus to
+  `<body>` on close. 4.5b's `PeekDrawer` implements the return locally
+  (`onOpenAutoFocus` remembers, `onCloseAutoFocus` restores unless it
+  routed away); it belongs in `RightSheetContent`
+  (`components/ui/sheet.tsx:413`). Related: `demoteRadixDialog`
+  (`sheet.tsx:403`) leaves Radix's FocusScope fallback on the
+  role-stripped, unnamed wrapper; the bottom Sheet's focus on web is its
+  own entry above, "Bottom Sheets on web move no focus in and return
+  none on close"; and 4.5a's list and categories swaps drop focus, as
+  does the phone row-to-peek swap on web (Chromium blurs the row when its
+  layer turns `visibility: hidden`) and the way back, since `←`
+  unmounts with the peek level it sits in.
+  Known residual in the peek: after a successful `Set as lead` the lead
+  row re-parents into `ModuleList`'s pinned slot, so the remembered node
+  is disconnected and the next close drops focus to `<body>`; canon
+  carves this out ("unless the row has moved"). Fix by
+  re-finding the row by id (`ModuleList`'s `focusRef`), or at primitive
+  level as above. Raised in 4.5b's review, 2026-10-09. Verified the same
+  day, with one shipped instance the entry misses: `JSONViewer`, the row
+  detail's "View JSON" Sheet, is right-anchored and trigger-less, so
+  closing it on desktop drops focus to `<body>` today. Trigger-less
+  `Dialog` and `AlertDialog` take the same Radix path (inferred, not
+  run). Routed from triage 2026-10-09.
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through
