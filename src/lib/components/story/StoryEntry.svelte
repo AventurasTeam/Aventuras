@@ -2355,7 +2355,9 @@
         </div>
         {#if pastCheckpoint.manual.length > 0}
           {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
-          <p class="text-muted-foreground text-xs">Changes a user made by hand after this entry:</p>
+          <p class="text-muted-foreground text-xs">
+            Some changes have been made by a user after this entry:
+          </p>
           <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
             {#each pastCheckpoint.manual as change (change.id)}
               <li>
