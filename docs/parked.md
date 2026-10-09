@@ -3126,3 +3126,24 @@ field that didn't change and feed the extra keys into user
 precedence. A writer sending thread or happening patches not
 pre-filtered against the row — a classifier status write, say — is
 the signal to revisit. Surfaced by 4.2b planning (2026-09-28).
+
+#### No lint rule catches a dropped `await`
+
+`eslint.config.js` has no type-aware promise rules (`no-floating-promises`,
+`return-await`), so a missing `await` passes lint repo-wide. Task 9's
+review proved it on the export path, and a story now pins that one. Found
+in Slice 4.6 review (2026-10-08).
+
+Measured in the 2026-10-09 triage pass, with `projectService` and
+`no-floating-promises` plus `no-misused-promises` over `lib`, `hooks`,
+`components` and `app`. Full lint went from 21.7 s to 39.1 s, and a
+single file from 0.76 s to 3.4 s, the per-commit cost in pre-commit.
+Of 2,076 floating-promise hits, all but 5 were in stories and tests,
+where Storybook's instrumented `expect` returns a thenable; the 5 in
+production code were false positives or dev-only. The 9
+`no-misused-promises` hits (the collision dialog's submit, the provider
+setup form's custom-model add, and dev routes) were reviewed by hand:
+each handler catches its own failure, so none can reject unhandled.
+Declined by the developer on that cost for no real hit; `return-await`
+was not probed. The signal to revisit is a shipped bug from a dropped
+`await`.

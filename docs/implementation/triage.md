@@ -218,11 +218,6 @@ slice-planning gate forces its resolution before that slice is planned.
   touch `components/compounds/importer-menu.tsx` — the import dialog
   mounts in the World and Plot routes beside the menu — so "this
   slice" above no longer makes 4.6 the cheaper home.
-- **No lint rule catches a dropped `await`.** (2026-10-08)
-  `eslint.config.js` has no type-aware promise rules (`no-floating-promises`,
-  `return-await`), so a missing `await` passes lint repo-wide. Task 9's
-  review proved it on the export path, and a story now pins that one. Found
-  in Slice 4.6 review.
 - **Slice 4.6 left four duplicates waiting for a shared home.**
   (2026-10-08) The closing review's simplifier skipped each because the
   shared copy needs a module that doesn't exist yet, or a file outside the
