@@ -211,9 +211,19 @@ describe('applyReconciliation', () => {
       'UPDATE story_entries',
       'UPDATE chapters',
       'UPDATE story_entries',
+      'UPDATE world_state_changes',
       'DELETE FROM',
       'UPDATE stories',
     ])
+  })
+
+  it("rewrites a header's recorded clock to the entry's new beginning", () => {
+    const plan = planReconciliation({ entries, chapters: [], times: [reconciled('B', t(3), t(5))] })
+    const header = reconciliationStatements(plan, entries).find((s) =>
+      s.sql.startsWith('UPDATE world_state_changes'),
+    )
+    expect(header?.sql).toContain("kind = 'header'")
+    expect(header?.params).toEqual([JSON.stringify(t(3)), 'B'])
   })
 
   it('keeps the rest of an entry metadata when it rewrites the times', () => {

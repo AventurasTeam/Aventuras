@@ -2,7 +2,8 @@
  * Turning a reconciliation into the writes that commit with it.
  *
  * Reconciling is not only entry times: chapter spans covering those entries are copies that go
- * stale, a delta's recorded clock would otherwise restore an earlier value on rollback, and a
+ * stale, a delta's or header's recorded clock would otherwise restore an earlier value on
+ * rollback, and a
  * range reaching the end of the branch moves the story clock. All of it lands together or
  * not at all.
  */
@@ -208,6 +209,14 @@ export function reconciliationStatements(
     statements.push({
       sql: 'UPDATE story_entries SET world_state_delta = ? WHERE id = ?',
       params: [JSON.stringify(delta.delta), delta.entryId],
+    })
+  }
+
+  // A header records the clock as it stood before its entry was classified, as a delta does.
+  for (const time of plan.times) {
+    statements.push({
+      sql: "UPDATE world_state_changes SET clock_before = ? WHERE entry_id = ? AND kind = 'header'",
+      params: [time.start ? JSON.stringify(time.start) : null, time.entryId],
     })
   }
 
