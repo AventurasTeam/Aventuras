@@ -3170,6 +3170,9 @@ class SettingsStore {
     await this.setActivityReporting(this.uiSettings.activityReporting)
     await ui.setNavPanelOpen(false)
     await ui.setGalleryNewestFirst(false)
+    await ui.setNavShowFirstLast(true)
+    await ui.setNavShowChapters(true)
+    await ui.setNavShowCheckpoints(true)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')
