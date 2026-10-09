@@ -57,8 +57,8 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 (Clicking a rail row opens the peek drawer. On desktop and tablet it
 is a right [Sheet](../../foundations/mobile/layout.md#sheet), ~440px
 wide, sliding in over the rail and narrative above a scrim, which
-leaves both inert while it is open; Esc, `×` or a click outside
-closes it. On phone it is the rail Sheet's peek level, per
+leaves both inert while it is open, the reader's undo / redo and End
+keys included; Esc, `×` or a click outside closes it. On phone it is the rail Sheet's peek level, per
 [Mobile expression](#mobile-expression).)
 
 Rail rows carry no collision strip and no collapsed-group `⚠ N`
@@ -1192,7 +1192,24 @@ Peek and collapsed-rail are mutually exclusive states:
 Collapsing the rail (manually or via viewport-forced collapse)
 while peek is open closes the peek simultaneously. They're a
 continuum: peek is a deeper state of "rail engaged," collapse is
-"rail dismissed." Closing the container closes its contents.
+"rail dismissed." Closing the container closes its contents. The
+rail's `Cmd/Ctrl+\` stays live inside the drawer, so it closes both.
+
+**Focus (desktop and tablet).** The drawer overrides Sheet's
+first-focusable default (per
+[`overlays.md → Sheet — ARIA contract`](../../patterns/overlays.md#sheet--aria-contract)):
+focus lands on the dialog itself, since for a non-lead character the
+first button is `Set as lead`, which one stray key would fire and
+Ctrl-Z can't undo. It stays on the dialog when `Set as lead` is
+swapped for the badge or disabled, and on close it returns to the
+rail row that opened it, unless the close was a route out to a panel.
+
+**A peeked row that disappears.** If the row is deleted (or a
+reversal removes it) while the peek is open, the peek closes: the
+desktop drawer closes and the store drops the peek, and on phone the
+Sheet returns to the list. No toast. The store drops the id rather
+than keeping it, or an undo that restores the row would reopen the
+peek.
 
 ### Animation
 
@@ -1221,7 +1238,7 @@ deviation; standard tooltip + ⓘ affordances per the
 
 The peek-head exposes the lead-character mutation inline (no overflow
 menu — peek is intentionally lightweight; deep work routes to the
-World panel via the existing `Open in World panel →` foot link).
+row's panel, World or Plot, via the foot link).
 
 For a character peek:
 
@@ -1295,8 +1312,8 @@ What's not on lore peek:
 
 Peek is read-mostly. The lead-character mutation above is the only
 inline mutation surface (character-only; doesn't apply to lore or
-other non-character kinds). Deep edits route to the World panel
-via the existing `Open in World panel →` foot link.
+other non-character kinds). Deep edits route to the row's panel,
+World or Plot, via the foot link (`Open in World panel →` here).
 
 ### State-field composition — thread and happening peek
 
