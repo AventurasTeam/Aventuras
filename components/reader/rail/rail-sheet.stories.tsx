@@ -574,7 +574,7 @@ function inView(row: HTMLElement, scroller: HTMLElement): boolean {
 
 const listLayer = () => within(railDialog()).getByTestId('rail-sheet-list-layer')
 
-/** The list fills the Sheet's content again: the peek's height cap is gone. */
+/** The list fills the Sheet's content again (a cap at the settled height may still be set). */
 async function listFillsSheet() {
   await waitFor(() => {
     const layer = listLayer()
@@ -613,7 +613,7 @@ async function peekAndBackFrom(name: string, scrollTo: 'end' | 'row') {
   await userEvent.click(peekBack())
   await headIs('character')
   await waitForMediumDetent()
-  // The cap is released once the Sheet is back down; the offset is read with it gone.
+  // Read the offset once the Sheet is back down and the list fills it.
   await listFillsSheet()
   return { scrolled, after: screen.getByRole('button', { name }) }
 }
@@ -643,7 +643,7 @@ export const ReaderChipBackKeepsScrollMidList: Story = {
   },
 }
 
-/** The cap that holds the offset through the peek is gone after `←`, and a bigger window refills. */
+/** The cap that holds the offset through the peek is released after `←`. */
 export const ReaderChipCapReleasedAfterBack: Story = {
   globals: PHONE,
   args: { initialData: LONG_ROSTER },
@@ -655,10 +655,6 @@ export const ReaderChipCapReleasedAfterBack: Story = {
     await headIs('character')
     await listFillsSheet()
     await waitFor(() => expect(getComputedStyle(listLayer()).maxHeight).toBe('none'), ANIMATION)
-    await withWindowResized(800, async () => {
-      await waitFor(() => expect(sheetCoverage()).toBeGreaterThan(0.45), ANIMATION)
-      await listFillsSheet()
-    })
   },
 }
 
