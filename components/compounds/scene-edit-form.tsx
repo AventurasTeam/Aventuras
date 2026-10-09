@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useImperativeHandle, useMemo, useState, type Ref } from 'react'
 import { ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -6,6 +6,7 @@ import { MultiSelectList } from '@/components/ui/multi-select'
 import { ContextScrollView } from '@/components/ui/scroll-component'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
+import type { EditDraft, EditFormHandle } from '@/hooks/use-edit-overlay-guard'
 import { t } from '@/lib/i18n'
 
 type EntityOption = { id: string; name: string }
@@ -68,8 +69,9 @@ export type SceneEditFormProps = {
   onSave: (next: SceneEdit) => void
   /** Close the overlay. Also fires in place of `onSave` on a no-change save. */
   onCancel: () => void
-  /** Whether the draft differs from the opening scene; fires on mount and on every change. */
-  onDirtyChange?: (dirty: boolean) => void
+  /** Dirty: the draft differs from the opening scene. Fires on mount and on every change. */
+  onDraftChange?: (draft: EditDraft) => void
+  ref?: Ref<EditFormHandle>
 }
 
 /** Sentinel for "no location", since Select's value is a plain string. */
@@ -119,7 +121,8 @@ export function SceneEditForm({
   saveError,
   onSave,
   onCancel,
-  onDirtyChange,
+  onDraftChange,
+  ref,
 }: SceneEditFormProps) {
   const [scene, setScene] = useState<string[]>([...sceneEntities])
   const [locationId, setLocationId] = useState<string>(currentLocationId ?? NO_LOCATION)
@@ -142,8 +145,8 @@ export function SceneEditForm({
   const nextLocationId = locationId === NO_LOCATION ? null : locationId
   const unchanged = sameMembers(scene, sceneEntities) && nextLocationId === currentLocationId
   useEffect(() => {
-    onDirtyChange?.(!unchanged)
-  }, [unchanged, onDirtyChange])
+    onDraftChange?.({ dirty: !unchanged })
+  }, [unchanged, onDraftChange])
 
   function handleSave() {
     // A Save with nothing changed takes the cancel route: no delta, no write, and
@@ -154,6 +157,7 @@ export function SceneEditForm({
     }
     onSave({ sceneEntities: scene, currentLocationId: nextLocationId })
   }
+  useImperativeHandle(ref, () => ({ save: handleSave }))
 
   return (
     <View className={insideSheet ? 'flex-1' : 'shrink'}>

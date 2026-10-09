@@ -24,6 +24,7 @@ import {
 import {
   BackHandler,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -104,10 +105,14 @@ const SheetInputComponent = (
   Platform.OS === 'web' ? TextInput : BottomSheetTextInput
 ) as InputComponent
 
-type SheetBackdropProps = BottomSheetBackdropProps & { dismissible: boolean; opacity: number }
+type SheetBackdropProps = BottomSheetBackdropProps & {
+  dismissible: boolean
+  opacity: number
+  onRefusedPress?: () => void
+}
 
 // Out of the a11y tree (assistive tech uses back); null role/label drop gorhom's English button.
-function SheetBackdrop({ dismissible, opacity, ...props }: SheetBackdropProps) {
+function SheetBackdrop({ dismissible, opacity, onRefusedPress, ...props }: SheetBackdropProps) {
   return (
     <BottomSheetBackdrop
       {...props}
@@ -118,7 +123,17 @@ function SheetBackdrop({ dismissible, opacity, ...props }: SheetBackdropProps) {
       accessible={false}
       accessibilityRole={null}
       accessibilityLabel={null}
-    />
+    >
+      {/* gorhom drops its tap gesture under 'none', so a held sheet hears the tap here. */}
+      {!dismissible && onRefusedPress != null ? (
+        <Pressable
+          accessible={false}
+          focusable={false}
+          style={StyleSheet.absoluteFill}
+          onPress={onRefusedPress}
+        />
+      ) : null}
+    </BottomSheetBackdrop>
   )
 }
 
@@ -129,16 +144,26 @@ type SheetDismissal = {
 
 /**
  * Spread onto a gorhom sheet: while `dismissible`, drag-down and a scrim press (the scrim spans
- * the window) both close it; otherwise neither does. A flip while open takes effect at once.
+ * the window) both close it; otherwise neither does, and the press goes to `onRefusedPress`. A
+ * flip while open takes effect at once. `onRefusedPress` must be stable: a new identity remounts
+ * the scrim.
  */
-export function useSheetDismissal(dismissible: boolean): SheetDismissal {
+export function useSheetDismissal(
+  dismissible: boolean,
+  onRefusedPress?: () => void,
+): SheetDismissal {
   const { theme } = useTheme()
   const opacity = SCRIM_OPACITY[theme.mode]
   const backdropComponent = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <SheetBackdrop {...props} dismissible={dismissible} opacity={opacity} />
+      <SheetBackdrop
+        {...props}
+        dismissible={dismissible}
+        opacity={opacity}
+        onRefusedPress={onRefusedPress}
+      />
     ),
-    [dismissible, opacity],
+    [dismissible, opacity, onRefusedPress],
   )
   return { enablePanDownToClose: dismissible, backdropComponent }
 }
@@ -152,6 +177,12 @@ const SheetScrollComponent = (
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
 type SheetKeyboardBehavior = 'interactive' | 'extend'
+
+/**
+ * An rn-primitives Portal host mounted after gorhom's, for a modal that must stack over an open
+ * bottom Sheet (layout.md → Stacking). Web ignores it: Radix portals to the body.
+ */
+export const ABOVE_SHEETS_PORTAL_HOST = 'above-sheets'
 
 const RIGHT_WIDTH_PX = 440
 const SAFE_AREA_GAP_PX = 8
@@ -187,6 +218,11 @@ type BottomSheetContentProps = SheetContentShared & {
    */
   dismissable?: boolean
   /**
+   * Called when a held sheet refuses a scrim tap or Android back, to raise the editor's unsaved-
+   * changes guard. Drag-down has no refusal to report: the sheet snaps back.
+   */
+  onDismissRefused?: () => void
+  /**
    * Replaces the keyboard behavior `size` picks. Pin it when size crosses 'tall' while open: the
    * flip kills gorhom's content scroll on native.
    */
@@ -220,6 +256,7 @@ function BottomSheetContent({
   // the bottom inset and put the sheet's last controls under the nav bar.
   style,
   dismissable = true,
+  onDismissRefused,
   keyboardBehavior,
   suppressOverlayRegistration = false,
   ...contentProps
@@ -229,7 +266,15 @@ function BottomSheetContent({
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
-  const dismissal = useSheetDismissal(dismissable)
+
+  // Latest-ref: the back listener must not re-subscribe on a render. Android calls the newest
+  // listener first, so a re-subscribe would put it above a guard dialog opened from it.
+  const backRef = useRef(() => {})
+  backRef.current = dismissable ? () => onOpenChange(false) : () => onDismissRefused?.()
+  const refusedRef = useRef(onDismissRefused)
+  refusedRef.current = onDismissRefused
+  const reportRefused = useCallback(() => refusedRef.current?.(), [])
+  const dismissal = useSheetDismissal(dismissable, reportRefused)
 
   const sheetRef = useRef<BottomSheetModal>(null)
   // gorhom's dismiss() on an already-dismissed modal corrupts internal state
@@ -274,11 +319,11 @@ function BottomSheetContent({
   useEffect(() => {
     if (!open || Platform.OS !== 'android') return
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (dismissable) onOpenChange(false)
+      backRef.current()
       return true
     })
     return () => sub.remove()
-  }, [open, onOpenChange, dismissable])
+  }, [open])
 
   useEffect(() => {
     let cancelled = false

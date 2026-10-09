@@ -19,6 +19,8 @@ type UnsavedChangesDialogProps = {
   saveDisabledReason?: string
   /** Why Save is unavailable. Rendered under the body when a section reports an invalid draft. */
   reason?: string
+  /** The rn-primitives Portal host; `ABOVE_SHEETS_PORTAL_HOST` when raised from a bottom Sheet. */
+  portalHost?: string
   onSave: () => void
   onDiscard: () => void
   onCancel: () => void
@@ -30,6 +32,7 @@ export function UnsavedChangesDialog({
   saveDisabled = false,
   saveDisabledReason,
   reason,
+  portalHost,
   onSave,
   onDiscard,
   onCancel,
@@ -42,7 +45,7 @@ export function UnsavedChangesDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent portalHost={portalHost}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('unsavedChanges.title')}</AlertDialogTitle>
           <AlertDialogDescription>

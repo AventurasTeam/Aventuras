@@ -13,6 +13,7 @@ import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
 import { RailViewportWatcher } from '@/components/reader/rail/rail-viewport-watcher'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
+import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
 import { setAppearanceThemeId } from '@/lib/actions'
@@ -108,6 +109,8 @@ export default function RootLayout() {
                     <PortalHost />
                     <DrizzleStudioDevTools />
                   </BottomSheetModalProvider>
+                  {/* gorhom mounts its sheets after its children, so this host comes after it. */}
+                  <PortalHost name={ABOVE_SHEETS_PORTAL_HOST} />
                 </I18nextProvider>
               </DensityProvider>
             </ThemeProvider>

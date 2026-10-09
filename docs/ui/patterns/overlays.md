@@ -120,7 +120,7 @@ both.
   onOpenAutoFocus onCloseAutoFocus
 >
   <SheetTrigger asChild>...</SheetTrigger>      // optional; controlled is canonical
-  <SheetContent anchor size dismissable keyboardBehavior>{children}</SheetContent>
+  <SheetContent anchor size dismissable onDismissRefused keyboardBehavior>{children}</SheetContent>
 </Sheet>
 ```
 
@@ -161,6 +161,13 @@ the other anchor reads fails typecheck rather than doing nothing:
   or an editor holding unsaved input. Esc on a web bottom sheet waits
   on its focus handling (roadmap M9.5); the right anchor dismisses
   on Esc and an outside click as a Radix dialog does.
+- `onDismissRefused?: () => void` — bottom only. Called when a held
+  sheet refuses a scrim tap or Android back, so an editor can raise
+  the [in-edit guard](../foundations/mobile/layout.md#sheet-behavior--additional-rules).
+  Drag-down reports nothing; it snaps back. A modal raised over an
+  open bottom Sheet passes `portalHost={ABOVE_SHEETS_PORTAL_HOST}`:
+  gorhom mounts its sheets after the app's default `PortalHost`, and
+  the root layout mounts this host after gorhom's provider.
 - `keyboardBehavior?: 'interactive' | 'extend'` — bottom only;
   replaces the behavior `size` picks, see
   [Sheet — Keyboard handling](#sheet--keyboard-handling) below.
@@ -174,7 +181,7 @@ the other anchor reads fails typecheck rather than doing nothing:
 - **Drag handle** — rendered automatically when `anchor='bottom'`;
   hidden on `anchor='right'` per [`layout.md → Sheet behavior`](../foundations/mobile/layout.md#sheet-behavior--additional-rules).
 - **Scrim** — full-screen backdrop; tap dismisses unless
-  `dismissable` is `false`.
+  `dismissable` is `false`, when it goes to `onDismissRefused`.
 - **Content area** — free shape. Consumer renders any tree. Sheet
   imposes no snap points or layout. In-sheet navigation (e.g.
   mobile browse rail → peek drawer state swap) lives in the

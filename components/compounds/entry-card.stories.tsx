@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState, type ReactElement } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
@@ -862,6 +862,43 @@ export const WorldTimeEditLocksWhileSaving: StoryT = {
   },
 }
 
+const guard = () => screen.getByRole('alertdialog', { name: 'Unsaved changes' })
+const guardButton = (name: string) => within(guard()).getByRole('button', { name })
+const noGuard = () => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+/** An edited overlay holds against Esc and a click outside: the unsaved-changes guard asks. */
+export const WorldTimeEditGuardsUnsavedInput: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, ...editableTimeProps, onEditTime: fn(async () => true) },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(guard()).toBeVisible())
+    await userEvent.click(guardButton('Cancel'))
+    await waitFor(noGuard)
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+
+    // A real click outside lands on the Dialog's scrim; Radix leaves the body inert under it.
+    const outside = document.elementFromPoint(4, 4) as HTMLElement
+    expect(screen.getByRole('dialog', { name: 'Edit time' }).contains(outside)).toBe(false)
+    await userEvent.pointer({
+      keys: '[MouseLeft]',
+      target: outside,
+      coords: { clientX: 4, clientY: 4 },
+    })
+    await waitFor(() => expect(guard()).toBeVisible())
+    await userEvent.click(guardButton('Discard'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    noGuard()
+    expect(args.onEditTime).not.toHaveBeenCalled()
+  },
+}
+
 /**
  * Tier-independent half of the fork: with no `onEditTime` to land a save on,
  * the card refuses to host the overlay at any width, because a Dialog Save
@@ -1272,6 +1309,37 @@ export const WorldStateSaveRefused: StoryT = {
     expect(screen.queryByText('Could not save the scene. Try again.')).not.toBeInTheDocument()
     // The overlay stays open on failure, so the edit is not silently discarded.
     expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible()
+  },
+}
+
+/** The guard's Save writes the draft, and the guard closes with the overlay it guarded. */
+export const WorldStateEditGuardSaves: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: true }) as const),
+  },
+  play: async ({ args }) => {
+    await openPanel()
+    const trigger = screen.getByRole('button', { name: 'Edit scene' })
+    await userEvent.click(trigger)
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(guard()).toBeVisible())
+    await userEvent.click(guardButton('Save'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    noGuard()
+    expect(args.onEditScene).toHaveBeenCalledWith({
+      sceneEntities: [CHAR_A],
+      currentLocationId: LOC_A,
+    })
+    // Two overlays close at once; the keyboard still lands back on the pencil.
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
   },
 }
 

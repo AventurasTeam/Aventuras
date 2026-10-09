@@ -7,7 +7,9 @@ import {
   sceneSaveErrorKey,
   type SceneSaveResult,
 } from '@/components/compounds/scene-edit-form'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { UnsavedChangesDialog } from '@/components/compounds/unsaved-changes-dialog'
+import { ABOVE_SHEETS_PORTAL_HOST, Sheet, SheetContent } from '@/components/ui/sheet'
+import { useEditOverlayGuard } from '@/hooks/use-edit-overlay-guard'
 import { t } from '@/lib/i18n'
 
 type SceneEditSheetProps = {
@@ -31,9 +33,9 @@ export function SceneEditSheet({
 }: SceneEditSheetProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
-  // Unsaved input holds the sheet: drag-down and tap-outside wait for Save or Cancel. Android
-  // back still closes it through the primitive's BackHandler.
-  const [dirty, setDirty] = useState(false)
+  // Unsaved input holds the sheet: a scrim tap or Android back raises the guard, drag-down
+  // snaps back.
+  const guard = useEditOverlayGuard({ saving, saveError, onClose })
 
   async function save(next: SceneEdit) {
     if (saving) return
@@ -42,7 +44,7 @@ export function SceneEditSheet({
     try {
       const result = await onSave(next)
       if (result.ok) {
-        onClose()
+        guard.close()
       } else {
         setSaveError(t(sceneSaveErrorKey(result.code)))
       }
@@ -57,17 +59,23 @@ export function SceneEditSheet({
     <Sheet
       open
       onOpenChange={(next) => {
-        if (!next && !saving) onClose()
+        if (!next && !saving) guard.close()
       }}
       ariaLabel={t('reader:sceneEdit.title')}
     >
       {/* Fixed detent, not `auto`: the scene list needs its own BottomSheetScrollView,
           and `auto` wraps content in a BottomSheetView that captures vertical pan and
           starves nested scrollables (sheet.tsx). */}
-      <SheetContent anchor="bottom" size="tall" dismissable={!saving && !dirty}>
+      <SheetContent
+        anchor="bottom"
+        size="tall"
+        dismissable={!guard.held}
+        onDismissRefused={guard.requestClose}
+      >
         {/* Keyed so an external scene change (undo, classifier write) reseeds the
             form, which only reads its props on mount. */}
         <SceneEditForm
+          ref={guard.formRef}
           insideSheet
           key={`${sceneEntities.join(',')}|${currentLocationId ?? ''}`}
           sceneEntities={sceneEntities}
@@ -76,10 +84,11 @@ export function SceneEditSheet({
           saving={saving}
           saveError={saveError}
           onSave={(next) => void save(next)}
-          onCancel={onClose}
-          onDirtyChange={setDirty}
+          onCancel={guard.close}
+          onDraftChange={guard.onDraftChange}
         />
       </SheetContent>
+      <UnsavedChangesDialog {...guard.dialog} portalHost={ABOVE_SHEETS_PORTAL_HOST} />
     </Sheet>
   )
 }

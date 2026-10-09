@@ -638,6 +638,15 @@ the Dialog or Sheet cannot be dismissed. Only a write that reports
 success closes the overlay; `onEditTime` resolving `false` and
 `onEditTime` rejecting are both treated as failures.
 
+Unsaved input holds the overlay too. While the tuple differs from the
+opening one, a dismissal (Esc, a click or tap outside, Android back)
+raises the
+[navigate-away guard](./save-sessions.md#navigate-away-guard--global-intercept)
+instead of dropping the edit. The guard's Save runs the form's own
+Save, so a tuple the form would refuse disables it with the same
+reason. Drag-down on the phone Sheet snaps back. The scene editor
+holds the same way.
+
 A Save whose tuple is unchanged never reaches the write path at
 all: no delta, no edit callback, and the overlay closes through the
 same cancel route an explicit Cancel takes. The check is tuple

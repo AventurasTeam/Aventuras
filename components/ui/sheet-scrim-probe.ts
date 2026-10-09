@@ -11,6 +11,15 @@ const SCRIM_SETTLED = 0.39
 /** Longer than a dismissible sheet takes to close, so a close that was coming has landed. */
 export const SHEET_NO_CLOSE_MS = 2000
 
+// Opacity doesn't inherit through getComputedStyle, and a held sheet's scrim hits on a child layer.
+function effectiveOpacity(el: Element): number {
+  let opacity = 1
+  for (let node: Element | null = el; node != null; node = node.parentElement) {
+    opacity *= Number(getComputedStyle(node).opacity)
+  }
+  return opacity
+}
+
 export type SheetScrimHit = { scrim: HTMLElement; coords: { clientX: number; clientY: number } }
 
 /**
@@ -25,9 +34,7 @@ export async function findSheetScrim(landmark: HTMLElement): Promise<SheetScrimH
     expect(hit).toBeInstanceOf(HTMLElement)
     expect(landmark.contains(hit)).toBe(false)
     // A press before the sheet finishes opening reaches a sheet that can't close yet.
-    expect(Number(getComputedStyle(hit as HTMLElement).opacity)).toBeGreaterThanOrEqual(
-      SCRIM_SETTLED,
-    )
+    expect(effectiveOpacity(hit as HTMLElement)).toBeGreaterThanOrEqual(SCRIM_SETTLED)
     return hit as HTMLElement
   }, SCRIM_WAIT)
   return { scrim, coords }
@@ -37,6 +44,13 @@ export async function findSheetScrim(landmark: HTMLElement): Promise<SheetScrimH
 export async function pressSheetScrim(landmark: HTMLElement): Promise<void> {
   const { scrim, coords } = await findSheetScrim(landmark)
   await userEvent.pointer([{ keys: '[MouseLeft]', target: scrim, coords }])
+}
+
+/** Asserts a real tap at the centre of `el` lands on it: stacked over a Sheet, not mounted under. */
+export function expectTopmost(el: HTMLElement): void {
+  const box = el.getBoundingClientRect()
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+  expect(el.contains(hit)).toBe(true)
 }
 
 /** The black fill a Radix modal's scrim paints (Dialog, AlertDialog, right Sheet), or null. */

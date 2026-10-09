@@ -212,7 +212,11 @@ on tablet inheriting desktop chrome).
 - **In-edit dismissal** triggers the save-session navigate-away
   guard per
   [`../../patterns/save-sessions.md → Navigate-away guard`](../../patterns/save-sessions.md).
-  Mobile inherits.
+  Mobile inherits. A tap outside, Esc on desktop and system back
+  raise it. On a bottom Sheet, drag-down snaps the sheet back
+  instead: gorhom has no point between release and dismissal to hold
+  the close, so a held sheet refuses the drag rather than guarding
+  it.
 - **Keyboard interaction** — sheets and modals trap Tab focus.
   Esc dismisses (desktop); on mobile, system back / swipe-back
   triggers stack-aware Return which dismisses the sheet (per
