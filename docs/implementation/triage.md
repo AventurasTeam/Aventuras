@@ -90,16 +90,6 @@ slice-planning gate forces its resolution before that slice is planned.
   fix lands the canon name and the back / Esc gating together; until then
   `component-inventory.md`'s "every shipped primitive matches its spec" is
   untrue for `Sheet`. Added in 4.5a's slice review, 2026-10-07.
-- **The rail's happening list and the Plot pane duplicate the entry-index
-  status block.** A shared `EntryIndexStatus` (title, body, retry) would
-  replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in
-  4.5a review, 2026-10-07.
-- **Collapse defaults belong to the C2 modules.**
-  [`entity.md → Accordion grouping`](../ui/patterns/entity.md#accordion-grouping-on-all-view)
-  makes the grouping a module concern, yet the rail keeps its own
-  `railCollapseDefaults` and imports two pane modules to build it. A
-  `defaultCollapsed` on `ListModule` would remove both. Raised in 4.5a review,
-  2026-10-07.
 - **The World and Plot `search` locators match the hidden reader rail's search
   box.** `e2e/locators/world.ts:60` and `e2e/locators/plot.ts:28` match the
   rail's identical placeholder whenever the rail shows the same category
@@ -111,12 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`reader:rail.backToCategories`) would collide if that button ever rendered
   in a desktop E2E DOM. Latent: the Sheet is phone-only and E2E is
   desktop-only. Raised in 4.5a's final review, 2026-10-07.
-- **The happening filter-reset layout effect is duplicated.**
-  `components/reader/rail/rail-list.tsx:88-95` repeats
-  `components/plot/plot-list-pane.tsx:98-103`, same comment and same reset. A
-  small shared hook (e.g. `useOfferedFilterReset`) would remove the copy; it
-  fits the same pass as the filed `EntryIndexStatus` and collapse-defaults
-  extractions. Raised in 4.5a's final review, 2026-10-07.
 - **A medium Sheet can be lifted under the status bar by a tall keyboard.**
   `components/ui/sheet.tsx` gives bottom Sheets smaller than `tall`
   `keyboardBehavior='interactive'` with no `topInset`, so on a small phone a

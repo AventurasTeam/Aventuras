@@ -28,6 +28,8 @@ export const happeningListModule: HappeningListModule = {
   grouping: {
     group: groupHappeningsByBucket,
     label: (key) => t(`plot:buckets.${key}`),
+    // The working bucket starts open, the rest closed.
+    defaultCollapsed: new Set<HappeningBucket>(['earlier', 'out-of-narrative']),
   },
   copy: plotListCopy('happening', HAPPENING_SEARCH_SCOPE),
   Row: HappeningRow,

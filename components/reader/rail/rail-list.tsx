@@ -1,16 +1,13 @@
 import { useLayoutEffect, useMemo, type ReactNode } from 'react'
 import { View } from 'react-native'
 
+import { EntryIndexStatus } from '@/components/compounds/entry-index-status'
 import { LORE_FILTER } from '@/components/entity/lore-list-module'
+import { collapseDefaultsOf } from '@/components/list/list-module'
 import { ModuleList } from '@/components/list/module-list'
-import { plotCollapseDefaults } from '@/components/plot/plot-list-pane'
 import type { EntityListPaneSurface } from '@/components/shells/entity-list-pane'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Spinner } from '@/components/ui/spinner'
-import { Text } from '@/components/ui/text'
-import { WORLD_COLLAPSED_DEFAULTS } from '@/components/world/world-list-pane'
-import { useEntryIndex, type EntryIndexSnapshot } from '@/hooks/use-entry-index'
+import { useEntryIndex } from '@/hooks/use-entry-index'
 import { t } from '@/lib/i18n'
 import type { PlotListSignals } from '@/lib/list-modules'
 import type { RailCategory, RailView } from '@/lib/reader-rail'
@@ -31,35 +28,13 @@ export type RailListProps = {
   surface?: EntityListPaneSurface
 }
 
-// The panels' own defaults under the panels' own keys, so the rail and World / Plot share one
+// The modules' own defaults under the panels' own keys, so the rail and World / Plot share one
 // session collapse state per category (patterns/entity.md → Accordion grouping).
 function railCollapseDefaults(category: RailCategory): ReadonlySet<string> {
-  return category === 'thread' || category === 'happening'
-    ? plotCollapseDefaults(category)
-    : WORLD_COLLAPSED_DEFAULTS
+  return collapseDefaultsOf(RAIL_MODULES[category])
 }
 
 function ignoreFilter(): void {}
-
-/** The happening body while the entry index is unread or failed. */
-function EntryIndexStatus({
-  entryIndex,
-}: {
-  entryIndex: Pick<EntryIndexSnapshot, 'failed' | 'retry'>
-}): ReactNode {
-  if (!entryIndex.failed) return <EmptyState title={t('reader:rail.happeningsLoading')} />
-  return (
-    <View className="items-center gap-3">
-      <EmptyState
-        title={t('plot:entryIndexFailed')}
-        subtext={t('reader:rail.entryIndexFailedBody')}
-      />
-      <Button variant="secondary" onPress={entryIndex.retry}>
-        <Text>{t('plot:entryIndexRetry')}</Text>
-      </Button>
-    </View>
-  )
-}
 
 /** The active category's C2 module, at the rail's density, over the rail's data. */
 export function RailList({
@@ -162,7 +137,18 @@ export function RailList({
           {...shared}
           listModule={RAIL_MODULES.happening}
           // The header stays mounted while the body waits, so the Select keeps focus.
-          body={entryIndex.ready ? undefined : <EntryIndexStatus entryIndex={entryIndex} />}
+          body={
+            entryIndex.ready ? undefined : (
+              <EntryIndexStatus
+                failed={entryIndex.failed}
+                onRetry={entryIndex.retry}
+                loadingTitle={t('reader:rail.happeningsLoading')}
+                failedTitle={t('plot:entryIndexFailed')}
+                failedBody={t('reader:rail.entryIndexFailedBody')}
+                retryLabel={t('plot:entryIndexRetry')}
+              />
+            )
+          }
           rows={data.happenings}
           filter={view.filter}
           onFilterChange={(filter) => onViewChange({ ...view, filter })}

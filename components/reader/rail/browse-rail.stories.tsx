@@ -3,8 +3,9 @@ import { useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
-import { plotCollapseDefaults } from '@/components/plot/plot-list-pane'
-import { WORLD_COLLAPSED_DEFAULTS } from '@/components/world/world-list-pane'
+import { entityListModule } from '@/components/entity/entity-list-module'
+import { collapseDefaultsOf } from '@/components/list/list-module'
+import { threadListModule } from '@/components/plot/thread-list-module'
 import { EntryIndexReadProvider, type EntryIndexRead } from '@/hooks/use-entry-index'
 import { railViewFor, type RailCategory, type RailView } from '@/lib/reader-rail'
 import { entriesStore, listCollapseStore, readerRailStore } from '@/lib/stores'
@@ -88,7 +89,9 @@ export const Characters: Story = {
     await userEvent.click(screen.getByRole('button', { name: /^Staged\s*1$/ }))
     expect(await screen.findByRole('button', { name: 'Vorne' }, WAIT)).toBeVisible()
     expect(
-      listCollapseStore.getCollapsed('character', WORLD_COLLAPSED_DEFAULTS).has('staged'),
+      listCollapseStore
+        .getCollapsed('character', collapseDefaultsOf(entityListModule('character')))
+        .has('staged'),
     ).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: 'Collapse rail' }))
     expect(args.onCollapse).toHaveBeenCalledTimes(1)
@@ -155,7 +158,7 @@ export const Threads: Story = {
       await screen.findByRole('button', { name: 'Expose the Syndicate broker' }, WAIT),
     ).toBeVisible()
     expect(
-      listCollapseStore.getCollapsed('thread', plotCollapseDefaults('thread')).has('pending'),
+      listCollapseStore.getCollapsed('thread', collapseDefaultsOf(threadListModule)).has('pending'),
     ).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: 'Resolved' }))
     expect(

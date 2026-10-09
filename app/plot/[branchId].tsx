@@ -6,6 +6,7 @@ import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
+import { EntryIndexStatus } from '@/components/compounds/entry-index-status'
 import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
@@ -34,10 +35,7 @@ import {
   storyPillPhase,
   useStoryGenerationGate,
 } from '@/components/story-settings/generation-run'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
-import { Text } from '@/components/ui/text'
 import { single as singleParam, worldHref } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
@@ -459,19 +457,14 @@ export default function PlotRoute() {
     >
       {!panesReady ? (
         <View className="flex-1 items-center justify-center">
-          {entryIndex.failed ? (
-            <View className="items-center gap-3">
-              <EmptyState
-                title={t('plot:entryIndexFailed')}
-                subtext={t('plot:entryIndexFailedBody')}
-              />
-              <Button variant="secondary" onPress={entryIndex.retry}>
-                <Text>{t('plot:entryIndexRetry')}</Text>
-              </Button>
-            </View>
-          ) : (
-            <EmptyState title={t('reader:hydrationLoading')} />
-          )}
+          <EntryIndexStatus
+            failed={entryIndex.failed}
+            onRetry={entryIndex.retry}
+            loadingTitle={t('reader:hydrationLoading')}
+            failedTitle={t('plot:entryIndexFailed')}
+            failedBody={t('plot:entryIndexFailedBody')}
+            retryLabel={t('plot:entryIndexRetry')}
+          />
         </View>
       ) : (
         // touch.md → Save bar on phone: the panes compress so the save bar rides above the IME.
