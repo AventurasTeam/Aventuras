@@ -3160,6 +3160,7 @@ class SettingsStore {
     // assigning the defaults object updates neither.
     await this.setActivityReporting(this.uiSettings.activityReporting)
     await ui.setNavPanelOpen(false)
+    await ui.setGalleryNewestFirst(false)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')

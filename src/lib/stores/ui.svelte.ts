@@ -403,9 +403,13 @@ class UIStore {
   }
 
   toggleGalleryOrder() {
-    this.galleryNewestFirst = !this.galleryNewestFirst
-    database
-      .setSetting('gallery_newest_first', this.galleryNewestFirst.toString())
+    this.setGalleryNewestFirst(!this.galleryNewestFirst)
+  }
+
+  setGalleryNewestFirst(newestFirst: boolean): Promise<void> {
+    this.galleryNewestFirst = newestFirst
+    return database
+      .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
   }
 
