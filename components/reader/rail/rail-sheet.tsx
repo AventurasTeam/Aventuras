@@ -67,10 +67,8 @@ export function RailSheet({
   const [sheet, setSheet] = useState<RailSheetState>(RAIL_SHEET_OPENED)
   const send = (event: RailSheetEvent) => setSheet((current) => reduceRailSheet(current, event))
 
-  // The list's viewport at the list level. The tall peek detent would grow it, and a list
-  // scrolled to its end clamps its offset to the bigger viewport; capping the list at its old
-  // height keeps the offset. The cap outlives `←`: it equals the list level's height, and
-  // releasing it relayouts the list mid-settle, when gorhom's scroll lock resets the offset.
+  // Caps the hidden list at its list-level height: the tall detent would clamp an end-of-list
+  // offset. Kept through `←`: a release relayouts mid-settle and gorhom's scroll lock resets it.
   const listHeight = useRef(0)
   const { height: windowHeight } = useWindowDimensions()
   const [cap, setCap] = useState<{ height: number; windowHeight: number } | null>(null)
@@ -127,7 +125,7 @@ export function RailSheet({
           <View
             className="flex-1"
             onLayout={(event) => {
-              if (heightCap == null) listHeight.current = event.nativeEvent.layout.height
+              if (!peeking) listHeight.current = event.nativeEvent.layout.height
             }}
           >
             {/* Mounted under the peek so `←` finds the list as it was left, scroll included. */}

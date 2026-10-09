@@ -585,6 +585,29 @@ async function listFillsSheet() {
   }, ANIMATION)
 }
 
+/** Waits until the list level's height holds still across several polls: the Sheet has settled. */
+async function waitForSheetSettled() {
+  let last = -1
+  let still = 0
+  await waitFor(async () => {
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    const height = (listLayer().parentElement as HTMLElement).getBoundingClientRect().height
+    still = Math.abs(height - last) < 0.5 ? still + 1 : 0
+    last = height
+    expect(still).toBeGreaterThanOrEqual(5)
+  }, ANIMATION)
+}
+
+/** The list fills the Sheet's content, read once the Sheet has settled. */
+async function settledListFillsSheet() {
+  await waitForSheetSettled()
+  const layer = listLayer()
+  const container = layer.parentElement as HTMLElement
+  await expect(layer.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+    container.getBoundingClientRect().height - 1,
+  )
+}
+
 /** Runs `play` with the browser window resized, then puts it back; a no-op outside Vitest. */
 async function withWindowResized(height: number, play: () => Promise<void>) {
   const browser = await import('vitest/browser').catch(() => null)
@@ -654,10 +677,9 @@ export const ReaderChipReopenClearsCap: Story = {
     await userEvent.click(peekBack())
     await headIs('character')
     await waitForMediumDetent()
-    await listFillsSheet()
-    // Past the settle: releasing it on `←` relayouts the list while the Sheet settles, which on
-    // native resets the offset of a list scrolled to its end.
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await settledListFillsSheet()
+    // Releasing it on `←` relayouts the list while the Sheet settles, which on native resets the
+    // offset of a list scrolled to its end.
     await expect(getComputedStyle(listLayer()).maxHeight).not.toBe('none')
 
     await pressBackdropOver(screen.getByTestId('browse-chip'))
@@ -682,6 +704,27 @@ export const ReaderChipWindowGrowsWhilePeeking: Story = {
       await listFillsSheet()
       await expect(getComputedStyle(listLayer()).maxHeight).toBe('none')
     })
+  },
+}
+
+/** A window round trip at the list level must not leave the other window's height for the next cap. */
+export const ReaderChipWindowRoundTripRecapsList: Story = {
+  globals: PHONE,
+  args: { initialData: LONG_ROSTER },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    await openChipSheet()
+    await peekRow('Zed 02')
+    await userEvent.click(peekBack())
+    await headIs('character')
+    await waitForSheetSettled()
+    await withWindowResized(450, waitForSheetSettled)
+    await settledListFillsSheet()
+
+    await peekRow('Zed 02')
+    await userEvent.click(peekBack())
+    await headIs('character')
+    await settledListFillsSheet()
   },
 }
 
