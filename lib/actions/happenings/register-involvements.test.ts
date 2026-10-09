@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   branches,
+  deltas,
   entities,
   happenings,
   happeningInvolvements,
@@ -108,6 +109,36 @@ describe('happening_involvements CRUD arms', () => {
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     expect((await rowFor(db, 'hinv_1')).role).toBe('duelist')
     expect(happeningInvolvementsStore.getById('hinv_1')?.role).toBe('duelist')
+  })
+
+  it('no-ops a role update that changes nothing, writing no delta', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappeningInvolvement',
+          source: 'ai_classifier',
+          payload: { entry: INV },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateHappeningInvolvement',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'hinv_1', patch: { role: 'duelist' } },
+        },
+        actionId: 'act_u',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
+    expect(await db.select().from(deltas)).toHaveLength(1)
   })
 
   it('rejects an update with a non-string role (no row change)', async () => {

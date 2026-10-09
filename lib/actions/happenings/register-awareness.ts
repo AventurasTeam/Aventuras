@@ -78,25 +78,33 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   // A delete arm cascades the link under this lock, so an existing one skips the ref check;
   // a create's reversal can still orphan it.
   if (current) {
+    // Only a user edit re-anchors learned_at; a classifier re-emit must not drift the decay anchor.
+    const learnedAt =
+      learnedAtEntryId !== undefined && isUserOriginatedSource(action.source)
+        ? nullifyRef(learnedAtEntryId)
+        : undefined
+    // Update-only reject: a create with no authored fields is a valid awareness-only
+    // record (the character knows the happening; source/decay simply unrecorded).
+    if (source === undefined && decayResistance === undefined && learnedAt === undefined)
+      return { status: 'rejected', reason: 'no awareness fields to merge' }
+    // Unchanged fields are dropped, and an all-unchanged upsert is a noop: History reads an
+    // undo payload's keys as fields that changed.
     const set: Record<string, unknown> = {}
     const undoPayload: Record<string, unknown> = {}
-    if (source !== undefined) {
+    if (source !== undefined && source !== current.source) {
       set.source = source
       undoPayload.source = current.source
     }
-    if (decayResistance !== undefined) {
+    if (decayResistance !== undefined && decayResistance !== current.decayResistance) {
       set.decayResistance = decayResistance
       undoPayload.decayResistance = current.decayResistance
     }
-    // Only a user edit re-anchors learned_at; a classifier re-emit must not drift the decay anchor.
-    if (learnedAtEntryId !== undefined && isUserOriginatedSource(action.source)) {
-      set.learnedAtEntryId = nullifyRef(learnedAtEntryId)
+    if (learnedAt !== undefined && learnedAt !== current.learnedAtEntryId) {
+      set.learnedAtEntryId = learnedAt
       undoPayload.learnedAtEntryId = current.learnedAtEntryId
     }
-    // Update-only reject: a create with no authored fields is a valid awareness-only
-    // record (the character knows the happening; source/decay simply unrecorded).
     if (Object.keys(set).length === 0)
-      return { status: 'rejected', reason: 'no awareness fields to merge' }
+      return { status: 'rejected', reason: 'awareness unchanged', code: 'noop' }
     return {
       status: 'ok',
       targetTable: 'happening_awareness',

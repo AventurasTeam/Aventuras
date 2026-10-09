@@ -159,6 +159,33 @@ describe('happening_awareness upsert', () => {
     expect(back[0].retrievalCount).toBe(7)
   })
 
+  it('logs only the fields a re-emit changes, and no-ops one that changes none', async () => {
+    const { db, ctx } = await setup()
+    const upsert = (actionId: string, fields: Record<string, unknown>) =>
+      applyDeltaAction(
+        {
+          action: {
+            kind: 'upsertHappeningAwareness',
+            source: 'user_edit',
+            payload: { branchId: 'br_1', characterId: 'char_a', happeningId: 'hap_1', ...fields },
+          },
+          actionId,
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+    const fields = { learnedAtEntryId: 'entry_3', decayResistance: 0.2, source: 'overheard' }
+    await upsert('act_1', fields)
+
+    expect(await upsert('act_2', fields)).toMatchObject({ status: 'rejected', code: 'noop' })
+    expect(await upsert('act_3', { ...fields, decayResistance: 0.8 })).toMatchObject({
+      status: 'ok',
+    })
+    const logged = await db.select().from(deltas).where(eq(deltas.actionId, 'act_3'))
+    expect(logged.map((d) => d.undoPayload)).toEqual([{ decayResistance: 0.2 }])
+    expect(await db.select().from(deltas)).toHaveLength(2)
+  })
+
   it('the DB UNIQUE backstops a duplicate natural key', async () => {
     const { ctx } = await setup()
     await applyDeltaAction(
