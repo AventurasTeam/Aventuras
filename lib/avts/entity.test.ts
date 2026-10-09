@@ -318,6 +318,35 @@ describe('EntityImportSchema', () => {
     expect(entity).toMatchObject({ state: { stackables: { [key]: 3 } } })
   })
 
+  it('bounds a quantity name by its normalized length, as storage does', () => {
+    // 'İ' lowercases to two code units; NFC folds 'e' + U+0301 into one.
+    const grows = 'İ'.repeat(21)
+    const shrinks = 'e\u0301'.repeat(21)
+    expect(
+      issuesOf(EntityImportSchema, {
+        kind: 'character',
+        ...MINIMAL,
+        state: { stackables: { [grows]: 1, [shrinks]: 2 } },
+      }),
+    ).toEqual([
+      { path: ['state', 'stackables', grows], message: 'This is longer than the field allows.' },
+    ])
+  })
+
+  it('keeps a quantity named __proto__ as data', () => {
+    const entity = EntityImportSchema.parse({
+      kind: 'character',
+      ...MINIMAL,
+      state: { stackables: JSON.parse('{"__proto__": 2, "rope": 1}') },
+    })
+    const stackables = (entity.state as { stackables: Record<string, number> }).stackables
+    expect(Object.entries(stackables)).toEqual([
+      ['__proto__', 2],
+      ['rope', 1],
+    ])
+    expect(Object.getPrototypeOf(stackables)).toBe(Object.prototype)
+  })
+
   it('reports a too-long quantity name and a repeated one in the same file', () => {
     const stackables = { ['k'.repeat(41)]: 1, Rope: 1, rope: 2 }
     expect(

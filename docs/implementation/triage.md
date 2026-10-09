@@ -537,21 +537,11 @@ slice-planning gate forces its resolution before that slice is planned.
   lore writer is what would surface it. Fix idea: fold stackables on
   export the way `normalizedStackables` in `lib/world/entity-actions.ts`
   does. Found in Slice 4.6 review.
-- **A stackable key's length is checked before it is normalized.**
-  (2026-10-08) `lib/world/entity-draft.ts:69` applies `max(40)` before
-  `normalizeTerm`, and `'İ'.toLowerCase()` grows, so a key of forty `İ`
-  passes the draft and the `.avts` import, then fails the stored
-  `max(40)` in `lib/actions/entities/register.ts:137`. Found in Slice 4.6
-  review.
 - **Entity register writes the raw state, not the parsed one.**
   (2026-10-08) `lib/actions/entities/register.ts:137-152` and `:213-220`
   `safeParse` the state but write the raw `row` / `patch.state`, so unknown
   state keys persist, and per-row export carries them out. Found in Slice
   4.6 review.
-- **A stackable key named `__proto__` vanishes on import.** (2026-10-08)
-  In `lib/avts/entity.ts` the key passes validation and is absent from the
-  parsed output, so it is dropped without a message. A pathological
-  hand-written file; low priority. Found in Slice 4.6 review.
 - **No lint rule catches a dropped `await`.** (2026-10-08)
   `eslint.config.js` has no type-aware promise rules (`no-floating-promises`,
   `return-await`), so a missing `await` passes lint repo-wide. Task 9's

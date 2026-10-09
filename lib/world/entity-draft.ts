@@ -66,7 +66,12 @@ export type EntityBaseDraft = z.infer<z.ZodObject<typeof baseShape>>
 export const stackableKey = normalizeTerm
 
 const stackableSchema = z.object({
-  key: z.string().trim().min(1, WORLD_ISSUE.stackableKeyRequired).max(40, WORLD_ISSUE.tooLong),
+  key: z
+    .string()
+    .trim()
+    .min(1, WORLD_ISSUE.stackableKeyRequired)
+    // The stored key's bound: normalizing can lengthen it ('İ' lowercases to two units).
+    .refine((key) => stackableKey(key).length <= 40, WORLD_ISSUE.tooLong),
   count: z
     .number({ error: WORLD_ISSUE.stackableCount })
     .int(WORLD_ISSUE.stackableCount)
