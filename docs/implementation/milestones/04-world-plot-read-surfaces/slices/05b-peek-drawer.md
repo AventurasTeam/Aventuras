@@ -231,6 +231,13 @@ Canon carries the detail; each line points to it.
   and
   [`entity.md → Why portrait lives only on Overview`](../../../../ui/patterns/entity.md#why-portrait-lives-only-on-overview).
 
+- **The phone `←` returns to the list where it was left** (developer,
+  2026-10-09, option c): a gap the plan missed, since `←` reset the
+  list to the top. `RailSheet` keeps the list level mounted, hidden,
+  under the peek, and `renderPeek` (C10) is unchanged for its callers;
+  canon in
+  [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
+
 Implementer choices worth keeping:
 
 - **The peek's `Set as lead` shows no toast on success**, unlike
@@ -259,12 +266,6 @@ Implementer choices worth keeping:
 - **One lead badge and one injection chip**: `LeadTag` and
   `InjectionModeChip` are extracted, so the rail row, World's Overview
   and the peek render the same components.
-- **The phone `←` returns to the list where it was left** (developer,
-  2026-10-09, option c): a gap the plan missed, since `←` reset the
-  list to the top. `RailSheet` keeps the list level mounted, hidden,
-  under the peek, and `renderPeek` (C10) is unchanged for its callers;
-  canon in
-  [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
 - **The hidden list keeps its height cap through `←`**, dropped only on
   reopen and suspended while the window height differs (it reapplies
   when the height returns): releasing it relayouts the list while the
