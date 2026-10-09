@@ -12,7 +12,7 @@ import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
-import type { ActionHandler } from '../delta/registry'
+import type { ActionHandler, HandlerOutcome } from '../delta/registry'
 import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteColumn } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 
@@ -141,6 +141,15 @@ function buildStatePatchOutcome(
   }
 }
 
+// buildStatePatchOutcome merges without parsing, and these fields belong to characters only.
+function refuseNonCharacter(kind: string, current: Entity): HandlerOutcome | null {
+  if (current.kind === 'character') return null
+  return {
+    status: 'rejected',
+    reason: `${kind} target ${current.branchId}:${current.id} is not a character`,
+  }
+}
+
 export const updateEntityVisualStateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'updateEntityVisualState')
     throw new Error(
@@ -152,6 +161,8 @@ export const updateEntityVisualStateHandler: ActionHandler = async (action, bran
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
     return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+  const wrongKind = refuseNonCharacter(action.kind, current)
+  if (wrongKind) return wrongKind
   return buildStatePatchOutcome(bid, id, current, { visual }, ctx)
 }
 
@@ -164,6 +175,8 @@ export const updateEntityInventoryHandler: ActionHandler = async (action, branch
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
     return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+  const wrongKind = refuseNonCharacter(action.kind, current)
+  if (wrongKind) return wrongKind
   const patch: Record<string, unknown> = {}
   if (equipped_items !== undefined) patch.equipped_items = equipped_items
   if (inventory !== undefined) patch.inventory = inventory
@@ -186,6 +199,8 @@ export const updateEntityStackablesHandler: ActionHandler = async (action, branc
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
     return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+  const wrongKind = refuseNonCharacter(action.kind, current)
+  if (wrongKind) return wrongKind
   return buildStatePatchOutcome(bid, id, current, { stackables }, ctx)
 }
 
@@ -214,6 +229,8 @@ export const updateEntityLocationTrackingHandler: ActionHandler = async (action,
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
     return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+  const wrongKind = refuseNonCharacter(action.kind, current)
+  if (wrongKind) return wrongKind
   const patch: Record<string, unknown> = {}
   if (currentLocationId !== undefined) patch.current_location_id = currentLocationId
   if (lastSeenAt !== undefined) patch.lastSeenAt = lastSeenAt

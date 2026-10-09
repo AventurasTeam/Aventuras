@@ -1076,6 +1076,7 @@ Per-field "who writes / when":
 | Field group                                 | First write                             | Subsequent writes                                         |
 | ------------------------------------------- | --------------------------------------- | --------------------------------------------------------- |
 | `description` (top-level)                   | Whoever spawns the entity               | User-only in v1                                           |
+| `name_collision_flag` (top-level)           | Classifier at create (Layer B)          | User-only, clearing only, delta-logged                    |
 | `visual.*`                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change        |
 | `traits`, `drives`                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form |
 | `voice`                                     | Classifier from prose, or user via form | Both                                                      |

@@ -41,15 +41,10 @@ export type EntityImport =
   | (EntityImportBase & { kind: 'item'; state: ItemImportState })
   | (EntityImportBase & { kind: 'faction'; state: FactionImportState })
 
-// entityStateSchemaForKind is typed as the union of the four; a key only one kind has picks it.
-type StateSchemaWith<K extends string> = Extract<
-  ReturnType<typeof entityStateSchemaForKind>,
-  { shape: Record<K, unknown> }
->
-const characterState = entityStateSchemaForKind('character') as StateSchemaWith<'lastSeenAt'>
-const locationState = entityStateSchemaForKind('location') as StateSchemaWith<'parent_location_id'>
-const itemState = entityStateSchemaForKind('item') as StateSchemaWith<'at_location_id'>
-const factionState = entityStateSchemaForKind('faction') as StateSchemaWith<'standing'>
+const characterState = entityStateSchemaForKind('character')
+const locationState = entityStateSchemaForKind('location')
+const itemState = entityStateSchemaForKind('item')
+const factionState = entityStateSchemaForKind('faction')
 
 const STACKABLE_KEY_MAX = 40
 
@@ -60,32 +55,41 @@ const stackableKeyCheckGate = {
     typeof payload.value === 'object' && payload.value !== null,
 }
 
-// The pane draft refuses a blank, repeated or (once trimmed) over-long quantity name;
-// saving would drop a blank one, or keep only one of a repeated one's counts.
+// The pane draft refuses a blank, repeated or (once normalized) over-long quantity name;
+// saving would drop a blank one, or keep only one of a repeated one's counts. A map, not a
+// record: zod's record skips a "__proto__" key, which the pane and piggyback store as data.
 const stackablesField = z
-  .record(z.string(), characterState.shape.stackables.unwrap().valueType)
-  .superRefine((stackables, ctx) => {
-    const seen = new Set<string>()
-    for (const raw of Object.keys(stackables)) {
-      const key = stackableKey(raw)
-      if (key === '') {
-        ctx.addIssue({
-          code: 'custom',
-          path: [raw],
-          message: t('common:avts.issue.stackableKeyRequired'),
-        })
-      } else if (raw.trim().length > STACKABLE_KEY_MAX) {
-        ctx.addIssue({ code: 'custom', path: [raw], message: t('common:avts.issue.tooLong') })
-      } else if (seen.has(key)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [raw],
-          message: t('common:avts.issue.duplicateStackable'),
-        })
-      }
-      seen.add(key)
-    }
-  }, stackableKeyCheckGate)
+  .preprocess(
+    (value) =>
+      typeof value === 'object' && value !== null && !Array.isArray(value)
+        ? new Map(Object.entries(value))
+        : value,
+    z
+      .map(z.string(), characterState.shape.stackables.unwrap().valueType)
+      .superRefine((stackables, ctx) => {
+        const seen = new Set<string>()
+        for (const raw of stackables.keys()) {
+          const key = stackableKey(raw)
+          if (key === '') {
+            ctx.addIssue({
+              code: 'custom',
+              path: [raw],
+              message: t('common:avts.issue.stackableKeyRequired'),
+            })
+          } else if (key.length > STACKABLE_KEY_MAX) {
+            ctx.addIssue({ code: 'custom', path: [raw], message: t('common:avts.issue.tooLong') })
+          } else if (seen.has(key)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [raw],
+              message: t('common:avts.issue.duplicateStackable'),
+            })
+          }
+          seen.add(key)
+        }
+      }, stackableKeyCheckGate)
+      .transform((stackables) => Object.fromEntries(stackables)),
+  )
   .optional()
 
 const characterImportState = characterState

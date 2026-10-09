@@ -184,6 +184,18 @@ describe('draft schemas', () => {
     ])
   })
 
+  it('bounds a quantity name by its normalized length, as storage does', () => {
+    // 'İ' lowercases to two code units; NFC folds 'e' + U+0301 into one.
+    const result = characterDraftSchema.safeParse({
+      ...base,
+      stackables: [
+        { key: 'İ'.repeat(21), count: 1 },
+        { key: 'e\u0301'.repeat(21), count: 2 },
+      ],
+    })
+    expect(issues(result)).toEqual([{ path: ['stackables', 0, 'key'], message: 'tooLong' }])
+  })
+
   it('reports a cleared quantity count as a count issue', () => {
     const result = characterDraftSchema.safeParse({
       ...base,

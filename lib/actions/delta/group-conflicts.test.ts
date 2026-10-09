@@ -258,6 +258,24 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
     expect(before.deltas).toEqual([])
   })
 
+  // Committed, its undo would refuse as held-in-redo: the group's own delete holds the row.
+  it('rejects an update of a row the group deletes', async () => {
+    const before = await snapshot()
+    const rename: PipelineAction = {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: { branchId: 'b1', id: 'char_keep', patch: { name: 'Renamed' } },
+    }
+
+    for (const actions of [
+      [rename, deleteEntity('char_keep')],
+      [deleteEntity('char_keep'), rename],
+    ]) {
+      expect(await group(actions)).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+      expect(await snapshot()).toEqual(before)
+    }
+  })
+
   it('commits the entity delete builder output and undoes it cleanly', async () => {
     await ctx.db.insert(entities).values([
       entity('fac_1', 'faction'),

@@ -26,7 +26,7 @@ describe('sceneTrackingActions', () => {
       branchId,
       source: 'user_edit',
       entities,
-      previous: { entryId: 'ent_0', sceneEntities: [], currentLocationId: null, worldTime: 0 },
+      previous: { entryId: 'ent_0', currentLocationId: null, worldTime: 0 },
       before: { sceneEntities: [], currentLocationId: null },
       after: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
     })
@@ -45,7 +45,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_a'],
         currentLocationId: 'loc_a',
         worldTime: 100,
       },
@@ -69,7 +68,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_a', 'char_b'],
         currentLocationId: 'loc_a',
         worldTime: 100,
       },
@@ -97,7 +95,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_a'],
         currentLocationId: 'loc_a',
         worldTime: 40,
       },
@@ -134,7 +131,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_a'],
         currentLocationId: 'loc_a',
         worldTime: 100,
       },
@@ -156,7 +152,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_a'],
         currentLocationId: null,
         worldTime: 0,
       },
@@ -174,7 +169,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_a'],
         currentLocationId: 'loc_a',
         worldTime: 0,
       },
@@ -198,7 +192,6 @@ describe('sceneTrackingActions', () => {
       entities,
       previous: {
         entryId: 'ent_0',
-        sceneEntities: ['char_b'],
         currentLocationId: null,
         worldTime: 0,
       },
@@ -215,7 +208,7 @@ describe('sceneTrackingActions', () => {
       branchId,
       source: 'user_edit',
       entities,
-      previous: { entryId: 'ent_0', sceneEntities: [], currentLocationId: null, worldTime: 0 },
+      previous: { entryId: 'ent_0', currentLocationId: null, worldTime: 0 },
       before: { sceneEntities: [], currentLocationId: null },
       after: { sceneEntities: ['item_a'], currentLocationId: 'loc_a' },
     })

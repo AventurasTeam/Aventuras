@@ -13,6 +13,7 @@ import {
 
 import { collisionPairOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
+import { referencingEntities } from './entity-refs'
 import { mergeLinks } from './merge-links'
 
 function entity(
@@ -305,6 +306,32 @@ describe('entityMergeActions — inverse refs', () => {
       ['item_1', { state: { at_location_id: 'loc_a' } }],
       ['loc_c', { state: { parent_location_id: 'loc_a' } }],
     ])
+  })
+
+  it('renames the place a character was last seen, and leaves a delete’s to history', () => {
+    const hollow = entity('loc_a', 'location')
+    const twin = entity('loc_b', 'location')
+    const lastSeenAt = { entryId: 'ent_1', locationId: 'loc_b', worldTime: 60 }
+    const left = entity('char_1', 'character', {}, { current_location_id: null, lastSeenAt })
+    const { actions } = merge({
+      canonical: hollow,
+      loser: twin,
+      branchEntities: [hollow, twin, left],
+    })
+    expect(
+      ofKind(actions, 'updateEntity').map((a) => [a.payload.id, a.payload.patch]),
+    ).toStrictEqual([
+      [
+        'char_1',
+        {
+          state: {
+            ...emptyEntityState('character'),
+            lastSeenAt: { ...lastSeenAt, locationId: 'loc_a' },
+          },
+        },
+      ],
+    ])
+    expect(referencingEntities('loc_b', [hollow, twin, left])).toEqual([])
   })
 
   it('rewrites a holder’s equipped and inventory refs in one update, holding the item once', () => {

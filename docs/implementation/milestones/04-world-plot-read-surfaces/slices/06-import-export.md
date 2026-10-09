@@ -198,7 +198,9 @@ bind a later slice. Canon carries the detail; each line points to it.
 - **Per-row payloads carry no branch-local id.** Export leaves out
   every entity and entry reference in an entity's `state`, a thread's
   or happening's entry references, and every link row; import drops
-  those keys rather than rejecting them. On another story the refs
+  those keys rather than rejecting them, except that a happening's
+  anchor is read for the time-anchor exclusivity before it's dropped.
+  On another story the refs
   would dangle, and on the same story a re-imported copy would run
   World's one-position-per-item rule and strip the original's items;
   see
@@ -221,12 +223,15 @@ bind a later slice. Canon carries the detail; each line points to it.
   [`data.md → Raw JSON viewer`](../../../../ui/patterns/data.md#raw-json-viewer--shared-modal-pattern).
   Export always reads the committed row, never the draft: exporting a
   row with unsaved edits exports the saved version.
-- **The host flow M8.3 and M9.4 copy:** one `useRowImport` per import
-  slot, opened through the leave guard, refused and closed while
+- **The per-row host flow (World and Plot):** one `useRowImport` per
+  import slot, opened through the leave guard, refused and closed while
   generation is in flight, and closed when the screen loses focus or
   the category switches. The dialog closes itself before the commit
   resolves, so the host toasts the outcome with import copy and
-  selects the new row through the leave guard; see
+  selects the new row through the leave guard. M8.3's vault calendars
+  and M9.4's story import copy only the outcome reporting: they create
+  rather than save a row, navigate rather than select, and the
+  generation gate doesn't apply to them; see
   [`import-dialog.md → World per-row entity import`](../../../../ui/patterns/import-dialog.md#world-per-row-entity-import)
   and
   [`→ Host gating during in-flight generation`](../../../../ui/patterns/import-dialog.md#host-gating-during-in-flight-generation).

@@ -4,7 +4,7 @@ import { branches, entities, stories, type EntityState, type NewEntity } from '@
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore, resetAllStores } from '@/lib/stores'
 
-import { commitRowSave } from './commit-row-save'
+import { commitRowSave, flatRowSaveResult } from './commit-row-save'
 import { withKeyLock } from '../delta/key-lock'
 import { rowLock } from '../delta/row-locks'
 import type { PipelineAction } from '../types'
@@ -66,6 +66,16 @@ describe('commitRowSave — every refusal carries a code from the closed set', (
     })
   })
 
+  it('reports a save of a row that is gone as not-found', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_b', null)])
+
+    expect(await save(() => [setParent('loc_a', 'loc_b')], ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+  })
+
   it('reports a refusal that carries no code as failed', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values([loc('loc_a', null)])
@@ -75,5 +85,23 @@ describe('commitRowSave — every refusal carries a code from the closed set', (
       status: 'rejected',
       code: 'failed',
     })
+  })
+})
+
+describe('flatRowSaveResult', () => {
+  it('reports a parent code as a failure and passes every other result through', () => {
+    for (const code of ['parent-cycle', 'parent-chain-broken'] as const)
+      expect(flatRowSaveResult({ status: 'rejected', reason: 'r', code })).toEqual({
+        status: 'rejected',
+        reason: 'r',
+        code: 'failed',
+      })
+    for (const code of ['in-flight', 'not-found', 'failed'] as const)
+      expect(flatRowSaveResult({ status: 'rejected', reason: 'r', code })).toEqual({
+        status: 'rejected',
+        reason: 'r',
+        code,
+      })
+    expect(flatRowSaveResult({ status: 'ok', id: 'thr_1' })).toEqual({ status: 'ok', id: 'thr_1' })
   })
 })

@@ -65,6 +65,11 @@ export function stateWithRefRewritten(
         next.inventory = held.inventory
         changed = true
       }
+      // A snapshot, not a ref: a merge renames the place it names, a delete leaves it.
+      if (to != null && current.lastSeenAt?.locationId === fromId) {
+        next.lastSeenAt = { ...current.lastSeenAt, locationId: to }
+        changed = true
+      }
       return changed ? next : null
     }
     case 'location': {

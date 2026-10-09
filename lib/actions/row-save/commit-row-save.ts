@@ -4,12 +4,14 @@ import { generationStore } from '@/lib/stores'
 import { PARENT_CHAIN_BROKEN, PARENT_CYCLE } from '@/lib/world'
 
 import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
+import { TARGET_NOT_FOUND } from '../delta/registry'
 import type { DbCtx, PipelineAction } from '../types'
 
 export const ROW_SAVE_REJECTION = {
   inFlight: 'in-flight',
   parentCycle: PARENT_CYCLE,
   parentChainBroken: PARENT_CHAIN_BROKEN,
+  notFound: TARGET_NOT_FOUND,
   failed: 'failed',
 } as const
 
@@ -18,6 +20,25 @@ export type RowSaveRejectionCode = (typeof ROW_SAVE_REJECTION)[keyof typeof ROW_
 export type RowSaveResult =
   | { status: 'ok'; id: string }
   | { status: 'rejected'; reason: string; code: RowSaveRejectionCode }
+
+/** What a save of a row with no parent chain (thread, happening, lore) can report. */
+export type FlatRowSaveRejectionCode = Exclude<
+  RowSaveRejectionCode,
+  typeof PARENT_CYCLE | typeof PARENT_CHAIN_BROKEN
+>
+
+export type FlatRowSaveResult =
+  | { status: 'ok'; id: string }
+  | { status: 'rejected'; reason: string; code: FlatRowSaveRejectionCode }
+
+// Only a location's parent raises a parent code, so on any other row one is a failure.
+export function flatRowSaveResult(result: RowSaveResult): FlatRowSaveResult {
+  if (result.status === 'ok') return result
+  const { reason, code } = result
+  return code === PARENT_CYCLE || code === PARENT_CHAIN_BROKEN
+    ? { status: 'rejected', reason, code: ROW_SAVE_REJECTION.failed }
+    : { status: 'rejected', reason, code }
+}
 
 // A reversal raised while the save awaited its locks is what the gate below reports as in-flight.
 function rejectionCode(code: string | undefined): RowSaveRejectionCode {
@@ -28,6 +49,8 @@ function rejectionCode(code: string | undefined): RowSaveRejectionCode {
       return ROW_SAVE_REJECTION.parentCycle
     case PARENT_CHAIN_BROKEN:
       return ROW_SAVE_REJECTION.parentChainBroken
+    case TARGET_NOT_FOUND:
+      return ROW_SAVE_REJECTION.notFound
     default:
       return ROW_SAVE_REJECTION.failed
   }

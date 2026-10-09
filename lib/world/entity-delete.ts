@@ -1,5 +1,5 @@
 import type { PipelineAction } from '@/lib/actions'
-import type { Entity } from '@/lib/db'
+import type { Entity, StoryEntry } from '@/lib/db'
 
 import { orphanedFlags, withFlagClears } from './collision-flags'
 import { stateOf } from './entity-draft'
@@ -9,6 +9,20 @@ export type DeleteTail = {
   id: string
   sceneEntities: readonly string[]
   currentLocationId: string | null
+}
+
+/** The head turn's tail as a delete or merge plans against it. */
+export function deleteTailOf(
+  head: { tail: Pick<StoryEntry, 'id' | 'metadata'> } | null,
+): DeleteTail | null {
+  const metadata = head?.tail.metadata
+  return head == null || metadata == null
+    ? null
+    : {
+        id: head.tail.id,
+        sceneEntities: metadata.sceneEntities,
+        currentLocationId: metadata.currentLocationId,
+      }
 }
 
 export type EntityDeleteInput = {

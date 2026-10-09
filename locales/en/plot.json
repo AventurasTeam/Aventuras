@@ -174,7 +174,8 @@
   "save": {
     "saved": "Saved.",
     "failed": "Couldn't save your changes. They're still here — try again.",
-    "inFlight": "Couldn't save while generation is in flight. Your changes are still here."
+    "inFlight": "Couldn't save while generation is in flight. Your changes are still here.",
+    "notFound": "Couldn't save: this row no longer exists."
   },
   "delete": {
     "threadTitle": "Delete {{name}}?",

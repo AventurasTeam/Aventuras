@@ -347,6 +347,15 @@ DB-backed `openRegionTokens` resolves all of them.
   awareness on rows it didn't create (max decay resistance, sources
   concatenated), so M5.2 decides whether a user-written awareness row
   keeps its values. Found in 4.2c's slice review (2026-10-07).
+- **M5.2 — A lore row with a null body exports a file its own import
+  refuses.** `lore.body` is nullable (`lib/db/lore/lore.table.ts`),
+  `loreExport` writes it as `''`, and the import refuses a lore file
+  without a body. No writer stores a null body today (the lore pane, the
+  wizard and the seed all require one), so a new lore writer is what
+  would surface it, and the close's lore-mgmt phase is the first. Either
+  that writer requires a body, or export and import agree on an empty
+  one. Split from a Slice 4.6 review entry; routed from triage
+  2026-10-09.
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
@@ -492,6 +501,36 @@ verified against the code first. Resolve with the slice each names.
   (`awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')`),
   which discards a pass before its commit burst and lets one already
   committing land. Routed from triage 2026-09-27.
+- **M6.3 — No shared branch filter for store rows.** About twenty call sites
+  in `lib`, `components` and `app` filter a store's rows by
+  `branchId` inline; 4.2c added two more (`branchRows` in
+  `resolve-collision.ts`, `inBranch` in
+  `components/world/use-collision-resolve.ts`). A store-level accessor
+  would replace them. Found in 4.2c's slice review (2026-10-07).
+  Verified 2026-10-09: 45 such filters (lib 16, components 14, app 10,
+  hooks 5), with a third identical helper, `onBranch` in
+  `lib/world/merge-links.ts`. The working-set stores hold one branch,
+  so each filter means "every row if this is the loaded branch, else
+  none", and an accessor can return a stable reference instead of
+  scanning. M6.3 is where a mounted route's branch can first differ
+  from the loaded one. Routed from triage 2026-10-09.
+- **M6.3 — The History tab reads its own row without a branch check.**
+  `components/history/use-history-target.ts` looks the tab's row up in
+  the stores by id alone; ids repeat across branches (composite primary
+  key), and 4.2c added branch guards to the other-end name lookups and
+  the link version beside it. Unreachable while panes render only
+  branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07). The
+  stores hold only the loaded branch, so the lookup can return another
+  branch's row only once a route outlives a re-hydrate for a different
+  branch; the accessor above fixes both. Routed from triage 2026-10-09.
+- **M6.3 — `readerRailStore.enterBranch` is keyed on `branchId` only.** Once M6 adds
+  branch switching, key it on focus too: a pushed reader for another branch,
+  popped back, would otherwise keep the other branch's view. Raised in 4.5a
+  review, 2026-10-07. Canon already says what the return resets
+  ([`reader-composer.md → State model`](../ui/screens/reader-composer/reader-composer.md#state-model--manual--viewport-decoupled):
+  filter, search and the peek reset when the reader's branch changes),
+  so no per-branch view map is needed. The stacked-route twin of the
+  composer-draft entry above. Routed from triage 2026-10-09.
 - **M6 — The lead must be per-branch and delta-logged.** Two branches
   with different leads is a valid use case (developer, 2026-09-28), and
   a story-level `definition.leadEntityId` dangles on any branch lacking
@@ -1248,6 +1287,14 @@ each names.
   carries a Gregorian calendar section for a 360-day calendar, and
   it starts describing the real one the moment the registry consults
   `vault_calendars`.
+- **M8.3 — `import-dialog.stories.tsx` now imports the World and Plot import
+  configs.** (2026-10-08) When M8.3 / M9.4 add more host stories, consider
+  domain-owned `world-import.stories.tsx` / `plot-import.stories.tsx` next
+  to the configs' tests instead of growing a compound's stories. Found in
+  Slice 4.6 review. M8.3's vault calendars are the first likely new host;
+  no canon rule bans a compound's stories importing domain configs, and
+  this is the only compound story that does. Routed from triage
+  2026-10-09.
 
 **Gates.** M7 (settings surfaces translation toggles).
 
@@ -1358,6 +1405,15 @@ own.
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+  The same pass owns focus: RN Web maps `disabled` to the native
+  attribute, so a control that disables under focus drops it to
+  `<body>` (`Button`'s `loading`, History's `Load more`;
+  [lesson](./lessons-learned/rnweb-disabled-under-focus-blurs.md)). A
+  focusable `aria-disabled` control without native `disabled` would
+  keep focus and carry the reason, but contradicts
+  [`color.md → Disabled`](../ui/foundations/color.md#disabled)
+  ("disabled controls aren't focusable"), so it's a developer call.
+  Widened from triage 2026-10-09.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
@@ -1396,6 +1452,43 @@ own.
   would let a caller-supplied `role="combobox"` through — nobody has
   applied or tested it. Applies to every `dropdown`-mode `Select` that
   carries a `label`. Raised 2026-08-13.
+- **M9.2 — Select's radio groups don't follow the keyboard on web.**
+  `components/ui/select.tsx` builds its segment and radio-row branches on
+  `@rn-primitives/radio-group`, whose web side relies on Radix's roving
+  focus. RN-Web drops the `data-radix-collection-item` attribute Radix
+  finds its items by. Probed on the collision dialog's mode picker (a
+  segment): the group is a stray tab stop and an arrow key moves focus
+  without checking anything. The radio-row branch uses the same
+  primitive and wasn't probed. 4.2c's collision dialog handles Space,
+  the arrows and the single tab stop itself for its stacked radios.
+  Found in 4.2c's slice review (2026-10-07). The mechanism was verified
+  from library source on 2026-10-09: with the attribute gone, Radix's
+  collection sorts every item at index -1 and falls back to insertion
+  order, which re-shuffles on each render, so arrow targets come out in
+  arbitrary order, and the root's roving `tabIndex` is the stray stop.
+  The symptom is unreconciled: by that trace an arrow-driven focus still
+  checks the radio (Radix's `onFocus` clicks it, and RN-Web's responder
+  turns the click into `onPress`). Untested candidate fix:
+  `dataSet={{ radixCollectionItem: '' }}` on each item, which RN-Web
+  writes as the attribute; if it holds, the collision dialog's own
+  roving focus can go. Every segment and radio-row `Select` is affected.
+  Routed from triage 2026-10-09.
+- **M9.2 — Focus-ring canon drift.** (2026-10-09)
+  [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
+  ring with a 2px offset; none of the `focus-visible:ring-2` usages under
+  `components/` has an offset (no `ring-offset` anywhere). `Region`,
+  `EntityLink` and `StatusRow` in
+  `components/world/overview/overview-parts.tsx` have no focus ring at
+  all. Raised in 4.5b's review, 2026-10-09. Wider, verified the same day:
+  27 `focus-visible:ring-2` sites, none offset; 7 more use shadcn's 3px
+  half-alpha ring (switch, checkbox, select, step frame, picker field,
+  input); 2 use `ring-inset`; and `ListRow`, which canon names, has no
+  focus style. The three overview parts carry no `outline-none`, so they
+  likely show the browser's default outline: off-token rather than absent
+  (not checked in a browser). The design call: keep the outset offset,
+  which a scroll or `overflow-hidden` container clips (probably why
+  `ring-inset` exists), or amend canon to an un-offset ring, then unify
+  the 3px variants. Routed from triage 2026-10-09.
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:
@@ -1412,7 +1505,14 @@ own.
   common-knowledge glyph is text-less, so it joins in-scene and
   recently-classified in needing the hidden-text primitive. The row's
   `description` line (a happening's category, a lore excerpt) is hidden
-  too. Widened 2026-09-22 by Slice 4.3.
+  too. Widened 2026-09-22 by Slice 4.3. A selected row says nothing either:
+  `aria-selected` on the row's `role="button"` is invalid ARIA on web
+  (`components/compounds/list-row.tsx`, and the phone rail's categories
+  in `components/reader/rail/rail-sheet-categories.tsx`), while native maps
+  it to `accessibilityState.selected`. RN Web forwards `aria-current` and
+  `aria-pressed`; `Chip` already uses the latter. The ⊙ glyph has had a
+  label since 4.5b (`plot:commonKnowledgeMarker`, used by the peek), ready
+  for the hidden-text primitive. Widened from triage 2026-10-09.
 - **M9.4 — A failed desktop save of an `.avts` file goes unreported.**
   On desktop and web, `saveAvtsFile` (`lib/avts/save-file.ts`) hands
   the file over as an anchor download and resolves at the hand-off.
@@ -1579,6 +1679,130 @@ own.
   `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
   review (2026-10-05); the two wider scans were found when it was
   routed.
+- **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
+  `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
+  indexes without statistics. Measured while planning 4.2c's History
+  link-row union: on a 30k-delta branch (node:sqlite, desktop) a
+  History chunk takes about 9 ms because the union's OR keeps SQLite off
+  `deltas_chain_idx`, and about 2 ms after `ANALYZE`. That's accepted
+  for 4.2c. Running `PRAGMA optimize` at boot or on close is
+  cross-cutting (desktop main process and the mobile expo-sqlite
+  connection), so it's routed here rather than into the slice. Revisit
+  if History or another log-shaped query feels slow on a long story,
+  Android first. Found during 4.2c planning (2026-10-06). Once the
+  History tab reused its link-end scan (#581), this is most of what is
+  left: on a 30k-delta branch whose tab row has only old deltas, a
+  first chunk or search keystroke still takes about 9 ms while the
+  next chunk takes under 1 ms (`pnpm bench:history`). Re-measured
+  2026-10-09 (Node 24.14, SQLite 3.51.2): first chunk 7.5–9.7 ms, search
+  8.1–8.9 ms, next chunk under 1 ms. Plain `PRAGMA optimize` doesn't
+  deliver the gain: its approximate statistics underestimate how many
+  rows share a branch on `deltas_chain_idx`, and the chunk stays at
+  8.5 ms. `PRAGMA optimize=0x10002` or a full `ANALYZE` brings it to
+  about 1.2 ms, on a single-branch fixture. Two queries are written
+  around the missing statistics (`lib/history/link-ends.ts`,
+  `lib/retrieval/source-rows.ts`) and need their plans re-checked once
+  statistics exist. Measure on one bench with the reversal-selection
+  entry above, whose index migration shifts the same `deltas` plans.
+  Routed from triage 2026-10-09.
+- **M9.5 — `useRailData` runs in the uncompiled reader route.** The route
+  re-renders on lore, thread, happening and chapter writes. Unmeasured.
+  Options: each connected rail component calls `useRailData` itself,
+  memoized, or a `useReaderRail(branchId)` hook. Raised in 4.5a review,
+  2026-10-07. Verified 2026-10-09: the React Compiler bails on the route
+  (listed in `scripts/compiler-bailouts.baseline.json` since 2026-09-24)
+  over two `try … finally` blocks, and with those removed still bails
+  on value blocks inside a try. A third option: a small provider that
+  calls `useRailData` and wraps the shell's children, so its re-renders
+  reach context consumers only; calling the hook in each consumer
+  doubles the work on desktop, where the rail column and the peek both
+  mount. Profile a classifier burst first. Routed from triage
+  2026-10-09.
+- **M9.5 — `useRowSignals` returns new `rowTints` and `inScene` identities on
+  unrelated writes.** `hooks/use-row-signals.ts:107-131` changes them on lore,
+  thread and entry writes, so rail lists re-render through a classifier
+  burst; keep the old value when the contents are equal. Raised in 4.5a
+  review, 2026-10-07. Verified 2026-10-09: `rowTints` is `useRailData`'s
+  name for `recentlyClassified.rows`, rebuilt on any lore, thread,
+  happening or entity write on any branch; `inScene` on entry and entity
+  writes. `useRailData`'s own arrays change on the same writes, so this
+  spares row-level re-renders only. One budget with the entry above.
+  Routed from triage 2026-10-09.
+- **M9.5 — A toast fired under a modal Sheet may be hidden from assistive
+  tech.** (2026-10-09) Radix's `hideOthers` marks everything outside a
+  modal Sheet `aria-hidden`, and the `Toaster` renders in-tree
+  (`app/_layout.tsx:107`, `components/ui/toast.tsx:194`), so a toast
+  fired while the peek drawer or another modal Sheet is open may sit
+  under the scrim and go unannounced; the peek's `Set as lead` refusal
+  toast is a new instance. Raised in 4.5b's review, 2026-10-09. Verified
+  statically the same day, and wider: the `Toaster` renders nothing while
+  empty and puts `aria-live` on each toast, so a Radix modal (Dialog,
+  AlertDialog or right Sheet) that opens with no toast showing hides the
+  app root, and a toast mounted after inherits it. An always-rendered,
+  empty live region would be spared by `hideOthers`. The observation in
+  [`parked.md → Background content behind AlertDialog is not aria-hidden`](../parked.md#background-content-behind-alertdialog-is-not-aria-hidden)
+  contradicts this; one browser probe settles both. Routed from triage
+  2026-10-09.
+- **M9.5 — A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
+  native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
+  a closing Sheet's scrim keeps catching touches until its animation ends
+  (gorhom's backdrop turns `pointerEvents` off only at index -1). A host that
+  closes a Sheet and opens a Dialog in one press, like the phone
+  `OverflowMenu`, would show the Dialog under the fading scrim for about
+  250 ms and lose a tap in that window. Inferred from the code, not observed
+  on a device. Raised in 4.5a's slice review, 2026-10-07. Wider, verified
+  statically 2026-10-09: on native any Dialog opened over an open bottom
+  Sheet renders under it, though
+  [`layout.md → Stacking`](../ui/foundations/mobile/layout.md#stacking)
+  allows a modal over a Sheet. A shipped instance is World and Plot's
+  phone `⋯` → Delete, which closes the menu Sheet and opens the delete
+  AlertDialog in one press. Observe it on a device first; deferring the
+  action to the Sheet's `onDismiss` is the likelier fix, since lifting the
+  `PortalHost` above gorhom would put Select's phone sheet under any
+  Dialog. Routed from triage 2026-10-09.
+- **M9.5 — Bottom Sheets on web move no focus in and return none on close.**
+  [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
+  trap Tab focus; the primitive neither focuses into the Sheet nor restores
+  focus to the trigger. Raised in 4.5a review, 2026-10-07. Verified
+  2026-10-09; the fuller canon is
+  [`overlays.md → Sheet — ARIA contract`](../ui/patterns/overlays.md#sheet--aria-contract)
+  (focus moves in on open and back on close). The bottom path passes
+  neither autofocus hook, gorhom has none, and nothing sets `aria-modal`,
+  so the page behind stays tabbable. Reached on web at phone tier: a
+  narrow desktop window, or the web build. One item with the next entry,
+  and with the native side in
+  [`parked.md → Android bottom sheets are not dialogs for TalkBack`](../parked.md#android-bottom-sheets-are-not-dialogs-for-talkback).
+  Routed from triage 2026-10-09.
+- **M9.5 — Trigger-less overlay focus return isn't where canon says.**
+  (2026-10-09)
+  [`overlays.md → Sheet — ARIA contract`](../ui/patterns/overlays.md#sheet--aria-contract)
+  (lines 353-358) says a Sheet opened without a trigger returns focus to
+  the element focused before the open, "per rn-primitives / Radix
+  convention", but Radix's modal Dialog only returns focus to a
+  registered trigger (`@radix-ui/react-dialog` `dist/index.mjs:146-149`),
+  so every right-anchored Sheet opened through `open` drops focus to
+  `<body>` on close. 4.5b's `PeekDrawer` implements the return locally
+  (`onOpenAutoFocus` remembers, `onCloseAutoFocus` restores unless it
+  routed away); it belongs in `RightSheetContent`
+  (`components/ui/sheet.tsx:413`). Related: `demoteRadixDialog`
+  (`sheet.tsx:403`) leaves Radix's FocusScope fallback on the
+  role-stripped, unnamed wrapper; the bottom Sheet's focus on web is its
+  own entry above, "Bottom Sheets on web move no focus in and return
+  none on close"; and 4.5a's list and categories swaps drop focus, as
+  does the phone row-to-peek swap on web (Chromium blurs the row when its
+  layer turns `visibility: hidden`) and the way back, since `←`
+  unmounts with the peek level it sits in.
+  Known residual in the peek: after a successful `Set as lead` the lead
+  row re-parents into `ModuleList`'s pinned slot, so the remembered node
+  is disconnected and the next close drops focus to `<body>`; canon
+  carves this out ("unless the row has moved"). Fix by
+  re-finding the row by id (`ModuleList`'s `focusRef`), or at primitive
+  level as above. Raised in 4.5b's review, 2026-10-09. Verified the same
+  day, with one shipped instance the entry misses: `JSONViewer`, the row
+  detail's "View JSON" Sheet, is right-anchored and trigger-less, so
+  closing it on desktop drops focus to `<body>` today. Trigger-less
+  `Dialog` and `AlertDialog` take the same Radix path (inferred, not
+  run). Routed from triage 2026-10-09.
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through

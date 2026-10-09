@@ -108,17 +108,18 @@ export const entityStateColumnSchema = z.object({
   agenda: z.array(z.string()).optional(),
 })
 
-export function entityStateSchemaForKind(kind: EntityKind) {
-  switch (kind) {
-    case 'character':
-      return characterStateSchema
-    case 'location':
-      return locationStateSchema
-    case 'item':
-      return itemStateSchema
-    case 'faction':
-      return factionStateSchema
-  }
+const STATE_SCHEMA_BY_KIND = {
+  character: characterStateSchema,
+  location: locationStateSchema,
+  item: itemStateSchema,
+  faction: factionStateSchema,
+} satisfies Record<EntityKind, z.ZodType>
+
+/** A literal kind gets its own schema; a kind typed as the union gets the union of the four. */
+export function entityStateSchemaForKind<K extends EntityKind>(
+  kind: K,
+): (typeof STATE_SCHEMA_BY_KIND)[K] {
+  return STATE_SCHEMA_BY_KIND[kind]
 }
 
 // Per-kind factories behind a `satisfies` map rather than one switch returning

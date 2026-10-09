@@ -182,6 +182,35 @@ describe('updateEntrySceneFields', () => {
     expect((await entityState(db, 'char_b')).current_location_id).toBe(LOC_B)
   })
 
+  // char_c left the scene at e2 and has been moved by hand since. An edit that doesn't
+  // touch them must not re-anchor them at the previous entry's location.
+  it('leaves a character who left at the tail where they were moved since', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const charC = character('char_c', LOC_B)
+    await db.insert(entities).values(charC)
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_A),
+      character('char_b', LOC_A),
+      charC,
+      location(LOC_A),
+      location(LOC_B),
+    ] as never)
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: ['char_a', 'char_c'], currentLocationId: LOC_A, worldTime: 60 },
+      })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
+
+    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)).toEqual({
+      status: 'ok',
+    })
+    expect((await entityState(db, 'char_c')).current_location_id).toBe(LOC_B)
+    expect((await entityState(db, 'char_b')).current_location_id).toBe(LOC_A)
+  })
+
   // char_b is in this entry's ORIGINAL scene but not the previous entry's, so only
   // the three-way diff visits them at all.
   it('closes location tracking for a character the edit removed', async () => {

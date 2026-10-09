@@ -77,6 +77,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (!current)
     return { status: 'rejected', reason: `update target involvement ${bid}:${id} not found` }
   const set = { role: patch.role ?? null }
+  // Logged anyway, it would show in History as a "Modified Role" that changed nothing.
+  if (set.role === current.role)
+    return { status: 'rejected', reason: 'involvement unchanged', code: 'noop' }
   return {
     status: 'ok',
     targetTable: 'happening_involvements',

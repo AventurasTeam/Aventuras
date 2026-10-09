@@ -11,6 +11,7 @@ import {
 import {
   COLLISION_PAIR_MISS,
   collisionPairOf,
+  deleteTailOf,
   entityKeepActions,
   entityMergeActions,
   entityRenameActions,
@@ -31,8 +32,7 @@ import {
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
-import { withEntryMetadataLock } from '../story-entries/entry-metadata-lock'
-import { loadHeadTurn } from '../story-entries/head-turn'
+import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
 import type { DbCtx } from '../types'
 
 export const COLLISION_REJECTION = {
@@ -175,17 +175,6 @@ function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<Delta
   return applyDeltaActionGroupBuilt(build, { actionId: generateId('act'), branchId }, ctx)
 }
 
-function tailOf(head: Awaited<ReturnType<typeof loadHeadTurn>>): DeleteTail | null {
-  const metadata = head?.tail.metadata
-  return head == null || metadata == null
-    ? null
-    : {
-        id: head.tail.id,
-        sceneEntities: metadata.sceneEntities,
-        currentLocationId: metadata.currentLocationId,
-      }
-}
-
 /**
  * generation-pipeline.md → No-gate write phase: the merge rewrites the tail scene, so it holds the
  * tail's metadata lock around the branch lock.
@@ -195,15 +184,15 @@ async function commitMerge(
   resolution: MergeResolution,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  const lockedTail = (await loadHeadTurn(branchId, ctx))?.tail.id ?? null
-  const run = async (): Promise<DeltaGroupResult> => {
-    const head = await loadHeadTurn(branchId, ctx)
-    if ((head?.tail.id ?? null) !== lockedTail)
-      return refusal(COLLISION_REJECTION.inFlight, 'tail moved')
-    const tail = tailOf(head)
-    return commit(branchId, () => buildResolution(branchId, resolution, tail), ctx)
-  }
-  return lockedTail == null ? run() : withEntryMetadataLock(branchId, lockedTail, run)
+  return withTailMetadataLock<DeltaGroupResult>(
+    branchId,
+    ctx,
+    (head) => {
+      const tail = deleteTailOf(head)
+      return commit(branchId, () => buildResolution(branchId, resolution, tail), ctx)
+    },
+    () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
+  )
 }
 
 function dispatch(

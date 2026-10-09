@@ -10,7 +10,6 @@ type Args = {
   /** The PREVIOUS entry's state — supplies the lastSeenAt anchor. */
   previous: {
     entryId: string
-    sceneEntities: string[]
     currentLocationId: string | null
     worldTime: number
   }
@@ -65,12 +64,14 @@ export function scenePromotionActions(args: {
  * (docs/memory/piggyback.md → What piggyback writes). Three-way so an edit can pass this
  * entry's ORIGINAL scene as `before`: folding from `previous` alone would skip a
  * character in neither the previous nor the edited scene, stranding what the fold wrote.
+ * Leaving is read against `before` only: a character who left at this entry and stays
+ * out was closed out by the original fold, and re-writing them would undo a manual edit.
  */
 export function sceneTrackingActions(args: Args): PipelineAction[] {
   const { branchId, source, entities, previous, before, after } = args
   const actions: PipelineAction[] = []
 
-  const wasInScene = new Set([...previous.sceneEntities, ...before.sceneEntities])
+  const wasInScene = new Set(before.sceneEntities)
   const nowInScene = new Set(after.sceneEntities)
 
   for (const character of entities.filter((e) => e.kind === 'character')) {

@@ -95,6 +95,44 @@ describe('entities CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
 
+  // Drizzle skips an undefined key, so committing would leave the row as it was while the
+  // store, the undo payload and History recorded a write.
+  it('refuses a column set to undefined, and codes a missing row as not-found', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const update = (id: string, patch: Record<string, unknown>) =>
+      applyDeltaAction(
+        {
+          action: {
+            kind: 'updateEntity',
+            source: 'user_edit',
+            payload: { branchId: 'br_1', id, patch },
+          },
+          actionId: 'act_u',
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+
+    expect(await update('char_1', { name: undefined, description: 'rewritten' })).toMatchObject({
+      status: 'rejected',
+    })
+    expect((await rowFor(db, 'char_1')).description).toBe('a wandering knight')
+    expect(entitiesStore.getEntities().get('char_1')?.name).toBe('Kael')
+    expect((await db.select().from(deltas)).length).toBe(1)
+    expect(await update('char_9', { description: 'rewritten' })).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+  })
+
   it('a write to a non-held branch no-ops against the store', async () => {
     const { db, ctx } = await setup()
     entitiesStore.hydrate('br_2', []) // store now holds br_2, not br_1
@@ -615,7 +653,10 @@ describe('collision flag clear', () => {
 
     // A present-but-undefined key would reach the store patch as an undefined flag.
     const blank = { name: 'Kaelin', nameCollisionFlag: undefined }
-    expect(await applyDeltaAction(patchChar(blank, 'act_blank'), ctx)).toEqual(refusal)
+    expect(await applyDeltaAction(patchChar(blank, 'act_blank'), ctx)).toEqual({
+      status: 'rejected',
+      reason: 'invalid entity patch: nameCollisionFlag is undefined',
+    })
     expect((await rowFor(db, 'char_1')).name).toBe('Kael')
     expect(await db.select().from(deltas)).toHaveLength(1)
   })

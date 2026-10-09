@@ -1127,11 +1127,28 @@ describe('resolveCollision — refusals', () => {
     expect(await deltaRows()).toEqual([])
   })
 
+  it('reports a holder gone from the database as not-found', async () => {
+    // The store still holds Vorne, so the plan rewrites a holder the update arm can't find.
+    sqlite.exec(`DELETE FROM entities WHERE id = 'char_o'`)
+
+    expect(await resolveCollision('b1', mergeInto('item_a', 'item_b'), ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+      reason: 'update target entities b1:char_o not found',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
   it('reports a refusal with no collision code as failed', async () => {
     const warn = vi.spyOn(logger, 'warn')
     try {
-      // The store still holds Vorne, so the plan rewrites a holder the update arm can't find.
-      sqlite.exec(`DELETE FROM entities WHERE id = 'char_o'`)
+      // The plan carries the store's state for the holder it rewrites, and the arm refuses it.
+      const traits = Array.from({ length: 51 }, (_, i) => `trait ${i}`)
+      entitiesStore.patch('b1', {
+        op: 'update',
+        id: 'char_o',
+        columns: { state: characterState({ inventory: ['item_b'], traits }) },
+      })
 
       expect(await resolveCollision('b1', mergeInto('item_a', 'item_b'), ctx)).toMatchObject({
         status: 'rejected',
@@ -1142,7 +1159,7 @@ describe('resolveCollision — refusals', () => {
         'action_layer.collision_resolve_rejected',
         expect.objectContaining({
           code: 'failed',
-          reason: 'update target entities b1:char_o not found',
+          reason: expect.stringContaining('invalid character state'),
         }),
       )
       expect(warn.mock.calls[0][1]).not.toHaveProperty('rawCode')

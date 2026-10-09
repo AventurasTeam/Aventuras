@@ -155,14 +155,11 @@ export function happeningPatch(row: Happening, draft: HappeningDraft): Happening
   return patch
 }
 
-type AwarenessUpsert = {
-  branchId: string
-  characterId: string
-  happeningId: string
-  learnedAtEntryId?: string | null
-  decayResistance?: number | null
-  source?: string | null
-}
+// The draft never carries a retrieval count; only a moved row keeps one.
+type AwarenessUpsert = Omit<
+  Extract<PipelineAction, { kind: 'upsertHappeningAwareness' }>['payload'],
+  'retrievalCount'
+>
 
 // Only changed fields ride the payload; null baseline means a full create.
 function awarenessUpsert(
