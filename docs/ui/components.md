@@ -184,8 +184,8 @@ Documented precedents:
   Phase 2 Group E). Reshaped from the react-native-reusables
   baseline (a single fixed `size-8` Radix-style triad). Sizes:
   `xs` (24 px, members-here mini-rows), `sm` (40 px, default row
-  leading), `md` (96 px, compact peek head + mobile portrait
-  reflow per
+  leading), `md` (96 px, the compact Overview portrait — peek body and
+  phone reflow per
   [`world.md → Mobile expression`](./screens/world/world.md#mobile-expression)),
   `lg` (220 px, desktop overview hero portrait). Convenience shape
   takes inline `src` + `fallback` since most v1 sites render

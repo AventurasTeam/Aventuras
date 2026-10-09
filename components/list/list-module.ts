@@ -4,8 +4,7 @@ import type { View } from 'react-native'
 import type { CollisionListRowProps } from '@/components/compounds/collision-list-row'
 import type { ListGrouping, ListQuery } from '@/lib/list-modules'
 import type { RecentlyClassified } from '@/lib/row-signals'
-
-export type LeadLabel = 'you' | 'protagonist'
+import type { LeadLabel } from '@/lib/world'
 
 export type RowCollision = CollisionListRowProps['collision']
 

@@ -52,6 +52,7 @@ import {
   worldCategoryLabel,
   type WorldSelection,
 } from '@/components/world/world-selection'
+import { useBranchWorldTime } from '@/hooks/use-branch-world-time'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
@@ -79,14 +80,13 @@ import { isEntityCategory, type EntityFilter, type WorldCategory } from '@/lib/l
 import {
   characterRelationshipsStore,
   entitiesStore,
-  entriesStore,
   happeningInvolvementsStore,
   happeningsStore,
   loreStore,
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { branchWorldTime, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
+import { leadLabelFor, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -148,16 +148,7 @@ export default function WorldRoute() {
   const relationshipRows = characterRelationshipsStore.useRelationships((m) => m)
   const involvementRows = happeningInvolvementsStore.useInvolvements((m) => m)
   const happeningRows = happeningsStore.useHappenings((m) => m)
-  const entryRows = entriesStore.useEntries((m) => m)
-  const worldTime = useMemo(
-    () =>
-      branchWorldTime(
-        [...entryRows.values()]
-          .filter((e) => e.branchId === branchId)
-          .sort((a, b) => a.position - b.position),
-      ),
-    [entryRows, branchId],
-  )
+  const worldTime = useBranchWorldTime(branchId)
   const entryIndex = useEntryIndex(branchId)
   const calendarId = open?.definition.calendarSystemId ?? DEFAULT_CALENDAR_ID
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
@@ -167,8 +158,7 @@ export default function WorldRoute() {
     () => resolveLead(open?.definition.leadEntityId, entityRows, branchId)?.id ?? null,
     [open, entityRows, branchId],
   )
-  const leadLabel =
-    open == null ? null : open.definition.mode === 'adventure' ? 'you' : 'protagonist'
+  const leadLabel = open == null ? null : leadLabelFor(open.definition.mode)
 
   const { selectedId, selection, select, startCreate } = useWorldSelection({
     initialId: initialSelection?.id ?? null,
@@ -352,7 +342,11 @@ export default function WorldRoute() {
   const [linkMount, setLinkMount] = useState(0)
   const followLink = useCallback(
     (target: WorldSelection, atMount: boolean) => {
-      if (atMount) return
+      // The linked row may sit in a collapsed tier or below the fold: reveal it, as Plot does.
+      if (atMount) {
+        listRef.current?.revealRow(target.id)
+        return
+      }
       guard(() => {
         if (target.category !== category) switchCategory(target.category)
         select(target.id)

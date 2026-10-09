@@ -1,12 +1,13 @@
 import { ArrowLeft } from 'lucide-react-native'
-import { useEffect, useState, type ReactNode } from 'react'
-import { View } from 'react-native'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { t } from '@/lib/i18n'
+import { dismissKeyboard, isKeyboardVisible } from '@/lib/keyboard'
 import {
   RAIL_SHEET_OPENED,
   reduceRailSheet,
@@ -45,6 +46,13 @@ export type RailSheetProps = {
   onCategoryChange: (category: RailCategory) => void
 } & RailSheetRowPress
 
+// visibility, not display: none: the hidden list stays laid out, so `←` shows it with no relayout;
+// pointer events and the accessibility tree are cut separately, as native has no visibility.
+const HIDDEN_LAYER = {
+  ...Platform.select({ web: { visibility: 'hidden' }, default: { opacity: 0 } }),
+  pointerEvents: 'none',
+} as const
+
 export function RailSheet({
   open,
   onOpenChange,
@@ -59,16 +67,36 @@ export function RailSheet({
   const [sheet, setSheet] = useState<RailSheetState>(RAIL_SHEET_OPENED)
   const send = (event: RailSheetEvent) => setSheet((current) => reduceRailSheet(current, event))
 
+  // Caps the hidden list at its list-level height: the tall detent would clamp an end-of-list
+  // offset. Kept through `←`: a release relayouts mid-settle and gorhom's scroll lock resets it.
+  const listHeight = useRef(0)
+  const { height: windowHeight } = useWindowDimensions()
+  const [cap, setCap] = useState<{ height: number; windowHeight: number } | null>(null)
+  // A window that changed under the peek makes the recorded height wrong for the new layout.
+  const heightCap = cap != null && cap.windowHeight === windowHeight ? cap.height : null
+
   // The Sheet presents a tick after `open` flips, so this lands before anything renders.
   useEffect(() => {
-    if (open) setSheet(RAIL_SHEET_OPENED)
+    if (open) {
+      setSheet(RAIL_SHEET_OPENED)
+      setCap(null)
+    }
   }, [open])
+
+  const peeking = sheet.content === 'peek'
 
   const handleRowPress = (category: RailCategory, id: string) => {
     if (renderPeek == null) {
       onRowPress(category, id)
       return
     }
+    // The search field keeps focus under the hidden list, so the keyboard goes down with the
+    // tap; its shortened list is no height to restore.
+    const keyboardUp = Platform.OS !== 'web' && isKeyboardVisible()
+    if (keyboardUp) void dismissKeyboard()
+    setCap(
+      listHeight.current > 0 && !keyboardUp ? { height: listHeight.current, windowHeight } : null,
+    )
     send({ type: 'openPeek', peek: { category, id } })
   }
 
@@ -77,6 +105,9 @@ export function RailSheet({
       <SheetContent
         anchor="bottom"
         size={sheet.size}
+        // One value for both detents: gorhom's content can stop scrolling when it changes while
+        // open. The peek level, the only one 'extend' would pick, holds no field.
+        keyboardBehavior="interactive"
         className="p-0"
         // The primitive pads the inset plus p-6's 24px inline, which p-0 can't override.
         style={{ paddingBottom: insets.bottom }}
@@ -90,33 +121,53 @@ export function RailSheet({
               send({ type: 'pickCategory' })
             }}
           />
-        ) : sheet.content === 'list' ? (
-          <View className="flex-1">
-            <RailList
-              data={data}
-              view={view}
-              onViewChange={onViewChange}
-              header={
-                <View className="flex-row items-center gap-1">
-                  <IconAction
-                    icon={ArrowLeft}
-                    label={t('reader:rail.backToCategories')}
-                    onPress={() => send({ type: 'up' })}
-                  />
-                  <Heading level={3} numberOfLines={1} className="min-w-0 shrink">
-                    {railCategoryLabel(view.category)}
-                  </Heading>
-                </View>
-              }
-              onRowPress={handleRowPress}
-              surface="transparent"
-            />
-            <View className="px-3 pb-3">
-              <RailImportFooter />
-            </View>
-          </View>
         ) : (
-          (renderPeek?.(sheet.peek, () => send({ type: 'back' })) ?? null)
+          <View
+            className="flex-1"
+            onLayout={(event) => {
+              if (!peeking) listHeight.current = event.nativeEvent.layout.height
+            }}
+          >
+            {/* Mounted under the peek so `←` finds the list as it was left, scroll included. */}
+            <View
+              testID="rail-sheet-list-layer"
+              className="flex-1"
+              style={[
+                peeking ? HIDDEN_LAYER : null,
+                heightCap != null ? { maxHeight: heightCap } : null,
+              ]}
+              aria-hidden={peeking}
+              importantForAccessibility={peeking ? 'no-hide-descendants' : 'auto'}
+            >
+              <RailList
+                data={data}
+                view={view}
+                onViewChange={onViewChange}
+                header={
+                  <View className="flex-row items-center gap-1">
+                    <IconAction
+                      icon={ArrowLeft}
+                      label={t('reader:rail.backToCategories')}
+                      onPress={() => send({ type: 'up' })}
+                    />
+                    <Heading level={3} numberOfLines={1} className="min-w-0 shrink">
+                      {railCategoryLabel(view.category)}
+                    </Heading>
+                  </View>
+                }
+                onRowPress={handleRowPress}
+                surface="transparent"
+              />
+              <View className="px-3 pb-3">
+                <RailImportFooter />
+              </View>
+            </View>
+            {sheet.content === 'peek' ? (
+              <View style={StyleSheet.absoluteFill}>
+                {renderPeek?.(sheet.peek, () => send({ type: 'back' })) ?? null}
+              </View>
+            ) : null}
+          </View>
         )}
       </SheetContent>
     </Sheet>

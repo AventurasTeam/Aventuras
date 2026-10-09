@@ -4,9 +4,7 @@ import {
   happeningListModule,
   type HappeningListModule,
 } from '@/components/plot/happening-list-module'
-import { plotHref } from '@/components/plot/plot-selection'
 import { threadListModule, type ThreadListModule } from '@/components/plot/thread-list-module'
-import { worldHref } from '@/components/world/world-selection'
 import { t } from '@/lib/i18n'
 import type { RailCategory } from '@/lib/reader-rail'
 
@@ -41,12 +39,4 @@ export function railEmptySubtext(category: RailCategory): string {
   return category === 'lore'
     ? t('reader:rail.empty.loreBody')
     : t('reader:rail.empty.classifierBody')
-}
-
-/** The owning panel with the row pre-selected (M4 C6). */
-export function railRowHref(branchId: string, category: RailCategory, id: string): string {
-  if (category === 'thread' || category === 'happening') {
-    return plotHref(branchId, { kind: category, id })
-  }
-  return worldHref(branchId, { category, id })
 }

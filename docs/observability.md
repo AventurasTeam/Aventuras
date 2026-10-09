@@ -297,7 +297,15 @@ convention, and the expectation that subsystems route through
   `undo_failed` / `redo_failed` carry the ones that mean the delta log
   cannot produce the reversal it should
   (the rollback-confirm modal's regenerate variant, distinct from the
-  `pipeline.regenerate_*` kinds `runRegenerate` logs internally)
+  `pipeline.regenerate_*` kinds `runRegenerate` logs internally). The
+  rail and the peek add two outside `runAction`:
+  `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
+  — a rail collapse-preference write that rejected) and
+  `peek_set_lead_failed` (`components/reader/peek/use-set-lead.ts` — a
+  peek `Set as lead` whose `setStoryLead` threw rather than refused,
+  or that had no story id to write with after the reader's
+  `story_id_load_failed`; the user sees the generic lead-failure toast
+  either way)
 
 Kinds grow organically as subsystems land.
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
 
-import { resolveLead } from './lead'
+import { leadLabelFor, resolveLead } from './lead'
 
 const row = (id: string, branchId: string, kind: Entity['kind']) =>
   ({ id, branchId, kind }) as Entity
@@ -22,5 +22,12 @@ describe('resolveLead', () => {
     expect(resolveLead('char_gone', rows, 'b1')).toBeNull()
     expect(resolveLead('char_1', rows, 'b2')).toBeNull()
     expect(resolveLead('loc_1', rows, 'b1')).toBeNull()
+  })
+})
+
+describe('leadLabelFor', () => {
+  it('labels the lead `you` in adventure and `protagonist` in creative', () => {
+    expect(leadLabelFor('adventure')).toBe('you')
+    expect(leadLabelFor('creative')).toBe('protagonist')
   })
 })

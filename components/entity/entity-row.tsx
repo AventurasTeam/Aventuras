@@ -1,14 +1,12 @@
-import { Star } from 'lucide-react-native'
-
 import { CollisionListRow } from '@/components/compounds/collision-list-row'
 import { ListRow, type ListRowProps } from '@/components/compounds/list-row'
 import type { RowRendererProps } from '@/components/list/list-module'
-import { Icon } from '@/components/ui/icon'
 import { Tag, type TagTone } from '@/components/ui/tag'
 import type { Entity } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { EntityKindIcon } from './entity-kind-icon'
+import { LeadTag } from './lead-tag'
 
 // patterns/entity.md → Entity row indicators.
 export const ENTITY_STATUS_TONE: Record<Entity['status'], TagTone> = {
@@ -22,15 +20,7 @@ export function EntityRow({ row, selected, onPress, signals, focusRef }: RowRend
   const props: ListRowProps = {
     label: row.name,
     leading: <EntityKindIcon kind={row.kind} />,
-    meta:
-      signals.lead != null ? (
-        <Tag
-          tone="accent"
-          leading={<Icon as={Star} aria-hidden size="sm" className="fill-accent-fg" />}
-        >
-          {t(`world:lead.${signals.lead}`)}
-        </Tag>
-      ) : undefined,
+    meta: signals.lead != null ? <LeadTag label={signals.lead} /> : undefined,
     trailing: <Tag tone={ENTITY_STATUS_TONE[row.status]}>{t(`world:status.${row.status}`)}</Tag>,
     inScene: signals.inScene,
     recentlyClassified: signals.recentlyClassified,

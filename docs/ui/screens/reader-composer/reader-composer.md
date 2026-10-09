@@ -54,8 +54,13 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 └───────────────────────────────────────┴───────────────────────┘
 ```
 
-(Right-side peek drawer slides in over the rail + narrative when an
-entity row is clicked.)
+(Clicking a rail row opens the peek drawer. On desktop and tablet it
+is a right [Sheet](../../foundations/mobile/layout.md#sheet), ~440px
+wide, sliding in over the rail and narrative above a scrim, which
+leaves both inert while it is open, the reader's undo / redo and End
+keys included; Esc, `×` or a click outside closes it. On phone it is
+the rail Sheet's peek level, per
+[Mobile expression](#mobile-expression).)
 
 Rail rows carry no collision strip and no collapsed-group `⚠ N`
 badge: the World panel is the only surface that resolves a name
@@ -1172,7 +1177,8 @@ search survive collapse and expand, a reflow between tiers (per
 [`collapse.md → State preservation on reflow`](../../foundations/mobile/collapse.md#state-preservation-on-reflow))
 and a reader remount. The peek follows
 [peek implies rail open](#peek-drawer--peek-implies-rail-open):
-any collapse closes it.
+any collapse closes it, as does a reflow to phone, where the desktop
+drawer has no host.
 
 ### Peek drawer — peek implies rail open
 
@@ -1188,7 +1194,25 @@ Peek and collapsed-rail are mutually exclusive states:
 Collapsing the rail (manually or via viewport-forced collapse)
 while peek is open closes the peek simultaneously. They're a
 continuum: peek is a deeper state of "rail engaged," collapse is
-"rail dismissed." Closing the container closes its contents.
+"rail dismissed." Closing the container closes its contents. The
+rail's `Cmd/Ctrl+\` stays live inside the drawer, so it closes both.
+
+**Focus (desktop and tablet).** The drawer overrides Sheet's
+first-focusable default (per
+[`overlays.md → Sheet — ARIA contract`](../../patterns/overlays.md#sheet--aria-contract)):
+focus lands on the dialog itself, since for a non-lead character the
+first button is `Set as lead`, which one stray key would fire and
+Ctrl-Z can't undo. It stays on the dialog when `Set as lead` is
+swapped for the badge or disabled, and on close it returns to the
+rail row that opened it, unless the close was a route out to a panel
+or the row has moved, as it does after `Set as lead`.
+
+**A peeked row that disappears.** If the row is deleted (or a
+reversal removes it) while the peek is open, the peek closes: the
+desktop drawer closes and the store drops the peek, and on phone the
+Sheet returns to the list. No toast. The store drops the id rather
+than keeping it, or an undo that restores the row would reopen the
+peek.
 
 ### Animation
 
@@ -1217,7 +1241,7 @@ deviation; standard tooltip + ⓘ affordances per the
 
 The peek-head exposes the lead-character mutation inline (no overflow
 menu — peek is intentionally lightweight; deep work routes to the
-World panel via the existing `Open in World panel →` foot link).
+row's panel, World or Plot, via the foot link).
 
 For a character peek:
 
@@ -1233,10 +1257,13 @@ For non-character kinds (location / item / faction / lore / threads /
 happenings) the peek-head is unchanged — the affordance does not
 apply.
 
-**Thumbnail tap.** Character (or any kind's) portrait thumbnail in
-the peek head opens the
-[full-size image preview](../../patterns/image-preview.md) on
-click / tap — same universal pattern World uses.
+**Thumbnail tap.** The portrait sits in the peek body, not the head:
+an entity's is the Overview's own portrait, projected with it (per
+[`entity.md → Why portrait lives only on Overview`](../../patterns/entity.md#why-portrait-lives-only-on-overview)).
+A click / tap on it opens the
+[full-size image preview](../../patterns/image-preview.md) — same
+universal pattern World uses. Until the asset gallery lands the
+portrait is a placeholder and the tap is inert, as on World.
 
 No confirmation modal. Lead-switching is a first-class action per
 [principles → Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts);
@@ -1288,8 +1315,38 @@ What's not on lore peek:
 
 Peek is read-mostly. The lead-character mutation above is the only
 inline mutation surface (character-only; doesn't apply to lore or
-other non-character kinds). Deep edits route to the World panel
-via the existing `Open in World panel →` foot link.
+other non-character kinds). Deep edits route to the row's panel,
+World or Plot, via the foot link (`Open in World panel →` here).
+
+### State-field composition — thread and happening peek
+
+Threads and happenings have no World Overview to project; their
+detail lives in the Plot panel. The peek body is a read-only
+summary, top-down at 440px width:
+
+- **Thread** — a chip row: the status chip, the
+  [non-default `injection_mode` chip](../world/world.md#overview--glance-summary-read-mostly)
+  (as on the entity and lore peeks) and the category chip when
+  set; then the full description.
+- **Happening** — a chip row: the when-marker (`entry #N`, the
+  dangling state, or the free-text `temporal`, per
+  [`plot.md → Happenings side`](../plot/plot.md#happenings-side)),
+  `⊙` when common knowledge, and the category chip when set; then
+  the full description; then a muted `N involved · N aware` line.
+  A common-knowledge happening reads `Common knowledge` in place of
+  the aware count: such a happening skips awareness rows, and any
+  that survived a toggle don't apply, so a count would mislead.
+
+Until the peek has read the branch's entries, an anchored
+when-marker shows nothing, since it can't yet be told from a dangling
+one (a `temporal` still shows). If that read fails, an anchored
+happening without a `temporal` shows a warning chip,
+`Couldn't read this branch's entries.`, in the marker's place; the
+entries are read again when the next turn settles.
+
+Nothing in either body is pressable. The foot link
+`Open in Plot panel →` is the escalation, and the peek-head carries
+no lead affordance.
 
 ## Mobile expression
 
@@ -1386,8 +1443,9 @@ specifics below.
   is desktop chrome; sheets dismiss via handle / backdrop, not
   an X). The arrow is the universal back affordance, no text
   label needed; the head uses flex-start so entity meta sits
-  close after the arrow. Tap returns to the list level. Peek's
-  `Open in panel →` link dismisses the sheet and routes to
+  close after the arrow. Tap returns to the list level, where it
+  was left: the list stays in place under the peek, so its scroll
+  position holds. Peek's `Open in panel →` link dismisses the sheet and routes to
   World / Plot per the cross-surface nav model. Drag-down on the
   handle, or backdrop tap, dismisses the whole sheet from any
   level.

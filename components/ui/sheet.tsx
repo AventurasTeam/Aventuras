@@ -152,6 +152,7 @@ const SheetScrollComponent = (
 
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
+type SheetKeyboardBehavior = 'interactive' | 'extend'
 
 const RIGHT_WIDTH_PX = 440
 const SAFE_AREA_GAP_PX = 8
@@ -178,6 +179,11 @@ type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
    * Android back still closes.
    */
   enablePanDownToClose?: boolean
+  /**
+   * Bottom-anchor only — replaces the keyboard behavior `size` picks. Pin it when size crosses
+   * 'tall' while open: the flip kills gorhom's content scroll on native.
+   */
+  keyboardBehavior?: SheetKeyboardBehavior
   /** Right-anchor only — names the rn-primitives Portal host to render into. */
   portalHost?: string
   /**
@@ -205,6 +211,7 @@ function BottomSheetContent({
   // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
   portalHost: _portalHost,
   enablePanDownToClose = true,
+  keyboardBehavior,
   suppressOverlayRegistration = false,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
@@ -325,7 +332,7 @@ function BottomSheetContent({
       // keep only on 'tall', which at 95% already clears the keyboard and just
       // reflows content inside height it was going to occupy. Shorter sheets need
       // 'interactive', which lifts by the keyboard height and keeps their resting size.
-      keyboardBehavior={size === 'tall' ? 'extend' : 'interactive'}
+      keyboardBehavior={keyboardBehavior ?? (size === 'tall' ? 'extend' : 'interactive')}
       keyboardBlurBehavior="restore"
       // Explicitly 'adjustPan', which is also gorhom's default: 'adjustResize'
       // makes it zero out `heightWithinContainer` and wait for a container shrink
@@ -408,6 +415,7 @@ function RightSheetContent({
   portalHost,
   children,
   enablePanDownToClose: _enablePanDownToClose,
+  keyboardBehavior: _keyboardBehavior,
   suppressOverlayRegistration = false,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {

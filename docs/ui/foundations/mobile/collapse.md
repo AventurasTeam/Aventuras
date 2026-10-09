@@ -96,7 +96,7 @@ Phone (< 640 px):
   Sheet height grows to tall (~85–95%) when peek loads.
 - **In peek state, sheet head shows an icon-only `←` back
   affordance at the top-left** in place of the desktop `×`. Tap
-  returns to row-list state. Icon-only — the arrow is the
+  returns to row-list state, where it was left. Icon-only — the arrow is the
   universal back affordance, no text label needed; the head uses
   flex-start so the entity meta sits close after the arrow
   (iOS nav-header layout). The desktop × is desktop chrome —

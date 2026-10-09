@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 
-import type { LeadLabel, RowSignals } from '@/components/list/list-module'
+import type { RowSignals } from '@/components/list/list-module'
 import { useRowSignals } from '@/hooks/use-row-signals'
 import type { Entity, Happening, Lore, Thread } from '@/lib/db'
 import type { EntityListSignals } from '@/lib/list-modules'
@@ -14,7 +14,7 @@ import {
   loreStore,
   threadsStore,
 } from '@/lib/stores'
-import { resolveLead } from '@/lib/world'
+import { leadLabelFor, resolveLead, type LeadLabel } from '@/lib/world'
 
 export type RailData = {
   /** The branch whose entry index the happening list reads. */
@@ -94,8 +94,7 @@ export function useRailData(branchId: string): RailData {
     () => resolveLead(leadEntityId, entityRows, branchId)?.id ?? null,
     [leadEntityId, entityRows, branchId],
   )
-  const leadLabel: LeadLabel | null =
-    mode == null ? null : mode === 'adventure' ? 'you' : 'protagonist'
+  const leadLabel: LeadLabel | null = mode == null ? null : leadLabelFor(mode)
 
   const entityListSignals = useMemo<EntityListSignals>(
     () => ({ leadId, inScene }),

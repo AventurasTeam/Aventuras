@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react'
 import type { View } from 'react-native'
 
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
-import { matchesRailToggleShortcut, type RailCategory } from '@/lib/reader-rail'
+import { matchesRailToggleShortcut } from '@/lib/reader-rail'
 import { readerRailStore } from '@/lib/stores'
 
 import { BrowseRail } from './browse-rail'
@@ -10,17 +10,18 @@ import { RailColumn } from './rail-column'
 import { RailStrip } from './rail-strip'
 import { useRailCollapse } from './use-rail-collapse'
 import { railStripOf, type RailData } from './use-rail-data'
+import { useOpenRailPeek } from './use-rail-peek'
 
 export type ReaderRailColumnProps = {
   data: RailData
   /** The reader screen's focus; a pushed-under reader must not answer the shortcut. */
   isFocused: boolean
-  onRowPress: (category: RailCategory, id: string) => void
 }
 
-export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColumnProps) {
+export function ReaderRailColumn({ data, isFocused }: ReaderRailColumnProps) {
   const view = readerRailStore.useView()
   const { collapsed, setCollapsed } = useRailCollapse()
+  const openPeek = useOpenRailPeek()
   const strip = useMemo(() => railStripOf(data), [data])
   const collapseRef = useRef<View>(null)
   const expandRef = useRef<View>(null)
@@ -42,7 +43,7 @@ export function ReaderRailColumn({ data, isFocused, onRowPress }: ReaderRailColu
           view={view}
           onViewChange={(next) => readerRailStore.setView(next)}
           onCategoryChange={(category) => readerRailStore.setCategory(category)}
-          onRowPress={onRowPress}
+          onRowPress={openPeek}
           onCollapse={() => setCollapsed(true)}
           collapseRef={collapseRef}
         />

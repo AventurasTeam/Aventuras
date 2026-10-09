@@ -46,12 +46,16 @@ Used by:
   as the per-tier dispatch for its three consumers (Autocomplete,
   provider-model-picker, Actions menu), which reach the overlays
   through it rather than directly.
+- [Reader · Peek drawer](../screens/reader-composer/reader-composer.md#peek-drawer--peek-implies-rail-open):
+  a right Sheet on desktop and tablet whose open and close focus
+  override the defaults below; on phone the peek is a level of the
+  rail's bottom Sheet, not a Sheet of its own.
 
 The Used-by list grows as primitives and patterns adopt the
 overlays. Future consumers will include the Branch chip popover,
 the Time chip popover, the Chapter chip popover, the Calendar
-picker, the Peek drawer, the Raw JSON viewer, and the
-generation-in-flight pill expansion.
+picker, the Raw JSON viewer, and the generation-in-flight pill
+expansion.
 
 ---
 

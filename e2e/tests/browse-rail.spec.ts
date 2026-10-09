@@ -7,8 +7,10 @@ import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { setWindowWidth } from '../harness/window'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
+import { peek } from '../locators/peek'
 import { plot } from '../locators/plot'
 import { rail } from '../locators/rail'
 import { reader } from '../locators/reader'
@@ -61,16 +63,6 @@ async function inSceneCount(page: Page, branchId: string, kind: EntityKind): Pro
   return Number(count)
 }
 
-// Resizes the real BrowserWindow, as a user's drag would. Returns the width it replaced.
-function setWindowWidth(app: LaunchedApp, width: number): Promise<number> {
-  return app.app.evaluate(({ BrowserWindow }, next) => {
-    const win = BrowserWindow.getAllWindows()[0]
-    const [previous, height] = win.getSize()
-    win.setSize(next, height)
-    return previous
-  }, width)
-}
-
 const innerWidth = (page: Page): Promise<number> => page.evaluate(() => window.innerWidth)
 
 // Serial suite on one seeded user-data dir: each test starts where the last left the rail, and the
@@ -90,7 +82,7 @@ test.describe.serial('Browse rail', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('lists the branch rows under all seven categories and lands Plot on a pressed thread', async () => {
+  test("lists the branch rows under all seven categories and lands Plot from a thread's peek", async () => {
     const page = app.window
     await home.openStory(page, HERO_TITLE).click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
@@ -115,6 +107,8 @@ test.describe.serial('Browse rail', () => {
       [branchId, SEEDED_THREAD],
     )
     await rail.row(page, SEEDED_THREAD).click()
+    await expect(peek.drawer(page, SEEDED_THREAD)).toBeVisible()
+    await peek.openInPlot(page, SEEDED_THREAD).click()
     await page.waitForURL(new RegExp(`/plot/${branchId}\\?kind=thread&id=${threadId as string}`))
     await expect(plot.subHeader(page)).toContainText(t('plot:kinds.thread'))
     await expect(plot.subHeader(page)).toContainText(SEEDED_THREAD)
@@ -122,6 +116,7 @@ test.describe.serial('Browse rail', () => {
     await chrome.back(page).click()
     await page.waitForURL(/\/reader-composer\//)
     await expect(rail.column(page)).toBeVisible()
+    await expect(peek.drawer(page, SEEDED_THREAD)).toHaveCount(0)
   })
 
   test('the chevron collapses to the strip, which counts the scene, and stores the preference', async () => {

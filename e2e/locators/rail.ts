@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import type { ThreadFilter } from '@/lib/list-modules'
+import type { EntityFilter, ThreadFilter } from '@/lib/list-modules'
 import type {
   RailCategory,
   StripCategory,
@@ -60,9 +60,20 @@ export const rail = {
   threadChip: (page: Page, filter: ThreadFilter): Locator =>
     rail.column(page).getByRole('button', { name: t(`plot:filters.${filter}`), exact: true }),
 
+  // Entity filter chips set aria-pressed; the exact name keeps them apart from the tier headers.
+  entityChip: (page: Page, filter: EntityFilter): Locator =>
+    rail.column(page).getByRole('button', { name: t(`world:filters.${filter}`), exact: true }),
+  // All-view group header (module-list.tsx), matched by aria-expanded: the filter chip of the same
+  // label sets aria-pressed instead.
+  tierHeader: (page: Page, label: string): Locator =>
+    rail.column(page).locator('[aria-expanded]').filter({ hasText: label }),
+
   // ListRow's Pressable carries the label as its accessible name.
   row: (page: Page, name: string): Locator =>
     rail.column(page).getByRole('button', { name, exact: true }),
+  // The row's lead Tag (entity-row.tsx meta slot); the hero story runs in adventure mode.
+  leadTag: (page: Page, name: string): Locator =>
+    rail.row(page, name).getByText(t('world:lead.you'), { exact: true }),
 
   collapse: (page: Page): Locator =>
     rail.column(page).getByRole('button', { name: t('reader:rail.collapse'), exact: true }),

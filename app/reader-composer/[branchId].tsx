@@ -12,7 +12,7 @@ import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
-import { railRowHref } from '@/components/reader/rail/rail-modules'
+import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
 import { useRailData } from '@/components/reader/rail/use-rail-data'
@@ -98,11 +98,11 @@ import {
   SUGGESTION_REFRESH_KIND,
   type PipelineError,
 } from '@/lib/pipeline'
-import type { RailCategory } from '@/lib/reader-rail'
 import {
   appSettingsStore,
   awaitRunTerminal,
   backgroundClassifierRunning,
+  blockingOverlaysStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -148,14 +148,18 @@ type BranchHydrationState =
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
 
-// Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
-// deps, so identity has to hold unconditionally.
+// Module scope, not useCallback([]): `matches` is a useGlobalHotkey effect dep; identity must hold.
+// Blocking overlays (Sheet, AlertDialog, Select) own the surface at key time; a miss stays native.
 function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
-  return (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z')
+  return (
+    (ev.metaKey || ev.ctrlKey) &&
+    (ev.key === 'z' || ev.key === 'Z') &&
+    !blockingOverlaysStore.isBlocked()
+  )
 }
 
 function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
-  return ev.key === 'End'
+  return ev.key === 'End' && !blockingOverlaysStore.isBlocked()
 }
 
 type ReaderGateState = {
@@ -1201,12 +1205,8 @@ export default function ReaderComposerRoute() {
     readerRailStore.enterBranch(branchId)
   }, [branchId])
 
-  // One read for whichever tier's rail mounts: the column on tablet / desktop, the chip on phone.
+  // One read for whichever rail mounts: the column and peek drawer, or the phone chip's Sheet.
   const railData = useRailData(branchId)
-  const handleRailRowPress = useCallback(
-    (category: RailCategory, id: string) => surfaceNavigate(railRowHref(branchId, category, id)),
-    [surfaceNavigate, branchId],
-  )
 
   const placeholder = readerPlaceholder({
     hydrationSucceeded,
@@ -1250,7 +1250,13 @@ export default function ReaderComposerRoute() {
       chapterProgress={openRegionPct}
       mobileChipAction={
         tier === 'phone' ? (
-          <ReaderBrowseChip data={railData} onRowPress={handleRailRowPress} />
+          <ReaderBrowseChip
+            data={railData}
+            storyId={storyId}
+            blocked={actionsBlocked}
+            blockedReason={gateReason}
+            onNavigate={surfaceNavigate}
+          />
         ) : undefined
       }
       onBack={() => router.back()}
@@ -1362,7 +1368,17 @@ export default function ReaderComposerRoute() {
           </View>
         </KeyboardInsetColumn>
         {showRail ? (
-          <ReaderRailColumn data={railData} isFocused={isFocused} onRowPress={handleRailRowPress} />
+          <>
+            <ReaderRailColumn data={railData} isFocused={isFocused} />
+            <ReaderPeekDrawer
+              data={railData}
+              isFocused={isFocused}
+              storyId={storyId}
+              blocked={actionsBlocked}
+              blockedReason={gateReason}
+              onNavigate={surfaceNavigate}
+            />
+          </>
         ) : null}
       </View>
       {rollback ? (

@@ -1,0 +1,272 @@
+import { expect, test, type Page } from '@playwright/test'
+
+import { currentBranchId, queryApp } from '../harness/db'
+import { installEmbedderModel } from '../harness/embedder'
+import { t } from '../harness/i18n'
+import { launchApp, type LaunchedApp } from '../harness/launch'
+import { startMockLlm, type MockLlm } from '../harness/mock-llm'
+import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
+import { setWindowHeight } from '../harness/window'
+import { chrome } from '../locators/chrome'
+import { home } from '../locators/home'
+import { peek } from '../locators/peek'
+import { plot } from '../locators/plot'
+import { rail } from '../locators/rail'
+import { reader } from '../locators/reader'
+import { world } from '../locators/world'
+
+// reader-composer.md → Peek drawer, at the seams only a running app reaches: the C5 write, the
+// mounted reader re-deriving its lead, the C6 routes. The rest: stories (testing.md → Coverage).
+
+const HERO_STORY = 'story_hero'
+const HERO_TITLE = 'The Veilstone Courier'
+const SEEDED_LEAD = 'Kael'
+const NEW_LEAD = 'Mira'
+// Staged: its peek offers `Set as lead` disabled, and World files it under a collapsed tier.
+const STAGED_CHARACTER = 'The Ashen Sage'
+// Anchored to an entry in a closed chapter, so the rail files it under Earlier chapters.
+const ANCHORED_HAPPENING = 'The alley ambush'
+const REPLY_MARKER = 'E2E-PEEK-REPLY'
+// Short enough that the Staged tier sits below World's fold once it opens, so only the reveal's
+// scroll can bring the row into view; at the default window it is already on screen.
+const SHORT_WINDOW_HEIGHT = 420
+
+// Seeded ids under a substitutable prefix become `prefix_<uuid>` (docs/testing.md → Substitutable
+// IDs must be real UUIDs), so every id the spec asserts is read by name or title.
+async function entityId(page: Page, branchId: string, name: string): Promise<string> {
+  const [[id]] = await queryApp(page, `SELECT id FROM entities WHERE branch_id = ? AND name = ?`, [
+    branchId,
+    name,
+  ])
+  return id as string
+}
+
+async function leadEntityId(page: Page): Promise<unknown> {
+  const [[id]] = await queryApp(
+    page,
+    `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE id = ?`,
+    [HERO_STORY],
+  )
+  return id
+}
+
+async function countOf(page: Page, sql: string, params: unknown[]): Promise<number> {
+  const [[n]] = await queryApp(page, sql, params)
+  return Number(n)
+}
+
+// Serial suite, one app: each test starts on the reader the last returned to, which stays mounted
+// under every World and Plot visit, so the Do turn runs in the reader that saw the lead change.
+test.describe.serial('Peek drawer', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+  let branchId: string
+
+  test.beforeAll(async () => {
+    // A turn needs the mock LLM and an installed embedder; the model copy dominates.
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setNarrative(`${REPLY_MARKER} the rain answers.`)
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('a rail row opens the peek on that row, offering Set as lead', async () => {
+    const page = app.window
+    await home.openStory(page, HERO_TITLE).click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    branchId = await currentBranchId(page, HERO_STORY)
+
+    await rail.row(page, NEW_LEAD).click()
+    await expect(peek.drawer(page, NEW_LEAD)).toBeVisible()
+    await expect(peek.setLead(page, NEW_LEAD)).toBeVisible()
+    await expect(peek.leadTag(page, NEW_LEAD)).toHaveCount(0)
+  })
+
+  test('Set as lead writes the lead in one press, and the rail badge moves', async () => {
+    const page = app.window
+    const mira = await entityId(page, branchId, NEW_LEAD)
+    expect(await leadEntityId(page)).toBe(await entityId(page, branchId, SEEDED_LEAD))
+
+    // One press and no confirm: a confirm would hold the write, and the drawer stays on the row.
+    await peek.setLead(page, NEW_LEAD).click()
+    await expect.poll(() => leadEntityId(page)).toBe(mira)
+    await expect(peek.drawer(page, NEW_LEAD)).toBeVisible()
+    await expect(peek.leadTag(page, NEW_LEAD)).toBeVisible()
+    await expect(peek.setLead(page, NEW_LEAD)).toHaveCount(0)
+
+    await peek.close(page, NEW_LEAD).click()
+    await expect(peek.drawer(page, NEW_LEAD)).toHaveCount(0)
+    await expect(rail.leadTag(page, NEW_LEAD)).toBeVisible()
+    // The row first, or the zero count could pass with Kael's row never mounted.
+    await expect(rail.row(page, SEEDED_LEAD)).toBeVisible()
+    await expect(rail.leadTag(page, SEEDED_LEAD)).toHaveCount(0)
+  })
+
+  test("the Overview's visual line lands World on Identity, and back shows no peek", async () => {
+    const page = app.window
+    const mira = await entityId(page, branchId, NEW_LEAD)
+    await rail.row(page, NEW_LEAD).click()
+    await peek.region(page, NEW_LEAD, 'overview-visual').click()
+
+    await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${mira}&tab=identity`))
+    await expect(world.detailName(page)).toHaveText(NEW_LEAD)
+    await expect(world.tab(page, 'identity')).toHaveAttribute('aria-selected', 'true')
+
+    await chrome.back(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+    await expect(rail.column(page)).toBeVisible()
+    await expect(peek.drawer(page, NEW_LEAD)).toHaveCount(0)
+  })
+
+  test("a staged character's peek disables Set as lead, and Open in World panel reveals its row", async () => {
+    const page = app.window
+    const sage = await entityId(page, branchId, STAGED_CHARACTER)
+    const staged = t('world:tiers.staged')
+    // listCollapseStore is shared with World's list: the tier the reveal opens is shut going in.
+    await expect(rail.tierHeader(page, staged)).toHaveAttribute('aria-expanded', 'false')
+
+    await rail.entityChip(page, 'staged').click()
+    await rail.row(page, STAGED_CHARACTER).click()
+    await expect(
+      peek.setLeadDisabled(page, STAGED_CHARACTER, t('world:detail.menu.setLeadInactive')),
+    ).toBeVisible()
+    await expect(peek.setLead(page, STAGED_CHARACTER)).toHaveCount(0)
+    // Disabled, not just renamed: a reason in the name alone doesn't block the press.
+    await expect(
+      peek.setLeadDisabled(page, STAGED_CHARACTER, t('world:detail.menu.setLeadInactive')),
+    ).toBeDisabled()
+
+    const fullHeight = await setWindowHeight(app, SHORT_WINDOW_HEIGHT)
+    await expect
+      .poll(() => page.evaluate(() => window.innerHeight))
+      .toBeLessThanOrEqual(SHORT_WINDOW_HEIGHT)
+    await peek.openInWorld(page, STAGED_CHARACTER).click()
+    await page.waitForURL(new RegExp(`/world/${branchId}\\?kind=character&id=${sage}`))
+    await expect(world.detailName(page)).toHaveText(STAGED_CHARACTER)
+    await expect(world.tierHeader(page, staged)).toHaveAttribute('aria-expanded', 'true')
+    await expect(world.row(page, STAGED_CHARACTER)).toHaveAttribute('aria-selected', 'true')
+    await expect(world.row(page, STAGED_CHARACTER)).toBeInViewport()
+
+    await setWindowHeight(app, fullHeight)
+    await chrome.back(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+  })
+
+  test("a happening's peek shows its marker and counts, and Open in Plot panel lands it", async () => {
+    const page = app.window
+    const [[happeningId]] = await queryApp(
+      page,
+      `SELECT id FROM happenings WHERE branch_id = ? AND title = ?`,
+      [branchId, ANCHORED_HAPPENING],
+    )
+    const [[position]] = await queryApp(
+      page,
+      `SELECT e.position FROM story_entries e JOIN happenings h
+         ON e.branch_id = h.branch_id AND e.id = h.occurred_at_entry_id WHERE h.id = ?`,
+      [happeningId],
+    )
+    const involved = await countOf(
+      page,
+      `SELECT count(*) FROM happening_involvements WHERE branch_id = ? AND happening_id = ?`,
+      [branchId, happeningId],
+    )
+    const aware = await countOf(
+      page,
+      `SELECT count(*) FROM happening_awareness WHERE branch_id = ? AND happening_id = ?`,
+      [branchId, happeningId],
+    )
+    // Zero would also match a peek that never read the link stores.
+    expect(involved).toBeGreaterThan(0)
+    expect(aware).toBeGreaterThan(0)
+
+    await rail.categoryTrigger(page).click()
+    await rail.categoryOption(page, 'happening').click()
+    const earlier = rail.tierHeader(page, t('plot:buckets.earlier'))
+    await expect(earlier).toHaveAttribute('aria-expanded', 'false')
+    await earlier.click()
+    await rail.row(page, ANCHORED_HAPPENING).click()
+
+    await expect(peek.region(page, ANCHORED_HAPPENING, 'happening-peek-body')).toContainText(
+      t('common:entryRef', { n: Number(position) }),
+    )
+    // Whole counts line, so a description saying "2 aware" or "12 involved" can't pass. Equal
+    // seeded counts leave a swap undetected here; peek-content.stories.tsx seeds distinct ones.
+    await expect(peek.region(page, ANCHORED_HAPPENING, 'happening-peek-counts')).toHaveText(
+      `${t('reader:peek.involved', { count: involved })} · ${t('reader:peek.aware', { count: aware })}`,
+    )
+
+    await peek.openInPlot(page, ANCHORED_HAPPENING).click()
+    await page.waitForURL(
+      new RegExp(`/plot/${branchId}\\?kind=happening&id=${happeningId as string}`),
+    )
+    await expect(plot.subHeader(page)).toContainText(ANCHORED_HAPPENING)
+    await expect(plot.row(page, ANCHORED_HAPPENING)).toHaveAttribute('aria-selected', 'true')
+
+    await chrome.back(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+  })
+
+  // The hero story wraps a Do turn in third person, so it names the lead as its subject.
+  test('a Do turn in the reader that saw the change wraps with the new lead', async () => {
+    const page = app.window
+    await reader.modeTrigger(page).click()
+    await reader.modeOption(page, 'do').click()
+    await reader.composer(page).fill('draw the E2E-PEEK blade')
+    await reader.send(page).click()
+
+    await expect
+      .poll(
+        () =>
+          countOf(
+            page,
+            `SELECT count(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply' AND content LIKE ?`,
+            [branchId, `%${REPLY_MARKER}%`],
+          ),
+        { timeout: 30_000 },
+      )
+      .toBe(1)
+    const rows = await queryApp(
+      page,
+      `SELECT content FROM story_entries WHERE branch_id = ? AND kind = 'user_action' AND content LIKE '%E2E-PEEK blade%'`,
+      [branchId],
+    )
+    expect(rows).toEqual([[`${NEW_LEAD} draws the E2E-PEEK blade.`]])
+  })
+
+  // Needs the Do turn above's undo. The drawer is a blocking overlay, so the reader's window-level
+  // Ctrl+Z stands down while it's open; undoing once closed proves the key reaches the reader.
+  test("Ctrl+Z inside the peek leaves the story alone, and undoes the turn once it's closed", async () => {
+    const page = app.window
+    const replies = (): Promise<number> =>
+      countOf(
+        page,
+        `SELECT count(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply' AND content LIKE ?`,
+        [branchId, `%${REPLY_MARKER}%`],
+      )
+    expect(await replies()).toBe(1)
+
+    // The rail still shows the happenings the Plot test left it on.
+    await rail.row(page, ANCHORED_HAPPENING).click()
+    await expect(peek.drawer(page, ANCHORED_HAPPENING)).toBeFocused()
+    await page.keyboard.press('Control+z')
+    // An undo commits in well under this; nothing observable marks a handler that stayed quiet.
+    await page.waitForTimeout(1_500)
+    expect(await replies()).toBe(1)
+
+    await page.keyboard.press('Escape')
+    await expect(peek.drawer(page, ANCHORED_HAPPENING)).toHaveCount(0)
+    await page.keyboard.press('Control+z')
+    await expect.poll(replies, { timeout: 15_000 }).toBe(0)
+  })
+})

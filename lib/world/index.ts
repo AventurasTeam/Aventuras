@@ -55,7 +55,8 @@ export { mergedTerms } from './merge-terms'
 export type { MergeDeselections } from './merge-terms'
 export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
 export type { LoreDraft } from './lore-draft'
-export { resolveLead } from './lead'
+export { leadLabelFor, resolveLead } from './lead'
+export type { LeadLabel } from './lead'
 export {
   branchWorldTime,
   carryingSummary,

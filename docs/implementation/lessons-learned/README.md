@@ -133,7 +133,8 @@ slice plans when relevant.
 - [`KeyboardProvider` is inert until a hook claims resize mode](./keyboard-resize-mode-must-be-claimed.md)
   — the provider alone avoids nothing; `useResizeMode` must be claimed once at
   the root, or every keyboard-avoiding surface measures a window that under
-  edge-to-edge never shrinks.
+  edge-to-edge never shrinks. A Sheet whose size crosses `tall` while open
+  pins `keyboardBehavior`: a flip while open kills its content scroll.
 - [KAV `automaticOffset` × layout-entering animation race](./kav-automatic-offset-animation-race.md)
   — `react-native-keyboard-controller` KAV measures once;
   Reanimated-entry containers drive `paddingBottom` off

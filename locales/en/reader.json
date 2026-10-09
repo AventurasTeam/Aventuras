@@ -199,5 +199,18 @@
     "importFromVaultReason": "Vault lands in M8",
     "browse": "Browse",
     "backToCategories": "Back to categories"
+  },
+  "peek": {
+    "label": "Peek: {{name}}",
+    "close": "Close peek",
+    "back": "Back to Browse",
+    "recentlyClassified": "Recently classified",
+    "setLead": "Set as lead",
+    "openInWorld": "Open in World panel →",
+    "openInPlot": "Open in Plot panel →",
+    "tags": "Tags",
+    "involved": "{{count}} involved",
+    "aware": "{{count}} aware",
+    "commonKnowledge": "Common knowledge"
   }
 }
