@@ -49,6 +49,7 @@
 
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js'
+  import { accessibleName } from './accessibleName'
 
   let {
     class: className,
@@ -66,11 +67,14 @@
     iconClass,
     endIcon: EndIcon,
     title,
+    'aria-label': ariaLabel,
     ...restProps
   }: ButtonProps = $props()
 
   // Determine if we are in "Responsive Mode" (Icon/Label provided)
   let isResponsive = $derived(!!(Icon || label || mobileLabel || mobileVariant))
+
+  let name = $derived(accessibleName({ ariaLabel, size, isResponsive, label, title }))
 
   // If responsive mode and no class override, use ResponsiveButton default
   // ResponsiveButton default: "h-10 w-10 sm:w-auto sm:h-10 sm:px-4"
@@ -117,11 +121,25 @@
   {@const finalTitle = title ?? label}
 
   {#if href}
-    <a bind:this={ref} class={finalClass} {href} title={finalTitle} {...restProps}>
+    <a
+      bind:this={ref}
+      class={finalClass}
+      {href}
+      title={finalTitle}
+      aria-label={name}
+      {...restProps}
+    >
       {@render ButtonContent(isMobile)}
     </a>
   {:else}
-    <button bind:this={ref} class={finalClass} {type} title={finalTitle} {...restProps}>
+    <button
+      bind:this={ref}
+      class={finalClass}
+      {type}
+      title={finalTitle}
+      aria-label={name}
+      {...restProps}
+    >
       {@render ButtonContent(isMobile)}
     </button>
   {/if}
@@ -137,7 +155,14 @@
   {@const finalClass = cn(buttonVariants({ variant, size }), effectiveClass)}
 
   {#if href}
-    <a bind:this={ref} class={finalClass} {href} title={finalTitle} {...restProps}>
+    <a
+      bind:this={ref}
+      class={finalClass}
+      {href}
+      title={finalTitle}
+      aria-label={name}
+      {...restProps}
+    >
       {#if Icon}<Icon class={responsiveIconClass} />{/if}
       {#if mobileLabel}<span data-button-label class="inline sm:hidden">{mobileLabel}</span>{/if}
       {#if label}<span data-button-label class="hidden -translate-y-px sm:inline">{label}</span
@@ -146,7 +171,14 @@
       {#if EndIcon}<EndIcon class="hidden h-3 w-3 opacity-50 sm:inline" />{/if}
     </a>
   {:else}
-    <button bind:this={ref} class={finalClass} {type} title={finalTitle} {...restProps}>
+    <button
+      bind:this={ref}
+      class={finalClass}
+      {type}
+      title={finalTitle}
+      aria-label={name}
+      {...restProps}
+    >
       {#if Icon}<Icon class={responsiveIconClass} />{/if}
       {#if mobileLabel}<span data-button-label class="inline sm:hidden">{mobileLabel}</span>{/if}
       {#if label}<span data-button-label class="hidden -translate-y-px sm:inline">{label}</span
@@ -164,6 +196,7 @@
       class={cn(buttonVariants({ variant, size }), className)}
       {href}
       title={finalTitle}
+      aria-label={name}
       {...restProps}
     >
       {@render children?.()}
@@ -174,6 +207,7 @@
       class={cn(buttonVariants({ variant, size }), className)}
       {type}
       title={finalTitle}
+      aria-label={name}
       {...restProps}
     >
       {@render children?.()}
