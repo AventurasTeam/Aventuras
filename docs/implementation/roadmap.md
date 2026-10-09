@@ -1489,6 +1489,44 @@ own.
   which a scroll or `overflow-hidden` container clips (probably why
   `ring-inset` exists), or amend canon to an un-offset ring, then unify
   the 3px variants. Routed from triage 2026-10-09.
+- **M9.2 — `ImporterMenu` is a Popover on phone.** (2026-09-11)
+  [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
+  wants a short Sheet on phone but it's a Popover at every size. The
+  surface binding it cites has no `ImporterMenu` row, so that sentence
+  is the only canon. Slice 4.6 was to re-plumb the menu to host
+  `ImportDialog`; a Sheet there makes it the third caller of the phone
+  wrap, which is the extraction trigger in
+  [the parked tier-wrap entry](../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
+  The controlled-open seam drives the trigger ref, so a Sheet needs it
+  re-plumbed. Moved from Slice 4.6's Open questions (2026-10-07): 4.6
+  did not touch `components/compounds/importer-menu.tsx`. Verified
+  2026-10-09: the third-caller claim doesn't hold, since `OverflowMenu`
+  already splits Popover and Sheet by tier with its trigger inside the
+  Sheet's root and no wrapping View, so the parked trigger isn't
+  reached; model the Sheet on `OverflowMenu`. `From JSON file…` opens
+  `ImportDialog` in the same press, the native Dialog-under-Sheet case
+  in M9.5 above, so this lands after that fix. Decided 2026-10-09
+  (developer): build the Sheet per canon, in the World / Plot shard,
+  with the shared row below. Routed from triage 2026-10-09.
+- **M9.2 — Four hand-copied menu-item rows.** (2026-09-22)
+  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
+  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
+  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
+  the cast-list inline row (`components/wizard/cast-list.tsx`) each
+  reimplement the same pressable-row shape. Their disabled naming was
+  aligned to `label, reason` on 2026-09-23, but the shapes still
+  differ: only the first two have a disabled state, and `StoryCard`'s
+  row is `py-row-y-sm` with no phone `min-h`. Extracting one shared
+  `MenuItem` belongs with the `ImporterMenu` Sheet above. The rows' role
+  stays with
+  [Nested dialog roles in Popover](../parked.md#nested-dialog-roles-in-popover).
+  Moved from Slice 4.6's Open questions (2026-10-07). More drift,
+  verified 2026-10-09: only `ImporterMenuItem` has the pointer-events
+  disabled guard, only `OverflowMenu`'s row shows its reason inline on
+  native (`ReasonTooltip` does nothing there), and destructive styling
+  and `description` each live in one row. So on an Android phone a
+  disabled World or Plot `[+]` row shows no reason. Routed from triage
+  2026-10-09.
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:

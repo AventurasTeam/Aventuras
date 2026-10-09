@@ -179,36 +179,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`parked.md → Vault parent shell`](../parked.md#vault-parent-shell)).
   Decide who builds importing from the vault into a story, or drop the footer
   and its copy. Raised in 4.5a's slice review, 2026-10-07.
-- **`ImporterMenu` is a Popover on phone.** (2026-09-11)
-  [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
-  wants a short Sheet on phone but it's a Popover at every size. The
-  surface binding it cites has no `ImporterMenu` row, so that sentence
-  is the only canon. This slice re-plumbs the menu to host
-  `ImportDialog`; a Sheet there makes it the third caller of the phone
-  wrap, which is the extraction trigger in
-  [the parked tier-wrap entry](../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
-  The controlled-open seam drives the trigger ref, so a Sheet needs it
-  re-plumbed.
-  Moved from Slice 4.6's Open questions (2026-10-07): 4.6 does not
-  touch `components/compounds/importer-menu.tsx` — the import dialog
-  mounts in the World and Plot routes beside the menu — so "this
-  slice" above no longer makes 4.6 the cheaper home.
-- **Four hand-copied menu-item rows.** (2026-09-22)
-  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
-  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
-  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
-  the cast-list inline row (`components/wizard/cast-list.tsx`) each
-  reimplement the same pressable-row shape. Their disabled naming was
-  aligned to `label, reason` on 2026-09-23, but the shapes still
-  differ: only the first two have a disabled state, and `StoryCard`'s
-  row is `py-row-y-sm` with no phone `min-h`. This slice re-plumbs
-  `ImporterMenu` anyway, which makes it the cheapest place to extract
-  one shared `MenuItem`. The rows' role stays with
-  [Nested dialog roles in Popover](../parked.md#nested-dialog-roles-in-popover).
-  Moved from Slice 4.6's Open questions (2026-10-07): 4.6 does not
-  touch `components/compounds/importer-menu.tsx` — the import dialog
-  mounts in the World and Plot routes beside the menu — so "this
-  slice" above no longer makes 4.6 the cheaper home.
 - **Slice 4.6 left four duplicates waiting for a shared home.**
   (2026-10-08) The closing review's simplifier skipped each because the
   shared copy needs a module that doesn't exist yet, or a file outside the
