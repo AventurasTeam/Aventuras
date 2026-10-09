@@ -254,15 +254,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `return-await`), so a missing `await` passes lint repo-wide. Task 9's
   review proved it on the export path, and a story now pins that one. Found
   in Slice 4.6 review.
-- **The wrong-kind banner prints the file's `format` uncapped.**
-  (2026-10-08) `parseEnvelope` in
-  `components/compounds/import-dialog-pipeline.ts` puts the envelope's
-  `format` into the wrong-kind banner ("got …, expected …") at any length,
-  so a hand-made file with a 1 MB `format` gives a million-character
-  banner. The issue list caps paths at 40 characters
-  ([`import-dialog.md → Issue flattening`](../ui/patterns/import-dialog.md#issue-flattening));
-  meta copy has no such rule. Predates 4.6. Raised in 4.6's slice review,
-  2026-10-08.
 - **Slice 4.6 left four duplicates waiting for a shared home.**
   (2026-10-08) The closing review's simplifier skipped each because the
   shared copy needs a module that doesn't exist yet, or a file outside the

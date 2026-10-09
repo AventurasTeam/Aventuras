@@ -175,7 +175,9 @@ copy line:
   `aventuras-` → `⚠ This isn’t an Aventuras file.`
 - `parsed.format !== props.format` (exact match,
   case-sensitive) → `⚠ This is a different kind of Aventuras
-file (got <parsed.format>, expected <props.format>).`
+file (got <parsed.format>, expected <props.format>).` The file's
+  `format` is the file's own text, so it's capped at 40 characters
+  like an issue path.
 - `parsed.formatVersion` missing or shape-invalid (must match
   `/^(\d+)\.(\d+)$/`; `"1"`, `"1.0.0"`, `"v1.0"` all fail)
   → `⚠ This file is missing version information.`

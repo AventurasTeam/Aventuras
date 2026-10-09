@@ -88,6 +88,18 @@ describe('parseEnvelope', () => {
     expect(result.copy).toContain(CALENDAR_FORMAT)
   })
 
+  it('caps the file’s format at 40 characters in the wrong-kind copy', () => {
+    const long = `aventuras-${'x'.repeat(5000)}`
+    const result = parse(envelope({ format: long }))
+    if (result.kind !== 'error') throw new Error('expected an error')
+    expect(result.copy).toBe(
+      t('common:importDialog.meta.wrongKind', {
+        got: `aventuras-${'x'.repeat(10)}…${'x'.repeat(19)}`,
+        expected: STORY_FORMAT,
+      }),
+    )
+  })
+
   it.each(['aventuras-{{expected}}', 'aventuras-{{{expected}}}'])(
     'shows the file’s format %s verbatim in the wrong-kind copy',
     (got) => {
