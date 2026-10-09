@@ -168,3 +168,37 @@ export function resolveRun(query: RunQuery): RunResult {
     return missed ? 'interrupted' : null
   }
 }
+
+/**
+ * The records to put in a story file. A branch whose tracking this device cannot vouch for since
+ * its last record (tracking is off now, or was turned on again after it) gets a break at the
+ * end, so the importing device never treats what happened since as tracked.
+ */
+export function recordsForExport(
+  records: WorldStateRecord[],
+  tracking: { on: boolean; enabledSince: number | null },
+  now: number,
+): WorldStateRecord[] {
+  const lastByBranch = new Map<string | null, WorldStateRecord>()
+  for (const r of records) {
+    const last = lastByBranch.get(r.branchId)
+    if (!last || r.seq > last.seq) lastByBranch.set(r.branchId, r)
+  }
+  const maxSeq = records.reduce((max, r) => Math.max(max, r.seq), 0)
+  const breaks: WorldStateRecord[] = []
+  for (const last of lastByBranch.values()) {
+    const vouched =
+      tracking.on && tracking.enabledSince !== null && tracking.enabledSince <= last.createdAt
+    if (vouched || last.kind === 'break') continue
+    breaks.push({
+      id: crypto.randomUUID(),
+      storyId: last.storyId,
+      branchId: last.branchId,
+      entryId: last.entryId,
+      seq: maxSeq + breaks.length + 1,
+      createdAt: now,
+      kind: 'break',
+    })
+  }
+  return [...records, ...breaks]
+}

@@ -8,6 +8,7 @@ import {
   isContinuous,
   lastCompletedEntry,
   lastHeaderOnLine,
+  recordsForExport,
   resolveRun,
   type AnchorCandidate,
   type LineEntry,
@@ -210,5 +211,27 @@ describe('lastCompletedEntry', () => {
   it('skips the turn in flight', () => {
     expect(lastCompletedEntry(turn, true)?.id).toBe('n60')
     expect(lastCompletedEntry(turn.slice(0, 2), true)?.id).toBe('n60')
+  })
+})
+
+describe('recordsForExport', () => {
+  const records = [header(1), header(2)]
+
+  it('adds nothing while this device has tracked since the last record', () => {
+    expect(recordsForExport(records, { on: true, enabledSince: 5 }, 100)).toEqual(records)
+  })
+
+  it('ends the branch with a break when tracking is off', () => {
+    const out = recordsForExport(records, { on: false, enabledSince: 5 }, 100)
+    expect(out.at(-1)).toMatchObject({ kind: 'break', entryId: 'e2', seq: 22 })
+  })
+
+  it('ends the branch with a break when tracking was turned on again since', () => {
+    const out = recordsForExport(records, { on: true, enabledSince: 50 }, 100)
+    expect(out.at(-1)?.kind).toBe('break')
+  })
+
+  it('exports nothing for a story that was never tracked', () => {
+    expect(recordsForExport([], { on: false, enabledSince: null }, 100)).toEqual([])
   })
 })

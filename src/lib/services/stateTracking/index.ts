@@ -12,6 +12,7 @@ export {
   isContinuous,
   lastCompletedEntry,
   lastHeaderOnLine,
+  recordsForExport,
   resolveRun,
   type AnchorCandidate,
   type LineEntry,

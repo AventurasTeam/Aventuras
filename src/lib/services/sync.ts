@@ -3,7 +3,8 @@ import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '#lib/
 import type { AventuraExport } from './export'
 // The one piece of the `.avt` exporter sync shares. See the note on `exportStoryToJson` for what
 // is deliberately *not* shared.
-import { gatherPackBinding } from './export'
+import { gatherPackBinding, NOT_VOUCHED, type ExportTracking } from './export'
+import { recordsForExport } from './stateTracking'
 import { database } from './database'
 
 /**
@@ -90,7 +91,10 @@ class SyncService {
    * metadata only and lets Rust stream the bytes into SQLite, so they cannot merge without
    * first deciding whether sync should stream natively too.
    */
-  async exportStoryToJson(storyId: string): Promise<string> {
+  async exportStoryToJson(
+    storyId: string,
+    tracking: ExportTracking = NOT_VOUCHED,
+  ): Promise<string> {
     // Get all story data from database
     const storyData = await database.getStory(storyId)
     if (!storyData) {
@@ -110,6 +114,7 @@ class SyncService {
       chapters,
       packBinding,
       timeAnchors,
+      storedRecords,
     ] = await Promise.all([
       database.getStoryEntries(storyId),
       database.getCharacters(storyId),
@@ -123,8 +128,10 @@ class SyncService {
       database.getChapters(storyId),
       gatherPackBinding(storyId),
       database.getTimeAnchors(storyId),
+      database.getWorldStateRecordsForStory(storyId),
     ])
 
+    const worldStateRecords = recordsForExport(storedRecords, tracking, Date.now())
     const exportData: AventuraExport = {
       // Left at 1.7.0 on purpose. The receiving importer is shape-driven — it reads whichever
       // sections are present and never compares this number — so `packBinding` below is honoured
@@ -146,6 +153,7 @@ class SyncService {
       chapters,
       // Omitted when empty, as `exportToAventura` does.
       ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
+      ...(worldStateRecords.length > 0 ? { worldStateRecords } : {}),
       // Omitted rather than written as null, so a story with no pack keeps the shape that takes
       // the legacy import path — matching what `exportToAventura` produces.
       ...(packBinding ? { packBinding } : {}),
@@ -157,13 +165,13 @@ class SyncService {
   /**
    * Export all stories to JSON strings
    */
-  async exportAllStoriesToJson(): Promise<string[]> {
+  async exportAllStoriesToJson(tracking: ExportTracking = NOT_VOUCHED): Promise<string[]> {
     const allStories = await database.getAllStories()
     const exports: string[] = []
 
     for (const s of allStories) {
       try {
-        const json = await this.exportStoryToJson(s.id)
+        const json = await this.exportStoryToJson(s.id, tracking)
         exports.push(json)
       } catch (e) {
         console.error(`Failed to export story ${s.id}:`, e)

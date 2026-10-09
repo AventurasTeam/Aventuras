@@ -29,6 +29,7 @@ const db = {
   getBranches: vi.fn(),
   getChapters: vi.fn(),
   getTimeAnchors: vi.fn(),
+  getWorldStateRecordsForStory: vi.fn(),
   getStoryPackId: vi.fn(),
   getPack: vi.fn(),
   getPackVariables: vi.fn(),
@@ -60,6 +61,7 @@ function baseline() {
   db.getBranches.mockResolvedValue([])
   db.getChapters.mockResolvedValue([])
   db.getTimeAnchors.mockResolvedValue([])
+  db.getWorldStateRecordsForStory.mockResolvedValue([])
   db.getStoryPackId.mockResolvedValue(null)
   db.getPack.mockResolvedValue(null)
   db.getPackVariables.mockResolvedValue([])
@@ -219,5 +221,37 @@ describe('exportStoryToJson — time anchors', () => {
 
   it('omits the section for a story with none, as the .avt export does', async () => {
     expect((await payload()).timeAnchors).toBeUndefined()
+  })
+})
+
+describe('exportStoryToJson — state tracking records', () => {
+  const header = {
+    id: 'h1',
+    storyId: 's1',
+    branchId: null,
+    entryId: 'e1',
+    seq: 1,
+    createdAt: 50,
+    kind: 'header' as const,
+    continuous: true,
+    clockBefore: null,
+    locationBefore: null,
+    coverage: 'full' as const,
+  }
+
+  it('carries the records and vouches for a run this device kept tracking', async () => {
+    db.getWorldStateRecordsForStory.mockResolvedValue([header])
+    const json = await syncService.exportStoryToJson('s1', { on: true, enabledSince: 10 })
+    expect(JSON.parse(json).worldStateRecords).toEqual([header])
+  })
+
+  it('ends the run with a break when it cannot vouch for it', async () => {
+    db.getWorldStateRecordsForStory.mockResolvedValue([header])
+    const records = (await payload()).worldStateRecords
+    expect(records?.map((r: { kind: string }) => r.kind)).toEqual(['header', 'break'])
+  })
+
+  it('omits the section for a story that was never tracked', async () => {
+    expect((await payload()).worldStateRecords).toBeUndefined()
   })
 })

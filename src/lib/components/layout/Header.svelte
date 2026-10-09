@@ -85,7 +85,10 @@
     // Gather inside the exportFn so handleExport's try/catch surfaces any failure as a toast
     // (previously the gather ran outside it, so errors failed silently — nothing happened).
     await handleExport(async () => {
-      const data = await gatherStoryData(currentStory.id)
+      const data = await gatherStoryData(currentStory.id, {
+        on: settings.experimentalFeatures.stateTracking,
+        enabledSince: settings.experimentalFeatures.trackingEnabledSince,
+      })
       return exportService.exportToAventura(
         currentStory,
         data.entries,
@@ -101,6 +104,7 @@
         null, // currentBgImage: unchanged from before; the importer reads it off story instead
         data.packBinding,
         data.timeAnchors,
+        data.worldStateRecords,
       )
     }, 'Aventuras (.avt)')
   }

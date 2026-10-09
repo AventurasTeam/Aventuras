@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import { syncService } from '#lib/services/sync.ts'
   import { importSyncedStory, pushSyncedStory } from '#lib/services/syncActions.ts'
   import { getVersion } from '@tauri-apps/api/app'
@@ -344,6 +345,13 @@
     }
   }
 
+  function trackingForExport() {
+    return {
+      on: settings.experimentalFeatures.stateTracking,
+      enabledSince: settings.experimentalFeatures.trackingEnabledSince,
+    }
+  }
+
   async function startGenerateMode() {
     ui.setSyncMode('generate')
     loading = true
@@ -351,7 +359,7 @@
 
     try {
       // Export all stories for the server
-      const storiesJson = await syncService.exportAllStoriesToJson()
+      const storiesJson = await syncService.exportAllStoriesToJson(trackingForExport())
       serverInfo = await syncService.startServer(storiesJson)
       // Start polling for pushed stories
       startPolling()
@@ -555,7 +563,7 @@
     error = null
 
     try {
-      await pushSyncedStory(connection, selectedLocalStory.id)
+      await pushSyncedStory(connection, selectedLocalStory.id, trackingForExport())
 
       syncSuccess = true
       syncMessage = `Successfully pushed "${selectedLocalStory.title}"`

@@ -1682,6 +1682,15 @@ class DatabaseService {
     return rows.map(rowToRecord)
   }
 
+  async getWorldStateRecordsForStory(storyId: string): Promise<WorldStateRecord[]> {
+    const db = await this.getDb()
+    const rows = await db.select<Record<string, unknown>[]>(
+      'SELECT * FROM world_state_changes WHERE story_id = ? ORDER BY seq ASC',
+      [storyId],
+    )
+    return rows.map(rowToRecord)
+  }
+
   async hasWorldStateRecords(storyId: string): Promise<boolean> {
     const db = await this.getDb()
     const rows = await db.select<{ n: number }[]>(
