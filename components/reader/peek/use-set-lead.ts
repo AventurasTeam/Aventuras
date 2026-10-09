@@ -61,7 +61,6 @@ export function useSetLead(storyId: string | null): {
   return { pending, setLead }
 }
 
-/** The head's lead control as both peek hosts build it. */
 export function usePeekLeadControl(
   storyId: string | null,
   blocked: boolean,

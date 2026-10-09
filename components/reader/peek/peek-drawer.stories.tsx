@@ -122,7 +122,10 @@ export const OpenOnKael: Story = {
   },
 }
 
-/** Focus lands on the drawer, not on a non-lead's `Set as lead` (reader-composer.md → Peek drawer — peek implies rail open). */
+/**
+ * Focus lands on the drawer, not on a non-lead's `Set as lead`.
+ * reader-composer.md → Peek drawer — peek implies rail open.
+ */
 export const FocusLandsOnTheDrawer: Story = {
   args: { initialPeek: MIRA },
   play: async () => {

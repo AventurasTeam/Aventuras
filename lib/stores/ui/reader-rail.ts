@@ -64,10 +64,7 @@ export const readerRailStore = {
   useCollapsed: (stored: boolean): boolean =>
     useStore(store, (s) => isRailCollapsed(s.display, stored)),
   getDisplay: (): RailDisplayState => store.getState().display,
-  /**
-   * The row the desktop / tablet peek drawer opens on; the drawer also needs the rail expanded
-   * and the reader focused.
-   */
+  /** The row the desktop / tablet drawer opens on; also needs the rail expanded, reader focused. */
   usePeek: (): RailPeek | null => useStore(store, (s) => s.display.peek),
   /** The pending toggle once every preference write has settled; `null` while one is in flight. */
   useSettledPending: (): boolean | null =>

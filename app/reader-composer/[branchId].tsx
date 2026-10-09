@@ -148,9 +148,8 @@ type BranchHydrationState =
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
 
-// Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
-// deps, so identity has to hold unconditionally. A blocking overlay (Sheet, AlertDialog,
-// Select) claims the surface, read at key time; a miss leaves the key's native action alone.
+// Module scope, not useCallback([]): `matches` is a useGlobalHotkey effect dep; identity must hold.
+// Blocking overlays (Sheet, AlertDialog, Select) own the surface at key time; a miss stays native.
 function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
   return (
     (ev.metaKey || ev.ctrlKey) &&
