@@ -1,11 +1,10 @@
 import { useEffect } from 'react'
 
-import { railRowHref } from '@/components/reader/rail/rail-modules'
 import type { RailData } from '@/components/reader/rail/use-rail-data'
-import { worldHref } from '@/components/world/world-selection'
 import type { RailPeek } from '@/lib/reader-rail'
 
 import { PeekContent } from './peek-content'
+import { peekFootHref, peekLeadControl, peekRegionHref } from './peek-model'
 import { usePeekView } from './use-peek-view'
 import { useSetLead } from './use-set-lead'
 
@@ -44,18 +43,12 @@ export function RailSheetPeek({
       model={model}
       entityContext={entityContext}
       entryIndex={entryIndex}
-      lead={{
-        leadId: data.entityListSignals.leadId,
-        blocked,
-        blockedReason,
-        pending,
-        onSetLead: setLead,
-      }}
+      lead={peekLeadControl(data, { blocked, blockedReason, pending, onSetLead: setLead })}
       chrome={{ kind: 'back', onBack }}
-      onOpenInPanel={() => onOpenInPanel(railRowHref(data.branchId, peek.category, peek.id))}
+      onOpenInPanel={() => onOpenInPanel(peekFootHref(data, peek))}
       onRegionPress={(tab) => {
-        if (model.kind !== 'entity') return
-        onOpenInPanel(worldHref(data.branchId, { category: model.row.kind, id: model.row.id, tab }))
+        const href = peekRegionHref(data, model, tab)
+        if (href != null) onOpenInPanel(href)
       }}
     />
   )

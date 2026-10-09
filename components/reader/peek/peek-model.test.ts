@@ -10,8 +10,11 @@ import type { LeadLabel } from '@/lib/world'
 import {
   isLeadActionDisabled,
   peekLeadOf,
+  peekFootHref,
+  peekLeadControl,
   peekModelOf,
   peekNameOf,
+  peekRegionHref,
   type PeekLead,
   type PeekLeadControl,
   type PeekLinks,
@@ -297,6 +300,60 @@ describe('peekLeadOf', () => {
       state: 'candidate',
       disabledReason: 'Already the lead',
     })
+  })
+})
+
+describe('peekLeadControl', () => {
+  it('reads the lead off the rail data and passes the gate through', () => {
+    const onSetLead = vi.fn<(entityId: string) => void>()
+    expect(
+      peekLeadControl(railData(), {
+        blocked: true,
+        blockedReason: 'why',
+        pending: true,
+        onSetLead,
+      }),
+    ).toEqual({
+      leadId: 'char_kael',
+      blocked: true,
+      blockedReason: 'why',
+      pending: true,
+      onSetLead,
+    })
+  })
+})
+
+describe('peekFootHref', () => {
+  it('routes a world row to its World selection', () => {
+    expect(peekFootHref(railData(), { category: 'character', id: 'char_mira' })).toBe(
+      '/world/br_1?kind=character&id=char_mira',
+    )
+    expect(peekFootHref(railData(), { category: 'lore', id: 'lore_veil' })).toBe(
+      '/world/br_1?kind=lore&id=lore_veil',
+    )
+  })
+
+  it('routes a thread or happening to Plot', () => {
+    expect(peekFootHref(railData(), { category: 'thread', id: 't_amulet' })).toBe(
+      '/plot/br_1?kind=thread&id=t_amulet',
+    )
+    expect(peekFootHref(railData(), { category: 'happening', id: 'h_ambush' })).toBe(
+      '/plot/br_1?kind=happening&id=h_ambush',
+    )
+  })
+})
+
+describe('peekRegionHref', () => {
+  it('opens the entity on the pressed tab', () => {
+    expect(peekRegionHref(railData(), modelOf('location', 'loc_hollow'), 'connections')).toBe(
+      '/world/br_1?kind=location&id=loc_hollow&tab=connections',
+    )
+  })
+
+  it('has no region route for the other kinds', () => {
+    expect(peekRegionHref(railData(), modelOf('lore', 'lore_veil'), 'history')).toBeNull()
+    expect(peekRegionHref(railData(), modelOf('thread', 't_amulet'), 'history')).toBeNull()
+    expect(peekRegionHref(railData(), modelOf('happening', 'h_ambush'), 'history')).toBeNull()
   })
 })
 

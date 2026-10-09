@@ -6,7 +6,7 @@ import { happeningListModule } from '@/components/plot/happening-list-module'
 import { threadListModule } from '@/components/plot/thread-list-module'
 import { RAIL_CATEGORIES } from '@/lib/reader-rail'
 
-import { RAIL_MODULES, railCategoryLabel, railEmptySubtext, railRowHref } from './rail-modules'
+import { RAIL_MODULES, railCategoryLabel, railEmptySubtext } from './rail-modules'
 
 // The row renderers drag in the RN component tree; these tests never render a row.
 vi.mock('@/components/entity/entity-row', () => ({ EntityRow: () => null }))
@@ -60,17 +60,5 @@ describe('railEmptySubtext', () => {
         'The classifier writes most rows automatically as the story progresses.',
       )
     }
-  })
-})
-
-describe('railRowHref', () => {
-  it('routes World rows to World with the row pre-selected', () => {
-    expect(railRowHref('br_1', 'location', 'loc_1')).toBe('/world/br_1?kind=location&id=loc_1')
-    expect(railRowHref('br_1', 'lore', 'lore_1')).toBe('/world/br_1?kind=lore&id=lore_1')
-  })
-
-  it('routes Plot rows to Plot with the row pre-selected', () => {
-    expect(railRowHref('br_1', 'thread', 't_1')).toBe('/plot/br_1?kind=thread&id=t_1')
-    expect(railRowHref('br_1', 'happening', 'h_1')).toBe('/plot/br_1?kind=happening&id=h_1')
   })
 })

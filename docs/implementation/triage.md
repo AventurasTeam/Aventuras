@@ -717,14 +717,11 @@ slice-planning gate forces its resolution before that slice is planned.
   (`app/world/[branchId].tsx:379`); applies to World and Plot, and
   `openEntity` on phone has the same gap. Raised in 4.5b's review,
   2026-10-09.
-- **Small duplications, 4.5b's own debt.** (2026-10-09)
-  `'min-h-[44px] justify-center'` is written out in three places
-  (`PHONE_TOUCH_FLOOR`, private in `overview-parts.tsx:35`;
-  `components/compounds/breadcrumb.tsx:29`; `peek-foot.tsx:26`, new in
-  4.5b). The two peek hosts (`PeekDrawer`, `RailSheetPeek`), both new in
-  4.5b, build the same `PeekLeadControl`, foot href and region href; a
-  `peekRouteOf`-style helper in `peek-model.ts` would keep them from
-  drifting. Raised in 4.5b's review, 2026-10-09.
+- **The 44 px touch class is written out three times.** (2026-10-09)
+  `'min-h-[44px] justify-center'` appears as `PHONE_TOUCH_FLOOR`, private
+  in `overview-parts.tsx:35`, in `components/compounds/breadcrumb.tsx:29`
+  and in `peek-foot.tsx:26` (new in 4.5b). Raised in 4.5b's review,
+  2026-10-09.
 - **`QuietSheetBackground` passes the deprecated `pointerEvents` prop.**
   (2026-10-09) `components/ui/sheet.tsx:79` hands gorhom's
   `pointerEvents` to a `View` as a prop; RN-Web warns that the prop is

@@ -281,9 +281,8 @@ Implementer choices worth keeping:
   controls, focus-ring drift, trigger-less overlay focus return, Plot
   row semantics, the phone deep-link reveal, a toast under a modal
   Sheet) are in [`triage.md`](../../../triage.md).
-- **4.5b debt left unrefactored:** `PeekDrawer` and `RailSheetPeek`
-  build the same lead control and hrefs, and the foot's 44 px touch
-  class repeats two others; see triage's "Small duplications".
+- **4.5b debt left unrefactored:** the foot's 44 px touch class repeats
+  two others; see triage's "The 44 px touch class".
 
 Peek quick-edits stay parked, now naming `entity.md` as a fourth doc in
 conflict; see [`parked.md → Peek quick-edits`](../../../../parked.md#peek-quick-edits).

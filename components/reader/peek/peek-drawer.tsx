@@ -1,15 +1,20 @@
 import { useEffect, useRef } from 'react'
 import { Platform, type View } from 'react-native'
 
-import { railRowHref } from '@/components/reader/rail/rail-modules'
 import type { RailData } from '@/components/reader/rail/use-rail-data'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { worldHref } from '@/components/world/world-selection'
 import { t } from '@/lib/i18n'
 import type { RailPeek } from '@/lib/reader-rail'
 
 import { PeekContent } from './peek-content'
-import { isLeadActionDisabled, peekLeadOf, peekNameOf, type PeekLeadControl } from './peek-model'
+import {
+  isLeadActionDisabled,
+  peekFootHref,
+  peekLeadControl,
+  peekLeadOf,
+  peekNameOf,
+  peekRegionHref,
+} from './peek-model'
 import { usePeekView } from './use-peek-view'
 import { useSetLead } from './use-set-lead'
 
@@ -43,13 +48,7 @@ export function PeekDrawer({
   const { pending, setLead } = useSetLead(storyId)
   const gone = peek != null && model == null
   const open = visible && model != null
-  const control: PeekLeadControl = {
-    leadId: data.entityListSignals.leadId,
-    blocked,
-    blockedReason,
-    pending,
-    onSetLead: setLead,
-  }
+  const control = peekLeadControl(data, { blocked, blockedReason, pending, onSetLead: setLead })
   const leadAffordance = model == null ? undefined : peekLeadOf(model, control)
   const isLead = leadAffordance?.state === 'lead'
   const leadActionDisabled = isLeadActionDisabled(leadAffordance)
@@ -117,12 +116,10 @@ export function PeekDrawer({
             entryIndex={entryIndex}
             lead={control}
             chrome={{ kind: 'close', onClose }}
-            onOpenInPanel={() => routeOut(railRowHref(data.branchId, peek.category, peek.id))}
+            onOpenInPanel={() => routeOut(peekFootHref(data, peek))}
             onRegionPress={(tab) => {
-              if (model.kind !== 'entity') return
-              routeOut(
-                worldHref(data.branchId, { category: model.row.kind, id: model.row.id, tab }),
-              )
+              const href = peekRegionHref(data, model, tab)
+              if (href != null) routeOut(href)
             }}
           />
         ) : null}

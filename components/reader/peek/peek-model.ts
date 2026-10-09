@@ -1,5 +1,8 @@
+import { railRowHref } from '@/components/reader/rail/rail-row-href'
 import type { RailData } from '@/components/reader/rail/use-rail-data'
+import type { EntityTab } from '@/components/world/detail/entity-tabs'
 import { leadDisabledReason } from '@/components/world/world-copy'
+import { worldHref } from '@/components/world/world-selection'
 import type {
   Entity,
   Happening,
@@ -96,6 +99,25 @@ export type PeekLeadControl = {
   /** A `Set as lead` call is in flight. */
   pending: boolean
   onSetLead: (entityId: string) => void
+}
+
+/** Both peek hosts build the control here, so neither can read the lead off a stale source. */
+export function peekLeadControl(
+  data: RailData,
+  rest: Omit<PeekLeadControl, 'leadId'>,
+): PeekLeadControl {
+  return { leadId: data.entityListSignals.leadId, ...rest }
+}
+
+/** The foot link: the owning panel with the peeked row selected. */
+export function peekFootHref(data: RailData, peek: RailPeek): string {
+  return railRowHref(data.branchId, peek.category, peek.id)
+}
+
+/** An Overview region's route to the entity's tab; only entities have regions. */
+export function peekRegionHref(data: RailData, model: PeekModel, tab: EntityTab): string | null {
+  if (model.kind !== 'entity') return null
+  return worldHref(data.branchId, { category: model.row.kind, id: model.row.id, tab })
 }
 
 export type PeekLead =
