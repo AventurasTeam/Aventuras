@@ -1177,7 +1177,8 @@ search survive collapse and expand, a reflow between tiers (per
 [`collapse.md → State preservation on reflow`](../../foundations/mobile/collapse.md#state-preservation-on-reflow))
 and a reader remount. The peek follows
 [peek implies rail open](#peek-drawer--peek-implies-rail-open):
-any collapse closes it.
+any collapse closes it, as does a reflow to phone, where the desktop
+drawer has no host.
 
 ### Peek drawer — peek implies rail open
 
