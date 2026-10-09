@@ -6,7 +6,7 @@ import type {
   StoryEntry,
 } from '@/lib/db'
 import { resolveHeadTurn } from '@/lib/head-turn'
-import { entityDeleteActions, entityLinkRows } from '@/lib/world'
+import { deleteTailOf, entityDeleteActions, entityLinkRows } from '@/lib/world'
 
 export type EntityDeleteImpact = {
   awareness: number
@@ -41,19 +41,11 @@ export function entityDeleteImpact({
   const head = resolveHeadTurn(
     [...entries].filter((e) => e.branchId === branchId).sort((a, b) => a.position - b.position),
   )
-  const metadata = head?.tail.metadata
   const plan = entityDeleteActions({
     branchId,
     target: row,
     branchEntities: entities,
-    tail:
-      head == null || metadata == null
-        ? null
-        : {
-            id: head.tail.id,
-            sceneEntities: metadata.sceneEntities,
-            currentLocationId: metadata.currentLocationId,
-          },
+    tail: deleteTailOf(head),
   })
   const links = entityLinkRows({ branchId, id: row.id, awareness, involvements, relationships })
   return {

@@ -184,14 +184,6 @@ slice-planning gate forces its resolution before that slice is planned.
   key), and 4.2c added branch guards to the other-end name lookups and
   the link version beside it. Unreachable while panes render only
   branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07).
-- **The tail-lock sequence is written twice.** The collision merge
-  (`lib/actions/world/resolve-collision.ts`) copies the entity delete's
-  steps (`lib/actions/row-delete/delete-entity.ts`): read the head's
-  tail, take its metadata lock, re-read the head, refuse if the tail
-  moved, then build the tail value. `components/world/delete-impact.ts`
-  builds the same tail value a third time. A shared helper in
-  `lib/actions/story-entries` would keep the lock order in one place.
-  Found in 4.2c's slice review (2026-10-07).
 - **No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
