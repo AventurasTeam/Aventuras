@@ -190,7 +190,7 @@ export default function ReaderComposerRoute() {
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
-  // A modal drawer or dialog claims the surface; the window-level reader keys stand down for it.
+  // A registered blocking overlay (Sheet, AlertDialog) claims the surface; reader keys stand down.
   const overlayOpen = blockingOverlaysStore.useBlockingOverlayCount() > 0
   const readerKeysEnabled = isFocused && !overlayOpen
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
