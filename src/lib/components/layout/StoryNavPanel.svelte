@@ -1,7 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { TAIL_BANNER_TITLE } from '$lib/utils/chapterBanners'
   import {
     buildLandmarks,
     checkpointDeletionBlocker,
@@ -23,6 +22,8 @@
   import TimelinePanel from '$lib/components/world/TimelinePanel.svelte'
   import { swipe } from '$lib/utils/swipe'
   import {
+    ArrowDownToLine,
+    ArrowUpToLine,
     BookOpen,
     Bookmark,
     Check,
@@ -92,7 +93,7 @@
   )
   const orphaned = $derived(landmarkList.orphaned)
 
-  const showTail = $derived(ui.navShowTail)
+  const showChapters = $derived(ui.navShowChapters)
   // Opened by hover where there is a mouse, by a tap where there is not.
   let tailInfoOpen = $state(false)
   let tailInfoTimer: ReturnType<typeof setTimeout> | undefined
@@ -105,12 +106,18 @@
     else tailInfoOpen = false
   }
 
-  const filtered = $derived(!showTail)
+  const showFirstLast = $derived(ui.navShowFirstLast)
+  const showCheckpoints = $derived(ui.navShowCheckpoints)
+
+  const filtered = $derived(!showChapters || !showFirstLast || !showCheckpoints)
 
   const landmarks = $derived(
-    showTail
-      ? landmarkList.landmarks
-      : landmarkList.landmarks.filter((landmark) => landmark.kind !== 'tail'),
+    landmarkList.landmarks.filter((landmark) => {
+      if (landmark.kind === 'chapter' || landmark.kind === 'tail') return showChapters
+      if (landmark.kind === 'first' || landmark.kind === 'last') return showFirstLast
+      if (landmark.kind === 'origin' || landmark.kind === 'checkpoint') return showCheckpoints
+      return true
+    }),
   )
 
   // Not persisted with the panel's own state: a reader who opens this to clear one checkpoint out
@@ -331,11 +338,25 @@
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
               <DropdownMenu.CheckboxItem
-                checked={showTail}
-                onCheckedChange={(checked) => void ui.setNavShowTail(checked)}
+                checked={showFirstLast}
+                onCheckedChange={(checked) => void ui.setNavShowFirstLast(checked)}
                 closeOnSelect={false}
               >
-                Show “{TAIL_BANNER_TITLE}”
+                Show first and last entry
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem
+                checked={showChapters}
+                onCheckedChange={(checked) => void ui.setNavShowChapters(checked)}
+                closeOnSelect={false}
+              >
+                Show chapter borders
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem
+                checked={showCheckpoints}
+                onCheckedChange={(checked) => void ui.setNavShowCheckpoints(checked)}
+                closeOnSelect={false}
+              >
+                Show checkpoints
               </DropdownMenu.CheckboxItem>
             </DropdownMenu.Content>
           </DropdownMenu.Root>
@@ -405,6 +426,10 @@
                       <BookOpen class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else if landmark.kind === 'tail'}
                       <PenLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'first'}
+                      <ArrowUpToLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'last'}
+                      <ArrowDownToLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else}
                       <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {/if}

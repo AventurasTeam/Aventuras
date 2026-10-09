@@ -198,6 +198,15 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   shown; with them off, the jump lands on the chapter's first entry. A chapter or tail row
   never switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
   history while the chapter is in the current branch's view all the same.
+
+  The list also carries a **First entry** row on the branch's first entry and a **Last entry** row
+  on its last (one row, First entry, when there is a single entry). Both stay on the current
+  branch in every navigation mode. The list's filter has two remembered options: one hides or shows
+  those two rows (`nav_show_first_last`), the other the chapter rows and the tail row together
+  (`nav_show_chapters`), and a third hides or shows the checkpoint rows together with the origin
+  row of a branch, which is named after its fork checkpoint (`nav_show_checkpoints`). The orphaned
+  checkpoints section is not filtered: it is where they are cleared out.
+
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
   per entry type, but every creation path initialised them blank and nothing ever wrote one

@@ -118,7 +118,7 @@ export function jumpToEntry(request: EntryJumpRequest): boolean {
   return willLand
 }
 
-export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail'
+export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last'
 
 export interface Landmark {
   entryId: string
@@ -174,7 +174,10 @@ export interface Landmarks {
  * checkpoint along the lineage that produced its current state, and where each chapter starts.
  *
  * A chapter or tail row sorts ahead of any other row on the same entry, matching the story view, where
- * its banner sits above that entry.
+ * its banner sits above that entry. The first-entry row leads the list and the last-entry row ends it, whatever
+ * else shares their entries.
+ *
+ * They mark the first and last entry of the branch as read. A single entry gets the first-entry row only.
  *
  * A checkpoint missing from `entries` is two different things, and they are not shown alike: one
  * anchored elsewhere belongs to another branch and is left out, while one with no anchoring entry
@@ -266,8 +269,38 @@ export function buildLandmarks(
     })
   }
 
-  const rank = (landmark: Landmark) =>
-    landmark.kind === 'chapter' || landmark.kind === 'tail' ? 0 : 1
+  const first = entries[0]
+  const last = entries[entries.length - 1]
+  if (first) {
+    landmarks.push({
+      entryId: first.id,
+      checkpointId: null,
+      branchId: first.branchId,
+      switchesBranch: false,
+      number: entryNumber(first),
+      kind: 'first',
+      label: 'First entry',
+      branchName: getBranchName(first.branchId),
+    })
+  }
+  if (last && last !== first) {
+    landmarks.push({
+      entryId: last.id,
+      checkpointId: null,
+      branchId: last.branchId,
+      switchesBranch: false,
+      number: entryNumber(last),
+      kind: 'last',
+      label: 'Last entry',
+      branchName: getBranchName(last.branchId),
+    })
+  }
+
+  const rank = (landmark: Landmark) => {
+    if (landmark.kind === 'first') return -1
+    if (landmark.kind === 'last') return 2
+    return landmark.kind === 'chapter' || landmark.kind === 'tail' ? 0 : 1
+  }
 
   return {
     landmarks: landmarks.sort((a, b) => a.number - b.number || rank(a) - rank(b)),
