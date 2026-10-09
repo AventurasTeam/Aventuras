@@ -295,7 +295,7 @@ describe('peekLeadOf', () => {
     )
   })
 
-  it('never offers Set as lead on the lead, even when the row carries no label', () => {
+  it('disables Set as lead as "Already the lead" when the lead row has no label', () => {
     expect(peekLeadOf(modelOf('character', 'char_kael', railData(null)), control())).toMatchObject({
       state: 'candidate',
       disabledReason: 'Already the lead',
