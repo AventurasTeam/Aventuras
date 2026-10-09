@@ -16,6 +16,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   type ComponentProps,
@@ -269,11 +270,11 @@ function BottomSheetContent({
 
   // Latest-ref: the back listener must not re-subscribe on a render. Android calls the newest
   // listener first, so a re-subscribe would put it above a guard dialog opened from it.
-  const backRef = useRef(() => {})
-  backRef.current = dismissable ? () => onOpenChange(false) : () => onDismissRefused?.()
-  const refusedRef = useRef(onDismissRefused)
-  refusedRef.current = onDismissRefused
-  const reportRefused = useCallback(() => refusedRef.current?.(), [])
+  const latest = useRef({ dismissable, onOpenChange, onDismissRefused })
+  useLayoutEffect(() => {
+    latest.current = { dismissable, onOpenChange, onDismissRefused }
+  })
+  const reportRefused = useCallback(() => latest.current.onDismissRefused?.(), [])
   const dismissal = useSheetDismissal(dismissable, reportRefused)
 
   const sheetRef = useRef<BottomSheetModal>(null)
@@ -319,7 +320,9 @@ function BottomSheetContent({
   useEffect(() => {
     if (!open || Platform.OS !== 'android') return
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      backRef.current()
+      const current = latest.current
+      if (current.dismissable) current.onOpenChange(false)
+      else current.onDismissRefused?.()
       return true
     })
     return () => sub.remove()
