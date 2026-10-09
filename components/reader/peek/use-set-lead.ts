@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { leadRejectionText } from '@/components/world/world-copy'
 import { setStoryLead } from '@/lib/actions'
@@ -6,6 +6,8 @@ import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
+
+import type { PeekLeadControl } from './peek-model'
 
 const ctx = { db, runInTransaction }
 
@@ -23,7 +25,17 @@ export function useSetLead(storyId: string | null): {
 
   const setLead = useCallback(
     (entityId: string) => {
-      if (storyId == null || inFlight.current) return
+      if (inFlight.current) return
+      // The reader's story-id read can fail; a press then must not vanish silently.
+      if (storyId == null) {
+        logger.error('reader.peek_set_lead_failed', {
+          storyId: null,
+          entityId,
+          error: 'no story id',
+        })
+        toast.error(t('world:lead.failed'))
+        return
+      }
       inFlight.current = true
       setPending(true)
       void setStoryLead(storyId, entityId, ctx)
@@ -49,4 +61,17 @@ export function useSetLead(storyId: string | null): {
   )
 
   return { pending, setLead }
+}
+
+/** The head's lead control as both peek hosts build it. */
+export function usePeekLeadControl(
+  storyId: string | null,
+  blocked: boolean,
+  blockedReason: string | undefined,
+): PeekLeadControl {
+  const { pending, setLead } = useSetLead(storyId)
+  return useMemo(
+    () => ({ blocked, blockedReason, pending, onSetLead: setLead }),
+    [blocked, blockedReason, pending, setLead],
+  )
 }

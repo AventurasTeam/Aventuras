@@ -6,7 +6,8 @@ import { LEAD_REJECTION, type SetStoryLeadResult } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { toast } from '@/lib/toast'
 
-import { useSetLead } from './use-set-lead'
+import type { PeekLeadControl } from './peek-model'
+import { usePeekLeadControl, useSetLead } from './use-set-lead'
 
 const setStoryLead = vi.hoisted(() => vi.fn())
 
@@ -127,13 +128,68 @@ describe('useSetLead', () => {
     await waitFor(() => expect(result.current.pending).toBe(false))
   })
 
-  it('does nothing without an open story', () => {
+  it('logs and toasts instead of writing without a story id', () => {
     setStoryLead.mockResolvedValue({ status: 'ok' } satisfies SetStoryLeadResult)
+    const error = vi.spyOn(logger, 'error')
     const { result } = renderHook(() => useSetLead(null))
 
     act(() => result.current.setLead('char_mira'))
 
     expect(setStoryLead).not.toHaveBeenCalled()
     expect(result.current.pending).toBe(false)
+    expect(error).toHaveBeenCalledWith('reader.peek_set_lead_failed', {
+      storyId: null,
+      entityId: 'char_mira',
+      error: 'no story id',
+    })
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith("Couldn't change the lead.")
+  })
+})
+
+describe('usePeekLeadControl', () => {
+  it('passes the gate and its reason through', () => {
+    const { result, rerender } = renderHook<
+      PeekLeadControl,
+      { blocked: boolean; reason: string | undefined }
+    >(({ blocked, reason }) => usePeekLeadControl(STORY, blocked, reason), {
+      initialProps: { blocked: true, reason: 'Chapter close in progress.' },
+    })
+    expect(result.current).toMatchObject({
+      blocked: true,
+      blockedReason: 'Chapter close in progress.',
+      pending: false,
+    })
+
+    rerender({ blocked: false, reason: undefined })
+    expect(result.current).toMatchObject({ blocked: false, blockedReason: undefined })
+  })
+
+  it('keeps one control object while nothing it carries changes', () => {
+    const { result, rerender } = renderHook(() => usePeekLeadControl(STORY, false, undefined))
+    const first = result.current
+    rerender()
+    expect(result.current).toBe(first)
+  })
+
+  it('sets the lead on the story and reports the call as pending until it settles', async () => {
+    const call = deferred<SetStoryLeadResult>()
+    setStoryLead.mockReturnValueOnce(call.promise)
+    const { result } = renderHook(() => usePeekLeadControl(STORY, false, undefined))
+
+    act(() => result.current.onSetLead('char_mira'))
+    expect(setStoryLead).toHaveBeenCalledTimes(1)
+    expect(setStoryLead).toHaveBeenCalledWith(
+      STORY,
+      'char_mira',
+      expect.objectContaining({ runInTransaction: expect.any(Function) }),
+    )
+    expect(result.current.pending).toBe(true)
+
+    await act(async () => {
+      call.resolve({ status: 'ok' })
+      await call.promise
+    })
+    await waitFor(() => expect(result.current.pending).toBe(false))
   })
 })

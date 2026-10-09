@@ -6,7 +6,7 @@ import type { RailPeek } from '@/lib/reader-rail'
 import { PeekContent } from './peek-content'
 import { peekFootHref, peekRegionHref } from './peek-model'
 import { usePeekView } from './use-peek-view'
-import { useSetLead } from './use-set-lead'
+import { usePeekLeadControl } from './use-set-lead'
 
 export type RailSheetPeekProps = {
   peek: RailPeek
@@ -30,7 +30,7 @@ export function RailSheetPeek({
   onOpenInPanel,
 }: RailSheetPeekProps) {
   const { model, entityContext, entryIndex } = usePeekView(peek, data)
-  const { pending, setLead } = useSetLead(storyId)
+  const lead = usePeekLeadControl(storyId, blocked, blockedReason)
   const gone = model == null
   // A row deleted under the peek returns to the list rather than keep its id: an undo that
   // restored it must not reopen the peek (lessons-learned → No "harmless" id leaks).
@@ -43,7 +43,7 @@ export function RailSheetPeek({
       model={model}
       entityContext={entityContext}
       entryIndex={entryIndex}
-      lead={{ blocked, blockedReason, pending, onSetLead: setLead }}
+      lead={lead}
       chrome={{ kind: 'back', onBack }}
       onOpenInPanel={() => onOpenInPanel(peekFootHref(data, peek))}
       onRegionPress={(tab) => {

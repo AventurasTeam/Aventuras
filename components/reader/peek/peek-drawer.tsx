@@ -15,7 +15,7 @@ import {
   peekRegionHref,
 } from './peek-model'
 import { usePeekView } from './use-peek-view'
-import { useSetLead } from './use-set-lead'
+import { usePeekLeadControl } from './use-set-lead'
 
 export type PeekDrawerProps = {
   data: RailData
@@ -44,10 +44,9 @@ export function PeekDrawer({
 }: PeekDrawerProps) {
   // Called here, above SheetContent's Portal, which drops custom contexts on native.
   const { model, entityContext, entryIndex } = usePeekView(peek, data)
-  const { pending, setLead } = useSetLead(storyId)
+  const control = usePeekLeadControl(storyId, blocked, blockedReason)
   const gone = peek != null && model == null
   const open = visible && model != null
-  const control = { blocked, blockedReason, pending, onSetLead: setLead }
   const leadAffordance = model == null ? undefined : peekLeadOf(model, control)
   const isLead = leadAffordance?.state === 'lead'
   const leadActionDisabled = isLeadActionDisabled(leadAffordance)
