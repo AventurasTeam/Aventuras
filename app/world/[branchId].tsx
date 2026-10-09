@@ -414,10 +414,15 @@ export default function WorldRoute() {
 
   // Phone is list-first: an open detail collapses to the list; any other back leaves, and
   // useUnsavedChangesGuard holds the pop behind the dialog while dirty.
+  // The list sat hidden under the detail, so a reveal sent then (an arrival link, Connections)
+  // scrolled nothing: reveal the row as the list comes back, in the same update.
   const handleBack = useCallback(() => {
-    if (detailOpen) guard(() => select(null))
-    else router.back()
-  }, [detailOpen, guard, router, select])
+    if (!detailOpen) return router.back()
+    guard(() => {
+      select(null)
+      if (selectedId != null) listRef.current?.revealRow(selectedId)
+    })
+  }, [detailOpen, guard, router, select, selectedId])
   // Constant true: Android back always runs handleBack, so it can't leave past a dirty pane.
   useMasterDetailBack(true, handleBack)
 

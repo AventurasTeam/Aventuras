@@ -6,7 +6,7 @@ import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
-import { setWindowHeight } from '../harness/window'
+import { setWindowHeight, setWindowWidth } from '../harness/window'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { peek } from '../locators/peek'
@@ -30,6 +30,8 @@ const REPLY_MARKER = 'E2E-PEEK-REPLY'
 // Short enough that the Staged tier sits below World's fold once it opens, so only the reveal's
 // scroll can bring the row into view; at the default window it is already on screen.
 const SHORT_WINDOW_HEIGHT = 420
+// The phone tier (< 640 px), where World's list hides under an open detail.
+const PHONE_WIDTH = 400
 
 // Seeded ids under a substitutable prefix become `prefix_<uuid>` (docs/testing.md → Substitutable
 // IDs must be real UUIDs), so every id the spec asserts is read by name or title.
@@ -161,6 +163,45 @@ test.describe.serial('Peek drawer', () => {
     await setWindowHeight(app, fullHeight)
     await chrome.back(page).click()
     await page.waitForURL(/\/reader-composer\//)
+  })
+
+  // On phone the list sits hidden under the detail, where an arrival's reveal scrolls nothing;
+  // `←` must reveal the selected row as the list comes back.
+  test('on phone, back from a selected row shows it in the list', async () => {
+    const page = app.window
+    await rail.row(page, STAGED_CHARACTER).click()
+    const fullHeight = await setWindowHeight(app, SHORT_WINDOW_HEIGHT)
+    await peek.openInWorld(page, STAGED_CHARACTER).click()
+    await page.waitForURL(/\/world\//)
+    // Scrolled back to the top, so only the back's own reveal can bring the row into view.
+    await world.row(page, STAGED_CHARACTER).evaluate((row) => {
+      for (let el = row.parentElement; el != null; el = el.parentElement) {
+        const { overflowY } = getComputedStyle(el)
+        if (overflowY === 'auto' || overflowY === 'scroll') {
+          el.scrollTop = 0
+          return
+        }
+      }
+    })
+    await expect(world.row(page, STAGED_CHARACTER)).not.toBeInViewport()
+    const fullWidth = await setWindowWidth(app, PHONE_WIDTH)
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThan(640)
+    await expect(world.detailName(page)).toHaveText(STAGED_CHARACTER)
+
+    await chrome.back(page).click()
+    await expect(world.row(page, STAGED_CHARACTER)).toBeInViewport()
+
+    await setWindowWidth(app, fullWidth)
+    await setWindowHeight(app, fullHeight)
+    await chrome.back(page).click()
+    await page.waitForURL(/\/reader-composer\//)
+  })
+
+  test('the window keeps a phone-width minimum', async () => {
+    const minimum = await app.app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].getMinimumSize(),
+    )
+    expect(minimum[0]).toBe(360)
   })
 
   test("a happening's peek shows its marker and counts, and Open in Plot panel lands it", async () => {

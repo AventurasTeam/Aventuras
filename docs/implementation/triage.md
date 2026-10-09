@@ -56,22 +56,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **The desktop window has no minimum width.** `createWindow` in
-  `electron/main.ts` sets `width` and `height` but no `minWidth`, so the
-  window can shrink to widths no desktop user works at, and layouts get
-  exercised there that only phones should reach. Example: below 330 px
-  the collision dialog's mode segment clips (see the segment-clip entry
-  above). Developer-requested: set `minWidth` around 360 px, which still
-  lets the window narrow into the phone tier to check phone layouts.
-  Found in 4.2c's developer review (2026-10-07).
-- **Phone deep-link reveal can't scroll the hidden list.** (2026-10-09)
-  World's and Plot's mount-arrival `revealRow` opens the row's tier, but
-  on phone the list sits under the detail with `hidden`
-  (`components/shells/master-detail-layout.tsx:83`), so the scroll and
-  focus are a no-op and the first `←` shows the tier open with the list
-  at the top. Fix shape: reveal the selected row in `handleBack` in the
-  same guarded update as `select(null)`, as `onPillPress` does
-  (`app/world/[branchId].tsx:379`); applies to World and Plot, and
-  `openEntity` on phone has the same gap. Raised in 4.5b's review,
-  2026-10-09.

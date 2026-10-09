@@ -237,10 +237,16 @@ export default function PlotRoute() {
 
   // Phone is list-first: an open detail collapses to the list; any other back leaves, and
   // useUnsavedChangesGuard holds the pop behind the dialog while dirty.
+  // The list sat hidden under the detail, so a reveal sent then (an arrival link) scrolled
+  // nothing: reveal the row as the list comes back, in the same update.
   const handleBack = useCallback(() => {
-    if (detailOpen) guard(() => select(null))
-    else router.back()
-  }, [detailOpen, guard, router, select])
+    if (!detailOpen) return router.back()
+    guard(() => {
+      select(null)
+      if (selection != null && selection.type !== 'create')
+        listRef.current?.revealRow(selection.type, selection.row.id)
+    })
+  }, [detailOpen, guard, router, select, selection])
   // Constant true: Android back always runs handleBack, so it can't leave the app past a dirty
   // pane. Bottom-of-stack Back is inert (parked.md → "Back on a screen entered without the
   // story list beneath it").
