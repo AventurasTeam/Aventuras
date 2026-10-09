@@ -213,7 +213,9 @@ Canon carries the detail; each line points to it.
   the rail row on close. Canon:
   [`reader-composer.md → Peek drawer — peek implies rail open`](../../../../ui/screens/reader-composer/reader-composer.md#peek-drawer--peek-implies-rail-open).
   The dialog takes focus by ref in `onOpenAutoFocus`, since Radix's
-  `event.currentTarget` there is its unnamed wrapper.
+  `event.currentTarget` there is its unnamed wrapper. After a
+  successful `Set as lead` the row moves, so that close drops focus to
+  `<body>` (see [triage](../../../triage.md#inbox)).
 - **Thread and happening peeks are read-only summaries** (developer,
   2026-10-08); see
   [`reader-composer.md → State-field composition — thread and happening peek`](../../../../ui/screens/reader-composer/reader-composer.md#state-field-composition--thread-and-happening-peek).
