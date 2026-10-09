@@ -248,7 +248,7 @@ story.** A run with a `newChapter` â€” the automatic path and a manual chapter â
 entries first. The triggering chapter is in the prompt in full (or as its summary when _Send full
 text of new chapter_ is off), so the tail continues it without a gap, however far before the end
 of the story the chapter was cut. How far it runs is the Advanced Settings switch
-`chapterBufferTail` (on by default), which `createLoreManagementService` hands the service beside
+`chapterBufferTail` (off by default), which `createLoreManagementService` hands the service beside
 `sendNewChapterText`. On, the story's Buffer Messages is the limit: exactly that many prose entries,
 with no character budget and no floor, however long they are. Off, it is the same character budget
 and floor, counted from the chapter's end. A buffer of 0 shows none, and an empty tail is absent
