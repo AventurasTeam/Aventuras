@@ -648,24 +648,22 @@ slice-planning gate forces its resolution before that slice is planned.
   (`sheet.tsx:396`) leaves Radix's FocusScope fallback on the
   role-stripped, unnamed wrapper; the gorhom `BottomSheetContent` has no
   Tab trap on web though
-  [`layout.md`](../ui/foundations/mobile/layout.md) (line 216) says
+  [`layout.md`](../ui/foundations/mobile/layout.md#sheet-behavior--additional-rules) (line 216) says
   sheets trap Tab; and 4.5a's list and categories swaps drop focus.
   Known residual in the peek: after a successful `Set as lead` the lead
   row re-parents into `ModuleList`'s pinned slot, so the remembered node
   is disconnected and the next close drops focus to `<body>`. Fix by
   re-finding the row by id (`ModuleList`'s `focusRef`), or at primitive
   level as above. Raised in 4.5b's review, 2026-10-09.
-- **Reader shortcuts fire behind modal overlays.** (2026-10-09) The
-  reader's undo/redo and End handlers (`app/reader-composer/[branchId].tsx`
-  lines 1130-1132 and 1147-1149) gate on `isFocused` only, not on
-  `blockingOverlaysStore` (which the Actions menu and
-  `hooks/use-master-detail-back.ts` check), so Ctrl+Z with the peek
-  drawer or another reader dialog open undoes a turn behind the scrim.
-  Related: a toast fired while a modal Sheet is open is `aria-hidden` by
-  Radix's `hideOthers` (the `Toaster` renders in-tree,
-  `app/_layout.tsx:107`, `components/ui/toast.tsx:194`) and may sit under
-  the scrim; the peek's `Set as lead` refusal toast is a new instance.
-  Raised in 4.5b's review, 2026-10-09.
+- **A toast fired under a modal Sheet may be hidden from assistive
+  tech.** (2026-10-09) Radix's `hideOthers` marks everything outside a
+  modal Sheet `aria-hidden`, and the `Toaster` renders in-tree
+  (`app/_layout.tsx:107`, `components/ui/toast.tsx:194`), so a toast
+  fired while the peek drawer or another modal Sheet is open may sit
+  under the scrim and go unannounced; the peek's `Set as lead` refusal
+  toast is a new instance. (The reader's undo / redo and End keys no
+  longer fire behind a blocking overlay.) Raised in 4.5b's review,
+  2026-10-09.
 - **Plot row semantics are hidden from assistive tech.** (2026-10-09)
   Plot's `⊙` common-knowledge marker (`components/plot/happening-row.tsx:46`)
   is a bare icon with no accessible name, and `ListRow` sets `aria-label`
@@ -683,10 +681,11 @@ slice-planning gate forces its resolution before that slice is planned.
   (`app/world/[branchId].tsx:379`); applies to World and Plot, and
   `openEntity` on phone has the same gap. Raised in 4.5b's review,
   2026-10-09.
-- **Small duplications.** (2026-10-09) `'min-h-[44px] justify-center'` is
-  written out in three places (`PHONE_TOUCH_FLOOR`, private in
-  `overview-parts.tsx:35`; `components/compounds/breadcrumb.tsx:29`;
-  `components/reader/peek/peek-foot.tsx:26`). The two peek hosts
-  (`PeekDrawer`, `RailSheetPeek`) build the same `PeekLeadControl`, foot
-  href and region href; a `peekRouteOf`-style helper in `peek-model.ts`
-  would keep them from drifting. Raised in 4.5b's review, 2026-10-09.
+- **Small duplications, 4.5b's own debt.** (2026-10-09)
+  `'min-h-[44px] justify-center'` is written out in three places
+  (`PHONE_TOUCH_FLOOR`, private in `overview-parts.tsx:35`;
+  `components/compounds/breadcrumb.tsx:29`; `peek-foot.tsx:26`, new in
+  4.5b). The two peek hosts (`PeekDrawer`, `RailSheetPeek`), both new in
+  4.5b, build the same `PeekLeadControl`, foot href and region href; a
+  `peekRouteOf`-style helper in `peek-model.ts` would keep them from
+  drifting. Raised in 4.5b's review, 2026-10-09.

@@ -202,24 +202,25 @@ Canon carries the detail; each line points to it.
 - **The desktop and tablet drawer is the blocking right `Sheet`**
   (developer, 2026-10-08): a scrim and a focus trap, and Esc, `×` or a
   click outside closes it, so the narrative and composer are inert
-  while it is open. The wireframe's phone-only backdrop changed with
-  it; see
+  while it is open. The reader's undo / redo and End keys stand down
+  under any blocking overlay (`blockingOverlaysStore`). The
+  wireframe's phone-only backdrop changed with it; see
   [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout)
   and [`layout.md → Sheet`](../../../../ui/foundations/mobile/layout.md#sheet).
 - **Focus lands on the drawer when it opens** (developer, 2026-10-08),
-  not on its first button: for a non-lead character that would be
-  `Set as lead`, which one stray key would fire and Ctrl-Z can't undo.
-  Focus stays on the named dialog when `Set as lead` is swapped or
-  disabled, and returns to the rail row on close unless the drawer
-  routed away — except after a successful `Set as lead`, which moves
-  the row (see [triage](../../../triage.md#inbox)).
+  not on its first button, which for a non-lead character is
+  `Set as lead`; it stays on the dialog through the swap and returns to
+  the rail row on close. Canon:
+  [`reader-composer.md → Peek drawer — peek implies rail open`](../../../../ui/screens/reader-composer/reader-composer.md#peek-drawer--peek-implies-rail-open).
+  The dialog takes focus by ref in `onOpenAutoFocus`, since Radix's
+  `event.currentTarget` there is its unnamed wrapper.
 - **Thread and happening peeks are read-only summaries** (developer,
   2026-10-08); see
   [`reader-composer.md → State-field composition — thread and happening peek`](../../../../ui/screens/reader-composer/reader-composer.md#state-field-composition--thread-and-happening-peek).
 - **A peeked row deleted while it is open closes the peek** (developer,
-  2026-10-08): the drawer closes and the store drops the peek; on phone
-  the Sheet returns to the list; no toast. Keeping the id would let an
-  undo that restores the row reopen it, per
+  2026-10-08), with no toast; canon in the same section as the focus
+  rule above. The store drops the id: keeping it would let an undo that
+  restores the row reopen it, per
   [lessons-learned → No "harmless" id leaks](../../../lessons-learned/no-harmless-id-leaks.md).
 - **The portrait is the body's, not the head's** (developer,
   2026-10-08): an entity peek's portrait is the Overview's own
@@ -241,7 +242,7 @@ Implementer choices worth keeping:
   [`color.md → Disabled`](../../../../ui/foundations/color.md#disabled)).
 - **The phone head holds the 44 px touch floor** on its name group, so
   it keeps one height across lead states
-  ([`touch.md`](../../../../ui/foundations/mobile/touch.md));
+  ([`touch.md`](../../../../ui/foundations/mobile/touch.md#touch-target-floor-on-phone));
   `Set as lead` and the foot link carry web focus rings.
 - **The slice's component tests are Storybook plays**, the Component
   layer of
@@ -260,10 +261,12 @@ Implementer choices worth keeping:
   the peek's foot and its Overview regions. `RailSheet` keeps its
   `onRowPress` mode, which only its bare stories use.
 - **Review findings outside the slice** (web focus on disabled
-  controls, focus-ring drift, trigger-less overlay focus return, reader
-  shortcuts behind modal overlays, Plot row semantics, the phone
-  deep-link reveal, small duplications) are in
-  [`triage.md`](../../../triage.md).
+  controls, focus-ring drift, trigger-less overlay focus return, Plot
+  row semantics, the phone deep-link reveal, a toast under a modal
+  Sheet) are in [`triage.md`](../../../triage.md).
+- **4.5b debt left unrefactored:** `PeekDrawer` and `RailSheetPeek`
+  build the same lead control and hrefs, and the foot's 44 px touch
+  class repeats two others; see triage's "Small duplications".
 
 Peek quick-edits stay parked, now naming `entity.md` as a fourth doc in
 conflict; see [`parked.md → Peek quick-edits`](../../../../parked.md#peek-quick-edits).
