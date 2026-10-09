@@ -5,7 +5,8 @@ import { t } from '../harness/i18n'
 // ScreenShell's chrome (components/shells/screen-shell.tsx) and the app Actions menu it opens:
 // the same controls on every in-story screen, so no surface file owns them.
 export const chrome = {
-  back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back') }),
+  // Exact: "Back to categories" and "Back to Browse" (the phone rail Sheet's) also contain "Back".
+  back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back'), exact: true }),
 
   // On web the trigger's accessible name carries the "(Ctrl+K)" hint, so it anchors on the base label.
   actionsTrigger: (page: Page): Locator =>

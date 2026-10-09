@@ -58,12 +58,15 @@ export const world = {
   categoryOption: (page: Page, category: string): Locator =>
     page.getByRole('option', { name: t(`world:categories.${category}`) }),
 
+  // Visible only: the reader rail, hidden under World, words its search box the same way.
   search: (page: Page, category: string): Locator =>
-    page.getByPlaceholder(
-      t('world:search.placeholder', {
-        category: t(`world:categories.${category}`).toLocaleLowerCase('en'),
-      }),
-    ),
+    page
+      .getByPlaceholder(
+        t('world:search.placeholder', {
+          category: t(`world:categories.${category}`).toLocaleLowerCase('en'),
+        }),
+      )
+      .filter({ visible: true }),
 
   // All-view group accordion header (module-list.tsx); matched via aria-expanded, since the
   // sibling filter Chip shares the same label text but sets aria-pressed instead (chip.tsx).

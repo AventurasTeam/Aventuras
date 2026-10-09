@@ -72,17 +72,6 @@ slice-planning gate forces its resolution before that slice is planned.
   above). Developer-requested: set `minWidth` around 360 px, which still
   lets the window narrow into the phone tier to check phone layouts.
   Found in 4.2c's developer review (2026-10-07).
-- **The World and Plot `search` locators match the hidden reader rail's search
-  box.** `e2e/locators/world.ts:60` and `e2e/locators/plot.ts:28` match the
-  rail's identical placeholder whenever the rail shows the same category
-  (World's default `Characters`), a latent strict-mode trap. Scope them like
-  `categoryTrigger` and `tierHeader` if they ever fail. Raised in 4.5a review,
-  2026-10-07.
-- **`chrome.back` matches its name as a substring.** `e2e/locators/chrome.ts:8`
-  has no `exact: true`, so the phone rail Sheet's "Back to categories"
-  (`reader:rail.backToCategories`) would collide if that button ever rendered
-  in a desktop E2E DOM. Latent: the Sheet is phone-only and E2E is
-  desktop-only. Raised in 4.5a's final review, 2026-10-07.
 - **Phone deep-link reveal can't scroll the hidden list.** (2026-10-09)
   World's and Plot's mount-arrival `revealRow` opens the row's tier, but
   on phone the list sits under the detail with `hidden`
