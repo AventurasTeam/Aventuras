@@ -101,13 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   left: on a 30k-delta branch whose tab row has only old deltas, a
   first chunk or search keystroke still takes about 9 ms while the
   next chunk takes under 1 ms (`pnpm bench:history`).
-- **The entity operational seam's flag arm can bypass the delta log.**
-  `lib/actions/entities/operational.ts` still calls itself the non-delta
-  seam for the compute-lifecycle columns, flag included, but 4.2c made
-  the flag clear a delta-logged user write. Its flag arm is unused; a
-  future classifier path calling it would write a column the user path
-  delta-logs, and a rollback couldn't revert it. Either drop the arm or
-  narrow the header. Found in 4.2c's Task 1 review (2026-10-06).
 - **Plot's awareness upsert type duplicates the arm's payload.**
   `lib/plot/happening-draft.ts` declares a local `AwarenessUpsert` type
   instead of deriving it from the `upsertHappeningAwareness` payload in
@@ -220,12 +213,6 @@ slice-planning gate forces its resolution before that slice is planned.
   key), and 4.2c added branch guards to the other-end name lookups and
   the link version beside it. Unreachable while panes render only
   branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07).
-- **The authorship contract table doesn't list the collision flag.**
-  `docs/data-model.md → Authorship contract` has no row for
-  `name_collision_flag`, though the World screen's authorship section
-  (3+ collisions) cites the contract for who sets and clears it: the
-  classifier at create, user paths only clearing it since 4.2c. Found
-  in 4.2c's PR 2 review (2026-10-06).
 - **The tail-lock sequence is written twice.** The collision merge
   (`lib/actions/world/resolve-collision.ts`) copies the entity delete's
   steps (`lib/actions/row-delete/delete-entity.ts`): read the head's
