@@ -4285,6 +4285,9 @@ class StoryStore {
     }
     const entry = this.entries.find((e) => e.id === entryId)
     if (!entry) throw new Error('Entry not found')
+    if (entry.type !== 'narration') {
+      throw new Error('A checkpoint at a past entry can only be created on a narration')
+    }
     const branchId = this.currentStory.currentBranchId ?? null
     if ((entry.branchId ?? null) !== branchId) {
       throw new Error('A checkpoint can only be created on an entry this branch owns')

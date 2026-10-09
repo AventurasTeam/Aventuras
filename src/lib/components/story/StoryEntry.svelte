@@ -450,10 +450,14 @@
     (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null),
   )
 
-  // At the latest entry always; at an earlier one this branch owns while State Tracking is on.
+  // At the latest entry always; at an earlier narration this branch owns while State Tracking
+  // is on — a fork after a player action would leave its answer to one branch only.
   const canCreateCheckpoint = $derived(
-    (isLatestEntry || (settings.experimentalFeatures.stateTracking && isOwnedEntry)) &&
-      entry.type !== 'system' &&
+    (isLatestEntry
+      ? entry.type !== 'system'
+      : settings.experimentalFeatures.stateTracking &&
+        isOwnedEntry &&
+        entry.type === 'narration') &&
       !entryCheckpoint &&
       !entriesLocked,
   )
@@ -464,12 +468,13 @@
     manual: WorldStateChangeRecord[]
     unkeepable: WorldStateChangeRecord[]
   } | null>(null)
-  let keepManualInCheckpoint = $state(true)
+  let keepManualInCheckpoint = $state(false)
+  let savingCheckpoint = $state(false)
 
   async function openCheckpoint() {
     isCreatingCheckpoint = true
     pastCheckpoint = null
-    keepManualInCheckpoint = true
+    keepManualInCheckpoint = false
     if (!isLatestEntry) pastCheckpoint = await story.previewCheckpointAt(entry.id)
   }
 
@@ -500,7 +505,8 @@
   )
 
   async function handleCreateCheckpoint() {
-    if (!checkpointName.trim() || checkpointBlocked) return
+    if (!checkpointName.trim() || checkpointBlocked || savingCheckpoint) return
+    savingCheckpoint = true
     try {
       if (isLatestEntry) await story.createCheckpoint(checkpointName.trim())
       else {
@@ -513,6 +519,8 @@
     } catch (error) {
       console.error('[StoryEntry] Failed to create checkpoint:', error)
       alert(error instanceof Error ? error.message : 'Failed to create checkpoint')
+    } finally {
+      savingCheckpoint = false
     }
   }
 
@@ -2083,66 +2091,6 @@
           This will create a new timeline from this checkpoint.
         </p>
       </div>
-    {:else if isCreatingCheckpoint}
-      <div class="space-y-2">
-        <p class="text-muted-foreground text-sm">Create a checkpoint at this point:</p>
-        <Input
-          type="text"
-          class="h-9 text-sm"
-          placeholder="Checkpoint name..."
-          bind:value={checkpointName}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') handleCreateCheckpoint()
-            if (e.key === 'Escape') cancelCheckpoint()
-          }}
-        />
-        <div class="flex gap-2">
-          <Button
-            size="sm"
-            onclick={handleCreateCheckpoint}
-            disabled={!checkpointName.trim() || checkpointBlocked}
-            class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
-          >
-            <Bookmark class="mr-1.5 h-4 w-4" />
-            Create Checkpoint
-          </Button>
-          <Button variant="secondary" size="sm" onclick={cancelCheckpoint} class="h-9 px-3">
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-        </div>
-        {#if isLatestEntry}
-          <p class="text-muted-foreground text-xs">
-            Checkpoints save the current story state and allow branching from this point.
-          </p>
-        {:else if pastCheckpoint === null}
-          <p class="text-muted-foreground text-xs italic">Checking the story after this entry…</p>
-        {:else if pastCheckpoint.refusal}
-          <p class="text-xs text-amber-500">{pastCheckpoint.refusal}</p>
-        {:else}
-          <p class="text-muted-foreground text-xs">
-            The checkpoint holds the story as it was at this entry. The story itself is not changed.
-          </p>
-          {#if pastCheckpoint.manual.length > 0}
-            {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
-            <p class="text-muted-foreground text-xs">Changes you made by hand after this entry:</p>
-            <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
-              {#each pastCheckpoint.manual as change (change.id)}
-                <li>
-                  {describeChange(change, (type, id) => story.trackedName(type, id))}
-                  {#if unkeepable.has(change.id)}
-                    <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-            <label class="flex items-center gap-2 text-xs">
-              <Checkbox bind:checked={keepManualInCheckpoint} />
-              Keep them in the checkpoint
-            </label>
-          {/if}
-        {/if}
-      </div>
     {:else}
       <!-- Reasoning content panel (between header and story text) -->
       {#if entry.reasoning}
@@ -2338,6 +2286,92 @@
 {/snippet}
 
 <!-- View/Edit Image Modal -->
+<!-- Modal: the story must not change while the checkpoint is described and taken. -->
+<ResponsiveModal.Root
+  bind:open={
+    () => isCreatingCheckpoint,
+    (open) => {
+      if (!open && !savingCheckpoint) cancelCheckpoint()
+    }
+  }
+  dismissible={false}
+>
+  <ResponsiveModal.Content
+    class="max-w-md gap-0 p-0"
+    interactOutsideBehavior="ignore"
+    escapeKeydownBehavior={savingCheckpoint ? 'ignore' : 'close'}
+  >
+    <ResponsiveModal.Header class="border-b px-6 py-4">
+      <ResponsiveModal.Title>Create checkpoint</ResponsiveModal.Title>
+      <ResponsiveModal.Description>At entry {entryNumber(entry)}</ResponsiveModal.Description>
+    </ResponsiveModal.Header>
+    <div class="space-y-3 px-6 py-4">
+      <Input
+        type="text"
+        class="h-9 text-sm"
+        placeholder="Checkpoint name..."
+        bind:value={checkpointName}
+        disabled={savingCheckpoint}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') handleCreateCheckpoint()
+        }}
+      />
+      {#if isLatestEntry}
+        <p class="text-muted-foreground text-xs">
+          Checkpoints save the current story state and allow branching from this point.
+        </p>
+      {:else if pastCheckpoint === null}
+        <p class="text-muted-foreground text-xs italic">Checking the story after this entry…</p>
+      {:else if pastCheckpoint.refusal}
+        <p class="text-xs text-amber-500">{pastCheckpoint.refusal}</p>
+      {:else}
+        <p class="text-muted-foreground text-xs">
+          Checkpoints save the story state and allow branching.
+        </p>
+        {#if pastCheckpoint.manual.length > 0}
+          {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
+          <p class="text-muted-foreground text-xs">Changes you made by hand after this entry:</p>
+          <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
+            {#each pastCheckpoint.manual as change (change.id)}
+              <li>
+                {describeChange(change, (type, id) => story.trackedName(type, id))}
+                {#if unkeepable.has(change.id)}
+                  <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+          <label class="flex items-center gap-2 text-xs">
+            <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
+            Include them in the checkpoint
+          </label>
+        {/if}
+      {/if}
+    </div>
+    <ResponsiveModal.Footer class="border-t px-6 py-4">
+      <Button
+        variant="secondary"
+        size="sm"
+        onclick={cancelCheckpoint}
+        disabled={savingCheckpoint}
+        class="h-9 px-3"
+      >
+        <X class="mr-1.5 h-4 w-4" />
+        Cancel
+      </Button>
+      <Button
+        size="sm"
+        onclick={handleCreateCheckpoint}
+        disabled={!checkpointName.trim() || checkpointBlocked || savingCheckpoint}
+        class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
+      >
+        <Bookmark class="mr-1.5 h-4 w-4" />
+        Create Checkpoint
+      </Button>
+    </ResponsiveModal.Footer>
+  </ResponsiveModal.Content>
+</ResponsiveModal.Root>
+
 <ResponsiveModal.Root bind:open={isViewingImage}>
   <ResponsiveModal.Content class="gap-0 overflow-hidden p-0 sm:max-w-3xl">
     <!-- Image area -->

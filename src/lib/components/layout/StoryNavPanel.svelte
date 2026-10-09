@@ -141,7 +141,7 @@
     const entry = story.entries.find((e) => e.id === landmark.entryId)
     return (
       !!entry &&
-      entry.type !== 'system' &&
+      entry.type === 'narration' &&
       (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null) &&
       !story.checkpoints.some((c) => c.lastEntryId === entry.id)
     )
