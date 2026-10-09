@@ -375,14 +375,24 @@ Identical shape to world per-row. Each kind:
   schema={CalendarSystemSchema}
   title="Import calendar"
   onValidated={(calendar) => {
-    importCalendarAction(calendar).then((newId) => router.push(`/vault/calendars/${newId}`))
+    importCalendarAction(calendar).then(
+      (newId) => router.push(`/vault/calendars/${newId}`),
+      (error) => {
+        logger.error('app.calendar_import_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+        toast.error(t('vault:import.failed'))
+      },
+    )
   }}
 />
 ```
 
 Vault-specific bits (fresh UUID on import, name-collisions
 allowed, success route to L2 detail) live in the action layer
-and the route — the Dialog only validates shape.
+and the route — the Dialog only validates shape. The dialog has
+closed by the time the action settles, so the host reports a
+failure itself, as the World host does.
 
 ### Story list
 
@@ -402,10 +412,21 @@ Flat-button trigger. No menu.
   schema={StoryImportSchema}
   title="Import story"
   onValidated={(story) => {
-    importStoryAction(story).then((storyId) => router.push(`/story/${storyId}`))
+    importStoryAction(story).then(
+      (branchId) => router.push(`/reader-composer/${branchId}`),
+      (error) => {
+        logger.error('app.story_import_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+        toast.error(t('landing:import.failed'))
+      },
+    )
   }}
 />
 ```
+
+The reader route is keyed by branch, so the action resolves to the new
+story's branch. As with vault calendars, the host reports a failure.
 
 Legacy `.avt` migration import is a separate parallel path with
 its own dialog and design pass — see

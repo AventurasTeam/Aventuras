@@ -331,28 +331,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`import-dialog.md → Issue flattening`](../ui/patterns/import-dialog.md#issue-flattening));
   meta copy has no such rule. Predates 4.6. Raised in 4.6's slice review,
   2026-10-08.
-- **The Vault and story-list `ImportDialog` sketches have no failure
-  path.** (2026-10-08)
-  [`import-dialog.md → Vault calendars`](../ui/patterns/import-dialog.md#vault-calendars)
-  and [`→ Story list`](../ui/patterns/import-dialog.md#story-list) chain
-  the import action's promise into navigation with no rejection handling,
-  though the dialog has closed by then, so a host copied from them fails
-  silently. The World sketch shows the shape (failure toast and log).
-  Owners: M8.3 (vault calendars) and M9.4 (story import). Predates 4.6.
-  Raised in 4.6's slice review, 2026-10-08.
-- **Slice 4.6's Implementation notes overstate two rules.** (2026-10-08)
-  In [Slice 4.6](milestones/04-world-plot-read-surfaces/slices/06-import-export.md#implementation-notes),
-  "import drops those keys rather than rejecting them" skips the happening
-  anchor, which is still read for the time-anchor exclusivity
-  ([`data-model.md → Aventuras file format`](../data-model.md#aventuras-file-format-avts)
-  now says so). "The host flow M8.3 and M9.4 copy … refused and closed
-  while generation is in flight" contradicts
-  [`import-dialog.md → Host gating during in-flight generation`](../ui/patterns/import-dialog.md#host-gating-during-in-flight-generation),
-  where vault calendars and story-list import are unaffected; and
-  `useRowImport` commits a row save (`ImportRowResult`), which neither of
-  those imports is. Reword both notes when the slice doc is next edited;
-  the closing review had it read-only. Raised in 4.6's slice review,
-  2026-10-08.
 - **The World route's collision-dialog blur comment gives the wrong
   reason.** (2026-10-08) In `app/world/[branchId].tsx`, "The dialog is
   portaled: left open, it would paint over the screen pushed on top" sits
