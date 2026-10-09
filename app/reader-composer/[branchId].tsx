@@ -148,20 +148,19 @@ type BranchHydrationState =
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
 
-// A blocking overlay (Sheet, AlertDialog, Select) claims the surface. Read at key time, not
-// subscribed (no route re-render); a `matches` miss also leaves the key's native action alone.
-function readerKeysStandDown(): boolean {
-  return blockingOverlaysStore.getState().open.size > 0
-}
-
 // Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
-// deps, so identity has to hold unconditionally.
+// deps, so identity has to hold unconditionally. A blocking overlay (Sheet, AlertDialog,
+// Select) claims the surface, read at key time; a miss leaves the key's native action alone.
 function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
-  return (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z') && !readerKeysStandDown()
+  return (
+    (ev.metaKey || ev.ctrlKey) &&
+    (ev.key === 'z' || ev.key === 'Z') &&
+    !blockingOverlaysStore.isBlocked()
+  )
 }
 
 function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
-  return ev.key === 'End' && !readerKeysStandDown()
+  return ev.key === 'End' && !blockingOverlaysStore.isBlocked()
 }
 
 type ReaderGateState = {

@@ -30,7 +30,7 @@ export function useMasterDetailBack(canCollapse: boolean, onCollapse: () => void
       const onHardwareBack = () => {
         // An overlay that mounted before this surface focused registered first, so this
         // handler would run ahead of its own; yield and let the overlay close itself.
-        if (blockingOverlaysStore.getState().open.size > 0) return false
+        if (blockingOverlaysStore.isBlocked()) return false
         if (!canCollapse) return false
         onCollapseRef.current()
         return true

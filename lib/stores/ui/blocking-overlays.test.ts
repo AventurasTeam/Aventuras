@@ -52,6 +52,15 @@ describe('blockingOverlaysStore', () => {
     expect(blockingOverlaysStore.getState()).toBe(before)
   })
 
+  it('reads blocked while any token is held', () => {
+    const a = {}
+    expect(blockingOverlaysStore.isBlocked()).toBe(false)
+    acquire(a)
+    expect(blockingOverlaysStore.isBlocked()).toBe(true)
+    release(a)
+    expect(blockingOverlaysStore.isBlocked()).toBe(false)
+  })
+
   it('keeps the previous state identity when nothing changes', () => {
     const before = blockingOverlaysStore.getState()
     release({})

@@ -57,6 +57,8 @@ export function useRegisteredOverlay(open: boolean): void {
 
 export const blockingOverlaysStore = {
   useBlockingOverlayCount: (): number => useStore(store, (s) => s.open.size),
+  /** A non-subscribing read, for key and back handlers that check at the event. */
+  isBlocked: (): boolean => store.getState().open.size > 0,
   getState: (): BlockingOverlaysState => store.getState(),
   __reset: (): void => store.setState({ open: new Set<object>() }),
 }
