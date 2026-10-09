@@ -430,7 +430,29 @@ slice-planning gate forces its resolution before that slice is planned.
   medium (60 %) Sheet can rise until its head sits under the status bar.
   Inferred from the code, not observed; the rail Sheet (medium, a search field
   right under its head) is the likeliest place to see it. Raised in 4.5a's
-  final review, 2026-10-07.
+  final review, 2026-10-07. A `tall` Sheet pinned to `interactive` (the rail
+  Sheet's peek level, since 4.5b) goes further with a keyboard showing:
+  gorhom places it at `max(0, highestDetent − keyboard)`
+  (`BottomSheet.tsx` around lines 845-857), under the status bar with no
+  `topInset`. Harmless today, as the peek holds no field. Added in 4.5b,
+  2026-10-09.
+- **The Sheet canon describes a keyboard API the shipped Sheet doesn't
+  have.**
+  [`overlays.md → Sheet — API surface`](../ui/patterns/overlays.md#sheet--api-surface)
+  and
+  [`Sheet — Keyboard handling`](../ui/patterns/overlays.md#sheet--keyboard-handling)
+  specify `dismissable` and `avoidKeyboard` props and a
+  `react-native-keyboard-controller` wrap. The gorhom-based
+  `components/ui/sheet.tsx` has none of them: it takes
+  `enablePanDownToClose`, and gorhom handles the keyboard through
+  `keyboardBehavior`.
+  [`layout.md → Sheet behavior`](../ui/foundations/mobile/layout.md#sheet-behavior--additional-rules)
+  points at the same `avoidKeyboard` prop. The consumer rule there also
+  lists a "Peek drawer hosting save-session edits" as a field-bearing
+  Sheet body, which contradicts the read-only peek in
+  [`reader-composer.md → State-field composition — lore peek`](../ui/screens/reader-composer/reader-composer.md#state-field-composition--lore-peek).
+  Rewrite the keyboard canon from the shipped Sheet. Raised in 4.5b's
+  review, 2026-10-09.
 - **The rail's `+ Import from Vault` footer has no owner.** 4.5a ships it
   disabled with the reason "Vault lands in M8"
   (`reader:rail.importFromVaultReason`), and the 4.5a slice doc routes vault

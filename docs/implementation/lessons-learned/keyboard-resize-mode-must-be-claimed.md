@@ -173,6 +173,20 @@ separate them by _when_ the keyboard arrives: covered when the keyboard was
 already up is the event-sourcing gap; covered when a field inside the sheet is
 focused afterwards is this.
 
+## A `keyboardBehavior` that changes while open kills the content scroll
+
+Because `sheet.tsx` derives the behavior from `size`, a Sheet that morphs
+across `tall` while open flips it from `interactive` to `extend`. On Android
+the reader's rail Sheet did exactly that on its medium-to-tall peek, and the
+peek body stopped scrolling. Each drag fired `onScrollBeginDrag`, then no
+scroll and no end event, while gorhom reported the sheet extended and its
+scrollable unlocked, so the scroll lock was not the cause. Holding either
+value for both detents scrolled; flipping it never did. That bisection is
+verified on the emulator. The mechanism is inferred: `keyboardBehavior` is in
+`animateToPosition`'s dependencies, which rebuilds the content pan gesture,
+and the scroll view's simultaneous-gesture binding to it breaks. A morphing
+Sheet pins one value through `SheetContent`'s `keyboardBehavior` prop.
+
 ## Symptom-to-cause shortcut
 
 Keyboard avoidance broken **everywhere at once**, including surfaces nobody

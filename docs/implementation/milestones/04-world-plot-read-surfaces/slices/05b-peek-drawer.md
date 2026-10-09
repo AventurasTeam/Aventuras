@@ -265,6 +265,14 @@ Implementer choices worth keeping:
   under the peek, and `renderPeek` (C10) is unchanged for its callers;
   canon in
   [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
+- **The hidden list keeps its height cap through `←`**, cleared only on
+  reopen or a window-height change: releasing it relayouts the list
+  while the Sheet settles, and gorhom's scroll lock then resets an
+  end-of-list offset to 0 on Android.
+- **The rail Sheet pins `keyboardBehavior="interactive"`** for both
+  detents: the size-derived value flipped on the peek's morph and the
+  peek body stopped scrolling on Android; see
+  [lessons-learned](../../../lessons-learned/keyboard-resize-mode-must-be-claimed.md#a-keyboardbehavior-that-changes-while-open-kills-the-content-scroll).
 - **Rail rows no longer route out** on any tier; the C6 link lives on
   the peek's foot and its Overview regions. `RailSheet` keeps its
   `onRowPress` mode, which only its bare stories use.
