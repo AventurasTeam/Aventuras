@@ -208,10 +208,10 @@ than taking it as a prop, so a new mount is gated by default and a
 screen cannot forget.
 
 **Inert under a blocking overlay.** `Cmd/Ctrl-K` and the `⚲`
-trigger do nothing while another Sheet, a modal dialog or a Select
-dropdown is open — Sheet-over-Sheet is disallowed per
-[`overlays.md`](./overlays.md) — or while the surface is
-mid-decision.
+trigger do nothing while another Sheet, a modal dialog, a Select
+dropdown or a searchable picker is open — Sheet-over-Sheet is
+disallowed per [`overlays.md`](./overlays.md) — or while the surface
+is mid-decision.
 
 The two halves are gated differently because only one of them can be
 derived. Blocking overlays register themselves, so the menu reads the

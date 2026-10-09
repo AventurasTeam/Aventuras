@@ -859,6 +859,41 @@ export const SavedHandlerThrows: Story = {
 }
 
 /** Escape after a mid-edit Ctrl-S restores the saved title, not the one the edit started from. */
+/**
+ * save-sessions.md → Save bar: an open picker owns Ctrl-S, so the draft can't commit without the
+ * pick; the key stays claimed rather than reaching the browser's save dialog.
+ */
+export const ShortcutWaitsForOpenPicker: Story = {
+  play: async ({ args }) => {
+    await editDescription(' At dusk.')
+    await userEvent.click(pane().getByRole('button', { name: /^Occurred at/ }))
+    await userEvent.type(await screen.findByPlaceholderText('Search entries or #n…'), '#12')
+    const entry = await screen.findByRole('option', { name: /entry #12/ }, WAIT)
+    const shortcut = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    document.body.dispatchEvent(shortcut)
+    expect(shortcut.defaultPrevented).toBe(true)
+
+    await userEvent.click(entry)
+    await waitFor(() => expect(saveBar()).toHaveTextContent('2 unsaved changes'), WAIT)
+    expect(args.onSave).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+    expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: `${AMBUSH.description} At dusk.`,
+        occurredAtEntryId: 'e_12',
+      }),
+    )
+  },
+}
+
 export const EscapeAfterSaveKeepsSavedTitle: Story = {
   play: async ({ args }) => {
     await userEvent.click(await pane().findByRole('button', { name: 'Edit The alley ambush' }))
