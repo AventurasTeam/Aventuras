@@ -57,13 +57,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **An E2E failure with a dirty pane hangs teardown.** When a test fails
-  while a pane is dirty, the main process's armed close guard blocks
-  `app.close()` (`e2e/harness/launch.ts`), so each spec's `afterAll`
-  waits out the 90 s hook timeout per attempt and leaks its temporary
-  `userData` directory. The harness needs a fallback that exits the app
-  from main or kills it after a timeout. Found in 4.2c's PR 2 review
-  (2026-10-06).
 - **The desktop window has no minimum width.** `createWindow` in
   `electron/main.ts` sets `width` and `height` but no `minWidth`, so the
   window can shrink to widths no desktop user works at, and layouts get
