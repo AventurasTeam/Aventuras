@@ -41,15 +41,10 @@ export type EntityImport =
   | (EntityImportBase & { kind: 'item'; state: ItemImportState })
   | (EntityImportBase & { kind: 'faction'; state: FactionImportState })
 
-// entityStateSchemaForKind is typed as the union of the four; a key only one kind has picks it.
-type StateSchemaWith<K extends string> = Extract<
-  ReturnType<typeof entityStateSchemaForKind>,
-  { shape: Record<K, unknown> }
->
-const characterState = entityStateSchemaForKind('character') as StateSchemaWith<'lastSeenAt'>
-const locationState = entityStateSchemaForKind('location') as StateSchemaWith<'parent_location_id'>
-const itemState = entityStateSchemaForKind('item') as StateSchemaWith<'at_location_id'>
-const factionState = entityStateSchemaForKind('faction') as StateSchemaWith<'standing'>
+const characterState = entityStateSchemaForKind('character')
+const locationState = entityStateSchemaForKind('location')
+const itemState = entityStateSchemaForKind('item')
+const factionState = entityStateSchemaForKind('faction')
 
 const STACKABLE_KEY_MAX = 40
 

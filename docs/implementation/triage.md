@@ -495,14 +495,6 @@ slice-planning gate forces its resolution before that slice is planned.
   those imports is. Reword both notes when the slice doc is next edited;
   the closing review had it read-only. Raised in 4.6's slice review,
   2026-10-08.
-- **`entityStateSchemaForKind` isn't generic over the kind.** (2026-10-08)
-  `lib/db/entities/entity-state-schema.ts` returns the union of the four
-  state schemas, so `lib/avts/entity.ts` casts each kind's schema
-  (`StateSchemaWith<…>`) to reach a key only that kind has. A generic
-  `entityStateSchemaForKind<K>(kind: K)` would drop the casts. Older API,
-  so a deferral per
-  [`code-conventions.md → Type design`](../code-conventions.md#type-design).
-  Raised in 4.6's slice review, 2026-10-08.
 - **The World route's collision-dialog blur comment gives the wrong
   reason.** (2026-10-08) In `app/world/[branchId].tsx`, "The dialog is
   portaled: left open, it would paint over the screen pushed on top" sits
