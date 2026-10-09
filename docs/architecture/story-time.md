@@ -19,6 +19,7 @@ There is no calendar. Arithmetic goes through total minutes (`toMinutes` / `from
 | `metadata.timeStart` on an entry            | the entry is added (`addEntry`)             |
 | `metadata.timeEnd` on a narration           | classification has advanced the clock       |
 | `worldStateDelta.previousState.timeTracker` | the entry's delta is recorded, for rollback |
+| `world_state_changes.clock_before` (header) | the entry's classification is recorded      |
 | `chapters.start_time` / `end_time`          | the chapter is written                      |
 | `checkpoints.time_tracker_snapshot`         | the checkpoint is taken                     |
 
@@ -101,7 +102,7 @@ has a weight. Reconciling again with unchanged boundaries changes nothing.
 ## Applying
 
 `planReconciliation` (`reconciliation.ts`) turns the new times into every write that must accompany
-them: chapter spans covering the range, the clock inside each rewritten delta, a checkpoint whose
+them: chapter spans covering the range, the clock inside each rewritten delta and header, a checkpoint whose
 last entry moved, the world-state keyframes of the rewritten entries, and the story clock — **only**
 when the range reaches the branch's last entry. An interior range makes no claim about where the
 story now stands, and writing the clock anyway would discard a clock adjustment the reader had not

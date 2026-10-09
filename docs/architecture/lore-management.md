@@ -59,7 +59,10 @@ it, so a decision made once is not re-argued by either side.
 Lorebook on its own. It runs after a chapter is created — automatically at the token threshold,
 manually from the Memory view, and once per batch during `chapterizeFromBeginning` (the
 SillyTavern import path) — and on demand from the **Tidy lorebook** button in the Active Context
-panel (`runManualLoreManagement`, shared by both manual callers).
+panel (`runManualLoreManagement`, shared by both manual callers). With State Tracking on, every
+change a session makes is recorded: an automatic session's as `agent` on the turn's narration, a
+Tidy run's as `manual` on the last completed entry, so a revert can undo them — see
+[state-tracking.md](state-tracking.md).
 
 **By default, the chapter that triggered a run arrives in full, not as a summary.** Every other
 chapter is still a `{number, title, summary}` line, but the one just written is handed over as its own

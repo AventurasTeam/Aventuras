@@ -64,21 +64,22 @@ that block; do not add more of it.
 `docs/` holds the architecture, one file per area. Read the relevant one **before** changing
 that area, and update it in the same commit when behaviour it describes changes.
 
-| Touching                                                                       | Read                                                                             |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| repo layout, data model, generation phases, the side panels and their gestures | [docs/architecture/overview.md](docs/architecture/overview.md)                   |
-| `services/ai/retrieval/`, `WorldStateInjector`, tiers, stickiness, memory      | [docs/architecture/context-injection.md](docs/architecture/context-injection.md) |
-| `services/ai/lorebook/`, `services/duplicates/`, the duplicates window         | [docs/architecture/lore-management.md](docs/architecture/lore-management.md)     |
-| `services/prompts/`, prompt packs, block ordering                              | [docs/architecture/prompts.md](docs/architecture/prompts.md)                     |
-| a new `ServiceId`, agent profiles, reasoning effort, defaults                  | [docs/architecture/ai-services.md](docs/architecture/ai-services.md)             |
-| SQLite, migrations, `src-tauri/src/`, the settings blob                        | [docs/architecture/persistence.md](docs/architecture/persistence.md)             |
-| `utils/dialogue.ts`, dialogue highlighting, TTS                                | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)   |
-| `services/storyTime/`, time anchors, reconciliation, a new story's start       | [docs/architecture/story-time.md](docs/architecture/story-time.md)               |
-| `services/exchange/`, vault export/import, the Aventura lorebook format        | [docs/architecture/exchange-format.md](docs/architecture/exchange-format.md)     |
-| `utils/narrationClean.ts`, the Style Reviewer's input                          | [docs/architecture/narration-cleaning.md](docs/architecture/narration-cleaning.md) |
-| a new JS, CSS or Web API, or the bundle minimums                               | [docs/development/platform-support.md](docs/development/platform-support.md)     |
-| tests                                                                          | [docs/development/testing.md](docs/development/testing.md)                       |
-| the updater, CI, release scripts, Android builds                               | [docs/development/release.md](docs/development/release.md)                       |
+| Touching                                                                             | Read                                                                               |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| repo layout, data model, generation phases, the side panels and their gestures       | [docs/architecture/overview.md](docs/architecture/overview.md)                     |
+| `services/ai/retrieval/`, `WorldStateInjector`, tiers, stickiness, memory            | [docs/architecture/context-injection.md](docs/architecture/context-injection.md)   |
+| `services/ai/lorebook/`, `services/duplicates/`, the duplicates window               | [docs/architecture/lore-management.md](docs/architecture/lore-management.md)       |
+| `services/prompts/`, prompt packs, block ordering                                    | [docs/architecture/prompts.md](docs/architecture/prompts.md)                       |
+| a new `ServiceId`, agent profiles, reasoning effort, defaults                        | [docs/architecture/ai-services.md](docs/architecture/ai-services.md)               |
+| SQLite, migrations, `src-tauri/src/`, the settings blob                              | [docs/architecture/persistence.md](docs/architecture/persistence.md)               |
+| `utils/dialogue.ts`, dialogue highlighting, TTS                                      | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)     |
+| `services/storyTime/`, time anchors, reconciliation, a new story's start             | [docs/architecture/story-time.md](docs/architecture/story-time.md)                 |
+| `services/exchange/`, vault export/import, the Aventura lorebook format              | [docs/architecture/exchange-format.md](docs/architecture/exchange-format.md)       |
+| `services/stateTracking/`, `rollbackService`, a store write method, past checkpoints | [docs/architecture/state-tracking.md](docs/architecture/state-tracking.md)         |
+| `utils/narrationClean.ts`, the Style Reviewer's input                                | [docs/architecture/narration-cleaning.md](docs/architecture/narration-cleaning.md) |
+| a new JS, CSS or Web API, or the bundle minimums                                     | [docs/development/platform-support.md](docs/development/platform-support.md)       |
+| tests                                                                                | [docs/development/testing.md](docs/development/testing.md)                         |
+| the updater, CI, release scripts, Android builds                                     | [docs/development/release.md](docs/development/release.md)                         |
 
 The index is [docs/README.md](docs/README.md).
 
