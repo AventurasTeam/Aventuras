@@ -9,6 +9,7 @@
 
 <script lang="ts">
   import { settings } from '$lib/stores/settings.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import {
     FlaskConical,
     Download,
@@ -51,8 +52,6 @@
   let restoreError = $state<string | null>(null)
   let showBackupConfirm = $state(false)
   let showRestoreConfirm = $state(false)
-  let restoreDone = $state(false)
-  let restoreCloseHint = $state<string | null>(null)
   const RESTORE_EXIT_DELAY_MS = 3000
   const onIos = isIos()
 
@@ -184,12 +183,12 @@
     }
 
     // The DB is closed and replaced; the blocking modal keeps anything from lazily reopening it.
-    restoreDone = true
+    ui.restoreComplete = true
     // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
     await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
     // iOS ignores exit(), so the user has to close the app themselves.
     if (isIos()) {
-      restoreCloseHint =
+      ui.restoreCloseHint =
         'Restore succeeded. Close Aventuras from the app switcher, then reopen it to continue with the restored database.'
       return
     }
@@ -199,7 +198,7 @@
       await exit(0)
     } catch (error) {
       console.error('[ExperimentalSettings] Exit after restore failed:', error)
-      restoreCloseHint = 'Restore succeeded. Please close and relaunch Aventuras.'
+      ui.restoreCloseHint = 'Restore succeeded. Please close and relaunch Aventuras.'
     }
   }
 
@@ -773,22 +772,5 @@
         {onIos ? 'Restore' : 'Restore & Close App'}
       </Button>
     </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Restore Complete: not dismissable; the app exits shortly or the user closes it -->
-<Dialog.Root open={restoreDone}>
-  <Dialog.Content
-    class="p-6 sm:max-w-md"
-    interactOutsideBehavior="ignore"
-    escapeKeydownBehavior="ignore"
-  >
-    <Dialog.Header>
-      <Dialog.Title>Restore complete</Dialog.Title>
-      <Dialog.Description class="pt-2">
-        {restoreCloseHint ??
-          'Aventuras is closing. Reopen it to continue with the restored database.'}
-      </Dialog.Description>
-    </Dialog.Header>
   </Dialog.Content>
 </Dialog.Root>
