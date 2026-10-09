@@ -293,6 +293,7 @@
     "saved": "Saved.",
     "failed": "Couldn't save your changes. They're still here — try again.",
     "inFlight": "Couldn't save while generation is in flight. Your changes are still here.",
+    "notFound": "Couldn't save: this row no longer exists.",
     "parentCycle": "That parent would make this location part of itself.",
     "parentChainBroken": "That parent's own chain of parents loops back or runs too deep. Fix that chain first."
   },

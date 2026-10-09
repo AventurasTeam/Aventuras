@@ -82,6 +82,7 @@ const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
   [ENTITY_REJECTION.inFlight]: () => t('world:save.inFlight'),
   [ENTITY_REJECTION.parentCycle]: () => t('world:save.parentCycle'),
   [ENTITY_REJECTION.parentChainBroken]: () => t('world:save.parentChainBroken'),
+  [ENTITY_REJECTION.notFound]: () => t('world:save.notFound'),
   [ENTITY_REJECTION.failed]: () => t('world:save.failed'),
 }
 

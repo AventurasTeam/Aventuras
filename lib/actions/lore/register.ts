@@ -6,7 +6,7 @@ import { loreStore } from '@/lib/stores'
 
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { deepEqual } from '../delta/delta-encoding'
-import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
+import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('lore')
@@ -98,7 +98,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(lore)
     .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
-  if (!current) return { status: 'rejected', reason: `update target lore ${bid}:${id} not found` }
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `update target lore ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
+  const blank = undefinedColumn(patch, UPDATABLE)
+  if (blank != null)
+    return { status: 'rejected', reason: `invalid lore patch: ${blank} is undefined` }
 
   const named = UPDATABLE.filter((col) => col in patch)
   // A patch naming no updatable column would reach Drizzle's .set({}) and throw — reject instead.

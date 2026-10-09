@@ -100,6 +100,44 @@ describe('lore CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
 
+  // Drizzle skips an undefined key, so committing would leave the row as it was while the
+  // store, the undo payload and History recorded a write.
+  it('refuses a column set to undefined, and codes a missing row as not-found', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createLore', source: 'user_edit', payload: { entry: LORE } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const update = (id: string, patch: Record<string, unknown>) =>
+      applyDeltaAction(
+        {
+          action: {
+            kind: 'updateLore',
+            source: 'user_edit',
+            payload: { branchId: 'br_1', id, patch },
+          },
+          actionId: 'act_u',
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+
+    expect(await update('lore_1', { title: undefined, priority: 7 })).toMatchObject({
+      status: 'rejected',
+    })
+    expect((await rowFor(db, 'lore_1')).priority).toEqual(10)
+    expect(loreStore.getById('lore_1')?.title).toBe('Aether')
+    expect((await db.select().from(deltas)).length).toBe(1)
+    expect(await update('lore_9', { priority: 7 })).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+  })
+
   it('rejects an out-of-range priority on create (no row, no delta)', async () => {
     const { db, ctx } = await setup()
     const bad: NewLore = { ...LORE, priority: 200 }

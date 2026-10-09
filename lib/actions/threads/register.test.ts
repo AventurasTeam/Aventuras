@@ -96,6 +96,44 @@ describe('threads CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
 
+  // Drizzle skips an undefined key, so committing would leave the row as it was while the
+  // store, the undo payload and History recorded a write.
+  it('refuses a column set to undefined, and codes a missing row as not-found', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createThread', source: 'chapter_close', payload: { entry: THREAD } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const update = (id: string, patch: Record<string, unknown>) =>
+      applyDeltaAction(
+        {
+          action: {
+            kind: 'updateThread',
+            source: 'user_edit',
+            payload: { branchId: 'br_1', id, patch },
+          },
+          actionId: 'act_u',
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+
+    expect(await update('thr_1', { title: undefined, status: 'active' })).toMatchObject({
+      status: 'rejected',
+    })
+    expect((await rowFor(db, 'thr_1')).status).toEqual('pending')
+    expect(threadsStore.getById('thr_1')?.title).toBe('Recover the relic')
+    expect((await db.select().from(deltas)).length).toBe(1)
+    expect(await update('thr_9', { status: 'active' })).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+  })
+
   it('rejects an unknown status on create (no row, no delta)', async () => {
     const { db, ctx } = await setup()
     const bad = { ...THREAD, status: 'abandoned' } as unknown as NewThread

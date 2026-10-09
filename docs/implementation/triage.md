@@ -101,16 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   left: on a 30k-delta branch whose tab row has only old deltas, a
   first chunk or search keystroke still takes about 9 ms while the
   next chunk takes under 1 ms (`pnpm bench:history`).
-- **The entity update arm accepts a present-but-`undefined` column.**
-  `updateHandler` (`lib/actions/entities/register.ts`) treats a key as
-  written whenever `col in patch`, so `{ name: undefined, priority: 7 }`
-  returns `ok`: the DB keeps the old name, the store row's `name` becomes
-  `undefined`, and the undo payload records `name`, so History shows
-  "Modified Name" for a change that never landed and user precedence
-  treats `name` as user-written. 4.2c closed the hole for
-  `nameCollisionFlag` only (its own refusal). A general rule — refuse or
-  skip any updatable key whose value is `undefined` — would cover every
-  column. Found in 4.2c's Task 1 review (2026-10-06).
 - **The entity operational seam's flag arm can bypass the delta log.**
   `lib/actions/entities/operational.ts` still calls itself the non-delta
   seam for the compute-lifecycle columns, flag included, but 4.2c made
@@ -136,12 +126,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the merge holds the tail's metadata lock while it waits for the shared
   branch lock, so that order deadlocks. Take the metadata lock first, as
   the four callers do (4.2c's slice review, 2026-10-07).
-- **The entity update arm's missing-row refusal carries no code.**
-  `updateHandler` (`lib/actions/entities/register.ts`) refuses "update
-  target … not found" without `TARGET_NOT_FOUND`, which the delete arm
-  sets. Callers that map refusal codes (`resolveCollision`,
-  `commitRowSave`) therefore report a vanished row as `failed` instead
-  of `not-found`. Found in 4.2c's PR 1 final review (2026-10-06).
 - **The group runner commits an update and a delete of one row.**
   `groupConflict` (`lib/actions/delta/apply-delta-action.ts`) refuses a
   write to a row a delete in the same group cascades, but not an update
@@ -242,13 +226,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (3+ collisions) cites the contract for who sets and clears it: the
   classifier at create, user paths only clearing it since 4.2c. Found
   in 4.2c's PR 2 review (2026-10-06).
-- **Row-save and row-delete map refusal codes from a plain string.**
-  `rejectionCode` in `lib/actions/row-save/commit-row-save.ts` and
-  `lib/actions/row-delete/delete-row.ts` switches over the runner's
-  untyped `code: string`, defaulting to `failed`, so a new arm refusal
-  code compiles and is silently reported as `failed`. 4.2c made its own
-  collision mapping exhaustive; these two predate it. Found in 4.2c's
-  slice review (2026-10-07).
 - **The tail-lock sequence is written twice.** The collision merge
   (`lib/actions/world/resolve-collision.ts`) copies the entity delete's
   steps (`lib/actions/row-delete/delete-entity.ts`): read the head's

@@ -66,6 +66,16 @@ describe('commitRowSave — every refusal carries a code from the closed set', (
     })
   })
 
+  it('reports a save of a row that is gone as not-found', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_b', null)])
+
+    expect(await save(() => [setParent('loc_a', 'loc_b')], ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+  })
+
   it('reports a refusal that carries no code as failed', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values([loc('loc_a', null)])

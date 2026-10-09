@@ -6,7 +6,7 @@ import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { register, TARGET_NOT_FOUND, type ActionHandler } from '../delta/registry'
+import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('thread')
@@ -104,7 +104,14 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(threads)
     .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target threads ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target threads ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
+  const blank = undefinedColumn(patch, UPDATABLE)
+  if (blank != null)
+    return { status: 'rejected', reason: `invalid thread patch: ${blank} is undefined` }
 
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}

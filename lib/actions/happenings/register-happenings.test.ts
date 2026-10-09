@@ -139,6 +139,44 @@ describe('happenings CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
 
+  // Drizzle skips an undefined key, so committing would leave the row as it was while the
+  // store, the undo payload and History recorded a write.
+  it('refuses a column set to undefined, and codes a missing row as not-found', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'user_edit', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const update = (id: string, patch: Record<string, unknown>) =>
+      applyDeltaAction(
+        {
+          action: {
+            kind: 'updateHappening',
+            source: 'user_edit',
+            payload: { branchId: 'br_1', id, patch },
+          },
+          actionId: 'act_u',
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+
+    expect(await update('hap_1', { title: undefined, description: 'rewritten' })).toMatchObject({
+      status: 'rejected',
+    })
+    expect((await rowFor(db, 'hap_1')).description).toEqual('Kael vs Aria')
+    expect(happeningsStore.getById('hap_1')?.title).toBe('The duel')
+    expect((await db.select().from(deltas)).length).toBe(1)
+    expect(await update('hap_9', { description: 'rewritten' })).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+  })
+
   it('update produces whole-value undo; reverse-replay restores row + store', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(

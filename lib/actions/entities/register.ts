@@ -20,6 +20,7 @@ import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
 import {
   register,
   TARGET_NOT_FOUND,
+  undefinedColumn,
   type ActionHandler,
   type HandlerOutcome,
 } from '../delta/registry'
@@ -168,7 +169,14 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(entities)
     .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
+  const blank = undefinedColumn(patch, UPDATABLE)
+  if (blank != null)
+    return { status: 'rejected', reason: `invalid entity patch: ${blank} is undefined` }
 
   const scalars = entityWriteSchema.partial().safeParse(patch)
   if (!scalars.success)

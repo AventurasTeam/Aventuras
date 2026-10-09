@@ -44,6 +44,15 @@ export function createdKey(table: string, id: string): string {
 /** A handler's code for a write whose target row is gone, so each family's boundary can name it. */
 export const TARGET_NOT_FOUND = 'not-found'
 
+/**
+ * The first updatable key a patch carries as `undefined`. Drizzle skips such a key, so the
+ * row keeps its value while the store, the undo payload and History would record a write.
+ */
+export function undefinedColumn(patch: object, columns: readonly string[]): string | undefined {
+  const values = patch as Record<string, unknown>
+  return columns.find((col) => col in values && values[col] === undefined)
+}
+
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.

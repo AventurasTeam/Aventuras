@@ -4,12 +4,14 @@ import { generationStore } from '@/lib/stores'
 import { PARENT_CHAIN_BROKEN, PARENT_CYCLE } from '@/lib/world'
 
 import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
+import { TARGET_NOT_FOUND } from '../delta/registry'
 import type { DbCtx, PipelineAction } from '../types'
 
 export const ROW_SAVE_REJECTION = {
   inFlight: 'in-flight',
   parentCycle: PARENT_CYCLE,
   parentChainBroken: PARENT_CHAIN_BROKEN,
+  notFound: TARGET_NOT_FOUND,
   failed: 'failed',
 } as const
 
@@ -28,6 +30,8 @@ function rejectionCode(code: string | undefined): RowSaveRejectionCode {
       return ROW_SAVE_REJECTION.parentCycle
     case PARENT_CHAIN_BROKEN:
       return ROW_SAVE_REJECTION.parentChainBroken
+    case TARGET_NOT_FOUND:
+      return ROW_SAVE_REJECTION.notFound
     default:
       return ROW_SAVE_REJECTION.failed
   }

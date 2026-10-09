@@ -26,6 +26,7 @@ const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
   [PLOT_REJECTION.inFlight]: () => t('plot:save.inFlight'),
   [PLOT_REJECTION.parentCycle]: () => t('plot:save.failed'),
   [PLOT_REJECTION.parentChainBroken]: () => t('plot:save.failed'),
+  [PLOT_REJECTION.notFound]: () => t('plot:save.notFound'),
   [PLOT_REJECTION.failed]: () => t('plot:save.failed'),
 }
 
