@@ -72,20 +72,6 @@ slice-planning gate forces its resolution before that slice is planned.
   px). It fit while the dialog lacked the primitive's side margin, which
   4.2c's developer review restored. Native keeps no such margin and is
   unaffected (2026-10-07).
-- **`Dialog` doesn't register as a blocking overlay.**
-  `components/ui/dialog.tsx` never calls `useRegisteredOverlay`, while
-  `alert-dialog.tsx`, `sheet.tsx` and `select.tsx` do, and
-  `lib/stores/ui/blocking-overlays.ts` says modal dialogs should. So
-  every `Dialog`-based modal (collision resolve, import, embedder) leaves
-  the actions menu and its shortcuts armed underneath it. Found in 4.2c's
-  PR 2 review (2026-10-06). Since 4.5b the reader's undo / redo and End
-  keys stand down only for registered overlays, so the entry card's
-  world-time and scene Dialogs (`components/compounds/entry-card.tsx`),
-  which focus their content on open, leave Ctrl+Z live: edit an entry's
-  world time, reopen its Dialog, press Ctrl+Z, and the edit reverts
-  behind it as the Dialog closes. Registering `DialogContent` like
-  `AlertDialogContent` also makes master-detail back stand down under any
-  Dialog. Added in 4.5b, 2026-10-09.
 - **The collision dialog's tag partition compares raw strings.**
   `components/compounds/collision-resolve-diff.ts` partitions tags
   exactly, while the merge planner cleans them (trim, drop blanks, drop

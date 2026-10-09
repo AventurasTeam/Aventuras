@@ -8,6 +8,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text } from '@/components/ui/text'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 const Dialog = DialogPrimitive.Root
@@ -72,6 +73,10 @@ function DialogContent({
    */
   scrollable?: boolean
 }) {
+  // Keyed on `open` like AlertDialogContent: the reader's undo / End keys and the Actions
+  // menu stand down only for a registered overlay.
+  const { open } = DialogPrimitive.useRootContext()
+  useRegisteredOverlay(open)
   const { height } = useWindowDimensions()
   return (
     <DialogPortal hostName={portalHost}>

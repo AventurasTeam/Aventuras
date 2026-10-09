@@ -149,7 +149,8 @@ type BranchHydrationState =
     }
 
 // Module scope, not useCallback([]): `matches` is a useGlobalHotkey effect dep; identity must hold.
-// Blocking overlays (Sheet, AlertDialog, Select) own the surface at key time; a miss stays native.
+// Blocking overlays (Sheet, Dialog, AlertDialog, Select) own the surface at key time; a miss
+// stays native.
 function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
   return (
     (ev.metaKey || ev.ctrlKey) &&
