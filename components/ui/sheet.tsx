@@ -236,8 +236,6 @@ function BottomSheetContent({
     isSettledRef.current = false
     sheetRef.current?.dismiss()
   }, [])
-  // Stable: gorhom threads onChange through its own callbacks, and a fresh one each render
-  // left a later scrim press unanswered.
   const handleChange = useCallback(
     (index: number) => {
       if (index < 0) return
