@@ -311,17 +311,6 @@ slice-planning gate forces its resolution before that slice is planned.
   in `overview-parts.tsx:35`, in `components/compounds/breadcrumb.tsx:29`
   and in `peek-foot.tsx:26` (new in 4.5b). Raised in 4.5b's review,
   2026-10-09.
-- **The injection help copy is keyed in four places.** (2026-10-09)
-  `InjectionModeChip`'s `INJECTION_HELP` map
-  (`components/world/overview/overview-parts.tsx`) and the three
-  Settings selects it mirrors (`components/world/tabs/settings-tab.tsx:61`,
-  `components/world/detail/lore-detail-pane.tsx:226`,
-  `components/plot/thread-detail-pane.tsx:276`) each spell out their
-  `injection.<mode>Help` key.
-  [`world.md → Overview`](../ui/screens/world/world.md#overview--glance-summary-read-mostly)
-  makes the chip's tooltip the select's own explanation, so one shared
-  lookup would keep them from drifting. Raised in 4.5b's slice review,
-  2026-10-09.
 - **`QuietSheetBackground` passes the deprecated `pointerEvents` prop.**
   (2026-10-09) `components/ui/sheet.tsx:79` hands gorhom's
   `pointerEvents` to a `View` as a prop; RN-Web warns that the prop is

@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { injectionHelpText, type InjectionHelp } from '@/components/world/injection-help'
 import { useTier } from '@/hooks/use-tier'
 import type { CalendarSystem } from '@/lib/calendar'
 import type { Entity, InjectionMode } from '@/lib/db'
@@ -246,20 +247,11 @@ export function ChipRow({ preview }: { preview: ChipPreview }) {
   )
 }
 
-/** Whose Settings select the chip's tooltip copy comes from. */
-type InjectionHelp = 'entity' | 'lore' | 'thread'
-
-const INJECTION_HELP: Record<InjectionHelp, (mode: InjectionMode) => string> = {
-  entity: (mode) => t(`world:fields.injection.${mode}Help`),
-  lore: (mode) => t(`world:lore.injection.${mode}Help`),
-  thread: (mode) => t(`plot:fields.injection.${mode}Help`),
-}
-
 /** world.md → Overview: the non-default injection chip, its tooltip the Settings select's copy. */
 export function InjectionModeChip({ mode, help }: { mode: InjectionMode; help: InjectionHelp }) {
   if (mode === 'auto') return null
   return (
-    <ReasonTooltip reason={INJECTION_HELP[help](mode)}>
+    <ReasonTooltip reason={injectionHelpText(help, mode)}>
       <Tag>
         <Text className="font-semibold uppercase tracking-widest">
           {t(`world:overview.injectionChip.${mode}`)}
