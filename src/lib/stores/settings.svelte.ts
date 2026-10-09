@@ -925,6 +925,7 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     rollbackOnDelete: false,
     lightweightBranches: false,
     autoSnapshotInterval: 20,
+    trackingEnabledSince: null,
     backgroundGeneration: false,
     generationNotifications: false,
     notificationPreview: false,
@@ -1789,6 +1790,13 @@ class SettingsStore {
           this.experimentalFeatures = {
             ...getDefaultExperimentalFeatures(),
             ...loaded,
+          }
+          if (
+            this.experimentalFeatures.stateTracking &&
+            this.experimentalFeatures.trackingEnabledSince === null
+          ) {
+            this.experimentalFeatures.trackingEnabledSince = Date.now()
+            await this.saveExperimentalFeatures()
           }
         } catch {
           // Keep defaults
@@ -2910,6 +2918,9 @@ class SettingsStore {
       !updates.stateTracking
     ) {
       updates.lightweightBranches = false
+    }
+    if (updates.stateTracking === true && !this.experimentalFeatures.stateTracking) {
+      updates.trackingEnabledSince = Date.now()
     }
     // Disabling stateTracking cascades
     if (updates.stateTracking === false) {

@@ -934,6 +934,8 @@ export interface ExperimentalFeatures {
   lightweightBranches: boolean
   /** Number of entries between automatic world state snapshots (for fast rollback) */
   autoSnapshotInterval: number
+  /** When State Tracking was last turned on; a header written before it cannot vouch for a run. */
+  trackingEnabledSince: number | null
   /** Android: Keep generation alive when app is backgrounded or screen is locked */
   backgroundGeneration: boolean
   /** Android: Send OS notification when generation completes while app is backgrounded */
@@ -1024,6 +1026,60 @@ export interface WorldStateDelta {
  * Instead of replaying all deltas from the start, rollback can start from the
  * nearest snapshot and only replay/undo deltas from there.
  */
+export type TrackedEntityType = 'character' | 'location' | 'item' | 'story_beat' | 'lorebook_entry'
+
+export type ChangeOrigin = 'agent' | 'manual'
+
+/** `softDelete` sets the row's tombstone flag; `delete` removes the row. */
+export type ChangeOp = 'create' | 'update' | 'delete' | 'softDelete'
+
+interface WorldStateRecordBase {
+  id: string
+  storyId: string
+  branchId: string | null
+  entryId: string
+  /** Write order within the story. */
+  seq: number
+  createdAt: number
+}
+
+/**
+ * One write to one entity. `entityId` is the row written, which on a lightweight branch can be
+ * an override or a tombstone.
+ * - create: `before` is the row this one shadows (null for a new entity); `after` is the full row
+ *   for a manual change.
+ * - update: `before`/`after` hold only the changed fields; `after` for a manual change only.
+ * - delete / softDelete: `before` is the full row.
+ */
+export interface WorldStateChangeRecord extends WorldStateRecordBase {
+  kind: 'change'
+  origin: ChangeOrigin
+  entityType: TrackedEntityType
+  entityId: string
+  op: ChangeOp
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+}
+
+/** Written for every narration classified while tracking is on, even when nothing changed. */
+export interface WorldStateHeaderRecord extends WorldStateRecordBase {
+  kind: 'header'
+  continuous: boolean
+  clockBefore: TimeTracker | null
+  locationBefore: string | null
+  /** `classifier` marks history recorded before lorebook and manual changes were tracked. */
+  coverage: 'full' | 'classifier'
+}
+
+export interface WorldStateBreakRecord extends WorldStateRecordBase {
+  kind: 'break'
+}
+
+export type WorldStateRecord =
+  | WorldStateChangeRecord
+  | WorldStateHeaderRecord
+  | WorldStateBreakRecord
+
 export interface WorldStateSnapshot {
   id: string
   storyId: string
