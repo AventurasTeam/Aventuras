@@ -1,33 +1,41 @@
-import type { ReactNode } from 'react'
+import { ArrowLeft, X } from 'lucide-react-native'
 import { Platform, Pressable, View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { LeadTag } from '@/components/entity/lead-tag'
 import { PlotIcon } from '@/components/plot/plot-icon'
 import { Heading } from '@/components/ui/heading'
+import { IconAction } from '@/components/ui/icon-action'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Tag, TAG_HIT_SLOP } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import type { EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { isPlotKind } from '@/lib/list-modules'
-import type { RailCategory } from '@/lib/reader-rail'
+import type { PlotKind } from '@/lib/list-modules'
 import { cn } from '@/lib/utils'
 
 import { isLeadActionDisabled, type PeekLead } from './peek-model'
 
-export type PeekHeadProps = {
-  kind: RailCategory
+/** Desktop / tablet close with `×`; phone goes back to the rail Sheet's list with `←`. */
+export type PeekChrome =
+  | { kind: 'close'; onClose: () => void }
+  | { kind: 'back'; onBack: () => void }
+
+/** What the head shows for its kind: characters carry the lead affordance, plot rows their icon. */
+export type PeekHeadIdentity =
+  | { kind: 'character'; lead: PeekLead }
+  | { kind: Exclude<EntityKind, 'character'> | 'lore' }
+  | {
+      kind: PlotKind
+      /** The row's catalog key; `PlotIcon` falls back per kind. */
+      icon: string | null
+    }
+
+export type PeekHeadProps = PeekHeadIdentity & {
   name: string
-  /** A thread's or happening's catalog icon key; other kinds take their kind glyph. */
-  icon?: string | null
   recentlyClassified: boolean
-  /** Characters only (`peekLeadOf`). */
-  lead?: PeekLead
-  /** Phone: the icon-only `←`. */
-  leading?: ReactNode
-  /** Desktop / tablet: the `×`. */
-  trailing?: ReactNode
+  chrome: PeekChrome
 }
 
 type LeadCandidate = Extract<PeekLead, { state: 'candidate' }>
@@ -69,30 +77,31 @@ function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolea
 }
 
 /** reader-composer.md → Peek drawer. */
-export function PeekHead({
-  kind,
-  name,
-  icon,
-  recentlyClassified,
-  lead,
-  leading,
-  trailing,
-}: PeekHeadProps) {
+export function PeekHead(props: PeekHeadProps) {
+  const { name, recentlyClassified, chrome } = props
   const isPhone = useTier() === 'phone'
+  const back = chrome.kind === 'back'
+  const lead = props.kind === 'character' ? props.lead : undefined
   return (
     <View
       testID="peek-head"
       className={cn(
         'flex-row items-center border-b border-border',
         // Mobile expression: the phone head sits flush after its ←; desktop pushes × to the end.
-        leading != null ? 'justify-start gap-2 px-3' : 'justify-between gap-3 px-4',
+        back ? 'justify-start gap-2 px-3' : 'justify-between gap-3 px-4',
         // On phone the 44px group sets the height; elsewhere the head pads its own.
-        !isPhone && (leading != null ? 'pb-2.5 pt-2' : 'pb-2.5 pt-3'),
+        !isPhone && (back ? 'pb-2.5 pt-2' : 'pb-2.5 pt-3'),
       )}
     >
-      {leading}
+      {chrome.kind === 'back' ? (
+        <IconAction icon={ArrowLeft} label={t('reader:peek.back')} onPress={chrome.onBack} />
+      ) : null}
       <View className={cn('min-w-0 shrink flex-row items-center gap-2', isPhone && 'min-h-[44px]')}>
-        {isPlotKind(kind) ? <PlotIcon kind={kind} icon={icon} /> : <EntityKindIcon kind={kind} />}
+        {props.kind === 'thread' || props.kind === 'happening' ? (
+          <PlotIcon kind={props.kind} icon={props.icon} />
+        ) : (
+          <EntityKindIcon kind={props.kind} />
+        )}
         <Heading level={3} numberOfLines={1} className="min-w-0 shrink">
           {name}
         </Heading>
@@ -102,7 +111,9 @@ export function PeekHead({
         {lead?.state === 'lead' ? <LeadTag label={lead.label} /> : null}
         {lead?.state === 'candidate' ? <SetLeadAction lead={lead} isPhone={isPhone} /> : null}
       </View>
-      {trailing}
+      {chrome.kind === 'close' ? (
+        <IconAction icon={X} label={t('reader:peek.close')} onPress={chrome.onClose} />
+      ) : null}
     </View>
   )
 }

@@ -1,29 +1,20 @@
-import { ArrowLeft, X } from 'lucide-react-native'
 import { useContext } from 'react'
 import { View, type ViewStyle } from 'react-native'
 
-import { IconAction } from '@/components/ui/icon-action'
 import { ScrollComponentContext } from '@/components/ui/scroll-component'
 import type { EntryIndex } from '@/lib/entry-refs'
-import { t } from '@/lib/i18n'
-import type { RailCategory } from '@/lib/reader-rail'
 
 import { PeekBody } from './peek-body'
 import { PeekFoot } from './peek-foot'
-import { PeekHead } from './peek-head'
+import { PeekHead, type PeekChrome, type PeekHeadIdentity } from './peek-head'
 import {
-  peekLeadOf,
+  characterLeadOf,
   peekNameOf,
   type PeekLeadControl,
   type PeekModel,
   type PeekRegionPress,
 } from './peek-model'
 import type { PeekEntityContext } from './use-peek-view'
-
-/** Desktop / tablet close with `×`; phone goes back to the rail Sheet's list with `←`. */
-export type PeekChrome =
-  | { kind: 'close'; onClose: () => void }
-  | { kind: 'back'; onBack: () => void }
 
 export type PeekContentProps = {
   model: PeekModel
@@ -38,18 +29,21 @@ export type PeekContentProps = {
 // In the phone Sheet the scroll view is gorhom's Animated one, which NativeWind never styles.
 const FILL = { flex: 1 } satisfies ViewStyle
 
-type PeekIdentity = { category: RailCategory; icon?: string | null }
-
-function identityOf(model: PeekModel): PeekIdentity {
+function identityOf(model: PeekModel, lead: PeekLeadControl): PeekHeadIdentity {
   switch (model.kind) {
-    case 'entity':
-      return { category: model.row.kind }
+    case 'entity': {
+      const { row } = model
+      if (row.kind === 'character') {
+        return { kind: 'character', lead: characterLeadOf(row, model.leadLabel, lead) }
+      }
+      return { kind: row.kind }
+    }
     case 'lore':
-      return { category: 'lore' }
+      return { kind: 'lore' }
     case 'thread':
-      return { category: 'thread', icon: model.row.icon }
+      return { kind: 'thread', icon: model.row.icon }
     case 'happening':
-      return { category: 'happening', icon: model.row.icon }
+      return { kind: 'happening', icon: model.row.icon }
   }
 }
 
@@ -66,26 +60,14 @@ export function PeekContent({
   // A plain context read with a ScrollView default: no provider needed above the right Sheet's
   // Portal; the phone Sheet provides gorhom's inside its own tree.
   const Scroll = useContext(ScrollComponentContext)
-  const { category, icon } = identityOf(model)
-  const name = peekNameOf(model)
+  const identity = identityOf(model, lead)
   return (
     <View testID="peek-content" className="flex-1">
       <PeekHead
-        kind={category}
-        name={name}
-        icon={icon}
+        {...identity}
+        name={peekNameOf(model)}
         recentlyClassified={model.recentlyClassified != null}
-        lead={peekLeadOf(model, lead)}
-        leading={
-          chrome.kind === 'back' ? (
-            <IconAction icon={ArrowLeft} label={t('reader:peek.back')} onPress={chrome.onBack} />
-          ) : undefined
-        }
-        trailing={
-          chrome.kind === 'close' ? (
-            <IconAction icon={X} label={t('reader:peek.close')} onPress={chrome.onClose} />
-          ) : undefined
-        }
+        chrome={chrome}
       />
       <Scroll style={FILL}>
         <View className="p-4">
@@ -97,7 +79,7 @@ export function PeekContent({
           />
         </View>
       </Scroll>
-      <PeekFoot category={category} onOpenInPanel={onOpenInPanel} />
+      <PeekFoot category={identity.kind} onOpenInPanel={onOpenInPanel} />
     </View>
   )
 }

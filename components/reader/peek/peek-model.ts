@@ -129,8 +129,16 @@ export function isLeadActionDisabled(lead: PeekLead | undefined): boolean {
 /** The head's lead affordance: characters only. */
 export function peekLeadOf(model: PeekModel, control: PeekLeadControl): PeekLead | undefined {
   if (model.kind !== 'entity' || model.row.kind !== 'character') return undefined
-  if (model.leadLabel != null) return { state: 'lead', label: model.leadLabel }
-  const { row } = model
+  return characterLeadOf(model.row, model.leadLabel, control)
+}
+
+/** A character's lead affordance: the badge on the resolved lead, else `Set as lead`. */
+export function characterLeadOf(
+  row: Entity,
+  leadLabel: LeadLabel | null,
+  control: PeekLeadControl,
+): PeekLead {
+  if (leadLabel != null) return { state: 'lead', label: leadLabel }
   return {
     state: 'candidate',
     onSetLead: () => control.onSetLead(row.id),

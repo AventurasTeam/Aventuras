@@ -1,21 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { ArrowLeft, X } from 'lucide-react-native'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { PlotIcon } from '@/components/plot/plot-icon'
-import { IconAction } from '@/components/ui/icon-action'
-import { t } from '@/lib/i18n'
 
 import { PeekFoot } from './peek-foot'
 import { PeekHead } from './peek-head'
+import type { PeekLead } from './peek-model'
 
+// Args over a union are Partial per member, so nothing flags a story that drops `chrome`.
 const meta: Meta<typeof PeekHead> = {
   title: 'Compounds/Reader/PeekHead',
   component: PeekHead,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
-  args: { kind: 'character', name: 'Kael', recentlyClassified: false },
+  args: {
+    kind: 'character',
+    name: 'Kael',
+    recentlyClassified: false,
+    chrome: { kind: 'close', onClose: fn() },
+  },
   decorators: [
     (Story) => (
       <View className="rounded-md bg-bg-base" style={{ width: 440 }}>
@@ -31,6 +35,13 @@ type Story = StoryObj<typeof PeekHead>
 const INACTIVE = 'Only an active character can be the lead'
 
 const setLeadButton = () => screen.queryByRole('button', { name: /^Set as lead/ })
+
+const MIRA_CANDIDATE: PeekLead = {
+  state: 'candidate',
+  onSetLead: fn(),
+  disabledReason: undefined,
+  pending: false,
+}
 
 /** The current lead in adventure mode: the rail's accent badge, no action. */
 export const LeadYou: Story = {
@@ -128,12 +139,13 @@ export const CandidatePhoneFloor: Story = {
   args: {
     name: 'Mira',
     lead: { state: 'candidate', onSetLead: fn(), disabledReason: undefined, pending: false },
+    chrome: { kind: 'back', onBack: fn() },
   },
   globals: { viewport: { value: 'mobile1' } },
   render: (args) => (
     <View>
       <PeekHead {...args} />
-      <PeekHead {...args} lead={{ state: 'lead', label: 'you' }} />
+      <PeekHead {...args} kind="character" lead={{ state: 'lead', label: 'you' }} />
     </View>
   ),
   play: async () => {
@@ -188,7 +200,7 @@ export const ThreadWithIcon: Story = {
 
 /** C1: the classifier touched this row in the last turns. */
 export const RecentlyClassified: Story = {
-  args: { name: 'Mira', recentlyClassified: true },
+  args: { name: 'Mira', recentlyClassified: true, lead: MIRA_CANDIDATE },
   play: async () => {
     await expect(screen.getByText('Recently classified').parentElement).toHaveClass(
       'bg-recently-classified-bg',
@@ -202,7 +214,7 @@ const onClose = fn()
 export const DesktopClose: Story = {
   args: {
     lead: { state: 'lead', label: 'you' },
-    trailing: <IconAction icon={X} label={t('reader:peek.close')} onPress={onClose} />,
+    chrome: { kind: 'close', onClose },
   },
   play: async () => {
     const head = screen.getByTestId('peek-head').getBoundingClientRect()
@@ -222,7 +234,8 @@ const onBack = fn()
 export const PhoneBack: Story = {
   args: {
     name: 'Mira',
-    leading: <IconAction icon={ArrowLeft} label={t('reader:peek.back')} onPress={onBack} />,
+    lead: MIRA_CANDIDATE,
+    chrome: { kind: 'back', onBack },
   },
   decorators: [
     (Story) => (
