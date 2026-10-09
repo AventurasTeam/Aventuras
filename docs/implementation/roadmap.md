@@ -1615,9 +1615,10 @@ own.
 - **M9.5 — A bottom `Sheet` closed while it is still presenting can
   stay mounted.** Probed in the Storybook browser runner on 2026-09-23.
   After a normal close the primitive's content leaves the DOM about
-  690 ms later, when gorhom's dismiss animation ends. A close in the
-  same tick as the open leaves the content mounted off-screen with
-  `open` false and nothing `aria-hidden`, until the next open. And
+  690 ms later, when gorhom's dismiss animation ends. (A close sent
+  before gorhom finished presenting was dropped, and one sent before it
+  mounted blocked the next open; since 2026-10-09 the primitive holds
+  such a close until the sheet settles.) But
   `OverflowMenu`'s phone sheet kept its rows mounted and on screen for
   3 s after both an item pick and a disable-close, three runs of three,
   while its trigger reported `aria-expanded="false"`. `sheet.tsx`

@@ -113,12 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   expand shows the same. Canon's anchor rule
   ([`reader-composer.md → Anchor preservation under shifts`](../ui/screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts))
   names no rail-toggle scenario. Raised in 4.5a, 2026-10-07.
-- **A `Sheet` dismiss sent right after `present()` is dropped.** In
-  `components/ui/sheet.tsx`, a dismiss that lands while gorhom's modal status
-  is still INITIAL (within about 60 ms of `present()`) is silently ignored, so
-  the Sheet stays open while the host holds `open=false`. Fix idea: hold the
-  dismiss until gorhom reports the opening animation (`onAnimate` or
-  `onChange`). Raised in 4.5a review, 2026-10-07.
 - **The rail's happening list and the Plot pane duplicate the entry-index
   status block.** A shared `EntryIndexStatus` (title, body, retry) would
   replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in

@@ -371,3 +371,51 @@ export const RightDarkScrim: Story = {
     expect(modalScrimColor()).toBe('rgba(0, 0, 0, 0.6)')
   },
 }
+
+function QuickCloseHarness({ closeAfterMs }: { closeAfterMs: number }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <View className="items-start gap-4 p-4" style={{ minHeight: 640 }}>
+      <Button
+        onPress={() => {
+          setOpen(true)
+          setTimeout(() => setOpen(false), closeAfterMs)
+        }}
+      >
+        <Text>Open briefly</Text>
+      </Button>
+      <Button onPress={() => setOpen(true)}>
+        <Text>Open</Text>
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen} ariaLabel="Quick sheet">
+        <SheetContent anchor="bottom" size="short">
+          <Text>Quick sheet body</Text>
+        </SheetContent>
+      </Sheet>
+    </View>
+  )
+}
+
+// gorhom drops a dismiss that lands before its opening animation starts, and one sent before it
+// mounts also blocks the next open: the close is held until the sheet settles.
+function quickClose(closeAfterMs: number): Story {
+  return {
+    parameters: { layout: 'fullscreen' },
+    render: () => <QuickCloseHarness closeAfterMs={closeAfterMs} />,
+    play: async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Open briefly' }))
+      // Held, the close lands once the sheet settles: it opens, then goes.
+      expect(await screen.findByText('Quick sheet body', {}, BACKDROP_WAIT)).toBeInTheDocument()
+      await waitFor(
+        () => expect(screen.queryByText('Quick sheet body')).not.toBeInTheDocument(),
+        BACKDROP_WAIT,
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+      expect(await screen.findByText('Quick sheet body', {}, BACKDROP_WAIT)).toBeVisible()
+    },
+  }
+}
+
+// Lands before gorhom mounts the modal; without the hold, the next open showed nothing too.
+export const CloseBeforeMounting = quickClose(5)

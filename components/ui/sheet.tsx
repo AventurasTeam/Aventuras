@@ -226,6 +226,16 @@ function BottomSheetContent({
   // and subsequent present() becomes a silent no-op. Track actual modal state
   // so dismiss() is only called when the modal is presented.
   const isPresentedRef = useRef(false)
+  // gorhom ignores a dismiss sent before its opening animation starts, and one sent before the
+  // modal mounts also blocks the next present. A close requested while opening is held until
+  // the sheet reports a detent, then sent from the settled state.
+  const isSettledRef = useRef(false)
+  const isDismissHeldRef = useRef(false)
+  const dismissSheet = useCallback(() => {
+    isPresentedRef.current = false
+    isSettledRef.current = false
+    sheetRef.current?.dismiss()
+  }, [])
   // gorhom keeps a modal unmounted-while-presented alive until its dismiss
   // animation completes, then still fires onDismiss; that late callback must
   // not write the dead open state back through onOpenChange.
@@ -257,6 +267,7 @@ function BottomSheetContent({
       // that flips back while we wait below can't leave dismiss() firing
       // against a modal that never opened.
       isPresentedRef.current = true
+      isSettledRef.current = false
       sheetRef.current?.present()
     }
 
@@ -264,6 +275,7 @@ function BottomSheetContent({
     // present() succeeds; that registration happens in the modal's own mount
     // effects, which run after this one. Defer to the next tick.
     const handle = setTimeout(() => {
+      if (open) isDismissHeldRef.current = false
       if (open && !isPresentedRef.current) {
         // gorhom's keyboard state is built purely from show/hide events
         // (useAnimatedKeyboard subscribes; it never reads Keyboard.metrics), so
@@ -279,8 +291,8 @@ function BottomSheetContent({
         }
         present()
       } else if (!open && isPresentedRef.current) {
-        isPresentedRef.current = false
-        sheetRef.current?.dismiss()
+        if (isSettledRef.current) dismissSheet()
+        else isDismissHeldRef.current = true
       }
     }, 0)
 
@@ -288,7 +300,7 @@ function BottomSheetContent({
       cancelled = true
       clearTimeout(handle)
     }
-  }, [open])
+  }, [open, dismissSheet])
 
   const snapPoints = useMemo(() => {
     if (size === 'auto') return undefined
@@ -346,9 +358,18 @@ function BottomSheetContent({
       // dialog role. null, not undefined: undefined falls through to gorhom's English label.
       accessibilityRole="none"
       accessibilityLabel={Platform.OS === 'web' ? null : (ariaLabel ?? null)}
+      onChange={(index: number) => {
+        if (index < 0) return
+        isSettledRef.current = true
+        if (!isDismissHeldRef.current) return
+        isDismissHeldRef.current = false
+        dismissSheet()
+      }}
       onDismiss={() => {
         if (!isMountedRef.current) return
         isPresentedRef.current = false
+        isSettledRef.current = false
+        isDismissHeldRef.current = false
         onOpenChange(false)
       }}
     >
