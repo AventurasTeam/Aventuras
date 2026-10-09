@@ -225,6 +225,48 @@ describe('updateItemPosition', () => {
   })
 })
 
+// The patch builder merges unparsed, so only the arm stands between these fields and an item.
+describe('character-only state arms', () => {
+  const ROPE: NewEntity = {
+    ...CHAR,
+    id: 'item_rope',
+    kind: 'item',
+    name: 'Rope',
+    state: { at_location_id: 'loc_hollow' },
+  }
+
+  it.each([
+    { kind: 'updateEntityVisualState', visual: { attire: 'tarred' } },
+    { kind: 'updateEntityInventory', inventory: ['item_knife'] },
+    { kind: 'updateEntityStackables', stackables: { knots: 3 } },
+    { kind: 'updateEntityLocationTracking', currentLocationId: 'loc_cellar' },
+  ] as const)('$kind refuses an item target, writing nothing', async ({ kind, ...fields }) => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry: ROPE } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind,
+          source: 'ai_classifier',
+          payload: { branchId: 'br_1', id: 'item_rope', ...fields },
+        } as PipelineAction,
+        actionId: 'act_p',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'item_rope')).state).toEqual({ at_location_id: 'loc_hollow' })
+  })
+})
+
 describe('updateEntityStackables', () => {
   it('replaces the stackables record', async () => {
     const { db, ctx } = await setup()

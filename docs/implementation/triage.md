@@ -120,13 +120,6 @@ slice-planning gate forces its resolution before that slice is planned.
   a row the same group deletes. Planners avoid it by discipline (4.2c's
   merge rewrites every ref to the loser before deleting it); nothing
   checks it. Found in 4.2c's PR 1 review (2026-10-06).
-- **Location tracking accepts an item target.**
-  `updateEntityLocationTracking`
-  (`lib/actions/entities/state-patch-actions.ts`) has no kind check, so
-  it writes `current_location_id` into an item's state, which the item
-  state schema doesn't refuse; `updateItemPosition` checks its kind.
-  4.2c's merge guards its own call; the arm doesn't. Found in 4.2c's
-  PR 1 review (2026-10-06).
 - **Segment Select clips a label that wraps past two lines.**
   `SegmentBranch` (`components/ui/select.tsx`) gives each option a fixed
   `h-control-md` height with `overflow-hidden` and no line limit, so a
