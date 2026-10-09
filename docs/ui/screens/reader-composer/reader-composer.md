@@ -1434,8 +1434,9 @@ specifics below.
   is desktop chrome; sheets dismiss via handle / backdrop, not
   an X). The arrow is the universal back affordance, no text
   label needed; the head uses flex-start so entity meta sits
-  close after the arrow. Tap returns to the list level. Peek's
-  `Open in panel →` link dismisses the sheet and routes to
+  close after the arrow. Tap returns to the list level, where it
+  was left: the list stays in place under the peek, so its scroll
+  position holds. Peek's `Open in panel →` link dismisses the sheet and routes to
   World / Plot per the cross-surface nav model. Drag-down on the
   handle, or backdrop tap, dismisses the whole sheet from any
   level.

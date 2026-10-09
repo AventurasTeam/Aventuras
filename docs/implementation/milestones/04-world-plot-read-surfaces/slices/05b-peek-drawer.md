@@ -259,6 +259,12 @@ Implementer choices worth keeping:
 - **One lead badge and one injection chip**: `LeadTag` and
   `InjectionModeChip` are extracted, so the rail row, World's Overview
   and the peek render the same components.
+- **The phone `←` returns to the list where it was left** (developer,
+  2026-10-09, option c): a gap the plan missed, since `←` reset the
+  list to the top. `RailSheet` keeps the list level mounted, hidden,
+  under the peek, and `renderPeek` (C10) is unchanged for its callers;
+  canon in
+  [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
 - **Rail rows no longer route out** on any tier; the C6 link lives on
   the peek's foot and its Overview regions. `RailSheet` keeps its
   `onRowPress` mode, which only its bare stories use.
