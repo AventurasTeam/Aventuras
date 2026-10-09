@@ -358,9 +358,16 @@ function getApi(baseUrl: string): ComfyApi {
   }
 
   // A failed init() never opens a socket, so a cached client would never see generation events.
-  api.on('connection_error', () => {
-    if (apis.get(baseUrl) === api) apis.delete(baseUrl)
-  })
+  // reconnection_failed: the socket gave up after its retry limit and nothing revives it, so a
+  // cached client would hang every later generate() until the image timeout. Evict and destroy()
+  // so the next call builds a fresh client and the dead one's timers and poller stop.
+  const evict = () => {
+    if (apis.get(baseUrl) !== api) return
+    apis.delete(baseUrl)
+    api.destroy()
+  }
+  api.on('connection_error', evict)
+  api.on('reconnection_failed', evict)
 
   apis.set(baseUrl, api)
   // init() issues its first request synchronously, so the patch above must already be in place.
