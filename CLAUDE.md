@@ -74,6 +74,7 @@ that area, and update it in the same commit when behaviour it describes changes.
 | `services/storyTime/`, time anchors, reconciliation, a new story's start       | [docs/architecture/story-time.md](docs/architecture/story-time.md)               |
 | `services/exchange/`, vault export/import, the Aventura lorebook format        | [docs/architecture/exchange-format.md](docs/architecture/exchange-format.md)     |
 | `utils/narrationClean.ts`, the Style Reviewer's input                          | [docs/architecture/narration-cleaning.md](docs/architecture/narration-cleaning.md) |
+| a new JS, CSS or Web API, or the bundle minimums                               | [docs/development/platform-support.md](docs/development/platform-support.md)     |
 | tests                                                                          | [docs/development/testing.md](docs/development/testing.md)                       |
 | the updater, CI, release scripts, Android builds                               | [docs/development/release.md](docs/development/release.md)                       |
 
@@ -85,5 +86,8 @@ The index is [docs/README.md](docs/README.md).
   that has shipped — add a new one.
 - `src-tauri/gen/android/` and `src-tauri/gen/apple/` are tracked in git. Do not run
   `tauri android init` / `tauri ios init` on a working tree that already has them.
+- Vite lowers syntax but adds no polyfills, and `check` accepts any API TypeScript knows. Anything
+  newer than Chrome 111 or Safari 16.4 is out unless MDN says it works there. See
+  [docs/development/platform-support.md](docs/development/platform-support.md).
 - There is no DOM in the test environment, so a Svelte-level mistake passes `check`, `lint`
   and the whole suite and only fails when the app runs.
