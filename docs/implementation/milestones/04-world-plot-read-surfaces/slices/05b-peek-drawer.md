@@ -241,7 +241,8 @@ Implementer choices worth keeping:
 
 - **The peek's `Set as lead` shows no toast on success**, unlike
   World's `⋯ → Set as lead`: the reader's re-anchor is the feedback
-  canon names. A refusal toasts its reason; a throw logs
+  canon names. A refusal toasts its reason; a throw, or a press
+  before the reader has its story id, logs
   `reader.peek_set_lead_failed` (see
   [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory))
   and toasts the generic failure. It gates on the reader's own
@@ -256,8 +257,8 @@ Implementer choices worth keeping:
   layer of
   [`testing.md → Test taxonomy`](../../../../testing.md#test-taxonomy);
   vitest covers the peek model, the body selection with its
-  component-identity check, `useSetLead`, `useRailPeek` and
-  `usePeekView`.
+  component-identity check, `useSetLead` with `usePeekLeadControl`,
+  `useRailPeek` with `useOpenRailPeek`, and `usePeekView`.
 - **The drawer reads its view above the right Sheet's Portal** and
   hands it to `PeekContent` as props, since rn-primitives' native
   Portal drops custom contexts

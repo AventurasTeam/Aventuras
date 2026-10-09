@@ -302,8 +302,10 @@ convention, and the expectation that subsystems route through
   `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
   — a rail collapse-preference write that rejected) and
   `peek_set_lead_failed` (`components/reader/peek/use-set-lead.ts` — a
-  peek `Set as lead` whose `setStoryLead` threw rather than refused;
-  the user sees the generic lead-failure toast)
+  peek `Set as lead` whose `setStoryLead` threw rather than refused,
+  or that had no story id to write with after the reader's
+  `story_id_load_failed`; the user sees the generic lead-failure toast
+  either way)
 
 Kinds grow organically as subsystems land.
 
