@@ -35,13 +35,17 @@ state — who is present, where you are, what you carry — is tracked turn by t
 
 Pre-built binaries are on the [Releases](https://github.com/AventurasTeam/Aventuras/releases) page:
 
-| Platform | Download                                                     |
-| -------- | ------------------------------------------------------------ |
-| Windows  | `Aventuras_vX.Y.Z_x64-setup.exe`                             |
-| macOS    | `Aventuras_vX.Y.Z_x64.dmg` / `_aarch64.dmg`                  |
-| Linux    | `Aventuras_vX.Y.Z_amd64.deb` / `.AppImage`, or `_x86_64.rpm` |
-| Android  | `Aventuras_vX.Y.Z.apk`                                       |
-| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) |
+| Platform | Download                                                       | Minimum                                                                  |
+| -------- | -------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Windows  | `Aventuras_vX.Y.Z_x64-setup.exe`                               | Windows 10                                                               |
+| macOS    | `Aventuras_vX.Y.Z_x64.dmg` / `_aarch64.dmg`                    | macOS 13.3                                                               |
+| Linux    | `Aventuras_vX.Y.Z_amd64.deb` / `.AppImage`, or `_x86_64.rpm`   | WebKitGTK 2.40 for the `.deb` / `.rpm`; the AppImage carries its own, needs glibc 2.35 |
+| Android  | `Aventuras_vX.Y.Z.apk`                                         | Android 8, with System WebView 111 or later                              |
+| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) | iOS 16.4                                                                 |
+
+The minimums come from the web engine each platform uses. They are derived from documentation and
+have not been tested on devices at those versions; see
+[docs/development/platform-support.md](docs/development/platform-support.md).
 
 No API keys in config files — providers are set up in the app, under Settings → API Settings.
 
