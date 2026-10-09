@@ -13,13 +13,13 @@ import type { RailData } from '@/components/reader/rail/use-rail-data'
 import { pressSheetScrim } from '@/components/ui/sheet-scrim-probe'
 import { Text } from '@/components/ui/text'
 import { EntryIndexReadProvider } from '@/hooks/use-entry-index'
-import type { HappeningAwareness, HappeningInvolvement } from '@/lib/db'
 import { formatEntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import type { RailPeek } from '@/lib/reader-rail'
 import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
 
 import { PeekDrawer } from './peek-drawer'
+import { awareness, involvement } from './peek-story-fixtures'
 
 const DATA = railDataFixture()
 const MIRA_LEADS = railDataFixture({
@@ -41,23 +41,6 @@ const harnessGate = createStore<{ blocked: boolean; reason: string | undefined }
   blocked: false,
   reason: undefined,
 }))
-
-function involvement(id: string, happeningId: string, entityId: string): HappeningInvolvement {
-  return { id, branchId: DATA.branchId, happeningId, entityId, role: null }
-}
-
-function awareness(id: string, happeningId: string, characterId: string): HappeningAwareness {
-  return {
-    id,
-    branchId: DATA.branchId,
-    happeningId,
-    characterId,
-    learnedAtEntryId: null,
-    decayResistance: null,
-    retrievalCount: 0,
-    source: null,
-  }
-}
 
 type HarnessProps = {
   initialPeek: RailPeek | null

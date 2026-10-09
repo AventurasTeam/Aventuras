@@ -1,3 +1,4 @@
+import { happeningLinksFor } from '@/components/plot/plot-route-data'
 import { railRowHref } from '@/components/reader/rail/rail-row-href'
 import type { RailData } from '@/components/reader/rail/use-rail-data'
 import type { EntityTab } from '@/components/world/detail/entity-tabs'
@@ -38,18 +39,6 @@ export type PeekLinks = {
   awareness: ReadonlyMap<string, HappeningAwareness>
 }
 
-function linkCount(
-  rows: Iterable<{ branchId: string; happeningId: string }>,
-  branchId: string,
-  happeningId: string,
-): number {
-  let count = 0
-  for (const row of rows) {
-    if (row.branchId === branchId && row.happeningId === happeningId) count += 1
-  }
-  return count
-}
-
 /** The row `peek` names on `data`'s branch; null once it no longer resolves. */
 export function peekModelOf(peek: RailPeek, data: RailData, links: PeekLinks): PeekModel | null {
   const { lead, recentlyClassified } = data.rowSignals(peek.id)
@@ -75,12 +64,13 @@ export function peekModelOf(peek: RailPeek, data: RailData, links: PeekLinks): P
     case 'happening': {
       const row = data.happenings.find((r) => r.id === peek.id)
       if (row == null) return null
+      const linked = happeningLinksFor(row.id, data.branchId, links.involvements, links.awareness)
       return {
         kind: 'happening',
         row,
         recentlyClassified,
-        involved: linkCount(links.involvements.values(), data.branchId, row.id),
-        aware: linkCount(links.awareness.values(), data.branchId, row.id),
+        involved: linked.involvements.length,
+        aware: linked.awareness.length,
       }
     }
   }

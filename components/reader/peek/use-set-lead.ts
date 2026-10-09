@@ -11,6 +11,11 @@ import type { PeekLeadControl } from './peek-model'
 
 const ctx = { db, runInTransaction }
 
+function reportSetLeadFailure(storyId: string | null, entityId: string, error: string): void {
+  logger.error('reader.peek_set_lead_failed', { storyId, entityId, error })
+  toast.error(t('world:lead.failed'))
+}
+
 /**
  * The peek's `Set as lead`. No toast on success: the reader re-anchoring is the feedback
  * (reader-composer.md → Peek drawer — lead affordance for characters).
@@ -28,12 +33,7 @@ export function useSetLead(storyId: string | null): {
       if (inFlight.current) return
       // The reader's story-id read can fail; a press then must not vanish silently.
       if (storyId == null) {
-        logger.error('reader.peek_set_lead_failed', {
-          storyId: null,
-          entityId,
-          error: 'no story id',
-        })
-        toast.error(t('world:lead.failed'))
+        reportSetLeadFailure(null, entityId, 'no story id')
         return
       }
       inFlight.current = true
@@ -43,14 +43,12 @@ export function useSetLead(storyId: string | null): {
           (result) => {
             if (result.status === 'rejected') toast.error(leadRejectionText(result.code))
           },
-          (error: unknown) => {
-            logger.error('reader.peek_set_lead_failed', {
+          (error: unknown) =>
+            reportSetLeadFailure(
               storyId,
               entityId,
-              error: error instanceof Error ? error.message : String(error),
-            })
-            toast.error(t('world:lead.failed'))
-          },
+              error instanceof Error ? error.message : String(error),
+            ),
         )
         .finally(() => {
           inFlight.current = false

@@ -168,11 +168,19 @@ const PEEK_DATA = railDataFixture({
   happenings: HAPPENINGS,
 })
 
-function involvement(id: string, happeningId: string, entityId: string): HappeningInvolvement {
+export function involvement(
+  id: string,
+  happeningId: string,
+  entityId: string,
+): HappeningInvolvement {
   return { id, branchId: BRANCH, happeningId, entityId, role: null }
 }
 
-function awareness(id: string, happeningId: string, characterId: string): HappeningAwareness {
+export function awareness(
+  id: string,
+  happeningId: string,
+  characterId: string,
+): HappeningAwareness {
   return {
     id,
     branchId: BRANCH,
