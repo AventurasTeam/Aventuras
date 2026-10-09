@@ -273,7 +273,10 @@ rather than merely recorded. `sceneEntities` and `currentLocationId`
 drive materialized derived state — per-character `current_location_id`,
 `lastSeenAt`, staged promotion — which is a fold over entries, so
 editing the tail re-folds one step with nothing downstream to
-invalidate. Promotion is shared with the generation fold rather than
+invalidate. The re-fold writes only the characters the edit touches:
+those in the edited scene, and those it drops from the entry's original
+scene. A character who left the scene at this entry and stays out keeps
+any location set since. Promotion is shared with the generation fold rather than
 reimplemented: a staged entity the edit names in the scene is promoted
 exactly as the classifier would promote it. On any non-tail entry the panel renders the same fields
 with **no edit control at all**, not a disabled one: a control present

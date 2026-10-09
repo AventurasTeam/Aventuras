@@ -119,9 +119,6 @@ async function updateEntrySceneFieldsLocked(
       entities: branchEntities,
       previous: {
         entryId: previousEntry?.id ?? id,
-        sceneEntities: (previousMetadata?.sceneEntities ?? []).filter((sceneId) =>
-          live.has(sceneId),
-        ),
         currentLocationId:
           previousLocationId != null && live.has(previousLocationId) ? previousLocationId : null,
         worldTime: previousMetadata?.worldTime ?? 0,

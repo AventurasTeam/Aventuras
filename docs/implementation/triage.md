@@ -170,15 +170,6 @@ slice-planning gate forces its resolution before that slice is planned.
   a row the same group deletes. Planners avoid it by discipline (4.2c's
   merge rewrites every ref to the loser before deleting it); nothing
   checks it. Found in 4.2c's PR 1 review (2026-10-06).
-- **A tail scene edit re-anchors characters who left at the tail.** The
-  scene editor (`lib/actions/story-entries/scene-fields.ts`) runs
-  `sceneTrackingActions` over the previous, original and edited scenes
-  on every tail edit, so a character the tail's scene dropped is moved
-  back to the previous entry's location, overwriting a manual location
-  edit made since. Plausibly intended (the edit re-states the scene) but
-  undocumented as a consequence. Its live filter on the previous scene's
-  ids has no effect, since tracking iterates live entities only. Found
-  in 4.2c's PR 1 review (2026-10-06).
 - **Location tracking accepts an item target.**
   `updateEntityLocationTracking`
   (`lib/actions/entities/state-patch-actions.ts`) has no kind check, so
