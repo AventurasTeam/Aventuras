@@ -191,7 +191,8 @@ Sheet.
   `components/reader/rail/use-rail-data.ts`; the peek head would be a
   third copy. Add a `leadLabelFor(mode)` helper as part of this slice.
   Resolved in planning (2026-10-08): `leadLabelFor(mode)` in
-  `lib/world/lead.ts`, which World, the rail and the peek call.
+  `lib/world/lead.ts`, which World and the rail call; the peek reads
+  the rail's label rather than deriving its own.
 
 ## Implementation notes
 
@@ -208,13 +209,10 @@ Canon carries the detail; each line points to it.
 - **Focus lands on the drawer when it opens** (developer, 2026-10-08),
   not on its first button: for a non-lead character that would be
   `Set as lead`, which one stray key would fire and Ctrl-Z can't undo.
-  The target is the named `role="dialog"` element, made focusable with
-  `tabIndex` -1 on web and focused by ref in `onOpenAutoFocus`; Radix's
-  `event.currentTarget` there is its unnamed wrapper. On web the dialog
-  is refocused when `Set as lead` is swapped for the badge or becomes
-  disabled under focus, and on close focus returns to the element that
-  held it before the open (the rail row) unless the drawer routed away,
-  since the drawer opens from the store, not from a Radix trigger.
+  Focus stays on the named dialog when `Set as lead` is swapped or
+  disabled, and returns to the rail row on close unless the drawer
+  routed away — except after a successful `Set as lead`, which moves
+  the row (see [triage](../../../triage.md#inbox)).
 - **Thread and happening peeks are read-only summaries** (developer,
   2026-10-08); see
   [`reader-composer.md → State-field composition — thread and happening peek`](../../../../ui/screens/reader-composer/reader-composer.md#state-field-composition--thread-and-happening-peek).
@@ -248,8 +246,8 @@ Implementer choices worth keeping:
 - **The slice's component tests are Storybook plays**, the Component
   layer of
   [`testing.md → Test taxonomy`](../../../../testing.md#test-taxonomy);
-  the component-identity check is the one vitest, beside unit tests for
-  the peek model, the body selection, `useSetLead`, `useRailPeek` and
+  vitest covers the peek model, the body selection with its
+  component-identity check, `useSetLead`, `useRailPeek` and
   `usePeekView`.
 - **The drawer reads its view above the right Sheet's Portal** and
   hands it to `PeekContent` as props, since rn-primitives' native
