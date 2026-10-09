@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { useStore } from 'zustand'
+import { createStore } from 'zustand/vanilla'
 
 import {
   railDataFixture,
@@ -26,25 +28,32 @@ const DATA = railDataFixture()
 const ANIMATION = { timeout: 5000 }
 const MIRA: RailPeek = { category: 'character', id: 'char_mira' }
 const navigate = fn<(href: string) => void>()
+// Stands in for the reader route's `showRail`: the phone tier mounts neither rail nor drawer.
+const harnessTier = createStore<{ showRail: boolean }>()(() => ({ showRail: true }))
 
 // Storybook has no DB bridge: every preference write rejects and the display keeps the
 // optimistic toggle, as rail-column.stories.tsx's connected stories note.
 function ConnectedHarness({ isFocused }: { isFocused: boolean }) {
+  const showRail = useStore(harnessTier, (s) => s.showRail)
   return (
     <EntryIndexReadProvider value={readRailFixtureEntries}>
       <View style={{ height: 560, flexDirection: 'row' }}>
         <View style={{ flex: 1, padding: 16 }}>
           <Text>Narrative column</Text>
         </View>
-        <ReaderRailColumn data={DATA} isFocused={isFocused} />
-        <ReaderPeekDrawer
-          data={DATA}
-          isFocused={isFocused}
-          storyId={null}
-          blocked={false}
-          blockedReason={undefined}
-          onNavigate={navigate}
-        />
+        {showRail ? (
+          <>
+            <ReaderRailColumn data={DATA} isFocused={isFocused} />
+            <ReaderPeekDrawer
+              data={DATA}
+              isFocused={isFocused}
+              storyId={null}
+              blocked={false}
+              blockedReason={undefined}
+              onNavigate={navigate}
+            />
+          </>
+        ) : null}
       </View>
     </EntryIndexReadProvider>
   )
@@ -59,6 +68,7 @@ const meta: Meta<typeof ConnectedHarness> = {
     listCollapseStore.__reset()
     readerRailStore.__reset()
     appSettingsStore.__reset()
+    harnessTier.setState({ showRail: true })
     navigate.mockReset()
   },
 }
@@ -140,6 +150,26 @@ export const ViewportCollapseClosesPeek: Story = {
     readerRailStore.dispatchDisplay({ type: 'resize', width: 800 })
     await screen.findByTestId('rail-strip', {}, ANIMATION)
     await waitFor(() => expect(queryDrawer()).toBeNull(), ANIMATION)
+    await expect(readerRailStore.getDisplay().peek).toBeNull()
+  },
+}
+
+/** collapse.md → State preservation on reflow: a pass through phone drops the peek. */
+export const PhoneReflowDropsPeek: Story = {
+  play: async () => {
+    await screen.findByTestId('reader-rail', {}, ANIMATION)
+    // Opened after mount, so a mount-time clear (or a dev double mount) can't pass this.
+    readerRailStore.dispatchDisplay({ type: 'openPeek', peek: MIRA, storedCollapsed: false })
+    await screen.findByRole('dialog', { name: peekLabel('Mira') }, ANIMATION)
+
+    harnessTier.setState({ showRail: false })
+    await waitFor(() => expect(screen.queryByTestId('reader-rail')).toBeNull(), ANIMATION)
+    await waitFor(() => expect(readerRailStore.getDisplay().peek).toBeNull(), ANIMATION)
+
+    harnessTier.setState({ showRail: true })
+    await screen.findByTestId('reader-rail', {}, ANIMATION)
+    await settle()
+    await expect(queryDrawer()).toBeNull()
     await expect(readerRailStore.getDisplay().peek).toBeNull()
   },
 }

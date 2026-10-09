@@ -34,6 +34,10 @@ export function ReaderPeekDrawer({
     if (collapsed && peek != null) closePeek()
   }, [collapsed, peek, closePeek])
 
+  // The phone tier mounts no drawer, so a peek kept through it would reopen unprompted on return
+  // (collapse.md → State preservation on reflow).
+  useEffect(() => closePeek, [closePeek])
+
   return (
     <PeekDrawer
       data={data}
