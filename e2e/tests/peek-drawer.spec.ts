@@ -55,8 +55,8 @@ async function countOf(page: Page, sql: string, params: unknown[]): Promise<numb
   return Number(n)
 }
 
-// Serial suite, one app: each test starts on the reader the last returned to. That reader stays
-// mounted under every World and Plot visit, so the last test's turn runs where the lead changed.
+// Serial suite, one app: each test starts on the reader the last returned to, which stays mounted
+// under every World and Plot visit, so the Do turn runs in the reader that saw the lead change.
 test.describe.serial('Peek drawer', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -142,7 +142,7 @@ test.describe.serial('Peek drawer', () => {
       peek.setLeadDisabled(page, STAGED_CHARACTER, t('world:detail.menu.setLeadInactive')),
     ).toBeVisible()
     await expect(peek.setLead(page, STAGED_CHARACTER)).toHaveCount(0)
-    // Native-disabled, not merely absent from the accessibility tree by name.
+    // Disabled, not just renamed: a reason in the name alone doesn't block the press.
     await expect(
       peek.setLeadDisabled(page, STAGED_CHARACTER, t('world:detail.menu.setLeadInactive')),
     ).toBeDisabled()

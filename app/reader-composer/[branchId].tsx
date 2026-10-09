@@ -149,7 +149,7 @@ type BranchHydrationState =
     }
 
 // A blocking overlay (Sheet, AlertDialog, Select) claims the surface. Read at key time, not
-// subscribed (no route re-render); a `matches` miss skips preventDefault, so browser undo works.
+// subscribed (no route re-render); a `matches` miss also leaves the key's native action alone.
 function readerKeysStandDown(): boolean {
   return blockingOverlaysStore.getState().open.size > 0
 }

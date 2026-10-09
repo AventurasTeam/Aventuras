@@ -46,8 +46,8 @@ export type RailSheetProps = {
   onCategoryChange: (category: RailCategory) => void
 } & RailSheetRowPress
 
-// visibility, not display: none, which drops a scroller's offset; pointer events and the
-// accessibility tree are cut separately, as native has no visibility.
+// visibility, not display: none: the hidden list stays laid out, so `←` shows it with no relayout;
+// pointer events and the accessibility tree are cut separately, as native has no visibility.
 const HIDDEN_LAYER = {
   ...Platform.select({ web: { visibility: 'hidden' }, default: { opacity: 0 } }),
   pointerEvents: 'none',
