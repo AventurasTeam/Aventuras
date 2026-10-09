@@ -23,7 +23,7 @@ export function PeekFoot({
         className={cn(
           'rounded-sm px-2 py-1 active:bg-tint-press',
           // touch.md → Touch-target floor.
-          isPhone && 'min-h-[44px] justify-center',
+          isPhone && 'min-h-touch justify-center',
           Platform.select({
             web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-focus-ring',
           }),

@@ -33,7 +33,7 @@ const PRESSABLE = cn(
 )
 
 // touch.md → Touch-target floor: visible size, since hitSlop can't pass the parent on Android.
-const PHONE_TOUCH_FLOOR = 'min-h-[44px] justify-center'
+const PHONE_TOUCH_FLOOR = 'min-h-touch justify-center'
 
 function usePressBox(): string {
   return cn(PRESSABLE, useTier() === 'phone' && PHONE_TOUCH_FLOOR)

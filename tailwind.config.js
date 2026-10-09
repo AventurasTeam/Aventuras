@@ -120,6 +120,8 @@ module.exports = {
         'icon-action-sm': 'var(--icon-action-h-sm)',
         'icon-action-md': 'var(--icon-action-h-md)',
         'icon-action-lg': 'var(--icon-action-h-lg)',
+        // touch.md: the phone tap floor, fixed whatever the density.
+        touch: '44px',
       },
       padding: {
         'row-y-xs': 'var(--row-py-xs)',

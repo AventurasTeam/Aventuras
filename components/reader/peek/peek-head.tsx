@@ -97,7 +97,7 @@ export function PeekHead(props: PeekHeadProps) {
       {chrome.kind === 'back' ? (
         <IconAction icon={ArrowLeft} label={t('reader:peek.back')} onPress={chrome.onBack} />
       ) : null}
-      <View className={cn('min-w-0 shrink flex-row items-center gap-2', isPhone && 'min-h-[44px]')}>
+      <View className={cn('min-w-0 shrink flex-row items-center gap-2', isPhone && 'min-h-touch')}>
         {props.kind === 'thread' || props.kind === 'happening' ? (
           <PlotIcon kind={props.kind} icon={props.icon} />
         ) : (

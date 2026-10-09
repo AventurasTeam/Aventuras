@@ -1230,7 +1230,7 @@ export default function ReaderComposerRoute() {
     <ScreenShell
       variant="in-story"
       title={
-        <TruncatedText className="font-semibold" containerClassName="min-h-[44px] justify-center">
+        <TruncatedText className="font-semibold" containerClassName="min-h-touch justify-center">
           {storyTitle ?? t('reader:placeholderTitle')}
         </TruncatedText>
       }
