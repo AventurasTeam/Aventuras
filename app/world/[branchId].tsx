@@ -52,6 +52,7 @@ import {
   worldCategoryLabel,
   type WorldSelection,
 } from '@/components/world/world-selection'
+import { useBranchWorldTime } from '@/hooks/use-branch-world-time'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
@@ -79,20 +80,13 @@ import { isEntityCategory, type EntityFilter, type WorldCategory } from '@/lib/l
 import {
   characterRelationshipsStore,
   entitiesStore,
-  entriesStore,
   happeningInvolvementsStore,
   happeningsStore,
   loreStore,
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import {
-  branchWorldTime,
-  leadLabelFor,
-  resolveLead,
-  type EntitySaveInput,
-  type LoreDraft,
-} from '@/lib/world'
+import { leadLabelFor, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -154,16 +148,7 @@ export default function WorldRoute() {
   const relationshipRows = characterRelationshipsStore.useRelationships((m) => m)
   const involvementRows = happeningInvolvementsStore.useInvolvements((m) => m)
   const happeningRows = happeningsStore.useHappenings((m) => m)
-  const entryRows = entriesStore.useEntries((m) => m)
-  const worldTime = useMemo(
-    () =>
-      branchWorldTime(
-        [...entryRows.values()]
-          .filter((e) => e.branchId === branchId)
-          .sort((a, b) => a.position - b.position),
-      ),
-    [entryRows, branchId],
-  )
+  const worldTime = useBranchWorldTime(branchId)
   const entryIndex = useEntryIndex(branchId)
   const calendarId = open?.definition.calendarSystemId ?? DEFAULT_CALENDAR_ID
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
