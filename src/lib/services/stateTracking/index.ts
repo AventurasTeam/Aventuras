@@ -21,4 +21,4 @@ export {
 } from './runs'
 export { RECORD_COLUMNS, recordToRow, rowToRecord } from './rows'
 export { changeRecord, changedFields, diffStates, type RecordContext } from './record'
-export { describeChange } from './describe'
+export { describeChange, refusalMessage } from './describe'

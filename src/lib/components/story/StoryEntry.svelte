@@ -89,6 +89,7 @@
   import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '#lib/utils/inlineImageParser.ts'
@@ -442,14 +443,38 @@
   }
   let checkpointName = $state('')
 
-  // Check if this is the latest entry (checkpoints can only be created at the latest entry)
   const isLatestEntry = $derived(
     story.entries.length > 0 && story.entries[story.entries.length - 1].id === entry.id,
   )
+  const isOwnedEntry = $derived(
+    (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null),
+  )
 
-  // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
+  // At the latest entry always; at an earlier one this branch owns while State Tracking is on.
   const canCreateCheckpoint = $derived(
-    isLatestEntry && entry.type !== 'system' && !entryCheckpoint && !entriesLocked,
+    (isLatestEntry || (settings.experimentalFeatures.stateTracking && isOwnedEntry)) &&
+      entry.type !== 'system' &&
+      !entryCheckpoint &&
+      !entriesLocked,
+  )
+
+  // For a past entry: whether it can be rebuilt, and the manual changes that would undo.
+  let pastCheckpoint = $state<{
+    refusal: string | null
+    manual: WorldStateChangeRecord[]
+    unkeepable: WorldStateChangeRecord[]
+  } | null>(null)
+  let keepManualInCheckpoint = $state(true)
+
+  async function openCheckpoint() {
+    isCreatingCheckpoint = true
+    pastCheckpoint = null
+    keepManualInCheckpoint = true
+    if (!isLatestEntry) pastCheckpoint = await story.previewCheckpointAt(entry.id)
+  }
+
+  const checkpointBlocked = $derived(
+    !isLatestEntry && (pastCheckpoint === null || pastCheckpoint.refusal !== null),
   )
 
   // Is this the last user_action in the story? (used for the regeneration hint)
@@ -468,9 +493,14 @@
   )
 
   async function handleCreateCheckpoint() {
-    if (!checkpointName.trim()) return
+    if (!checkpointName.trim() || checkpointBlocked) return
     try {
-      await story.createCheckpoint(checkpointName.trim())
+      if (isLatestEntry) await story.createCheckpoint(checkpointName.trim())
+      else {
+        await story.createCheckpointAt(entry.id, checkpointName.trim(), {
+          keepManual: keepManualInCheckpoint,
+        })
+      }
       isCreatingCheckpoint = false
       checkpointName = ''
     } catch (error) {
@@ -1665,7 +1695,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => (isCreatingCheckpoint = true)}
+            onclick={openCheckpoint}
             class="hidden h-7 w-7 text-blue-700 hover:text-blue-800 @min-[23rem]:flex dark:text-blue-500 dark:hover:text-blue-600"
             title="Create checkpoint"
           >
@@ -1771,7 +1801,7 @@
               </DropdownMenu.Item>
             {/if}
             {#if canCreateCheckpoint}
-              <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
+              <DropdownMenu.Item onclick={openCheckpoint}>
                 <Bookmark class="h-4 w-4" />
                 Create checkpoint
               </DropdownMenu.Item>
@@ -2063,7 +2093,7 @@
           <Button
             size="sm"
             onclick={handleCreateCheckpoint}
-            disabled={!checkpointName.trim()}
+            disabled={!checkpointName.trim() || checkpointBlocked}
             class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
           >
             <Bookmark class="mr-1.5 h-4 w-4" />
@@ -2074,9 +2104,37 @@
             Cancel
           </Button>
         </div>
-        <p class="text-muted-foreground text-xs">
-          Checkpoints save the current story state and allow branching from this point.
-        </p>
+        {#if isLatestEntry}
+          <p class="text-muted-foreground text-xs">
+            Checkpoints save the current story state and allow branching from this point.
+          </p>
+        {:else if pastCheckpoint === null}
+          <p class="text-muted-foreground text-xs italic">Checking the story after this entry…</p>
+        {:else if pastCheckpoint.refusal}
+          <p class="text-xs text-amber-500">{pastCheckpoint.refusal}</p>
+        {:else}
+          <p class="text-muted-foreground text-xs">
+            The checkpoint holds the story as it was at this entry. The story itself is not changed.
+          </p>
+          {#if pastCheckpoint.manual.length > 0}
+            {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
+            <p class="text-muted-foreground text-xs">Changes you made by hand after this entry:</p>
+            <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
+              {#each pastCheckpoint.manual as change (change.id)}
+                <li>
+                  {describeChange(change, (type, id) => story.trackedName(type, id))}
+                  {#if unkeepable.has(change.id)}
+                    <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+            <label class="flex items-center gap-2 text-xs">
+              <Checkbox bind:checked={keepManualInCheckpoint} />
+              Keep them in the checkpoint
+            </label>
+          {/if}
+        {/if}
       </div>
     {:else}
       <!-- Reasoning content panel (between header and story text) -->

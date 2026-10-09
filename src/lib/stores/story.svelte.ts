@@ -27,6 +27,7 @@ import type {
   WorldStateRecord,
 } from '#lib/types/index.ts'
 import { database, type DbStatement } from '#lib/services/database.ts'
+import { errMessage } from '#lib/utils/error.ts'
 import {
   changeRecord,
   changedFields,
@@ -34,9 +35,15 @@ import {
   diffStates,
   isContinuous,
   lastCompletedEntry,
+  fromWorldStateDelta,
   lastHeaderOnLine,
+  planReversal,
+  refusalMessage,
+  resolveRun,
   rowsOf,
+  type AnchorCandidate,
   type RecordContext,
+  type ReversalPlan,
   type TrackedState,
 } from '#lib/services/stateTracking/index.ts'
 import { planRollback, rollbackService, type RollbackSummary } from '#lib/services/rollbackService.ts'
@@ -1253,7 +1260,6 @@ class StoryStore {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existingEntry = this.assertEntryDeletable(entryId, holder)
-    const currentBranchId = this.currentStory.currentBranchId
 
     // Phase 2: Rollback on delete — cascade delete from this position with world state undo
     const rollbackEnabled =
@@ -4248,6 +4254,174 @@ class StoryStore {
       name,
     })
 
+    return checkpoint
+  }
+
+  /**
+   * The state at a past entry, rebuilt from the nearest full state after it. Refuses with the
+   * reader-facing reason when the history in between cannot be rebuilt.
+   */
+  private async rebuildPastState(
+    entryId: string,
+    keepManual: boolean,
+  ): Promise<{ entry: StoryEntry; plan: ReversalPlan }> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    if (!settings.experimentalFeatures.stateTracking) {
+      throw new Error('A checkpoint at a past entry needs State Tracking')
+    }
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!entry) throw new Error('Entry not found')
+    const branchId = this.currentStory.currentBranchId ?? null
+    if ((entry.branchId ?? null) !== branchId) {
+      throw new Error('A checkpoint can only be created on an entry this branch owns')
+    }
+
+    const stored = await this.lineRecords()
+    const headed = new Set(stored.filter((r) => r.kind === 'header').map((r) => r.entryId))
+    const records = [
+      ...stored,
+      ...this.entries.flatMap((e) =>
+        e.worldStateDelta && !headed.has(e.id) ? fromWorldStateDelta(e, e.worldStateDelta) : [],
+      ),
+    ]
+    const positions = new Map(this.entries.map((e) => [e.id, e.position]))
+    const snapshots = await database.getWorldStateSnapshotTimes(this.currentStory.id, branchId)
+    const last = this.entries[this.entries.length - 1]
+    const candidates: AnchorCandidate[] = [
+      ...snapshots.map((s) => ({
+        kind: 'snapshot' as const,
+        id: s.id,
+        position: s.entryPosition,
+        takenAt: s.createdAt,
+      })),
+      // A checkpoint made after its entry had a successor was itself rebuilt; it cannot vouch.
+      ...this.checkpoints
+        .filter((cp) => cp.anchored && cp.branchId === branchId && positions.has(cp.lastEntryId))
+        .filter((cp) => {
+          const at = positions.get(cp.lastEntryId)!
+          const next = this.entries.find((e) => e.position > at)
+          return !next || cp.createdAt < next.createdAt
+        })
+        .map((cp) => ({
+          kind: 'checkpoint' as const,
+          id: cp.id,
+          position: positions.get(cp.lastEntryId)!,
+          takenAt: cp.createdAt,
+        })),
+      ...(last
+        ? [{ kind: 'live' as const, id: null, position: last.position, takenAt: Date.now() }]
+        : []),
+    ]
+
+    const run = resolveRun({
+      line: this.entries,
+      records,
+      snapshotTimes: snapshots.map((s) => s.createdAt),
+      target: entry.position,
+      candidates,
+      tracking: {
+        on: settings.experimentalFeatures.stateTracking,
+        enabledSince: settings.experimentalFeatures.trackingEnabledSince,
+      },
+    })
+    if (!run.ok) throw new Error(refusalMessage(run.reason))
+
+    const state = await this.anchorState(run.anchor)
+    const plan = planReversal({
+      state,
+      records: run.records,
+      entryPositions: positions,
+      keepManual,
+    })
+    return { entry, plan }
+  }
+
+  private async anchorState(anchor: AnchorCandidate): Promise<TrackedState> {
+    if (anchor.kind === 'live') return this.trackedState()
+    if (anchor.kind === 'checkpoint') {
+      const cp = this.checkpoints.find((c) => c.id === anchor.id)
+      if (!cp?.lorebookEntriesSnapshot) throw new Error(refusalMessage('noAnchor'))
+      return {
+        characters: cp.charactersSnapshot,
+        locations: cp.locationsSnapshot,
+        items: cp.itemsSnapshot,
+        storyBeats: cp.storyBeatsSnapshot,
+        lorebookEntries: cp.lorebookEntriesSnapshot,
+        timeTracker: cp.timeTrackerSnapshot ?? null,
+      }
+    }
+    const snapshot = anchor.id ? await database.getWorldStateSnapshot(anchor.id) : null
+    if (!snapshot?.lorebookEntriesSnapshot) throw new Error(refusalMessage('noAnchor'))
+    return {
+      characters: snapshot.charactersSnapshot,
+      locations: snapshot.locationsSnapshot,
+      items: snapshot.itemsSnapshot,
+      storyBeats: snapshot.storyBeatsSnapshot,
+      lorebookEntries: snapshot.lorebookEntriesSnapshot,
+      timeTracker: snapshot.timeTrackerSnapshot,
+    }
+  }
+
+  /**
+   * Whether a checkpoint can be created at a past entry, and which manual changes building it
+   * would undo. `refusal` is the reason it cannot, for the reader.
+   */
+  async previewCheckpointAt(entryId: string): Promise<{
+    refusal: string | null
+    manual: WorldStateChangeRecord[]
+    unkeepable: WorldStateChangeRecord[]
+  }> {
+    try {
+      const { plan } = await this.rebuildPastState(entryId, true)
+      return { refusal: null, manual: plan.manual, unkeepable: plan.unkeepable }
+    } catch (error) {
+      return { refusal: errMessage(error), manual: [], unkeepable: [] }
+    }
+  }
+
+  /** A checkpoint at a past entry, holding the state as it was there. The story is unchanged. */
+  async createCheckpointAt(
+    entryId: string,
+    name: string,
+    opts: { keepManual: boolean },
+  ): Promise<Checkpoint> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    this.assertNotBusy('create a checkpoint')
+    if (this.checkpoints.some((cp) => cp.lastEntryId === entryId)) {
+      throw new Error('This entry already has a checkpoint')
+    }
+
+    const { entry, plan } = await this.rebuildPastState(entryId, opts.keepManual)
+    const entries = this.entries.filter((e) => e.position <= entry.position)
+    const kept = new Set(entries.map((e) => e.id))
+    const record: CheckpointRecord = {
+      id: crypto.randomUUID(),
+      storyId: this.currentStory.id,
+      name,
+      lastEntryId: entry.id,
+      lastEntryPreview: entry.content.substring(0, 100),
+      entryCount: entries.length,
+      entriesSnapshot: entries,
+      charactersSnapshot: plan.state.characters,
+      locationsSnapshot: plan.state.locations,
+      itemsSnapshot: plan.state.items,
+      storyBeatsSnapshot: plan.state.storyBeats,
+      chaptersSnapshot: this.chapters.filter((ch) => kept.has(ch.endEntryId)),
+      timeTrackerSnapshot: plan.state.timeTracker,
+      lorebookEntriesSnapshot: plan.state.lorebookEntries,
+      createdAt: Date.now(),
+    }
+    await database.createCheckpoint(record)
+
+    const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
+    const checkpoint: Checkpoint = { ...loaded, branchId: entry.branchId, anchored: true }
+    this.checkpoints = [checkpoint, ...this.checkpoints]
+    log('Checkpoint created at past entry:', name, entry.position)
+    eventBus.emit<CheckpointCreatedEvent>({
+      type: 'CheckpointCreated',
+      checkpointId: checkpoint.id,
+      name,
+    })
     return checkpoint
   }
 

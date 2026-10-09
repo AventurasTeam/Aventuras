@@ -1,4 +1,5 @@
 import type { TrackedEntityType, WorldStateChangeRecord } from '#lib/types/index.ts'
+import type { RunRefusal } from './runs'
 
 const NOUN: Record<TrackedEntityType, string> = {
   character: 'character',
@@ -32,5 +33,19 @@ export function describeChange(
       const fields = Object.keys(record.after ?? record.before ?? {})
       return fields.length > 0 ? `Edited ${subject} (${fields.join(', ')})` : `Edited ${subject}`
     }
+  }
+}
+
+/** Why a checkpoint cannot be created at a past entry, for the reader. */
+export function refusalMessage(reason: RunRefusal): string {
+  switch (reason) {
+    case 'untracked':
+      return 'Part of the story after this entry was played without State Tracking, so its state cannot be rebuilt.'
+    case 'interrupted':
+      return 'State Tracking was interrupted after this entry, so changes may have been made without a record.'
+    case 'classifierOnly':
+      return 'The story after this entry was tracked before lorebook and manual changes were recorded, so the lorebook at this entry cannot be rebuilt.'
+    case 'noAnchor':
+      return 'There is no saved state after this entry to rebuild it from.'
   }
 }

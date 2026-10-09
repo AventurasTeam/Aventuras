@@ -70,3 +70,24 @@ describe('closing snapshots', () => {
     expect(body).toContain('settings.experimentalFeatures.trackingEnabledSince')
   })
 })
+
+describe('past checkpoints', () => {
+  it.each(['rebuildPastState', 'anchorState', 'createCheckpointAt'])(
+    '%s leaves the story and its world state untouched',
+    (method) => {
+      const body = bodyOf(method)
+      for (const write of [
+        'this.commit(',
+        'database.transaction(',
+        'this.entries =',
+        'this.characters =',
+        'this.locations =',
+        'this.items =',
+        'this.storyBeats =',
+        'this.lorebookEntries =',
+      ]) {
+        expect(body, `${method} must not contain ${write}`).not.toContain(write)
+      }
+    },
+  )
+})
