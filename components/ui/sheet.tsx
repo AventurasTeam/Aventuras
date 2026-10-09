@@ -40,7 +40,7 @@ import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-vie
 import { SCRIM_OPACITY, useScrimClass } from '@/components/ui/scrim'
 import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { TextClassContext } from '@/components/ui/text'
-import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
+import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useRegisteredOverlay } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
@@ -76,8 +76,9 @@ const QUIET_BACKGROUND: ViewStyle = { borderRadius: 15 }
 
 // gorhom's default background and handle are also `adjustable` views with hard-coded English
 // labels. Both are decoration here, so these keep them out of the accessibility tree.
+// gorhom's container passes 'none'; carried as the style key, like every first-party site.
 export function QuietSheetBackground({ style, pointerEvents }: BottomSheetBackgroundProps) {
-  return <View pointerEvents={pointerEvents} style={[QUIET_BACKGROUND, style]} />
+  return <View style={[QUIET_BACKGROUND, style, pointerEvents === 'none' && POINTER_EVENTS_NONE]} />
 }
 
 export function QuietSheetHandle(props: BottomSheetHandleProps) {

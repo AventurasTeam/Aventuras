@@ -311,8 +311,3 @@ slice-planning gate forces its resolution before that slice is planned.
   in `overview-parts.tsx:35`, in `components/compounds/breadcrumb.tsx:29`
   and in `peek-foot.tsx:26` (new in 4.5b). Raised in 4.5b's review,
   2026-10-09.
-- **`QuietSheetBackground` passes the deprecated `pointerEvents` prop.**
-  (2026-10-09) `components/ui/sheet.tsx:79` hands gorhom's
-  `pointerEvents` to a `View` as a prop; RN-Web warns that the prop is
-  deprecated in favour of `style.pointerEvents` on every rail-sheet play.
-  Raised in 4.5b's review, 2026-10-09.
