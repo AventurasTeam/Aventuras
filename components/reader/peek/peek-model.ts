@@ -104,10 +104,12 @@ export function peekFootHref(data: RailData, peek: RailPeek): string {
   return railRowHref(data.branchId, peek.category, peek.id)
 }
 
-/** An Overview region's route to the entity's tab; only entities have regions. */
-export function peekRegionHref(data: RailData, model: PeekModel, tab: EntityTab): string | null {
-  if (model.kind !== 'entity') return null
-  return worldHref(data.branchId, { category: model.row.kind, id: model.row.id, tab })
+/** A press on an entity Overview region: only entities have regions. */
+export type PeekRegionPress = (entity: Entity, tab: EntityTab) => void
+
+/** An Overview region's route: World, the entity selected on the pressed tab. */
+export function peekRegionHref(data: RailData, entity: Entity, tab: EntityTab): string {
+  return worldHref(data.branchId, { category: entity.kind, id: entity.id, tab })
 }
 
 export type PeekLead =

@@ -114,10 +114,7 @@ export function PeekDrawer({
             lead={control}
             chrome={{ kind: 'close', onClose }}
             onOpenInPanel={() => routeOut(peekFootHref(data, peek))}
-            onRegionPress={(tab) => {
-              const href = peekRegionHref(data, model, tab)
-              if (href != null) routeOut(href)
-            }}
+            onRegionPress={(entity, tab) => routeOut(peekRegionHref(data, entity, tab))}
           />
         ) : null}
       </SheetContent>

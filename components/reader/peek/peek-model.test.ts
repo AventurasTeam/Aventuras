@@ -316,15 +316,12 @@ describe('peekFootHref', () => {
 
 describe('peekRegionHref', () => {
   it('opens the entity on the pressed tab', () => {
-    expect(peekRegionHref(railData(), modelOf('location', 'loc_hollow'), 'connections')).toBe(
+    expect(peekRegionHref(railData(), HOLLOW, 'connections')).toBe(
       '/world/br_1?kind=location&id=loc_hollow&tab=connections',
     )
-  })
-
-  it('has no region route for the other kinds', () => {
-    expect(peekRegionHref(railData(), modelOf('lore', 'lore_veil'), 'history')).toBeNull()
-    expect(peekRegionHref(railData(), modelOf('thread', 't_amulet'), 'history')).toBeNull()
-    expect(peekRegionHref(railData(), modelOf('happening', 'h_ambush'), 'history')).toBeNull()
+    expect(peekRegionHref(railData(), KAEL, 'identity')).toBe(
+      '/world/br_1?kind=character&id=char_kael&tab=identity',
+    )
   })
 })
 

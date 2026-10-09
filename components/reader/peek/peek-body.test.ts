@@ -49,8 +49,16 @@ describe('PeekBody', () => {
       entities: CONTEXT.entities,
       worldTime: 120,
       calendar: EARTH_GREGORIAN,
-      onRegionPress: p.onRegionPress,
+      onRegionPress: expect.any(Function),
     })
+  })
+
+  it('hands a region press back with the peeked entity and the tab', () => {
+    const p = props({ kind: 'entity', row: KAEL, recentlyClassified: undefined, leadLabel: 'you' })
+    const element = PeekBody(p)
+    element.props.onRegionPress('identity')
+    expect(p.onRegionPress).toHaveBeenCalledTimes(1)
+    expect(p.onRegionPress).toHaveBeenCalledWith(KAEL, 'identity')
   })
 
   it('mounts the lore, thread and happening bodies for their kinds', () => {

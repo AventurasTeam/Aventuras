@@ -46,10 +46,7 @@ export function RailSheetPeek({
       lead={lead}
       chrome={{ kind: 'back', onBack }}
       onOpenInPanel={() => onOpenInPanel(peekFootHref(data, peek))}
-      onRegionPress={(tab) => {
-        const href = peekRegionHref(data, model, tab)
-        if (href != null) onOpenInPanel(href)
-      }}
+      onRegionPress={(entity, tab) => onOpenInPanel(peekRegionHref(data, entity, tab))}
     />
   )
 }

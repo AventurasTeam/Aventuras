@@ -7,14 +7,13 @@ import type { GlyphKind } from '@/components/entity/entity-kind-icon'
 import { PlotIcon } from '@/components/plot/plot-icon'
 import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { EntityOverview } from '@/components/world/overview/entity-overview'
-import type { RegionPress } from '@/components/world/overview/overview-parts'
 import { formatEntryRef, indexEntryRefs, type EntryIndex, type EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 import type { LeadLabel } from '@/lib/world'
 
 import { PeekContent } from './peek-content'
-import type { PeekModel } from './peek-model'
+import type { PeekModel, PeekRegionPress } from './peek-model'
 import { PEEK_ENTITY_CONTEXT, PEEK_LEAD_CONTROL, peekModelFixture } from './peek-story-fixtures'
 
 const WAIT = { timeout: 3000 }
@@ -41,6 +40,11 @@ const ENTRY_INDEXES: Record<Entries, EntryIndex | null> = {
 function withLeadLabel(model: PeekModel, leadLabel: LeadLabel): PeekModel {
   if (model.kind !== 'entity') throw new Error('Only an entity peek carries a lead label')
   return { ...model, leadLabel }
+}
+
+function entityOf(model: PeekModel) {
+  if (model.kind !== 'entity') throw new Error('Expected an entity peek')
+  return model.row
 }
 
 function loreOf(model: PeekModel) {
@@ -104,7 +108,7 @@ type HarnessProps = {
   onBack: () => void
   onSetLead: (entityId: string) => void
   onOpenInPanel: () => void
-  onRegionPress: RegionPress
+  onRegionPress: PeekRegionPress
 }
 
 function PeekHarness({
@@ -253,7 +257,7 @@ export const CharacterLead: Story = {
 
     await userEvent.click(peek.getByTestId('overview-visual'))
     await expect(args.onRegionPress).toHaveBeenCalledTimes(1)
-    await expect(args.onRegionPress).toHaveBeenLastCalledWith('identity')
+    await expect(args.onRegionPress).toHaveBeenLastCalledWith(entityOf(KAEL), 'identity')
 
     await expect(peek.queryByRole('button', { name: t('reader:peek.back') })).toBeNull()
     await userEvent.click(peek.getByRole('button', { name: t('reader:peek.close') }))

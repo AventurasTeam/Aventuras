@@ -4,7 +4,6 @@ import { View, type ViewStyle } from 'react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
 import { ScrollComponentContext } from '@/components/ui/scroll-component'
-import type { RegionPress } from '@/components/world/overview/overview-parts'
 import type { EntryIndex } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import type { RailCategory } from '@/lib/reader-rail'
@@ -12,7 +11,13 @@ import type { RailCategory } from '@/lib/reader-rail'
 import { PeekBody } from './peek-body'
 import { PeekFoot } from './peek-foot'
 import { PeekHead } from './peek-head'
-import { peekLeadOf, peekNameOf, type PeekLeadControl, type PeekModel } from './peek-model'
+import {
+  peekLeadOf,
+  peekNameOf,
+  type PeekLeadControl,
+  type PeekModel,
+  type PeekRegionPress,
+} from './peek-model'
 import type { PeekEntityContext } from './use-peek-view'
 
 /** Desktop / tablet close with `×`; phone goes back to the rail Sheet's list with `←`. */
@@ -27,7 +32,7 @@ export type PeekContentProps = {
   lead: PeekLeadControl
   chrome: PeekChrome
   onOpenInPanel: () => void
-  onRegionPress: RegionPress
+  onRegionPress: PeekRegionPress
 }
 
 // In the phone Sheet the scroll view is gorhom's Animated one, which NativeWind never styles.
