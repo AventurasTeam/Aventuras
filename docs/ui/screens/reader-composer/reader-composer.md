@@ -1203,7 +1203,8 @@ focus lands on the dialog itself, since for a non-lead character the
 first button is `Set as lead`, which one stray key would fire and
 Ctrl-Z can't undo. It stays on the dialog when `Set as lead` is
 swapped for the badge or disabled, and on close it returns to the
-rail row that opened it, unless the close was a route out to a panel.
+rail row that opened it, unless the close was a route out to a panel
+or the row has moved, as it does after `Set as lead`.
 
 **A peeked row that disappears.** If the row is deleted (or a
 reversal removes it) while the peek is open, the peek closes: the

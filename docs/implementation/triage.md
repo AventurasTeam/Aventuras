@@ -671,10 +671,13 @@ slice-planning gate forces its resolution before that slice is planned.
   role-stripped, unnamed wrapper; the gorhom `BottomSheetContent` has no
   Tab trap on web though
   [`layout.md`](../ui/foundations/mobile/layout.md#sheet-behavior--additional-rules) (line 216) says
-  sheets trap Tab; and 4.5a's list and categories swaps drop focus.
+  sheets trap Tab; and 4.5a's list and categories swaps drop focus, as
+  does the phone row-to-peek swap on web (Chromium blurs the row when its
+  layer turns `visibility: hidden`).
   Known residual in the peek: after a successful `Set as lead` the lead
   row re-parents into `ModuleList`'s pinned slot, so the remembered node
-  is disconnected and the next close drops focus to `<body>`. Fix by
+  is disconnected and the next close drops focus to `<body>`; canon
+  carves this out ("unless the row has moved"). Fix by
   re-finding the row by id (`ModuleList`'s `focusRef`), or at primitive
   level as above. Raised in 4.5b's review, 2026-10-09.
 - **A toast fired under a modal Sheet may be hidden from assistive
@@ -722,3 +725,8 @@ slice-planning gate forces its resolution before that slice is planned.
   4.5b, build the same `PeekLeadControl`, foot href and region href; a
   `peekRouteOf`-style helper in `peek-model.ts` would keep them from
   drifting. Raised in 4.5b's review, 2026-10-09.
+- **`QuietSheetBackground` passes the deprecated `pointerEvents` prop.**
+  (2026-10-09) `components/ui/sheet.tsx:79` hands gorhom's
+  `pointerEvents` to a `View` as a prop; RN-Web warns that the prop is
+  deprecated in favour of `style.pointerEvents` on every rail-sheet play.
+  Raised in 4.5b's review, 2026-10-09.

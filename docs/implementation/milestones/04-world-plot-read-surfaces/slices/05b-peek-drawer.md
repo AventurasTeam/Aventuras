@@ -210,7 +210,7 @@ Canon carries the detail; each line points to it.
 - **Focus lands on the drawer when it opens** (developer, 2026-10-08),
   not on its first button, which for a non-lead character is
   `Set as lead`; it stays on the dialog through the swap and returns to
-  the rail row on close. Canon:
+  the rail row on close unless the row has moved. Canon:
   [`reader-composer.md → Peek drawer — peek implies rail open`](../../../../ui/screens/reader-composer/reader-composer.md#peek-drawer--peek-implies-rail-open).
   The dialog takes focus by ref in `onOpenAutoFocus`, since Radix's
   `event.currentTarget` there is its unnamed wrapper. After a
@@ -265,10 +265,11 @@ Implementer choices worth keeping:
   under the peek, and `renderPeek` (C10) is unchanged for its callers;
   canon in
   [`reader-composer.md → Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression).
-- **The hidden list keeps its height cap through `←`**, cleared only on
-  reopen or a window-height change: releasing it relayouts the list
-  while the Sheet settles, and gorhom's scroll lock then resets an
-  end-of-list offset to 0 on Android.
+- **The hidden list keeps its height cap through `←`**, dropped only on
+  reopen and suspended while the window height differs (it reapplies
+  when the height returns): releasing it relayouts the list while the
+  Sheet settles, and gorhom's scroll lock then resets an end-of-list
+  offset to 0 on Android.
 - **The rail Sheet pins `keyboardBehavior="interactive"`** for both
   detents: the size-derived value flipped on the peek's morph and the
   peek body stopped scrolling on Android; see
