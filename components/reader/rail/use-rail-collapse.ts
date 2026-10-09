@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react'
+import { useWindowDimensions } from 'react-native'
 
 import { setReaderRailCollapsed } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
@@ -12,7 +13,8 @@ const selectStoredCollapsed = (s: AppSettingsSnapshot): boolean => s.appearance.
 /** The rail's displayed collapse, read-only; `useRailCollapse` owns the `persisted` effect. */
 export function useRailShowsCollapsed(): boolean {
   const stored = appSettingsStore.useAppSettings(selectStoredCollapsed)
-  return readerRailStore.useCollapsed(stored)
+  const { width } = useWindowDimensions()
+  return readerRailStore.useCollapsed(stored, width)
 }
 
 /** The rail's displayed collapse and its toggle: the display moves first, the write follows. */

@@ -60,9 +60,18 @@ export const readerRailStore = {
             display: reduceRailDisplay(s.display, { type: 'closePeek' }),
           },
     ),
-  /** The shown collapse: a forced collapse wins, then a pending toggle, then `stored`. */
-  useCollapsed: (stored: boolean): boolean =>
-    useStore(store, (s) => isRailCollapsed(s.display, stored)),
+  /**
+   * The shown collapse: a forced collapse wins, then a pending toggle, then `stored`. Until the
+   * viewport watcher reports a width, `windowWidth` stands in, so a reader mounted in the
+   * watcher's own commit starts collapsed when narrow instead of sliding shut after its first paint.
+   */
+  useCollapsed: (stored: boolean, windowWidth: number): boolean =>
+    useStore(store, (s) =>
+      isRailCollapsed(
+        Number.isFinite(s.display.lastWidth) ? s.display : initialRailDisplay(windowWidth),
+        stored,
+      ),
+    ),
   getDisplay: (): RailDisplayState => store.getState().display,
   /** The row the desktop / tablet drawer opens on; also needs the rail expanded, reader focused. */
   usePeek: (): RailPeek | null => useStore(store, (s) => s.display.peek),

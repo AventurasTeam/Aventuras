@@ -140,16 +140,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`reader:rail.backToCategories`) would collide if that button ever rendered
   in a desktop E2E DOM. Latent: the Sheet is phone-only and E2E is
   desktop-only. Raised in 4.5a's final review, 2026-10-07.
-- **The rail likely flashes expanded, then slides closed, on a narrow reader
-  mount.** When the reader route mounts in the same commit as
-  `RailViewportWatcher` under 900 px (a web or dev reload of the reader route),
-  `ReaderRailColumn` first renders before the first window width reaches the
-  store, so `RailColumn` starts at 300 px and the watcher's first resize then
-  forces a collapse. Reasoned, not observed; normal launches reach the reader
-  after home, so the store already holds a width. Fix idea: set the width
-  without `withTiming` for a `collapsed` change before first layout, or have
-  `ReaderRailColumn` wait for the first width. Raised in 4.5a's final review,
-  2026-10-07.
 - **The happening filter-reset layout effect is duplicated.**
   `components/reader/rail/rail-list.tsx:88-95` repeats
   `components/plot/plot-list-pane.tsx:98-103`, same comment and same reset. A
