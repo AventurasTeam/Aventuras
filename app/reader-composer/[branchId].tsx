@@ -150,12 +150,19 @@ type BranchHydrationState =
 
 // Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
 // deps, so identity has to hold unconditionally.
+// A registered blocking overlay (Sheet, AlertDialog) claims the surface, so the keys stand down.
+// Read at key time, not subscribed: the route must not re-render when an overlay opens, and a
+// miss in `matches` skips the hook's preventDefault, so the browser's own undo still works.
+function readerKeysStandDown(): boolean {
+  return blockingOverlaysStore.getState().open.size > 0
+}
+
 function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
-  return (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z')
+  return (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z') && !readerKeysStandDown()
 }
 
 function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
-  return ev.key === 'End'
+  return ev.key === 'End' && !readerKeysStandDown()
 }
 
 type ReaderGateState = {
@@ -190,9 +197,6 @@ export default function ReaderComposerRoute() {
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
-  // A registered blocking overlay (Sheet, AlertDialog) claims the surface; reader keys stand down.
-  const overlayOpen = blockingOverlaysStore.useBlockingOverlayCount() > 0
-  const readerKeysEnabled = isFocused && !overlayOpen
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
   const branchIdRef = useRef(branchId)
   // Assigned post-commit, not during render: a discarded render would otherwise
@@ -1133,7 +1137,7 @@ export default function ReaderComposerRoute() {
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
-    enabled: readerKeysEnabled,
+    enabled: isFocused,
   })
 
   // Touch-tier path to undo/redo (the shortcut is keyboard-only).
@@ -1150,7 +1154,7 @@ export default function ReaderComposerRoute() {
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
     ignoreEditableTargets: true,
-    enabled: readerKeysEnabled,
+    enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
     // editBlocked, not isGenerating: undo/redo reject on the gate, which a
