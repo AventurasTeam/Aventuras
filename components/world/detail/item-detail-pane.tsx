@@ -54,6 +54,7 @@ export function ItemDetailPane({
     <EntityDetailFrame
       kind="item"
       row={row}
+      entities={data.entities}
       session={session}
       savedName={values.name}
       tab={tab}

@@ -534,6 +534,23 @@ export const SaveCarriesThreeFields: Story = {
   },
 }
 
+/** world.md → Rename: typing another row's name warns under the field; Save stays live. */
+export const RenameWarnsOfATakenName: Story = {
+  play: async () => {
+    const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
+    await userEvent.click(name.getByRole('button', { name: 'Edit Kael' }))
+    const field = name.getByRole('textbox')
+    await userEvent.clear(field)
+    await userEvent.type(field, 'mira')
+    expect(await name.findByText('Another row already has that name.', {}, WAIT)).toBeVisible()
+    await waitFor(() => expect(saveBar()).toHaveTextContent('1 unsaved change'), WAIT)
+    await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).not.toBeDisabled()
+
+    await userEvent.type(field, ' Vale')
+    await waitFor(() => expect(name.queryByText('Another row already has that name.')).toBeNull())
+  },
+}
+
 /** The Relationships base freezes once dirty, so Save keeps a pair the classifier writes later. */
 export const RelationshipsBaseFrozenWhileDirty: Story = {
   args: { links: [MIRA_LINK], storeLink: VORNE_LINK },

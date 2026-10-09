@@ -31,7 +31,7 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
-export { namesakeKey } from './collision-flags'
+export { nameTakenByOther, namesakeKey } from './collision-flags'
 export {
   entityKeepActions,
   entityRenameActions,

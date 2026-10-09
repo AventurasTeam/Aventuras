@@ -67,6 +67,7 @@ export function LocationDetailPane({
     <EntityDetailFrame
       kind="location"
       row={row}
+      entities={data.entities}
       session={session}
       savedName={values.name}
       tab={tab}

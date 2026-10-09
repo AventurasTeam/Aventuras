@@ -1146,6 +1146,13 @@ change of letter case alone still collides. Save disables until
 that holds, and the help line says which rule fails (an untouched
 form shows the plain prompt to change a name).
 
+A name another row outside the pair already has, under the same
+namesake rule, shows `Another row already has that name.` under its
+field. It's a hint, not a block: the user may keep it, as Keep as
+distinct allows, and the save writes no flag for the new pair. The
+detail pane's name field shows the same hint for a typed name that
+matches any other row of its kind, in create mode too.
+
 #### Keep as distinct
 
 Body is a confirmation panel:

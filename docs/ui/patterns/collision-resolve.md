@@ -63,6 +63,8 @@ type CollisionResolveDialogProps = {
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
   blockedReason?: string
+  /** Whether a row outside the pair already has `name`; Rename warns under that field. */
+  isNameTaken?: (name: string) => boolean
 }
 ```
 

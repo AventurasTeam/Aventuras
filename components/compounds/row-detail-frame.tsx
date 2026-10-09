@@ -6,6 +6,7 @@ import { DetailPane } from '@/components/shells/detail-pane'
 import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Tabs } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
+import { Text } from '@/components/ui/text'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
 import { saveAvtsFile, type AvtsFile } from '@/lib/avts'
@@ -39,6 +40,8 @@ export type RowDetailFrameProps<Draft extends FieldValues, Tab extends string> =
   savedName: string
   namePlaceholder: string
   nameTestID?: string
+  /** A warning shown under the name for the name being typed, or nothing; never blocks Save. */
+  nameHint?: (name: string) => string | undefined
   /** The badge's label when the row is recently classified; no badge when absent. */
   recentlyClassifiedLabel?: string
   menuLabel: string
@@ -78,6 +81,7 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
   savedName,
   namePlaceholder,
   nameTestID,
+  nameHint,
   recentlyClassifiedLabel,
   menuLabel,
   menuEntries,
@@ -108,17 +112,28 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
     <Controller
       control={session.form.control}
       name={nameField}
-      render={({ field }) => (
-        <InlineEditableName
-          value={field.value}
-          onChange={field.onChange}
-          savedValue={savedName}
-          placeholder={namePlaceholder}
-          size="lg"
-          disabled={blocked}
-          disabledReason={blockedReason}
-        />
-      )}
+      render={({ field }) => {
+        const hint = nameHint?.(field.value)
+        // The wrapper always renders: a conditional one would remount the field mid-edit.
+        return (
+          <View className="gap-0.5">
+            <InlineEditableName
+              value={field.value}
+              onChange={field.onChange}
+              savedValue={savedName}
+              placeholder={namePlaceholder}
+              size="lg"
+              disabled={blocked}
+              disabledReason={blockedReason}
+            />
+            {hint != null ? (
+              <Text size="xs" variant="muted">
+                {hint}
+              </Text>
+            ) : null}
+          </View>
+        )
+      }}
     />
   )
   return (

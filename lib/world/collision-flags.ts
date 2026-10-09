@@ -1,5 +1,5 @@
 import type { PipelineAction } from '@/lib/actions'
-import type { Entity } from '@/lib/db'
+import type { Entity, EntityKind } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 type EntityUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
@@ -7,6 +7,22 @@ type EntityUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
 /** The classifier's namesake rule: same kind, same normalizeTerm name. */
 export function namesakeKey(entity: Pick<Entity, 'kind' | 'name'>): string {
   return `${entity.kind}:${normalizeTerm(entity.name)}`
+}
+
+/**
+ * Whether a row outside `exclude` already answers to `name` under the namesake rule (staged and
+ * retired rows count): world.md → Rename's hint, which warns and never blocks.
+ */
+export function nameTakenByOther(input: {
+  kind: EntityKind
+  name: string
+  /** The branch's entities. */
+  entities: readonly Entity[]
+  exclude: ReadonlySet<string>
+}): boolean {
+  if (input.name.trim() === '') return false
+  const key = namesakeKey({ kind: input.kind, name: input.name })
+  return input.entities.some((e) => !input.exclude.has(e.id) && namesakeKey(e) === key)
 }
 
 function countKeys(rows: Iterable<Pick<Entity, 'kind' | 'name'>>): Map<string, number> {
