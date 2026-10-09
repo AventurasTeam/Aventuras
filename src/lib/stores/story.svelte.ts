@@ -2844,13 +2844,18 @@ class StoryStore {
    * Shows rows already written for `expected`, skipping any a reload already brought in; a
    * no-op once another story or branch is open.
    */
-  appendImportedLorebookEntries(entries: Entry[], expected: BranchScope): void {
+  async appendImportedLorebookEntries(entries: Entry[], expected: BranchScope): Promise<void> {
     if (entries.length === 0 || !this.isOpen(expected)) return
     const shown = new Set(this.lorebookEntries.map((e) => e.id))
     const fresh = entries.filter((e) => !shown.has(e.id))
     if (fresh.length === 0) return
     this.lorebookEntries = [...this.lorebookEntries, ...fresh]
     this.invalidateRetrievalCache()
+    const ctx = this.recordContext()
+    await this.commit(
+      [],
+      fresh.map((e) => this.record(ctx, 'lorebook_entry', e.id, 'create', null, e)),
+    )
   }
 
   /**

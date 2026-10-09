@@ -35,6 +35,7 @@ const WRITE_METHODS = [
   'addLorebookEntries',
   'updateLorebookEntry',
   'deleteLorebookEntries',
+  'appendImportedLorebookEntries',
 ]
 
 describe('store writes', () => {
