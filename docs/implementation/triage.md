@@ -104,15 +104,6 @@ slice-planning gate forces its resolution before that slice is planned.
   fix lands the canon name and the back / Esc gating together; until then
   `component-inventory.md`'s "every shipped primitive matches its spec" is
   untrue for `Sheet`. Added in 4.5a's slice review, 2026-10-07.
-- **Narrative reflow on Browse rail toggle jumps the reading position.**
-  Measured by hand on desktop at a 1050 px window, hero story scrolled to
-  about 45% (`scrollTop` 3548, unchanged by the toggle): the narrative
-  scroller's width goes 739 px to 1007 px as the rail collapses, and the
-  paragraph at the top of the viewport moves +72 px on expand and -72 px on
-  collapse, so the reader loses a few lines of place. The Android tablet
-  expand shows the same. Canon's anchor rule
-  ([`reader-composer.md → Anchor preservation under shifts`](../ui/screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts))
-  names no rail-toggle scenario. Raised in 4.5a, 2026-10-07.
 - **The rail's happening list and the Plot pane duplicate the entry-index
   status block.** A shared `EntryIndexStatus` (title, body, retry) would
   replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in

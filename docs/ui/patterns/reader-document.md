@@ -92,7 +92,9 @@ changes _between_ the leading row and the viewport (reasoning
 expansion, footer re-wrap above the fold) are deliberately
 uncompensated — [validated acceptable](#validation-record) as
 felt on device; the rule extends naturally (anchor to the topmost
-in-viewport row instead) if they ever measure.
+in-viewport row instead) if they ever measure. A width reflow did
+measure, so it takes that extension
+([`reader-composer.md → Anchor preservation under shifts`](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)).
 
 Open-at-bottom is a document concern: land on the last entry
 before first paint and re-assert per frame until layout settles —

@@ -1761,6 +1761,23 @@ own.
   action to the Sheet's `onDismiss` is the likelier fix, since lifting the
   `PortalHost` above gorhom would put Select's phone sheet under any
   Dialog. Routed from triage 2026-10-09.
+- **M9.5 — Narrative reflow on Browse rail toggle jumps the reading position.**
+  Measured by hand on desktop at a 1050 px window, hero story scrolled to
+  about 45% (`scrollTop` 3548, unchanged by the toggle): the narrative
+  scroller's width goes 739 px to 1007 px as the rail collapses, and the
+  paragraph at the top of the viewport moves +72 px on expand and -72 px on
+  collapse, so the reader loses a few lines of place. The Android tablet
+  expand shows the same. Canon's anchor rule
+  ([`reader-composer.md → Anchor preservation under shifts`](../ui/screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts))
+  names no rail-toggle scenario. Raised in 4.5a, 2026-10-07. Decided
+  2026-10-09 (developer): compensate, and canon now names width reflow as
+  its fourth, compensated scenario. Any width change does it: resize, a
+  Fold unfold, orientation. The jump grows with the text above the
+  viewport. The shipped anchor rule can't catch it: its effect is keyed on
+  the row window, so a resize never runs it, and a reflow leaves the
+  window's leading row where it was. Needs the topmost in-viewport row's
+  offset held across the change, through the rail's width animation, with
+  a resize observer as the trigger. Routed from triage 2026-10-09.
 - **M9.5 — Bottom Sheets on web move no focus in and return none on close.**
   [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
   trap Tab focus; the primitive neither focuses into the Sheet nor restores
