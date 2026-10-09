@@ -35,10 +35,11 @@ import {
   isContinuous,
   lastCompletedEntry,
   lastHeaderOnLine,
+  rowsOf,
   type RecordContext,
   type TrackedState,
 } from '#lib/services/stateTracking/index.ts'
-import { rollbackService } from '#lib/services/rollbackService.ts'
+import { planRollback, rollbackService, type RollbackSummary } from '#lib/services/rollbackService.ts'
 import { ui } from './ui.svelte'
 import {
   analyzeTimeline,
@@ -1206,8 +1207,49 @@ class StoryStore {
     return entry
   }
 
+  /** Undoes the world state recorded for entries at or after `position` on this branch. */
+  private async rollbackFrom(position: number, keepManual: boolean): Promise<RollbackSummary> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    return rollbackService.rollbackFromPosition({
+      storyId: this.currentStory.id,
+      branchId: this.currentStory.currentBranchId ?? null,
+      fromPosition: position,
+      entries: this.entries,
+      state: this.trackedState(),
+      records: await this.lineRecords(),
+      keepManual,
+    })
+  }
+
+  /**
+   * The manual changes a revert-on-delete from this entry would undo, and those that could not
+   * be kept. Empty when the delete would not revert anything.
+   */
+  async previewRevert(
+    entryId: string,
+  ): Promise<{ manual: WorldStateChangeRecord[]; unkeepable: WorldStateChangeRecord[] }> {
+    const entry = this.entries.find((e) => e.id === entryId)
+    const reverts =
+      settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
+    if (!this.currentStory || !entry || !reverts) return { manual: [], unkeepable: [] }
+    const plan = planRollback({
+      storyId: this.currentStory.id,
+      branchId: this.currentStory.currentBranchId ?? null,
+      fromPosition: entry.position,
+      entries: this.entries,
+      state: this.trackedState(),
+      records: await this.lineRecords(),
+      keepManual: true,
+    })
+    return { manual: plan.manual, unkeepable: plan.unkeepable }
+  }
+
   // Delete a story entry
-  async deleteEntry(entryId: string, holder?: GenerationLease): Promise<void> {
+  async deleteEntry(
+    entryId: string,
+    holder?: GenerationLease,
+    opts?: { keepManual?: boolean },
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existingEntry = this.assertEntryDeletable(entryId, holder)
@@ -1223,11 +1265,10 @@ class StoryStore {
       this.assertNoBranchForkAtOrAfter(existingEntry.position)
 
       // Run rollback to undo world state changes for this entry and all after it
-      const rollbackSummary = await rollbackService.rollbackFromPosition(
-        this.currentStory.id,
-        currentBranchId ?? null,
+      // Manual changes are undone only when the reader chose so.
+      const rollbackSummary = await this.rollbackFrom(
         existingEntry.position,
-        this.entries,
+        opts?.keepManual ?? true,
       )
 
       log('Rollback summary:', rollbackSummary)
@@ -1348,14 +1389,10 @@ class StoryStore {
     let timeUndone = false
 
     try {
-      const summary = await rollbackService.rollbackFromPosition(
-        this.currentStory.id,
-        currentBranchId ?? null,
-        entry.position,
-        this.entries,
-      )
+      // The reader asked to redo the narration, not to lose their own edits since.
+      const summary = await this.rollbackFrom(entry.position, true)
       log('Regenerate rollback summary:', summary)
-      entitiesUndone = summary.entriesWithDelta > 0
+      entitiesUndone = summary.entriesWithRecords > 0
       timeUndone = summary.restoredTimeTracker
     } catch (error) {
       console.error('[StoryStore] Rollback failed before regenerate:', error)
@@ -1848,12 +1885,7 @@ class StoryStore {
 
     if (rollbackEnabled) {
       try {
-        const rollbackSummary = await rollbackService.rollbackFromPosition(
-          this.currentStory.id,
-          this.currentStory.currentBranchId ?? null,
-          position,
-          this.entries,
-        )
+        const rollbackSummary = await this.rollbackFrom(position, true)
         log('Rollback before deleteEntriesFromPosition:', rollbackSummary)
       } catch (error) {
         console.error('[StoryStore] Rollback failed, proceeding with entry deletion:', error)
@@ -2070,6 +2102,13 @@ class StoryStore {
       kind: 'break',
     }
     await this.commit([], [brk])
+  }
+
+  /** The current name of a tracked row, for showing a change to the reader. */
+  trackedName(type: TrackedEntityType, id: string): string | null {
+    const row = rowsOf(this.trackedState(), type).find((r) => r.id === id)
+    if (!row) return null
+    return 'title' in row ? row.title : row.name
   }
 
   private trackedState(): TrackedState {

@@ -1,294 +1,162 @@
 /**
- * RollbackService — Undoes world state changes by reversing deltas in order.
+ * RollbackService — undoes the world state recorded for entries from a position onward.
  *
- * When entries are deleted from a position onward, this service:
- * 1. Collects entries (position DESC) that have world_state_delta
- * 2. For each delta (newest first):
- *    - Deletes entities that were CREATED by that classification
- *    - Restores entities that were UPDATED to their before-state
- * 3. Restores current location and time tracker from the earliest rolled-back delta
- * 4. Cleans up auto-snapshots after the rollback position
+ * The plan comes from the reversal engine (`services/stateTracking`) over the live state, so
+ * every recorded change is undone newest first, and is applied in one transaction: a revert
+ * lands whole or not at all. Entries recorded before change records existed are read from
+ * their `world_state_delta`.
  */
 
-import type { WorldStateDelta, StoryEntry, TimeTracker } from '#lib/types/index.ts'
-import { database } from './database'
+import type { StoryEntry, TrackedEntityType, WorldStateRecord } from '#lib/types/index.ts'
+import { database, type DbStatement } from './database'
+import {
+  fromWorldStateDelta,
+  planReversal,
+  type ReversalOp,
+  type ReversalPlan,
+  type TrackedRow,
+  type TrackedState,
+} from './stateTracking'
 import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('RollbackService')
 
-class RollbackService {
-  /**
-   * Roll back world state changes for entries at position >= fromPosition.
-   * Processes deltas in reverse order (newest first) to correctly undo changes.
-   *
-   * @param storyId The story ID
-   * @param branchId The branch ID (null for main branch)
-   * @param fromPosition The position to roll back from (inclusive)
-   * @param entries The in-memory entries array (will be filtered for relevant entries)
-   * @returns Summary of what was rolled back
-   */
-  async rollbackFromPosition(
-    storyId: string,
-    branchId: string | null,
-    fromPosition: number,
-    entries: StoryEntry[],
-  ): Promise<RollbackSummary> {
-    const summary: RollbackSummary = {
-      entriesProcessed: 0,
-      entriesWithDelta: 0,
-      entriesWithoutDelta: 0,
-      deletedCharacters: 0,
-      deletedLocations: 0,
-      deletedItems: 0,
-      deletedStoryBeats: 0,
-      restoredCharacters: 0,
-      restoredLocations: 0,
-      restoredItems: 0,
-      restoredStoryBeats: 0,
-      restoredTimeTracker: false,
-      restoredCurrentLocation: false,
-    }
-
-    // Get entries to rollback, sorted position DESC (newest first)
-    const entriesToRollback = entries
-      .filter((e) => e.position >= fromPosition)
-      .sort((a, b) => b.position - a.position)
-
-    if (entriesToRollback.length === 0) {
-      log('No entries to rollback from position', fromPosition)
-      return summary
-    }
-
-    log('Rolling back', entriesToRollback.length, 'entries from position', fromPosition)
-
-    // Track the earliest delta's before-state for location and time restoration
-    let earliestTimeTracker: TimeTracker | null | undefined = undefined
-    let earliestCurrentLocationId: string | null | undefined = undefined
-
-    for (const entry of entriesToRollback) {
-      summary.entriesProcessed++
-
-      const delta = entry.worldStateDelta
-      if (!delta) {
-        summary.entriesWithoutDelta++
-        if (entry.type === 'narration') {
-          log('Entry at position', entry.position, 'has no delta (pre-Phase 1 entry), skipping')
-        }
-        continue
-      }
-
-      summary.entriesWithDelta++
-
-      // 1. Delete entities that were CREATED by this classification
-      await this.deleteCreatedEntities(delta, summary)
-
-      // 2. Restore entities that were UPDATED to their before-state
-      await this.restoreUpdatedEntities(delta, summary)
-
-      // Track the earliest (lowest position) delta's before-state
-      // This represents the state BEFORE any of the rolled-back entries existed
-      earliestTimeTracker = delta.previousState.timeTracker
-      earliestCurrentLocationId = delta.previousState.currentLocationId
-    }
-
-    // 3. Restore time tracker from the earliest rolled-back delta
-    if (earliestTimeTracker !== undefined) {
-      try {
-        if (earliestTimeTracker === null) {
-          await database.clearTimeTracker(storyId)
-        } else {
-          await database.saveTimeTracker(storyId, earliestTimeTracker)
-        }
-        summary.restoredTimeTracker = true
-        log('Time tracker restored to', earliestTimeTracker)
-      } catch (error) {
-        console.error('[RollbackService] Failed to restore time tracker:', error)
-      }
-    }
-
-    // 4. Restore current location from the earliest rolled-back delta
-    if (earliestCurrentLocationId !== undefined) {
-      try {
-        if (earliestCurrentLocationId) {
-          await database.setCurrentLocation(storyId, earliestCurrentLocationId)
-        } else {
-          // No current location before rollback — unset all
-          await this.clearCurrentLocation(storyId, branchId)
-        }
-        summary.restoredCurrentLocation = true
-        log('Current location restored to', earliestCurrentLocationId)
-      } catch (error) {
-        console.error('[RollbackService] Failed to restore current location:', error)
-      }
-    }
-
-    // 5. Clean up auto-snapshots after the rollback position
-    try {
-      await database.deleteWorldStateSnapshotsAfter(storyId, branchId, fromPosition - 1)
-      log('Cleaned up snapshots after position', fromPosition - 1)
-    } catch (error) {
-      console.error('[RollbackService] Failed to clean up snapshots:', error)
-    }
-
-    // 6. Clean up no-op COW overrides (overrides whose data matches the original)
-    try {
-      const cleaned = await database.cleanupNoopOverrides(storyId, branchId)
-      if (cleaned > 0) {
-        log('Cleaned up', cleaned, 'no-op COW override(s)')
-      }
-    } catch (error) {
-      console.error('[RollbackService] Failed to clean up no-op overrides:', error)
-    }
-
-    log('Rollback complete:', summary)
-    return summary
-  }
-
-  /**
-   * Delete entities that were created by a classification.
-   */
-  private async deleteCreatedEntities(
-    delta: WorldStateDelta,
-    summary: RollbackSummary,
-  ): Promise<void> {
-    const { createdEntities } = delta
-
-    for (const id of createdEntities.characterIds) {
-      try {
-        await database.deleteCharacter(id)
-        summary.deletedCharacters++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to delete character', id, error)
-      }
-    }
-
-    for (const id of createdEntities.locationIds) {
-      try {
-        await database.deleteLocation(id)
-        summary.deletedLocations++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to delete location', id, error)
-      }
-    }
-
-    for (const id of createdEntities.itemIds) {
-      try {
-        await database.deleteItem(id)
-        summary.deletedItems++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to delete item', id, error)
-      }
-    }
-
-    for (const id of createdEntities.storyBeatIds) {
-      try {
-        await database.deleteStoryBeat(id)
-        summary.deletedStoryBeats++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to delete story beat', id, error)
-      }
-    }
-  }
-
-  /**
-   * Restore entities that were updated to their before-state values.
-   */
-  private async restoreUpdatedEntities(
-    delta: WorldStateDelta,
-    summary: RollbackSummary,
-  ): Promise<void> {
-    const { previousState } = delta
-
-    for (const charBefore of previousState.characters) {
-      try {
-        await database.updateCharacter(charBefore.id, {
-          status: charBefore.status as 'active' | 'inactive' | 'deceased',
-          relationship: charBefore.relationship,
-          traits: charBefore.traits,
-          visualDescriptors: charBefore.visualDescriptors,
-          ...(charBefore.metadata !== undefined ? { metadata: charBefore.metadata } : {}),
-        })
-        summary.restoredCharacters++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to restore character', charBefore.id, error)
-      }
-    }
-
-    for (const locBefore of previousState.locations) {
-      try {
-        await database.updateLocation(locBefore.id, {
-          visited: locBefore.visited,
-          current: locBefore.current,
-          description: locBefore.description,
-          ...(locBefore.metadata !== undefined ? { metadata: locBefore.metadata } : {}),
-        })
-        summary.restoredLocations++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to restore location', locBefore.id, error)
-      }
-    }
-
-    for (const itemBefore of previousState.items) {
-      try {
-        await database.updateItem(itemBefore.id, {
-          quantity: itemBefore.quantity,
-          equipped: itemBefore.equipped,
-          location: itemBefore.location,
-          ...(itemBefore.metadata !== undefined ? { metadata: itemBefore.metadata } : {}),
-        })
-        summary.restoredItems++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to restore item', itemBefore.id, error)
-      }
-    }
-
-    for (const beatBefore of previousState.storyBeats) {
-      try {
-        await database.updateStoryBeat(beatBefore.id, {
-          status: beatBefore.status as 'pending' | 'active' | 'completed' | 'failed',
-          description: beatBefore.description,
-          resolvedAt: beatBefore.resolvedAt,
-          ...(beatBefore.metadata !== undefined ? { metadata: beatBefore.metadata } : {}),
-        })
-        summary.restoredStoryBeats++
-      } catch (error) {
-        console.warn('[RollbackService] Failed to restore story beat', beatBefore.id, error)
-      }
-    }
-  }
-
-  /**
-   * Clear current location flag for all locations in a story/branch.
-   */
-  private async clearCurrentLocation(storyId: string, branchId: string | null): Promise<void> {
-    // Use raw update to clear all current flags — no single entity to "set current"
-    const locations =
-      branchId === null
-        ? await database.getLocationsForBranch(storyId, null)
-        : await database.getLocationsForBranch(storyId, branchId)
-
-    for (const loc of locations) {
-      if (loc.current) {
-        await database.updateLocation(loc.id, { current: false })
-      }
-    }
-  }
+export interface RollbackInput {
+  storyId: string
+  branchId: string | null
+  /** Entries at or after this position are reverted. */
+  fromPosition: number
+  /** Every entry visible on the branch. */
+  entries: StoryEntry[]
+  /** The branch's live world state. */
+  state: TrackedState
+  /** Change records on the branch line. */
+  records: WorldStateRecord[]
+  keepManual: boolean
 }
 
 export interface RollbackSummary {
   entriesProcessed: number
-  entriesWithDelta: number
-  entriesWithoutDelta: number
-  deletedCharacters: number
-  deletedLocations: number
-  deletedItems: number
-  deletedStoryBeats: number
-  restoredCharacters: number
-  restoredLocations: number
-  restoredItems: number
-  restoredStoryBeats: number
+  entriesWithRecords: number
+  changesUndone: number
+  manualKept: number
+  unkeepable: number
   restoredTimeTracker: boolean
-  restoredCurrentLocation: boolean
+}
+
+/** The records to undo for a revert from `fromPosition`, older delta documents included. */
+function recordsFrom(input: RollbackInput): WorldStateRecord[] {
+  const reverted = input.entries.filter((e) => e.position >= input.fromPosition)
+  const ids = new Set(reverted.map((e) => e.id))
+  const records = input.records.filter((r) => ids.has(r.entryId))
+  const recorded = new Set(records.map((r) => r.entryId))
+  for (const entry of reverted) {
+    if (entry.worldStateDelta && !recorded.has(entry.id)) {
+      records.push(...fromWorldStateDelta(entry, entry.worldStateDelta))
+    }
+  }
+  return records
+}
+
+export function planRollback(input: RollbackInput): ReversalPlan & { records: WorldStateRecord[] } {
+  const records = recordsFrom(input)
+  const plan = planReversal({
+    state: input.state,
+    records,
+    entryPositions: new Map(input.entries.map((e) => [e.id, e.position])),
+    keepManual: input.keepManual,
+  })
+  return { ...plan, records }
+}
+
+function statementsFor(storyId: string, op: ReversalOp): DbStatement[] {
+  if (op.kind === 'clock') {
+    return [
+      op.timeTracker
+        ? database.saveTimeTrackerStatement(storyId, op.timeTracker)
+        : database.clearTimeTrackerStatement(storyId),
+    ]
+  }
+  const t = op.entityType
+  switch (op.kind) {
+    case 'delete':
+      return [DELETE[t](op.id)]
+    case 'softDelete':
+      return [MARK_DELETED[t](op.id)]
+    case 'update': {
+      const stmt = UPDATE[t](op.id, op.fields)
+      return stmt ? [stmt] : []
+    }
+    case 'restore':
+      return [INSERT_OR_REPLACE[t]({ ...op.row, deleted: false } as TrackedRow)]
+  }
+}
+
+const DELETE: Record<TrackedEntityType, (id: string) => DbStatement> = {
+  character: (id) => database.deleteCharacterStatement(id),
+  location: (id) => database.deleteLocationStatement(id),
+  item: (id) => database.deleteItemStatement(id),
+  story_beat: (id) => database.deleteStoryBeatStatement(id),
+  lorebook_entry: (id) => database.deleteEntryStatement(id),
+}
+
+const MARK_DELETED: Record<TrackedEntityType, (id: string) => DbStatement> = {
+  character: (id) => database.markCharacterDeletedStatement(id),
+  location: (id) => database.markLocationDeletedStatement(id),
+  item: (id) => database.markItemDeletedStatement(id),
+  story_beat: (id) => database.markStoryBeatDeletedStatement(id),
+  lorebook_entry: (id) => database.markEntryDeletedStatement(id),
+}
+
+const UPDATE: Record<
+  TrackedEntityType,
+  (id: string, fields: Record<string, unknown>) => DbStatement | null
+> = {
+  character: (id, f) => database.updateCharacterStatement(id, f),
+  location: (id, f) => database.updateLocationStatement(id, f),
+  item: (id, f) => database.updateItemStatement(id, f),
+  story_beat: (id, f) => database.updateStoryBeatStatement(id, f),
+  lorebook_entry: (id, f) => database.updateEntryStatement(id, f),
+}
+
+const INSERT_OR_REPLACE: Record<TrackedEntityType, (row: TrackedRow) => DbStatement> = {
+  character: (row) => database.addCharacterStatement(row as never, true),
+  location: (row) => database.addLocationStatement(row as never, true),
+  item: (row) => database.addItemStatement(row as never, true),
+  story_beat: (row) => database.addStoryBeatStatement(row as never, true),
+  lorebook_entry: (row) => database.addEntryStatement(row as never, true),
+}
+
+class RollbackService {
+  /** Undoes the world state of entries at or after `fromPosition`. Throws without writing. */
+  async rollbackFromPosition(input: RollbackInput): Promise<RollbackSummary> {
+    const plan = planRollback(input)
+    const statements = plan.ops.flatMap((op) => statementsFor(input.storyId, op))
+    await database.transaction(statements)
+
+    try {
+      await database.deleteWorldStateSnapshotsAfter(
+        input.storyId,
+        input.branchId,
+        input.fromPosition - 1,
+      )
+      const cleaned = await database.cleanupNoopOverrides(input.storyId, input.branchId)
+      if (cleaned > 0) log('Cleaned up', cleaned, 'no-op COW override(s)')
+    } catch (error) {
+      console.error('[RollbackService] Cleanup after rollback failed:', error)
+    }
+
+    const summary: RollbackSummary = {
+      entriesProcessed: input.entries.filter((e) => e.position >= input.fromPosition).length,
+      entriesWithRecords: new Set(plan.records.map((r) => r.entryId)).size,
+      changesUndone: plan.records.filter((r) => r.kind === 'change').length,
+      manualKept: input.keepManual ? plan.manual.length - plan.unkeepable.length : 0,
+      unkeepable: input.keepManual ? plan.unkeepable.length : 0,
+      restoredTimeTracker: plan.ops.some((op) => op.kind === 'clock'),
+    }
+    log('Rollback complete:', summary)
+    return summary
+  }
 }
 
 export const rollbackService = new RollbackService()

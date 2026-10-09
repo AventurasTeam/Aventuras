@@ -12,7 +12,14 @@
 </script>
 
 <script lang="ts">
-  import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '#lib/types/index.ts'
+  import type {
+    Character,
+    StoryEntry,
+    EmbeddedImage,
+    TimeTracker,
+    WorldStateChangeRecord,
+  } from '#lib/types/index.ts'
+  import { describeChange } from '#lib/services/stateTracking/index.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
@@ -324,6 +331,21 @@
   let isEditing = $state(false)
   let editContent = $state('')
   let isDeleting = $state(false)
+  // Manual changes a revert-on-delete from here would undo; null until known.
+  let revertPreview = $state<{
+    manual: WorldStateChangeRecord[]
+    unkeepable: WorldStateChangeRecord[]
+  } | null>(null)
+
+  async function startDelete() {
+    isDeleting = true
+    revertPreview = null
+    try {
+      revertPreview = await story.previewRevert(entry.id)
+    } catch (error) {
+      console.error('[StoryEntry] Could not preview the revert:', error)
+    }
+  }
 
   // Embedded images state
   let embeddedImages = $state<EmbeddedImage[]>([])
@@ -1374,9 +1396,9 @@
     editContent = ''
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(keepManual = true) {
     try {
-      await story.deleteEntry(entry.id)
+      await story.deleteEntry(entry.id, undefined, { keepManual })
       isDeleting = false
     } catch (error) {
       console.error('[StoryEntry] Failed to delete entry:', error)
@@ -1858,7 +1880,7 @@
     <Button
       variant="text"
       size="icon"
-      onclick={() => (isDeleting = true)}
+      onclick={startDelete}
       disabled={entriesLocked}
       class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
       title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
@@ -1932,12 +1954,55 @@
       </div>
     {:else if isDeleting}
       <div class="space-y-2">
-        <p class="text-muted-foreground text-sm">Delete this entry?</p>
-        <div class="flex gap-2">
-          <Button variant="destructive" size="sm" onclick={confirmDelete} class="h-9 px-3">
-            <Trash2 class="mr-1.5 h-4 w-4" />
-            Delete
-          </Button>
+        {#if revertPreview && revertPreview.manual.length > 0}
+          {@const unkeepable = new Set(revertPreview.unkeepable.map((r) => r.id))}
+          <p class="text-muted-foreground text-sm">
+            Delete this entry? The revert would also undo changes you made by hand:
+          </p>
+          <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
+            {#each revertPreview.manual as change (change.id)}
+              <li>
+                {describeChange(change, (type, id) => story.trackedName(type, id))}
+                {#if unkeepable.has(change.id)}
+                  <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="text-muted-foreground text-sm">Delete this entry?</p>
+        {/if}
+        <div class="flex flex-wrap gap-2">
+          {#if revertPreview && revertPreview.manual.length > 0}
+            <Button
+              variant="destructive"
+              size="sm"
+              onclick={() => confirmDelete(true)}
+              class="h-9 px-3"
+            >
+              <Trash2 class="mr-1.5 h-4 w-4" />
+              Delete, keep my edits
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onclick={() => confirmDelete(false)}
+              class="h-9 px-3"
+            >
+              <Trash2 class="mr-1.5 h-4 w-4" />
+              Delete, undo them too
+            </Button>
+          {:else}
+            <Button
+              variant="destructive"
+              size="sm"
+              onclick={() => confirmDelete()}
+              class="h-9 px-3"
+            >
+              <Trash2 class="mr-1.5 h-4 w-4" />
+              Delete
+            </Button>
+          {/if}
           <Button
             variant="secondary"
             size="sm"
