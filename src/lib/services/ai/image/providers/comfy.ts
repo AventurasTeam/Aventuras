@@ -367,7 +367,8 @@ function getApi(baseUrl: string): ComfyApi {
     api.destroy()
   }
   api.on('connection_error', evict)
-  api.on('reconnection_failed', evict)
+  // Dispatched by the SDK but missing from its TComfyAPIEventMap, so on() rejects it.
+  api.addEventListener('reconnection_failed', evict)
 
   apis.set(baseUrl, api)
   // init() issues its first request synchronously, so the patch above must already be in place.
