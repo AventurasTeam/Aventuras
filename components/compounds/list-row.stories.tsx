@@ -28,6 +28,16 @@ const meta: Meta<typeof ListRow> = {
 export default meta
 type Story = StoryObj<typeof ListRow>
 
+/** Hovers the row with a real pointer and returns its background; null outside Vitest. */
+async function backgroundOnHover(name: string): Promise<{ idle: string; hovered: string } | null> {
+  const row = screen.getByRole('button', { name })
+  const idle = getComputedStyle(row).backgroundColor
+  const browser = await import('vitest/browser').catch(() => null)
+  if (browser == null) return null
+  await browser.userEvent.hover(row)
+  return { idle, hovered: getComputedStyle(row).backgroundColor }
+}
+
 /**
  * Minimal — no leading, no meta, no trailing. Single-line label.
  * The label is what the row carries when nothing else is set.
@@ -123,6 +133,11 @@ export const RecentlyClassifiedFresh: Story = {
       onPress={fn()}
     />
   ),
+  // The tint is the signal; hovering must not replace it.
+  play: async () => {
+    const bg = await backgroundOnHover('Lord Hamasaki')
+    if (bg != null) expect(bg.hovered).toBe(bg.idle)
+  },
 }
 
 /**
@@ -174,6 +189,10 @@ export const Selected: Story = {
       onPress={fn()}
     />
   ),
+  play: async () => {
+    const bg = await backgroundOnHover('Aiko')
+    if (bg != null) expect(bg.hovered).toBe(bg.idle)
+  },
 }
 
 /**

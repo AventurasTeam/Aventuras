@@ -149,11 +149,6 @@ slice-planning gate forces its resolution before that slice is planned.
 - **`MultiSelect` nests a checkbox role inside a checkbox role.**
   `components/ui/multi-select.tsx:388-401`: the outer one shows no checked
   state on web. Raised in 4.5a review, 2026-10-07.
-- **A fresh-tinted row probably loses its tint on web hover.**
-  `components/compounds/list-row.tsx:89-91` sets the fresh tint and
-  `hover:bg-tint-hover` as backgrounds on the same element, so hover likely
-  replaces the tint. Reasoned from the classes, not rendered. Raised in 4.5a
-  review, 2026-10-07.
 - **The rail's happening list and the Plot pane duplicate the entry-index
   status block.** A shared `EntryIndexStatus` (title, body, retry) would
   replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in
