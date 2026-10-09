@@ -196,6 +196,26 @@ function StatefulList({ disabled }: { disabled?: boolean }) {
   )
 }
 
+// One checkbox per option, carrying its own state, and Space toggles it as a checkbox does.
+export const RowIsTheOneCheckbox: Story = {
+  render: () => (
+    <View className="w-72 p-4">
+      <StatefulList />
+    </View>
+  ),
+  play: async () => {
+    expect(screen.getAllByRole('checkbox')).toHaveLength(OPTIONS.length)
+    const row = screen.getByRole('checkbox', { name: 'retrieval' })
+    expect(row).not.toBeChecked()
+    row.focus()
+    await userEvent.keyboard(' ')
+    await waitFor(() => expect(row).toBeChecked())
+    expect(screen.getByText('selected:2')).toBeVisible()
+    await userEvent.tab()
+    expect(document.activeElement).toBe(screen.getAllByRole('checkbox')[2])
+  },
+}
+
 // The bulk actions sit outside the row list, so gating only onToggle left Select all and
 // Clear all live while a save was in flight — enough to submit one scene and show the
 // failure over another. Asserted as disabled rather than as clicks that change nothing:

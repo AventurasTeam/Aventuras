@@ -380,11 +380,25 @@ function NativeWidthSync({ children }: { children: React.ReactNode }) {
 
 function OptionRow({ option, checked, onPress, disabled, insideSheet }: OptionRowProps) {
   const handlePress = useCallback(() => onPress(option.value), [onPress, option.value])
+  // RN-Web presses a checkbox-role element on Enter only, and drops accessibilityState, so the
+  // row carries its own checked state and Space. Cast: RN's Pressable types omit onKeyDown.
+  const webRowProps: object | undefined =
+    Platform.OS === 'web'
+      ? {
+          'aria-checked': checked,
+          onKeyDown: (event: { key: string; preventDefault(): void }) => {
+            if (event.key !== ' ' || disabled) return
+            event.preventDefault()
+            handlePress()
+          },
+        }
+      : undefined
 
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked, disabled }}
+      {...webRowProps}
       onPress={handlePress}
       disabled={disabled}
       className={cn(
@@ -396,7 +410,14 @@ function OptionRow({ option, checked, onPress, disabled, insideSheet }: OptionRo
         option.disabled && 'opacity-50',
       )}
     >
-      <Checkbox checked={checked} onCheckedChange={handlePress} disabled={disabled} />
+      {/* Drawn only: the row is the checkbox, so this one takes no tab stop or role. */}
+      <Checkbox
+        checked={checked}
+        onCheckedChange={handlePress}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden
+      />
       <Text size="sm" className="flex-1 text-fg-primary">
         {option.label ?? option.value}
       </Text>

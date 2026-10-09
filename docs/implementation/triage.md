@@ -146,9 +146,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the Sheet stays open while the host holds `open=false`. Fix idea: hold the
   dismiss until gorhom reports the opening animation (`onAnimate` or
   `onChange`). Raised in 4.5a review, 2026-10-07.
-- **`MultiSelect` nests a checkbox role inside a checkbox role.**
-  `components/ui/multi-select.tsx:388-401`: the outer one shows no checked
-  state on web. Raised in 4.5a review, 2026-10-07.
 - **The rail's happening list and the Plot pane duplicate the entry-index
   status block.** A shared `EntryIndexStatus` (title, body, retry) would
   replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in
