@@ -402,7 +402,11 @@
         tokenThreshold: story.memoryConfig.tokenThreshold,
         chapterBuffer: story.memoryConfig.chapterBuffer,
       }),
-      loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
+      // Built once the narration is in, so the session's changes attach to this turn.
+      loreCallbacks: buildLoreManagementCallbacks(
+        { storyId, branchId },
+        { origin: 'agent', entryId: story.entries[story.entries.length - 1]?.id },
+      ),
       loreUICallbacks: buildLoreManagementUICallbacks(),
     }
   }

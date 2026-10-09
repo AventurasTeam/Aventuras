@@ -20,6 +20,19 @@ export function isContinuous(
   )
 }
 
+/** The latest entry not part of a turn still being generated. */
+export function lastCompletedEntry<E extends Pick<StoryEntry, 'type'>>(
+  entries: E[],
+  generating: boolean,
+): E | null {
+  let last = entries.length - 1
+  if (generating) {
+    while (last >= 0 && entries[last].type !== 'user_action') last--
+    last--
+  }
+  return last >= 0 ? entries[last] : null
+}
+
 /** The last header on the line before `position`, and whether a break follows it. */
 export function lastHeaderOnLine(
   records: WorldStateRecord[],

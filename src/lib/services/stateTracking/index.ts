@@ -10,6 +10,7 @@ export { planReversal, type ReversalInput, type ReversalOp, type ReversalPlan } 
 export { fromWorldStateDelta } from './legacy'
 export {
   isContinuous,
+  lastCompletedEntry,
   lastHeaderOnLine,
   resolveRun,
   type AnchorCandidate,

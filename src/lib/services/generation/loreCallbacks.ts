@@ -11,7 +11,7 @@
  * is safe only because every access happens inside a callback, never at module scope.
  */
 
-import { story } from '#lib/stores/story.svelte.ts'
+import { story, type RecordOptions } from '#lib/stores/story.svelte.ts'
 import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import { ui } from '#lib/stores/ui.svelte.ts'
 import { aiService } from '#lib/services/ai/index.ts'
@@ -45,28 +45,32 @@ function assertScope(scope: LoreCallbackScope, action: string): void {
   )
 }
 
-export function buildLoreManagementCallbacks(scope: LoreCallbackScope): LoreManagementCallbacks {
+/** `record` says who the session's changes belong to: its origin and the entry they attach to. */
+export function buildLoreManagementCallbacks(
+  scope: LoreCallbackScope,
+  record: RecordOptions,
+): LoreManagementCallbacks {
   return {
     // `addLorebookEntry` assigns its own id, storyId and timestamps over whatever is
     // passed, so handing it the entry whole is both shorter and safer than listing the
     // fields to keep — a field added to `Entry` is carried without touching this.
     onCreateEntry: async (entry) => {
       assertScope(scope, `create "${entry.name}"`)
-      await story.addLorebookEntry(entry)
+      await story.addLorebookEntry(entry, record)
     },
     onUpdateEntry: async (id, updates) => {
       assertScope(scope, `update entry ${id}`)
-      await story.updateLorebookEntry(id, updates)
+      await story.updateLorebookEntry(id, updates, record)
     },
     onDeleteEntry: async (id) => {
       assertScope(scope, `delete entry ${id}`)
-      await story.deleteLorebookEntry(id)
+      await story.deleteLorebookEntry(id, record)
     },
     // Survivor first: deleting first loses every source if the insert then fails.
     onMergeEntries: async (entryIds, mergedEntry) => {
       assertScope(scope, `merge into "${mergedEntry.name}"`)
-      await story.addLorebookEntry(mergedEntry)
-      await story.deleteLorebookEntries(entryIds)
+      await story.addLorebookEntry(mergedEntry, record)
+      await story.deleteLorebookEntries(entryIds, record)
     },
     // The user's dismissals and the agent's are the same decision, so they share a table.
     // Addressed by scope directly: no store involved, so there is nothing to be stale.

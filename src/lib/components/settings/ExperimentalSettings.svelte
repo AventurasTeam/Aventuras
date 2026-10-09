@@ -36,7 +36,8 @@
   import { Separator } from '#lib/components/ui/separator/index.ts'
   import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { database } from '#lib/services/database.ts'
-  import { isAndroid, isIos } from '#lib/utils/platform.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { isAndroid } from '#lib/utils/platform.ts'
   import { autosize } from '#lib/utils/autosize.ts'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '#lib/utils/dialogFilters.ts'
@@ -44,6 +45,7 @@
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
   let stateTrackingChecked = $state(settings.experimentalFeatures.stateTracking)
+  let closingTracking = $state(false)
 
   let isBackingUp = $state(false)
   let backupResult = $state<{ success: boolean; message: string } | null>(null)
@@ -214,6 +216,17 @@
         return
       }
     }
+    if (!checked) {
+      // Before the setting changes: branches must still resolve as they did while tracked.
+      closingTracking = true
+      try {
+        await story.takeClosingSnapshots()
+      } catch (error) {
+        console.error('[ExperimentalSettings] Closing snapshots failed:', error)
+      } finally {
+        closingTracking = false
+      }
+    }
     await settings.updateExperimentalFeatures({ stateTracking: checked })
   }
 
@@ -374,13 +387,19 @@
           Record world state changes (deltas) on each story entry after AI classification. This is
           the foundation for rollback and lightweight branches.
         </p>
-        {#if settings.experimentalFeatures.stateTracking}
+        {#if closingTracking}
+          <p class="text-muted-foreground pt-1 text-xs italic">Saving where tracking stops…</p>
+        {:else if settings.experimentalFeatures.stateTracking}
           <p class="pt-1 text-xs font-medium text-amber-500">
-            Active — deltas will be recorded on new entries.
+            Active — every change to the world and the lorebook is recorded.
           </p>
         {/if}
       </div>
-      <Switch bind:checked={stateTrackingChecked} onCheckedChange={handleStateTrackingToggle} />
+      <Switch
+        bind:checked={stateTrackingChecked}
+        onCheckedChange={handleStateTrackingToggle}
+        disabled={closingTracking}
+      />
     </div>
 
     <!-- Rollback on Delete -->

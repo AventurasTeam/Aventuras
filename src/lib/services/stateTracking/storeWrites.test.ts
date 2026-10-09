@@ -54,3 +54,19 @@ describe('store writes', () => {
     expect(body).not.toContain('worldStateDelta')
   })
 })
+
+describe('batch chapterization', () => {
+  it('breaks the tracked run before it classifies', () => {
+    const body = bodyOf('chapterizeFromBeginning')
+    expect(body.indexOf('await this.recordBreak()')).toBeGreaterThan(-1)
+    expect(body.indexOf('await this.recordBreak()')).toBeLessThan(body.indexOf('service.run('))
+  })
+})
+
+describe('closing snapshots', () => {
+  it('snapshots only branches written to since tracking was turned on', () => {
+    const body = bodyOf('takeClosingSnapshots')
+    expect(body).toContain('database.getBranchesRecordedSince(since)')
+    expect(body).toContain('settings.experimentalFeatures.trackingEnabledSince')
+  })
+})

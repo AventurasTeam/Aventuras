@@ -6,6 +6,7 @@ import type {
 } from '#lib/types/index.ts'
 import {
   isContinuous,
+  lastCompletedEntry,
   lastHeaderOnLine,
   resolveRun,
   type AnchorCandidate,
@@ -192,5 +193,22 @@ describe('lastHeaderOnLine', () => {
     const { header: previous, breakSince } = lastHeaderOnLine([header(1)], positions, 2)
     expect(isContinuous(previous, 15, breakSince)).toBe(false)
     expect(isContinuous(previous, 5, breakSince)).toBe(true)
+  })
+})
+
+describe('lastCompletedEntry', () => {
+  const turn = [
+    { id: 'n60', type: 'narration' as const },
+    { id: 'a61', type: 'user_action' as const },
+    { id: 'n62', type: 'narration' as const },
+  ]
+
+  it('is the latest entry when nothing is generating', () => {
+    expect(lastCompletedEntry(turn, false)?.id).toBe('n62')
+  })
+
+  it('skips the turn in flight', () => {
+    expect(lastCompletedEntry(turn, true)?.id).toBe('n60')
+    expect(lastCompletedEntry(turn.slice(0, 2), true)?.id).toBe('n60')
   })
 })

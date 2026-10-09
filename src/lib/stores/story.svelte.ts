@@ -21,6 +21,7 @@ import type {
   ChangeOp,
   ChangeOrigin,
   TrackedEntityType,
+  WorldStateBreakRecord,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
   WorldStateRecord,
@@ -32,6 +33,7 @@ import {
   cloneState,
   diffStates,
   isContinuous,
+  lastCompletedEntry,
   lastHeaderOnLine,
   type RecordContext,
   type TrackedState,
@@ -1159,6 +1161,11 @@ class StoryStore {
    * `holder` is the generation's own lease, for the two paths that legitimately edit under one
    * — the error retry's delete of the failed entry, and the regenerate's undo.
    */
+  /** The latest entry that is not part of a turn still being generated. */
+  get lastCompletedEntryId(): string | null {
+    return lastCompletedEntry(this.entries, ui.isGenerating || !!this.generationLease)?.id ?? null
+  }
+
   private assertNotBusy(action: string, holder?: GenerationLease): void {
     // A restore is rewriting these very entries, which refuses everyone — holder included.
     if (this._isRetryInProgress) {
@@ -2047,6 +2054,22 @@ class StoryStore {
     )
     const onLine = new Set(this.entries.map((e) => e.id))
     return records.filter((r) => onLine.has(r.entryId))
+  }
+
+  /** Marks the latest entry as a point no reconstruction crosses. */
+  private async recordBreak(): Promise<void> {
+    const ctx = this.recordContext()
+    if (!ctx) return
+    const brk: WorldStateBreakRecord = {
+      id: crypto.randomUUID(),
+      storyId: ctx.storyId,
+      branchId: ctx.branchId,
+      entryId: ctx.entryId,
+      seq: 0,
+      createdAt: Date.now(),
+      kind: 'break',
+    }
+    await this.commit([], [brk])
   }
 
   private trackedState(): TrackedState {
@@ -4040,6 +4063,9 @@ class StoryStore {
     this.chapterizationCancelRequested = false
     this.chapterizationProgress = { current: 0, total: 0 }
 
+    // The batch classifies without per-entry records, so no tracked run may cross it.
+    if (options.includeClassification) await this.recordBreak()
+
     try {
       const service = new ChapterBatchService({
         buildAndSaveChapter: this.buildAndSaveChapter.bind(this),
@@ -4089,10 +4115,10 @@ class StoryStore {
           onClassificationProgress: (current, total) => {
             this.chapterizationClassificationProgress = { current, total }
           },
-          loreCallbacks: buildLoreManagementCallbacks({
-            storyId: this.currentStory.id,
-            branchId: this.currentStory.currentBranchId,
-          }),
+          loreCallbacks: buildLoreManagementCallbacks(
+            { storyId: this.currentStory.id, branchId: this.currentStory.currentBranchId },
+            { origin: 'agent' },
+          ),
           loreUICallbacks: buildLoreManagementUICallbacks({
             onStatus: (status) => {
               this.chapterizationStatus = status
@@ -4527,9 +4553,9 @@ class StoryStore {
     return branch
   }
 
-  private buildBranchLineage(branchId: string): Branch[] {
+  private buildBranchLineage(branchId: string, branches: Branch[] = this.branches): Branch[] {
     const lineage: Branch[] = []
-    let current: Branch | null = this.branches.find((b) => b.id === branchId) ?? null
+    let current: Branch | null = branches.find((b) => b.id === branchId) ?? null
     const visited = new SvelteSet<string>()
 
     while (current) {
@@ -4538,7 +4564,7 @@ class StoryStore {
       lineage.unshift(current)
       const parentId = current.parentBranchId
       if (!parentId) break
-      current = this.branches.find((b) => b.id === parentId) ?? null
+      current = branches.find((b) => b.id === parentId) ?? null
     }
 
     return lineage
@@ -4738,6 +4764,100 @@ class StoryStore {
   }
 
   /**
+   * The visible world state of a branch, read from the database. COW branches resolve through
+   * their lineage unless they hold a complete snapshot; full-copy branches load directly.
+   */
+  private async loadBranchWorldState(
+    storyId: string,
+    branchId: string | null,
+    branches: Branch[],
+  ): Promise<Omit<TrackedState, 'timeTracker'>> {
+    const lightweight = settings.experimentalFeatures.lightweightBranches
+    const direct = async () => {
+      const [characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
+        database.getCharactersForBranch(storyId, branchId),
+        database.getLocationsForBranch(storyId, branchId),
+        database.getItemsForBranch(storyId, branchId),
+        database.getStoryBeatsForBranch(storyId, branchId),
+        database.getEntriesForBranch(storyId, branchId),
+      ])
+      if (!lightweight) return { characters, locations, items, storyBeats, lorebookEntries }
+      return {
+        characters: characters.filter((c) => !c.deleted),
+        locations: locations.filter((l) => !l.deleted),
+        items: items.filter((i) => !i.deleted),
+        storyBeats: storyBeats.filter((b) => !b.deleted),
+        lorebookEntries: lorebookEntries.filter((e) => !e.deleted),
+      }
+    }
+
+    // Main, a full-copy branch, or a COW branch holding its own complete entity set.
+    if (branchId === null || !lightweight) return direct()
+    if (branches.find((b) => b.id === branchId)?.snapshotComplete) return direct()
+
+    // Legacy COW: resolve through lineage (pre-snapshot branches)
+    const lineage = this.buildBranchLineage(branchId, branches)
+    const [characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
+      database.getCharactersResolved(storyId, lineage),
+      database.getLocationsResolved(storyId, lineage),
+      database.getItemsResolved(storyId, lineage),
+      database.getStoryBeatsResolved(storyId, lineage),
+      database.getLorebookEntriesResolved(storyId, lineage),
+    ])
+    return { characters, locations, items, storyBeats, lorebookEntries }
+  }
+
+  /**
+   * Snapshots every branch written to since State Tracking was turned on, so a run that ends
+   * here can still be the base of a past checkpoint. Call before turning the feature off.
+   */
+  async takeClosingSnapshots(): Promise<number> {
+    const since = settings.experimentalFeatures.trackingEnabledSince
+    if (!settings.experimentalFeatures.stateTracking || since === null) return 0
+
+    let taken = 0
+    for (const { storyId, branchId } of await database.getBranchesRecordedSince(since)) {
+      const open =
+        this.currentStory?.id === storyId &&
+        (this.currentStory.currentBranchId ?? null) === branchId
+      let world: Omit<TrackedState, 'timeTracker'>
+      let entry: StoryEntry | null
+      let timeTracker: TimeTracker | null
+      if (open) {
+        world = this.trackedState()
+        entry = this.entries[this.entries.length - 1] ?? null
+        timeTracker = this.currentStory?.timeTracker ?? null
+      } else {
+        const branches = await database.getBranches(storyId)
+        world = await this.loadBranchWorldState(storyId, branchId, branches)
+        const own = await database.getStoryEntriesForBranch(storyId, branchId)
+        const fork = branches.find((b) => b.id === branchId)?.forkEntryId
+        entry = own[own.length - 1] ?? (fork ? await database.getStoryEntry(fork) : null)
+        timeTracker = (entry?.metadata?.timeEnd as TimeTracker | undefined) ?? null
+      }
+      if (!entry) continue
+
+      await database.createWorldStateSnapshot({
+        id: crypto.randomUUID(),
+        storyId,
+        branchId,
+        entryId: entry.id,
+        entryPosition: entry.position,
+        charactersSnapshot: world.characters.map((c) => ({ ...c })),
+        locationsSnapshot: world.locations.map((l) => ({ ...l })),
+        itemsSnapshot: world.items.map((i) => ({ ...i })),
+        storyBeatsSnapshot: world.storyBeats.map((b) => ({ ...b })),
+        lorebookEntriesSnapshot: world.lorebookEntries.map((e) => ({ ...e })),
+        timeTrackerSnapshot: timeTracker ? { ...timeTracker } : null,
+        createdAt: Date.now(),
+      })
+      taken++
+    }
+    log('Closing snapshots taken:', taken)
+    return taken
+  }
+
+  /**
    * Reload entries and world state from database for the current branch.
    * World state is now persisted per-branch in the database via branch_id columns.
    * - For main branch: loads only items with null branch_id
@@ -4750,33 +4870,19 @@ class StoryStore {
 
     if (branchId === null) {
       // Main branch: load all data with null branch_id
-      const [entries, chapters, characters, locations, items, storyBeats, lorebookEntries] =
-        await Promise.all([
-          database.getStoryEntriesForBranch(this.currentStory.id, null),
-          database.getChaptersForBranch(this.currentStory.id, null),
-          database.getCharactersForBranch(this.currentStory.id, null),
-          database.getLocationsForBranch(this.currentStory.id, null),
-          database.getItemsForBranch(this.currentStory.id, null),
-          database.getStoryBeatsForBranch(this.currentStory.id, null),
-          database.getEntriesForBranch(this.currentStory.id, null),
-        ])
+      const [entries, chapters, world] = await Promise.all([
+        database.getStoryEntriesForBranch(this.currentStory.id, null),
+        database.getChaptersForBranch(this.currentStory.id, null),
+        this.loadBranchWorldState(this.currentStory.id, null, this.branches),
+      ])
 
       this.entries = entries
       this.chapters = chapters
-      this.characters = characters
-      this.locations = locations
-      this.items = items
-      this.storyBeats = storyBeats
-      this.lorebookEntries = lorebookEntries
-
-      // Filter out tombstoned entities when COW is enabled
-      if (settings.experimentalFeatures.lightweightBranches) {
-        this.characters = this.characters.filter((c) => !c.deleted)
-        this.locations = this.locations.filter((l) => !l.deleted)
-        this.items = this.items.filter((i) => !i.deleted)
-        this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
-        this.lorebookEntries = this.lorebookEntries.filter((e) => !e.deleted)
-      }
+      this.characters = world.characters
+      this.locations = world.locations
+      this.items = world.items
+      this.storyBeats = world.storyBeats
+      this.lorebookEntries = world.lorebookEntries
     } else {
       // Non-main branch: load entries across branch lineage (main -> ancestors -> current)
       const lineage = this.buildBranchLineage(branchId)
@@ -4843,66 +4949,8 @@ class StoryStore {
 
       this.chapters = chapters.sort((a, b) => a.number - b.number)
 
-      // Load world state from database
-      // COW branches use resolved loading (walks lineage), legacy branches use direct loading
-      let characters: Character[]
-      let locations: Location[]
-      let items: Item[]
-      let storyBeats: StoryBeat[]
-      let lorebookEntries: Entry[]
-
-      if (settings.experimentalFeatures.lightweightBranches) {
-        const currentBranchInfo = this.branches.find((b) => b.id === branchId)
-        if (currentBranchInfo?.snapshotComplete) {
-          // Snapshot isolation: branch has its own complete entity set
-          ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersForBranch(this.currentStory.id, branchId),
-            database.getLocationsForBranch(this.currentStory.id, branchId),
-            database.getItemsForBranch(this.currentStory.id, branchId),
-            database.getStoryBeatsForBranch(this.currentStory.id, branchId),
-            database.getEntriesForBranch(this.currentStory.id, branchId),
-          ])
-          // Filter out tombstoned entities
-          characters = characters.filter((c) => !c.deleted)
-          locations = locations.filter((l) => !l.deleted)
-          items = items.filter((i) => !i.deleted)
-          storyBeats = storyBeats.filter((b) => !b.deleted)
-          lorebookEntries = lorebookEntries.filter((e) => !e.deleted)
-          log('Snapshot isolation: loaded entities for branch:', branchId, {
-            characters: characters.length,
-            locations: locations.length,
-            items: items.length,
-            storyBeats: storyBeats.length,
-            lorebookEntries: lorebookEntries.length,
-          })
-        } else {
-          // Legacy COW: resolve through lineage (pre-snapshot branches)
-          ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersResolved(this.currentStory.id, lineage),
-            database.getLocationsResolved(this.currentStory.id, lineage),
-            database.getItemsResolved(this.currentStory.id, lineage),
-            database.getStoryBeatsResolved(this.currentStory.id, lineage),
-            database.getLorebookEntriesResolved(this.currentStory.id, lineage),
-          ])
-          log('COW: Resolved world state through lineage for branch:', branchId, {
-            lineageDepth: lineage.length,
-            characters: characters.length,
-            locations: locations.length,
-            items: items.length,
-            storyBeats: storyBeats.length,
-            lorebookEntries: lorebookEntries.length,
-          })
-        }
-      } else {
-        // Legacy path: direct branch loading (entities were fully copied at branch creation)
-        ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-          database.getCharactersForBranch(this.currentStory.id, branchId),
-          database.getLocationsForBranch(this.currentStory.id, branchId),
-          database.getItemsForBranch(this.currentStory.id, branchId),
-          database.getStoryBeatsForBranch(this.currentStory.id, branchId),
-          database.getEntriesForBranch(this.currentStory.id, branchId),
-        ])
-      }
+      const { characters, locations, items, storyBeats, lorebookEntries } =
+        await this.loadBranchWorldState(this.currentStory.id, branchId, this.branches)
 
       this.characters = characters
       this.locations = locations
