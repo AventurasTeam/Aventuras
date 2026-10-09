@@ -178,18 +178,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `userData` directory. The harness needs a fallback that exits the app
   from main or kills it after a timeout. Found in 4.2c's PR 2 review
   (2026-10-06).
-- **The History tab reads its own row without a branch check.**
-  `components/history/use-history-target.ts` looks the tab's row up in
-  the stores by id alone; ids repeat across branches (composite primary
-  key), and 4.2c added branch guards to the other-end name lookups and
-  the link version beside it. Unreachable while panes render only
-  branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07).
-- **No shared branch filter for store rows.** About twenty call sites
-  in `lib`, `components` and `app` filter a store's rows by
-  `branchId` inline; 4.2c added two more (`branchRows` in
-  `resolve-collision.ts`, `inBranch` in
-  `components/world/use-collision-resolve.ts`). A store-level accessor
-  would replace them. Found in 4.2c's slice review (2026-10-07).
 - **A `DialogContent` width override silently loses to
   `sm:max-w-lg`.** The primitive (`components/ui/dialog.tsx`) sets
   `max-w-[calc(100%-2rem)] sm:max-w-lg`, and tailwind-merge only
@@ -294,10 +282,6 @@ slice-planning gate forces its resolution before that slice is planned.
   unrelated writes.** `hooks/use-row-signals.ts:107-131` changes them on lore,
   thread and entry writes, so rail lists re-render through a classifier
   burst; keep the old value when the contents are equal. Raised in 4.5a
-  review, 2026-10-07.
-- **`readerRailStore.enterBranch` is keyed on `branchId` only.** Once M6 adds
-  branch switching, key it on focus too: a pushed reader for another branch,
-  popped back, would otherwise keep the other branch's view. Raised in 4.5a
   review, 2026-10-07.
 - **The World and Plot `search` locators match the hidden reader rail's search
   box.** `e2e/locators/world.ts:60` and `e2e/locators/plot.ts:28` match the

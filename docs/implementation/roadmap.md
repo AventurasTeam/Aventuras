@@ -492,6 +492,36 @@ verified against the code first. Resolve with the slice each names.
   (`awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')`),
   which discards a pass before its commit burst and lets one already
   committing land. Routed from triage 2026-09-27.
+- **M6.3 — No shared branch filter for store rows.** About twenty call sites
+  in `lib`, `components` and `app` filter a store's rows by
+  `branchId` inline; 4.2c added two more (`branchRows` in
+  `resolve-collision.ts`, `inBranch` in
+  `components/world/use-collision-resolve.ts`). A store-level accessor
+  would replace them. Found in 4.2c's slice review (2026-10-07).
+  Verified 2026-10-09: 45 such filters (lib 16, components 14, app 10,
+  hooks 5), with a third identical helper, `onBranch` in
+  `lib/world/merge-links.ts`. The working-set stores hold one branch,
+  so each filter means "every row if this is the loaded branch, else
+  none", and an accessor can return a stable reference instead of
+  scanning. M6.3 is where a mounted route's branch can first differ
+  from the loaded one. Routed from triage 2026-10-09.
+- **M6.3 — The History tab reads its own row without a branch check.**
+  `components/history/use-history-target.ts` looks the tab's row up in
+  the stores by id alone; ids repeat across branches (composite primary
+  key), and 4.2c added branch guards to the other-end name lookups and
+  the link version beside it. Unreachable while panes render only
+  branch-filtered rows. Found in 4.2c's PR 3 review (2026-10-07). The
+  stores hold only the loaded branch, so the lookup can return another
+  branch's row only once a route outlives a re-hydrate for a different
+  branch; the accessor above fixes both. Routed from triage 2026-10-09.
+- **M6.3 — `readerRailStore.enterBranch` is keyed on `branchId` only.** Once M6 adds
+  branch switching, key it on focus too: a pushed reader for another branch,
+  popped back, would otherwise keep the other branch's view. Raised in 4.5a
+  review, 2026-10-07. Canon already says what the return resets
+  ([`reader-composer.md → State model`](../ui/screens/reader-composer/reader-composer.md#state-model--manual--viewport-decoupled):
+  filter, search and the peek reset when the reader's branch changes),
+  so no per-branch view map is needed. The stacked-route twin of the
+  composer-draft entry above. Routed from triage 2026-10-09.
 - **M6 — The lead must be per-branch and delta-logged.** Two branches
   with different leads is a valid use case (developer, 2026-09-28), and
   a story-level `definition.leadEntityId` dangles on any branch lacking
