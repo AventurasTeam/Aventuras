@@ -245,4 +245,31 @@ test.describe.serial('Peek drawer', () => {
     )
     expect(rows).toEqual([[`${NEW_LEAD} draws the E2E-PEEK blade.`]])
   })
+
+  // The Do turn above left one undoable turn. The drawer is a blocking overlay, so the reader's
+  // window-level Ctrl+Z must stand down while it is open — the key someone presses after a stray
+  // Set as lead — and work again once it closes (which also proves the key reaches the reader here).
+  test("Ctrl+Z inside the peek leaves the story alone, and undoes the turn once it's closed", async () => {
+    const page = app.window
+    const replies = (): Promise<number> =>
+      countOf(
+        page,
+        `SELECT count(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply' AND content LIKE ?`,
+        [branchId, `%${REPLY_MARKER}%`],
+      )
+    expect(await replies()).toBe(1)
+
+    // The rail still shows the happenings the Plot test left it on.
+    await rail.row(page, ANCHORED_HAPPENING).click()
+    await expect(peek.drawer(page, ANCHORED_HAPPENING)).toBeFocused()
+    await page.keyboard.press('Control+z')
+    // An undo commits in well under this; nothing observable marks a handler that stayed quiet.
+    await page.waitForTimeout(1_500)
+    expect(await replies()).toBe(1)
+
+    await page.keyboard.press('Escape')
+    await expect(peek.drawer(page, ANCHORED_HAPPENING)).toHaveCount(0)
+    await page.keyboard.press('Control+z')
+    await expect.poll(replies, { timeout: 15_000 }).toBe(0)
+  })
 })

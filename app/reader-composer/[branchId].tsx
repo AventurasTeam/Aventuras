@@ -102,6 +102,7 @@ import {
   appSettingsStore,
   awaitRunTerminal,
   backgroundClassifierRunning,
+  blockingOverlaysStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -189,6 +190,9 @@ export default function ReaderComposerRoute() {
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
+  // A modal drawer or dialog claims the surface; the window-level reader keys stand down for it.
+  const overlayOpen = blockingOverlaysStore.useBlockingOverlayCount() > 0
+  const readerKeysEnabled = isFocused && !overlayOpen
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
   const branchIdRef = useRef(branchId)
   // Assigned post-commit, not during render: a discarded render would otherwise
@@ -1129,7 +1133,7 @@ export default function ReaderComposerRoute() {
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
-    enabled: isFocused,
+    enabled: readerKeysEnabled,
   })
 
   // Touch-tier path to undo/redo (the shortcut is keyboard-only).
@@ -1146,7 +1150,7 @@ export default function ReaderComposerRoute() {
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
     ignoreEditableTargets: true,
-    enabled: isFocused,
+    enabled: readerKeysEnabled,
   })
   const contextualActions: ActionGroup = useMemo(() => {
     // editBlocked, not isGenerating: undo/redo reject on the gate, which a
