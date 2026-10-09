@@ -1435,6 +1435,43 @@ own.
   would let a caller-supplied `role="combobox"` through — nobody has
   applied or tested it. Applies to every `dropdown`-mode `Select` that
   carries a `label`. Raised 2026-08-13.
+- **M9.2 — Select's radio groups don't follow the keyboard on web.**
+  `components/ui/select.tsx` builds its segment and radio-row branches on
+  `@rn-primitives/radio-group`, whose web side relies on Radix's roving
+  focus. RN-Web drops the `data-radix-collection-item` attribute Radix
+  finds its items by. Probed on the collision dialog's mode picker (a
+  segment): the group is a stray tab stop and an arrow key moves focus
+  without checking anything. The radio-row branch uses the same
+  primitive and wasn't probed. 4.2c's collision dialog handles Space,
+  the arrows and the single tab stop itself for its stacked radios.
+  Found in 4.2c's slice review (2026-10-07). The mechanism was verified
+  from library source on 2026-10-09: with the attribute gone, Radix's
+  collection sorts every item at index -1 and falls back to insertion
+  order, which re-shuffles on each render, so arrow targets come out in
+  arbitrary order, and the root's roving `tabIndex` is the stray stop.
+  The symptom is unreconciled: by that trace an arrow-driven focus still
+  checks the radio (Radix's `onFocus` clicks it, and RN-Web's responder
+  turns the click into `onPress`). Untested candidate fix:
+  `dataSet={{ radixCollectionItem: '' }}` on each item, which RN-Web
+  writes as the attribute; if it holds, the collision dialog's own
+  roving focus can go. Every segment and radio-row `Select` is affected.
+  Routed from triage 2026-10-09.
+- **M9.2 — Focus-ring canon drift.** (2026-10-09)
+  [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
+  ring with a 2px offset; none of the `focus-visible:ring-2` usages under
+  `components/` has an offset (no `ring-offset` anywhere). `Region`,
+  `EntityLink` and `StatusRow` in
+  `components/world/overview/overview-parts.tsx` have no focus ring at
+  all. Raised in 4.5b's review, 2026-10-09. Wider, verified the same day:
+  27 `focus-visible:ring-2` sites, none offset; 7 more use shadcn's 3px
+  half-alpha ring (switch, checkbox, select, step frame, picker field,
+  input); 2 use `ring-inset`; and `ListRow`, which canon names, has no
+  focus style. The three overview parts carry no `outline-none`, so they
+  likely show the browser's default outline: off-token rather than absent
+  (not checked in a browser). The design call: keep the outset offset,
+  which a scroll or `overflow-hidden` container clips (probably why
+  `ring-inset` exists), or amend canon to an un-offset ring, then unify
+  the 3px variants. Routed from triage 2026-10-09.
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:
@@ -1451,7 +1488,14 @@ own.
   common-knowledge glyph is text-less, so it joins in-scene and
   recently-classified in needing the hidden-text primitive. The row's
   `description` line (a happening's category, a lore excerpt) is hidden
-  too. Widened 2026-09-22 by Slice 4.3.
+  too. Widened 2026-09-22 by Slice 4.3. A selected row says nothing either:
+  `aria-selected` on the row's `role="button"` is invalid ARIA on web
+  (`components/compounds/list-row.tsx`, and the phone rail's categories
+  in `components/reader/rail/rail-sheet-categories.tsx`), while native maps
+  it to `accessibilityState.selected`. RN Web forwards `aria-current` and
+  `aria-pressed`; `Chip` already uses the latter. The ⊙ glyph has had a
+  label since 4.5b (`plot:commonKnowledgeMarker`, used by the peek), ready
+  for the hidden-text primitive. Widened from triage 2026-10-09.
 - **M9.4 — A failed desktop save of an `.avts` file goes unreported.**
   On desktop and web, `saveAvtsFile` (`lib/avts/save-file.ts`) hands
   the file over as an anchor download and resolves at the hand-off.

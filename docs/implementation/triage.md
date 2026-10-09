@@ -101,16 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   px). It fit while the dialog lacked the primitive's side margin, which
   4.2c's developer review restored. Native keeps no such margin and is
   unaffected (2026-10-07).
-- **Select's radio groups don't follow the keyboard on web.**
-  `components/ui/select.tsx` builds its segment and radio-row branches on
-  `@rn-primitives/radio-group`, whose web side relies on Radix's roving
-  focus. RN-Web drops the `data-radix-collection-item` attribute Radix
-  finds its items by. Probed on the collision dialog's mode picker (a
-  segment): the group is a stray tab stop and an arrow key moves focus
-  without checking anything. The radio-row branch uses the same
-  primitive and wasn't probed. 4.2c's collision dialog handles Space,
-  the arrows and the single tab stop itself for its stacked radios.
-  Found in 4.2c's slice review (2026-10-07).
 - **`Dialog` doesn't register as a blocking overlay.**
   `components/ui/dialog.tsx` never calls `useRegisteredOverlay`, while
   `alert-dialog.tsx`, `sheet.tsx` and `select.tsx` do, and
@@ -213,10 +203,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and the right-anchored Sheet (`sheet.tsx` near line 444) uses `bg-black/40`
   in both modes; `SCRIM_OPACITY` could be the single source. Raised in 4.5a
   review, 2026-10-07.
-- **`aria-selected` on `role="button"` is invalid ARIA on web.**
-  `components/compounds/list-row.tsx:85` and
-  `components/reader/rail/rail-sheet-categories.tsx` set it; native maps it to
-  `accessibilityState.selected` correctly. Raised in 4.5a review, 2026-10-07.
 - **`MultiSelect` nests a checkbox role inside a checkbox role.**
   `components/ui/multi-select.tsx:388-401`: the outer one shows no checked
   state on web. Raised in 4.5a review, 2026-10-07.
@@ -439,13 +425,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
   Raised in 4.6's slice review, 2026-10-08.
 
-- **Focus-ring canon drift.** (2026-10-09)
-  [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
-  ring with a 2px offset; none of the `focus-visible:ring-2` usages under
-  `components/` has an offset (no `ring-offset` anywhere). `Region`,
-  `EntityLink` and `StatusRow` in
-  `components/world/overview/overview-parts.tsx` have no focus ring at
-  all. Raised in 4.5b's review, 2026-10-09.
 - **A failed story-id read leaves the reader's actions silently
   inert.** (2026-10-09) The reader reads its branch's `storyId` on mount
   (`app/reader-composer/[branchId].tsx`, the `branches` select routed
@@ -456,13 +435,6 @@ slice-planning gate forces its resolution before that slice is planned.
   peek's `Set as lead` toasts the generic lead failure in that state
   since 4.5b's review; the reader has no error state of its own for it.
   Raised in 4.5b's slice review, 2026-10-09.
-- **Plot row semantics are hidden from assistive tech.** (2026-10-09)
-  Plot's `⊙` common-knowledge marker (`components/plot/happening-row.tsx:46`)
-  is a bare icon with no accessible name, and `ListRow` sets `aria-label`
-  to the title (`components/compounds/list-row.tsx:84`), so the
-  when-marker, `⊙` and category never reach AT on Plot rows.
-  (`plot:commonKnowledgeMarker` had no user before the 4.5b peek.) Raised
-  in 4.5b's review, 2026-10-09.
 - **Phone deep-link reveal can't scroll the hidden list.** (2026-10-09)
   World's and Plot's mount-arrival `revealRow` opens the row's tier, but
   on phone the list sits under the detail with `hidden`
