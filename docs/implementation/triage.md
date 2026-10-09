@@ -661,8 +661,19 @@ slice-planning gate forces its resolution before that slice is planned.
   (`app/_layout.tsx:107`, `components/ui/toast.tsx:194`), so a toast
   fired while the peek drawer or another modal Sheet is open may sit
   under the scrim and go unannounced; the peek's `Set as lead` refusal
-  toast is a new instance. (The reader's undo / redo and End keys no
-  longer fire behind a blocking overlay.) Raised in 4.5b's review,
+  toast is a new instance. Raised in 4.5b's review, 2026-10-09.
+- **Ctrl+Z still undoes behind the reader's desktop Dialogs.**
+  (2026-10-09) The reader's undo / redo and End keys stand down only
+  for overlays that register with `blockingOverlaysStore`
+  (`useRegisteredOverlay`: `Sheet`, `AlertDialog`, `Select`);
+  `components/ui/dialog.tsx` doesn't register. The entry card's
+  world-time and scene Dialogs (`components/compounds/entry-card.tsx`)
+  focus their content on open, so the key isn't filtered as an editable
+  target: edit an entry's world time, reopen its Dialog, press Ctrl+Z,
+  and the edit reverts behind it as the Dialog closes. Fix shape:
+  `DialogContent` registers like `AlertDialogContent` does — which also
+  makes the Actions menu and master-detail back stand down under any
+  Dialog, so it is a primitive-level call. Raised in 4.5b's review,
   2026-10-09.
 - **Plot row semantics are hidden from assistive tech.** (2026-10-09)
   Plot's `⊙` common-knowledge marker (`components/plot/happening-row.tsx:46`)

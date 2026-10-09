@@ -58,7 +58,8 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 is a right [Sheet](../../foundations/mobile/layout.md#sheet), ~440px
 wide, sliding in over the rail and narrative above a scrim, which
 leaves both inert while it is open, the reader's undo / redo and End
-keys included; Esc, `×` or a click outside closes it. On phone it is the rail Sheet's peek level, per
+keys included; Esc, `×` or a click outside closes it. On phone it is
+the rail Sheet's peek level, per
 [Mobile expression](#mobile-expression).)
 
 Rail rows carry no collision strip and no collapsed-group `⚠ N`
