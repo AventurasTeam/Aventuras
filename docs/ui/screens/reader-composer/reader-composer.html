@@ -315,6 +315,8 @@
   /* operational chip row — non-default injection mode + (lore-only) category */
   .peek-op-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .peek-chip-injection { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 3px; background: var(--bg); color: var(--ink-muted); border: 1px solid var(--line-soft); cursor: pointer; }
+  /* the lore and thread peeks are read-only: nothing in their chip rows is pressable */
+  .peek-body-lore .peek-chip-injection, .peek-body-thread .peek-chip-injection { cursor: default; }
   .peek-chip-category { font-size: 10px; padding: 2px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--ink-muted); }
   /* peek-kind switching: only the active kind's body shows; the lead
      affordance is character-only */
@@ -1357,7 +1359,7 @@
       <div class="peek-body-lore">
         <!-- Operational chip row: non-default injection chip + category chip -->
         <div class="peek-op-row">
-          <span class="peek-chip-injection" title="Injection mode &mdash; click to edit in Settings">always injected</span>
+          <span class="peek-chip-injection" title="Injection mode">always injected</span>
           <span class="peek-chip-category" title="Category">cosmology</span>
         </div>
 
