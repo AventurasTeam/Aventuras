@@ -146,7 +146,8 @@ export function contextLift(input: ContextLiftInput): number {
   return Math.max(0, wanted - Math.max(0, offset))
 }
 
-export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last'
+export type LandmarkKind =
+  'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last' | 'snapshot'
 
 /** The filter option each kind of row belongs to. */
 export type LandmarkFilterGroup = 'firstLast' | 'chapters' | 'checkpoints'
@@ -157,7 +158,8 @@ export const LANDMARK_FILTER_GROUPS: LandmarkFilterGroup[] = [
   'checkpoints',
 ]
 
-const FILTER_GROUP_OF: Record<LandmarkKind, LandmarkFilterGroup> = {
+// Snapshot rows are added after filtering, under an option of their own.
+const FILTER_GROUP_OF: Record<Exclude<LandmarkKind, 'snapshot'>, LandmarkFilterGroup> = {
   origin: 'checkpoints',
   checkpoint: 'checkpoints',
   chapter: 'chapters',
@@ -170,12 +172,16 @@ export function filterLandmarks(
   landmarks: Landmark[],
   shown: Record<LandmarkFilterGroup, boolean>,
 ): Landmark[] {
-  return landmarks.filter((landmark) => shown[FILTER_GROUP_OF[landmark.kind]])
+  return landmarks.filter(
+    (landmark) => landmark.kind === 'snapshot' || shown[FILTER_GROUP_OF[landmark.kind]],
+  )
 }
 
 export interface Landmark {
   entryId: string
   checkpointId: string | null
+  /** Set on a snapshot row only. */
+  snapshotId?: string
   branchId: string | null
   /** Whether "Switch to checkpoint branch" applies. A chapter's start may lie in an ancestor's history. */
   switchesBranch: boolean
@@ -346,4 +352,47 @@ export function buildLandmarks(
       .sort((a, b) => a.createdAt - b.createdAt)
       .map(({ checkpointId, label }) => ({ checkpointId, label })),
   }
+}
+
+/** A world-state snapshot of the branch being read, as the navigation panel lists it. */
+export interface SnapshotMark {
+  id: string
+  entryId: string
+}
+
+/** Ids of the snapshots taken when State Tracking is turned off begin with this. */
+export const CLOSING_SNAPSHOT_PREFIX = 'closing:'
+
+/**
+ * `landmarks` with a row for each snapshot whose entry is on the branch, after any other row on
+ * the same entry: a snapshot is taken once that entry is done.
+ */
+export function withSnapshotLandmarks(
+  landmarks: Landmark[],
+  snapshots: SnapshotMark[],
+  entries: StoryEntry[],
+  branchId: string | null,
+  branchName: string,
+): Landmark[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]))
+  const rows: Landmark[] = []
+  for (const snapshot of snapshots) {
+    const entry = byId.get(snapshot.entryId)
+    if (!entry) continue
+    rows.push({
+      entryId: entry.id,
+      checkpointId: null,
+      snapshotId: snapshot.id,
+      branchId,
+      switchesBranch: false,
+      number: entryNumber(entry),
+      kind: 'snapshot',
+      label: snapshot.id.startsWith(CLOSING_SNAPSHOT_PREFIX)
+        ? 'Snapshot (tracking stopped)'
+        : 'Snapshot',
+      branchName,
+    })
+  }
+  const order = (row: Landmark) => (row.kind === 'snapshot' ? 1 : 0)
+  return [...landmarks, ...rows].sort((a, b) => a.number - b.number || order(a) - order(b))
 }

@@ -12,7 +12,9 @@ import {
   entryNumberRange,
   jumpToEntry,
   resolveEntryByNumber,
+  withSnapshotLandmarks,
   type EntryJumpUi,
+  type Landmark,
 } from './storyNavigation'
 
 function entry(id: string, position: number, branchId: string | null = null): StoryEntry {
@@ -675,5 +677,54 @@ describe('filterLandmarks', () => {
     const shown = kinds({ ...all, firstLast: false })
     expect(shown).not.toContain('first')
     expect(shown).not.toContain('last')
+  })
+})
+
+describe('withSnapshotLandmarks', () => {
+  const entries = [entry('a', 0), entry('b', 1), entry('c', 2)]
+  const checkpointRow: Landmark = {
+    entryId: 'b',
+    checkpointId: 'cp',
+    branchId: null,
+    switchesBranch: false,
+    number: entryNumber(entries[1]),
+    kind: 'checkpoint',
+    label: 'Before the duel',
+    branchName: 'Main',
+  }
+
+  it('lists snapshots in entry order, after other rows on the same entry', () => {
+    const rows = withSnapshotLandmarks(
+      [checkpointRow],
+      [
+        { id: 'snap-c', entryId: 'c' },
+        { id: 'snap-b', entryId: 'b' },
+      ],
+      entries,
+      null,
+      'Main',
+    )
+    expect(rows.map((r) => [r.kind, r.entryId])).toEqual([
+      ['checkpoint', 'b'],
+      ['snapshot', 'b'],
+      ['snapshot', 'c'],
+    ])
+  })
+
+  it('names the snapshot taken when tracking was turned off', () => {
+    const [row] = withSnapshotLandmarks(
+      [],
+      [{ id: 'closing:x', entryId: 'a' }],
+      entries,
+      null,
+      'Main',
+    )
+    expect(row).toMatchObject({ label: 'Snapshot (tracking stopped)', snapshotId: 'closing:x' })
+  })
+
+  it('leaves out a snapshot whose entry is not on the branch', () => {
+    expect(
+      withSnapshotLandmarks([], [{ id: 's', entryId: 'gone' }], entries, null, 'Main'),
+    ).toEqual([])
   })
 })

@@ -473,6 +473,13 @@
     if (!isLatestEntry) pastCheckpoint = await story.previewCheckpointAt(entry.id)
   }
 
+  $effect(() => {
+    if (ui.checkpointFormEntryId !== entry.id) return
+    ui.requestCheckpointForm(null)
+    if (canCreateCheckpoint) void openCheckpoint()
+    else ui.showToast('A checkpoint cannot be created at this entry', 'info')
+  })
+
   const checkpointBlocked = $derived(
     !isLatestEntry && (pastCheckpoint === null || pastCheckpoint.refusal !== null),
   )

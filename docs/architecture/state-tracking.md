@@ -83,6 +83,9 @@ resolve differently once it has. A checkpoint created after its entry already ha
 itself rebuilt, possibly carrying manual changes back by the reader's choice, so it is never an
 anchor.
 
+Closing snapshots carry the id prefix `closing:`, which is how the navigation panel's "Show snapshots"
+filter names them apart from automatic ones without a column of its own.
+
 Story-time reconciliation rewrites a header's recorded clock as it does a delta's, and deletes the
 snapshots of the entries it rewrites; a run that loses its closing snapshot that way refuses past
 checkpoints rather than rebuilding them wrongly.

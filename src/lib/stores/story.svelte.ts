@@ -119,7 +119,11 @@ import { clearTier3SelectionCache } from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
-import { checkpointDeletionBlocker } from '#lib/utils/storyNavigation.ts'
+import {
+  CLOSING_SNAPSHOT_PREFIX,
+  checkpointDeletionBlocker,
+  type SnapshotMark,
+} from '#lib/utils/storyNavigation.ts'
 import {
   buildChapterBanners,
   lastResolvedChapterEnd,
@@ -4257,6 +4261,16 @@ class StoryStore {
     return checkpoint
   }
 
+  /** The snapshots of the branch being read, for listing; their contents are not loaded. */
+  async snapshotMarks(): Promise<SnapshotMark[]> {
+    if (!this.currentStory) return []
+    const times = await database.getWorldStateSnapshotTimes(
+      this.currentStory.id,
+      this.currentStory.currentBranchId ?? null,
+    )
+    return times.map((t) => ({ id: t.id, entryId: t.entryId }))
+  }
+
   /**
    * The state at a past entry, rebuilt from the nearest full state after it. Refuses with the
    * reader-facing reason when the history in between cannot be rebuilt.
@@ -5051,7 +5065,7 @@ class StoryStore {
       if (!entry) continue
 
       await database.createWorldStateSnapshot({
-        id: crypto.randomUUID(),
+        id: `${CLOSING_SNAPSHOT_PREFIX}${crypto.randomUUID()}`,
         storyId,
         branchId,
         entryId: entry.id,

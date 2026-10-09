@@ -128,6 +128,8 @@ class UIStore {
   // Held here rather than in the panel so it survives closing and reopening, as the sidebar's
   // does. It opens on Navigation until the reader leaves it somewhere else.
   navPanelTab = $state<NavPanelTab>('navigation')
+  /** An entry whose checkpoint form should open once it is on screen. */
+  checkpointFormEntryId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
   // reader opts into, not an ambient reference the way the sidebar is.
@@ -405,6 +407,10 @@ class UIStore {
 
   setNavPanelTab(tab: NavPanelTab) {
     this.navPanelTab = tab
+  }
+
+  requestCheckpointForm(entryId: string | null) {
+    this.checkpointFormEntryId = entryId
   }
 
   setVaultTab(tab: VaultTab) {

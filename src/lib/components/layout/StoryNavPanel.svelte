@@ -1,6 +1,7 @@
 <script lang="ts">
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     buildLandmarks,
     checkpointDeletionBlocker,
@@ -9,8 +10,10 @@
     LANDMARK_FILTER_GROUPS,
     jumpToEntry,
     resolveEntryByNumber,
+    withSnapshotLandmarks,
     type Landmark,
     type LandmarkFilterGroup,
+    type SnapshotMark,
   } from '#lib/utils/storyNavigation.ts'
   import { supportsHover } from '#lib/utils/platform.ts'
   import { ask } from '@tauri-apps/plugin-dialog'
@@ -30,6 +33,8 @@
     ArrowUpToLine,
     BookOpen,
     Bookmark,
+    BookmarkPlus,
+    Camera,
     Check,
     ChevronDown,
     ChevronRight,
@@ -102,9 +107,50 @@
   )
   const orphaned = $derived(landmarkList.orphaned)
 
-  const filtered = $derived(LANDMARK_FILTER_GROUPS.some((group) => !ui.navFilter[group]))
+  // Not remembered: snapshots are looked up for one visit, not listed on every one.
+  let showSnapshots = $state(false)
+  let snapshotMarks = $state<SnapshotMark[]>([])
+  const tracking = $derived(settings.experimentalFeatures.stateTracking)
 
-  const landmarks = $derived(filterLandmarks(landmarkList.landmarks, ui.navFilter))
+  $effect(() => {
+    // A new entry can bring a new snapshot; a branch or story switch brings another set.
+    void story.entries.length
+    void story.currentStory?.currentBranchId
+    if (!showSnapshots || !tracking) return
+    void story.snapshotMarks().then((marks) => (snapshotMarks = marks))
+  })
+
+  const filtered = $derived(
+    LANDMARK_FILTER_GROUPS.some((group) => !ui.navFilter[group]) || (showSnapshots && tracking),
+  )
+
+  const landmarks = $derived.by(() => {
+    const shown = filterLandmarks(landmarkList.landmarks, ui.navFilter)
+    if (!showSnapshots || !tracking) return shown
+    return withSnapshotLandmarks(
+      shown,
+      snapshotMarks,
+      story.entries,
+      activeBranch?.id ?? null,
+      activeBranch?.name ?? 'Main',
+    )
+  })
+
+  /** Snapshot rows offer a checkpoint where the entry form would. */
+  function canCheckpointAt(landmark: Landmark): boolean {
+    const entry = story.entries.find((e) => e.id === landmark.entryId)
+    return (
+      !!entry &&
+      entry.type !== 'system' &&
+      (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null) &&
+      !story.checkpoints.some((c) => c.lastEntryId === entry.id)
+    )
+  }
+
+  async function checkpointAt(landmark: Landmark) {
+    await goToLandmark(landmark)
+    ui.requestCheckpointForm(landmark.entryId)
+  }
 
   // Not persisted with the panel's own state: a reader who opens this to clear one checkpoint out
   // does not want it open on every story afterwards. Closing the panel unmounts this component,
@@ -323,6 +369,11 @@
                   {option.label}
                 </DropdownMenu.CheckboxItem>
               {/each}
+              {#if tracking}
+                <DropdownMenu.CheckboxItem bind:checked={showSnapshots} closeOnSelect={false}>
+                  Show snapshots
+                </DropdownMenu.CheckboxItem>
+              {/if}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </div>
@@ -397,6 +448,8 @@
                       <ArrowUpToLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else if landmark.kind === 'last'}
                       <ArrowDownToLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'snapshot'}
+                      <Camera class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else}
                       <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {/if}
@@ -442,6 +495,20 @@
                           not in a chapter yet. When the next chapter is written, it moves past it.
                         </Popover.Content>
                       </Popover.Root>
+                    </div>
+                  {/if}
+                  {#if landmark.kind === 'snapshot' && canCheckpointAt(landmark)}
+                    <div
+                      class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                    >
+                      <button
+                        class="text-surface-500 hover:text-surface-200 tap-target"
+                        onclick={() => void checkpointAt(landmark)}
+                        title="Create checkpoint here"
+                        aria-label="Create checkpoint at this snapshot"
+                      >
+                        <BookmarkPlus class="can-hover:size-3 size-4" />
+                      </button>
                     </div>
                   {/if}
                   {#if landmark.checkpointId}

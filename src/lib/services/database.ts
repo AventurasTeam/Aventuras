@@ -1716,15 +1716,22 @@ class DatabaseService {
   async getWorldStateSnapshotTimes(
     storyId: string,
     branchId: string | null,
-  ): Promise<{ id: string; entryPosition: number; createdAt: number }[]> {
+  ): Promise<{ id: string; entryId: string; entryPosition: number; createdAt: number }[]> {
     const db = await this.getDb()
-    const rows = await db.select<{ id: string; entry_position: number; created_at: number }[]>(
+    const rows = await db.select<
+      { id: string; entry_id: string; entry_position: number; created_at: number }[]
+    >(
       branchId === null
-        ? 'SELECT id, entry_position, created_at FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL'
-        : 'SELECT id, entry_position, created_at FROM world_state_snapshots WHERE story_id = ? AND branch_id = ?',
+        ? 'SELECT id, entry_id, entry_position, created_at FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL'
+        : 'SELECT id, entry_id, entry_position, created_at FROM world_state_snapshots WHERE story_id = ? AND branch_id = ?',
       branchId === null ? [storyId] : [storyId, branchId],
     )
-    return rows.map((r) => ({ id: r.id, entryPosition: r.entry_position, createdAt: r.created_at }))
+    return rows.map((r) => ({
+      id: r.id,
+      entryId: r.entry_id,
+      entryPosition: r.entry_position,
+      createdAt: r.created_at,
+    }))
   }
 
   async getWorldStateSnapshot(id: string): Promise<WorldStateSnapshot | null> {
