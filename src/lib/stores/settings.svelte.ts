@@ -1644,6 +1644,9 @@ class SettingsStore {
       const navPanelOpen = await database.getSetting('nav_panel_open')
       if (navPanelOpen !== null) ui.navPanelOpen = navPanelOpen === 'true'
 
+      const navShowTail = await database.getSetting('nav_show_tail')
+      if (navShowTail !== null) ui.navShowTail = navShowTail === 'true'
+
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
 

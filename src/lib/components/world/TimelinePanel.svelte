@@ -206,7 +206,7 @@
             <Button
               variant="outline"
               size="icon"
-              class="h-7 w-7 {filtered ? 'text-amber-500' : ''}"
+              class="h-7 w-7 {filtered ? 'text-amber-500 hover:text-amber-500' : ''}"
               aria-label="Filter reference points"
               title="Filter reference points"
               {...props}

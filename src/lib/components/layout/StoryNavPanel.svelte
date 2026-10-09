@@ -1,6 +1,7 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
+  import { TAIL_BANNER_TITLE } from '$lib/utils/chapterBanners'
   import {
     buildLandmarks,
     checkpointDeletionBlocker,
@@ -17,6 +18,8 @@
   import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import * as Tabs from '$lib/components/ui/tabs'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import * as Popover from '$lib/components/ui/popover'
   import TimelinePanel from '$lib/components/world/TimelinePanel.svelte'
   import { swipe } from '$lib/utils/swipe'
   import {
@@ -28,7 +31,9 @@
     Clock,
     CornerDownLeft,
     Edit2,
+    Filter,
     GitBranch,
+    Info,
     Milestone,
     Navigation,
     PenLine,
@@ -85,8 +90,28 @@
       story.chapterBanners,
     ),
   )
-  const landmarks = $derived(landmarkList.landmarks)
   const orphaned = $derived(landmarkList.orphaned)
+
+  const showTail = $derived(ui.navShowTail)
+  // Opened by hover where there is a mouse, by a tap where there is not.
+  let tailInfoOpen = $state(false)
+  let tailInfoTimer: ReturnType<typeof setTimeout> | undefined
+
+  // Waits like a native tooltip, so passing over the icon does not flash the note.
+  function hoverTailInfo(event: PointerEvent, entering: boolean) {
+    if (event.pointerType !== 'mouse') return
+    clearTimeout(tailInfoTimer)
+    if (entering) tailInfoTimer = setTimeout(() => (tailInfoOpen = true), 500)
+    else tailInfoOpen = false
+  }
+
+  const filtered = $derived(!showTail)
+
+  const landmarks = $derived(
+    showTail
+      ? landmarkList.landmarks
+      : landmarkList.landmarks.filter((landmark) => landmark.kind !== 'tail'),
+  )
 
   // Not persisted with the panel's own state: a reader who opens this to clear one checkpoint out
   // does not want it open on every story afterwards. Closing the panel unmounts this component,
@@ -285,9 +310,36 @@
           </Button>
         </div>
 
-        <h4 class="text-muted-foreground mt-5 mb-2 text-xs font-medium tracking-wider uppercase">
-          Landmarks
-        </h4>
+        <div class="mt-5 mb-2 flex items-center justify-between">
+          <h4 class="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+            Landmarks
+          </h4>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  class="h-7 w-7 {filtered ? 'text-amber-500 hover:text-amber-500' : ''}"
+                  aria-label="Filter landmarks"
+                  title="Filter landmarks"
+                  {...props}
+                >
+                  <Filter class="h-3.5 w-3.5" />
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.CheckboxItem
+                checked={showTail}
+                onCheckedChange={(checked) => void ui.setNavShowTail(checked)}
+                closeOnSelect={false}
+              >
+                Show “{TAIL_BANNER_TITLE}”
+              </DropdownMenu.CheckboxItem>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
 
         {#if landmarks.length === 0}
           <EmptyState
@@ -371,6 +423,35 @@
                       >
                     </span>
                   </button>
+                  {#if landmark.kind === 'tail'}
+                    <div
+                      class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                    >
+                      <Popover.Root bind:open={tailInfoOpen}>
+                        <Popover.Trigger>
+                          {#snippet child({ props })}
+                            <button
+                              {...props}
+                              class="text-surface-500 hover:text-surface-200 tap-target"
+                              aria-label="About this landmark"
+                              onpointerenter={(e) => hoverTailInfo(e, true)}
+                              onpointerleave={(e) => hoverTailInfo(e, false)}
+                            >
+                              <Info class="can-hover:size-3 size-4" />
+                            </button>
+                          {/snippet}
+                        </Popover.Trigger>
+                        <!-- Dark on light, as the native tooltips beside it are. -->
+                        <Popover.Content
+                          class="w-60 rounded-sm border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 shadow-md"
+                          align="end"
+                        >
+                          Points at the first entry after the last chapter: the part of the story
+                          not in a chapter yet. When the next chapter is written, it moves past it.
+                        </Popover.Content>
+                      </Popover.Root>
+                    </div>
+                  {/if}
                   {#if landmark.checkpointId}
                     {@const deleteBlockedReason = checkpointDeletionBlocker(
                       landmark.checkpointId,

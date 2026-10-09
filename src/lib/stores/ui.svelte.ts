@@ -149,6 +149,8 @@ class UIStore {
   private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
 
   galleryNewestFirst = $state(false)
+  /** Whether the landmark list shows where the story continues past its last chapter. */
+  navShowTail = $state(true)
 
   // Streaming state
   streamingContent = $state('')
@@ -414,6 +416,13 @@ class UIStore {
     return database
       .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
+  }
+
+  setNavShowTail(show: boolean): Promise<void> {
+    this.navShowTail = show
+    return database
+      .setSetting('nav_show_tail', show.toString())
+      .catch((err) => console.warn('[UI] Failed to persist landmark filter:', err))
   }
 
   /**
