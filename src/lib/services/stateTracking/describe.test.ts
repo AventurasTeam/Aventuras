@@ -20,7 +20,7 @@ const base: WorldStateChangeRecord = {
 
 describe('describeChange', () => {
   it('names the edited fields and looks the name up when the change does not carry it', () => {
-    expect(describeChange(base, () => 'Aria')).toBe('Edited character “Aria” (relationship)')
+    expect(describeChange(base, () => 'Aria')).toBe('Character “Aria” was edited (relationship)')
   })
 
   it('takes the name from the change itself', () => {
@@ -32,12 +32,12 @@ describe('describeChange', () => {
         before: { name: 'Citadel' },
         after: null,
       }),
-    ).toBe('Deleted lorebook entry “Citadel”')
+    ).toBe('Lorebook entry “Citadel” was deleted')
   })
 
   it('falls back to the kind of thing when no name is known', () => {
     expect(describeChange({ ...base, entityType: 'story_beat', op: 'create', after: {} })).toBe(
-      'Added a quest',
+      'A quest was added',
     )
   })
 })

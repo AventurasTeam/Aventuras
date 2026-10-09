@@ -14,7 +14,7 @@ function nameIn(values: Record<string, unknown> | null): string | null {
   return typeof name === 'string' && name.length > 0 ? name : null
 }
 
-/** One line for a change, for the reader: "Edited character “Aria” (relationship)". */
+/** One line for a change, for the reader: "Character “Aria” was edited (relationship)". */
 export function describeChange(
   record: WorldStateChangeRecord,
   nameOf: (type: TrackedEntityType, id: string) => string | null = () => null,
@@ -22,16 +22,18 @@ export function describeChange(
   const noun = NOUN[record.entityType]
   const name =
     nameIn(record.after) ?? nameIn(record.before) ?? nameOf(record.entityType, record.entityId)
-  const subject = name ? `${noun} “${name}”` : `a ${noun}`
+  const subject = name ? `${noun[0].toUpperCase()}${noun.slice(1)} “${name}”` : `A ${noun}`
   switch (record.op) {
     case 'create':
-      return `Added ${subject}`
+      return `${subject} was added`
     case 'delete':
     case 'softDelete':
-      return `Deleted ${subject}`
+      return `${subject} was deleted`
     case 'update': {
       const fields = Object.keys(record.after ?? record.before ?? {})
-      return fields.length > 0 ? `Edited ${subject} (${fields.join(', ')})` : `Edited ${subject}`
+      return fields.length > 0
+        ? `${subject} was edited (${fields.join(', ')})`
+        : `${subject} was edited`
     }
   }
 }
