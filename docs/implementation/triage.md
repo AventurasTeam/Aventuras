@@ -254,12 +254,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `return-await`), so a missing `await` passes lint repo-wide. Task 9's
   review proved it on the export path, and a story now pins that one. Found
   in Slice 4.6 review.
-- **The JSON viewer is a portaled overlay not gated on screen focus.**
-  (2026-10-08) It now lives in `components/compounds/row-detail-frame.tsx`,
-  so it stays open when the screen loses focus
-  ([lesson](lessons-learned/portaled-overlay-outlives-screen-focus.md)).
-  Pre-existing in all four detail heads; low risk because it is modal.
-  Found in Slice 4.6 review.
 - **The wrong-kind banner prints the file's `format` uncapped.**
   (2026-10-08) `parseEnvelope` in
   `components/compounds/import-dialog-pipeline.ts` puts the envelope's
@@ -269,14 +263,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`import-dialog.md → Issue flattening`](../ui/patterns/import-dialog.md#issue-flattening));
   meta copy has no such rule. Predates 4.6. Raised in 4.6's slice review,
   2026-10-08.
-- **The World route's collision-dialog blur comment gives the wrong
-  reason.** (2026-10-08) In `app/world/[branchId].tsx`, "The dialog is
-  portaled: left open, it would paint over the screen pushed on top" sits
-  above the effect that closes the collision dialog on focus loss, but
-  `open={focused}` already hides it; what the effect does is keep the
-  dialog from reopening when focus returns. 4.6 moved its import dialogs'
-  copy of the rule into `useRowImport`. Predates 4.6. Raised in 4.6's
-  slice review, 2026-10-08.
 - **Slice 4.6 left four duplicates waiting for a shared home.**
   (2026-10-08) The closing review's simplifier skipped each because the
   shared copy needs a module that doesn't exist yet, or a file outside the

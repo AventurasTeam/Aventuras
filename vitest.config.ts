@@ -56,6 +56,7 @@ export default defineConfig({
             'react-hook-form',
             '@hookform/resolvers/zod',
             '@tanstack/react-query',
+            '@react-navigation/native',
           ],
         },
         test: {

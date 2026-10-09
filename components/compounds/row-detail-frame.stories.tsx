@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { NavigationContext } from '@react-navigation/native'
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
@@ -135,6 +136,48 @@ export const JsonViewerClosesOnRowSwitch: Story = {
     // The switch landed: the head names the second row, and its JSON never showed.
     await expect(await screen.findByRole('button', { name: 'Edit Second row' }, WAIT)).toBeVisible()
     expect(flashed).toBe(false)
+  },
+}
+
+/** Just the slice useIsRouteFocused reads, with blur and focus driven from a play. */
+function stubNavigation() {
+  const listeners = new Map<string, Set<() => void>>()
+  let focused = true
+  return {
+    value: {
+      isFocused: () => focused,
+      addListener: (event: string, listener: () => void) => {
+        const set = listeners.get(event) ?? new Set<() => void>()
+        set.add(listener)
+        listeners.set(event, set)
+        return () => set.delete(listener)
+      },
+    },
+    emit(event: 'focus' | 'blur') {
+      focused = event === 'focus'
+      listeners.get(event)?.forEach((listener) => listener())
+    },
+  }
+}
+
+const screenNavigation = stubNavigation()
+
+/** Portaled, the viewer would paint over a pushed screen: blur closes it, and focus leaves it shut. */
+export const JsonViewerClosesOnScreenBlur: Story = {
+  render: (args) => (
+    <NavigationContext.Provider value={screenNavigation.value as never}>
+      <Harness {...args} />
+    </NavigationContext.Provider>
+  ),
+  play: async () => {
+    await openMenuEntry('View raw JSON')
+    const close = () => screen.queryByRole('button', { name: 'Close raw JSON viewer' })
+    await waitFor(() => expect(close()).toBeVisible(), WAIT)
+    screenNavigation.emit('blur')
+    await waitFor(() => expect(close()).not.toBeInTheDocument(), WAIT)
+    screenNavigation.emit('focus')
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(close()).not.toBeInTheDocument()
   },
 }
 

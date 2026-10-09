@@ -268,7 +268,8 @@ export default function WorldRoute() {
   const collision = useCollisionResolve(branchId, ctx, guard)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
-  // The dialog is portaled: left open, it would paint over the screen pushed on top.
+  // `open={focused}` already hides the dialog under a pushed screen; closing it here keeps it
+  // from reopening when focus returns.
   useEffect(() => {
     if (!focused) closeCollision()
   }, [focused, closeCollision])
