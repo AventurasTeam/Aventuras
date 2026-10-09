@@ -86,18 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   namesake the classifier actually compared rather than guessing by
   name. Both need a schema column. Found during 4.2c planning
   (2026-10-06).
-- **`lastSeenAt.locationId` can name a removed location.** Characters
-  and items carry `lastSeenAt { entryId, locationId, worldTime }`
-  (`lib/db/entities/entity-state-schema.ts`), but `locationId` isn't
-  one of the six ref fields the entity delete arm clears
-  (`lib/world/entity-delete.ts`), nor one the 4.2c merge rewrites. So
-  after a location is deleted (true since 4.2b) or merged away, a
-  "last seen" can name a row that no longer exists. Canon is silent:
-  `data-model.md → Authorship contract` makes `lastSeenAt` a
-  classifier-only snapshot, and `world.md → Delete` lists the six
-  fields. Decide whether the snapshot is history (leave it, render the
-  dangling id as "Entity no longer exists") or a ref (clear or rewrite
-  it like the others). Found during 4.2c planning (2026-10-06).
 - **SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
   `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
   indexes without statistics. Measured while planning 4.2c's History

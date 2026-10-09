@@ -488,7 +488,10 @@ cascade covers:
     `parent_location_id`, `at_location_id`, `faction_id`,
     `equipped_items[]`, `inventory[]` — cleared in one `state` patch
     per entity. Items at a deleted location, or held by a deleted
-    character, are left unplaced (no position is invented).
+    character, are left unplaced (no position is invented). A
+    character's `lastSeenAt` is a snapshot, not a ref, and keeps a
+    deleted location's id; the Last-seen line drops a location it
+    can't resolve.
   - **The tail entry's scene.** The id leaves the tail's
     `sceneEntities`, and a deleted location stops being its
     `currentLocationId`, so the next turn doesn't inherit it. Earlier
@@ -1187,7 +1190,8 @@ Merge writes, in order:
   the canonical is flagged.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
-  one patch per entity. An item has at most one position
+  one patch per entity, a character's `lastSeenAt` location among
+  them. An item has at most one position
   ([`data-model.md → ItemState shape`](../../../data-model.md#itemstate-shape)),
   so when the canonical item is already held or placed by
   `at_location_id`, a character holding the non-canonical drops it
