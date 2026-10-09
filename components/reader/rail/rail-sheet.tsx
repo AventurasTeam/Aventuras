@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react-native'
-import { useEffect, useState, type ReactNode } from 'react'
-import { View } from 'react-native'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Platform, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Heading } from '@/components/ui/heading'
@@ -45,6 +45,13 @@ export type RailSheetProps = {
   onCategoryChange: (category: RailCategory) => void
 } & RailSheetRowPress
 
+// visibility, not display: none, which drops a scroller's offset; pointer events and the
+// accessibility tree are cut separately, as native has no visibility.
+const HIDDEN_LAYER = {
+  ...Platform.select({ web: { visibility: 'hidden' }, default: { opacity: 0 } }),
+  pointerEvents: 'none',
+} as const
+
 export function RailSheet({
   open,
   onOpenChange,
@@ -59,16 +66,28 @@ export function RailSheet({
   const [sheet, setSheet] = useState<RailSheetState>(RAIL_SHEET_OPENED)
   const send = (event: RailSheetEvent) => setSheet((current) => reduceRailSheet(current, event))
 
+  // The list's viewport at the list level. The tall peek detent would grow it, and a list
+  // scrolled to its end clamps its offset to the bigger viewport; capping the list at its old
+  // height until the Sheet is back down keeps the offset.
+  const listHeight = useRef(0)
+  const [heightCap, setHeightCap] = useState<number | null>(null)
+
   // The Sheet presents a tick after `open` flips, so this lands before anything renders.
   useEffect(() => {
-    if (open) setSheet(RAIL_SHEET_OPENED)
+    if (open) {
+      setSheet(RAIL_SHEET_OPENED)
+      setHeightCap(null)
+    }
   }, [open])
+
+  const peeking = sheet.content === 'peek'
 
   const handleRowPress = (category: RailCategory, id: string) => {
     if (renderPeek == null) {
       onRowPress(category, id)
       return
     }
+    setHeightCap(listHeight.current > 0 ? listHeight.current : null)
     send({ type: 'openPeek', peek: { category, id } })
   }
 
@@ -90,33 +109,56 @@ export function RailSheet({
               send({ type: 'pickCategory' })
             }}
           />
-        ) : sheet.content === 'list' ? (
-          <View className="flex-1">
-            <RailList
-              data={data}
-              view={view}
-              onViewChange={onViewChange}
-              header={
-                <View className="flex-row items-center gap-1">
-                  <IconAction
-                    icon={ArrowLeft}
-                    label={t('reader:rail.backToCategories')}
-                    onPress={() => send({ type: 'up' })}
-                  />
-                  <Heading level={3} numberOfLines={1} className="min-w-0 shrink">
-                    {railCategoryLabel(view.category)}
-                  </Heading>
-                </View>
-              }
-              onRowPress={handleRowPress}
-              surface="transparent"
-            />
-            <View className="px-3 pb-3">
-              <RailImportFooter />
-            </View>
-          </View>
         ) : (
-          (renderPeek?.(sheet.peek, () => send({ type: 'back' })) ?? null)
+          <View
+            className="flex-1"
+            onLayout={(event) => {
+              const { height } = event.nativeEvent.layout
+              if (heightCap == null) listHeight.current = height
+              // Back down: the Sheet no longer outgrows the cap, which can go.
+              else if (!peeking && height <= heightCap + 1) setHeightCap(null)
+            }}
+          >
+            {/* Mounted under the peek so `←` finds the list as it was left, scroll included. */}
+            <View
+              testID="rail-sheet-list-layer"
+              className="flex-1"
+              style={[
+                peeking ? HIDDEN_LAYER : null,
+                heightCap != null ? { maxHeight: heightCap } : null,
+              ]}
+              aria-hidden={peeking}
+              importantForAccessibility={peeking ? 'no-hide-descendants' : 'auto'}
+            >
+              <RailList
+                data={data}
+                view={view}
+                onViewChange={onViewChange}
+                header={
+                  <View className="flex-row items-center gap-1">
+                    <IconAction
+                      icon={ArrowLeft}
+                      label={t('reader:rail.backToCategories')}
+                      onPress={() => send({ type: 'up' })}
+                    />
+                    <Heading level={3} numberOfLines={1} className="min-w-0 shrink">
+                      {railCategoryLabel(view.category)}
+                    </Heading>
+                  </View>
+                }
+                onRowPress={handleRowPress}
+                surface="transparent"
+              />
+              <View className="px-3 pb-3">
+                <RailImportFooter />
+              </View>
+            </View>
+            {sheet.content === 'peek' ? (
+              <View style={StyleSheet.absoluteFill}>
+                {renderPeek?.(sheet.peek, () => send({ type: 'back' })) ?? null}
+              </View>
+            ) : null}
+          </View>
         )}
       </SheetContent>
     </Sheet>

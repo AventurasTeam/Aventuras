@@ -80,6 +80,8 @@ type HarnessProps = {
   onNavigate?: (href: string) => void
   blocked?: boolean
   blockedReason?: string
+  /** The chip's initial data. */
+  initialData?: RailData
 }
 
 function SheetHarness({ data = DATA, onRowPress = () => {}, withPeek = false }: HarnessProps) {
@@ -120,8 +122,9 @@ function ChipHarness({
   onNavigate = () => {},
   blocked = false,
   blockedReason,
-}: Pick<HarnessProps, 'onNavigate' | 'blocked' | 'blockedReason'>) {
-  const [data, setData] = useState(DATA)
+  initialData = DATA,
+}: Pick<HarnessProps, 'onNavigate' | 'blocked' | 'blockedReason' | 'initialData'>) {
+  const [data, setData] = useState(initialData)
   useEffect(() => {
     chipData.set = setData
     return () => {
@@ -152,6 +155,7 @@ const railDialog = () => screen.getByRole('dialog', { name: t('reader:rail.label
 const queryRailDialog = () => screen.queryByRole('dialog', { name: t('reader:rail.label') })
 const backToCategories = () =>
   screen.getByRole('button', { name: t('reader:rail.backToCategories') })
+const peekContent = () => within(railDialog()).getByTestId('peek-content')
 const peekBack = () => screen.getByRole('button', { name: t('reader:peek.back') })
 
 async function headIs(category: RailCategory) {
@@ -535,6 +539,105 @@ export const ReaderChipRemovedRowReturnsToList: Story = {
   },
 }
 
+// Thirty rows past the lead and Mira, named to sort last in the Active tier: at the medium
+// detent the list shows a handful of them.
+const LONG_ROSTER = railDataFixture({
+  entities: [
+    // No staged tier below the Active one: the last row is then the list's last.
+    ...DATA.entities.filter((e) => e.status !== 'staged'),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      ...entityNamed('Mira'),
+      id: `char_zed_${i}`,
+      name: `Zed ${String(i).padStart(2, '0')}`,
+    })),
+  ],
+})
+
+/** The list's own scroller: scrollIntoView would also move the page under the Sheet. */
+function scrollerOf(row: HTMLElement): HTMLElement {
+  for (let node = row.parentElement; node != null; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) {
+      return node
+    }
+  }
+  throw new Error('the row has no scrolling ancestor')
+}
+
+// The row's centre: mobile1's list viewport at the medium detent is shorter than a row.
+function inView(row: HTMLElement, scroller: HTMLElement): boolean {
+  const view = scroller.getBoundingClientRect()
+  const box = row.getBoundingClientRect()
+  const centre = (box.top + box.bottom) / 2
+  return centre >= view.top && centre <= view.bottom
+}
+
+/** Scrolls the list to the named row (`end`: to the bottom), peeks it, and presses `←`. */
+async function peekAndBackFrom(name: string, scrollTo: 'end' | 'row') {
+  await openChipSheet()
+  const row = screen.getByRole('button', { name })
+  const before = scrollerOf(row)
+  if (scrollTo === 'end') before.scrollTop = before.scrollHeight
+  else before.scrollTop += row.getBoundingClientRect().top - before.getBoundingClientRect().top
+  await waitFor(() => expect(inView(screen.getByRole('button', { name }), before)).toBe(true))
+  const scrolled = before.scrollTop
+  await expect(scrolled).toBeGreaterThan(0)
+
+  await peekRow(name)
+  await userEvent.click(peekBack())
+  await headIs('character')
+  await waitForMediumDetent()
+  return { scrolled, after: screen.getByRole('button', { name }) }
+}
+
+/** `←` returns to the list where it was left, even for the last rows, whose offset the tall detent's bigger viewport would clamp. */
+export const ReaderChipBackKeepsScrollAtEnd: Story = {
+  globals: PHONE,
+  args: { initialData: LONG_ROSTER },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    const { scrolled, after } = await peekAndBackFrom('Zed 29', 'end')
+    const scroller = scrollerOf(after)
+    await expect(Math.abs(scroller.scrollTop - scrolled)).toBeLessThanOrEqual(1)
+    await expect(inView(after, scroller)).toBe(true)
+  },
+}
+
+export const ReaderChipBackKeepsScrollMidList: Story = {
+  globals: PHONE,
+  args: { initialData: LONG_ROSTER },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    const { scrolled, after } = await peekAndBackFrom('Zed 12', 'row')
+    const scroller = scrollerOf(after)
+    await expect(Math.abs(scroller.scrollTop - scrolled)).toBeLessThanOrEqual(1)
+    await expect(inView(after, scroller)).toBe(true)
+  },
+}
+
+/** The list stays mounted under the peek but is out of reach: unseen, unclickable, off the a11y tree. */
+export const ReaderChipListUnreachableUnderPeek: Story = {
+  globals: PHONE,
+  args: { initialData: LONG_ROSTER },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    await openChipSheet()
+    await peekRow('Zed 02')
+
+    const layer = within(railDialog()).getByTestId('rail-sheet-list-layer')
+    await expect(layer).toHaveAttribute('aria-hidden', 'true')
+    await expect(getComputedStyle(layer).visibility).toBe('hidden')
+    await expect(getComputedStyle(layer).pointerEvents).toBe('none')
+    await expect(screen.queryByRole('button', { name: 'Zed 03' })).not.toBeInTheDocument()
+
+    await userEvent.click(peekBack())
+    await headIs('character')
+    await expect(layer).not.toHaveAttribute('aria-hidden', 'true')
+    await expect(getComputedStyle(layer).visibility).toBe('visible')
+    await expect(screen.getByRole('button', { name: 'Zed 03' })).toBeVisible()
+  },
+}
+
 /** The peek's lead control: the lead wears the badge; a gated non-lead's `Set as lead` is disabled. */
 export const ReaderChipPeekLeadControl: Story = {
   globals: PHONE,
@@ -543,7 +646,8 @@ export const ReaderChipPeekLeadControl: Story = {
   play: async () => {
     await openChipSheet()
     await peekRow(leadOf(DATA).name)
-    await expect(within(railDialog()).getByText(t('world:lead.you'))).toBeVisible()
+    // The list stays mounted under the peek, with its own `You`: scope to the peek.
+    await expect(within(peekContent()).getByText(t('world:lead.you'))).toBeVisible()
     await expect(
       within(railDialog()).queryByRole('button', { name: t('reader:peek.setLead') }),
     ).not.toBeInTheDocument()
