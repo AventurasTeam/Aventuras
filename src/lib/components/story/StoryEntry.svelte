@@ -44,6 +44,8 @@
     Metronome,
     MoreVertical,
     MilestoneIcon,
+    ChevronDown,
+    ChevronRight,
   } from '@lucide/svelte'
   import { aiService } from '#lib/services/ai/index.ts'
   import { aiTTSService } from '#lib/services/ai/utils/TTSService.ts'
@@ -2325,12 +2327,35 @@
       {:else if pastCheckpoint.refusal}
         <p class="text-xs text-amber-500">{pastCheckpoint.refusal}</p>
       {:else}
-        <p class="text-muted-foreground text-xs">
-          Checkpoints save the story state and allow branching.
-        </p>
+        <div class="text-muted-foreground space-y-3 text-xs">
+          <p>Checkpoints save the story state and allow branching.</p>
+          <div>
+            <button
+              type="button"
+              class="hover:text-foreground flex items-center gap-1 font-medium"
+              onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
+              aria-expanded={!ui.checkpointHelpFolded}
+              aria-controls="past-checkpoint-help"
+            >
+              {#if ui.checkpointHelpFolded}
+                <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+              {:else}
+                <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+              {/if}
+              How past checkpoints work
+            </button>
+            {#if !ui.checkpointHelpFolded}
+              <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
+                Historical checkpoints rely on the state diffs that are recorded alongside the
+                tracked entries, and calculate past state through the rollback from the nearest
+                full-state landmark: an automated snapshot, another checkpoint, or current state.
+              </p>
+            {/if}
+          </div>
+        </div>
         {#if pastCheckpoint.manual.length > 0}
           {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
-          <p class="text-muted-foreground text-xs">Changes you made by hand after this entry:</p>
+          <p class="text-muted-foreground text-xs">Changes a user made by hand after this entry:</p>
           <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
             {#each pastCheckpoint.manual as change (change.id)}
               <li>

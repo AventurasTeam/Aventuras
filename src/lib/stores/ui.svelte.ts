@@ -164,6 +164,8 @@ class UIStore {
     chapters: true,
     checkpoints: true,
   })
+  /** Whether the checkpoint form's explanation of past checkpoints is folded. */
+  checkpointHelpFolded = $state(false)
 
   // Streaming state
   streamingContent = $state('')
@@ -435,6 +437,13 @@ class UIStore {
     return database
       .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
+  }
+
+  setCheckpointHelpFolded(folded: boolean): Promise<void> {
+    this.checkpointHelpFolded = folded
+    return database
+      .setSetting('checkpoint_help_folded', folded.toString())
+      .catch((err) => console.warn('[UI] Failed to persist checkpoint help fold:', err))
   }
 
   setNavFilter(group: LandmarkFilterGroup, show: boolean): Promise<void> {

@@ -1655,6 +1655,9 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
+      const checkpointHelpFolded = await database.getSetting('checkpoint_help_folded')
+      if (checkpointHelpFolded !== null) ui.checkpointHelpFolded = checkpointHelpFolded === 'true'
+
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
 
