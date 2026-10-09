@@ -221,7 +221,8 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 /**
  * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
  * second delete of a row, or a second write to a cascaded one, logs it twice (undo then hits a
- * unique constraint forever); a link or translation to a deleted or cascaded row dangles.
+ * unique constraint forever); a write to a row the group deletes leaves an undo that refuses as
+ * held; a link or translation to a deleted or cascaded row dangles.
  */
 function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   const cascaded = new Set<string>()
@@ -241,6 +242,8 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   for (const outcome of outcomes) {
     const target = createdKey(outcome.targetTable, outcome.targetId)
     if (cascaded.has(target)) return `the group writes ${target}, which a delete in it cascades`
+    if (outcome.op !== 'delete' && deleted.has(target))
+      return `the group writes ${target}, which it deletes`
     const { patch } = outcome
     const written =
       patch?.op === 'create' ? patch.row : patch?.op === 'update' ? patch.columns : undefined
