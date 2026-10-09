@@ -246,11 +246,20 @@ export function ChipRow({ preview }: { preview: ChipPreview }) {
   )
 }
 
-/** world.md → Overview: the non-default injection chip; nothing for `auto`. */
-export function InjectionModeChip({ mode }: { mode: InjectionMode }) {
+/** Whose Settings select the chip's tooltip copy comes from. */
+type InjectionHelp = 'entity' | 'lore' | 'thread'
+
+const INJECTION_HELP: Record<InjectionHelp, (mode: InjectionMode) => string> = {
+  entity: (mode) => t(`world:fields.injection.${mode}Help`),
+  lore: (mode) => t(`world:lore.injection.${mode}Help`),
+  thread: (mode) => t(`plot:fields.injection.${mode}Help`),
+}
+
+/** world.md → Overview: the non-default injection chip, its tooltip the Settings select's copy. */
+export function InjectionModeChip({ mode, help }: { mode: InjectionMode; help: InjectionHelp }) {
   if (mode === 'auto') return null
   return (
-    <ReasonTooltip reason={t(`world:fields.injection.${mode}Help`)}>
+    <ReasonTooltip reason={INJECTION_HELP[help](mode)}>
       <Tag>
         <Text className="font-semibold uppercase tracking-widest">
           {t(`world:overview.injectionChip.${mode}`)}
@@ -289,7 +298,7 @@ export function StatusRow({
           {t('world:overview.retiredReason', { reason })}
         </Text>
       ) : null}
-      <InjectionModeChip mode={entity.injectionMode} />
+      <InjectionModeChip mode={entity.injectionMode} help="entity" />
     </Pressable>
   )
 }

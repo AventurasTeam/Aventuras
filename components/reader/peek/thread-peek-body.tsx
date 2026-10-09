@@ -15,7 +15,7 @@ export function ThreadPeekBody({ thread }: { thread: Thread }) {
     <View testID="thread-peek-body" className="gap-3">
       <View className="flex-row flex-wrap items-center gap-1.5">
         <Tag tone={THREAD_STATUS_TONE[thread.status]}>{t(`plot:status.${thread.status}`)}</Tag>
-        <InjectionModeChip mode={thread.injectionMode} />
+        <InjectionModeChip mode={thread.injectionMode} help="thread" />
         {category ? <Tag tone="soft">{category}</Tag> : null}
       </View>
       {description ? <Text size="sm">{description}</Text> : null}

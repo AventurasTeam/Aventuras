@@ -16,7 +16,7 @@ export function LorePeekBody({ lore }: { lore: Lore }) {
     <View testID="lore-peek-body" className="gap-3">
       {hasChips ? (
         <View testID="lore-peek-chips" className="flex-row flex-wrap items-center gap-1.5">
-          <InjectionModeChip mode={lore.injectionMode} />
+          <InjectionModeChip mode={lore.injectionMode} help="lore" />
           {category ? <Tag tone="soft">{category}</Tag> : null}
         </View>
       ) : null}
