@@ -145,7 +145,6 @@ class UIStore {
   // Gallery image cache - persists across component unmounts
   private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
 
-  // Persists across GalleryTab unmounts.
   galleryNewestFirst = $state(false)
 
   // Streaming state

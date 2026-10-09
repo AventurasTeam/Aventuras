@@ -23,11 +23,14 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { SvelteSet, SvelteMap } from 'svelte/reactivity'
+  import type { Attachment } from 'svelte/attachments'
 
   const SWIPE_THRESHOLD = 50
 
+  const promptId = $props.id()
+
   // Always chronological, as loaded and cached in `ui`; `images` is the display order.
-  let loadedImages = $state<EmbeddedImageMeta[]>([])
+  let loadedImages = $state.raw<EmbeddedImageMeta[]>([])
   const images = $derived(ui.galleryNewestFirst ? loadedImages.toReversed() : loadedImages)
   // Lazy-loaded base64 payloads, keyed by image id. The grid/lightbox only loads the
   // pixels that are actually visible, so a story with many images never pulls all of
@@ -48,13 +51,12 @@
   let isSaving = $state(false)
   let isRegenerating = $state(false)
 
-  let selectedImageIds = $state<Set<string>>(new Set())
-  let selectAllChecked = $state(false)
+  const selectedImageIds = new SvelteSet<string>()
+  const selectAllChecked = $derived(images.length > 0 && selectedImageIds.size === images.length)
 
   let lightboxOpen = $state(false)
   let lightboxImageIndex = $state(0)
-  let touchStartX = $state(0)
-  let touchEndX = $state(0)
+  let touchStartX = 0
 
   /** Ids that must survive eviction: whatever the lightbox is showing or about to show. */
   function visibleImageIds(): Set<string> {
@@ -101,8 +103,7 @@
   }
 
   function resetSelection() {
-    selectedImageIds = new Set()
-    selectAllChecked = false
+    selectedImageIds.clear()
   }
 
   function closeGallery() {
@@ -138,26 +139,24 @@
     }
   }
 
-  /** Svelte action: load an image's pixels once its grid cell scrolls near the viewport. */
-  function lazyImage(node: HTMLElement, id: string) {
-    // Deliberately keeps observing instead of unobserving after the first hit: a payload can be
-    // evicted by the LRU once it scrolls away, and scrolling back must fetch it again.
-    // ensureImageData is itself a no-op when the data is already cached or in flight.
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) ensureImageData(id)
-        }
-      },
-      { rootMargin: '300px' },
-    )
-    observer.observe(node)
-    return {
-      destroy() {
-        observer.disconnect()
-      },
+  /** Svelte attachment: load an image's pixels once its grid cell scrolls near the viewport. */
+  const lazyImage =
+    (id: string): Attachment<HTMLElement> =>
+    (node) => {
+      // Deliberately keeps observing instead of unobserving after the first hit: a payload can be
+      // evicted by the LRU once it scrolls away, and scrolling back must fetch it again.
+      // ensureImageData is itself a no-op when the data is already cached or in flight.
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) ensureImageData(id)
+          }
+        },
+        { rootMargin: '300px' },
+      )
+      observer.observe(node)
+      return () => observer.disconnect()
     }
-  }
 
   async function loadImagesForStory(storyId: string) {
     isLoading = true
@@ -203,23 +202,19 @@
   })
 
   function toggleSelectAll() {
-    selectAllChecked = !selectAllChecked
     if (selectAllChecked) {
-      selectedImageIds = new Set(images.map((img) => img.id))
+      selectedImageIds.clear()
     } else {
-      selectedImageIds = new Set()
+      for (const img of images) selectedImageIds.add(img.id)
     }
   }
 
   function toggleImageSelection(imageId: string) {
-    const newSet = new SvelteSet(selectedImageIds)
-    if (newSet.has(imageId)) {
-      newSet.delete(imageId)
+    if (selectedImageIds.has(imageId)) {
+      selectedImageIds.delete(imageId)
     } else {
-      newSet.add(imageId)
+      selectedImageIds.add(imageId)
     }
-    selectedImageIds = newSet
-    selectAllChecked = newSet.size === images.length
   }
 
   async function handleSaveImages() {
@@ -284,7 +279,7 @@
   }
 
   function handleTouchEnd(e: TouchEvent) {
-    touchEndX = e.changedTouches[0].screenX
+    const touchEndX = e.changedTouches[0].screenX
     const diff = touchStartX - touchEndX
 
     if (Math.abs(diff) > SWIPE_THRESHOLD) {
@@ -296,34 +291,25 @@
     }
   }
 
-  $effect(() => {
-    function handleKeydown(e: KeyboardEvent) {
-      if (isEditingImage) {
-        if (e.key === 'Escape') handleEditImageCancel()
-        return
-      }
-      if (lightboxOpen) {
-        if (e.key === 'Escape') closeLightbox()
-        if (e.key === 'ArrowLeft') previousImage()
-        if (e.key === 'ArrowRight') nextImage()
-      } else {
-        if (e.key === 'Escape') closeGallery()
-      }
+  function handleKeydown(e: KeyboardEvent) {
+    if (lightboxOpen) {
+      if (e.key === 'Escape') closeLightbox()
+      if (e.key === 'ArrowLeft') previousImage()
+      if (e.key === 'ArrowRight') nextImage()
+    } else {
+      if (e.key === 'Escape') closeGallery()
     }
-
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
-  })
+  }
 
   // Edit modal state
-  let isEditingImage = $state(false)
-  let editingImageId = $state<string | null>(null)
   let editingImagePrompt = $state('')
 
   // Get the current lightbox image
   const lightboxImage = $derived(
     lightboxOpen && images.length > 0 ? images[lightboxImageIndex] : null,
   )
+
+  const OrderIcon = $derived(ui.galleryNewestFirst ? ClockArrowDown : ClockArrowUp)
 
   // Update prompt and lazily load pixels (current + neighbors) when navigating the lightbox
   $effect(() => {
@@ -338,37 +324,30 @@
     }
   })
 
-  // Cancel edit modal
-  function handleEditImageCancel() {
-    isEditingImage = false
-    editingImageId = null
-    editingImagePrompt = ''
-  }
-
   // Submit edit modal - regenerate with new prompt
-  async function handleEditImageSubmit() {
-    if (!editingImageId || !editingImagePrompt.trim()) return
+  async function handleEditImageSubmit(imageId: string) {
+    if (!editingImagePrompt.trim()) return
 
-    const image = images.find((img) => img.id === editingImageId)
+    const image = images.find((img) => img.id === imageId)
     if (!image) return
 
     // Use the prompt as-is - don't append style (user has full control)
     const fullPrompt = editingImagePrompt.trim()
 
     // Close modal and regenerate
-    isEditingImage = false
     closeLightbox()
 
     // Use centralized retry logic from ImageGenerationService
-    await retryImageGeneration(editingImageId, fullPrompt)
+    await retryImageGeneration(imageId, fullPrompt)
 
-    editingImageId = null
     editingImagePrompt = ''
 
     // Refresh gallery images
     await refreshImages()
   }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="bg-surface-900 flex h-full flex-col">
   <!-- Header -->
@@ -389,19 +368,10 @@
             variant="ghost"
             size="icon"
             onclick={() => ui.toggleGalleryOrder()}
-            title={ui.galleryNewestFirst
-              ? 'Newest first (click for oldest first)'
-              : 'Oldest first (click for newest first)'}
-            aria-label={ui.galleryNewestFirst
-              ? 'Newest first (click for oldest first)'
-              : 'Oldest first (click for newest first)'}
+            title={ui.galleryNewestFirst ? 'Show oldest first' : 'Show newest first'}
             class="h-8 w-8"
           >
-            {#if ui.galleryNewestFirst}
-              <ClockArrowDown class="h-3.5 w-3.5" />
-            {:else}
-              <ClockArrowUp class="h-3.5 w-3.5" />
-            {/if}
+            <OrderIcon class="h-3.5 w-3.5" />
           </Button>
 
           <!-- Refresh button -->
@@ -448,6 +418,7 @@
             size="sm"
             onclick={closeGallery}
             title="Close gallery (Esc)"
+            aria-label="Close gallery"
             class="h-8 gap-1 px-2.5 text-xs"
           >
             <X class="h-3.5 w-3.5" />
@@ -503,16 +474,17 @@
       <!-- Images grid -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {#each images as image, index (image.id)}
+          {@const selected = selectedImageIds.has(image.id)}
           <div
-            class="group bg-surface-800 relative overflow-hidden rounded-lg border-2 transition-colors"
-            class:border-accent-500={selectedImageIds.has(image.id)}
-            class:border-surface-700={!selectedImageIds.has(image.id)}
-            class:hover:border-accent-400={!selectedImageIds.has(image.id)}
+            class={[
+              'group bg-surface-800 relative overflow-hidden rounded-lg border-2 transition-colors',
+              selected ? 'border-accent-500' : 'border-surface-700 hover:border-accent-400',
+            ]}
           >
             <!-- Checkbox overlay (top-left) -->
             <div class="pointer-events-auto absolute top-2 left-2 z-20">
               <Checkbox
-                checked={selectedImageIds.has(image.id)}
+                checked={selected}
                 onCheckedChange={() => toggleImageSelection(image.id)}
                 aria-label="Select image"
                 class="bg-surface-900/80 border-surface-500"
@@ -524,7 +496,7 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               class="bg-surface-700 relative aspect-video cursor-pointer"
-              use:lazyImage={image.id}
+              {@attach lazyImage(image.id)}
               onclick={() => openLightbox(index)}
             >
               {#if imageDataCache.has(image.id)}
@@ -626,6 +598,7 @@
           disabled={lightboxImageIndex === 0}
           class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 left-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Previous (←)"
+          aria-label="Previous image"
         >
           <ChevronLeft class="h-5 w-5" />
         </button>
@@ -638,8 +611,10 @@
             <img
               src={getImagePreview(imageDataCache.get(images[lightboxImageIndex].id)!)}
               alt={`Generated image ${lightboxImageIndex + 1}`}
-              class="max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]"
-              class:opacity-50={isRegenerating}
+              class={[
+                'max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]',
+                isRegenerating && 'opacity-50',
+              ]}
             />
           {:else if failedImageIds.has(images[lightboxImageIndex].id)}
             <div class="flex h-[40vh] w-full items-center justify-center sm:h-[50vh]">
@@ -679,6 +654,7 @@
           disabled={lightboxImageIndex === images.length - 1}
           class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Next (→)"
+          aria-label="Next image"
         >
           <ChevronRight class="h-5 w-5" />
         </button>
@@ -687,9 +663,9 @@
 
     <!-- Edit area -->
     <div class="bg-surface-900 border-surface-800 border-t px-4 py-3">
-      <!-- svelte-ignore a11y_label_has_associated_control -->
-      <label class="text-surface-400 mb-1.5 block text-xs">Image Prompt</label>
+      <label for={promptId} class="text-surface-400 mb-1.5 block text-xs">Image Prompt</label>
       <Textarea
+        id={promptId}
         bind:value={editingImagePrompt}
         placeholder="Describe the image you want to generate..."
         rows={3}
@@ -721,8 +697,7 @@
             onclick={async () => {
               if (lightboxImage && editingImagePrompt.trim()) {
                 isRegenerating = true
-                editingImageId = lightboxImage.id
-                await handleEditImageSubmit()
+                await handleEditImageSubmit(lightboxImage.id)
                 isRegenerating = false
               }
             }}
