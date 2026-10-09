@@ -28,11 +28,11 @@ export type PeekDrawerProps = {
   blockedReason: string | undefined
   /** The host clears `peek`; also called when the peeked row stops resolving. */
   onClose: () => void
-  /** The C6 route for the peeked row or one of its Overview tabs; the host closes, then routes. */
+  /** The route for the peeked row or one of its Overview tabs; the host closes, then routes. */
   onOpenInPanel: (href: string) => void
 }
 
-/** layout.md → Sheet: the desktop / tablet peek, a right Sheet over a scrim. */
+/** layout.md → Sheet: the desktop / tablet peek. */
 export function PeekDrawer({
   data,
   visible,
@@ -82,8 +82,7 @@ export function PeekDrawer({
         if (!open) onClose()
       }}
       ariaLabel={model == null ? '' : t('reader:peek.label', { name: peekNameOf(model) })}
-      // Land on the named dialog, not its first button: a stray Enter or Space must not set the
-      // lead.
+      // Focus the named dialog, not its first button: a stray Enter/Space must not set the lead.
       onOpenAutoFocus={(event) => {
         event.preventDefault()
         routedAway.current = false

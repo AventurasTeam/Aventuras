@@ -8,7 +8,7 @@ import type { PeekModel } from './peek-model'
 import { ThreadPeekBody } from './thread-peek-body'
 import type { PeekEntityContext } from './use-peek-view'
 
-/** reader-composer.md → State-field composition: the entity peek body is World's Overview. */
+/** reader-composer.md → State-field composition. */
 export const PEEK_ENTITY_BODY = EntityOverview
 
 export type PeekBodyProps = {

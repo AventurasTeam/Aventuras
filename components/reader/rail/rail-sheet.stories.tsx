@@ -47,7 +47,7 @@ function leadOf(data: RailData) {
   return lead
 }
 
-// The peek stories use Mira, an active non-lead: her row sits in the Active tier, which starts open.
+// The peek stories use Mira, an active non-lead: her row is in the Active tier, which starts open.
 function entityNamed(name: string) {
   const entity = DATA.entities.find((e) => e.name === name)
   if (entity == null) throw new Error(`railDataFixture() has no entity named ${name}`)
@@ -442,7 +442,7 @@ export const ReaderChipViewEditsSetStoreView: Story = {
   },
 }
 
-/** C10 filled: a row tap grows the one Sheet to tall on that row's peek; `←` returns to the list. */
+/** C10 with the real peek: a row tap grows the one Sheet to tall; `←` returns to the list. */
 export const ReaderChipRowOpensPeek: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness {...args} />,
@@ -478,7 +478,7 @@ export const ReaderChipBackdropClosesPeek: Story = {
   },
 }
 
-/** layout.md → Stacking: the Sheet dismisses, then routes; a press during the close routes nothing. */
+/** layout.md → Stacking: the Sheet dismisses, then routes; a press mid-close routes nothing. */
 export const ReaderChipOpenInPanelNavigatesOnce: Story = {
   globals: PHONE,
   render: (args) => <ChipHarness {...args} />,
@@ -491,7 +491,7 @@ export const ReaderChipOpenInPanelNavigatesOnce: Story = {
     await userEvent.click(openInWorld)
     await userEvent.click(openInWorld)
     await expect(args.onNavigate).toHaveBeenCalledTimes(1)
-    // Spelled out rather than built by railRowHref: the expectation must not be the code under test.
+    // Spelled out, not built by railRowHref: the expectation must not be the code under test.
     await expect(args.onNavigate).toHaveBeenCalledWith(
       `/world/${DATA.branchId}?kind=character&id=${mira.id}`,
     )
@@ -587,10 +587,7 @@ async function listFillsSheet() {
 
 const sheetHeight = () => (listLayer().parentElement as HTMLElement).getBoundingClientRect().height
 
-/**
- * Waits until the Sheet's content height holds still across several polls. Pass `changeFrom`
- * where a resize is expected: a read taken before it lands would hold still at the old height.
- */
+/** Waits for the content height to hold still; `changeFrom` rejects the pre-resize height. */
 async function waitForSheetSettled(changeFrom?: number) {
   let last = -1
   let still = 0
@@ -647,7 +644,7 @@ async function peekAndBackFrom(name: string, scrollTo: 'end' | 'row') {
   return { scrolled, after: screen.getByRole('button', { name }) }
 }
 
-/** `←` returns to the list where it was left, even for the last rows, whose offset the tall detent's bigger viewport would clamp. */
+/** `←` restores the list offset, even at the end, which the tall detent's viewport would clamp. */
 export const ReaderChipBackKeepsScrollAtEnd: Story = {
   globals: PHONE,
   args: { initialData: LONG_ROSTER },
@@ -713,7 +710,7 @@ export const ReaderChipWindowGrowsWhilePeeking: Story = {
   },
 }
 
-/** A window round trip at the list level must not leave the other window's height for the next cap. */
+/** A window round trip at the list level must not re-cap the list at the other window's height. */
 export const ReaderChipWindowRoundTripRecapsList: Story = {
   globals: PHONE,
   args: { initialData: LONG_ROSTER },
@@ -741,7 +738,7 @@ export const ReaderChipWindowRoundTripRecapsList: Story = {
   },
 }
 
-/** The list stays mounted under the peek but is out of reach: unseen, unclickable, off the a11y tree. */
+/** The list stays mounted under the peek, unreachable: unseen, unclickable, off the a11y tree. */
 export const ReaderChipListUnreachableUnderPeek: Story = {
   globals: PHONE,
   args: { initialData: LONG_ROSTER },
@@ -764,7 +761,7 @@ export const ReaderChipListUnreachableUnderPeek: Story = {
   },
 }
 
-/** The peek's lead control: the lead wears the badge; a gated non-lead's `Set as lead` is disabled. */
+/** Peek lead control: the lead wears the badge; a gated non-lead's `Set as lead` is disabled. */
 export const ReaderChipPeekLeadControl: Story = {
   globals: PHONE,
   args: { blocked: true, blockedReason: t('common:generationGate.chapterClose') },

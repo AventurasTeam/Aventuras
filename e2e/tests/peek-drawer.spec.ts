@@ -16,8 +16,7 @@ import { reader } from '../locators/reader'
 import { world } from '../locators/world'
 
 // reader-composer.md → Peek drawer, at the seams only a running app reaches: the C5 write, the
-// mounted reader re-deriving its lead, and the C6 routes into World and Plot. Per-kind bodies, the
-// close paths and collapse-closes-peek are the peek stories' (docs/testing.md → Coverage).
+// mounted reader re-deriving its lead, the C6 routes. The rest: stories (testing.md → Coverage).
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
@@ -134,7 +133,7 @@ test.describe.serial('Peek drawer', () => {
     const page = app.window
     const sage = await entityId(page, branchId, STAGED_CHARACTER)
     const staged = t('world:tiers.staged')
-    // listCollapseStore is shared with World's list: the tier the reveal must open is shut going in.
+    // listCollapseStore is shared with World's list: the tier the reveal opens is shut going in.
     await expect(rail.tierHeader(page, staged)).toHaveAttribute('aria-expanded', 'false')
 
     await rail.entityChip(page, 'staged').click()
@@ -201,9 +200,8 @@ test.describe.serial('Peek drawer', () => {
     await expect(peek.region(page, ANCHORED_HAPPENING, 'happening-peek-body')).toContainText(
       t('common:entryRef', { n: Number(position) }),
     )
-    // The whole counts line, so a description that says "2 aware" can't satisfy it and "12
-    // involved" can't pass for "2 involved". Equal seeded counts leave a swap of the two numbers
-    // undetected here; peek-content.stories.tsx seeds distinct ones.
+    // Whole counts line, so a description saying "2 aware" or "12 involved" can't pass. Equal
+    // seeded counts leave a swap undetected here; peek-content.stories.tsx seeds distinct ones.
     await expect(peek.region(page, ANCHORED_HAPPENING, 'happening-peek-counts')).toHaveText(
       `${t('reader:peek.involved', { count: involved })} · ${t('reader:peek.aware', { count: aware })}`,
     )
@@ -246,9 +244,8 @@ test.describe.serial('Peek drawer', () => {
     expect(rows).toEqual([[`${NEW_LEAD} draws the E2E-PEEK blade.`]])
   })
 
-  // The Do turn above left one undoable turn. The drawer is a blocking overlay, so the reader's
-  // window-level Ctrl+Z must stand down while it is open — the key someone presses after a stray
-  // Set as lead — and work again once it closes (which also proves the key reaches the reader here).
+  // Needs the Do turn above's undo. The drawer is a blocking overlay, so the reader's window-level
+  // Ctrl+Z stands down while it's open; undoing once closed proves the key reaches the reader.
   test("Ctrl+Z inside the peek leaves the story alone, and undoes the turn once it's closed", async () => {
     const page = app.window
     const replies = (): Promise<number> =>

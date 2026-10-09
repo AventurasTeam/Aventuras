@@ -130,7 +130,6 @@ export type PeekLead =
       pending: boolean
     }
 
-/** Whether `Set as lead` can't be pressed. */
 export function isLeadActionDisabled(lead: PeekLead | undefined): boolean {
   return lead?.state === 'candidate' && (lead.disabledReason != null || lead.pending)
 }

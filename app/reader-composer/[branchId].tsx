@@ -148,9 +148,8 @@ type BranchHydrationState =
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
 
-// A registered blocking overlay (Sheet, AlertDialog, Select) claims the surface, so the keys stand
-// down. Read at key time, not subscribed: the route must not re-render when an overlay opens, and a
-// miss in `matches` skips the hook's preventDefault, so the browser's own undo still works.
+// A blocking overlay (Sheet, AlertDialog, Select) claims the surface. Read at key time, not
+// subscribed (no route re-render); a `matches` miss skips preventDefault, so browser undo works.
 function readerKeysStandDown(): boolean {
   return blockingOverlaysStore.getState().open.size > 0
 }
@@ -1208,8 +1207,7 @@ export default function ReaderComposerRoute() {
     readerRailStore.enterBranch(branchId)
   }, [branchId])
 
-  // One read for whichever tier's rail mounts: the column and its peek drawer on tablet / desktop,
-  // the chip's Sheet on phone.
+  // One read for whichever rail mounts: the column and peek drawer, or the phone chip's Sheet.
   const railData = useRailData(branchId)
 
   const placeholder = readerPlaceholder({

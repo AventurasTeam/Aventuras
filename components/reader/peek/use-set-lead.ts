@@ -10,7 +10,7 @@ import { toast } from '@/lib/toast'
 const ctx = { db, runInTransaction }
 
 /**
- * The peek's `Set as lead` (C5). No toast on success: the reader re-anchoring is the feedback
+ * The peek's `Set as lead`. No toast on success: the reader re-anchoring is the feedback
  * (reader-composer.md → Peek drawer — lead affordance for characters).
  */
 export function useSetLead(storyId: string | null): {

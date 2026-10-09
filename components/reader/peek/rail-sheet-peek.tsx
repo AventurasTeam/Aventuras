@@ -19,7 +19,7 @@ export type RailSheetPeekProps = {
   onOpenInPanel: (href: string) => void
 }
 
-/** The phone rail Sheet's peek level (M4 C10's slot), rendered through `RailSheet`'s `renderPeek`. */
+/** The phone rail Sheet's peek level, rendered through `RailSheet`'s `renderPeek`. */
 export function RailSheetPeek({
   peek,
   data,

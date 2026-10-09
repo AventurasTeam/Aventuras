@@ -68,7 +68,7 @@ function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolea
   )
 }
 
-/** reader-composer.md → Peek drawer: kind glyph, name, recently-classified, then the lead slot. */
+/** reader-composer.md → Peek drawer. */
 export function PeekHead({
   kind,
   name,

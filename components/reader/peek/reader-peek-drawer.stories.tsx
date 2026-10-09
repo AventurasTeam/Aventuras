@@ -179,7 +179,7 @@ export const PreferenceFlipClosesPeek: Story = {
   },
 }
 
-/** lessons-learned → Portaled overlays outlive screen focus: an unfocused reader shows no drawer. */
+/** lessons-learned → Portaled overlays outlive screen focus: unfocused, no drawer shows. */
 export const UnfocusedShowsNoDrawer: Story = {
   args: { isFocused: false },
   play: async () => {

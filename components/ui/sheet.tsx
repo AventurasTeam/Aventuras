@@ -180,8 +180,8 @@ type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
    */
   enablePanDownToClose?: boolean
   /**
-   * Bottom-anchor only — replaces the keyboard behavior `size` picks. A Sheet whose size changes
-   * across 'tall' while open must pin it: a flip while open kills gorhom's content scroll on native.
+   * Bottom-anchor only — replaces the keyboard behavior `size` picks. Pin it when size crosses
+   * 'tall' while open: the flip kills gorhom's content scroll on native.
    */
   keyboardBehavior?: SheetKeyboardBehavior
   /** Right-anchor only — names the rn-primitives Portal host to render into. */

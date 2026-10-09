@@ -28,8 +28,8 @@ export function ReaderPeekDrawer({
   const { peek, closePeek } = useRailPeek()
   const { collapsed } = useRailCollapse()
 
-  // Peek implies rail open. The reducer closes the peek on every collapse it sees; a preference
-  // flipped outside it (a settings import) would otherwise leave one to resurface on the next expand.
+  // Peek implies rail open. The reducer closes the peek on collapse, but a preference flipped
+  // outside it (a settings import) would leave one to resurface on the next expand.
   useEffect(() => {
     if (collapsed && peek != null) closePeek()
   }, [collapsed, peek, closePeek])

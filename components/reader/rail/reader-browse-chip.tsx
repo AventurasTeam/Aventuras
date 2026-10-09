@@ -28,7 +28,7 @@ export function ReaderBrowseChip({
   const view = readerRailStore.useView()
   const tint = useMemo(() => railChipTintOf(data), [data])
   const openInPanel = (href: string) => {
-    // The peek stays pressable while the Sheet animates out; a second press must not navigate again.
+    // The peek stays pressable while the Sheet animates out; a second press must not re-navigate.
     if (!open) return
     // layout.md → Stacking: dismiss the Sheet, then navigate.
     setOpen(false)

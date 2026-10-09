@@ -48,7 +48,7 @@ function identityOf(model: PeekModel): PeekIdentity {
   }
 }
 
-/** The peek both hosts render: head, the kind's body, then the C6 foot link. */
+/** The peek both hosts render: head, the kind's body, then the foot link. */
 export function PeekContent({
   model,
   entityContext,
