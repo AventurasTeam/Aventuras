@@ -1388,6 +1388,15 @@ own.
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+  The same pass owns focus: RN Web maps `disabled` to the native
+  attribute, so a control that disables under focus drops it to
+  `<body>` (`Button`'s `loading`, History's `Load more`;
+  [lesson](./lessons-learned/rnweb-disabled-under-focus-blurs.md)). A
+  focusable `aria-disabled` control without native `disabled` would
+  keep focus and carry the reason, but contradicts
+  [`color.md → Disabled`](../ui/foundations/color.md#disabled)
+  ("disabled controls aren't focusable"), so it's a developer call.
+  Widened from triage 2026-10-09.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist

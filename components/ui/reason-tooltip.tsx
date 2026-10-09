@@ -15,7 +15,8 @@ type ReasonTooltipProps = {
  *
  * Render this unconditionally and vary only `reason`: gating the wrapper itself
  * on the reason's presence changes the root element type, and React remounts
- * the control, dropping focus at the moment the state flips.
+ * the control, dropping focus at the moment the state flips. A web control that
+ * turns disabled loses focus anyway (lessons-learned/rnweb-disabled-under-focus-blurs.md).
  *
  * `contents` generates no layout box, so over a `pointer-events: none` control
  * nothing catches the pointer — hence a real box while a reason exists. It takes

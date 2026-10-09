@@ -439,21 +439,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
   Raised in 4.6's slice review, 2026-10-08.
 
-- **A disabled control under focus drops focus to `<body>` on web.**
-  (2026-10-09) RN-Web renders a `role="button"` Pressable as a native
-  `<button>` and turns `disabled` into the native attribute, so Chromium
-  blurs it when it disables under focus (`Button`'s `loading`,
-  `components/ui/button.tsx:97-107`; any reason-bearing control that
-  disables while focused). The remount note in
-  `components/ui/reason-tooltip.tsx` (lines 16-18) implies an
-  unconditional wrapper keeps focus across a flip to disabled, which
-  doesn't hold on web. The peek keeps focus by refocusing its dialog from
-  the drawer instead
-  ([`color.md → Disabled`](../ui/foundations/color.md#disabled): disabled controls
-  aren't focusable). The reason not reaching assistive tech on web is
-  [roadmap M9.2](./roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate)'s
-  `disabledReason` item. Candidate lessons-learned entry. Raised in
-  4.5b's review, 2026-10-09.
 - **Focus-ring canon drift.** (2026-10-09)
   [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
   ring with a 2px offset; none of the `focus-visible:ring-2` usages under
