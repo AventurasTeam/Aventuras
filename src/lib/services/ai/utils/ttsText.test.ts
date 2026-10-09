@@ -5,6 +5,7 @@ import {
   resolveTTSSanitizeOptions,
   stripExcludedCharacters,
   supportsDialogueVoice,
+  supportsVolumeOverride,
 } from './ttsText'
 import { buildChunks } from './TTSService'
 
@@ -173,5 +174,18 @@ describe('buildChunks', () => {
 
   it('drops a chunk with nothing pronounceable in it', () => {
     expect(buildChunks([{ text: '...', voice: 'alloy' }], 100)).toEqual([])
+  })
+})
+
+describe('supportsVolumeOverride', () => {
+  it('is always available off iOS', () => {
+    expect(supportsVolumeOverride('openai', false)).toBe(true)
+    expect(supportsVolumeOverride('microsoft', false)).toBe(true)
+  })
+
+  it('on iOS is limited to system voices', () => {
+    expect(supportsVolumeOverride('openai', true)).toBe(false)
+    expect(supportsVolumeOverride('google', true)).toBe(false)
+    expect(supportsVolumeOverride('microsoft', true)).toBe(true)
   })
 })

@@ -10,13 +10,17 @@ mod sync;
 mod time_anchors;
 
 use backup::{
-    backup_database, export_images_zip, export_single_image, export_story_avt, import_saf_to_temp,
-    restore_database,
+    backup_database, export_images_zip, export_single_image, export_story_avt, restore_database,
 };
 use sync::commands::{
     clear_received_stories, get_received_stories, start_sync_server, stop_sync_server,
     sync_connect, sync_pull_story, sync_push_story,
 };
+
+#[tauri::command]
+fn is_ios() -> bool {
+    cfg!(target_os = "ios")
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -294,6 +298,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             start_sync_server,
@@ -303,12 +308,12 @@ pub fn run() {
             sync_connect,
             sync_pull_story,
             sync_push_story,
+            is_ios,
             backup_database,
             restore_database,
             export_images_zip,
             export_single_image,
             export_story_avt,
-            import_saf_to_temp,
             avt_import::avt_read_light,
             avt_import::avt_import_images,
             db_tx::db_transaction,

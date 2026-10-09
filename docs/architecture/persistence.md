@@ -61,7 +61,10 @@ which on Android is a hard cap, not a soft one. The rule throughout is **JS owns
 Rust owns the bytes**: only small parameters (paths, ids) cross the IPC bridge.
 
 - **`backup.rs`** — database backup/restore and image export. Payloads are streamed file-to-file or
-  DB-to-file and never enter the JS heap.
+  DB-to-file and never enter the JS heap. Restore takes the open dialog's raw result: a path
+  (desktop) is read directly, a `file://` URL (iOS) is opened with security-scoped access that is
+  released afterwards, and a `content://` URI (Android) is copied to a temp file first because its
+  descriptor is not reliably seekable. Restores are serialized.
 - **`avt_import.rs`** — `.avt` story import in two streaming passes. `avt_read_light` returns the
   JSON with every `imageData` stripped, JS parses that and runs the normal import (id remapping,
   ordering and foreign keys stay in TypeScript where they are tested), then `avt_import_images`

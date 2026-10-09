@@ -368,16 +368,21 @@ The `.ipa` is written to the repo root as
 Mechanics worth knowing:
 
 - The script temporarily patches `project.yml` with the four signing-disabled settings and
-  runs `tauri ios build --target aarch64 --archive-only`, which stops after `xcodebuild
-  archive` and skips the CLI's IPA-export phase (the part that requires signing). Do not
+  runs `tauri ios build --target aarch64 --archive-only`, which
+  stops after `xcodebuild archive` and skips the CLI's IPA-export phase (the part that
+  requires signing). Do not
   rely on the CLI's own `CODE_SIGNING_*` defaults or xcodebuild runner args for this:
   neither reaches the signing validation inside `xcodebuild archive` — the patch is what
   disables signing, and it is restored on exit.
 - The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive`, and the app
   bundle at `Products/Applications/Aventuras.app` inside it.
-- **Local `tauri ios dev` does not work with the `devtools` feature**
-  (`tauri-plugin-devtools` is desktop-only). Pass the release config to drop the feature:
-  `npx tauri ios dev --config src-tauri/tauri.release.conf.json`.
+- The app icon comes from **`src-tauri/icons/ios/`**. `tauri ios init` fills
+  `gen/apple/Assets.xcassets/AppIcon.appiconset` with Tauri's placeholder logo, so
+  `scripts/sync-ios-icons.sh` copies the Aventuras set over it; the build script and the
+  bootstrap workflow both run it. Run it yourself before a local `tauri ios dev` or Xcode
+  build on a freshly initialised scaffold.
+- `tauri ios dev` drops the desktop-only `devtools` feature automatically through
+  `src-tauri/tauri.ios.conf.json`, which Tauri merges into every `tauri ios` command.
 
 CI builds iOS in `.github/workflows/build-ios.yml` (reusable, on `macos-15`), wired into
 `release.yml`, `pre-release.yml` and `ci.yml` exactly like the Android leg. If `gen/apple`

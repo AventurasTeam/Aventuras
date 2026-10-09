@@ -9,6 +9,7 @@
 
 <script lang="ts">
   import { settings } from '$lib/stores/settings.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import {
     FlaskConical,
     Download,
@@ -35,11 +36,10 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
-  import { isAndroid } from '$lib/utils/platform'
+  import { isAndroid, isIos } from '$lib/utils/platform'
   import { autosize } from '$lib/utils/autosize'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '$lib/utils/dialogFilters'
-  import { invoke } from '@tauri-apps/api/core'
   import { errMessage } from '$lib/utils/error'
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
@@ -52,6 +52,8 @@
   let restoreError = $state<string | null>(null)
   let showBackupConfirm = $state(false)
   let showRestoreConfirm = $state(false)
+  const RESTORE_EXIT_DELAY_MS = 3000
+  const onIos = isIos()
 
   // SQL Query Box state — initialized from module-level persisted values
   let sqlQuery = $state(_sqlQuery)
@@ -147,7 +149,8 @@
     showRestoreConfirm = false
     restoreError = null
 
-    // Pick the backup file. On Android this returns a SAF content:// URI; on desktop a real path.
+    // Pick the backup file: a SAF content:// URI on Android, a file:// URL on iOS, a real path on
+    // desktop.
     const selected = await open({
       title: 'Select Aventura Backup to Restore',
       // openFilters drops these on Android. It matters here: SAF appends " (1)" AFTER ".zip" for
@@ -162,20 +165,8 @@
     })
     if (!selected) return
 
-    let zipPath = selected as string
-    // Android: the picked content:// URI can't be std::fs-opened by the native restore, so stream
-    // it into a real temp file first (natively — no bytes cross the JS bridge), then restore that.
-    if (isAndroid()) {
-      isRestoring = true
-      try {
-        zipPath = await invoke<string>('import_saf_to_temp', { srcUri: selected })
-      } catch (error) {
-        restoreError = errMessage(error)
-        isRestoring = false
-        return
-      }
-    }
-    await doRestore(zipPath)
+    // The native restore opens a path, file:// URL or content:// URI itself.
+    await doRestore(selected as string)
   }
 
   async function doRestore(zipPath: string) {
@@ -184,12 +175,30 @@
     try {
       const { backupService } = await import('$lib/services/backupService')
       await backupService.restoreFromBackup(zipPath)
-      // App will exit — we won't reach here
     } catch (error) {
       console.error('[ExperimentalSettings] Restore failed:', error)
       restoreError = errMessage(error)
-    } finally {
       isRestoring = false
+      return
+    }
+
+    // The DB is closed and replaced; the blocking modal keeps anything from lazily reopening it.
+    ui.restoreComplete = true
+    // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
+    await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
+    // iOS ignores exit(), so the user has to close the app themselves.
+    if (isIos()) {
+      ui.restoreCloseHint =
+        'Restore succeeded. Close Aventuras from the app switcher, then reopen it to continue with the restored database.'
+      return
+    }
+    try {
+      // exit() rather than relaunch() avoids a Windows webview2 crash on teardown.
+      const { exit } = await import('@tauri-apps/plugin-process')
+      await exit(0)
+    } catch (error) {
+      console.error('[ExperimentalSettings] Exit after restore failed:', error)
+      ui.restoreCloseHint = 'Restore succeeded. Please close and relaunch Aventuras.'
     }
   }
 
@@ -743,7 +752,12 @@
           <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
         </p>
         <p class="font-medium text-amber-500">
-          The application will close after restoring. You will need to reopen it manually.
+          {#if onIos}
+            iOS cannot close the app for you. After restoring, close Aventuras from the app
+            switcher, then reopen it.
+          {:else}
+            The application will close after restoring. You will need to reopen it manually.
+          {/if}
         </p>
       </Dialog.Description>
     </Dialog.Header>
@@ -755,7 +769,7 @@
         class="border-destructive text-destructive hover:bg-destructive/10 gap-2"
       >
         <Upload class="h-4 w-4" />
-        Restore & Close App
+        {onIos ? 'Restore' : 'Restore & Close App'}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

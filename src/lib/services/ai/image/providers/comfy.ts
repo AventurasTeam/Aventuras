@@ -14,11 +14,21 @@ import type {
   ComfySamplerInfo,
   ComfyCustomWorkflow,
 } from './types'
-import { ComfyApi, PromptBuilder, CallWrapper, type ImageInfo } from '@saintno/comfyui-sdk'
+import {
+  ComfyApi,
+  PromptBuilder,
+  CallWrapper,
+  type ImageInfo,
+  type WebSocketInterface,
+} from '@saintno/comfyui-sdk'
 import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '$lib/utils/image'
+import { imageGetFetch } from './fetchAdapter'
+import type { ComfyApiFetchInternals } from './comfyFetchMembers'
+import { TauriWebSocket } from './tauriWebSocket'
+import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
@@ -42,23 +52,12 @@ export async function fetchModelList(
   type: string,
   timeoutMs?: number,
 ): Promise<string[]> {
-  const controller = new AbortController()
-  const timerId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null
-  try {
-    const resp = await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      throw new Error(`ComfyUI /models/${type} responded ${resp.status}: ${body}`)
-    }
-    return (await resp.json()) as string[]
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`ComfyUI /models/${type} timed out after ${timeoutMs}ms`)
-    }
-    throw err
-  } finally {
-    if (timerId !== null) clearTimeout(timerId)
-  }
+  // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
+  const resp = await imageGetFetch(`${baseUrl}/models/${type}`, undefined, {
+    serviceId: 'comfy-models',
+    timeoutMs,
+  })
+  return (await resp.json()) as string[]
 }
 
 export function clearComfyCacheForUrl(baseUrl: string): void {
@@ -338,10 +337,49 @@ function buildOnFailedHandler(
   }
 }
 
+// One client per server: each holds a socket and timers that nothing tears down.
+const apis = new Map<string, ComfyApi>()
+
+function getApi(baseUrl: string): ComfyApi {
+  const cached = apis.get(baseUrl)
+  if (cached) return cached
+
+  const api = new ComfyApi(baseUrl, undefined, {
+    customWebSocketImpl: TauriWebSocket as unknown as WebSocketInterface,
+  })
+
+  // Routes every SDK request through Tauri HTTP (docs/architecture/overview.md, "Local image
+  // servers"); headers are replaced, not merged, as in the SDK.
+  const internal = api as unknown as ComfyApiFetchInternals
+  internal.fetchApi = (path, options = {}) => {
+    options.headers = { ...internal.getCredentialHeaders() }
+    options.mode = 'cors'
+    return tauriHttpFetch(internal.apiURL(path), options)
+  }
+
+  // A failed init() never opens a socket, so a cached client would never see generation events.
+  // reconnection_failed: the socket gave up after its retry limit and nothing revives it, so a
+  // cached client would hang every later generate() until the image timeout. Evict and destroy()
+  // so the next call builds a fresh client and the dead one's timers and poller stop.
+  const evict = () => {
+    if (apis.get(baseUrl) !== api) return
+    apis.delete(baseUrl)
+    api.destroy()
+  }
+  api.on('connection_error', evict)
+  // Dispatched by the SDK but missing from its TComfyAPIEventMap, so on() rejects it.
+  api.addEventListener('reconnection_failed', evict)
+
+  apis.set(baseUrl, api)
+  // init() issues its first request synchronously, so the patch above must already be in place.
+  api.init()
+  return api
+}
+
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
 
-  const api = new ComfyApi(baseUrl).init()
+  const api = getApi(baseUrl)
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
   const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)

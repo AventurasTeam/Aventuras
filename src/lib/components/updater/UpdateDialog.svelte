@@ -51,6 +51,10 @@
       'This is an unpackaged development build, so Aventuras will not install over it — on Linux that would replace the binary you just built. The releases page will open in your browser instead.',
     'mobile-platform':
       'Aventuras cannot install its own updates on Android. The download will open in your browser.',
+    // The iOS .ipa is unsigned by design (docs/development/ios-build-target.md), so Safari can
+    // only save it and Files.app cannot install it.
+    'ios-sideload':
+      'Aventuras cannot install its own updates on iOS, and the download is an unsigned .ipa — Safari can only save it. Installing it needs a sideloading tool such as AltStore, Sideloadly or TrollStore.',
   }
 
   const HANDED_OFF_NOTES: Record<ManualInstallReason, string> = {
@@ -59,6 +63,8 @@
     unpackaged: 'The releases page has opened in your browser.',
     'mobile-platform':
       'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm.',
+    'ios-sideload':
+      'The .ipa download has opened in your browser — wait for it to finish. The file is unsigned, so opening it in Files will not install it — use a sideloading tool such as AltStore, Sideloadly or TrollStore.',
   }
 
   const manualInstallNote = $derived(
@@ -219,7 +225,8 @@
           <Button variant="outline" onclick={() => handleOpenChange(false)}>Not now</Button>
           <Button onclick={handleOpenInBrowser}>
             <ExternalLink class="mr-2 h-4 w-4" />
-            {info.manualInstallReason === 'mobile-platform'
+            {info.manualInstallReason === 'mobile-platform' ||
+            info.manualInstallReason === 'ios-sideload'
               ? 'Download update'
               : 'Open releases page'}
           </Button>

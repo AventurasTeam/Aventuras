@@ -126,6 +126,9 @@ class UIStore {
   // reader opts into, not an ambient reference the way the sidebar is.
   navPanelOpen = $state(false)
   settingsModalOpen = $state(false)
+  // Root-level so the blocking dialog outlives the settings tab that started the restore.
+  restoreComplete = $state(false)
+  restoreCloseHint = $state<string | null>(null)
   isGenerating = $state(false)
   isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
   vaultTab = $state<VaultTab>('characters')

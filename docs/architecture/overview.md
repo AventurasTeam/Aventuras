@@ -453,6 +453,18 @@ Images are stored as base64 in SQLite. Export and import of a story with images 
 handled natively in Rust so the payloads never enter the WebView heap — see
 [persistence.md](persistence.md).
 
+### Local image servers on iOS
+
+App Transport Security blocks the WebView's `fetch` to plaintext `http://` hosts outside the
+local-network exception, and it does so silently. Local backends therefore make every HTTP call
+through Tauri's HTTP plugin (`imageGetFetch`, or the patched `fetchApi` for ComfyUI, whose SDK
+has no injection point), on every platform. `comfy.test.ts` fails if an SDK upgrade renames the
+members that patch replaces.
+
+The ComfyUI SDK also holds a WebSocket, and `CallWrapper` only finishes on events from it, so the
+socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
+`customWebSocketImpl`); the WebView's own `ws://` is subject to the same ATS block.
+
 ## Environment
 
 There are no required `.env` files for local development or the built app:

@@ -6,7 +6,8 @@
 
 import { PROVIDERS } from '../sdk/providers/config'
 import { corsFetch } from '$lib/services/discovery/utils'
-import { SPEAKABLE } from './ttsText'
+import { SPEAKABLE, supportsVolumeOverride } from './ttsText'
+import { isIos } from '$lib/utils/platform'
 
 // Constants
 export const DEFAULT_SPEECH_RATE = 1.0
@@ -947,7 +948,8 @@ export class AITTSService {
     // OpenAI-compatible servers (e.g. Kokoro) honor the speed parameter
     const playbackRate = this.settings.speed
     const volume = this.settings.volume
-    const volumeOverride = this.settings.volumeOverride
+    const volumeOverride =
+      this.settings.volumeOverride && supportsVolumeOverride(this.settings.provider, isIos())
 
     try {
       this.isPlaying = true

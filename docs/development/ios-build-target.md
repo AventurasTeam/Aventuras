@@ -6,8 +6,8 @@ Written as a complete record: the audit, every design decision, every CI failure
 fix, and what remains untested.
 
 The user-facing build instructions live in
-[release.md → Building iOS](release.md#building-ios). This document is the *why and how it
-happened*.
+[release.md → Building iOS](release.md#building-ios). This document is the _why and how it
+happened_.
 
 ---
 
@@ -17,26 +17,26 @@ happened*.
   with **no Apple certificates, provisioning profiles, or signing secrets** anywhere.
 - **Zero regressions** to the existing platforms: Windows (`nsis`), Linux (`.deb`,
   `.AppImage`, `.rpm`), Android (signed `.apk`), macOS desktop (`.dmg`, Intel + ARM64).
-- Keep changes minimal and iOS-specific. In the end, **no file under `src-tauri/` was
-  modified at all** — no `Cargo.toml`, no `Cargo.lock`, no `tauri.conf.json`, no
-  capabilities, no Rust sources.
+- Keep changes minimal and iOS-specific. Existing files under `src-tauri/` changed only where
+  iOS needed it (see §5); everything else added there is iOS-only and read only for an iOS build
+  (see §4).
 
 ## 2. The compatibility audit (what was already iOS-ready)
 
 Before writing anything, the repository was audited end to end. The conclusion was that
 the app was unusually close to iOS-ready:
 
-| Area | Finding |
-| --- | --- |
-| Mobile entry point | [`src-tauri/src/lib.rs`](../src-tauri/src/lib.rs) already had `#[cfg_attr(mobile, tauri::mobile_entry_point)]` — the same hook Android builds use. |
-| Crate types | [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) already built `staticlib` (required by the iOS Xcode project to link the Rust library). |
-| Rust dependencies | `ring` (via rustls), `sqlx`/libsqlite3-sys, `axum`, `tokio`, `reqwest` (rustls-no-provider), `zip`, `image`, `local-ip-address`, `qrcode`, `uuid` — all support `aarch64-apple-ios`. Nothing to change. |
-| iOS icons | `src-tauri/icons/ios/AppIcon-*.png` — the full set was already generated. |
-| Frontend | `viewport-fit=cover` in `src/app.html`; the `AndroidBridge` insets script no-ops when the bridge is absent; `swipe.ts` already matched iPhone/iPad user agents; layout hooks are capability-based, not platform-based. |
-| Updater | `tauri-plugin-updater` has no iOS support, but `src/lib/services/updater.ts` already mapped `UnsupportedOs` to a graceful "not supported here" error, and the mobile path (GitHub Releases API + manual install) is platform-agnostic. |
-| Capabilities | The permission list in `src-tauri/capabilities/default.json` resolves on mobile — proven daily by Android building with the identical list. |
-| Desktop-only code | Already gated: `is_nvidia_wayland` under `#[cfg(target_os = "linux")]`, the devtools plugin under `debug_assertions` + feature flag. |
-| Database | `db_path` uses `app_config_dir()` → iOS `Library/Application Support`. Works. |
+| Area               | Finding                                                                                                                                                                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mobile entry point | [`src-tauri/src/lib.rs`](../src-tauri/src/lib.rs) already had `#[cfg_attr(mobile, tauri::mobile_entry_point)]` — the same hook Android builds use.                                                                                              |
+| Crate types        | [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) already built `staticlib` (required by the iOS Xcode project to link the Rust library).                                                                                                       |
+| Rust dependencies  | `ring` (via rustls), `sqlx`/libsqlite3-sys, `axum`, `tokio`, `reqwest` (rustls-no-provider), `zip`, `image`, `local-ip-address`, `qrcode`, `uuid` — all support `aarch64-apple-ios`. Nothing to change.                                         |
+| iOS icons          | `src-tauri/icons/ios/AppIcon-*.png` — the full set was already generated; `scripts/sync-ios-icons.sh` copies it into the Xcode asset catalog, which `tauri ios init` fills with Tauri's logo.                                                   |
+| Frontend           | `viewport-fit=cover` in `src/app.html`; the `AndroidBridge` insets script no-ops when the bridge is absent; `swipe.ts` matches `isIos()` (which covers iPads) or the mobile user agents; layout hooks are capability-based, not platform-based. |
+| Updater            | `tauri-plugin-updater` has no iOS support, but `src/lib/services/updater.ts` already mapped `UnsupportedOs` to a graceful "not supported here" error, and the mobile path (GitHub Releases API + manual install) is platform-agnostic.          |
+| Capabilities       | The permission list in `src-tauri/capabilities/default.json` resolves on mobile — proven daily by Android building with the identical list.                                                                                                     |
+| Desktop-only code  | Already gated: `is_nvidia_wayland` under `#[cfg(target_os = "linux")]`, the devtools plugin under `debug_assertions` + feature flag.                                                                                                            |
+| Database           | `db_path` uses `app_config_dir()` → iOS `Library/Application Support`. Works.                                                                                                                                                                   |
 
 Two genuine gaps existed:
 
@@ -67,10 +67,9 @@ A third, discovered only in CI: **the CLI's signing defaults don't reach
   the Android leg's shape. iOS is best-effort: the CI leg runs
   `continue-on-error`, and the pre-release `publish` job gates only on the desktop and
   Android legs, so an iOS-only failure never blocks a release or marks `master` red.
-- **Devtools feature** — left alone. `tauri.release.conf.json` already empties
-  `build.features` for CI/release builds, and iOS only builds in CI. Local
-  `tauri ios dev` needs `--config src-tauri/tauri.release.conf.json` to drop the
-  desktop-only `tauri-plugin-devtools`.
+- **Devtools feature** — `tauri.release.conf.json` empties `build.features` for CI/release
+  builds, and `tauri.ios.conf.json` (§4) does the same for every `tauri ios` command, dropping
+  the desktop-only `tauri-plugin-devtools`.
 - **Pre-verification on Linux** — every CLI flag used was verified by inspecting the
   actual `@tauri-apps/cli-darwin-arm64@2.11.4` binary (downloaded via `npm pack` and
   examined with `grep`/`python` over its embedded strings) rather than guessed from
@@ -88,10 +87,12 @@ macOS-only (guards on `uname`, repo root, tool availability). Steps:
    `CODE_SIGN_STYLE: Manual` into the `aventura_iOS` target's `settings.base`, then
    regenerate the `.xcodeproj` with `xcodegen generate`. This is **the** thing that
    actually disables signing — see §6, failure #4, for why nothing else worked.
-2. **`tauri ios build --target aarch64 --archive-only`** — `aarch64` is the CLI's
-   shorthand for the iOS-device target (`aarch64-sim` and `x86_64` are the others);
-   `--archive-only` stops after `xcodebuild archive`, skipping the CLI's IPA-export
-   phase that requires signing assets. All extra arguments (`--config …` from the
+2. **`tauri ios build --target aarch64 --archive-only`** —
+   `aarch64` is the CLI's shorthand for the iOS-device target (`aarch64-sim` and
+   `x86_64` are the others); `--archive-only` stops after `xcodebuild archive`, skipping
+   the CLI's IPA-export phase that requires signing assets. The `@tauri-apps/*` npm
+   packages and the Rust crates must stay on the same minor versions; the CLI rejects a
+   skew and the build must not bypass that check. All extra arguments (`--config …` from the
    build-version action) are forwarded verbatim, so the CI version rule stays in one
    place.
 3. **Locate the archive** — newest `*_iOS.xcarchive` under
@@ -111,7 +112,7 @@ macOS-only (guards on `uname`, repo root, tool availability). Steps:
    (the CLI refuses the suffix there), so naming from the plist would make CI builds
    indistinguishable from a release. It defaults to `tauri.conf.json`'s version so a
    plain local build needs no extra setup.
-6. **Verify before exiting 0**: binary is `arm64` (`lipo -info`), bundle is *not*
+6. **Verify before exiting 0**: binary is `arm64` (`lipo -info`), bundle is _not_
    signed (`codesign -dv` must fail), `.ipa` contains `Payload/<app>/Aventuras` and
    `Info.plist`, each checked separately.
 
@@ -147,13 +148,30 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 ### Frontend (additive branch, no behavior change elsewhere)
 
 - [`src/lib/utils/platform.ts`](../../src/lib/utils/platform.ts): `isIos()` — UA-based,
-  same style as the existing `isAndroid()`. (WKWebView always sends an iOS UA, so the
-  iPadOS desktop-UA caveat doesn't apply inside the app.)
+  same style as the existing `isAndroid()`. An iPad's WKWebView sends a Mac UA by default,
+  so a `Macintosh` UA with `maxTouchPoints > 1` also counts as iOS. Backup restore opens
+  the picked `file://` URL directly (`open_src` in `backup.rs`); only `content://` is staged.
 - [`src/lib/services/updater.ts`](../../src/lib/services/updater.ts): the mobile update
   check (`checkViaGitHub`) now dispatches on `isAndroid() || isIos()` and picks the
   release asset by platform — `.apk` on Android, `.ipa` on iOS. Everything else
-  (timeout, semver comparison, `manualInstallReason: 'mobile-platform'`) was already
-  platform-agnostic.
+  (timeout, semver comparison) was already platform-agnostic; the reason is
+  `'ios-sideload'` on iOS and `'mobile-platform'` on Android.
+
+### New `src-tauri/` files
+
+- **`src-tauri/Info.ios.plist`** — see §4, item 4. Read only by `tauri ios *` commands.
+- **`src-tauri/icons/ios/`** — the full iOS icon set (`AppIcon-*.png`), consumed by
+  `scripts/sync-ios-icons.sh` into a freshly initialised `gen/apple` scaffold. Read only by
+  that script.
+- **`src-tauri/tauri.ios.conf.json`** — a Tauri v2 platform-config override, merged
+  automatically for every `tauri ios *` command (unlike `tauri.release.conf.json`, which only
+  applies when passed explicitly via `--config`). Sets `bundle.iOS.minimumSystemVersion` to
+  `16.4` (the frontend's actual WebKit floor — Tailwind v4's `@property`/cascade-layer usage
+  and `color-mix()` need it; Tauri's own default is lower) and empties `build.features`, so
+  the devtools-feature workaround below (§7) is no longer needed by hand.
+
+None of the three is referenced by, or changes the output of, a Windows, Linux, macOS-desktop
+or Android build.
 
 ### Docs
 
@@ -167,10 +185,18 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 
 ## 5. What deliberately did NOT change
 
-`src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`,
-`src-tauri/capabilities/`, and every Rust source. The regression surface for the five
-existing platforms is limited to three additive YAML job blocks and two additive TS
-branches guarded by user-agent checks.
+`src-tauri/tauri.conf.json`. Existing `src-tauri/` files that did change:
+
+- **`src-tauri/src/backup.rs`** — `restore_database` now runs in `spawn_blocking`, opens the dialog's
+  result itself (`open_src`) and takes a lock. A `file://` URL (iOS) is opened with
+  security-scoped access that is released afterwards; a `content://` URI (Android) is copied to a
+  temp file first. This path is shared with desktop and Android restore.
+- **`src-tauri/src/lib.rs`, `Cargo.toml`, `Cargo.lock`, `capabilities/default.json`** — the
+  `tauri-plugin-websocket` plugin, which the ComfyUI client uses on every platform.
+
+The rest of the regression surface for the five existing platforms is three additive YAML job
+blocks, two additive TS branches guarded by user-agent checks, and the iOS-only files under
+`src-tauri/` (§4) that no other platform's build reads.
 
 ## 6. Every CI failure, in order — and what each taught
 
@@ -178,20 +204,20 @@ The target repo was a scratch fork (`TheDWz/AventurasiOStest`) pushing straight 
 `master`, so `ci.yml` ran the full matrix on every fix. Five failures, five lessons:
 
 1. **"src-tauri/gen/apple is not committed"** — the original workflow required the
-   bootstrap scaffold to be committed first. *Fix:* `build-ios.yml` now runs
+   bootstrap scaffold to be committed first. _Fix:_ `build-ios.yml` now runs
    `tauri ios init` on the runner itself when the scaffold is absent; the bootstrap
    workflow remains the way to produce a reviewed, committed scaffold.
 2. **`tauri ios init: unexpected argument '--ci'` (latent, caught by binary
-   inspection)** — `--ci` belongs to `tauri init`, not `tauri ios init`. *Fix:* dropped
+   inspection)** — `--ci` belongs to `tauri init`, not `tauri ios init`. _Fix:_ dropped
    the flag before it ever reached CI. Lesson: verify flags against the actual binary,
    not blog posts.
 3. **`Permission denied: scripts/build-ios-unsigned.sh`** — the executable bit wasn't in
-   git. *Fix:* `git update-index --chmod=+x`. Lesson: `chmod +x` on the working tree
+   git. _Fix:_ `git update-index --chmod=+x`. Lesson: `chmod +x` on the working tree
    does nothing once the file is committed with mode `100644`.
 4. **"Signing for aventura_iOS requires a development team"** — the big one. The CLI's
    documented signing defaults (`CODE_SIGNING_ALLOWED=NO` etc.) did not reach
    `xcodebuild archive`; passing the same settings as runner args after `--` didn't
-   either (signing is validated before any build phase runs). *Fix:* patch
+   either (signing is validated before any build phase runs). _Fix:_ patch
    `project.yml` (the source xcodegen renders the `.xcodeproj` from on **every** build,
    so the patch survives regeneration) with the four signing settings at the
    `aventura_iOS` target level, then `xcodegen generate`. The patcher was tested
@@ -200,7 +226,7 @@ The target repo was a scratch fork (`TheDWz/AventurasiOStest`) pushing straight 
    `.ipa` was **built and verified successfully**; the upload steps computed their
    expected name from the build-version action (`0.7.11-shae23df95`) while the iOS CLI
    stamps the Xcode project with the base semver (`0.7.11` — the `-sha` suffix is not a
-   valid `CFBundleShortVersionString`). *Fix (final):* the workflow passes the resolved
+   valid `CFBundleShortVersionString`). _Fix (final):_ the workflow passes the resolved
    version to the script via `IPA_VERSION` and the script names the `.ipa` from it, so
    the name always matches what the upload steps expect, on every kind of run. (An
    earlier fix globbed the upload paths; the explicit version made that unnecessary
@@ -225,8 +251,8 @@ all bundles had already succeeded; nothing in the iOS work touches that path.
   existing `unsupported` error kind covers any future platform gap.
 - **No background generation on iOS.** Android's `GenerationForegroundService` has no
   iOS equivalent (the Android-only Kotlin/bridge code is inert on iOS).
-- **Local `tauri ios dev`** requires `--config src-tauri/tauri.release.conf.json` to
-  drop the desktop-only devtools feature.
+- **`tauri ios dev` without `--config`** relies on `tauri.ios.conf.json` dropping the devtools
+  feature; this is untested on a real run.
 - **Simulator builds** (`aarch64-sim`) are possible with the same script but are not
   wired into CI; only the device target is built.
 - **The committed `gen/apple` scaffold is still pending** — CI currently self-heals via
@@ -240,7 +266,7 @@ On the Linux dev machine (as far as Linux allows):
 
 - `npm run check` (0 errors), `npm test` (1890 passed), `npm run lint` (0 errors),
   `npm run build` — all green after the frontend changes.
-- `cargo check` on the host target — green (no Rust changed, but verified).
+- `cargo check` on the host target — green.
 - `bash -n` on the build script; YAML parse of every touched workflow with a job-graph
   assertion; the `project.yml` patcher unit-tested against a template mock.
 - Flag-level verification of `tauri ios build/init` behavior against the real 2.11.4
@@ -266,10 +292,10 @@ scripts/build-ios-unsigned.sh --config src-tauri/tauri.release.conf.json
 # verified arm64 + unsigned + correct Payload layout before exit 0.
 ```
 
-| Artifact | Where |
-| --- | --- |
-| Build script | `scripts/build-ios-unsigned.sh` |
-| CI build leg | `.github/workflows/build-ios.yml` |
-| One-shot scaffold generator | `.github/workflows/bootstrap-ios.yml` |
-| Xcode scaffold (once committed) | `src-tauri/gen/apple/` |
-| Per-user build instructions | [release.md → Building iOS](release.md#building-ios) |
+| Artifact                        | Where                                                |
+| ------------------------------- | ---------------------------------------------------- |
+| Build script                    | `scripts/build-ios-unsigned.sh`                      |
+| CI build leg                    | `.github/workflows/build-ios.yml`                    |
+| One-shot scaffold generator     | `.github/workflows/bootstrap-ios.yml`                |
+| Xcode scaffold (once committed) | `src-tauri/gen/apple/`                               |
+| Per-user build instructions     | [release.md → Building iOS](release.md#building-ios) |

@@ -2,6 +2,7 @@
  * Swipe gesture detection utilities for mobile touch interactions.
  * Implements a Svelte action for easy attachment to any element.
  */
+import { isIos } from './platform'
 
 export type SwipeDirection = 'left' | 'right' | 'up' | 'down'
 
@@ -185,5 +186,5 @@ export function isTouchDevice(): boolean {
  */
 export function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  return isIos() || /Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 }

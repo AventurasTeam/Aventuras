@@ -50,7 +50,7 @@ const GITHUB_TIMEOUT_MS = 15_000
  * other about how this particular copy was installed -- so the reason travels with the
  * update rather than being re-derived in the component.
  */
-export type ManualInstallReason = 'mobile-platform' | 'deb-package' | 'unpackaged'
+export type ManualInstallReason = 'mobile-platform' | 'ios-sideload' | 'deb-package' | 'unpackaged'
 
 export interface UpdateInfo {
   available: boolean
@@ -338,7 +338,7 @@ class UpdaterService {
       date: release.published_at ?? undefined,
       downloadUrl: pkg?.browser_download_url ?? release.html_url ?? RELEASES_PAGE,
       canInstallInApp: false,
-      manualInstallReason: 'mobile-platform',
+      manualInstallReason: isIos() ? 'ios-sideload' : 'mobile-platform',
     }
   }
 
