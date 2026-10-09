@@ -43,7 +43,7 @@ Pre-built binaries are on the [Releases](https://github.com/AventurasTeam/Aventu
 | Android  | `Aventuras_vX.Y.Z.apk`                                         | Android 8, with System WebView 111 or later                              |
 | iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) | iOS 16.4                                                                 |
 
-The minimums come from the web engine each platform uses. They are derived from documentation and
+The minimums come from each platform's web engine, OS and runtime requirements. They are derived from documentation and
 have not been tested on devices at those versions; see
 [docs/development/platform-support.md](docs/development/platform-support.md).
 
