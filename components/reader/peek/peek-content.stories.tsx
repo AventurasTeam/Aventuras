@@ -300,7 +300,10 @@ export const CharacterStaged: Story = {
       label: t('reader:peek.setLead'),
       reason: t('world:detail.menu.setLeadInactive'),
     })
-    await expect(peek.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true')
+    const action = peek.getByRole('button', { name })
+    await expect(action).toHaveAttribute('aria-disabled', 'true')
+    // RN-Web gives a disabled Pressable pointer-events: none; dispatch the click anyway.
+    await userEvent.click(action, { pointerEventsCheck: 0 })
     await expect(args.onSetLead).not.toHaveBeenCalled()
   },
 }
