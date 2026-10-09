@@ -312,10 +312,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Options: each connected rail component calls `useRailData` itself,
   memoized, or a `useReaderRail(branchId)` hook. Raised in 4.5a review,
   2026-10-07.
-- **`ROW_CATEGORIES` duplicates a list `lib/list-modules` already has.**
-  `lib/row-signals/types.ts:3-11` spells out what
-  `[...WORLD_CATEGORIES, ...PLOT_KINDS]` gives. Raised in 4.5a review,
-  2026-10-07.
 - **`chrome.back` matches its name as a substring.** `e2e/locators/chrome.ts:8`
   has no `exact: true`, so the phone rail Sheet's "Back to categories"
   (`reader:rail.backToCategories`) would collide if that button ever rendered

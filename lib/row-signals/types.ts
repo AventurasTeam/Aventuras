@@ -1,14 +1,7 @@
 import type { Delta, EntityKind, StoryEntry } from '@/lib/db'
+import { PLOT_KINDS, WORLD_CATEGORIES } from '@/lib/list-modules'
 
-export const ROW_CATEGORIES = [
-  'character',
-  'location',
-  'item',
-  'faction',
-  'lore',
-  'thread',
-  'happening',
-] as const
+export const ROW_CATEGORIES = [...WORLD_CATEGORIES, ...PLOT_KINDS] as const
 export type RowCategory = (typeof ROW_CATEGORIES)[number]
 
 /** Categories a delta's table names directly; only `isLive` can say the row still exists. */
