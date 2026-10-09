@@ -275,8 +275,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `hover:bg-tint-hover` as backgrounds on the same element, so hover likely
   replaces the tint. Reasoned from the classes, not rendered. Raised in 4.5a
   review, 2026-10-07.
-- **`.storybook/*.ts` is never typechecked.** `tsc`'s `**/*.ts` include skips
-  dot-directories. Raised in 4.5a review, 2026-10-07.
 - **Three explicit gorhom scroll views should use `ScrollComponentContext`.**
   `SceneEditForm`'s inside-sheet `Body`, `AiAssist`'s `Scroller` and
   `MultiSelect`'s phone list pick their scroll host by hand; moving them onto
