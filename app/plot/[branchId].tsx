@@ -9,9 +9,9 @@ import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialo
 import { EntryIndexStatus } from '@/components/compounds/entry-index-status'
 import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
+import { rowAddOptions } from '@/components/compounds/row-add-options'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { HappeningDetailPane } from '@/components/plot/happening-detail-pane'
-import { plotAddOptions } from '@/components/plot/plot-add-options'
 import { importFailureText, importRejectionText } from '@/components/plot/plot-copy'
 import { PlotDetailEmpty } from '@/components/plot/plot-detail-empty'
 import { happeningImportDialog, threadImportDialog } from '@/components/plot/plot-import'
@@ -493,7 +493,8 @@ export default function PlotRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={plotAddLabel(kind)}
-                    options={plotAddOptions(
+                    options={rowAddOptions(
+                      'plot',
                       { onBlank: () => guard(startCreate), onJson: activeImport.request },
                       { disabled: editBlocked, disabledReason: gateReason },
                     )}

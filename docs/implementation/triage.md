@@ -139,22 +139,13 @@ slice-planning gate forces its resolution before that slice is planned.
   `anchor` would reject them at the call site
   ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
   Raised in 4.5b's slice review, 2026-10-09.
-- **Slice 4.6 left four duplicates waiting for a shared home.**
+- **Slice 4.6 left a duplicate waiting for a shared home.**
   (2026-10-08) The closing review's simplifier skipped each because the
   shared copy needs a module that doesn't exist yet, or a file outside the
   slice:
   - `openWorld` in `e2e/tests/import-export.spec.ts` repeats
     `openWorldFromHome` in `e2e/tests/world.spec.ts`; `e2e/flows/navigation.ts`
     is the natural home.
-  - The `ExportHandsTheCommittedRow` stories (entity, lore, thread,
-    happening) and the frame's `ExportStaysLiveWhileBlocked` each set up
-    the same download spy; there is no shared story-helper module.
-  - `components/world/world-import.test.ts` and
-    `components/plot/plot-import.test.ts` each define `parse`,
-    `withVersion` and `EnvelopeConfig`.
-  - `components/world/world-add-options.ts` and
-    `components/plot/plot-add-options.ts` are near copies; merging them
-    touches World's Vault entry.
 
   Raised in 4.6's slice review, 2026-10-08.
 

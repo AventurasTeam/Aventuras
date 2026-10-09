@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useRef, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { watchDownloads } from '@/components/compounds/download-probe'
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -11,7 +12,7 @@ import type { Lore } from '@/lib/db'
 import type { HistoryChunk } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
-import { toastStore, type ToastItem } from '@/lib/toast'
+import { toastStore } from '@/lib/toast'
 import type { LoreDraft } from '@/lib/world'
 
 import { LoreDetailPane } from './lore-detail-pane'
@@ -484,21 +485,7 @@ export const ExportHandsTheCommittedRow: Story = {
     toastStore.__reset()
   },
   play: async () => {
-    let toasts: ToastItem[] = []
-    const stop = toastStore.subscribe((next) => {
-      toasts = next
-    })
-    let blob: Blob | null = null
-    const downloads: string[] = []
-    const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
-      blob = b as Blob
-      return 'blob:story'
-    })
-    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      downloads.push(this.download)
-    })
+    const watch = watchDownloads()
     try {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit The Aetherium' }, WAIT))
       await userEvent.keyboard(' (draft){Enter}')
@@ -508,20 +495,15 @@ export const ExportHandsTheCommittedRow: Story = {
       const entry = await screen.findByRole('menuitem', { name: 'Export lore as JSON' }, WAIT)
       await waitFor(() => expect(entry).toBeVisible(), WAIT)
       await userEvent.click(entry)
-      await waitFor(() => expect(downloads).toEqual(['lore-the-aetherium.avts']), WAIT)
-      const file = JSON.parse(await (blob as unknown as Blob).text()) as { lore: { title: string } }
+      await waitFor(() => expect(watch.downloads).toEqual(['lore-the-aetherium.avts']), WAIT)
+      const file = JSON.parse(await (watch.blob() as Blob).text()) as { lore: { title: string } }
       await expect(file.lore.title).toBe('The Aetherium')
       await waitFor(
-        () =>
-          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
-            ['info', t('common:avts.exportedSaved')],
-          ]),
+        () => expect(watch.toasts()).toEqual([['info', t('common:avts.exportedSaved')]]),
         WAIT,
       )
     } finally {
-      stop()
-      url.mockRestore()
-      click.mockRestore()
+      watch.stop()
     }
   },
 }

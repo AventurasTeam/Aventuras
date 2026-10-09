@@ -9,6 +9,7 @@ import { CollisionResolveDialog } from '@/components/compounds/collision-resolve
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
 import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
+import { rowAddOptions } from '@/components/compounds/row-add-options'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { distinctCategories } from '@/components/plot/plot-route-data'
 import { plotHref } from '@/components/plot/plot-selection'
@@ -35,7 +36,6 @@ import {
   useWorldSelection,
   type WorldDetailSelection,
 } from '@/components/world/use-world-selection'
-import { worldAddOptions } from '@/components/world/world-add-options'
 import {
   importFailureText,
   importRejectionText,
@@ -642,7 +642,8 @@ export default function WorldRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={worldAddLabel(category)}
-                    options={worldAddOptions(
+                    options={rowAddOptions(
+                      'world',
                       { onBlank: () => guard(startCreate), onJson: activeImport.request },
                       { disabled: editBlocked, disabledReason: gateReason },
                     )}

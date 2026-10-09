@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { flattenIssues, parseEnvelope } from '@/components/compounds/import-dialog-pipeline'
+import { parse, withVersion } from '@/components/compounds/__tests__/import-envelope'
+import { flattenIssues } from '@/components/compounds/import-dialog-pipeline'
 import { entityExport, loreExport } from '@/lib/avts'
 import { emptyEntityState, type Entity, type EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -52,22 +53,6 @@ const AETHERIUM = makeLore({
   title: 'The Aetherium',
   body: 'A sea of light above the clouds, where the old gods left their tools.',
 })
-
-type EnvelopeConfig = { format: string; supportedMajor: number; payloadKey: string }
-
-function parse(config: EnvelopeConfig, raw: string) {
-  return parseEnvelope({
-    raw,
-    format: config.format,
-    supportedMajor: config.supportedMajor,
-    payloadKey: config.payloadKey,
-  })
-}
-
-function withVersion(contents: string, formatVersion: string): string {
-  const envelope = JSON.parse(contents) as Record<string, unknown>
-  return JSON.stringify({ ...envelope, formatVersion })
-}
 
 function entityPayload(kind: EntityKind): unknown {
   const envelope = JSON.parse(entityExport(ROWS[kind], EXPORTED_AT).contents) as Record<
