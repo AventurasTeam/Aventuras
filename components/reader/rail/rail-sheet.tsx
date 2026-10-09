@@ -1,12 +1,13 @@
 import { ArrowLeft } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Platform, StyleSheet, View } from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { t } from '@/lib/i18n'
+import { dismissKeyboard, isKeyboardVisible } from '@/lib/keyboard'
 import {
   RAIL_SHEET_OPENED,
   reduceRailSheet,
@@ -70,13 +71,16 @@ export function RailSheet({
   // scrolled to its end clamps its offset to the bigger viewport; capping the list at its old
   // height until the Sheet is back down keeps the offset.
   const listHeight = useRef(0)
-  const [heightCap, setHeightCap] = useState<number | null>(null)
+  const { height: windowHeight } = useWindowDimensions()
+  const [cap, setCap] = useState<{ height: number; windowHeight: number } | null>(null)
+  // A window that changed under the peek makes the recorded height wrong for the new layout.
+  const heightCap = cap != null && cap.windowHeight === windowHeight ? cap.height : null
 
   // The Sheet presents a tick after `open` flips, so this lands before anything renders.
   useEffect(() => {
     if (open) {
       setSheet(RAIL_SHEET_OPENED)
-      setHeightCap(null)
+      setCap(null)
     }
   }, [open])
 
@@ -87,7 +91,13 @@ export function RailSheet({
       onRowPress(category, id)
       return
     }
-    setHeightCap(listHeight.current > 0 ? listHeight.current : null)
+    // The search field keeps focus under the hidden list, so the keyboard goes down with the
+    // tap; its shortened list is no height to restore.
+    const keyboardUp = Platform.OS !== 'web' && isKeyboardVisible()
+    if (keyboardUp) void dismissKeyboard()
+    setCap(
+      listHeight.current > 0 && !keyboardUp ? { height: listHeight.current, windowHeight } : null,
+    )
     send({ type: 'openPeek', peek: { category, id } })
   }
 
@@ -116,7 +126,7 @@ export function RailSheet({
               const { height } = event.nativeEvent.layout
               if (heightCap == null) listHeight.current = height
               // Back down: the Sheet no longer outgrows the cap, which can go.
-              else if (!peeking && height <= heightCap + 1) setHeightCap(null)
+              else if (!peeking && height <= heightCap + 1) setCap(null)
             }}
           >
             {/* Mounted under the peek so `←` finds the list as it was left, scroll included. */}

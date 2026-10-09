@@ -572,6 +572,32 @@ function inView(row: HTMLElement, scroller: HTMLElement): boolean {
   return centre >= view.top && centre <= view.bottom
 }
 
+const listLayer = () => within(railDialog()).getByTestId('rail-sheet-list-layer')
+
+/** The list fills the Sheet's content again: the peek's height cap is gone. */
+async function listFillsSheet() {
+  await waitFor(() => {
+    const layer = listLayer()
+    const container = layer.parentElement as HTMLElement
+    expect(layer.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      container.getBoundingClientRect().height - 1,
+    )
+  }, ANIMATION)
+}
+
+/** Runs `play` with the browser window resized, then puts it back; a no-op outside Vitest. */
+async function withWindowResized(height: number, play: () => Promise<void>) {
+  const browser = await import('vitest/browser').catch(() => null)
+  if (browser == null) return
+  const original = { width: window.innerWidth, height: window.innerHeight }
+  await browser.page.viewport(original.width, height)
+  try {
+    await play()
+  } finally {
+    await browser.page.viewport(original.width, original.height)
+  }
+}
+
 /** Scrolls the list to the named row (`end`: to the bottom), peeks it, and presses `←`. */
 async function peekAndBackFrom(name: string, scrollTo: 'end' | 'row') {
   await openChipSheet()
@@ -587,6 +613,8 @@ async function peekAndBackFrom(name: string, scrollTo: 'end' | 'row') {
   await userEvent.click(peekBack())
   await headIs('character')
   await waitForMediumDetent()
+  // The cap is released once the Sheet is back down; the offset is read with it gone.
+  await listFillsSheet()
   return { scrolled, after: screen.getByRole('button', { name }) }
 }
 
@@ -612,6 +640,43 @@ export const ReaderChipBackKeepsScrollMidList: Story = {
     const scroller = scrollerOf(after)
     await expect(Math.abs(scroller.scrollTop - scrolled)).toBeLessThanOrEqual(1)
     await expect(inView(after, scroller)).toBe(true)
+  },
+}
+
+/** The cap that holds the offset through the peek is gone after `←`, and a bigger window refills. */
+export const ReaderChipCapReleasedAfterBack: Story = {
+  globals: PHONE,
+  args: { initialData: LONG_ROSTER },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    await openChipSheet()
+    await peekRow('Zed 02')
+    await userEvent.click(peekBack())
+    await headIs('character')
+    await listFillsSheet()
+    await waitFor(() => expect(getComputedStyle(listLayer()).maxHeight).toBe('none'), ANIMATION)
+    await withWindowResized(800, async () => {
+      await waitFor(() => expect(sheetCoverage()).toBeGreaterThan(0.45), ANIMATION)
+      await listFillsSheet()
+    })
+  },
+}
+
+/** A window that grows under the open peek must not leave the old height capping the list. */
+export const ReaderChipWindowGrowsWhilePeeking: Story = {
+  globals: PHONE,
+  args: { initialData: LONG_ROSTER },
+  render: (args) => <ChipHarness {...args} />,
+  play: async () => {
+    await openChipSheet()
+    await peekRow('Zed 02')
+    await withWindowResized(800, async () => {
+      await userEvent.click(peekBack())
+      await headIs('character')
+      await waitForMediumDetent()
+      await listFillsSheet()
+      await expect(getComputedStyle(listLayer()).maxHeight).toBe('none')
+    })
   },
 }
 
