@@ -725,12 +725,13 @@ export const ReaderChipWindowRoundTripRecapsList: Story = {
     await headIs('character')
     await waitForSheetSettled()
     const tall = sheetHeight()
-    let short = tall
+    // Outside Vitest the resize is a no-op, so there's no change to wait for on the way back.
+    let short: number | null = null
     await withWindowResized(450, async () => {
       await waitForSheetSettled(tall)
       short = sheetHeight()
     })
-    await waitForSheetSettled(short)
+    if (short != null) await waitForSheetSettled(short)
     await settledListFillsSheet()
 
     await peekRow('Zed 02')

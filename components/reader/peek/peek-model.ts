@@ -101,7 +101,7 @@ export type PeekLeadControl = {
   onSetLead: (entityId: string) => void
 }
 
-/** Both peek hosts build the control here, so neither can read the lead off a stale source. */
+/** The lead always comes from the rail data, never from the caller. */
 export function peekLeadControl(
   data: RailData,
   rest: Omit<PeekLeadControl, 'leadId'>,

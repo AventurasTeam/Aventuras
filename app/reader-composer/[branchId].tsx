@@ -148,15 +148,15 @@ type BranchHydrationState =
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
 
-// Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
-// deps, so identity has to hold unconditionally.
-// A registered blocking overlay (Sheet, AlertDialog) claims the surface, so the keys stand down.
-// Read at key time, not subscribed: the route must not re-render when an overlay opens, and a
+// A registered blocking overlay (Sheet, AlertDialog, Select) claims the surface, so the keys stand
+// down. Read at key time, not subscribed: the route must not re-render when an overlay opens, and a
 // miss in `matches` skips the hook's preventDefault, so the browser's own undo still works.
 function readerKeysStandDown(): boolean {
   return blockingOverlaysStore.getState().open.size > 0
 }
 
+// Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
+// deps, so identity has to hold unconditionally.
 function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
   return (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z') && !readerKeysStandDown()
 }
