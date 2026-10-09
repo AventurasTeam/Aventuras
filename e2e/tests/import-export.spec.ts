@@ -4,15 +4,13 @@ import { join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
-import { goToWorld } from '../flows/navigation'
+import { openStory, openWorld } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
-import { home } from '../locators/home'
 import { plot } from '../locators/plot'
-import { reader } from '../locators/reader'
 import { toast } from '../locators/toast'
 import { world } from '../locators/world'
 
@@ -97,16 +95,6 @@ function swapClipboardText(app: LaunchedApp, text: string): Promise<string> {
     clipboard.writeText(next)
     return previous
   }, text)
-}
-
-async function openReader(page: Page, title: string): Promise<void> {
-  await home.openStory(page, title).click()
-  await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-}
-
-async function openWorld(page: Page, title: string): Promise<void> {
-  await openReader(page, title)
-  await goToWorld(page)
 }
 
 // GO TO pops to the reader already on the stack; the reader's back returns to the story list.
@@ -267,7 +255,7 @@ test.describe('Per-row .avts clipboard import', () => {
 
   test('imports a hand-authored happening from the clipboard on Plot, the row alone', async () => {
     const page = app.window
-    await openReader(page, TARGET_TITLE)
+    await openStory(page, TARGET_TITLE)
     const branchId = await currentBranchId(page, TARGET_STORY)
     expect(
       await queryApp(page, `SELECT count(*) FROM happenings WHERE branch_id = ? AND title = ?`, [

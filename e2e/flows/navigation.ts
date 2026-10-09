@@ -1,6 +1,7 @@
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
 import { chrome } from '../locators/chrome'
+import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
 // Reader → World over GO TO. The round trip pops to the World instance already on the stack, which
@@ -18,4 +19,16 @@ export async function undoFromReader(page: Page): Promise<void> {
   await page.waitForURL(/\/reader-composer\//)
   await chrome.actionsTrigger(page).click()
   await reader.undoRow(page).click()
+}
+
+// Story list → reader, waiting out the story's open.
+export async function openStory(page: Page, title: string): Promise<void> {
+  await home.openStory(page, title).click()
+  await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+}
+
+// Story list → reader → World over GO TO.
+export async function openWorld(page: Page, title: string): Promise<void> {
+  await openStory(page, title)
+  await goToWorld(page)
 }

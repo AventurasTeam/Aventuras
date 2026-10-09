@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
-import { goToWorld as goToWorldFlow } from '../flows/navigation'
+import { goToWorld as goToWorldFlow, openWorld } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
@@ -67,12 +67,6 @@ async function entitySnapshot(page: Page, id: string): Promise<EntitySnapshot> {
 async function goToWorld(page: Page): Promise<string> {
   await goToWorldFlow(page)
   return currentBranchId(page, HERO_STORY)
-}
-
-async function openWorldFromHome(app: LaunchedApp): Promise<void> {
-  await home.openStory(app.window, HERO_TITLE).click()
-  await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
-  await goToWorld(app.window)
 }
 
 // Serial suite, one shared app: later tests build on earlier ones' navigation state (a GO TO
@@ -551,7 +545,7 @@ test.describe('World panel — window close', () => {
 
   test('a window close with a dirty pane raises the unsaved-changes dialog', async () => {
     const page = app.window
-    await openWorldFromHome(app)
+    await openWorld(app.window, HERO_TITLE)
     await world.row(page, 'Kael').click()
     await world.tab(page, 'identity').click()
     await watchCloseGuard(app)
@@ -596,7 +590,7 @@ test.describe('World panel — lead change reaches the reader', () => {
   // The hero story wraps in third person, so a Do turn names the lead as its subject.
   test('a Do turn after Set as lead wraps with the new lead', async () => {
     const page = app.window
-    await openWorldFromHome(app)
+    await openWorld(app.window, HERO_TITLE)
     await world.row(page, 'Mira').click()
     await world.moreActions(page).click()
     await world.menuItem(page, 'setLead').click()

@@ -83,16 +83,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`reader:rail.backToCategories`) would collide if that button ever rendered
   in a desktop E2E DOM. Latent: the Sheet is phone-only and E2E is
   desktop-only. Raised in 4.5a's final review, 2026-10-07.
-- **Slice 4.6 left a duplicate waiting for a shared home.**
-  (2026-10-08) The closing review's simplifier skipped each because the
-  shared copy needs a module that doesn't exist yet, or a file outside the
-  slice:
-  - `openWorld` in `e2e/tests/import-export.spec.ts` repeats
-    `openWorldFromHome` in `e2e/tests/world.spec.ts`; `e2e/flows/navigation.ts`
-    is the natural home.
-
-  Raised in 4.6's slice review, 2026-10-08.
-
 - **Phone deep-link reveal can't scroll the hidden list.** (2026-10-09)
   World's and Plot's mount-arrival `revealRow` opens the row's tier, but
   on phone the list sits under the detail with `hidden`
