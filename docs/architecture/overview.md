@@ -186,6 +186,14 @@ does not scroll. Two things keep that true, and both are structural:
 `holdFocus` calls remain where a card is about to disappear under an open soft keyboard, so the
 keyboard closes before the card does; they are no longer what stops the scroll.
 
+## One way out of a dialog
+
+A dialog has exactly one dismiss control: either the header's X or a Cancel button, never both.
+Two controls that do the same thing make the reader wonder how they differ, and a Cancel beside a
+confirming action is the clearer of the two wherever the dialog asks for a decision. Such a dialog
+passes `closeButton={false}` to `ResponsiveModal.Header`; the X stays for dialogs that only show
+something and have no action to cancel.
+
 ## Data Model
 
 The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`),

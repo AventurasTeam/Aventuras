@@ -78,6 +78,7 @@
   import { database } from '#lib/services/database.ts'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
+  import CreateBranchModal from '#lib/components/branch/CreateBranchModal.svelte'
   import ActivitySummary from './ActivitySummary.svelte'
   import ActivityTimeline from './ActivityTimeline.svelte'
   import { activity } from '#lib/stores/activity.svelte.ts'
@@ -367,7 +368,6 @@
 
   // Branching state
   let isBranching = $state(false)
-  let branchName = $state('')
 
   // Inline image edit state
 
@@ -390,28 +390,6 @@
   )
   // Main branch has no Branch record, so no divergence point
   const isForkPoint = $derived(!!activeBranch && activeBranch.forkEntryId === entry.id)
-
-  // Handle creating a branch from this entry
-  async function handleCreateBranch() {
-    if (!branchName.trim()) return
-    if (!entryCheckpoint) {
-      alert('Cannot branch from this entry - no checkpoint available')
-      return
-    }
-    try {
-      await story.createBranchFromCheckpoint(branchName.trim(), entry.id, entryCheckpoint.id)
-      isBranching = false
-      branchName = ''
-    } catch (error) {
-      console.error('[StoryEntry] Failed to create branch:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create branch')
-    }
-  }
-
-  function cancelBranch() {
-    isBranching = false
-    branchName = ''
-  }
 
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
@@ -2061,38 +2039,6 @@
           </Button>
         </div>
       </div>
-    {:else if isBranching}
-      <div class="space-y-2">
-        <p class="text-muted-foreground text-sm">Create a branch from this point:</p>
-        <Input
-          type="text"
-          class="h-9 text-sm"
-          placeholder="Branch name..."
-          bind:value={branchName}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') handleCreateBranch()
-            if (e.key === 'Escape') cancelBranch()
-          }}
-        />
-        <div class="flex gap-2">
-          <Button
-            size="sm"
-            onclick={handleCreateBranch}
-            disabled={!branchName.trim()}
-            class="h-9 bg-amber-500 px-3 text-white hover:bg-amber-600"
-          >
-            <GitBranch class="mr-1.5 h-4 w-4" />
-            Create Branch
-          </Button>
-          <Button variant="secondary" size="sm" onclick={cancelBranch} class="h-9 px-3">
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-        </div>
-        <p class="text-muted-foreground text-xs">
-          This will create a new timeline from this checkpoint.
-        </p>
-      </div>
     {:else}
       <!-- Reasoning content panel (between header and story text) -->
       {#if entry.reasoning}
@@ -2288,6 +2234,8 @@
 {/snippet}
 
 <!-- View/Edit Image Modal -->
+<CreateBranchModal bind:open={isBranching} checkpoint={entryCheckpoint ?? null} />
+
 <!-- Modal: the story must not change while the checkpoint is described and taken. -->
 <ResponsiveModal.Root
   bind:open={
@@ -2303,9 +2251,11 @@
     interactOutsideBehavior="ignore"
     escapeKeydownBehavior={savingCheckpoint ? 'ignore' : 'close'}
   >
-    <ResponsiveModal.Header class="border-b px-6 py-4">
+    <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
       <ResponsiveModal.Title>Create checkpoint</ResponsiveModal.Title>
-      <ResponsiveModal.Description>At entry {entryNumber(entry)}</ResponsiveModal.Description>
+      <ResponsiveModal.Description
+        >Create a new checkpoint at entry {entryNumber(entry)}</ResponsiveModal.Description
+      >
     </ResponsiveModal.Header>
     <div class="space-y-3 px-6 py-4">
       <Input
@@ -2320,7 +2270,7 @@
       />
       {#if isLatestEntry}
         <p class="text-muted-foreground text-xs">
-          Checkpoints save the current story state and allow branching from this point.
+          Checkpoints save the story state and allow branching.
         </p>
       {:else if pastCheckpoint === null}
         <p class="text-muted-foreground text-xs italic">Checking the story after this entry…</p>
@@ -2356,7 +2306,7 @@
         {#if pastCheckpoint.manual.length > 0}
           {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
           <p class="text-muted-foreground text-xs">
-            Some changes have been made by a user after this entry:
+            Some changes were made by a user after this entry:
           </p>
           <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
             {#each pastCheckpoint.manual as change (change.id)}
@@ -2392,7 +2342,11 @@
         disabled={!checkpointName.trim() || checkpointBlocked || savingCheckpoint}
         class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
       >
-        <Bookmark class="mr-1.5 h-4 w-4" />
+        {#if savingCheckpoint}
+          <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+        {:else}
+          <Bookmark class="mr-1.5 h-4 w-4" />
+        {/if}
         Create Checkpoint
       </Button>
     </ResponsiveModal.Footer>
