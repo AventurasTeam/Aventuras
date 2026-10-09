@@ -1489,6 +1489,44 @@ own.
   which a scroll or `overflow-hidden` container clips (probably why
   `ring-inset` exists), or amend canon to an un-offset ring, then unify
   the 3px variants. Routed from triage 2026-10-09.
+- **M9.2 — `ImporterMenu` is a Popover on phone.** (2026-09-11)
+  [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
+  wants a short Sheet on phone but it's a Popover at every size. The
+  surface binding it cites has no `ImporterMenu` row, so that sentence
+  is the only canon. Slice 4.6 was to re-plumb the menu to host
+  `ImportDialog`; a Sheet there makes it the third caller of the phone
+  wrap, which is the extraction trigger in
+  [the parked tier-wrap entry](../parked.md#duplicated-desktop-popover--phone-sheet-tier-wrap).
+  The controlled-open seam drives the trigger ref, so a Sheet needs it
+  re-plumbed. Moved from Slice 4.6's Open questions (2026-10-07): 4.6
+  did not touch `components/compounds/importer-menu.tsx`. Verified
+  2026-10-09: the third-caller claim doesn't hold, since `OverflowMenu`
+  already splits Popover and Sheet by tier with its trigger inside the
+  Sheet's root and no wrapping View, so the parked trigger isn't
+  reached; model the Sheet on `OverflowMenu`. `From JSON file…` opens
+  `ImportDialog` in the same press, the native Dialog-under-Sheet case
+  in M9.5 above, so this lands after that fix. Decided 2026-10-09
+  (developer): build the Sheet per canon, in the World / Plot shard,
+  with the shared row below. Routed from triage 2026-10-09.
+- **M9.2 — Four hand-copied menu-item rows.** (2026-09-22)
+  `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
+  `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
+  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
+  the cast-list inline row (`components/wizard/cast-list.tsx`) each
+  reimplement the same pressable-row shape. Their disabled naming was
+  aligned to `label, reason` on 2026-09-23, but the shapes still
+  differ: only the first two have a disabled state, and `StoryCard`'s
+  row is `py-row-y-sm` with no phone `min-h`. Extracting one shared
+  `MenuItem` belongs with the `ImporterMenu` Sheet above. The rows' role
+  stays with
+  [Nested dialog roles in Popover](../parked.md#nested-dialog-roles-in-popover).
+  Moved from Slice 4.6's Open questions (2026-10-07). More drift,
+  verified 2026-10-09: only `ImporterMenuItem` has the pointer-events
+  disabled guard, only `OverflowMenu`'s row shows its reason inline on
+  native (`ReasonTooltip` does nothing there), and destructive styling
+  and `description` each live in one row. So on an Android phone a
+  disabled World or Plot `[+]` row shows no reason. Routed from triage
+  2026-10-09.
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
   in-scene never reach screen readers. Only part of that is the label:
@@ -1615,9 +1653,10 @@ own.
 - **M9.5 — A bottom `Sheet` closed while it is still presenting can
   stay mounted.** Probed in the Storybook browser runner on 2026-09-23.
   After a normal close the primitive's content leaves the DOM about
-  690 ms later, when gorhom's dismiss animation ends. A close in the
-  same tick as the open leaves the content mounted off-screen with
-  `open` false and nothing `aria-hidden`, until the next open. And
+  690 ms later, when gorhom's dismiss animation ends. (A close sent
+  before gorhom finished presenting was dropped, and one sent before it
+  mounted blocked the next open; since 2026-10-09 the primitive holds
+  such a close until the sheet settles.) But
   `OverflowMenu`'s phone sheet kept its rows mounted and on screen for
   3 s after both an item pick and a disable-close, three runs of three,
   while its trigger reported `aria-expanded="false"`. `sheet.tsx`
@@ -1760,6 +1799,23 @@ own.
   action to the Sheet's `onDismiss` is the likelier fix, since lifting the
   `PortalHost` above gorhom would put Select's phone sheet under any
   Dialog. Routed from triage 2026-10-09.
+- **M9.5 — Narrative reflow on Browse rail toggle jumps the reading position.**
+  Measured by hand on desktop at a 1050 px window, hero story scrolled to
+  about 45% (`scrollTop` 3548, unchanged by the toggle): the narrative
+  scroller's width goes 739 px to 1007 px as the rail collapses, and the
+  paragraph at the top of the viewport moves +72 px on expand and -72 px on
+  collapse, so the reader loses a few lines of place. The Android tablet
+  expand shows the same. Canon's anchor rule
+  ([`reader-composer.md → Anchor preservation under shifts`](../ui/screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts))
+  names no rail-toggle scenario. Raised in 4.5a, 2026-10-07. Decided
+  2026-10-09 (developer): compensate, and canon now names width reflow as
+  its fourth, compensated scenario. Any width change does it: resize, a
+  Fold unfold, orientation. The jump grows with the text above the
+  viewport. The shipped anchor rule can't catch it: its effect is keyed on
+  the row window, so a resize never runs it, and a reflow leaves the
+  window's leading row where it was. Needs the topmost in-viewport row's
+  offset held across the change, through the rail's width animation, with
+  a resize observer as the trigger. Routed from triage 2026-10-09.
 - **M9.5 — Bottom Sheets on web move no focus in and return none on close.**
   [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
   trap Tab focus; the primitive neither focuses into the Sheet nor restores

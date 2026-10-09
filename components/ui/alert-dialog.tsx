@@ -13,6 +13,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { buttonTextVariants, buttonVariants } from '@/components/ui/button'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { useScrimClass } from '@/components/ui/scrim'
 import { TextClassContext } from '@/components/ui/text'
 import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
@@ -30,11 +31,13 @@ function AlertDialogOverlay({
 }: Omit<ComponentProps<typeof AlertDialogPrimitive.Overlay>, 'asChild'> & {
   children?: ReactNode
 }) {
+  const scrimClass = useScrimClass()
   return (
     <FullWindowOverlay>
       <AlertDialogPrimitive.Overlay
         className={cn(
-          'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center bg-black/50 p-2',
+          'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center p-2',
+          scrimClass,
           Platform.select({ web: 'fixed animate-fade-in' }),
           className,
         )}

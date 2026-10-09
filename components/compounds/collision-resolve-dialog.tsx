@@ -269,12 +269,13 @@ function ModeBody({
         contentContainerClassName="gap-4"
       >
         {children}
-        {error != null ? (
-          <Text size="sm" className="text-danger">
-            {error}
-          </Text>
-        ) : null}
       </ScrollView>
+      {/* Beside the actions, not after the content: a long merge body would scroll it out of view. */}
+      {error != null ? (
+        <Text size="sm" className="text-danger">
+          {error}
+        </Text>
+      ) : null}
       <DialogFooter>
         <Button variant="secondary" onPress={onCancel} disabled={submitting}>
           <Text>{t('cancel')}</Text>

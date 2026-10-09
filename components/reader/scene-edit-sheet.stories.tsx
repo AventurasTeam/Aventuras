@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import type { SceneOptions, SceneSaveResult } from '@/components/compounds/scene-edit-form'
 import { pressSheetScrim, SHEET_NO_CLOSE_MS } from '@/components/ui/sheet-scrim-probe'
@@ -57,6 +57,18 @@ async function openSheet() {
   await waitFor(() => expect(corin()).toBeVisible(), WAIT)
 }
 
+/** The sections keep the form's gap inside the sheet, as they do in the desktop Dialog. */
+export const SectionsKeepTheirGap: Story = {
+  play: async () => {
+    await openSheet()
+    const apply = screen.getByText(/Saving re-applies scene presence/)
+    const prose = screen.getByText(/This doesn't change the entry's text/)
+    const gap = prose.getBoundingClientRect().top - apply.getBoundingClientRect().bottom
+    expect(gap).toBeGreaterThanOrEqual(11)
+    expect(gap).toBeLessThanOrEqual(13)
+  },
+}
+
 /** Untouched, a tap outside the editor closes it, as drag-down does. */
 export const BackdropClosesUntouched: Story = {
   play: async ({ args }) => {
@@ -74,8 +86,7 @@ export const BackdropIgnoredWhileEdited: Story = {
     await pressSheetScrim(screen.getByText(LANDMARK))
     await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
     expect(args.onClose).not.toHaveBeenCalled()
-    // The row's outer node carries the role; the checked state sits on the control inside.
-    expect(within(corin()).getByRole('checkbox')).toBeChecked()
+    expect(corin()).toBeChecked()
   },
 }
 

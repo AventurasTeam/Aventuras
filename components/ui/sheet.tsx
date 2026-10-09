@@ -37,12 +37,13 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { SCRIM_OPACITY, useScrimClass } from '@/components/ui/scrim'
 import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { TextClassContext } from '@/components/ui/text'
-import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
+import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useRegisteredOverlay } from '@/lib/stores'
-import { useTheme, type Theme } from '@/lib/themes'
+import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 type AutoFocusHandler = (event: Event) => void
@@ -75,8 +76,9 @@ const QUIET_BACKGROUND: ViewStyle = { borderRadius: 15 }
 
 // gorhom's default background and handle are also `adjustable` views with hard-coded English
 // labels. Both are decoration here, so these keep them out of the accessibility tree.
+// gorhom's container passes 'none'; carried as the style key, like every first-party site.
 export function QuietSheetBackground({ style, pointerEvents }: BottomSheetBackgroundProps) {
-  return <View pointerEvents={pointerEvents} style={[QUIET_BACKGROUND, style]} />
+  return <View style={[QUIET_BACKGROUND, style, pointerEvents === 'none' && POINTER_EVENTS_NONE]} />
 }
 
 export function QuietSheetHandle(props: BottomSheetHandleProps) {
@@ -101,9 +103,6 @@ export function QuietSheetHandle(props: BottomSheetHandleProps) {
 const SheetInputComponent = (
   Platform.OS === 'web' ? TextInput : BottomSheetTextInput
 ) as InputComponent
-
-// spacing.md → Depth metaphor: the modal scrim is fixed per mode, not a theme color.
-const SCRIM_OPACITY: Record<Theme['mode'], number> = { light: 0.4, dark: 0.6 }
 
 type SheetBackdropProps = BottomSheetBackdropProps & { dismissible: boolean; opacity: number }
 
@@ -227,6 +226,16 @@ function BottomSheetContent({
   // and subsequent present() becomes a silent no-op. Track actual modal state
   // so dismiss() is only called when the modal is presented.
   const isPresentedRef = useRef(false)
+  // gorhom ignores a dismiss sent before its opening animation starts, and one sent before the
+  // modal mounts also blocks the next present. A close requested while opening is held until
+  // the sheet reports a detent, then sent from the settled state.
+  const isSettledRef = useRef(false)
+  const isDismissHeldRef = useRef(false)
+  const dismissSheet = useCallback(() => {
+    isPresentedRef.current = false
+    isSettledRef.current = false
+    sheetRef.current?.dismiss()
+  }, [])
   // gorhom keeps a modal unmounted-while-presented alive until its dismiss
   // animation completes, then still fires onDismiss; that late callback must
   // not write the dead open state back through onOpenChange.
@@ -258,6 +267,7 @@ function BottomSheetContent({
       // that flips back while we wait below can't leave dismiss() firing
       // against a modal that never opened.
       isPresentedRef.current = true
+      isSettledRef.current = false
       sheetRef.current?.present()
     }
 
@@ -265,6 +275,7 @@ function BottomSheetContent({
     // present() succeeds; that registration happens in the modal's own mount
     // effects, which run after this one. Defer to the next tick.
     const handle = setTimeout(() => {
+      if (open) isDismissHeldRef.current = false
       if (open && !isPresentedRef.current) {
         // gorhom's keyboard state is built purely from show/hide events
         // (useAnimatedKeyboard subscribes; it never reads Keyboard.metrics), so
@@ -280,8 +291,8 @@ function BottomSheetContent({
         }
         present()
       } else if (!open && isPresentedRef.current) {
-        isPresentedRef.current = false
-        sheetRef.current?.dismiss()
+        if (isSettledRef.current) dismissSheet()
+        else isDismissHeldRef.current = true
       }
     }, 0)
 
@@ -289,7 +300,7 @@ function BottomSheetContent({
       cancelled = true
       clearTimeout(handle)
     }
-  }, [open])
+  }, [open, dismissSheet])
 
   const snapPoints = useMemo(() => {
     if (size === 'auto') return undefined
@@ -347,9 +358,18 @@ function BottomSheetContent({
       // dialog role. null, not undefined: undefined falls through to gorhom's English label.
       accessibilityRole="none"
       accessibilityLabel={Platform.OS === 'web' ? null : (ariaLabel ?? null)}
+      onChange={(index: number) => {
+        if (index < 0) return
+        isSettledRef.current = true
+        if (!isDismissHeldRef.current) return
+        isDismissHeldRef.current = false
+        dismissSheet()
+      }}
       onDismiss={() => {
         if (!isMountedRef.current) return
         isPresentedRef.current = false
+        isSettledRef.current = false
+        isDismissHeldRef.current = false
         onOpenChange(false)
       }}
     >
@@ -421,6 +441,7 @@ function RightSheetContent({
 }: Omit<SheetContentProps, 'anchor'>) {
   const { open } = DialogPrimitive.useRootContext()
   useRegisteredOverlay(open && !suppressOverlayRegistration)
+  const scrimClass = useScrimClass()
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const maxHeight = Math.max(screenHeight - insets.top - SAFE_AREA_GAP_PX, 0)
@@ -455,7 +476,8 @@ function RightSheetContent({
           >
             <DialogPrimitive.Overlay
               className={cn(
-                'absolute inset-0 bg-black/40',
+                'absolute inset-0',
+                scrimClass,
                 Platform.select({ web: 'animate-fade-in' }),
               )}
               style={Platform.select({ native: StyleSheet.absoluteFill })}

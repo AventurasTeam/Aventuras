@@ -42,6 +42,8 @@ function renderRecording(seen: boolean[]) {
 
 beforeEach(() => {
   readerRailStore.__reset()
+  // The app's viewport watcher reports a width at mount; jsdom's window measures zero wide.
+  readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 })
   appSettingsStore.__reset()
   writeRailPreference.mockReset()
 })

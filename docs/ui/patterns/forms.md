@@ -224,7 +224,8 @@ One primitive, three render modes. Component used everywhere a
 ### Render modes
 
 - **`segment`** — horizontal bordered button group. Best for ≤3
-  options, label-only.
+  options, label-only. A label that wraps grows the row rather than
+  clipping, since labels can carry user data (a name).
 - **`dropdown`** — collapsed picker. Best for ≥4 options, or any
   cardinality where horizontal space is scarce (chrome carve-out
   below).

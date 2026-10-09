@@ -626,7 +626,8 @@ function SegmentBranch({
       aria-label={label}
       accessibilityHint={disabled ? disabledReason : undefined}
       className={cn(
-        'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
+        // A floor, not a height: a label that wraps grows the row instead of clipping.
+        'min-h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
         className,
       )}
     >
@@ -639,7 +640,7 @@ function SegmentBranch({
             value={opt.value}
             disabled={optDisabled ?? undefined}
             className={cn(
-              'flex-1 items-center justify-center px-3',
+              'flex-1 items-center justify-center px-3 py-1.5',
               i > 0 && 'border-l border-l-border-strong',
               selected ? 'bg-accent' : 'active:bg-tint-press',
               Platform.select({

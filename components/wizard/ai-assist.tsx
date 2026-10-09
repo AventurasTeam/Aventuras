@@ -1,7 +1,6 @@
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { Sparkles } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, ScrollView, View } from 'react-native'
+import { Platform, Pressable, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -15,6 +14,7 @@ import {
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
+import { ContextScrollView } from '@/components/ui/scroll-component'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
@@ -148,11 +148,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const { ariaLabel, guidancePlaceholder, resolveModelId, onSetup, disabled } = props
 
   const isPhone = useTier() === 'phone'
-  // Inside a gorhom sheet a plain ScrollView's touches lose to the sheet's pan
-  // gesture, so rows past the fold are unreachable; BottomSheetScrollView
-  // registers with that gesture system. It is not an RN core component, so
-  // NativeWind drops className on it — every class stays on the wrapping View.
-  const Scroller = isPhone ? BottomSheetScrollView : ScrollView
+  // Inside the phone Sheet a plain ScrollView's touches lose to its pan gesture, so
+  // rows past the fold are unreachable; the Sheet's scroll component registers with
+  // that gesture system. NativeWind drops className on gorhom's, so every class stays
+  // on the wrapping View.
+  const Scroller = ContextScrollView
 
   const [assist, setAssist] = useState<AssistState<T>>({ kind: 'idle' })
   const [guidanceText, setGuidanceText] = useState('')

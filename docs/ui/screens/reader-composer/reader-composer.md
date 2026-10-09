@@ -991,8 +991,8 @@ branch); chapter-anchored navigation lives with chapter chrome.
 
 ### Anchor preservation under shifts
 
-Three content-shift scenarios can push above-the-fold content
-without the user asking for it; in all three, the user's apparent
+Four content-shift scenarios can push above-the-fold content
+without the user asking for it; in all four, the user's apparent
 scroll position must stay anchored — content above the fold can
 shift, but what's in front of the user must not jump.
 
@@ -1005,6 +1005,10 @@ shift, but what's in front of the user must not jump.
 - **World-time footer label re-render.** A manual world-time edit
   on an entry above the fold can change the footer label's pixel
   width, wrapping or de-wrapping the footer row.
+- **Width reflow.** Toggling the Browse rail, resizing the window
+  or unfolding a Fold changes the narrative's width, so every row
+  above the viewport rewraps. Rows cap at 860 px, so on desktop it
+  bites between the rail's auto-collapse width and about 1170 px.
 
 The mechanism is the reader document's **deterministic anchor
 rule**
@@ -1020,9 +1024,12 @@ virtualizer). Coverage: scenario 1 is device-verified
 scenarios 2 and 3 change heights _below_ the leading row and stay
 deliberately uncompensated — validated acceptable as felt (see the
 [reader-document validation record](../../patterns/reader-document.md#validation-record)).
-The designed extension — anchor on the topmost in-viewport row
-instead of the window's first — stays parked unless they ever
-measure.
+Scenario 4 is compensated by the designed extension: across a width
+change the surface anchors on the topmost in-viewport row instead of
+the window's first, whose delta a reflow leaves at zero. It measured:
+a rail toggle at a 1050 px window moved the reading line 72 px
+(2026-10-07). Not yet built; owned by
+[roadmap M9.5](../../../implementation/roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
 
 ## Browse rail — collapse / expand
 

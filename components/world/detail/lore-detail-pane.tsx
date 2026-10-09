@@ -12,6 +12,7 @@ import { HistoryTab } from '@/components/history/history-tab'
 import { Autocomplete } from '@/components/ui/autocomplete'
 import { Select } from '@/components/ui/select'
 import { TabsContent } from '@/components/ui/tabs'
+import { injectionHelpText } from '@/components/world/injection-help'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { LoreSaveResult } from '@/lib/actions'
@@ -223,7 +224,7 @@ function LoreSettings({ control, blocked, blockedReason }: Gate & { control: Con
               options={INJECTION_MODES.map((mode) => ({
                 value: mode,
                 label: t(`world:fields.injection.${mode}`),
-                description: t(`world:lore.injection.${mode}Help`),
+                description: injectionHelpText('lore', mode),
               }))}
             />
           </FormRow>

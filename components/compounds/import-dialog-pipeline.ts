@@ -57,7 +57,8 @@ export function parseEnvelope({
     return {
       kind: 'error',
       copy: t('common:importDialog.meta.wrongKind', {
-        got: neutralizePlaceholders(parsedFormat),
+        // The file's own text, so capped like an issue path: a hand-made file can make it huge.
+        got: neutralizePlaceholders(truncatePath(parsedFormat)),
         expected: format,
       }),
     }

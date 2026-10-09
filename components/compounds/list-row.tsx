@@ -73,6 +73,8 @@ export function ListRow({
 }: ListRowProps) {
   const interactive = !disabled && onPress != null
   const reason = disabled ? disabledReason : undefined
+  // A state-layer tint would replace a filled row's own background (state-layer-vs-filled).
+  const filled = selected === true || recentlyClassified === 'fresh'
   return (
     <ReasonTooltip reason={reason}>
       <Pressable
@@ -87,8 +89,12 @@ export function ListRow({
           'relative flex-row items-center gap-3 px-row-x-md py-row-y-md',
           selected && 'bg-bg-sunken',
           recentlyClassified === 'fresh' && 'bg-recently-classified-bg',
-          interactive && 'active:bg-tint-press',
-          Platform.select({ web: interactive ? 'cursor-pointer hover:bg-tint-hover' : '' }),
+          interactive && (filled ? 'active:opacity-90' : 'active:bg-tint-press'),
+          Platform.select({
+            web: interactive
+              ? cn('cursor-pointer', filled ? 'hover:opacity-90' : 'hover:bg-tint-hover')
+              : '',
+          }),
           disabled && 'opacity-50',
           Platform.select({ web: disabled && 'cursor-not-allowed' }),
           className,

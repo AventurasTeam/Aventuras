@@ -6,6 +6,7 @@ import { DetailPane } from '@/components/shells/detail-pane'
 import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Tabs } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
+import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
 import { saveAvtsFile, type AvtsFile } from '@/lib/avts'
 import { t } from '@/lib/i18n'
@@ -98,6 +99,10 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
     setJsonRowId(rowId)
     setJsonOpen(false)
   }
+  // Portaled, so left open it would paint over a screen pushed on top; closed, it stays closed
+  // when focus returns (lessons-learned/portaled-overlay-outlives-screen-focus.md).
+  const focused = useIsRouteFocused()
+  if (!focused && jsonOpen) setJsonOpen(false)
   const changeTab = (value: string) => onTabChange(value as Tab)
   const name = (
     <Controller

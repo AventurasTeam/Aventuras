@@ -38,3 +38,12 @@ export async function pressSheetScrim(landmark: HTMLElement): Promise<void> {
   const { scrim, coords } = await findSheetScrim(landmark)
   await userEvent.pointer([{ keys: '[MouseLeft]', target: scrim, coords }])
 }
+
+/** The black fill a Radix modal's scrim paints (Dialog, AlertDialog, right Sheet), or null. */
+export function modalScrimColor(): string | null {
+  for (const el of Array.from(document.body.querySelectorAll('div'))) {
+    const color = getComputedStyle(el).backgroundColor
+    if (/^rgba\(0, 0, 0, 0\.\d+\)$/.test(color)) return color
+  }
+  return null
+}

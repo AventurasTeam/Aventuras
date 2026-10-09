@@ -10,7 +10,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
-import { expect, screen, spyOn, userEvent, waitFor } from 'storybook/test'
+import { expect, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -79,6 +79,33 @@ export const Default: Story = {
       <Stateful initial="two" options={SHORT_OPTIONS} />
     </View>
   ),
+}
+
+// Labels can carry user data, so a wrapped one must grow the row rather than clip.
+export const SegmentWrapsALongLabel: Story = {
+  render: () => (
+    <View className="p-4" style={{ width: 240 }}>
+      <Stateful
+        initial="merge"
+        mode="segment"
+        label="Resolution"
+        options={[
+          { value: 'merge', label: 'Merge into one' },
+          { value: 'rename', label: 'Rename one' },
+          { value: 'keep', label: 'Keep as distinct' },
+        ]}
+      />
+    </View>
+  ),
+  play: async () => {
+    const group = screen.getByRole('radiogroup', { name: 'Resolution' })
+    const groupBox = group.getBoundingClientRect()
+    for (const name of ['Merge into one', 'Rename one', 'Keep as distinct']) {
+      const text = within(group).getByText(name).getBoundingClientRect()
+      expect(text.top).toBeGreaterThanOrEqual(groupBox.top)
+      expect(text.bottom).toBeLessThanOrEqual(groupBox.bottom)
+    }
+  },
 }
 
 export const Variants: Story = {

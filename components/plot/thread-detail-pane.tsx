@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Select } from '@/components/ui/select'
 import { TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { injectionHelpText } from '@/components/world/injection-help'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSessionHandle } from '@/hooks/use-row-save-session'
 import type { PlotSaveResult } from '@/lib/actions'
@@ -273,7 +274,7 @@ function ThreadOverviewForm({
               options={INJECTION_MODES.map((mode) => ({
                 value: mode,
                 label: t(`plot:fields.injection.${mode}`),
-                description: t(`plot:fields.injection.${mode}Help`),
+                description: injectionHelpText('thread', mode),
               }))}
             />
           </FormRow>

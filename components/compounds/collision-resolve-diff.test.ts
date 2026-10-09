@@ -123,6 +123,12 @@ describe('computeDivergence', () => {
       })
     })
 
+    it('returns null when the sides differ only in whitespace and blanks', () => {
+      const a = baseEntity({ tags: ['hero', ' '] })
+      const b = baseEntity({ id: 'ent_b', tags: ['hero '] })
+      expect(computeDivergence(a, b).tags).toBeNull()
+    })
+
     it('keeps tags exact: a case variant tag diverges', () => {
       const a = baseEntity({ tags: ['Hero'] })
       const b = baseEntity({ id: 'ent_b', tags: ['hero'] })

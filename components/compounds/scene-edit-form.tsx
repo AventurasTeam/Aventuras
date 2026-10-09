@@ -1,9 +1,9 @@
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { useEffect, useMemo, useState } from 'react'
 import { ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { MultiSelectList } from '@/components/ui/multi-select'
+import { ContextScrollView } from '@/components/ui/scroll-component'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -77,7 +77,7 @@ const NO_LOCATION = '__none__'
 
 const FILL: ViewStyle = { flex: 1 }
 
-/** The sheet needs gorhom's own scroll host so the rows don't fight its drag gesture. */
+/** Inside the sheet, its own scroll host (gorhom's on native), so rows don't fight its drag. */
 function Body({
   insideSheet,
   children,
@@ -97,13 +97,10 @@ function Body({
     )
   }
   return (
-    <BottomSheetScrollView
-      keyboardShouldPersistTaps="handled"
-      contentContainerClassName="gap-3 pb-3"
-      style={FILL}
-    >
-      {children}
-    </BottomSheetScrollView>
+    <ContextScrollView keyboardShouldPersistTaps="handled" style={FILL}>
+      {/* NativeWind never registered gorhom's scroll view, so its content classes would drop. */}
+      <View className="gap-3 pb-3">{children}</View>
+    </ContextScrollView>
   )
 }
 

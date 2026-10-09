@@ -659,6 +659,10 @@ export const EditableWorldTimeFooter: StoryT = {
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
     expect(args.onRequestEditTime).not.toHaveBeenCalled()
+    // 36rem: the override must beat the primitive's own `sm:` cap.
+    expect(screen.getByRole('dialog', { name: 'Edit time' }).getBoundingClientRect().width).toBe(
+      576,
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -1234,6 +1238,9 @@ export const WorldStateTailEditable: StoryT = {
     const trigger = screen.getByRole('button', { name: 'Edit scene' })
     await userEvent.click(trigger)
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    expect(screen.getByRole('dialog', { name: 'Edit scene' }).getBoundingClientRect().width).toBe(
+      576,
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     // Closing must hand the keyboard back to the control that opened it.

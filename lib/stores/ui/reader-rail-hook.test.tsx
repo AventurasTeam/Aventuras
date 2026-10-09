@@ -17,7 +17,7 @@ describe('readerRailStore.useCollapsed', () => {
     const { result, rerender } = renderHook(
       ({ stored }: { stored: boolean }) => {
         renders += 1
-        return readerRailStore.useCollapsed(stored)
+        return readerRailStore.useCollapsed(stored, 1200)
       },
       { initialProps: { stored: false } },
     )
@@ -36,5 +36,21 @@ describe('readerRailStore.useCollapsed', () => {
     expect(result.current).toBe(false)
     act(() => readerRailStore.dispatchDisplay({ type: 'setCollapsed', collapsed: true }))
     expect(result.current).toBe(true)
+  })
+
+  it('reads the window width until the watcher reports one', () => {
+    const { result, rerender } = renderHook(
+      ({ windowWidth }: { windowWidth: number }) =>
+        readerRailStore.useCollapsed(false, windowWidth),
+      { initialProps: { windowWidth: 850 } },
+    )
+    expect(result.current).toBe(true)
+    rerender({ windowWidth: 1200 })
+    expect(result.current).toBe(false)
+
+    // Once a width is known it decides, whatever the caller passes.
+    act(() => readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 }))
+    rerender({ windowWidth: 850 })
+    expect(result.current).toBe(false)
   })
 })

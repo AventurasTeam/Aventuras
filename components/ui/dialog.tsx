@@ -7,7 +7,9 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { useScrimClass } from '@/components/ui/scrim'
 import { Text } from '@/components/ui/text'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 const Dialog = DialogPrimitive.Root
@@ -24,11 +26,13 @@ function DialogOverlay({
 }: Omit<ComponentProps<typeof DialogPrimitive.Overlay>, 'asChild'> & {
   children?: ReactNode
 }) {
+  const scrimClass = useScrimClass()
   return (
     <FullWindowOverlay>
       <DialogPrimitive.Overlay
         className={cn(
-          'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center bg-black/50 p-2',
+          'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center p-2',
+          scrimClass,
           Platform.select({
             web: 'fixed animate-fade-in cursor-default [&>*]:cursor-auto',
           }),
@@ -72,11 +76,17 @@ function DialogContent({
    */
   scrollable?: boolean
 }) {
+  // Keyed on `open` like AlertDialogContent: the reader's undo / End keys and the Actions
+  // menu stand down only for a registered overlay.
+  const { open } = DialogPrimitive.useRootContext()
+  useRegisteredOverlay(open)
   const { height } = useWindowDimensions()
   return (
     <DialogPortal hostName={portalHost}>
       <DialogOverlay>
         <DialogPrimitive.Content
+          // A width override needs the `sm:` variant (`sm:max-w-xl`): tailwind-merge replaces
+          // only the same variant, so a bare `max-w-*` leaves the 32rem cap from `sm` up.
           className={cn(
             'relative z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             !scrollable && 'gap-4',

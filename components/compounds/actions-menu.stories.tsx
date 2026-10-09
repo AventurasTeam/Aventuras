@@ -9,6 +9,7 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useRegisteredOverlay } from '@/lib/stores'
 
@@ -260,6 +261,46 @@ export const AClosedModalLeavesTheMenuLive: Story = {
           <AlertDialogDescription>A draft was left behind.</AlertDialogDescription>
         </AlertDialogContent>
       </AlertDialog>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    expect(screen.getByRole('button', { name: /Actions/ })).not.toBeDisabled()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+// A plain Dialog is modal too: the entry card's world-time and scene editors are Dialogs, and
+// the reader's Ctrl+Z reverted an edit behind one while it stood unregistered.
+export const DialogSuppressesTheMenu: Story = {
+  render: () => (
+    <>
+      <Dialog open>
+        <DialogContent>
+          <DialogTitle>Edit world time</DialogTitle>
+        </DialogContent>
+      </Dialog>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Actions/, hidden: true })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+export const AClosedDialogLeavesTheMenuLive: Story = {
+  render: () => (
+    <>
+      <Dialog open={false}>
+        <DialogContent>
+          <DialogTitle>Edit world time</DialogTitle>
+        </DialogContent>
+      </Dialog>
       <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
     </>
   ),

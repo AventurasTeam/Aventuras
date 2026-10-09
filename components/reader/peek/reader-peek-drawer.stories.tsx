@@ -71,6 +71,8 @@ const meta: Meta<typeof ConnectedHarness> = {
   beforeEach: () => {
     listCollapseStore.__reset()
     readerRailStore.__reset()
+    // The app's viewport watcher reports a desktop width at mount.
+    readerRailStore.dispatchDisplay({ type: 'resize', width: 1200 })
     appSettingsStore.__reset()
     harnessTier.setState({ showRail: true })
     navigate.mockReset()

@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { FormRow } from '@/components/compounds/form-row'
 import { NumberInput } from '@/components/compounds/number-input'
 import { Select } from '@/components/ui/select'
+import { injectionHelpText } from '@/components/world/injection-help'
 import { INJECTION_MODES } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { ENTITY_STATUSES, type EntityBaseDraft } from '@/lib/world'
@@ -58,7 +59,7 @@ export function SettingsTab({
               options={INJECTION_MODES.map((mode) => ({
                 value: mode,
                 label: t(`world:fields.injection.${mode}`),
-                description: t(`world:fields.injection.${mode}Help`),
+                description: injectionHelpText('entity', mode),
               }))}
             />
           </FormRow>

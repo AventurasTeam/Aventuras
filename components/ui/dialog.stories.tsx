@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { modalScrimColor } from '@/components/ui/sheet-scrim-probe'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
 
@@ -224,5 +225,31 @@ export const TallContentFormOwnedScroll: Story = {
       Math.floor(box.top + box.height / 2),
     )
     expect(confirm.contains(topMost) || confirm === topMost).toBe(true)
+  },
+}
+
+// spacing.md → Depth metaphor: the scrim is 0.4 on light themes, 0.6 on dark.
+const scrimDialog = (
+  <Dialog open>
+    <DialogContent>
+      <DialogTitle>Scrim</DialogTitle>
+    </DialogContent>
+  </Dialog>
+)
+
+export const ScrimLight: Story = {
+  render: () => scrimDialog,
+  play: async () => {
+    await screen.findByRole('dialog', { name: 'Scrim' })
+    expect(modalScrimColor()).toBe('rgba(0, 0, 0, 0.4)')
+  },
+}
+
+export const ScrimDark: Story = {
+  globals: { theme: 'default-dark' },
+  render: () => scrimDialog,
+  play: async () => {
+    await screen.findByRole('dialog', { name: 'Scrim' })
+    expect(modalScrimColor()).toBe('rgba(0, 0, 0, 0.6)')
   },
 }

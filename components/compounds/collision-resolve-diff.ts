@@ -1,6 +1,7 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 import {
+  cleanList,
   MERGE_SCALARS,
   mergedTerms,
   type MergeDeselections,
@@ -138,7 +139,8 @@ export function mergeChips(
 export function computeDivergence(a: EntitySummary, b: EntitySummary): DiffPayload {
   return {
     divergentScalars: SCALAR_FIELDS.filter((f) => a[f] !== b[f]),
-    tags: partition(a.tags, b.tags),
+    // Cleaned as the merge writes them, so whitespace alone offers no choice.
+    tags: partition(cleanList(a.tags), cleanList(b.tags)),
     keywords: keywordPartition(a.keywords, b.keywords),
     stateDivergent: !deepEqual(a.state, b.state),
   }
