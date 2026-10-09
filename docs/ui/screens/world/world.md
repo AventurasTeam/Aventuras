@@ -1357,7 +1357,7 @@ overflows.
   slot floats at 220 px upper-right on desktop and tablet; on
   phone that eats ~56 % of the 390 px viewport, squeezing
   description prose. Phone tier: portrait stacks below the prose
-  at ~100 px, matching the peek-drawer compact-head shape (glance
+  at ~100 px, matching the peek body's compact portrait (glance
   content first, visual reference below). Tap the portrait to
   view it full-size per
   [`principles.md → Tap a thumbnail to see it full-size`](../../principles.md#tap-a-thumbnail-to-see-it-full-size).

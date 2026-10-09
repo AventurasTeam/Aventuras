@@ -1333,8 +1333,8 @@ summary, top-down at 440px width:
   `⊙` when common knowledge, and the category chip when set; then
   the full description; then a muted `N involved · N aware` line.
   A common-knowledge happening reads `Common knowledge` in place of
-  the aware count: it records no awareness rows, so the count would
-  always read 0.
+  the aware count: such a happening skips awareness rows, and any
+  that survived a toggle don't apply, so a count would mislead.
 
 Nothing in either body is pressable. The foot link
 `Open in Plot panel →` is the escalation, and the peek-head carries

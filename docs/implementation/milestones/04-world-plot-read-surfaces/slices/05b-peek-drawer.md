@@ -187,7 +187,7 @@ Sheet.
   second press during the close routes nothing.
 - **The lead label is derived in two places, and the peek would make
   three.** The mode to `LeadLabel` ternary lives in
-  `app/world/[branchId].tsx:152-153` and
+  `app/world/[branchId].tsx` and
   `components/reader/rail/use-rail-data.ts`; the peek head would be a
   third copy. Add a `leadLabelFor(mode)` helper as part of this slice.
   Resolved in planning (2026-10-08): `leadLabelFor(mode)` in
@@ -230,7 +230,6 @@ Canon carries the detail; each line points to it.
   [`reader-composer.md → Peek drawer — lead affordance for characters`](../../../../ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
   and
   [`entity.md → Why portrait lives only on Overview`](../../../../ui/patterns/entity.md#why-portrait-lives-only-on-overview).
-
 - **The phone `←` returns to the list where it was left** (developer,
   2026-10-09, option c): a gap the plan missed, since `←` reset the
   list to the top. `RailSheet` keeps the list level mounted, hidden,
@@ -283,7 +282,9 @@ Implementer choices worth keeping:
   row semantics, the phone deep-link reveal, a toast under a modal
   Sheet) are in [`triage.md`](../../../triage.md).
 - **4.5b debt left unrefactored:** the foot's 44 px touch class repeats
-  two others; see triage's "The 44 px touch class".
+  two others; see [`triage.md`](../../../triage.md#inbox), "The 44 px
+  touch class is written out three times".
 
-Peek quick-edits stay parked, now naming `entity.md` as a fourth doc in
-conflict; see [`parked.md → Peek quick-edits`](../../../../parked.md#peek-quick-edits).
+Peek quick-edits stay parked; the entry now names six docs in conflict,
+`entity.md`, `layout.md` and `overlays.md` added in 4.5b; see
+[`parked.md → Peek quick-edits`](../../../../parked.md#peek-quick-edits).

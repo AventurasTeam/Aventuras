@@ -736,12 +736,16 @@ use.
   and [`collapse.md → Reader / composer`](../../../ui/foundations/mobile/collapse.md#reader--composer-narrative--rail--narrative--rail-strip)
   spec pencil edits committing on blur, as does
   [`entity.md → Entity surfacing`](../../../ui/patterns/entity.md#entity-surfacing--three-levels-same-data),
-  while
+  and
+  [`layout.md → Pre-foundations naming`](../../../ui/foundations/mobile/layout.md#pre-foundations-naming)
+  and
+  [`overlays.md → Sheet — Keyboard handling`](../../../ui/patterns/overlays.md#sheet--keyboard-handling)
+  assume them, while
   [`reader-composer.md → State-field composition`](../../../ui/screens/reader-composer/reader-composer.md#state-field-composition--same-as-world-panel-overview)
   says peek is read-mostly with the lead mutation as its only inline
   write. M4 follows the reader doc and files the pencil edits in
   [`parked.md → Peek quick-edits`](../../../parked.md#peek-quick-edits);
-  the four docs want reconciling when that entry is picked up.
+  the six docs want reconciling when that entry is picked up.
 - **4.3 sizing.** Plot is one slice because its two detail panes are
   lighter than World's four, but it carries both picker primitives
   and two link-table editors. If planning runs past "days, not
