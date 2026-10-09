@@ -57,21 +57,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Segment Select clips a label that wraps past two lines.**
-  `SegmentBranch` (`components/ui/select.tsx`) gives each option a fixed
-  `h-control-md` height with `overflow-hidden` and no line limit, so a
-  segment whose labels carry user data clips once a label wraps. 4.2c's
-  collision dialog moved its phone picker to radio rows to avoid it; the
-  component itself still needs a line limit or a growing row. Found in
-  4.2c's PR 2 review (2026-10-06). The desktop canonical picker is still
-  a segment, and its options now carry the side word as well ("Kael,
-  Older, 3 days ago"), so a long name reaches the clip sooner (4.2c's
-  slice review, 2026-10-07). The dialog's mode picker clips too, on web
-  in a window narrower than 330 px: "Keep as distinct", then "Merge into
-  one", wrap to three lines (text 192–252 px in a 201–243 px row at 320
-  px). It fit while the dialog lacked the primitive's side margin, which
-  4.2c's developer review restored. Native keeps no such margin and is
-  unaffected (2026-10-07).
 - **An E2E failure with a dirty pane hangs teardown.** When a test fails
   while a pane is dirty, the main process's armed close guard blocks
   `app.close()` (`e2e/harness/launch.ts`), so each spec's `afterAll`
