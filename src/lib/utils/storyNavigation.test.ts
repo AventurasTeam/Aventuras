@@ -6,6 +6,7 @@ import {
   buildLandmarks,
   checkpointsOnBranch,
   checkpointDeletionBlocker,
+  contextLift,
   entryNumber,
   entryNumberRange,
   jumpToEntry,
@@ -608,5 +609,18 @@ describe('entryNumberRange', () => {
 
   it('has no range to report for no entries', () => {
     expect(entryNumberRange([])).toBe(null)
+  })
+})
+
+describe('contextLift', () => {
+  const viewport = 1000 // the cap is 300
+
+  it('lifts a short card by its whole distance, gap included, and keeps a margin above it', () => {
+    expect(contextLift(112, viewport, 12)).toBe(124)
+    expect(contextLift(300, viewport, 12)).toBe(312)
+  })
+
+  it('clips a tall entry at the cap, as a short one would be, rather than hiding it', () => {
+    expect(contextLift(900, viewport, 12)).toBe(312)
   })
 })

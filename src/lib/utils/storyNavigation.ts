@@ -118,6 +118,19 @@ export function jumpToEntry(request: EntryJumpRequest): boolean {
   return willLand
 }
 
+/** Most of the viewport the entry above a landing may take when lifted into view. */
+export const CONTEXT_LIFT_MAX_RATIO = 0.3
+
+/**
+ * How far to pull a landing up so the entry above it shows. `distance` is from that entry's top
+ * edge to the landing entry's, so the gap between them is lifted too. The entry takes at most
+ * the cap and is clipped beyond it, whatever its kind; `margin` then keeps its top edge off the
+ * viewport's. It has to stay under the gap between cards, or the card before shows above it.
+ */
+export function contextLift(distance: number, viewportHeight: number, margin: number): number {
+  return Math.min(distance, CONTEXT_LIFT_MAX_RATIO * viewportHeight) + margin
+}
+
 export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last'
 
 export interface Landmark {

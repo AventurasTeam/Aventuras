@@ -199,6 +199,10 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   never switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
   history while the chapter is in the current branch's view all the same.
 
+  A jump lifts the view so the entry above the landing shows, whole when it is within 30% of the
+  viewport and clipped at that height when it is taller, with half the gap between cards as the
+  margin above it, so the card before it stays out of view (`contextLift`). Its kind does not change the rule.
+
   The list also carries a **First entry** row on the branch's first entry and a **Last entry** row
   on its last (one row, First entry, when there is a single entry). Both stay on the current
   branch in every navigation mode. The list's filter has two remembered options: one hides or shows

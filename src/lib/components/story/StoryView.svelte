@@ -16,6 +16,7 @@
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import { eventBus, type BranchSwitchedEvent } from '$lib/services/events'
   import { repinDecision, type PinSnapshot } from '$lib/utils/storyPin'
+  import { contextLift } from '$lib/utils/storyNavigation'
 
   const storyMaxWidthStyle = $derived.by(() => {
     const maxWidth =
@@ -225,10 +226,6 @@
   // from the fork point doesn't immediately hit the "earlier entries hidden" divider.
   const FORK_CONTEXT_BEFORE = 5
 
-  // Most of the viewport the preceding entry may take when lifted into view. A tall entry
-  // shows a slice; a short one shows in full, and the fork entry stays near the top either way.
-  const CONTEXT_LIFT_MAX_RATIO = 0.3
-
   // A branch switch happened while the story panel was hidden; consumed when it returns
   let pendingBranchLanding = false
 
@@ -245,12 +242,11 @@
         if (liftForContext && storyContainer) {
           const prevEl = el.previousElementSibling
           if (prevEl) {
-            // Cap the lift so a long preceding entry can't push the fork entry off the bottom
-            const lift = Math.min(
-              prevEl.getBoundingClientRect().height,
-              CONTEXT_LIFT_MAX_RATIO * storyContainer.clientHeight,
-            )
-            storyContainer.scrollTop -= lift
+            const prevRect = prevEl.getBoundingClientRect()
+            const distance = el.getBoundingClientRect().top - prevRect.top
+            // Half the gap between cards: any more and the card before this one shows above it.
+            const margin = Math.floor((distance - prevRect.height) * 0.8)
+            storyContainer.scrollTop -= contextLift(distance, storyContainer.clientHeight, margin)
           }
         }
       } else {
