@@ -16,6 +16,12 @@ import { worldListCopy } from './world-list-copy'
 
 export type EntityListModule = ListModule<Entity, EntityFilter, EntityListSignals, EntityTier>
 
+// The working tier starts open, the rest closed.
+const ENTITY_COLLAPSED_DEFAULTS: ReadonlySet<EntityTier> = new Set<EntityTier>([
+  'staged',
+  'retired',
+])
+
 function buildEntityListModule(kind: EntityKind): EntityListModule {
   return {
     filters: () => ENTITY_FILTERS,
@@ -23,6 +29,7 @@ function buildEntityListModule(kind: EntityKind): EntityListModule {
     grouping: {
       group: (rows, signals) => groupEntitiesByTier(rows, signals.leadId),
       label: (key) => t(`world:tiers.${key}`),
+      defaultCollapsed: ENTITY_COLLAPSED_DEFAULTS,
     },
     copy: (categoryLabel) =>
       worldListCopy(

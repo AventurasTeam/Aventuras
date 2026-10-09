@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, renderHook } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ThemeProvider } from '@/lib/themes'
 
-import { useSheetDismissal } from './sheet'
+import { useSheetDismissal, type SheetContent } from './sheet'
 
 // Stubbed: each ships Flow, JSX or a native lookup the unit bundler can't load, and the hook
 // touches none of them.
@@ -43,5 +43,16 @@ describe('useSheetDismissal', () => {
     expect(result.current.enablePanDownToClose).toBe(false)
     rerender({ dismissible: true })
     expect(result.current.enablePanDownToClose).toBe(true)
+  })
+})
+
+describe('SheetContent props', () => {
+  it('reject a prop only the other anchor reads, at the type level', () => {
+    type Props = ComponentProps<typeof SheetContent>
+    // @ts-expect-error `size` is the bottom anchor's.
+    const right: Props = { anchor: 'right', size: 'tall' }
+    // @ts-expect-error `portalHost` is the right anchor's.
+    const bottom: Props = { anchor: 'bottom', portalHost: 'host' }
+    expect([right.anchor, bottom.anchor]).toEqual(['right', 'bottom'])
   })
 })

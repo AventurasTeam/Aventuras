@@ -26,7 +26,7 @@ type BreadcrumbProps = {
 // One box for every segment keeps the bar's height when the current one becomes a link;
 // phone adds the 44px touch floor as visible size (hitSlop can't pass the parent on Android).
 const SEGMENT_BOX = 'py-2'
-const PHONE_SEGMENT_BOX = 'min-h-[44px] justify-center'
+const PHONE_SEGMENT_BOX = 'min-h-touch justify-center'
 
 export function Breadcrumb({ segments, className, testID, size = 'base' }: BreadcrumbProps) {
   const isPhone = useTier() === 'phone'

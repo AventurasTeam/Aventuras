@@ -379,8 +379,9 @@ sub-structure decision lands with this design pass.
 
 #### Vault parent shell
 
-Vault home navigation + the calendar editor have shipped (see
-[`docs/ui/screens/vault/calendars/calendars.md`](./ui/screens/vault/calendars/calendars.md)).
+The calendar editor is specified
+([`docs/ui/screens/vault/calendars/calendars.md`](./ui/screens/vault/calendars/calendars.md))
+and lands with M8.3's vault shell; no vault route has shipped yet.
 What's still deferred:
 
 - **Import/export at the Vault level** — round-tripping calendar
@@ -394,6 +395,12 @@ What's still deferred:
   eventually carry packs, presets, possibly templates. Each needs
   its own list/editor design once the content types are spec'd.
   Pending a second content type to validate the shell against.
+- **Importing vault content into a story** — characters, lore,
+  threads or happenings kept in the vault and brought into a story.
+  The World and Plot `[+]` menus and the reader rail shipped a
+  disabled `From Vault…` / `+ Import from Vault` placeholder for it;
+  those were removed on 2026-10-09 (developer), since nothing in v1
+  enables them. They return with the content type.
 
 #### Universal import surface
 
@@ -2794,12 +2801,10 @@ and
 [`entity.md → Entity surfacing`](./ui/patterns/entity.md#entity-surfacing--three-levels-same-data)
 all spec, and
 [`layout.md → Pre-foundations naming`](./ui/foundations/mobile/layout.md#pre-foundations-naming)
-and
-[`overlays.md → Sheet — Keyboard handling`](./ui/patterns/overlays.md#sheet--keyboard-handling)
-assume. M4 ships the peek read-mostly with `Set as lead` as its only
+assumes. M4 ships the peek read-mostly with `Set as lead` as its only
 inline write, following
 [`reader-composer.md → State-field composition`](./ui/screens/reader-composer/reader-composer.md#state-field-composition--same-as-world-panel-overview);
-the six docs disagree and want reconciling when this is picked up.
+the five docs disagree and want reconciling when this is picked up.
 Parked until peek editing proves wanted over the `Open in World panel →`
 escalation. Filed at M4 promotion (2026-09-10).
 

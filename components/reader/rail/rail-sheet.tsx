@@ -18,7 +18,6 @@ import {
   type RailView,
 } from '@/lib/reader-rail'
 
-import { RailImportFooter } from './rail-import-footer'
 import { RailList } from './rail-list'
 import { railCategoryLabel } from './rail-modules'
 import { RailSheetCategories } from './rail-sheet-categories'
@@ -158,9 +157,6 @@ export function RailSheet({
                 onRowPress={handleRowPress}
                 surface="transparent"
               />
-              <View className="px-3 pb-3">
-                <RailImportFooter />
-              </View>
             </View>
             {sheet.content === 'peek' ? (
               <View style={StyleSheet.absoluteFill}>

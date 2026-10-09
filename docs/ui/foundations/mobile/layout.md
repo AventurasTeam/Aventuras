@@ -212,14 +212,17 @@ on tablet inheriting desktop chrome).
 - **In-edit dismissal** triggers the save-session navigate-away
   guard per
   [`../../patterns/save-sessions.md → Navigate-away guard`](../../patterns/save-sessions.md).
-  Mobile inherits.
+  Mobile inherits. A tap outside, Esc on desktop and system back
+  raise it. On a bottom Sheet, drag-down snaps the sheet back
+  instead: gorhom has no point between release and dismissal to hold
+  the close, so a held sheet refuses the drag rather than guarding
+  it.
 - **Keyboard interaction** — sheets and modals trap Tab focus.
   Esc dismisses (desktop); on mobile, system back / swipe-back
   triggers stack-aware Return which dismisses the sheet (per
   [`./navigation.md → Stack-aware Return on mobile`](./navigation.md#stack-aware-return-on-mobile)).
-  Bottom-anchored sheets respond to on-screen keyboards via the
-  Sheet primitive's `avoidKeyboard` prop and suspend body-drag
-  while a keyboard is shown; canonical text at
+  Bottom-anchored sheets respond to on-screen keyboards through
+  gorhom's keyboard handling, chosen by `size`; canonical text at
   [`patterns/overlays.md → Sheet — Keyboard handling`](../../patterns/overlays.md#sheet--keyboard-handling).
 
 ## Container conventions

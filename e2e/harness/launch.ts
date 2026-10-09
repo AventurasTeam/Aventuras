@@ -87,6 +87,30 @@ async function selectAppWindow(app: ElectronApplication, originPrefix: string): 
   return window
 }
 
+// A dirty pane arms main's close guard, which cancels Playwright's quit, so close() would wait
+// out the hook timeout and leak the temp userData. Past this, the app exits from main instead.
+const CLOSE_GRACE_MS = 10_000
+
+// `proc` is taken at launch: process() throws once Playwright has dropped the app.
+async function closeApp(app: ElectronApplication, proc: ChildProcess): Promise<void> {
+  // A rejected close proves nothing about the process, so only a resolved one skips the fallback.
+  const closing = app.close().then(
+    () => true,
+    () => false,
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), CLOSE_GRACE_MS)
+  })
+  const closed = await Promise.race([closing, timedOut])
+  clearTimeout(timer)
+  if (closed) return
+  // app.exit skips the window close handlers, the guard among them.
+  await app.evaluate(({ app: main }) => main.exit(0)).catch(() => {})
+  await stopAppProcess(proc)
+  await closing
+}
+
 export type LaunchedApp = {
   app: ElectronApplication
   window: Page
@@ -114,13 +138,14 @@ export async function launchApp(opts: {
       })
       const window = await selectAppWindow(app, APP_SCHEME_ORIGIN)
       const launched = app
+      const proc = app.process()
       return {
         app: launched,
         window,
         // finally so a failing app.close() still cleans up the temp dir.
         close: async () => {
           try {
-            await launched.close()
+            await closeApp(launched, proc)
           } finally {
             await cleanupUserData()
           }
@@ -144,6 +169,7 @@ export async function launchApp(opts: {
     })
     const window = await selectAppWindow(app, origin)
     const launched = app
+    const proc = app.process()
     return {
       app: launched,
       window,
@@ -151,7 +177,7 @@ export async function launchApp(opts: {
       // app.close() must not leave the server holding the worker open.
       close: async () => {
         try {
-          await launched.close()
+          await closeApp(launched, proc)
         } finally {
           await stopServer(server)
           await cleanupUserData()

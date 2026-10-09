@@ -172,6 +172,9 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    // responsive.md's narrowest phone: still inside the phone tier, so phone layouts stay
+    // checkable, but no narrower than any device the layouts serve.
+    minWidth: 360,
     show: false,
     backgroundColor: '#000000',
     autoHideMenuBar: !isDev,

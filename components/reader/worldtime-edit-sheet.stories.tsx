@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
-import { pressSheetScrim, SHEET_NO_CLOSE_MS } from '@/components/ui/sheet-scrim-probe'
+import { expectTopmost, pressSheetScrim } from '@/components/ui/sheet-scrim-probe'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 
@@ -146,17 +146,82 @@ export const BackdropClosesUntouched: Story = {
   },
 }
 
-/** An edit holds the sheet: tap-outside does nothing until Save or Cancel. */
-export const BackdropIgnoredWhileEdited: Story = {
+const guard = () => screen.getByRole('alertdialog', { name: 'Unsaved changes' })
+const guardButton = (name: string) => within(guard()).getByRole('button', { name })
+
+async function raiseGuard() {
+  await pressSheetScrim(screen.getByText(LANDMARK))
+  await waitFor(() => expect(guard()).toBeVisible(), WAIT)
+}
+
+/** An edit holds the sheet: tap-outside raises the unsaved-changes guard over it instead. */
+export const BackdropRaisesGuardWhileEdited: Story = {
   parameters: { layout: 'fullscreen' },
   render: overCanvas,
   play: async ({ args }) => {
     await openSheet()
     await typeSecond('45')
-    await pressSheetScrim(screen.getByText(LANDMARK))
-    await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
+    await raiseGuard()
+    expectTopmost(guardButton('Discard'))
     expect(args.onClose).not.toHaveBeenCalled()
+
+    // Cancel keeps editing: the guard goes, the sheet and its draft stay.
+    await userEvent.click(guardButton('Cancel'))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(), WAIT)
     expect(secondField()).toHaveValue('45')
+    expect(args.onClose).not.toHaveBeenCalled()
+
+    await raiseGuard()
+    await userEvent.click(guardButton('Discard'))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
+/** The guard's Save writes the draft and closes, as the sheet's own Save does. */
+export const GuardSaveWritesTheDraft: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: overCanvas,
+  play: async ({ args }) => {
+    await openSheet()
+    await typeSecond('45')
+    await raiseGuard()
+    await userEvent.click(guardButton('Save'))
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onSave).toHaveBeenCalledWith(105)
+  },
+}
+
+/** A failed write keeps the guard up, saying why, with the draft still behind it. */
+export const GuardSaveFailureStaysRaised: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: overCanvas,
+  args: { onSave: fn(async () => false) },
+  play: async ({ args }) => {
+    await openSheet()
+    await typeSecond('45')
+    await raiseGuard()
+    await userEvent.click(guardButton('Save'))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105), WAIT)
+    await waitFor(
+      () => expect(guard()).toHaveTextContent("Couldn't update the entry's time."),
+      WAIT,
+    )
+    expect(args.onClose).not.toHaveBeenCalled()
+  },
+}
+
+/** A draft the form's Save would refuse leaves the guard Discard and Cancel, and says why. */
+export const GuardSaveBlockedByInvalidDraft: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: overCanvas,
+  play: async ({ args }) => {
+    await openSheet()
+    await userEvent.clear(secondField())
+    await raiseGuard()
+    expect(guardButton('Save')).toBeDisabled()
+    expect(guard()).toHaveTextContent('Enter a valid second between 0 and 59.')
+    expect(args.onSave).not.toHaveBeenCalled()
   },
 }
 

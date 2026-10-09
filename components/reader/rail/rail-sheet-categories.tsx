@@ -77,7 +77,7 @@ function CategoryRow({
       aria-selected={selected}
       onPress={onPress}
       className={cn(
-        'relative min-h-[44px] flex-row items-center px-row-x-md active:bg-tint-press',
+        'relative min-h-touch flex-row items-center px-row-x-md active:bg-tint-press',
         selected && 'bg-bg-sunken',
         Platform.select({
           web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring',

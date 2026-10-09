@@ -54,6 +54,7 @@ export function FactionDetailPane({
     <EntityDetailFrame
       kind="faction"
       row={row}
+      entities={data.entities}
       session={session}
       savedName={values.name}
       tab={tab}

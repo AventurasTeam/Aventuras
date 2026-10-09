@@ -23,6 +23,8 @@ export const threadListModule: ThreadListModule = {
   grouping: {
     group: (rows) => groupThreadsByTier(rows),
     label: (key) => t(`plot:tiers.${key}`),
+    // The working tier starts open, the rest closed.
+    defaultCollapsed: new Set<ThreadTier>(['pending', 'resolved', 'failed']),
   },
   copy: plotListCopy('thread', THREAD_SEARCH_SCOPE),
   Row: ThreadRow,

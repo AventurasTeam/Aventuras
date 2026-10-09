@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fireEvent, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { watchDownloads } from '@/components/compounds/download-probe'
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -12,7 +13,7 @@ import type { CharacterState, Entity, EntityKind } from '@/lib/db'
 import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
 import { t } from '@/lib/i18n'
-import { toastStore, type ToastItem } from '@/lib/toast'
+import { toastStore } from '@/lib/toast'
 import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
@@ -534,6 +535,23 @@ export const SaveCarriesThreeFields: Story = {
   },
 }
 
+/** world.md → Rename: typing another row's name warns under the field; Save stays live. */
+export const RenameWarnsOfATakenName: Story = {
+  play: async () => {
+    const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
+    await userEvent.click(name.getByRole('button', { name: 'Edit Kael' }))
+    const field = name.getByRole('textbox')
+    await userEvent.clear(field)
+    await userEvent.type(field, 'mira')
+    expect(await name.findByText('Another row already has that name.', {}, WAIT)).toBeVisible()
+    await waitFor(() => expect(saveBar()).toHaveTextContent('1 unsaved change'), WAIT)
+    await expect(within(saveBar()).getByRole('button', { name: /^Save/ })).not.toBeDisabled()
+
+    await userEvent.type(field, ' Vale')
+    await waitFor(() => expect(name.queryByText('Another row already has that name.')).toBeNull())
+  },
+}
+
 /** The Relationships base freezes once dirty, so Save keeps a pair the classifier writes later. */
 export const RelationshipsBaseFrozenWhileDirty: Story = {
   args: { links: [MIRA_LINK], storeLink: VORNE_LINK },
@@ -979,21 +997,7 @@ export const ExportHandsTheCommittedRow: Story = {
     toastStore.__reset()
   },
   play: async () => {
-    let toasts: ToastItem[] = []
-    const stop = toastStore.subscribe((next) => {
-      toasts = next
-    })
-    let blob: Blob | null = null
-    const downloads: string[] = []
-    const url = spyOn(URL, 'createObjectURL').mockImplementation((b) => {
-      blob = b as Blob
-      return 'blob:story'
-    })
-    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      downloads.push(this.download)
-    })
+    const watch = watchDownloads()
     try {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit Kael' }, WAIT))
       await userEvent.keyboard(' (draft){Enter}')
@@ -1003,8 +1007,8 @@ export const ExportHandsTheCommittedRow: Story = {
       const entry = await screen.findByRole('menuitem', { name: 'Export entity as JSON' }, WAIT)
       await waitFor(() => expect(entry).toBeVisible(), WAIT)
       await userEvent.click(entry)
-      await waitFor(() => expect(downloads).toEqual(['character-kael.avts']), WAIT)
-      const file = JSON.parse(await (blob as unknown as Blob).text()) as {
+      await waitFor(() => expect(watch.downloads).toEqual(['character-kael.avts']), WAIT)
+      const file = JSON.parse(await (watch.blob() as Blob).text()) as {
         format: string
         entity: Record<string, unknown>
       }
@@ -1019,16 +1023,11 @@ export const ExportHandsTheCommittedRow: Story = {
         }),
       )
       await waitFor(
-        () =>
-          expect(toasts.map((item) => [item.severity, item.message])).toEqual([
-            ['info', t('common:avts.exportedSaved')],
-          ]),
+        () => expect(watch.toasts()).toEqual([['info', t('common:avts.exportedSaved')]]),
         WAIT,
       )
     } finally {
-      stop()
-      url.mockRestore()
-      click.mockRestore()
+      watch.stop()
     }
   },
 }

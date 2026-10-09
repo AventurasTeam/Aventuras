@@ -123,3 +123,7 @@ for the placement rule.
   World's name-based guess differs from the classifier's comparison only
   with three or more namesakes. Moves with the entry above. Routed from
   triage 2026-10-09.
+
+## UX
+
+_None active._

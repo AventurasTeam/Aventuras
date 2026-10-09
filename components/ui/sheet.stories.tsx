@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from './button'
 import { Heading } from './heading'
@@ -270,7 +270,13 @@ const BACKDROP_WAIT = { timeout: 3000 }
 const LANDMARK = 'Canvas below the sheet'
 
 /** `pending` stands in for a save in flight, which blocks swipe-dismiss. */
-function BackdropHarness({ initiallyPending = false }: { initiallyPending?: boolean }) {
+function BackdropHarness({
+  initiallyPending = false,
+  onDismissRefused,
+}: {
+  initiallyPending?: boolean
+  onDismissRefused?: () => void
+}) {
   const [pending, setPending] = useState(initiallyPending)
   return (
     <View className="items-start gap-4 p-4" style={{ minHeight: 640 }}>
@@ -281,7 +287,12 @@ function BackdropHarness({ initiallyPending = false }: { initiallyPending?: bool
             <Text>Open sheet</Text>
           </Button>
         </SheetTrigger>
-        <SheetContent anchor="bottom" size="short" enablePanDownToClose={!pending}>
+        <SheetContent
+          anchor="bottom"
+          size="short"
+          dismissable={!pending}
+          onDismissRefused={onDismissRefused}
+        >
           <Button variant="secondary" onPress={() => setPending(true)}>
             <Text>Start save</Text>
           </Button>
@@ -319,6 +330,21 @@ export const BackdropPressBlocked: Story = {
     const trigger = await openSheet()
     await pressSheetScrim(screen.getByText(LANDMARK))
     await new Promise((resolve) => setTimeout(resolve, SHEET_NO_CLOSE_MS))
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  },
+}
+
+const refused = fn()
+
+/** A held sheet reports the refused press, for its owner to raise a guard; it stays open. */
+export const BackdropPressReportsRefusal: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <BackdropHarness initiallyPending onDismissRefused={refused} />,
+  play: async () => {
+    refused.mockClear()
+    const trigger = await openSheet()
+    await pressSheetScrim(screen.getByText(LANDMARK))
+    await waitFor(() => expect(refused).toHaveBeenCalledTimes(1), BACKDROP_WAIT)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
   },
 }

@@ -170,10 +170,23 @@ function sheetCoverage(): number {
   return (stage.bottom - railDialog().getBoundingClientRect().top) / stage.height
 }
 
+// gorhom's content height still shifts a few pixels while the Sheet rises into the band.
+const SETTLED_MS = 150
+
+/** Waits for the Sheet to come to rest at the medium detent, not just to enter its band. */
 async function waitForMediumDetent() {
+  let last = Number.NaN
+  let since = 0
   await waitFor(() => {
-    expect(sheetCoverage()).toBeGreaterThan(0.45)
-    expect(sheetCoverage()).toBeLessThan(0.65)
+    const coverage = sheetCoverage()
+    const now = performance.now()
+    if (coverage !== last) {
+      last = coverage
+      since = now
+    }
+    expect(coverage).toBeGreaterThan(0.45)
+    expect(coverage).toBeLessThan(0.65)
+    expect(now - since).toBeGreaterThanOrEqual(SETTLED_MS)
   }, ANIMATION)
 }
 
@@ -213,11 +226,24 @@ async function openChipSheet() {
   await waitForMediumDetent()
 }
 
-/** Taps the named list row and waits for its peek at the tall detent. */
+/** gorhom's container, scrolled by the browser to reveal a focused row, lifts the whole Sheet. */
+function liftedAncestor(): HTMLElement | null {
+  for (let node = railDialog().parentElement; node != null; node = node.parentElement) {
+    if (node.scrollTop !== 0) return node
+  }
+  return null
+}
+
+/**
+ * Taps the named list row and waits for its peek at the tall detent. The click focuses the row:
+ * pressed while the Sheet still rises, the row sits below the window and the browser lifts the
+ * Sheet to show it.
+ */
 async function peekRow(name: string) {
   await userEvent.click(screen.getByRole('button', { name }))
   await waitFor(() => expect(screen.getByRole('heading', { name })).toBeVisible())
   await waitFor(() => expect(sheetCoverage()).toBeGreaterThan(0.85), ANIMATION)
+  expect(liftedAncestor()).toBeNull()
 }
 
 const openRailButton = () => screen.getByRole('button', { name: 'Open rail' })
@@ -243,13 +269,11 @@ export const ListLevel: Story = {
     await headIs('character')
     await expect(backToCategories()).toBeVisible()
     await expect(screen.getByRole('button', { name: leadOf(DATA).name })).toBeVisible()
-    await expect(screen.getByText(t('reader:rail.importFromVault'))).toBeVisible()
 
     // Every level sits on the Sheet's own surface, so a level switch never changes the background.
     await expect(
       paintedUpToDialog(screen.getByRole('button', { name: leadOf(DATA).name })),
     ).toEqual([])
-    await expect(paintedUpToDialog(screen.getByText(t('reader:rail.importFromVault')))).toEqual([])
   },
 }
 

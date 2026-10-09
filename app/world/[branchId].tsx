@@ -9,6 +9,7 @@ import { CollisionResolveDialog } from '@/components/compounds/collision-resolve
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
 import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
+import { rowAddOptions } from '@/components/compounds/row-add-options'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { distinctCategories } from '@/components/plot/plot-route-data'
 import { plotHref } from '@/components/plot/plot-selection'
@@ -35,7 +36,6 @@ import {
   useWorldSelection,
   type WorldDetailSelection,
 } from '@/components/world/use-world-selection'
-import { worldAddOptions } from '@/components/world/world-add-options'
 import {
   importFailureText,
   importRejectionText,
@@ -86,7 +86,13 @@ import {
   storiesStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { leadLabelFor, resolveLead, type EntitySaveInput, type LoreDraft } from '@/lib/world'
+import {
+  leadLabelFor,
+  nameTakenByOther,
+  resolveLead,
+  type EntitySaveInput,
+  type LoreDraft,
+} from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -268,6 +274,18 @@ export default function WorldRoute() {
   const collision = useCollisionResolve(branchId, ctx, guard)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
+  const collisionPair = collision.pair
+  // world.md → Rename: a name another row outside the pair already has earns a hint.
+  const collisionNameTaken =
+    collisionPair == null
+      ? undefined
+      : (name: string) =>
+          nameTakenByOther({
+            kind: collisionPair[0].kind,
+            name,
+            entities,
+            exclude: new Set(collisionPair.map((side) => side.id)),
+          })
   // `open={focused}` already hides the dialog under a pushed screen; closing it here keeps it
   // from reopening when focus returns.
   useEffect(() => {
@@ -396,10 +414,15 @@ export default function WorldRoute() {
 
   // Phone is list-first: an open detail collapses to the list; any other back leaves, and
   // useUnsavedChangesGuard holds the pop behind the dialog while dirty.
+  // The list sat hidden under the detail, so a reveal sent then (an arrival link, Connections)
+  // scrolled nothing: reveal the row as the list comes back, in the same update.
   const handleBack = useCallback(() => {
-    if (detailOpen) guard(() => select(null))
-    else router.back()
-  }, [detailOpen, guard, router, select])
+    if (!detailOpen) return router.back()
+    guard(() => {
+      select(null)
+      if (selectedId != null) listRef.current?.revealRow(selectedId)
+    })
+  }, [detailOpen, guard, router, select, selectedId])
   // Constant true: Android back always runs handleBack, so it can't leave past a dirty pane.
   useMasterDetailBack(true, handleBack)
 
@@ -624,7 +647,8 @@ export default function WorldRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={worldAddLabel(category)}
-                    options={worldAddOptions(
+                    options={rowAddOptions(
+                      'world',
                       { onBlank: () => guard(startCreate), onJson: activeImport.request },
                       { disabled: editBlocked, disabledReason: gateReason },
                     )}
@@ -658,6 +682,7 @@ export default function WorldRoute() {
           entityB={collision.pair[1]}
           onResolve={collision.resolve}
           blockedReason={collisionBlocked}
+          isNameTaken={collisionNameTaken}
         />
       ) : null}
       {isEntityCategory(category) ? (

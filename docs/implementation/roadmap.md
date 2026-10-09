@@ -1798,7 +1798,14 @@ own.
   AlertDialog in one press. Observe it on a device first; deferring the
   action to the Sheet's `onDismiss` is the likelier fix, since lifting the
   `PortalHost` above gorhom would put Select's phone sheet under any
-  Dialog. Routed from triage 2026-10-09.
+  Dialog. Routed from triage 2026-10-09. The editor sheets'
+  unsaved-changes guard avoids the question through a second host,
+  `ABOVE_SHEETS_PORTAL_HOST`, mounted after gorhom's provider. Re-read
+  while building it, also statically: the Dialog and AlertDialog
+  overlays carry `z-50`, and every layer between them and gorhom's
+  sheet views is a fragment, so on native the zIndex may already draw
+  them over an unindexed sheet. The device check decides between the
+  two readings.
 - **M9.5 — Narrative reflow on Browse rail toggle jumps the reading position.**
   Measured by hand on desktop at a 1050 px window, hero story scrolled to
   about 45% (`scrollTop` 3548, unchanged by the toggle): the narrative
@@ -1825,7 +1832,10 @@ own.
   (focus moves in on open and back on close). The bottom path passes
   neither autofocus hook, gorhom has none, and nothing sets `aria-modal`,
   so the page behind stays tabbable. Reached on web at phone tier: a
-  narrow desktop window, or the web build. One item with the next entry,
+  narrow desktop window, or the web build. Esc doesn't dismiss a web
+  bottom sheet either, and binding it needs the same knowledge of which
+  overlay is on top (`dismissable` already gates drag, scrim and Android
+  back). One item with the next entry,
   and with the native side in
   [`parked.md → Android bottom sheets are not dialogs for TalkBack`](../parked.md#android-bottom-sheets-are-not-dialogs-for-talkback).
   Routed from triage 2026-10-09.

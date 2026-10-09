@@ -213,6 +213,7 @@
     },
     "renameConfirm": "Save renames",
     "renameHelp": "Change at least one name to clear the collision.",
+    "nameTaken": "Another row already has that name.",
     "renameIssue": {
       "emptyName": "A name can't be empty.",
       "stillColliding": "These names still collide: letter case and spaces at either end don't count as a difference."

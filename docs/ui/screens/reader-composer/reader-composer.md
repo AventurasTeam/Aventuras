@@ -48,7 +48,6 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 │                                       │ search                 │
 │                                       │ filter chips           │
 │                                       │ list (sorted, grouped) │
-│                                       │ + Import from Vault    │
 │   suggestions panel (after AI reply)  │                        │
 │   composer (mode, regen, send/cancel) │                        │
 └───────────────────────────────────────┴───────────────────────┘

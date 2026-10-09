@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { ImporterMenu } from '@/components/compounds/importer-menu'
+import { rowAddOptions } from '@/components/compounds/row-add-options'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
@@ -12,7 +13,6 @@ import type { EntityFilter, WorldCategory } from '@/lib/list-modules'
 import { listCollapseStore } from '@/lib/stores'
 
 import { deriveCollisions } from './collisions'
-import { worldAddOptions } from './world-add-options'
 import { WorldListPane, type WorldListPaneHandle } from './world-list-pane'
 import { worldAddLabel } from './world-selection'
 
@@ -215,7 +215,7 @@ function Harness({
           <ImporterMenu
             trigger="icon"
             label={worldAddLabel(category)}
-            options={worldAddOptions({ onBlank: () => {}, onJson: () => {} }, {})}
+            options={rowAddOptions('world', { onBlank: () => {}, onJson: () => {} }, {})}
             open={addOpen}
             onOpenChange={setAddOpen}
           />
@@ -500,11 +500,11 @@ export const Empty: Story = {
   },
 }
 
-/** The `[+]` menu on an entity category: only From Vault stays disabled. */
+/** The `[+]` menu on an entity category offers Blank and From JSON, both live. */
 export const AddMenuDisabledEntries: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New character' }))
-    expect(await screen.findByTitle('Vault lands in M8')).toBeInTheDocument()
+    expect(await screen.findAllByRole('menuitem')).toHaveLength(2)
     expect(screen.getByRole('menuitem', { name: 'Blank' })).not.toHaveAttribute(
       'aria-disabled',
       'true',

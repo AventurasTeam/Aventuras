@@ -1,10 +1,12 @@
 import { useState } from 'react'
 
+import { UnsavedChangesDialog } from '@/components/compounds/unsaved-changes-dialog'
 import {
   WorldTimeEditForm,
   type MonotonicityBreak,
 } from '@/components/compounds/world-time-edit-form'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { ABOVE_SHEETS_PORTAL_HOST, Sheet, SheetContent } from '@/components/ui/sheet'
+import { useEditOverlayGuard } from '@/hooks/use-edit-overlay-guard'
 import type { CalendarFrame } from '@/lib/calendar'
 import { t } from '@/lib/i18n'
 
@@ -26,9 +28,9 @@ export function WorldTimeEditSheet({
 }: WorldTimeEditSheetProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
-  // Unsaved input holds the sheet: drag-down and tap-outside wait for Save or Cancel. Android
-  // back still closes it through the primitive's BackHandler.
-  const [dirty, setDirty] = useState(false)
+  // Unsaved input holds the sheet: a scrim tap or Android back raises the guard, drag-down
+  // snaps back.
+  const guard = useEditOverlayGuard({ saving, saveError, onClose })
 
   async function save(next: number) {
     if (saving) return
@@ -36,7 +38,7 @@ export function WorldTimeEditSheet({
     setSaveError(undefined)
     try {
       if (await onSave(next)) {
-        onClose()
+        guard.close()
       } else {
         setSaveError(t('reader:worldTimeEdit.failed'))
       }
@@ -51,14 +53,20 @@ export function WorldTimeEditSheet({
     <Sheet
       open
       onOpenChange={(next) => {
-        if (!next && !saving) onClose()
+        if (!next && !saving) guard.close()
       }}
       ariaLabel={t('reader:worldTimeEdit.title')}
     >
-      <SheetContent anchor="bottom" size="auto" enablePanDownToClose={!saving && !dirty}>
+      <SheetContent
+        anchor="bottom"
+        size="auto"
+        dismissable={!guard.held}
+        onDismissRefused={guard.requestClose}
+      >
         {/* Keyed so an external worldTime change (undo, classifier write)
             reseeds the form, which only reads the prop on mount. */}
         <WorldTimeEditForm
+          ref={guard.formRef}
           key={worldTimeRaw}
           frame={frame}
           worldTimeRaw={worldTimeRaw}
@@ -66,10 +74,11 @@ export function WorldTimeEditSheet({
           saving={saving}
           saveError={saveError}
           onSave={(next) => void save(next)}
-          onCancel={onClose}
-          onDirtyChange={setDirty}
+          onCancel={guard.close}
+          onDraftChange={guard.onDraftChange}
         />
       </SheetContent>
+      <UnsavedChangesDialog {...guard.dialog} portalHost={ABOVE_SHEETS_PORTAL_HOST} />
     </Sheet>
   )
 }

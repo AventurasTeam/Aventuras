@@ -58,12 +58,15 @@ export const world = {
   categoryOption: (page: Page, category: string): Locator =>
     page.getByRole('option', { name: t(`world:categories.${category}`) }),
 
+  // Visible only: the reader rail, hidden under World, words its search box the same way.
   search: (page: Page, category: string): Locator =>
-    page.getByPlaceholder(
-      t('world:search.placeholder', {
-        category: t(`world:categories.${category}`).toLocaleLowerCase('en'),
-      }),
-    ),
+    page
+      .getByPlaceholder(
+        t('world:search.placeholder', {
+          category: t(`world:categories.${category}`).toLocaleLowerCase('en'),
+        }),
+      )
+      .filter({ visible: true }),
 
   // All-view group accordion header (module-list.tsx); matched via aria-expanded, since the
   // sibling filter Chip shares the same label text but sets aria-pressed instead (chip.tsx).
@@ -90,7 +93,7 @@ export const world = {
 
   // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name appends its
   // reason (world-add-options.ts), so match the visible label text.
-  addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
+  addMenuOption: (page: Page, key: 'blank' | 'fromJson'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
 
   // Tab triggers may carry a `(n)` count suffix.

@@ -44,6 +44,7 @@ import { IconAction } from '@/components/ui/icon-action'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
+import { useEditOverlayGuard } from '@/hooks/use-edit-overlay-guard'
 import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
@@ -54,6 +55,7 @@ import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
 import { SceneEditForm, sceneSaveErrorKey, type SceneSaveResult } from './scene-edit-form'
+import { UnsavedChangesDialog } from './unsaved-changes-dialog'
 import { WorldTimeEditForm, type MonotonicityBreak } from './world-time-edit-form'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
@@ -210,6 +212,7 @@ function WorldTimeEditDialog({
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
+  const guard = useEditOverlayGuard({ saving, saveError, onClose: () => setOpen(false) })
 
   async function save(next: number) {
     if (saving) return
@@ -217,7 +220,7 @@ function WorldTimeEditDialog({
     setSaveError(undefined)
     try {
       if (await onEditTime?.(next)) {
-        setOpen(false)
+        guard.close()
       } else {
         setSaveError(t('reader:worldTimeEdit.failed'))
       }
@@ -229,9 +232,12 @@ function WorldTimeEditDialog({
   }
 
   function handleOpenChange(next: boolean) {
-    if (!next && saving) return
-    if (next) setSaveError(undefined)
-    setOpen(next)
+    if (!next) {
+      guard.requestClose()
+      return
+    }
+    setSaveError(undefined)
+    setOpen(true)
   }
 
   return (
@@ -258,6 +264,7 @@ function WorldTimeEditDialog({
         {/* Keyed so an external worldTime change (undo, classifier write)
             reseeds the form, which only reads the prop on mount. */}
         <WorldTimeEditForm
+          ref={guard.formRef}
           key={edit.worldTimeRaw}
           frame={edit.frame}
           worldTimeRaw={edit.worldTimeRaw}
@@ -265,9 +272,11 @@ function WorldTimeEditDialog({
           saving={saving}
           saveError={saveError}
           onSave={(next) => void save(next)}
-          onCancel={() => setOpen(false)}
+          onCancel={guard.close}
+          onDraftChange={guard.onDraftChange}
         />
       </DialogContent>
+      <UnsavedChangesDialog {...guard.dialog} />
     </Dialog>
   )
 }
@@ -291,6 +300,7 @@ function SceneEditDialog({
 }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
+  const guard = useEditOverlayGuard({ saving, saveError, onClose: () => onOpenChange(false) })
 
   async function save(next: SceneEdit) {
     if (saving) return
@@ -299,7 +309,7 @@ function SceneEditDialog({
     try {
       const result = await onEditScene?.(next)
       if (result?.ok) {
-        onOpenChange(false)
+        guard.close()
       } else {
         setSaveError(t(sceneSaveErrorKey(result?.code)))
       }
@@ -311,9 +321,12 @@ function SceneEditDialog({
   }
 
   function handleOpenChange(next: boolean) {
-    if (!next && saving) return
-    if (next) setSaveError(undefined)
-    onOpenChange(next)
+    if (!next) {
+      guard.requestClose()
+      return
+    }
+    setSaveError(undefined)
+    onOpenChange(true)
   }
 
   return (
@@ -344,6 +357,7 @@ function SceneEditDialog({
         {/* Keyed so an external scene change (undo, classifier write) reseeds the
             form, which only reads its props on mount. */}
         <SceneEditForm
+          ref={guard.formRef}
           key={`${sceneEntities.join(',')}|${currentLocationId ?? ''}`}
           sceneEntities={sceneEntities}
           currentLocationId={currentLocationId}
@@ -351,9 +365,11 @@ function SceneEditDialog({
           saving={saving}
           saveError={saveError}
           onSave={(next) => void save(next)}
-          onCancel={() => onOpenChange(false)}
+          onCancel={guard.close}
+          onDraftChange={guard.onDraftChange}
         />
       </DialogContent>
+      <UnsavedChangesDialog {...guard.dialog} />
     </Dialog>
   )
 }

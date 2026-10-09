@@ -9,7 +9,7 @@ import {
 
 import { entityListModule } from '@/components/entity/entity-list-module'
 import { LORE_FILTER, loreListModule } from '@/components/entity/lore-list-module'
-import type { RowSignals } from '@/components/list/list-module'
+import { collapseDefaultsOf, type RowSignals } from '@/components/list/list-module'
 import { ModuleList } from '@/components/list/module-list'
 import { planReveal, type RevealPlan } from '@/components/list/reveal-plan'
 import type { RevealRequest } from '@/components/list/use-reveal-scroll'
@@ -23,7 +23,6 @@ import {
   WORLD_CATEGORIES,
   type EntityFilter,
   type EntityListSignals,
-  type EntityTier,
   type WorldCategory,
 } from '@/lib/list-modules'
 import { listCollapseStore } from '@/lib/stores'
@@ -63,11 +62,9 @@ export type WorldListPaneProps = {
   ref?: Ref<WorldListPaneHandle>
 }
 
-// patterns/entity.md → Accordion grouping: the working tier starts open, the rest closed.
-export const WORLD_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<EntityTier>([
-  'staged',
-  'retired',
-])
+function worldCollapseDefaults(category: WorldCategory): ReadonlySet<string> {
+  return collapseDefaultsOf(category === 'lore' ? loreListModule : entityListModule(category))
+}
 
 export function WorldListPane({
   category,
@@ -89,10 +86,10 @@ export function WorldListPane({
   addSlot,
   ref,
 }: WorldListPaneProps) {
-  const collapsed = listCollapseStore.useCollapsed(category, WORLD_COLLAPSED_DEFAULTS)
+  const collapsed = listCollapseStore.useCollapsed(category, worldCollapseDefaults(category))
   const setGroupCollapsed = useCallback(
     (key: string, value: boolean) =>
-      listCollapseStore.setCollapsed(category, key, value, WORLD_COLLAPSED_DEFAULTS),
+      listCollapseStore.setCollapsed(category, key, value, worldCollapseDefaults(category)),
     [category],
   )
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
@@ -143,7 +140,7 @@ export function WorldListPane({
           targetKind,
           plan.expandGroup,
           false,
-          WORLD_COLLAPSED_DEFAULTS,
+          worldCollapseDefaults(targetKind),
         )
       setReveal({ id })
     },

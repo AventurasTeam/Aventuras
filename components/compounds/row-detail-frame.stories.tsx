@@ -14,6 +14,7 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
+import { watchDownloads } from './download-probe'
 import { RowDetailFrame } from './row-detail-frame'
 
 // CI runs plays several times slower than local; every post-interaction wait uses this.
@@ -259,37 +260,13 @@ export const ExportRejectionToasts: Story = {
   },
 }
 
-/** Captures anchor downloads and toasts for an export play; `stop` restores both. */
-function watchExport() {
-  const downloads: string[] = []
-  let toasts: ToastItem[] = []
-  const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
-  const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-    this: HTMLAnchorElement,
-  ) {
-    downloads.push(this.download)
-  })
-  const unsubscribe = toastStore.subscribe((next) => {
-    toasts = next
-  })
-  return {
-    downloads,
-    toasts: () => toasts.map((item) => [item.severity, item.message]),
-    stop: () => {
-      unsubscribe()
-      url.mockRestore()
-      click.mockRestore()
-    },
-  }
-}
-
 /** Export reads the committed row, so with unsaved edits a toast says the file holds the saved one. */
 export const ExportWithUnsavedEditsSaysSo: Story = {
   beforeEach: () => {
     toastStore.__reset()
   },
   play: async () => {
-    const watch = watchExport()
+    const watch = watchDownloads()
     try {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit First row' }, WAIT))
       await userEvent.keyboard(' (draft){Enter}')
@@ -312,7 +289,7 @@ export const ExportWhileCleanStaysQuiet: Story = {
     toastStore.__reset()
   },
   play: async () => {
-    const watch = watchExport()
+    const watch = watchDownloads()
     try {
       await openMenuEntry('Export row as JSON')
       await waitFor(() => expect(watch.downloads).toEqual(['row-first-row.avts']), WAIT)
@@ -329,13 +306,7 @@ export const ExportWhileCleanStaysQuiet: Story = {
 export const ExportStaysLiveWhileBlocked: Story = {
   args: { blocked: true, blockedReason: 'Generation is in flight. Cancel to edit.' },
   play: async () => {
-    const downloads: string[] = []
-    const url = spyOn(URL, 'createObjectURL').mockReturnValue('blob:story')
-    const click = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      downloads.push(this.download)
-    })
+    const watch = watchDownloads()
     try {
       await expect(await screen.findByRole('button', { name: 'More actions' }, WAIT)).toBeEnabled()
       // The gate reached the frame: the blocked name drops its edit button.
@@ -345,10 +316,9 @@ export const ExportStaysLiveWhileBlocked: Story = {
       await waitFor(() => expect(entry).toBeVisible(), WAIT)
       await expect(entry).not.toHaveAttribute('aria-disabled', 'true')
       await userEvent.click(entry)
-      await waitFor(() => expect(downloads).toEqual(['row-first-row.avts']), WAIT)
+      await waitFor(() => expect(watch.downloads).toEqual(['row-first-row.avts']), WAIT)
     } finally {
-      url.mockRestore()
-      click.mockRestore()
+      watch.stop()
     }
   },
 }

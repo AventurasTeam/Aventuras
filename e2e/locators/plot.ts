@@ -25,12 +25,15 @@ export const plot = {
     page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) }),
 
   // The list pane's search box, named by its placeholder (plot-list-copy.ts).
+  // Visible only: the reader rail, hidden under Plot, words its search box the same way.
   search: (page: Page, kind: 'thread' | 'happening'): Locator =>
-    page.getByPlaceholder(
-      t('plot:search.placeholder', {
-        category: t(`plot:kinds.${kind}`).toLocaleLowerCase('en'),
-      }),
-    ),
+    page
+      .getByPlaceholder(
+        t('plot:search.placeholder', {
+          category: t(`plot:kinds.${kind}`).toLocaleLowerCase('en'),
+        }),
+      )
+      .filter({ visible: true }),
 
   subHeader: (page: Page): Locator => page.getByTestId('plot-sub-header'),
   // The sub-header's kind segment: a link only while a row follows it (breadcrumb.tsx).

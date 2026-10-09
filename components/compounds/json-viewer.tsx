@@ -32,7 +32,10 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} ariaLabelledBy={headingId}>
-      <SheetContent anchor={anchor} size="tall" className={className}>
+      <SheetContent
+        {...(anchor === 'right' ? { anchor } : { anchor, size: 'tall' as const })}
+        className={className}
+      >
         <View className="flex-row items-center gap-3 border-b border-border pb-3">
           <View nativeID={headingId} className="min-w-0 flex-1 flex-row items-baseline gap-1">
             <Text numberOfLines={1} className="shrink-0 font-semibold">

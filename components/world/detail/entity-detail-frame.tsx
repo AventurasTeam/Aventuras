@@ -8,7 +8,7 @@ import { entityExport } from '@/lib/avts'
 import type { Entity, EntityKind } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
-import type { EntityBaseDraft } from '@/lib/world'
+import { nameTakenByOther, type EntityBaseDraft } from '@/lib/world'
 
 import { deleteDisabledReason } from '../delete-copy'
 import { entityMenuEntries } from '../world-copy'
@@ -50,6 +50,8 @@ export function useEntityTab(
 type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   kind: EntityKind
   row: Entity | null
+  /** The branch's entities, for world.md → Rename's hint when a typed name is taken. */
+  entities: readonly Entity[]
   session: RowSaveSession<Draft>
   /** The committed name; a save landing mid-edit is what InlineEditableName's Escape restores. */
   savedName: string
@@ -73,6 +75,7 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
 export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   kind,
   row,
+  entities,
   session,
   savedName,
   tab,
@@ -101,6 +104,12 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
       savedName={savedName}
       namePlaceholder={t('world:detail.namePlaceholder')}
       nameTestID="world-detail-name"
+      nameHint={(name) =>
+        name.trim() !== savedName &&
+        nameTakenByOther({ kind, name, entities, exclude: new Set(row == null ? [] : [row.id]) })
+          ? t('world:detail.nameTaken')
+          : undefined
+      }
       recentlyClassifiedLabel={
         recentlyClassified != null ? t('world:detail.recentlyClassified') : undefined
       }

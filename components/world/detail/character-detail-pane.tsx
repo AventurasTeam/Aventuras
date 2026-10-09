@@ -82,6 +82,7 @@ export function CharacterDetailPane({
     <EntityDetailFrame
       kind="character"
       row={row}
+      entities={data.entities}
       session={session}
       savedName={values.name}
       tab={tab}

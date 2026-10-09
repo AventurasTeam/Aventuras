@@ -293,7 +293,7 @@ happening).
 
 Each follows the standard
 [import-counterparts pattern](../../patterns/data.md#import-counterparts--file-based--vault)
-(Blank / From JSON file… / From Vault…). `From JSON file…` opens
+(Blank / From JSON file…). `From JSON file…` opens
 the shared [`ImportDialog`](../../patterns/import-dialog.md)
 configured for the active kind:
 

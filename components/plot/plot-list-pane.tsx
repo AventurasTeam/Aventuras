@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { View } from 'react-native'
 
-import type { RowSignals } from '@/components/list/list-module'
+import { collapseDefaultsOf, type RowSignals } from '@/components/list/list-module'
 import { ModuleList } from '@/components/list/module-list'
 import { planReveal } from '@/components/list/reveal-plan'
 import type { RevealRequest } from '@/components/list/use-reveal-scroll'
@@ -18,12 +18,10 @@ import { t } from '@/lib/i18n'
 import {
   isPlotKind,
   PLOT_KINDS,
-  type HappeningBucket,
   type HappeningFilter,
   type PlotKind,
   type PlotListSignals,
   type ThreadFilter,
-  type ThreadTier,
 } from '@/lib/list-modules'
 import type { RecentlyClassified } from '@/lib/row-signals'
 import { listCollapseStore } from '@/lib/stores'
@@ -59,19 +57,8 @@ export type PlotListPaneProps = {
   ref?: Ref<PlotListPaneHandle>
 }
 
-// patterns/entity.md → Accordion grouping: the working tier / bucket starts open, the rest closed.
-const THREAD_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<ThreadTier>([
-  'pending',
-  'resolved',
-  'failed',
-])
-const HAPPENING_COLLAPSED_DEFAULTS: ReadonlySet<string> = new Set<HappeningBucket>([
-  'earlier',
-  'out-of-narrative',
-])
-
-export function plotCollapseDefaults(kind: PlotKind): ReadonlySet<string> {
-  return kind === 'thread' ? THREAD_COLLAPSED_DEFAULTS : HAPPENING_COLLAPSED_DEFAULTS
+function plotCollapseDefaults(kind: PlotKind): ReadonlySet<string> {
+  return collapseDefaultsOf(kind === 'thread' ? threadListModule : happeningListModule)
 }
 
 export function PlotListPane({
@@ -124,7 +111,7 @@ export function PlotListPane({
             'thread',
             plan.expandGroup,
             false,
-            THREAD_COLLAPSED_DEFAULTS,
+            plotCollapseDefaults('thread'),
           )
         }
       } else {
@@ -146,7 +133,7 @@ export function PlotListPane({
             'happening',
             plan.expandGroup,
             false,
-            HAPPENING_COLLAPSED_DEFAULTS,
+            plotCollapseDefaults('happening'),
           )
         }
       }

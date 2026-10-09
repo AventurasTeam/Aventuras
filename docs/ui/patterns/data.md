@@ -9,7 +9,7 @@ Used by:
 - [World panel · ⋯ → View raw JSON](../screens/world/world.md#detail-pane--raw-json-viewer)
   (raw JSON viewer)
 - [World per-row import](../screens/world/world.md#per-row-import)
-  (import counterparts: Blank / From JSON / From Vault)
+  (import counterparts: Blank / From JSON)
 - [Plot panel · ⋯ → View raw JSON](../screens/plot/plot.md#detail-pane--raw-json-viewer)
   (raw JSON viewer)
 - [Plot per-row import](../screens/plot/plot.md#manual-creation--per-row-import)
@@ -110,13 +110,13 @@ pane's `+ New X ▾` affordance is a menu offering:
   kind. File pick or clipboard read, envelope meta-check, zod
   payload validation. Mismatch fails with a friendly error rather
   than a partial save.
-- `From Vault…` — disabled placeholder until the Vault parent shell
-  lands (per the
-  [Vault parent shell followup](../../parked.md#vault-parent-shell)).
-  The first Vault content type — calendars — has its editor at
-  [vault/calendars](../screens/vault/calendars/calendars.md); the
-  picker affordance hooks into the same content store once the
-  shell catches up.
+
+No `From Vault…` option in v1: the vault holds no entity, lore,
+thread or happening content, so the menu doesn't advertise a source
+nothing can enable. It returns with that content type
+([`parked.md → Vault parent shell`](../../parked.md#vault-parent-shell));
+the first vault content type, calendars, has its own editor at
+[vault/calendars](../screens/vault/calendars/calendars.md).
 
 **Validation contract:** all imports (story-level or row-level) pass
 through the same zod schema that protects writes. JSON that doesn't

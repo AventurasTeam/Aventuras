@@ -17,9 +17,7 @@
   },
   "addMenu": {
     "blank": "Blank",
-    "fromJson": "From JSON file…",
-    "fromVault": "From Vault…",
-    "fromVaultReason": "Vault lands in M8"
+    "fromJson": "From JSON file…"
   },
   "import": {
     "title": {
@@ -116,6 +114,7 @@
     "selectRow": "Select a row",
     "selectRowBody": "Pick an entity or lore entry from the list to see it here.",
     "recentlyClassified": "Recently classified",
+    "nameTaken": "Another row already has that name.",
     "namePlaceholder": "Unnamed",
     "newEntity": {
       "character": "New character",

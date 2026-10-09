@@ -119,12 +119,14 @@ function ControlledDialog({
   entityB: b,
   onResolve,
   blockedReason,
+  isNameTaken,
 }: {
   initialOpen?: boolean
   entityA: EntitySummary
   entityB: EntitySummary
   onResolve: (r: Resolution) => Promise<void>
   blockedReason?: string
+  isNameTaken?: (name: string) => boolean
 }) {
   const [open, setOpen] = useState(initialOpen)
   return (
@@ -139,6 +141,7 @@ function ControlledDialog({
         entityB={b}
         onResolve={onResolve}
         blockedReason={blockedReason}
+        isNameTaken={isNameTaken}
       />
     </View>
   )
@@ -915,6 +918,31 @@ export const RenameCaseOnly: Story = {
 
     await waitFor(() => expect(save()).not.toBeDisabled())
     expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+  },
+}
+
+// world.md → Rename: a name a third row has earns a hint under that field, and never blocks.
+export const RenameWarnsOfATakenName: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={entityB}
+      onResolve={resolveOk}
+      isNameTaken={(name) => name.toLowerCase() === 'jorin'}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const inputs = await screen.findAllByRole('textbox')
+    expect(screen.queryByText('Another row already has that name.')).toBeNull()
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
+    expect(await screen.findByText('Another row already has that name.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save renames' })).not.toBeDisabled(),
+    )
+    await userEvent.type(inputs[1], ' the Elder')
+    await waitFor(() => expect(screen.queryByText('Another row already has that name.')).toBeNull())
   },
 }
 

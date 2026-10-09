@@ -87,6 +87,8 @@ type CollisionResolveDialogProps = {
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
   blockedReason?: string
+  /** Whether a row outside the pair already has `name`; Rename warns under that field. */
+  isNameTaken?: (name: string) => boolean
 }
 
 type FooterProps = {
@@ -137,6 +139,7 @@ export function CollisionResolveDialog({
   entityB,
   onResolve,
   blockedReason,
+  isNameTaken,
 }: CollisionResolveDialogProps) {
   const [mode, setMode] = useState<Mode>('merge')
   const [submitting, setSubmitting] = useState(false)
@@ -216,6 +219,7 @@ export function CollisionResolveDialog({
             entityA={entityA}
             entityB={entityB}
             nowMs={nowMs}
+            isNameTaken={isNameTaken}
             onSubmit={handleSubmit}
             onCancel={onCancel}
             submitting={submitting}
@@ -748,12 +752,32 @@ type RenameBodyProps = BodyProps & {
   entityA: EntitySummary
   entityB: EntitySummary
   nowMs: number
+  isNameTaken?: (name: string) => boolean
+}
+
+/** A hint, not a block: the user may keep a name another row has, as Keep as distinct allows. */
+function NameTakenHint({
+  name,
+  original,
+  isNameTaken,
+}: {
+  name: string
+  original: string
+  isNameTaken?: (name: string) => boolean
+}) {
+  if (name.trim() === original || isNameTaken?.(name.trim()) !== true) return null
+  return (
+    <Text size="sm" variant="muted">
+      {t('collisionDialog.nameTaken')}
+    </Text>
+  )
 }
 
 function RenameBody({
   entityA,
   entityB,
   nowMs,
+  isNameTaken,
   onSubmit,
   onCancel,
   submitting,
@@ -808,6 +832,7 @@ function RenameBody({
           editable={!submitting}
           accessibilityLabel={captionA}
         />
+        <NameTakenHint name={nameA} original={entityA.name} isNameTaken={isNameTaken} />
       </View>
       <View className="gap-1">
         <Text size="sm" variant="muted">
@@ -819,6 +844,7 @@ function RenameBody({
           editable={!submitting}
           accessibilityLabel={captionB}
         />
+        <NameTakenHint name={nameB} original={entityB.name} isNameTaken={isNameTaken} />
       </View>
       <Text size="sm" variant="muted">
         {help}

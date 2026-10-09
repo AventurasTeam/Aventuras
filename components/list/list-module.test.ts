@@ -27,7 +27,7 @@ function group(rows: readonly Row[]): ListGrouping<Row, 'a' | 'b'> {
 const MODULE: ListModule<Row, 'all' | 'a', null, 'a' | 'b'> = {
   filters: () => ['all', 'a'],
   query: (rows, { filter }) => rows.filter((r) => filter === 'all' || r.tier === filter),
-  grouping: { group, label: (key) => key },
+  grouping: { group, label: (key) => key, defaultCollapsed: new Set() },
   copy: () => ({
     searchPlaceholder: '',
     searchScope: [],

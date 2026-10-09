@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseEnvelope } from '@/components/compounds/import-dialog-pipeline'
+import { parse, withVersion } from '@/components/compounds/__tests__/import-envelope'
 import { happeningExport, threadExport } from '@/lib/avts'
 import type { Happening, Thread } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -41,22 +41,6 @@ const AMBUSH: Happening = {
   embeddingStale: 0,
   createdAt: 1,
   updatedAt: 1,
-}
-
-type EnvelopeConfig = { format: string; supportedMajor: number; payloadKey: string }
-
-function parse(config: EnvelopeConfig, raw: string) {
-  return parseEnvelope({
-    raw,
-    format: config.format,
-    supportedMajor: config.supportedMajor,
-    payloadKey: config.payloadKey,
-  })
-}
-
-function withVersion(contents: string, formatVersion: string): string {
-  const envelope = JSON.parse(contents) as Record<string, unknown>
-  return JSON.stringify({ ...envelope, formatVersion })
 }
 
 describe('threadImportDialog', () => {

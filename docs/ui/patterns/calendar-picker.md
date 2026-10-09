@@ -368,9 +368,7 @@ primitive's gate is a direct consequence of that principle.
   bar is present (see deferrals below). Inherits from Select /
   Picker base.
 - **Keyboard handling on phone.** When the search bar is present,
-  on phone the Sheet inherits `avoidKeyboard={true}` from the Sheet
-  primitive and the option list wraps in `KeyboardAwareScrollView`
-  per the consumer rule in
+  the phone sheet lifts with the keyboard per
   [`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling).
 
 Resolved during the implementation pass: the picker rides Select

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useImperativeHandle, useMemo, useState, type Ref } from 'react'
 import { View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { TierTupleInput } from '@/components/wizard/tier-tuple-input'
 import { validateOriginTuple } from '@/components/wizard/tier-tuple-input-logic'
+import type { EditDraft, EditFormHandle } from '@/hooks/use-edit-overlay-guard'
 import {
   tupleToWorldTime,
   worldTimeToTuple,
@@ -32,8 +33,12 @@ type WorldTimeEditFormProps = {
   onSave: (next: number) => void
   /** Close the overlay. Also fires in place of `onSave` on a no-change save. */
   onCancel: () => void
-  /** Whether the tuple differs from the opening one; fires on mount and on every change. */
-  onDirtyChange?: (dirty: boolean) => void
+  /**
+   * Dirty: the tuple differs from the opening one. Invalid: why Save is blocked. Fires on mount
+   * and on every change.
+   */
+  onDraftChange?: (draft: EditDraft) => void
+  ref?: Ref<EditFormHandle>
 }
 
 // The conversion walks the top tier, and only units past the seed are uncached
@@ -53,7 +58,8 @@ export function WorldTimeEditForm({
   saveError,
   onSave,
   onCancel,
-  onDirtyChange,
+  onDraftChange,
+  ref,
 }: WorldTimeEditFormProps) {
   const { calendar, origin } = frame
   const seedTuple = useMemo(
@@ -64,9 +70,6 @@ export function WorldTimeEditForm({
   // Tuple-level, not seconds: a coarse calendar's tuple can't hold a sub-base-unit
   // remainder, so an untouched save compared in seconds would truncate worldTime.
   const dirty = !tuplesEqual(tuple, seedTuple, calendar)
-  useEffect(() => {
-    onDirtyChange?.(dirty)
-  }, [dirty, onDirtyChange])
 
   // Two independent gates run before the conversion: validity keeps a cleared
   // (NaN) or out-of-range tier out of a function that does not bounds-check,
@@ -104,6 +107,9 @@ export function WorldTimeEditForm({
   }, [tuple, calendar, origin, seedTuple])
 
   const blockReason = tierError ?? rangeError ?? undefined
+  useEffect(() => {
+    onDraftChange?.({ dirty, invalidReason: blockReason })
+  }, [dirty, blockReason, onDraftChange])
 
   const handleSave = () => {
     // Redundant behind the disabled Save; kept because `next` needs the narrowing.
@@ -114,6 +120,7 @@ export function WorldTimeEditForm({
     }
     onSave(next)
   }
+  useImperativeHandle(ref, () => ({ save: handleSave }))
 
   return (
     <View className="gap-3">

@@ -21,7 +21,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore } from '@/lib/stores'
 
-import { namesakeKey, orphanedFlags, withFlagClears } from './collision-flags'
+import { namesakeKey, nameTakenByOther, orphanedFlags, withFlagClears } from './collision-flags'
 import { entityActions } from './entity-actions'
 import { entityDeleteActions } from './entity-delete'
 import { characterDraftFrom } from './entity-draft'
@@ -56,6 +56,29 @@ function entity(
 
 const flagged = (id: string, name: string, overrides: Partial<Entity> = {}) =>
   entity(id, name, { nameCollisionFlag: 1, ...overrides })
+
+describe('nameTakenByOther', () => {
+  const branch = [
+    entity('char_a', 'Kael'),
+    entity('char_b', 'Jorin', { status: 'retired' }),
+    entity('loc_a', 'Harbor', {}, 'location'),
+  ]
+  const taken = (name: string, exclude: string[] = [], kind: EntityKind = 'character') =>
+    nameTakenByOther({ kind, name, entities: branch, exclude: new Set(exclude) })
+
+  it('finds a same-kind row under the namesake rule, retired rows included', () => {
+    expect(taken('  kael ')).toBe(true)
+    expect(taken('JORIN')).toBe(true)
+    expect(taken('Kael Stormborn')).toBe(false)
+  })
+
+  it('skips the excluded rows, another kind and a blank name', () => {
+    expect(taken('Kael', ['char_a'])).toBe(false)
+    expect(taken('Harbor')).toBe(false)
+    expect(taken('Harbor', [], 'location')).toBe(true)
+    expect(taken('   ')).toBe(false)
+  })
+})
 
 describe('namesakeKey', () => {
   it.each([' Kael ', 'KAEL', 'Kae\u0301l', 'Ka\u00e9l'])(

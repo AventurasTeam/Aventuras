@@ -6,11 +6,12 @@ import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { DeleteConfirmDialog } from '@/components/compounds/delete-confirm-dialog'
+import { EntryIndexStatus } from '@/components/compounds/entry-index-status'
 import { ImportDialog } from '@/components/compounds/import-dialog'
 import { ImporterMenu } from '@/components/compounds/importer-menu'
+import { rowAddOptions } from '@/components/compounds/row-add-options'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { HappeningDetailPane } from '@/components/plot/happening-detail-pane'
-import { plotAddOptions } from '@/components/plot/plot-add-options'
 import { importFailureText, importRejectionText } from '@/components/plot/plot-copy'
 import { PlotDetailEmpty } from '@/components/plot/plot-detail-empty'
 import { happeningImportDialog, threadImportDialog } from '@/components/plot/plot-import'
@@ -34,10 +35,7 @@ import {
   storyPillPhase,
   useStoryGenerationGate,
 } from '@/components/story-settings/generation-run'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
-import { Text } from '@/components/ui/text'
 import { single as singleParam, worldHref } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
@@ -239,10 +237,16 @@ export default function PlotRoute() {
 
   // Phone is list-first: an open detail collapses to the list; any other back leaves, and
   // useUnsavedChangesGuard holds the pop behind the dialog while dirty.
+  // The list sat hidden under the detail, so a reveal sent then (an arrival link) scrolled
+  // nothing: reveal the row as the list comes back, in the same update.
   const handleBack = useCallback(() => {
-    if (detailOpen) guard(() => select(null))
-    else router.back()
-  }, [detailOpen, guard, router, select])
+    if (!detailOpen) return router.back()
+    guard(() => {
+      select(null)
+      if (selection != null && selection.type !== 'create')
+        listRef.current?.revealRow(selection.type, selection.row.id)
+    })
+  }, [detailOpen, guard, router, select, selection])
   // Constant true: Android back always runs handleBack, so it can't leave the app past a dirty
   // pane. Bottom-of-stack Back is inert (parked.md → "Back on a screen entered without the
   // story list beneath it").
@@ -459,19 +463,14 @@ export default function PlotRoute() {
     >
       {!panesReady ? (
         <View className="flex-1 items-center justify-center">
-          {entryIndex.failed ? (
-            <View className="items-center gap-3">
-              <EmptyState
-                title={t('plot:entryIndexFailed')}
-                subtext={t('plot:entryIndexFailedBody')}
-              />
-              <Button variant="secondary" onPress={entryIndex.retry}>
-                <Text>{t('plot:entryIndexRetry')}</Text>
-              </Button>
-            </View>
-          ) : (
-            <EmptyState title={t('reader:hydrationLoading')} />
-          )}
+          <EntryIndexStatus
+            failed={entryIndex.failed}
+            onRetry={entryIndex.retry}
+            loadingTitle={t('reader:hydrationLoading')}
+            failedTitle={t('plot:entryIndexFailed')}
+            failedBody={t('plot:entryIndexFailedBody')}
+            retryLabel={t('plot:entryIndexRetry')}
+          />
         </View>
       ) : (
         // touch.md → Save bar on phone: the panes compress so the save bar rides above the IME.
@@ -500,7 +499,8 @@ export default function PlotRoute() {
                   <ImporterMenu
                     trigger="icon"
                     label={plotAddLabel(kind)}
-                    options={plotAddOptions(
+                    options={rowAddOptions(
+                      'plot',
                       { onBlank: () => guard(startCreate), onJson: activeImport.request },
                       { disabled: editBlocked, disabledReason: gateReason },
                     )}

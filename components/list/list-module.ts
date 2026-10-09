@@ -66,6 +66,8 @@ export type ListModule<
   grouping: {
     group: (rows: readonly Row[], signals: Signals) => ListGrouping<Row, GroupKey>
     label: (key: GroupKey) => string
+    /** The groups that start closed (patterns/entity.md → Accordion grouping). */
+    defaultCollapsed: ReadonlySet<GroupKey>
   } | null
   copy: (categoryLabel: string) => ListCopy<Filter>
   Row: ComponentType<RowRendererProps<Row, Signals>>
@@ -105,4 +107,13 @@ export function renderOrder<Row, GroupKey extends string>({
     ...(grouped.pinned == null ? [] : [grouped.pinned]),
     ...grouped.groups.flatMap((g) => g.rows),
   ]
+}
+
+const NONE_COLLAPSED: ReadonlySet<string> = new Set()
+
+/** A module's starting collapse, the defaults every surface listing its category shares. */
+export function collapseDefaultsOf(module: {
+  grouping: { defaultCollapsed: ReadonlySet<string> } | null
+}): ReadonlySet<string> {
+  return module.grouping?.defaultCollapsed ?? NONE_COLLAPSED
 }
