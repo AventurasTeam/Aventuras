@@ -65,6 +65,10 @@ export class TauriWebSocket {
       this.onmessage?.({ data: new Uint8Array(message.data).buffer })
     } else if (message.type === 'Close') {
       this.finish(message.data?.code ?? 1006, message.data?.reason ?? '')
+    } else {
+      // The plugin forwards a read error as a bare string and sends no Close after it.
+      this.onerror?.(new Event('error'))
+      this.finish(1006, '')
     }
   }
 
