@@ -8,11 +8,11 @@ import type { RailData } from '@/components/reader/rail/use-rail-data'
 import { EntryIndexReadProvider } from '@/hooks/use-entry-index'
 import { createQueryClient } from '@/lib/cache'
 import { DEFAULT_CALENDAR_ID, EARTH_GREGORIAN } from '@/lib/calendar'
-import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
+import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type StoryEntry } from '@/lib/db'
 import type { EntryRef } from '@/lib/entry-refs'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import type { RailPeek } from '@/lib/reader-rail'
-import { currentStoryStore, resetAllStores } from '@/lib/stores'
+import { currentStoryStore, entriesStore, resetAllStores } from '@/lib/stores'
 
 import { usePeekView } from './use-peek-view'
 
@@ -71,6 +71,25 @@ function ref(id: string, position: number): EntryRef {
   return { id, position, kind: 'user_action', chapterId: null, excerpt: '' }
 }
 
+function entry(
+  id: string,
+  kind: StoryEntry['kind'],
+  position: number,
+  worldTime: number,
+  branchId = 'br_1',
+): StoryEntry {
+  return {
+    id,
+    branchId,
+    position,
+    kind,
+    content: '',
+    chapterId: null,
+    metadata: { sceneEntities: [], currentLocationId: null, worldTime },
+    createdAt: position,
+  }
+}
+
 beforeEach(() => {
   resetAllStores()
   read.mockReset()
@@ -107,6 +126,19 @@ describe('usePeekView', () => {
     await act(async () => resolve([ref('e1', 1)]))
     await waitFor(() => expect(result.current.entryIndex).not.toBeNull())
     expect(result.current.entryIndex?.get('e1')?.position).toBe(1)
+  })
+
+  it('takes world time from this branch’s tail by position, not by store order', () => {
+    // Neither store order nor its reverse ends on e4; another branch's entry sits past it.
+    entriesStore.hydrate('br_1', [
+      entry('e2', 'user_action', 2, 200),
+      entry('e4', 'user_action', 4, 400),
+      entry('f9', 'ai_reply', 9, 900, 'br_2'),
+      entry('e1', 'opening', 1, 100),
+      entry('e3', 'ai_reply', 3, 300),
+    ])
+    const { result } = renderPeek(null)
+    expect(result.current.entityContext.worldTime).toBe(400)
   })
 
   it('takes the default calendar from a story open on another branch', () => {
