@@ -7,6 +7,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { useScrimClass } from '@/components/ui/scrim'
 import { Text } from '@/components/ui/text'
 import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
@@ -25,11 +26,13 @@ function DialogOverlay({
 }: Omit<ComponentProps<typeof DialogPrimitive.Overlay>, 'asChild'> & {
   children?: ReactNode
 }) {
+  const scrimClass = useScrimClass()
   return (
     <FullWindowOverlay>
       <DialogPrimitive.Overlay
         className={cn(
-          'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center bg-black/50 p-2',
+          'absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center p-2',
+          scrimClass,
           Platform.select({
             web: 'fixed animate-fade-in cursor-default [&>*]:cursor-auto',
           }),

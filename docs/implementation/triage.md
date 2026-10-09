@@ -146,11 +146,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the Sheet stays open while the host holds `open=false`. Fix idea: hold the
   dismiss until gorhom reports the opening animation (`onAnimate` or
   `onChange`). Raised in 4.5a review, 2026-10-07.
-- **Overlay scrims are off canon (0.4 light, 0.6 dark).**
-  `components/ui/dialog.tsx:31` and `alert-dialog.tsx:37` use `bg-black/50`,
-  and the right-anchored Sheet (`sheet.tsx` near line 444) uses `bg-black/40`
-  in both modes; `SCRIM_OPACITY` could be the single source. Raised in 4.5a
-  review, 2026-10-07.
 - **`MultiSelect` nests a checkbox role inside a checkbox role.**
   `components/ui/multi-select.tsx:388-401`: the outer one shows no checked
   state on web. Raised in 4.5a review, 2026-10-07.

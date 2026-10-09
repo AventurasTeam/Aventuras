@@ -37,12 +37,13 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
+import { SCRIM_OPACITY, useScrimClass } from '@/components/ui/scrim'
 import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
 import { TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useRegisteredOverlay } from '@/lib/stores'
-import { useTheme, type Theme } from '@/lib/themes'
+import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 type AutoFocusHandler = (event: Event) => void
@@ -101,9 +102,6 @@ export function QuietSheetHandle(props: BottomSheetHandleProps) {
 const SheetInputComponent = (
   Platform.OS === 'web' ? TextInput : BottomSheetTextInput
 ) as InputComponent
-
-// spacing.md → Depth metaphor: the modal scrim is fixed per mode, not a theme color.
-const SCRIM_OPACITY: Record<Theme['mode'], number> = { light: 0.4, dark: 0.6 }
 
 type SheetBackdropProps = BottomSheetBackdropProps & { dismissible: boolean; opacity: number }
 
@@ -421,6 +419,7 @@ function RightSheetContent({
 }: Omit<SheetContentProps, 'anchor'>) {
   const { open } = DialogPrimitive.useRootContext()
   useRegisteredOverlay(open && !suppressOverlayRegistration)
+  const scrimClass = useScrimClass()
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const maxHeight = Math.max(screenHeight - insets.top - SAFE_AREA_GAP_PX, 0)
@@ -455,7 +454,8 @@ function RightSheetContent({
           >
             <DialogPrimitive.Overlay
               className={cn(
-                'absolute inset-0 bg-black/40',
+                'absolute inset-0',
+                scrimClass,
                 Platform.select({ web: 'animate-fade-in' }),
               )}
               style={Platform.select({ native: StyleSheet.absoluteFill })}

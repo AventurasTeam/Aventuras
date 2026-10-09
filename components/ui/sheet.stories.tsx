@@ -7,7 +7,12 @@ import { Button } from './button'
 import { Heading } from './heading'
 import { Input } from './input'
 import { Sheet, SheetContent, SheetTrigger } from './sheet'
-import { findSheetScrim, pressSheetScrim, SHEET_NO_CLOSE_MS } from './sheet-scrim-probe'
+import {
+  findSheetScrim,
+  modalScrimColor,
+  pressSheetScrim,
+  SHEET_NO_CLOSE_MS,
+} from './sheet-scrim-probe'
 import { Text } from './text'
 
 const meta: Meta<typeof Sheet> = {
@@ -350,3 +355,19 @@ export const BackdropDarkScrim: Story = {
 // (one theme at a time), or visit the native dev page at /dev/sheet
 // where the ThemePicker drives data-theme globally and portals
 // inherit correctly.
+
+/** The right anchor is a Radix modal with its own scrim, held to the same per-mode values. */
+export const RightDarkScrim: Story = {
+  globals: { theme: 'default-dark' },
+  render: () => (
+    <Sheet open onOpenChange={() => {}} ariaLabel="Entity details">
+      <SheetContent anchor="right">
+        <Text>Entity details</Text>
+      </SheetContent>
+    </Sheet>
+  ),
+  play: async () => {
+    await screen.findByRole('dialog', { name: 'Entity details' })
+    expect(modalScrimColor()).toBe('rgba(0, 0, 0, 0.6)')
+  },
+}

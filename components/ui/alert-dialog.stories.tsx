@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from './alert-dialog'
 import { Button } from './button'
+import { modalScrimColor } from './sheet-scrim-probe'
 import { Text } from './text'
 
 const meta: Meta<typeof AlertDialog> = {
@@ -283,5 +284,22 @@ export const TallContent: Story = {
       expect(after.top).toBeCloseTo(before[i].top, 0)
       expect(after.bottom).toBeCloseTo(before[i].bottom, 0)
     }
+  },
+}
+
+// spacing.md → Depth metaphor: the scrim is 0.4 on light themes, 0.6 on dark.
+export const ScrimDark: Story = {
+  globals: { theme: 'default-dark' },
+  render: () => (
+    <AlertDialog open>
+      <AlertDialogContent>
+        <AlertDialogTitle>Scrim</AlertDialogTitle>
+        <AlertDialogDescription>Darker on a dark theme.</AlertDialogDescription>
+      </AlertDialogContent>
+    </AlertDialog>
+  ),
+  play: async () => {
+    await screen.findByRole('alertdialog', { name: 'Scrim' })
+    expect(modalScrimColor()).toBe('rgba(0, 0, 0, 0.6)')
   },
 }
