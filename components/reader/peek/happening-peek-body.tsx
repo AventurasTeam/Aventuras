@@ -6,18 +6,23 @@ import { Icon } from '@/components/ui/icon'
 import { Tag, type TagTone } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import type { Happening } from '@/lib/db'
-import type { EntryIndex } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 
-// Until the index is read an anchored marker can't be told from a dangling one, so only the
-// free-text `temporal` shows.
+import type { PeekEntryIndex } from './use-peek-view'
+
+// An unread anchor can't be told from a dangling one, so `temporal` shows first; a failed read
+// says so rather than leave the anchor unplaced without a word.
 function markerOf(
   row: Happening,
-  entryIndex: EntryIndex | null,
+  entryIndex: PeekEntryIndex,
 ): { tone: TagTone; label: string } | null {
-  if (entryIndex != null) return whenMarker(row, entryIndex)
+  if (entryIndex.state === 'ready') return whenMarker(row, entryIndex.index)
   const temporal = row.temporal?.trim()
-  return temporal ? { tone: 'soft', label: temporal } : null
+  if (temporal) return { tone: 'soft', label: temporal }
+  if (entryIndex.state === 'failed' && row.occurredAtEntryId != null) {
+    return { tone: 'warning', label: t('plot:entryIndexFailed') }
+  }
+  return null
 }
 
 /** reader-composer.md → State-field composition — thread and happening peek: read-only. */
@@ -30,7 +35,7 @@ export function HappeningPeekBody({
   happening: Happening
   involved: number
   aware: number
-  entryIndex: EntryIndex | null
+  entryIndex: PeekEntryIndex
 }) {
   const marker = markerOf(happening, entryIndex)
   // plot.md → Common-knowledge interaction: such a happening skips awareness rows.

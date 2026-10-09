@@ -2,7 +2,6 @@ import { useContext } from 'react'
 import { View, type ViewStyle } from 'react-native'
 
 import { ScrollComponentContext } from '@/components/ui/scroll-component'
-import type { EntryIndex } from '@/lib/entry-refs'
 
 import { PeekBody } from './peek-body'
 import { PeekFoot } from './peek-foot'
@@ -14,12 +13,12 @@ import {
   type PeekModel,
   type PeekRegionPress,
 } from './peek-model'
-import type { PeekEntityContext } from './use-peek-view'
+import type { PeekEntityContext, PeekEntryIndex } from './use-peek-view'
 
 export type PeekContentProps = {
   model: PeekModel
   entityContext: PeekEntityContext
-  entryIndex: EntryIndex | null
+  entryIndex: PeekEntryIndex
   lead: PeekLeadControl
   chrome: PeekChrome
   onOpenInPanel: () => void

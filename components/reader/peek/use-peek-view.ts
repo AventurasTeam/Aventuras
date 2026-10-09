@@ -22,11 +22,19 @@ export type PeekEntityContext = {
   calendar: CalendarSystem
 }
 
+/** The branch's entry index, for a happening's when-marker. */
+export type PeekEntryIndex =
+  | { state: 'reading' }
+  | { state: 'ready'; index: EntryIndex }
+  | { state: 'failed' }
+
+const READING: PeekEntryIndex = { state: 'reading' }
+const FAILED: PeekEntryIndex = { state: 'failed' }
+
 export type PeekView = {
   model: PeekModel | null
   entityContext: PeekEntityContext
-  /** The branch's entry index once read, for a happening's when-marker; null until then. */
-  entryIndex: EntryIndex | null
+  entryIndex: PeekEntryIndex
 }
 
 /** Everything a peek renders. Calls context-bound hooks: call it above any rn-primitives Portal. */
@@ -51,11 +59,14 @@ export function usePeekView(peek: RailPeek | null, data: RailData): PeekView {
   )
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
   // A full-branch read per turn, so only while a happening's when-marker needs it.
-  const entryIndex = useEntryIndex(branchId, {
+  const { ready, failed, index } = useEntryIndex(branchId, {
     enabled: peek?.category === 'happening',
     seedFromLastRead: true,
   })
-  const index = entryIndex.ready ? entryIndex.index : null
+  const entryIndex = useMemo<PeekEntryIndex>(() => {
+    if (ready) return { state: 'ready', index }
+    return failed ? FAILED : READING
+  }, [ready, failed, index])
 
   const model = useMemo(
     () => (peek == null ? null : peekModelOf(peek, data, { involvements, awareness })),
@@ -65,5 +76,5 @@ export function usePeekView(peek: RailPeek | null, data: RailData): PeekView {
     () => ({ entities: data.entities, worldTime, calendar }),
     [data.entities, worldTime, calendar],
   )
-  return useMemo(() => ({ model, entityContext, entryIndex: index }), [model, entityContext, index])
+  return useMemo(() => ({ model, entityContext, entryIndex }), [model, entityContext, entryIndex])
 }

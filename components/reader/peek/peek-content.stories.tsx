@@ -6,8 +6,10 @@ import { expect, fn, screen, userEvent, within } from 'storybook/test'
 import type { GlyphKind } from '@/components/entity/entity-kind-icon'
 import { PlotIcon } from '@/components/plot/plot-icon'
 import { ScrollComponentContext, type ScrollComponent } from '@/components/ui/scroll-component'
+import { Tag } from '@/components/ui/tag'
+import { Text } from '@/components/ui/text'
 import { EntityOverview } from '@/components/world/overview/entity-overview'
-import { formatEntryRef, indexEntryRefs, type EntryIndex, type EntryRef } from '@/lib/entry-refs'
+import { formatEntryRef, indexEntryRefs, type EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import type { PlotKind } from '@/lib/list-modules'
 import type { LeadLabel } from '@/lib/world'
@@ -15,6 +17,7 @@ import type { LeadLabel } from '@/lib/world'
 import { PeekContent } from './peek-content'
 import type { PeekModel, PeekRegionPress } from './peek-model'
 import { PEEK_ENTITY_CONTEXT, PEEK_LEAD_CONTROL, peekModelFixture } from './peek-story-fixtures'
+import type { PeekEntryIndex } from './use-peek-view'
 
 const WAIT = { timeout: 3000 }
 
@@ -28,13 +31,14 @@ function entryRef(position: number): EntryRef {
   }
 }
 
-/** The happening body's entry index: read, not read yet, or read without the ambush's e_10. */
-type Entries = 'read' | 'unread' | 'dangling'
+/** The happening body's entry index: read, unread, read without the ambush's e_10, or failed. */
+type Entries = 'read' | 'unread' | 'dangling' | 'failed'
 
-const ENTRY_INDEXES: Record<Entries, EntryIndex | null> = {
-  read: indexEntryRefs([entryRef(10), entryRef(52)]),
-  unread: null,
-  dangling: indexEntryRefs([entryRef(52)]),
+const ENTRY_INDEXES: Record<Entries, PeekEntryIndex> = {
+  read: { state: 'ready', index: indexEntryRefs([entryRef(10), entryRef(52)]) },
+  unread: { state: 'reading' },
+  dangling: { state: 'ready', index: indexEntryRefs([entryRef(52)]) },
+  failed: { state: 'failed' },
 }
 
 function withLeadLabel(model: PeekModel, leadLabel: LeadLabel): PeekModel {
@@ -62,6 +66,11 @@ function happeningOf(model: PeekModel) {
   return model.row
 }
 
+function anchoredAt(model: PeekModel, entryId: string): PeekModel {
+  if (model.kind !== 'happening') throw new Error('Only a happening peek carries an anchor')
+  return { ...model, row: { ...model.row, occurredAtEntryId: entryId } }
+}
+
 const KAEL = peekModelFixture('character', 'char_kael')
 const MIRA = peekModelFixture('character', 'char_mira')
 const CHARTER = peekModelFixture('lore', 'lore_charter')
@@ -76,6 +85,7 @@ const OPEN_IN_WORLD = t('reader:peek.openInWorld')
 const OPEN_IN_PLOT = t('reader:peek.openInPlot')
 // The ⊙ is an `img` with this name; the counts line repeats the words as text.
 const CK_MARKER = t('plot:commonKnowledgeMarker')
+const ENTRY_INDEX_FAILED = t('plot:entryIndexFailed')
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -220,6 +230,20 @@ function withGlyphReference(kind: PlotKind, icon: string | null) {
       </View>
     )
   }
+}
+
+// Tag doesn't expose its tone, so a chip's fill is compared with a hidden warning Tag's.
+function withWarningReference(args: HarnessProps) {
+  return (
+    <View>
+      <PeekHarness {...args} />
+      <View testID="warning-reference" className="hidden">
+        <Tag tone="warning">
+          <Text>reference</Text>
+        </Tag>
+      </View>
+    </View>
+  )
 }
 
 function scrollAncestor(el: HTMLElement, root: HTMLElement): HTMLElement | null {
@@ -471,6 +495,36 @@ export const HappeningDanglingAnchor: Story = {
   },
 }
 
+/** A failed read leaves an anchor unplaced: a warning chip says so, with nothing to press. */
+export const HappeningIndexFailed: Story = {
+  args: { model: AMBUSH, entries: 'failed' },
+  render: withWarningReference,
+  play: async () => {
+    const body = within(await findPeek()).getByTestId('happening-peek-body')
+    const label = within(body).getByText(ENTRY_INDEX_FAILED)
+    await expect(label).toBeVisible()
+    const chip = label.parentElement
+    const reference = screen.getByTestId('warning-reference').firstElementChild
+    if (chip == null || reference == null) throw new Error('Missing a chip to compare')
+    await expect(getComputedStyle(chip).backgroundColor).toBe(
+      getComputedStyle(reference).backgroundColor,
+    )
+    await expect(within(body).queryByText(formatEntryRef(10))).toBeNull()
+    await expect(within(body).queryByText(t('entryRefDangling'))).toBeNull()
+    await expectReadOnly(body)
+  },
+}
+
+/** With no anchor, a failed read hides nothing, so there is nothing to warn about. */
+export const HappeningUnanchoredIndexFailed: Story = {
+  args: { model: LEDGER_HAPPENING, entries: 'failed' },
+  play: async () => {
+    const body = within(await findPeek()).getByTestId('happening-peek-body')
+    await expect(within(body).getByTestId('happening-peek-counts')).toBeVisible()
+    await expect(within(body).queryByText(ENTRY_INDEX_FAILED)).toBeNull()
+  },
+}
+
 /** Common knowledge: the ⊙ marker, and `Common knowledge` where the aware count would be. */
 export const HappeningCommonKnowledge: Story = {
   args: { model: ECLIPSE },
@@ -515,6 +569,17 @@ export const HappeningTemporal: Story = {
     const row = happeningOf(FOUNDING)
     const body = within(await findPeek()).getByTestId('happening-peek-body')
     await expect(within(body).getByText(row.temporal ?? '')).toBeVisible()
+  },
+}
+
+/** `temporal` outranks the anchor, so a failed read changes nothing it shows. */
+export const HappeningTemporalIndexFailed: Story = {
+  args: { model: anchoredAt(FOUNDING, 'e_10'), entries: 'failed' },
+  play: async () => {
+    const row = happeningOf(FOUNDING)
+    const body = within(await findPeek()).getByTestId('happening-peek-body')
+    await expect(within(body).getByText(row.temporal ?? '')).toBeVisible()
+    await expect(within(body).queryByText(ENTRY_INDEX_FAILED)).toBeNull()
   },
 }
 
@@ -572,7 +637,7 @@ function SideBySide() {
         <PeekContent
           model={KAEL}
           entityContext={PEEK_ENTITY_CONTEXT}
-          entryIndex={null}
+          entryIndex={ENTRY_INDEXES.unread}
           lead={PEEK_LEAD_CONTROL}
           chrome={{ kind: 'close', onClose: () => {} }}
           onOpenInPanel={() => {}}

@@ -9,6 +9,7 @@ import { EntryIndexReadProvider } from '@/hooks/use-entry-index'
 import { createQueryClient } from '@/lib/cache'
 import { DEFAULT_CALENDAR_ID, EARTH_GREGORIAN } from '@/lib/calendar'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import type { RailPeek } from '@/lib/reader-rail'
@@ -98,6 +99,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 describe('usePeekView', () => {
@@ -111,7 +113,7 @@ describe('usePeekView', () => {
     await waitFor(() => expect(read).toHaveBeenCalledWith('br_1'))
   })
 
-  it('holds the entry index null until the read resolves', async () => {
+  it('holds the entry index reading until the read resolves', async () => {
     let resolve!: (rows: EntryRef[]) => void
     read.mockImplementationOnce(
       () =>
@@ -121,11 +123,20 @@ describe('usePeekView', () => {
     )
     const { result } = renderPeek({ category: 'happening', id: 'h_ambush' })
     await waitFor(() => expect(read).toHaveBeenCalled())
-    expect(result.current.entryIndex).toBeNull()
+    expect(result.current.entryIndex).toEqual({ state: 'reading' })
 
     await act(async () => resolve([ref('e1', 1)]))
-    await waitFor(() => expect(result.current.entryIndex).not.toBeNull())
-    expect(result.current.entryIndex?.get('e1')?.position).toBe(1)
+    await waitFor(() => expect(result.current.entryIndex.state).toBe('ready'))
+    const { entryIndex } = result.current
+    if (entryIndex.state !== 'ready') throw new Error('Expected a read entry index')
+    expect(entryIndex.index.get('e1')?.position).toBe(1)
+  })
+
+  it('marks the entry index failed when its read rejects', async () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    read.mockRejectedValueOnce(new Error('disk I/O error'))
+    const { result } = renderPeek({ category: 'happening', id: 'h_ambush' })
+    await waitFor(() => expect(result.current.entryIndex).toEqual({ state: 'failed' }))
   })
 
   it('takes world time from this branch’s tail by position, not by store order', () => {

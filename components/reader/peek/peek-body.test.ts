@@ -12,7 +12,7 @@ import { HappeningPeekBody } from './happening-peek-body'
 import { LorePeekBody } from './lore-peek-body'
 import { PEEK_ENTITY_BODY, PeekBody, type PeekBodyProps } from './peek-body'
 import { ThreadPeekBody } from './thread-peek-body'
-import type { PeekEntityContext } from './use-peek-view'
+import type { PeekEntityContext, PeekEntryIndex } from './use-peek-view'
 
 // The real components pull in the RN tree, which the unit bundler can't load; only which
 // component each kind mounts, and with what, is asserted here.
@@ -32,6 +32,8 @@ const AMBUSH = { id: 'h_ambush', title: 'The alley ambush' } as Happening
 
 const CONTEXT: PeekEntityContext = { entities: [KAEL], worldTime: 120, calendar: EARTH_GREGORIAN }
 const INDEX: EntryIndex = new Map()
+const READ: PeekEntryIndex = { state: 'ready', index: INDEX }
+const FAILED: PeekEntryIndex = { state: 'failed' }
 
 const PANE_DATA: EntityPaneData = {
   branchId: 'br_1',
@@ -44,7 +46,7 @@ const PANE_DATA: EntityPaneData = {
   leadId: null,
 }
 
-function props(model: PeekBodyProps['model'], entryIndex: EntryIndex | null = INDEX) {
+function props(model: PeekBodyProps['model'], entryIndex: PeekEntryIndex = READ) {
   return { model, entityContext: CONTEXT, entryIndex, onRegionPress: vi.fn() }
 }
 
@@ -99,7 +101,7 @@ describe('PeekBody', () => {
     } as const
     const happening = PeekBody(props(model))
     expect(happening.type).toBe(HappeningPeekBody)
-    expect(happening.props).toEqual({ happening: AMBUSH, involved: 3, aware: 1, entryIndex: INDEX })
-    expect(PeekBody(props(model, null)).props).toMatchObject({ entryIndex: null })
+    expect(happening.props).toEqual({ happening: AMBUSH, involved: 3, aware: 1, entryIndex: READ })
+    expect(PeekBody(props(model, FAILED)).props.entryIndex).toBe(FAILED)
   })
 })

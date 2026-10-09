@@ -1,11 +1,10 @@
 import { EntityOverview } from '@/components/world/overview/entity-overview'
-import type { EntryIndex } from '@/lib/entry-refs'
 
 import { HappeningPeekBody } from './happening-peek-body'
 import { LorePeekBody } from './lore-peek-body'
 import type { PeekModel, PeekRegionPress } from './peek-model'
 import { ThreadPeekBody } from './thread-peek-body'
-import type { PeekEntityContext } from './use-peek-view'
+import type { PeekEntityContext, PeekEntryIndex } from './use-peek-view'
 
 /** reader-composer.md → State-field composition. */
 export const PEEK_ENTITY_BODY = EntityOverview
@@ -13,7 +12,7 @@ export const PEEK_ENTITY_BODY = EntityOverview
 export type PeekBodyProps = {
   model: PeekModel
   entityContext: PeekEntityContext
-  entryIndex: EntryIndex | null
+  entryIndex: PeekEntryIndex
   onRegionPress: PeekRegionPress
 }
 
