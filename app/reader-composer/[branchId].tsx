@@ -76,7 +76,6 @@ import {
 } from '@/lib/actions'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
 import {
-  branches,
   db,
   runInTransaction,
   storyEntries,
@@ -211,7 +210,6 @@ export default function ReaderComposerRoute() {
   // and stays unconditional.
   const branchUnchanged = useCallback((started: string) => branchIdRef.current === started, [])
 
-  const [storyId, setStoryId] = useState<string | null>(null)
   const [rollback, setRollback] = useState<RollbackState | null>(null)
   const [lastSubmission, setLastSubmission] = useState<{
     content: string
@@ -266,8 +264,13 @@ export default function ReaderComposerRoute() {
     status: 'loading',
   })
   const hydrationIsCurrent = hydration.branchId === branchId
-  const hydrationSucceeded =
+  const hydrated =
     hydrationIsCurrent && hydration.status === 'success' && hydration.result.branchId === branchId
+      ? hydration.result
+      : null
+  const hydrationSucceeded = hydrated != null
+  // From the hydration rather than a read of its own, which could fail and leave Send inert.
+  const storyId = hydrated?.storyId ?? null
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
   const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities(
@@ -493,23 +496,6 @@ export default function ReaderComposerRoute() {
       entriesStore.patch(branchId, { op: 'create', id: row.id, row })
     }
     setHasOlder(older.length >= ENTRIES_WINDOW_SIZE)
-  }, [branchId])
-
-  useEffect(() => {
-    let cancelled = false
-    runAction(
-      db
-        .select({ storyId: branches.storyId })
-        .from(branches)
-        .where(eq(branches.id, branchId))
-        .then((r) => {
-          if (!cancelled) setStoryId(r[0]?.storyId ?? null)
-        }),
-      { event: 'reader.story_id_load_failed', context: { branchId } },
-    )
-    return () => {
-      cancelled = true
-    }
   }, [branchId])
 
   useEffect(() => {

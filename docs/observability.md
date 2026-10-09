@@ -290,8 +290,8 @@ convention, and the expectation that subsystems route through
   (`components/world/detail/stackables-editor.tsx` — after a quantity
   row's removal) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
-  (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
-  `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`
+  (`lib/utils.ts`) instead of a bare `void`: `undo_failed`, `redo_failed`,
+  `rollback_failed`, `regenerate_failed`
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log
@@ -303,9 +303,9 @@ convention, and the expectation that subsystems route through
   — a rail collapse-preference write that rejected) and
   `peek_set_lead_failed` (`components/reader/peek/use-set-lead.ts` — a
   peek `Set as lead` whose `setStoryLead` threw rather than refused,
-  or that had no story id to write with after the reader's
-  `story_id_load_failed`; the user sees the generic lead-failure toast
-  either way)
+  or that had no story id to write with because the reader's hydration
+  hadn't landed; the user sees the generic lead-failure toast either
+  way)
 
 Kinds grow organically as subsystems land.
 

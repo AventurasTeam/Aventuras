@@ -296,16 +296,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
   Raised in 4.6's slice review, 2026-10-08.
 
-- **A failed story-id read leaves the reader's actions silently
-  inert.** (2026-10-09) The reader reads its branch's `storyId` on mount
-  (`app/reader-composer/[branchId].tsx`, the `branches` select routed
-  through `runAction`); if that read rejects it only logs
-  `reader.story_id_load_failed`, and `storyId` stays null for the
-  visit. Send and Regenerate then return early with nothing shown
-  (`runSubmit` / `runRegenerate`: `if (!storyId || …) return`). The
-  peek's `Set as lead` toasts the generic lead failure in that state
-  since 4.5b's review; the reader has no error state of its own for it.
-  Raised in 4.5b's slice review, 2026-10-09.
 - **Phone deep-link reveal can't scroll the hidden list.** (2026-10-09)
   World's and Plot's mount-arrival `revealRow` opens the row's tier, but
   on phone the list sits under the detail with `hidden`
