@@ -107,6 +107,9 @@ export function RailSheet({
       <SheetContent
         anchor="bottom"
         size={sheet.size}
+        // One value for both detents: gorhom's content can stop scrolling when it changes while
+        // open. The peek level, the only one 'extend' would pick, holds no field.
+        keyboardBehavior="interactive"
         className="p-0"
         // The primitive pads the inset plus p-6's 24px inline, which p-0 can't override.
         style={{ paddingBottom: insets.bottom }}
