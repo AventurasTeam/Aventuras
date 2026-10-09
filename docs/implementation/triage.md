@@ -56,12 +56,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **Two window-level hotkeys ignore the blocking-overlay store.** The
-  rail toggle (`components/reader/rail/reader-rail-column.tsx`, capture
-  phase, deliberately live in a field) and the SaveBar's Ctrl+S
-  (`components/compounds/save-bar.tsx`, capture plus `stopPropagation`)
-  never check `blockingOverlaysStore`, so both fire under an open Sheet,
-  Dialog or AlertDialog; Ctrl+S under the World collision dialog may
-  save the detail pane behind it, depending on SaveBar's `enabled`. Found
-  by a verifier in the 2026-10-09 triage pass; read from code, not run.

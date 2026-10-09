@@ -65,6 +65,16 @@ The bar is uniform across surfaces — same shape, same affordances,
 same shortcuts. One component reused everywhere; no per-surface
 variants.
 
+**The shortcut stands down under a blocking overlay.** While a
+Sheet, a modal dialog or a Select dropdown is open over the surface,
+`Cmd/Ctrl-S` writes nothing behind it, so a draft can't commit
+without the choice still open in the overlay. The key stays claimed
+rather than reaching the browser's own save dialog. A non-modal
+popover, such as a searchable picker on desktop, leaves the surface
+live and the shortcut with it. The one overlay that answers the key
+is the [navigate-away guard](#navigate-away-guard--global-intercept),
+where it is Save.
+
 ### Visual
 
 Established across World, Story Settings, App Settings, and any
@@ -171,7 +181,8 @@ changes, a confirmation modal intercepts:
 
 Three actions, no implicit default:
 
-- **Save** — commit the session, then proceed with the action.
+- **Save** (`Cmd/Ctrl-S`) — commit the session, then proceed with
+  the action.
 - **Discard** — throw the session away, then proceed with the
   action.
 - **Cancel** — keep the session and stay on the current surface.

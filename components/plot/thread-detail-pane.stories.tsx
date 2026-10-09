@@ -536,6 +536,54 @@ export const SavedHandlerThrows: Story = {
 }
 
 /**
+ * save-sessions.md → Save bar: an open Select owns Ctrl-S, so the draft can't commit without the
+ * pick; the key stays claimed rather than reaching the browser's save dialog.
+ */
+export const ShortcutWaitsForOpenSelect: Story = {
+  play: async ({ args }) => {
+    await editDescription(' Soon.')
+    await userEvent.click(screen.getByRole('button', { name: 'Icon' }))
+    const noIcon = await screen.findByRole('option', { name: 'No icon' }, WAIT)
+    const shortcut = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    document.body.dispatchEvent(shortcut)
+    expect(shortcut.defaultPrevented).toBe(true)
+
+    await userEvent.click(noIcon)
+    await waitFor(() => expect(saveBar()).toHaveTextContent('2 unsaved changes'), WAIT)
+    expect(args.onSave).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument(), WAIT)
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+    expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ description: `${AMULET.description} Soon.`, icon: null }),
+    )
+  },
+}
+
+/** Under the leave guard Ctrl-S is the guard's Save: the draft writes, then the leave proceeds. */
+export const LeaveGuardSavesOnShortcut: Story = {
+  play: async ({ args }) => {
+    await editDescription(' Soon.')
+    await userEvent.keyboard('{F3}')
+    await screen.findByRole('alertdialog', { name: 'Unsaved changes' }, WAIT)
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(args.onLeave).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+    expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ description: `${AMULET.description} Soon.` }),
+    )
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(), WAIT)
+  },
+}
+
+/**
  * A leave requested through the session handle waits on the dialog; the gate disables its Save
  * with the gate's reason, and Discard releases the leave.
  */

@@ -26,6 +26,7 @@ export const Saving: Story = {
     }
     // Escape and Android back reach the disabled Cancel's close handler; the guard must hold too.
     await userEvent.keyboard('{Escape}')
+    await userEvent.keyboard('{Control>}s{/Control}')
     expect(args.onCancel).not.toHaveBeenCalled()
     expect(args.onSave).not.toHaveBeenCalled()
     expect(args.onDiscard).not.toHaveBeenCalled()
@@ -39,6 +40,34 @@ export const SaveFires: Story = {
     await waitFor(() => expect(args.onSave).toHaveBeenCalled())
     // Save must not also request close — that would resolve the leave twice.
     expect(args.onCancel).not.toHaveBeenCalled()
+  },
+}
+
+/** save-sessions.md → Navigate-away guard: the save bar behind stands down, so Ctrl-S is Save. */
+export const ShortcutSaves: Story = {
+  args: { open: true, onSave: fn(), onDiscard: fn(), onCancel: fn() },
+  play: async ({ args }) => {
+    await screen.findByRole('alertdialog')
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1))
+    expect(args.onCancel).not.toHaveBeenCalled()
+    expect(args.onDiscard).not.toHaveBeenCalled()
+  },
+}
+
+/** A closed guard leaves the key alone; hosts keep it mounted. */
+export const ClosedLeavesShortcut: Story = {
+  args: { open: false, onSave: fn(), onDiscard: fn(), onCancel: fn() },
+  play: async ({ args }) => {
+    const shortcut = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    document.body.dispatchEvent(shortcut)
+    expect(shortcut.defaultPrevented).toBe(false)
+    expect(args.onSave).not.toHaveBeenCalled()
   },
 }
 
@@ -99,6 +128,7 @@ export const InvalidDraft: Story = {
     const describedByElement = document.getElementById(describedById!)
     expect(describedByElement).toBeTruthy()
     expect(describedByElement).toContainElement(reasonText)
+    await userEvent.keyboard('{Control>}s{/Control}')
     await userEvent.click(discard)
     await waitFor(() => expect(args.onDiscard).toHaveBeenCalled())
     expect(args.onSave).not.toHaveBeenCalled()

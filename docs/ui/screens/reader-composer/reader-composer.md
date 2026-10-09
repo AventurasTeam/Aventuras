@@ -1131,7 +1131,9 @@ collapses the rail. The chevron points toward the right edge to
 telegraph the motion. Tooltip: `Collapse rail`.
 
 Keyboard shortcut: `Cmd/Ctrl+\` (toggles regardless of focus
-location, mirroring VSCode's sidebar shortcut).
+location, mirroring VSCode's sidebar shortcut). It stays live under
+an open Sheet or dialog as well, since it changes only chrome, as a
+resize does.
 
 No top-bar slot for the toggle. The back button stays in its
 existing rightmost position, and the right-edge spatial gravity
