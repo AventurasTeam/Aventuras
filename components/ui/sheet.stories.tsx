@@ -281,7 +281,7 @@ function BackdropHarness({ initiallyPending = false }: { initiallyPending?: bool
             <Text>Open sheet</Text>
           </Button>
         </SheetTrigger>
-        <SheetContent anchor="bottom" size="short" enablePanDownToClose={!pending}>
+        <SheetContent anchor="bottom" size="short" dismissable={!pending}>
           <Button variant="secondary" onPress={() => setPending(true)}>
             <Text>Start save</Text>
           </Button>

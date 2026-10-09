@@ -170,21 +170,7 @@ const BOTTOM_SNAP_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
   tall: '95%',
 }
 
-type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
-  anchor?: SheetAnchor
-  size?: SheetSize
-  /**
-   * Bottom-anchor only — `false` blocks drag-down and tap-outside dismissal, for a pending action;
-   * Android back still closes.
-   */
-  enablePanDownToClose?: boolean
-  /**
-   * Bottom-anchor only — replaces the keyboard behavior `size` picks. Pin it when size crosses
-   * 'tall' while open: the flip kills gorhom's content scroll on native.
-   */
-  keyboardBehavior?: SheetKeyboardBehavior
-  /** Right-anchor only — names the rn-primitives Portal host to render into. */
-  portalHost?: string
+type SheetContentShared = ComponentProps<typeof DialogPrimitive.Content> & {
   /**
    * Opt out of claiming the surface. Only for an overlay that must not gate the
    * Actions menu against itself — the menu's own sheet is not a foreign overlay.
@@ -192,11 +178,37 @@ type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   suppressOverlayRegistration?: boolean
 }
 
-function SheetContent({ anchor = 'bottom', ...props }: SheetContentProps) {
-  if (anchor === 'bottom') {
-    return <BottomSheetContent {...props} />
+type BottomSheetContentProps = SheetContentShared & {
+  anchor?: 'bottom'
+  size?: SheetSize
+  /**
+   * `false` holds the sheet open against drag-down, a scrim tap and Android back (which it then
+   * swallows), for a pending action or an unsaved edit.
+   */
+  dismissable?: boolean
+  /**
+   * Replaces the keyboard behavior `size` picks. Pin it when size crosses 'tall' while open: the
+   * flip kills gorhom's content scroll on native.
+   */
+  keyboardBehavior?: SheetKeyboardBehavior
+}
+
+type RightSheetContentProps = SheetContentShared & {
+  anchor: 'right'
+  /** Names the rn-primitives Portal host to render into. */
+  portalHost?: string
+}
+
+/** Keyed on `anchor`, so a prop only the other anchor reads is a type error, not a silent no-op. */
+type SheetContentProps = BottomSheetContentProps | RightSheetContentProps
+
+function SheetContent(props: SheetContentProps) {
+  if (props.anchor === 'right') {
+    const { anchor: _anchor, ...rest } = props
+    return <RightSheetContent {...rest} />
   }
-  return <RightSheetContent {...props} />
+  const { anchor: _anchor, ...rest } = props
+  return <BottomSheetContent {...rest} />
 }
 
 function BottomSheetContent({
@@ -207,19 +219,17 @@ function BottomSheetContent({
   // below rather than spread over it — a caller's `style` would otherwise drop
   // the bottom inset and put the sheet's last controls under the nav bar.
   style,
-  // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
-  portalHost: _portalHost,
-  enablePanDownToClose = true,
+  dismissable = true,
   keyboardBehavior,
   suppressOverlayRegistration = false,
   ...contentProps
-}: Omit<SheetContentProps, 'anchor'>) {
+}: Omit<BottomSheetContentProps, 'anchor'>) {
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
   useRegisteredOverlay(open && !suppressOverlayRegistration)
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
-  const dismissal = useSheetDismissal(enablePanDownToClose)
+  const dismissal = useSheetDismissal(dismissable)
 
   const sheetRef = useRef<BottomSheetModal>(null)
   // gorhom's dismiss() on an already-dismissed modal corrupts internal state
@@ -260,14 +270,15 @@ function BottomSheetContent({
   // Bottom-anchored sheets render a bare BottomSheetModal, and neither dialog (Content-only)
   // nor gorhom registers a back handler — back would hit the screen's router.back() and pop
   // the route out from under the sheet. Android-only: react-native-web's stub console.errors.
+  // Held open, the sheet still claims back, so it doesn't fall through and pop the route.
   useEffect(() => {
     if (!open || Platform.OS !== 'android') return
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      onOpenChange(false)
+      if (dismissable) onOpenChange(false)
       return true
     })
     return () => sub.remove()
-  }, [open, onOpenChange])
+  }, [open, onOpenChange, dismissable])
 
   useEffect(() => {
     let cancelled = false
@@ -360,6 +371,9 @@ function BottomSheetContent({
       // that never arrives under edge-to-edge, putting every sheet under the
       // keyboard. Verified on-device both ways; gorhom keeps translating itself.
       android_keyboardInputMode="adjustPan"
+      // 'interactive' lifts a sheet by the keyboard height, up to this inset: without it a tall
+      // keyboard could put the sheet's head under the status bar.
+      topInset={insets.top}
       backgroundComponent={QuietSheetBackground}
       backgroundStyle={backgroundStyle}
       handleComponent={QuietSheetHandle}
@@ -438,11 +452,9 @@ function RightSheetContent({
   className,
   portalHost,
   children,
-  enablePanDownToClose: _enablePanDownToClose,
-  keyboardBehavior: _keyboardBehavior,
   suppressOverlayRegistration = false,
   ...contentProps
-}: Omit<SheetContentProps, 'anchor'>) {
+}: Omit<RightSheetContentProps, 'anchor'>) {
   const { open } = DialogPrimitive.useRootContext()
   useRegisteredOverlay(open && !suppressOverlayRegistration)
   const scrimClass = useScrimClass()

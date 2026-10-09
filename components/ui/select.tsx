@@ -181,6 +181,8 @@ function PhoneSheetContent({
             // 'adjustPan' deliberately — see sheet.tsx for why 'adjustResize'
             // puts every sheet back under the keyboard.
             android_keyboardInputMode="adjustPan"
+            // As in sheet.tsx: the keyboard lift stops below the status bar.
+            topInset={insets.top}
             backgroundComponent={QuietSheetBackground}
             backgroundStyle={backgroundStyle}
             handleComponent={QuietSheetHandle}

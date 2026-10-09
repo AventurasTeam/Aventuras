@@ -42,7 +42,7 @@ Toast. Plus the `NativeOnlyAnimatedView` and `DisabledReasonTooltip` utility
 wrappers.
 
 The bottom `Sheet` renders gorhom's `BottomSheetBackdrop`, the scrim,
-which closes the Sheet on a tap outside unless `enablePanDownToClose` is
+which closes the Sheet on a tap outside unless `dismissable` is
 false. It also provides `ScrollComponentContext`
 (`components/ui/scroll-component.tsx`, read in place by `ContextScrollView`): gorhom's `BottomSheetScrollView`
 on native and a plain `ScrollView` on web, so a `ModuleList` inside the

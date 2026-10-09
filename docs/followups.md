@@ -123,3 +123,24 @@ for the placement rule.
   World's name-based guess differs from the classifier's comparison only
   with three or more namesakes. Moves with the entry above. Routed from
   triage 2026-10-09.
+
+## UX
+
+- **Editor overlays refuse a dismissal instead of raising the in-edit
+  guard.**
+  [`layout.md → Sheet`](./ui/foundations/mobile/layout.md#sheet) wants an
+  in-edit dismissal to raise the save-session navigate-away guard (Save /
+  Discard / Cancel). On phone the world-time and scene editors hold their
+  bottom Sheets with `dismissable={false}` while they carry unsaved input,
+  so drag-down, a scrim tap and Android back now do nothing rather than
+  offer the guard; Esc on a web bottom sheet waits on its focus handling
+  (roadmap M9.5). On desktop and tablet the same edits run in `EntryCard`'s
+  Dialogs, which drop the input on an outside click. The guard can't
+  simply stack over a native bottom Sheet: gorhom's sheets render above
+  the app's `PortalHost`, so `UnsavedChangesDialog` would sit under it
+  (the Dialog-under-Sheet entry in roadmap M9.5). Decide how the guard
+  reaches a bottom Sheet (rendered inside the sheet's portal, or the sheet
+  closed behind a pending choice), then route both overlays through it.
+  Raised in 4.5a planning (2026-10-07); split from its primitive half in
+  the 2026-10-09 triage pass, which landed `dismissable` and gated
+  Android back.

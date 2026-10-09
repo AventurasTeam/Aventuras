@@ -217,9 +217,8 @@ on tablet inheriting desktop chrome).
   Esc dismisses (desktop); on mobile, system back / swipe-back
   triggers stack-aware Return which dismisses the sheet (per
   [`./navigation.md → Stack-aware Return on mobile`](./navigation.md#stack-aware-return-on-mobile)).
-  Bottom-anchored sheets respond to on-screen keyboards via the
-  Sheet primitive's `avoidKeyboard` prop and suspend body-drag
-  while a keyboard is shown; canonical text at
+  Bottom-anchored sheets respond to on-screen keyboards through
+  gorhom's keyboard handling, chosen by `size`; canonical text at
   [`patterns/overlays.md → Sheet — Keyboard handling`](../../patterns/overlays.md#sheet--keyboard-handling).
 
 ## Container conventions

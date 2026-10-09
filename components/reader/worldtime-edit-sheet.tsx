@@ -55,7 +55,7 @@ export function WorldTimeEditSheet({
       }}
       ariaLabel={t('reader:worldTimeEdit.title')}
     >
-      <SheetContent anchor="bottom" size="auto" enablePanDownToClose={!saving && !dirty}>
+      <SheetContent anchor="bottom" size="auto" dismissable={!saving && !dirty}>
         {/* Keyed so an external worldTime change (undo, classifier write)
             reseeds the form, which only reads the prop on mount. */}
         <WorldTimeEditForm

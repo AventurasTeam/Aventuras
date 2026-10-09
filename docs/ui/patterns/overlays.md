@@ -115,57 +115,66 @@ both.
 
 ```
 <Sheet
-  open onOpenChange anchor size dismissable
-  avoidKeyboard
+  open onOpenChange
   ariaLabel ariaLabelledBy ariaDescribedBy
   onOpenAutoFocus onCloseAutoFocus
 >
-  <Sheet.Trigger asChild>...</Sheet.Trigger>      // optional; controlled is canonical
-  <Sheet.Content>{children}</Sheet.Content>
+  <SheetTrigger asChild>...</SheetTrigger>      // optional; controlled is canonical
+  <SheetContent anchor size dismissable keyboardBehavior>{children}</SheetContent>
 </Sheet>
 ```
 
-**Props:**
+**Root props:**
 
 - `open: boolean` / `onOpenChange: (open) => void` — controlled
   state. Uncontrolled `defaultOpen` supported but consumers like
   Select drive open programmatically.
+- `ariaLabel?: string` / `ariaLabelledBy?: string` /
+  `ariaDescribedBy?: string` — accessible-name and description
+  routing; see [Sheet — ARIA contract](#sheet--aria-contract) below.
+- `onOpenAutoFocus?: (event: FocusEvent) => void` /
+  `onCloseAutoFocus?: (event: FocusEvent) => void` —
+  focus-handling overrides, read by the right anchor; see
+  [Sheet — ARIA contract](#sheet--aria-contract).
+
+**`SheetContent` props**, a union keyed on `anchor`, so a prop only
+the other anchor reads fails typecheck rather than doing nothing:
+
 - `anchor: 'bottom' | 'right'` — defaults to `'bottom'`.
   `'right'` is desktop-anchored (~440px wide, full height) per
   [`layout.md → Mapping`](../foundations/mobile/layout.md#mapping--desktop-to-mobile);
   `'bottom'` is the mobile / phone shape.
-- `size: 'short' | 'medium' | 'tall' | 'auto'` — applies to
-  `anchor='bottom'` only. `short` / `medium` / `tall` map to fixed
+- `size: 'short' | 'medium' | 'tall' | 'auto'` — bottom only.
+  `short` / `medium` / `tall` map to fixed
   viewport-percentage heights (33 / 60 / 95 vh) per
   [`layout.md`](../foundations/mobile/layout.md). `auto` opts out of
   a fixed height — content drives the panel via flexbox, capped at
   95vh. Use for editors whose intrinsic height is small and
   predictable but doesn't fit any rigid size (e.g. ColorPicker's
   custom-color editor); use the rigid sizes when the sheet should
-  visually communicate its weight regardless of content. Right-anchored
-  sheets are always full-height; `size` is ignored when
-  `anchor='right'`.
-- `dismissable: boolean` (default `true`) — controls drag-down
-  (bottom only), tap-outside, system-back / Escape behavior. Set
-  `false` for sheets that must commit-or-cancel explicitly.
-- `avoidKeyboard?: boolean` — defaults `true` when `anchor='bottom'`;
-  ignored when `anchor='right'` (desktop-only, no soft keyboard in
-  scope). Drives the keyboard-avoidance wrap; see
+  visually communicate its weight regardless of content.
+  Right-anchored sheets are always full-height.
+- `dismissable: boolean` (default `true`) — bottom only. `false`
+  holds the sheet open against drag-down, a scrim tap and Android
+  back, which it then swallows so the route doesn't pop. Set `false`
+  for a sheet that must commit or cancel explicitly: a pending save,
+  or an editor holding unsaved input. Esc on a web bottom sheet waits
+  on its focus handling (roadmap M9.5); the right anchor dismisses
+  on Esc and an outside click as a Radix dialog does.
+- `keyboardBehavior?: 'interactive' | 'extend'` — bottom only;
+  replaces the behavior `size` picks, see
   [Sheet — Keyboard handling](#sheet--keyboard-handling) below.
-- `ariaLabel?: string` / `ariaLabelledBy?: string` /
-  `ariaDescribedBy?: string` — accessible-name and description
-  routing; see [Sheet — ARIA contract](#sheet--aria-contract) below.
-- `onOpenAutoFocus?: (event: FocusEvent) => void` /
-  `onCloseAutoFocus?: (event: FocusEvent) => void` —
-  focus-handling overrides; see
-  [Sheet — ARIA contract](#sheet--aria-contract).
+- `portalHost?: string` — right only; the rn-primitives Portal host
+  to render into.
+- `suppressOverlayRegistration?: boolean` — opts out of claiming the
+  surface as a blocking overlay, for the Actions menu's own sheet.
 
 **Anatomy:**
 
 - **Drag handle** — rendered automatically when `anchor='bottom'`;
   hidden on `anchor='right'` per [`layout.md → Sheet behavior`](../foundations/mobile/layout.md#sheet-behavior--additional-rules).
-- **Scrim** — full-screen backdrop; tap dismisses when
-  `dismissable=true`.
+- **Scrim** — full-screen backdrop; tap dismisses unless
+  `dismissable` is `false`.
 - **Content area** — free shape. Consumer renders any tree. Sheet
   imposes no snap points or layout. In-sheet navigation (e.g.
   mobile browse rail → peek drawer state swap) lives in the
@@ -197,56 +206,46 @@ Sheet-only specifics:
 
 ### Sheet — Keyboard handling
 
-Bottom-anchored sheets respond to on-screen keyboards via the
-[`react-native-keyboard-controller`](https://github.com/kirillzyusko/react-native-keyboard-controller)
-library (Reanimated 4 peer; lands at the first Sheet implementation
-pass). Native-only — Electron and RN Web get the library's
-documented no-op shim.
+Bottom-anchored sheets ride gorhom's own keyboard handling
+(`@gorhom/bottom-sheet`); the right anchor is desktop-only and takes
+none.
 
-**Outer wrap (primitive-owned).** When `avoidKeyboard` is true and
-`anchor='bottom'`, `Sheet.Content` wraps the consumer's child tree
-in a `flex:1` `Animated.View` whose `paddingBottom` is driven
-directly off `useReanimatedKeyboardAnimation()`'s `height`
-SharedValue (negative when the keyboard is open; `paddingBottom`
-applied as `-height.value`). The wrap is a single layer between
-`<Sheet.Content>` and consumer children; flex-based child layouts
-treat it as transparent.
+- **Behavior per size.** `keyboardBehavior` follows `size`:
+  `extend` for `tall`, whose 95% already clears the keyboard, so
+  content reflows inside it; `interactive` for every other size,
+  which lifts the sheet by the keyboard height and keeps its resting
+  size. A sheet whose size crosses `tall` while open pins one value
+  through `keyboardBehavior`, because the flip stops gorhom's content
+  scrolling on native; the rail Sheet's peek level does this.
+- **Top inset.** The lift stops at the safe-area top (`topInset`),
+  so a tall keyboard can't put a sheet's head under the status bar.
+  The same holds for Select's own phone sheet.
+- **Blur and Android.** `keyboardBlurBehavior="restore"` returns the
+  sheet to its detent when the keyboard hides.
+  `android_keyboardInputMode="adjustPan"`: under `adjustResize`
+  gorhom waits for a container shrink that never arrives under
+  edge-to-edge, leaving every sheet under the keyboard
+  (device-verified both ways).
+- **Inputs and scroll.** Inside a sheet, `Input` renders gorhom's
+  keyboard-aware text input (through `InputComponentContext`), so
+  focusing a field moves the sheet. A fixed-detent sheet provides
+  its scroll component (`ScrollComponentContext`, gorhom's on
+  native), read by lists and by `ContextScrollView`, so a scrollable
+  body coordinates with drag-down. An `auto` sheet provides none;
+  its content sizes it.
+- **A keyboard already up.** gorhom learns the keyboard only from
+  show and hide events, so a sheet opened over an open keyboard
+  dismisses it first; focusing a field in the sheet raises it again
+  where gorhom sees it.
 
-The library's bundled `<KeyboardAvoidingView>` with `automaticOffset`
-was tried first and rejected: its frame measurement runs once on
-mount via `viewPositionInWindow`, which fires while the Sheet's
-Reanimated layout-entering animation is still mid-slide-in,
-capturing a stale screen position that the lib never re-measures
-(transform-only animations don't re-trigger `onLayout`). The result
-was a first-keyboard-open flicker after every Sheet open — the
-KAV computed `paddingBottom` against the wrong position, the
-resulting reflow triggered a fresh `onLayout`, and the second pass
-corrected. Since the Sheet is anchored at `bottom:0`, keyboard
-overlap is always exactly the keyboard height — no screen-position
-math needed, no frame measurement, no race. The library's
-`KeyboardContext` is still re-provided inside the rn-primitives
-Portal (the Portal drops React contexts on native), so
-`useReanimatedKeyboardAnimation()` resolves to the real shared
-values inside the portaled tree.
+**Consumer rule of thumb:**
 
-**Inner scroll (consumer-rendered).** `avoidKeyboard` handles outer
-layout; it does **not** scroll a focused input into view inside a
-scrollable Sheet body. For that, consumers wrap their scrollable
-list in
-[`KeyboardAwareScrollView`](https://github.com/kirillzyusko/react-native-keyboard-controller)
-from the same library, replacing any inner `<ScrollView>` or
-`<FlatList>`. Recommended props: `bottomOffset={16}` (one row-gap
-unit, aligns to `--spacing-row-gap-md`), `mode='insets'` (default,
-best perf, no layout reflow), `disableScrollOnKeyboardHide={false}`
-(default, preserves scroll position on keyboard dismiss).
-
-**Two-line consumer rule.**
-
-- Scrollable Sheet body (Select with search, Calendar picker, Peek
-  drawer hosting save-session edits) → wrap content in
-  `KeyboardAwareScrollView`.
-- Non-scrollable Sheet body (world-time edit Sheet with
-  TierTupleInput) → rely on `avoidKeyboard` alone.
+- **Forms, input-bearing sheets, single-purpose edits** (custom-color
+  picker, world-time correction) → `size='auto'`. The panel hugs the
+  content and rises with the keyboard.
+- **Scrollable lists, picker surfaces, content that adapts to
+  whatever space is available** (Select with search, MultiSelect,
+  Calendar picker, the Browse rail) → `short` / `medium` / `tall`.
 
 Sheet primitive does not ship a built-in scrollable wrapper —
 consumers already make per-consumer list-shape choices
@@ -256,64 +255,8 @@ Dialog takes the opposite default, for a reason the detent gives
 Sheet for free: see
 [Dialog — height and scroll](#dialog--height-and-scroll).
 
-**Drag × keyboard interaction.** While a keyboard is showing or
-shown, body-drag is suspended; the drag handle remains the explicit
-drag-to-dismiss surface in all keyboard states. Tap-outside, Esc,
-and system-back continue to dismiss as usual. The Sheet's gesture
-detector consults the library's keyboard-state hook (Android 21+
-and iOS) and short-circuits the body-drag's `onBegin` when the
-keyboard is up; the drag-handle detector ignores keyboard state.
-Rationale: the drag handle is the canonical drag surface per
-[`layout.md → Sheet behavior`](../foundations/mobile/layout.md#sheet-behavior--additional-rules);
-suspending body-drag during composition removes accidental dismiss
-and avoids competing with the iOS scroll-pulls-keyboard-down chain
-(consumers using `KeyboardAwareScrollView` should set
-`keyboardDismissMode='interactive'` for the scroll-chain feel
-inside the scroll surface).
-
-**Independent of `dismissable`.** `dismissable={false}` sheets can
-still host inputs (calendar swap warnings with a confirm field,
-save-session navigate-away guard with a textarea). `avoidKeyboard`
-defaults `true` regardless of `dismissable`.
-
-**Size selection × keyboard interaction.** The `paddingBottom`
-mechanism behaves differently depending on whether the panel has a
-fixed height:
-
-- **`size='auto'`** — panel has no fixed `height`, only `maxHeight`.
-  The inner `flex:1` wrap has no parent height to fill, so it sizes
-  to its content. `paddingBottom = keyboardHeight` then _grows_ the
-  wrap (and therefore the panel) by the keyboard height — content
-  visually translates upward, panel rises above the keyboard. Works
-  for any content whose intrinsic height is smaller than
-  `screenHeight − keyboardHeight − safeArea`.
-- **`size='short' | 'medium' | 'tall'`** — panel pins to a fixed
-  percentage of screen height (33% / 60% / 95%). The inner `flex:1`
-  wrap fills that fixed space. `paddingBottom = keyboardHeight`
-  then _shrinks_ the content area inside the fixed bounds — content
-  reflows within the panel's existing position. The panel does
-  **not** translate; it stays anchored at `bottom:0`. Works only
-  when the panel is meaningfully taller than the keyboard.
-
-**Consumer rule of thumb:**
-
-- **Forms, input-bearing sheets, single-purpose edits** (custom-color
-  picker, "add note", world-time correction, save-session
-  navigate-away guard with a textarea) → use `size='auto'`. The
-  panel hugs the content and rises with the keyboard.
-- **Scrollable lists, picker surfaces, content that adapts to
-  whatever space is available** (Select with search, Autocomplete,
-  Calendar picker, multi-item lists) → use `short` / `medium` /
-  `tall`. The list shrinks gracefully when the keyboard takes part
-  of the panel, and `KeyboardAwareScrollView` (per the
-  [Two-line consumer rule](#sheet--keyboard-handling) above) keeps
-  the focused input visible while the list scrolls.
-
-`size='short'` is **not suitable for input-bearing sheets** — a
-typical mobile keyboard is taller than 33vh, so the
-`paddingBottom = keyboardHeight` math leaves zero or negative
-content area inside the panel and the input gets clipped above the
-panel's top edge. Use `auto` for any short input form.
+**Independent of `dismissable`.** A held-open sheet can still host
+inputs; keyboard behavior doesn't depend on it.
 
 **Translation note.** `ariaLabel` strings (see
 [ARIA contract](#sheet--aria-contract)) are translatable

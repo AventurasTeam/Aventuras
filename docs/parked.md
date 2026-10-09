@@ -2801,12 +2801,10 @@ and
 [`entity.md → Entity surfacing`](./ui/patterns/entity.md#entity-surfacing--three-levels-same-data)
 all spec, and
 [`layout.md → Pre-foundations naming`](./ui/foundations/mobile/layout.md#pre-foundations-naming)
-and
-[`overlays.md → Sheet — Keyboard handling`](./ui/patterns/overlays.md#sheet--keyboard-handling)
-assume. M4 ships the peek read-mostly with `Set as lead` as its only
+assumes. M4 ships the peek read-mostly with `Set as lead` as its only
 inline write, following
 [`reader-composer.md → State-field composition`](./ui/screens/reader-composer/reader-composer.md#state-field-composition--same-as-world-panel-overview);
-the six docs disagree and want reconciling when this is picked up.
+the five docs disagree and want reconciling when this is picked up.
 Parked until peek editing proves wanted over the `Open in World panel →`
 escalation. Filed at M4 promotion (2026-09-10).
 

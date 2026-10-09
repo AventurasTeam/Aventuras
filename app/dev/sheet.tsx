@@ -109,8 +109,8 @@ function PendingActionProbe() {
     <View>
       <Heading level={3}>Pending action (dismiss blocked)</Heading>
       <Text variant="muted" size="xs" className="mt-1">
-        enablePanDownToClose=false, as a sheet with a save in flight sets it. Expect: the scrim
-        shows, but neither tap-outside nor drag-down closes the sheet; Close does.
+        dismissable=false, as a sheet with a save in flight sets it. Expect: the scrim shows, but
+        neither tap-outside nor drag-down closes the sheet; Close does.
       </Text>
       <View className="mt-3">
         <Sheet ariaLabel="Pending action" open={open} onOpenChange={setOpen}>
@@ -119,7 +119,7 @@ function PendingActionProbe() {
               <Text>pending</Text>
             </Button>
           </SheetTrigger>
-          <SheetContent anchor="bottom" size="short" enablePanDownToClose={false}>
+          <SheetContent anchor="bottom" size="short" dismissable={false}>
             <View className="flex-col gap-3">
               <Heading level={4}>Saving…</Heading>
               <Button onPress={() => setOpen(false)}>

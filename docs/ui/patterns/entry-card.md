@@ -648,9 +648,8 @@ would read an untouched Save as a change and rewrite `worldTime` to
 the truncated value.
 
 On phone the Sheet variant carries a non-scrollable body
-(TierTupleInput is a fixed-shape form), so the Sheet's default
-`avoidKeyboard={true}` alone is sufficient — no
-`KeyboardAwareScrollView` wrap needed, per the consumer rule in
+(TierTupleInput is a fixed-shape form), so it takes `size='auto'`
+and rises with the keyboard, per the consumer rule in
 [`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling).
 
 When `worldTimeMonotonicityBreak` is present, the overlay's body

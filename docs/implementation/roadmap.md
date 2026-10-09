@@ -1825,7 +1825,10 @@ own.
   (focus moves in on open and back on close). The bottom path passes
   neither autofocus hook, gorhom has none, and nothing sets `aria-modal`,
   so the page behind stays tabbable. Reached on web at phone tier: a
-  narrow desktop window, or the web build. One item with the next entry,
+  narrow desktop window, or the web build. Esc doesn't dismiss a web
+  bottom sheet either, and binding it needs the same knowledge of which
+  overlay is on top (`dismissable` already gates drag, scrim and Android
+  back). One item with the next entry,
   and with the native side in
   [`parked.md → Android bottom sheets are not dialogs for TalkBack`](../parked.md#android-bottom-sheets-are-not-dialogs-for-talkback).
   Routed from triage 2026-10-09.
