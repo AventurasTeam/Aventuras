@@ -127,12 +127,10 @@ export function RailSheet({
               if (!peeking) listHeight.current = event.nativeEvent.layout.height
             }}
           >
-            {/* Mounted under the peek so `←` finds the list as it was left, scroll included. The
-                bottom inset matters: with the list flush to the Sheet's edge, a scrim press from
-                the peek went unanswered on web. */}
+            {/* Mounted under the peek so `←` finds the list as it was left, scroll included. */}
             <View
               testID="rail-sheet-list-layer"
-              className="flex-1 pb-3"
+              className="flex-1"
               style={[
                 peeking ? HIDDEN_LAYER : null,
                 heightCap != null ? { maxHeight: heightCap } : null,
