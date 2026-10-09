@@ -10,7 +10,7 @@ import { RailColumn } from './rail-column'
 import { RailStrip } from './rail-strip'
 import { useRailCollapse } from './use-rail-collapse'
 import { railStripOf, type RailData } from './use-rail-data'
-import { useRailPeek } from './use-rail-peek'
+import { useOpenRailPeek } from './use-rail-peek'
 
 export type ReaderRailColumnProps = {
   data: RailData
@@ -21,7 +21,7 @@ export type ReaderRailColumnProps = {
 export function ReaderRailColumn({ data, isFocused }: ReaderRailColumnProps) {
   const view = readerRailStore.useView()
   const { collapsed, setCollapsed } = useRailCollapse()
-  const { openPeek } = useRailPeek()
+  const openPeek = useOpenRailPeek()
   const strip = useMemo(() => railStripOf(data), [data])
   const collapseRef = useRef<View>(null)
   const expandRef = useRef<View>(null)

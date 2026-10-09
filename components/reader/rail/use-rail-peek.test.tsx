@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
 import { appSettingsStore, hydrateAppSettings, readerRailStore } from '@/lib/stores'
 
-import { useRailPeek } from './use-rail-peek'
+import { useOpenRailPeek, useRailPeek } from './use-rail-peek'
 
 const MIRA = { category: 'character', id: 'char_mira' } as const
 
@@ -89,5 +89,23 @@ describe('useRailPeek', () => {
     })
 
     expect(result.current.peek).toBeNull()
+  })
+})
+
+describe('useOpenRailPeek', () => {
+  it("doesn't re-render its caller when a peek opens and closes", () => {
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders += 1
+      return useOpenRailPeek()
+    })
+    const rendersBefore = renders
+
+    act(() => result.current('character', 'char_mira'))
+    expect(readerRailStore.getDisplay().peek).toEqual(MIRA)
+    act(() => readerRailStore.dispatchDisplay({ type: 'closePeek' }))
+    expect(readerRailStore.getDisplay().peek).toBeNull()
+
+    expect(renders).toBe(rendersBefore)
   })
 })

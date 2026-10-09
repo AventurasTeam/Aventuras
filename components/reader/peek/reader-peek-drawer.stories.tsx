@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { Profiler } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 import { useStore } from 'zustand'
@@ -28,6 +29,7 @@ const DATA = railDataFixture()
 const ANIMATION = { timeout: 5000 }
 const MIRA: RailPeek = { category: 'character', id: 'char_mira' }
 const navigate = fn<(href: string) => void>()
+const railCommits = fn()
 // Stands in for the reader route's `showRail`: the phone tier mounts neither rail nor drawer.
 const harnessTier = createStore<{ showRail: boolean }>()(() => ({ showRail: true }))
 
@@ -43,7 +45,9 @@ function ConnectedHarness({ isFocused }: { isFocused: boolean }) {
         </View>
         {showRail ? (
           <>
-            <ReaderRailColumn data={DATA} isFocused={isFocused} />
+            <Profiler id="reader-rail" onRender={railCommits}>
+              <ReaderRailColumn data={DATA} isFocused={isFocused} />
+            </Profiler>
             <ReaderPeekDrawer
               data={DATA}
               isFocused={isFocused}
@@ -70,6 +74,7 @@ const meta: Meta<typeof ConnectedHarness> = {
     appSettingsStore.__reset()
     harnessTier.setState({ showRail: true })
     navigate.mockReset()
+    railCommits.mockReset()
   },
 }
 
@@ -94,6 +99,21 @@ export const RowOpensPeek: Story = {
     await expect(readerRailStore.getDisplay().peek).toEqual(MIRA)
     await expect(screen.getByTestId('reader-rail')).toBeInTheDocument()
     await expect(navigate).not.toHaveBeenCalled()
+  },
+}
+
+/** The rail opens the peek without watching it, so an open and a close leave it unrendered. */
+export const PeekLeavesRailUnrendered: Story = {
+  play: async () => {
+    // The rail's mount-time layout commits would count: wait them out.
+    await screen.findByRole('button', { name: 'Mira' }, ANIMATION)
+    await settle()
+    railCommits.mockClear()
+    readerRailStore.dispatchDisplay({ type: 'openPeek', peek: MIRA, storedCollapsed: false })
+    await screen.findByRole('dialog', { name: peekLabel('Mira') }, ANIMATION)
+    readerRailStore.dispatchDisplay({ type: 'closePeek' })
+    await waitFor(() => expect(queryDrawer()).toBeNull(), ANIMATION)
+    await expect(railCommits).not.toHaveBeenCalled()
   },
 }
 
