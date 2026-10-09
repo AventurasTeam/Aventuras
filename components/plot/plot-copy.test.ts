@@ -50,15 +50,14 @@ describe('plot icon options', () => {
 })
 
 describe('saveRejectionText', () => {
-  it('names generation in flight, otherwise the generic failure', () => {
+  it('names generation in flight and a row gone, otherwise the generic failure', () => {
     expect(saveRejectionText('in-flight')).toBe(
       "Couldn't save while generation is in flight. Your changes are still here.",
     )
-    for (const code of ['failed', 'parent-cycle', 'parent-chain-broken'] as const) {
-      expect(saveRejectionText(code)).toBe(
-        "Couldn't save your changes. They're still here — try again.",
-      )
-    }
+    expect(saveRejectionText('not-found')).toBe("Couldn't save: this row no longer exists.")
+    expect(saveRejectionText('failed')).toBe(
+      "Couldn't save your changes. They're still here — try again.",
+    )
   })
 })
 

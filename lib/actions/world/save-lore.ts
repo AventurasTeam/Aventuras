@@ -1,10 +1,14 @@
 import type { Lore } from '@/lib/db'
 import { loreActions, type LoreDraft } from '@/lib/world'
 
-import { commitRowSave, type RowSaveResult } from '../row-save/commit-row-save'
+import {
+  commitRowSave,
+  flatRowSaveResult,
+  type FlatRowSaveResult,
+} from '../row-save/commit-row-save'
 import type { DbCtx } from '../types'
 
-export type LoreSaveResult = RowSaveResult
+export type LoreSaveResult = FlatRowSaveResult
 
 type SaveLoreArgs = { branchId: string; row: Lore | null; draft: LoreDraft }
 
@@ -22,5 +26,5 @@ export function saveLore(
       build: (id) => loreActions({ branchId, row, draft, id, now: Date.now() }),
     },
     ctx,
-  )
+  ).then(flatRowSaveResult)
 }

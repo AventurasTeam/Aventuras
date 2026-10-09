@@ -21,6 +21,25 @@ export type RowSaveResult =
   | { status: 'ok'; id: string }
   | { status: 'rejected'; reason: string; code: RowSaveRejectionCode }
 
+/** What a save of a row with no parent chain (thread, happening, lore) can report. */
+export type FlatRowSaveRejectionCode = Exclude<
+  RowSaveRejectionCode,
+  typeof PARENT_CYCLE | typeof PARENT_CHAIN_BROKEN
+>
+
+export type FlatRowSaveResult =
+  | { status: 'ok'; id: string }
+  | { status: 'rejected'; reason: string; code: FlatRowSaveRejectionCode }
+
+// Only a location's parent raises a parent code, so on any other row one is a failure.
+export function flatRowSaveResult(result: RowSaveResult): FlatRowSaveResult {
+  if (result.status === 'ok') return result
+  const { reason, code } = result
+  return code === PARENT_CYCLE || code === PARENT_CHAIN_BROKEN
+    ? { status: 'rejected', reason, code: ROW_SAVE_REJECTION.failed }
+    : { status: 'rejected', reason, code }
+}
+
 // A reversal raised while the save awaited its locks is what the gate below reports as in-flight.
 function rejectionCode(code: string | undefined): RowSaveRejectionCode {
   switch (code) {

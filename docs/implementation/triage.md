@@ -545,14 +545,6 @@ slice-planning gate forces its resolution before that slice is planned.
   those imports is. Reword both notes when the slice doc is next edited;
   the closing review had it read-only. Raised in 4.6's slice review,
   2026-10-08.
-- **`PlotSaveResult` admits codes Plot can't produce.** (2026-10-08)
-  `PlotSaveResult = RowSaveResult` (`lib/actions/plot/commit-plot-save.ts`)
-  carries `parent-cycle` and `parent-chain-broken`, but threads and
-  happenings have no parent chain; `components/plot/plot-copy.ts` maps them
-  to the generic failure. Narrow it the way 4.6 narrowed `ImportRowResult`;
-  older code, so a deferral per
-  [`code-conventions.md → Type design`](../code-conventions.md#type-design).
-  Raised in 4.6's slice review, 2026-10-08.
 - **`entityStateSchemaForKind` isn't generic over the kind.** (2026-10-08)
   `lib/db/entities/entity-state-schema.ts` returns the union of the four
   state schemas, so `lib/avts/entity.ts` casts each kind's schema
