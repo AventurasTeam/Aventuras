@@ -57,6 +57,18 @@ async function openSheet() {
   await waitFor(() => expect(corin()).toBeVisible(), WAIT)
 }
 
+/** The sections keep the form's gap inside the sheet, as they do in the desktop Dialog. */
+export const SectionsKeepTheirGap: Story = {
+  play: async () => {
+    await openSheet()
+    const apply = screen.getByText(/Saving re-applies scene presence/)
+    const prose = screen.getByText(/This doesn't change the entry's text/)
+    const gap = prose.getBoundingClientRect().top - apply.getBoundingClientRect().bottom
+    expect(gap).toBeGreaterThanOrEqual(11)
+    expect(gap).toBeLessThanOrEqual(13)
+  },
+}
+
 /** Untouched, a tap outside the editor closes it, as drag-down does. */
 export const BackdropClosesUntouched: Story = {
   play: async ({ args }) => {

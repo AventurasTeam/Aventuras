@@ -1,17 +1,16 @@
-import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import * as PopoverPrimitive from '@rn-primitives/popover'
 import { ChevronDown } from 'lucide-react-native'
 import { useCallback, useId, useMemo, useState } from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 // Desktop: gesture-handler ScrollView bypasses rn-primitives Content's
-// onStartShouldSetResponder claim. Phone: BottomSheetScrollView registers
-// with gorhom's sheet gesture system so the row scroll and the sheet drag
-// don't fight each other (same pattern Select uses for its phone branch).
+// onStartShouldSetResponder claim. Phone: the Sheet's own scroll component
+// (gorhom's on native) so the row scroll and the sheet drag don't fight.
 import { ScrollView } from 'react-native-gesture-handler'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { Icon } from '@/components/ui/icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ContextScrollView } from '@/components/ui/scroll-component'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
@@ -320,14 +319,13 @@ function Overlay({
   ))
 
   if (scroll === 'sheet') {
-    // BottomSheetScrollView registers with gorhom's sheet gesture system;
-    // a plain ScrollView's touches conflict with the sheet drag and its
-    // scroll region doesn't claim available space inside the sheet.
-    // flex-1 lets the body fill the remaining sheet height below the header.
+    // The Sheet's scroll component registers with gorhom's gesture system on native;
+    // a plain ScrollView's touches conflict with the sheet drag. flex-1 lets the
+    // body fill the remaining sheet height below the header.
     return (
       <View className="flex-1">
         {header}
-        <BottomSheetScrollView keyboardShouldPersistTaps="handled">{rows}</BottomSheetScrollView>
+        <ContextScrollView keyboardShouldPersistTaps="handled">{rows}</ContextScrollView>
       </View>
     )
   }

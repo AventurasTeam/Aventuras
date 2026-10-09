@@ -159,11 +159,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `hover:bg-tint-hover` as backgrounds on the same element, so hover likely
   replaces the tint. Reasoned from the classes, not rendered. Raised in 4.5a
   review, 2026-10-07.
-- **Three explicit gorhom scroll views should use `ScrollComponentContext`.**
-  `SceneEditForm`'s inside-sheet `Body`, `AiAssist`'s `Scroller` and
-  `MultiSelect`'s phone list pick their scroll host by hand; moving them onto
-  the context leaves one way to choose a Sheet's scroll component. Raised in
-  4.5a review, 2026-10-07.
 - **The rail's happening list and the Plot pane duplicate the entry-index
   status block.** A shared `EntryIndexStatus` (title, body, retry) would
   replace the rail's copy and `app/plot/[branchId].tsx:405-418`. Raised in
@@ -249,15 +244,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`parked.md → Vault parent shell`](../parked.md#vault-parent-shell)).
   Decide who builds importing from the vault into a story, or drop the footer
   and its copy. Raised in 4.5a's slice review, 2026-10-07.
-- **The phone scene editor's sections have no gaps.**
-  `components/compounds/scene-edit-form.tsx` sets
-  `contentContainerClassName="gap-3 pb-3"` on gorhom's
-  `BottomSheetScrollView`, which NativeWind never registered, so inside the
-  bottom Sheet both classes drop (measured in a story: `rowGap: normal` and
-  `paddingBottom: 0px`, against `rowGap: 12px` outside a Sheet). Put the
-  classes on an inner `View`, as `components/wizard/ai-assist.tsx` does.
-  Predates 4.5a, and the `ScrollComponentContext` move filed above wouldn't
-  fix it. Raised in 4.5a's slice review, 2026-10-07.
 - **`ImporterMenu` is a Popover on phone.** (2026-09-11)
   [`world.md → Mobile expression`](../ui/screens/world/world.md#mobile-expression)
   wants a short Sheet on phone but it's a Popover at every size. The

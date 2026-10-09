@@ -1,4 +1,4 @@
-import { createContext, type ComponentType, type Ref } from 'react'
+import { createContext, useContext, type ComponentType, type Ref } from 'react'
 import { ScrollView, type ScrollViewProps } from 'react-native'
 
 // Lets a host swap the scroll container a list renders: on native, a fixed-detent bottom Sheet
@@ -8,3 +8,9 @@ import { ScrollView, type ScrollViewProps } from 'react-native'
 export type ScrollComponentHandle = Pick<ScrollView, 'scrollTo'>
 export type ScrollComponent = ComponentType<ScrollViewProps & { ref?: Ref<ScrollComponentHandle> }>
 export const ScrollComponentContext = createContext<ScrollComponent>(ScrollView)
+
+/** The host's scroll container, read where it renders: inside a fixed-detent Sheet, the Sheet's. */
+export function ContextScrollView(props: ScrollViewProps) {
+  const Scroll = useContext(ScrollComponentContext)
+  return <Scroll {...props} />
+}
