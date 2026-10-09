@@ -530,6 +530,29 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await ctx.db.select().from(characterRelationships)).toEqual([])
   })
 
+  it('composes an older undo onto the row its own delete in the set restores', async () => {
+    const state = { ...emptyEntityState('character'), inventory: ['item_sword'] }
+    await ctx.db
+      .update(entities)
+      .set({ state: { ...state, visual: { attire: 'travel cloak' } } })
+      .where(eq(entities.id, 'char_x'))
+    await act('act_pass', {
+      kind: 'updateEntityVisualState',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'char_x', visual: { attire: 'muddied cloak' } },
+    })
+    await act('act_del', deleteEntity('char_x'))
+    const target = [...(await deltasOf('act_del')), ...(await deltasOf('act_pass'))]
+
+    // The pass undo restores `visual` alone; on any base but the restored row it drops inventory.
+    await reverseAndPruneDeltaRows(await selectReversalSet(ctx, { branchId: 'b1', target }), ctx, {
+      keepRedoExact: false,
+    })
+
+    const [row] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
+    expect(row.state).toEqual({ ...state, visual: { attire: 'travel cloak' } })
+  })
+
   it("prunes the own delete of a child the closure takes through that delete's payload", async () => {
     await ctx.db
       .insert(happenings)
