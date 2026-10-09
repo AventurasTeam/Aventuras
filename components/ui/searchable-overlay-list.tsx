@@ -45,6 +45,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 type Row<T> = {
@@ -128,7 +129,7 @@ type SearchableOverlayListProps<T> = {
   autofocusSearch?: 'always' | 'web-only'
   escClearsQueryFirst?: boolean
   sheetSize?: 'short' | 'medium' | 'tall'
-  /** Forwarded to the phone sheet; see `SheetContentProps`. */
+  /** Keeps the phone sheet and the web popover out of the blocking-overlay store. */
   suppressOverlayRegistration?: boolean
 
   renderTrigger?: (p: TriggerProps) => ReactNode
@@ -1103,6 +1104,10 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     prevIsPhoneRef.current = isPhone
     if (isPhone && open) setOpen(false)
   }, [isPhone, open, setOpen])
+
+  // The phone Sheet registers itself. The web popover isn't modal, but it holds a choice its
+  // surface hasn't taken yet, so the surface's hotkeys wait it out.
+  useRegisteredOverlay(Platform.OS === 'web' && !isPhone && open && !suppressOverlayRegistration)
 
   const list = useSearchableList(props)
   const selectedRowIdsSet = useSelectedSet(props.selectedRowIds)

@@ -271,6 +271,20 @@ export const AClosedModalLeavesTheMenuLive: Story = {
   },
 }
 
+// actions-menu.md → Open / close: the shortcut toggles, so the menu's own popover must not
+// register as the overlay that makes the menu inert.
+export const ShortcutTogglesClosed: Story = {
+  render: () => <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />,
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument(),
+    )
+  },
+}
+
 // A plain Dialog is modal too: the entry card's world-time and scene editors are Dialogs, and
 // the reader's Ctrl+Z reverted an edit behind one while it stood unregistered.
 export const DialogSuppressesTheMenu: Story = {
