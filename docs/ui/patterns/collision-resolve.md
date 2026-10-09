@@ -226,8 +226,9 @@ type DiffPayload = {
   merged entity can be matched by — the losing side's aliases are
   exactly the references prose already used for this character. See
   [`retrieval.md → Keywords schema`](../../memory/retrieval.md#keywords-schema).
-- **Tags** — partitioned into `onlyInA` / `onlyInB` / `both`.
-  `null` when both sides have identical tag sets (order-independent).
+- **Tags** — partitioned into `onlyInA` / `onlyInB` / `both`, after
+  the trim and blank-drop the merge writes them with. `null` when both
+  sides have identical tag sets (order-independent).
 - **State** — structural deep-equal: sort keys, compare leaves.
 
 `divergentScalars` preserves a fixed field order

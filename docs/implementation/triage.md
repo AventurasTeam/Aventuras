@@ -72,14 +72,6 @@ slice-planning gate forces its resolution before that slice is planned.
   px). It fit while the dialog lacked the primitive's side margin, which
   4.2c's developer review restored. Native keeps no such margin and is
   unaffected (2026-10-07).
-- **The collision dialog's tag partition compares raw strings.**
-  `components/compounds/collision-resolve-diff.ts` partitions tags
-  exactly, while the merge planner cleans them (trim, drop blanks, drop
-  duplicates). So `'hero'` and `'hero '` render as two chips, a blank tag
-  renders as an empty chip, and a side's internal duplicates give
-  duplicate chip keys and a duplicated tag in the submitted list; the
-  merge writes the cleaned list. The plan kept tags exact for case only.
-  Found in 4.2c's PR 2 review (2026-10-06).
 - **An E2E failure with a dirty pane hangs teardown.** When a test fails
   while a pane is dirty, the main process's armed close guard blocks
   `app.close()` (`e2e/harness/launch.ts`), so each spec's `afterAll`
