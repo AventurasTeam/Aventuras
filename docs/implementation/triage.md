@@ -217,7 +217,14 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/stores/ui/blocking-overlays.ts` says modal dialogs should. So
   every `Dialog`-based modal (collision resolve, import, embedder) leaves
   the actions menu and its shortcuts armed underneath it. Found in 4.2c's
-  PR 2 review (2026-10-06).
+  PR 2 review (2026-10-06). Since 4.5b the reader's undo / redo and End
+  keys stand down only for registered overlays, so the entry card's
+  world-time and scene Dialogs (`components/compounds/entry-card.tsx`),
+  which focus their content on open, leave Ctrl+Z live: edit an entry's
+  world time, reopen its Dialog, press Ctrl+Z, and the edit reverts
+  behind it as the Dialog closes. Registering `DialogContent` like
+  `AlertDialogContent` also makes master-detail back stand down under any
+  Dialog. Added in 4.5b, 2026-10-09.
 - **The collision dialog's tag partition compares raw strings.**
   `components/compounds/collision-resolve-diff.ts` partitions tags
   exactly, while the merge planner cleans them (trim, drop blanks, drop
@@ -447,12 +454,21 @@ slice-planning gate forces its resolution before that slice is planned.
   `enablePanDownToClose`, and gorhom handles the keyboard through
   `keyboardBehavior`.
   [`layout.md → Sheet behavior`](../ui/foundations/mobile/layout.md#sheet-behavior--additional-rules)
-  points at the same `avoidKeyboard` prop. The consumer rule there also
-  lists a "Peek drawer hosting save-session edits" as a field-bearing
+  points at the same `avoidKeyboard` prop. The two-line consumer rule in
+  `Sheet — Keyboard handling` also lists a "Peek drawer hosting
+  save-session edits" as a field-bearing
   Sheet body, which contradicts the read-only peek in
   [`reader-composer.md → State-field composition — lore peek`](../ui/screens/reader-composer/reader-composer.md#state-field-composition--lore-peek).
   Rewrite the keyboard canon from the shipped Sheet. Raised in 4.5b's
   review, 2026-10-09.
+- **`SheetContent`'s props don't say which anchor takes which.**
+  (2026-10-09) `SheetContentProps` in `components/ui/sheet.tsx` is one
+  flat type: `size`, `enablePanDownToClose` and, since 4.5b,
+  `keyboardBehavior` only reach the bottom anchor, and `portalHost` only
+  the right one; the other path drops them unread. A union keyed on
+  `anchor` would reject them at the call site
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
+  Raised in 4.5b's slice review, 2026-10-09.
 - **The rail's `+ Import from Vault` footer has no owner.** 4.5a ships it
   disabled with the reason "Vault lands in M8"
   (`reader:rail.importFromVaultReason`), and the 4.5a slice doc routes vault
@@ -637,17 +653,16 @@ slice-planning gate forces its resolution before that slice is planned.
   `<button>` and turns `disabled` into the native attribute, so Chromium
   blurs it when it disables under focus (`Button`'s `loading`,
   `components/ui/button.tsx:97-107`; any reason-bearing control that
-  disables while focused). `Button` also carries its disabled reason only
-  in `accessibilityHint`, which RN-Web ignores. The docblock of
-  `components/ui/reason-tooltip.tsx` (lines 10-25) puts the reason in AT
-  through that hint on native only, and its remount note (16-18) implies
-  an unconditional wrapper keeps focus across a flip to disabled; neither
-  helps on web, where the reason is a hover `title` and keyboard users
-  never see it. The peek keeps focus by refocusing its dialog from the
-  drawer instead
+  disables while focused). The remount note in
+  `components/ui/reason-tooltip.tsx` (lines 16-18) implies an
+  unconditional wrapper keeps focus across a flip to disabled, which
+  doesn't hold on web. The peek keeps focus by refocusing its dialog from
+  the drawer instead
   ([`color.md → Disabled`](../ui/foundations/color.md#disabled): disabled controls
-  aren't focusable). Candidate lessons-learned entry; pairs with M9.2's
-  disabledReason a11y work. Raised in 4.5b's review, 2026-10-09.
+  aren't focusable). The reason not reaching assistive tech on web is
+  [roadmap M9.2](./roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate)'s
+  `disabledReason` item. Candidate lessons-learned entry. Raised in
+  4.5b's review, 2026-10-09.
 - **Focus-ring canon drift.** (2026-10-09)
   [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
   ring with a 2px offset; none of the `focus-visible:ring-2` usages under
@@ -666,14 +681,14 @@ slice-planning gate forces its resolution before that slice is planned.
   `<body>` on close. 4.5b's `PeekDrawer` implements the return locally
   (`onOpenAutoFocus` remembers, `onCloseAutoFocus` restores unless it
   routed away); it belongs in `RightSheetContent`
-  (`components/ui/sheet.tsx:406`). Related: `demoteRadixDialog`
-  (`sheet.tsx:396`) leaves Radix's FocusScope fallback on the
-  role-stripped, unnamed wrapper; the gorhom `BottomSheetContent` has no
-  Tab trap on web though
-  [`layout.md`](../ui/foundations/mobile/layout.md#sheet-behavior--additional-rules) (line 216) says
-  sheets trap Tab; and 4.5a's list and categories swaps drop focus, as
+  (`components/ui/sheet.tsx:413`). Related: `demoteRadixDialog`
+  (`sheet.tsx:403`) leaves Radix's FocusScope fallback on the
+  role-stripped, unnamed wrapper; the bottom Sheet's focus on web is its
+  own entry above, "Bottom Sheets on web move no focus in and return
+  none on close"; and 4.5a's list and categories swaps drop focus, as
   does the phone row-to-peek swap on web (Chromium blurs the row when its
-  layer turns `visibility: hidden`).
+  layer turns `visibility: hidden`) and the way back, since `←`
+  unmounts with the peek level it sits in.
   Known residual in the peek: after a successful `Set as lead` the lead
   row re-parents into `ModuleList`'s pinned slot, so the remembered node
   is disconnected and the next close drops focus to `<body>`; canon
@@ -687,19 +702,16 @@ slice-planning gate forces its resolution before that slice is planned.
   fired while the peek drawer or another modal Sheet is open may sit
   under the scrim and go unannounced; the peek's `Set as lead` refusal
   toast is a new instance. Raised in 4.5b's review, 2026-10-09.
-- **Ctrl+Z still undoes behind the reader's desktop Dialogs.**
-  (2026-10-09) The reader's undo / redo and End keys stand down only
-  for overlays that register with `blockingOverlaysStore`
-  (`useRegisteredOverlay`: `Sheet`, `AlertDialog`, `Select`);
-  `components/ui/dialog.tsx` doesn't register. The entry card's
-  world-time and scene Dialogs (`components/compounds/entry-card.tsx`)
-  focus their content on open, so the key isn't filtered as an editable
-  target: edit an entry's world time, reopen its Dialog, press Ctrl+Z,
-  and the edit reverts behind it as the Dialog closes. Fix shape:
-  `DialogContent` registers like `AlertDialogContent` does — which also
-  makes the Actions menu and master-detail back stand down under any
-  Dialog, so it is a primitive-level call. Raised in 4.5b's review,
-  2026-10-09.
+- **A failed story-id read leaves the reader's actions silently
+  inert.** (2026-10-09) The reader reads its branch's `storyId` on mount
+  (`app/reader-composer/[branchId].tsx`, the `branches` select routed
+  through `runAction`); if that read rejects it only logs
+  `reader.story_id_load_failed`, and `storyId` stays null for the
+  visit. Send and Regenerate then return early with nothing shown
+  (`runSubmit` / `runRegenerate`: `if (!storyId || …) return`). The
+  peek's `Set as lead` toasts the generic lead failure in that state
+  since 4.5b's review; the reader has no error state of its own for it.
+  Raised in 4.5b's slice review, 2026-10-09.
 - **Plot row semantics are hidden from assistive tech.** (2026-10-09)
   Plot's `⊙` common-knowledge marker (`components/plot/happening-row.tsx:46`)
   is a bare icon with no accessible name, and `ListRow` sets `aria-label`
