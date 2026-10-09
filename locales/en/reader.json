@@ -195,8 +195,6 @@
       "classifierBody": "The classifier writes most rows automatically as the story progresses.",
       "loreBody": "Add lore from the World panel."
     },
-    "importFromVault": "+ Import from Vault",
-    "importFromVaultReason": "Vault lands in M8",
     "browse": "Browse",
     "backToCategories": "Back to categories"
   },

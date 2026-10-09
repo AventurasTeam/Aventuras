@@ -23,11 +23,5 @@ export function plotAddOptions(
       disabledReason: gate.disabledReason,
       onPress: onJson,
     },
-    {
-      key: 'vault',
-      label: t('plot:addMenu.fromVault'),
-      disabled: true,
-      disabledReason: t('plot:addMenu.fromVaultReason'),
-    },
   ]
 }

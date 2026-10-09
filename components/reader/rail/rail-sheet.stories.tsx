@@ -243,13 +243,11 @@ export const ListLevel: Story = {
     await headIs('character')
     await expect(backToCategories()).toBeVisible()
     await expect(screen.getByRole('button', { name: leadOf(DATA).name })).toBeVisible()
-    await expect(screen.getByText(t('reader:rail.importFromVault'))).toBeVisible()
 
     // Every level sits on the Sheet's own surface, so a level switch never changes the background.
     await expect(
       paintedUpToDialog(screen.getByRole('button', { name: leadOf(DATA).name })),
     ).toEqual([])
-    await expect(paintedUpToDialog(screen.getByText(t('reader:rail.importFromVault')))).toEqual([])
   },
 }
 

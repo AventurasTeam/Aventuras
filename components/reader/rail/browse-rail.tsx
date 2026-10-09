@@ -8,7 +8,6 @@ import { t } from '@/lib/i18n'
 import type { RailCategory, RailView } from '@/lib/reader-rail'
 
 import { RailCategorySelect } from './rail-category-select'
-import { RailImportFooter } from './rail-import-footer'
 import { RailList } from './rail-list'
 import type { RailData } from './use-rail-data'
 
@@ -55,7 +54,6 @@ export function BrowseRail({
         }
         onRowPress={onRowPress}
       />
-      <RailImportFooter />
     </View>
   )
 }

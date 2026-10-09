@@ -90,7 +90,7 @@ export const world = {
 
   // ImporterMenu options (importer-menu.tsx). A disabled option's accessible name appends its
   // reason (world-add-options.ts), so match the visible label text.
-  addMenuOption: (page: Page, key: 'blank' | 'fromJson' | 'fromVault'): Locator =>
+  addMenuOption: (page: Page, key: 'blank' | 'fromJson'): Locator =>
     page.getByText(t(`world:addMenu.${key}`), { exact: true }),
 
   // Tab triggers may carry a `(n)` count suffix.

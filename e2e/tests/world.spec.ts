@@ -322,7 +322,6 @@ test.describe.serial('World panel', () => {
 
     await expect(world.addMenuOption(page, 'blank')).toBeVisible()
     await expect(world.addMenuOption(page, 'fromJson')).toBeVisible()
-    await expect(world.addMenuOption(page, 'fromVault')).toBeVisible()
 
     await page.keyboard.press('Escape')
     await expect(world.addMenuOption(page, 'blank')).toHaveCount(0)

@@ -500,11 +500,11 @@ export const Empty: Story = {
   },
 }
 
-/** The `[+]` menu on an entity category: only From Vault stays disabled. */
+/** The `[+]` menu on an entity category offers Blank and From JSON, both live. */
 export const AddMenuDisabledEntries: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New character' }))
-    expect(await screen.findByTitle('Vault lands in M8')).toBeInTheDocument()
+    expect(await screen.findAllByRole('menuitem')).toHaveLength(2)
     expect(screen.getByRole('menuitem', { name: 'Blank' })).not.toHaveAttribute(
       'aria-disabled',
       'true',

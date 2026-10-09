@@ -7,12 +7,11 @@ const IN_FLIGHT = 'Generation is in flight. Cancel to edit.'
 const handlers = () => ({ onBlank: vi.fn(), onJson: vi.fn() })
 
 describe('plotAddOptions', () => {
-  it('offers Blank and From JSON live; From Vault stays disabled', () => {
+  it('offers Blank and From JSON, both live', () => {
     const options = plotAddOptions(handlers(), {})
     expect(options.map((o) => [o.key, o.label, o.disabled ?? false, o.disabledReason])).toEqual([
       ['blank', 'Blank', false, undefined],
       ['json', 'From JSON file…', false, undefined],
-      ['vault', 'From Vault…', true, 'Vault lands in M8'],
     ])
   })
 
@@ -32,7 +31,6 @@ describe('plotAddOptions', () => {
     expect(options.map((o) => [o.key, o.disabled ?? false, o.disabledReason])).toEqual([
       ['blank', true, IN_FLIGHT],
       ['json', true, IN_FLIGHT],
-      ['vault', true, 'Vault lands in M8'],
     ])
   })
 })

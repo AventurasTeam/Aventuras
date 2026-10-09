@@ -531,7 +531,7 @@ lore creation path.
 
 The button opens an `ImporterMenu` with the standard
 [import-counterparts options](../../patterns/data.md#import-counterparts--file-based--vault)
-(Blank / From JSON file… / From Vault…). `From JSON file…` opens
+(Blank / From JSON file…). `From JSON file…` opens
 the shared [`ImportDialog`](../../patterns/import-dialog.md)
 configured for the active kind:
 
@@ -829,8 +829,6 @@ counts as empty. Validation lives at two places:
     disabled until the draft's body is non-empty.
   - **From JSON file** — Zod schema marks `body` required;
     mismatch fails the existing friendly-error path.
-  - **From Vault** — vault entries already carry populated bodies
-    (vault flow mostly deferred; verify when vault lands).
 
 ### History tab — lore
 
@@ -1351,7 +1349,7 @@ overflows.
 - **Per-row import affordance** — the EntityListPane `[+]`
   icon-action reads naturally on phone too (touch-tier hit area
   per the icon-actions touch-tier minimum). The import-counterparts
-  dropdown (`Blank` / `From JSON file…` / `From Vault…`) opens
+  dropdown (`Blank` / `From JSON file…`) opens
   as Sheet (short) on phone per the layout binding for
   popover-style menus.
 - **Raw JSON viewer** inherits the binding-table mapping: Sheet

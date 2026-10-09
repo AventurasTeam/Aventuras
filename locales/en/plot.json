@@ -11,9 +11,7 @@
   },
   "addMenu": {
     "blank": "Blank",
-    "fromJson": "From JSON file…",
-    "fromVault": "From Vault…",
-    "fromVaultReason": "Vault lands in M8"
+    "fromJson": "From JSON file…"
   },
   "import": {
     "title": {

@@ -23,11 +23,5 @@ export function worldAddOptions(
       disabledReason: gate.disabledReason,
       onPress: onJson,
     },
-    {
-      key: 'vault',
-      label: t('world:addMenu.fromVault'),
-      disabled: true,
-      disabledReason: t('world:addMenu.fromVaultReason'),
-    },
   ]
 }

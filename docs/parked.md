@@ -379,8 +379,9 @@ sub-structure decision lands with this design pass.
 
 #### Vault parent shell
 
-Vault home navigation + the calendar editor have shipped (see
-[`docs/ui/screens/vault/calendars/calendars.md`](./ui/screens/vault/calendars/calendars.md)).
+The calendar editor is specified
+([`docs/ui/screens/vault/calendars/calendars.md`](./ui/screens/vault/calendars/calendars.md))
+and lands with M8.3's vault shell; no vault route has shipped yet.
 What's still deferred:
 
 - **Import/export at the Vault level** — round-tripping calendar
@@ -394,6 +395,12 @@ What's still deferred:
   eventually carry packs, presets, possibly templates. Each needs
   its own list/editor design once the content types are spec'd.
   Pending a second content type to validate the shell against.
+- **Importing vault content into a story** — characters, lore,
+  threads or happenings kept in the vault and brought into a story.
+  The World and Plot `[+]` menus and the reader rail shipped a
+  disabled `From Vault…` / `+ Import from Vault` placeholder for it;
+  those were removed on 2026-10-09 (developer), since nothing in v1
+  enables them. They return with the content type.
 
 #### Universal import surface
 

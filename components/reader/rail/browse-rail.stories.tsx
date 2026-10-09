@@ -90,9 +90,6 @@ export const Characters: Story = {
     expect(
       listCollapseStore.getCollapsed('character', WORLD_COLLAPSED_DEFAULTS).has('staged'),
     ).toBe(false)
-    const vault = screen.getByRole('button', { name: '+ Import from Vault' })
-    expect(vault).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByTitle('Vault lands in M8')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Collapse rail' }))
     expect(args.onCollapse).toHaveBeenCalledTimes(1)
     expect(screen.getByTitle('Collapse rail')).toBeInTheDocument()

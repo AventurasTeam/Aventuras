@@ -169,16 +169,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `anchor` would reject them at the call site
   ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
   Raised in 4.5b's slice review, 2026-10-09.
-- **The rail's `+ Import from Vault` footer has no owner.** 4.5a ships it
-  disabled with the reason "Vault lands in M8"
-  (`reader:rail.importFromVaultReason`), and the 4.5a slice doc routes vault
-  import to M8.3, but
-  [roadmap M8.3](./roadmap.md#m8--translation--vault-parent-shell) scopes
-  only the vault shell, vault-level import / export is parked, and the vault
-  holds no entity content type
-  ([`parked.md → Vault parent shell`](../parked.md#vault-parent-shell)).
-  Decide who builds importing from the vault into a story, or drop the footer
-  and its copy. Raised in 4.5a's slice review, 2026-10-07.
 - **Slice 4.6 left four duplicates waiting for a shared home.**
   (2026-10-08) The closing review's simplifier skipped each because the
   shared copy needs a module that doesn't exist yet, or a file outside the

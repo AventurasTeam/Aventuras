@@ -236,6 +236,18 @@ function BottomSheetContent({
     isSettledRef.current = false
     sheetRef.current?.dismiss()
   }, [])
+  // Stable: gorhom threads onChange through its own callbacks, and a fresh one each render
+  // left a later scrim press unanswered.
+  const handleChange = useCallback(
+    (index: number) => {
+      if (index < 0) return
+      isSettledRef.current = true
+      if (!isDismissHeldRef.current) return
+      isDismissHeldRef.current = false
+      dismissSheet()
+    },
+    [dismissSheet],
+  )
   // gorhom keeps a modal unmounted-while-presented alive until its dismiss
   // animation completes, then still fires onDismiss; that late callback must
   // not write the dead open state back through onOpenChange.
@@ -358,13 +370,7 @@ function BottomSheetContent({
       // dialog role. null, not undefined: undefined falls through to gorhom's English label.
       accessibilityRole="none"
       accessibilityLabel={Platform.OS === 'web' ? null : (ariaLabel ?? null)}
-      onChange={(index: number) => {
-        if (index < 0) return
-        isSettledRef.current = true
-        if (!isDismissHeldRef.current) return
-        isDismissHeldRef.current = false
-        dismissSheet()
-      }}
+      onChange={handleChange}
       onDismiss={() => {
         if (!isMountedRef.current) return
         isPresentedRef.current = false
