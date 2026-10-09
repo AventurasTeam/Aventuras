@@ -101,25 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   left: on a 30k-delta branch whose tab row has only old deltas, a
   first chunk or search keystroke still takes about 9 ms while the
   next chunk takes under 1 ms (`pnpm bench:history`).
-- **Undo and redo of a story entry's metadata skip its metadata lock.**
-  `withEntryMetadataLock` has four callers (scene fields, world time,
-  entity delete, 4.2c's merge); the undo and redo paths for an
-  `updateStoryEntryMetadata` delta (`lib/actions/story-entries/undo.ts`,
-  `lib/actions/delta/redo.ts`) take no lock. A CTRL-Z landing while a
-  scene edit, delete or merge sits between its tail read and its commit
-  could have its restore overwritten. Unverified: it needs two user
-  actions at once. Found in 4.2c's Task 8 review (2026-10-06). The fix
-  can't take the metadata lock inside the branch lock's exclusive hold:
-  the merge holds the tail's metadata lock while it waits for the shared
-  branch lock, so that order deadlocks. Take the metadata lock first, as
-  the four callers do (4.2c's slice review, 2026-10-07).
-- **The group conflict check can't see refs inside entity `state`.**
-  `rowRefs` (`lib/actions/delta/live-refs.ts`) covers link-row columns
-  but not the ref fields inside an entity's `state` (`current_location_id`
-  and the rest), so `groupConflict` can't refuse a state write that names
-  a row the same group deletes. Planners avoid it by discipline (4.2c's
-  merge rewrites every ref to the loser before deleting it); nothing
-  checks it. Found in 4.2c's PR 1 review (2026-10-06).
 - **Segment Select clips a label that wraps past two lines.**
   `SegmentBranch` (`components/ui/select.tsx`) gives each option a fixed
   `h-control-md` height with `overflow-hidden` and no line limit, so a
@@ -421,11 +402,6 @@ slice-planning gate forces its resolution before that slice is planned.
   lore writer is what would surface it. Fix idea: fold stackables on
   export the way `normalizedStackables` in `lib/world/entity-actions.ts`
   does. Found in Slice 4.6 review.
-- **Entity register writes the raw state, not the parsed one.**
-  (2026-10-08) `lib/actions/entities/register.ts:137-152` and `:213-220`
-  `safeParse` the state but write the raw `row` / `patch.state`, so unknown
-  state keys persist, and per-row export carries them out. Found in Slice
-  4.6 review.
 - **No lint rule catches a dropped `await`.** (2026-10-08)
   `eslint.config.js` has no type-aware promise rules (`no-floating-promises`,
   `return-await`), so a missing `await` passes lint repo-wide. Task 9's

@@ -1092,6 +1092,15 @@ A fix is a JSON-path reference registry the closure queries through
 `json_each`. Parked 2026-10-05; the signal to revisit is a machine
 writer that creates entities other than characters.
 
+The group runner's conflict check has the same blind spot and would be
+the registry's second consumer: `rowRefs` (`lib/actions/delta/live-refs.ts`)
+covers link-row columns but not the ref fields inside an entity's `state`
+or an entry's `metadata`, so `groupConflict` can't refuse a write there
+that names a row the same group deletes. Planners avoid it by discipline
+(4.2c's merge rewrites every ref to the loser before deleting it, and the
+entity delete clears the tail's scene fields); nothing checks it. Folded
+in from triage 2026-10-09.
+
 #### A kept create in a redo group fails redo with a raw SQLite error
 
 When a user write keeps a machine create, the reversal re-owns the
@@ -1368,6 +1377,52 @@ covers _exposing_ ranker knobs rather than the decision to drop a
 query, so it sits beside this rather than owning it. Revisit once real
 captures accumulate; the answer may be that no automatic drop is wanted
 and the number stays diagnostic.
+
+#### Undo and redo of a story entry's metadata skip its metadata lock
+
+`withEntryMetadataLock` has four callers (scene fields, world time,
+entity delete, 4.2c's merge); the undo and redo paths for an
+`updateStoryEntryMetadata` delta (`lib/actions/story-entries/undo.ts`,
+`lib/actions/delta/redo.ts`) take no lock. A CTRL-Z landing while a
+scene edit, delete or merge sits between its tail read and its commit
+could have its restore overwritten. Unverified: it needs two user
+actions at once. Found in 4.2c's Task 8 review (2026-10-06). The fix
+can't take the metadata lock inside the branch lock's exclusive hold:
+the merge holds the tail's metadata lock while it waits for the shared
+branch lock, so that order deadlocks. Take the metadata lock first, as
+the four callers do (4.2c's slice review, 2026-10-07).
+
+Narrower than that, verified by reading in the 2026-10-09 triage pass.
+Undo and redo run inside `bracketProseReversal`, which raises the
+reversal flag, settles tracked user writes and holds the branch lock
+exclusive; only the metadata lock is skipped. The scene editor, the
+world-time edit and the entity delete re-check the gate and register
+their write with no await between, so a reversal refuses or outwaits
+them. Only the collision merge reads the tail outside the branch lock,
+and canon already calls that path unreachable
+([no-gate write phase](./generation-pipeline.md#no-gate-write-phase):
+the resolve dialog is modal, and Reader undo needs the Reader's focus).
+The lock order now lives in `withTailMetadataLock`
+(`lib/actions/story-entries/entry-metadata-lock.ts`). Parked
+2026-10-09; the signal is a non-modal merge, or any surface where Reader
+undo and a World write can run together.
+
+#### Entity register writes the raw state, not the parsed one
+
+`lib/actions/entities/register.ts` `safeParse`s the state on create and
+update but writes the raw `row` / `patch.state`, so unknown state keys
+would persist, and per-row export would carry them out. Found in Slice
+4.6 review (2026-10-08).
+
+No writer supplies unknown keys today, verified in the 2026-10-09
+triage pass: the World pane builds state from known fields, the
+classifier creates with no state, piggyback patches known keys only,
+and `.avts` import goes through the pane draft after its own parse
+strips them. `state-patch-actions.ts` merges without parsing at all. The
+obvious fix, writing `parsed.data`, would silently drop a stackable
+named `__proto__`, which the pane and piggyback store deliberately:
+zod's record skips that key. Parked 2026-10-09; the signal is a writer
+that can emit model-shaped state, such as an agentic classifier.
 
 ### UX (parked)
 
