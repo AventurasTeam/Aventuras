@@ -294,6 +294,14 @@
   function handleKeydown(e: KeyboardEvent) {
     if (lightboxOpen) {
       if (e.key === 'Escape') closeLightbox()
+      // Arrows move the caret in a field, and switching images would discard its unsaved edit.
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable)
+      ) {
+        return
+      }
       if (e.key === 'ArrowLeft') previousImage()
       if (e.key === 'ArrowRight') nextImage()
     } else {
