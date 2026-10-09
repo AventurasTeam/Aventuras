@@ -11,7 +11,12 @@ import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { t } from '@/lib/i18n'
+import { blockingOverlaysStore } from '@/lib/stores'
 import { cn } from '@/lib/utils'
+
+export function matchesSaveShortcut(e: KeyboardEvent): boolean {
+  return (e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')
+}
 
 type SaveBarProps = {
   /**
@@ -42,7 +47,8 @@ type SaveBarProps = {
    * A section's draft cannot be written. Disables Save and the keyboard
    * shortcut; Discard stays live so the session is never a dead end. Pair with
    * `notice` to say why. Gates the handler body, not hotkey registration, so
-   * Ctrl-S stays claimed instead of reaching the browser's own save dialog.
+   * Ctrl-S stays claimed instead of reaching the browser's own save dialog. An open
+   * blocking overlay gates the shortcut the same way.
    */
   saveDisabled?: boolean
   /** Explains a disabled Save action through accessibility hint and web tooltip. */
@@ -71,12 +77,9 @@ export function SaveBar({
   const count = dirtyCount ?? dirtyFields.length
   const fieldList = dirtyFields.length > 0 ? dirtyFields.join(', ') : null
 
-  const matchesSaveShortcut = useCallback(
-    (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S'),
-    [],
-  )
   const handleSaveShortcut = useCallback(() => {
-    if (!saving && !saveDisabled) onSave()
+    // A blocking overlay owns the key; the unsaved-changes guard answers it itself.
+    if (!saving && !saveDisabled && !blockingOverlaysStore.isBlocked()) onSave()
   }, [onSave, saving, saveDisabled])
   useGlobalHotkey(matchesSaveShortcut, handleSaveShortcut, {
     capture: true,

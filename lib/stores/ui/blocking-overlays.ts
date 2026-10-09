@@ -3,8 +3,8 @@ import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
 /**
- * The overlays currently claiming the surface — bottom sheets and modal
- * dialogs — held as opaque per-instance tokens.
+ * The overlays currently claiming the surface — bottom sheets, modal
+ * dialogs and the web Select listbox — held as opaque per-instance tokens.
  *
  * A set rather than a counter: a duplicate release is a no-op instead of
  * underflowing the gate into permanently-unblocked, which fails open silently.

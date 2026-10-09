@@ -248,7 +248,9 @@ function PopoverContent({
   // primitive only clamps the top against screen bounds, leaving content to
   // overflow without scrolling — drive maxHeight ourselves so the inner
   // ScrollView clamps and actually scrolls.
-  const { triggerPosition } = SelectBase.useRootContext()
+  const { open, triggerPosition } = SelectBase.useRootContext()
+  // Radix's web listbox is modal: it traps focus and blocks pointer events outside it.
+  useRegisteredOverlay(Platform.OS === 'web' && open)
   const { height: windowHeight } = useWindowDimensions()
   const insets = useSafeAreaInsets()
 

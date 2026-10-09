@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -9,7 +11,10 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { t } from '@/lib/i18n'
+
+import { matchesSaveShortcut } from './save-bar'
 
 type UnsavedChangesDialogProps = {
   open: boolean
@@ -37,6 +42,16 @@ export function UnsavedChangesDialog({
   onDiscard,
   onCancel,
 }: UnsavedChangesDialogProps) {
+  // save-sessions.md → Navigate-away guard: the save bar behind stands down, so the key is Save here.
+  const handleSaveShortcut = useCallback(() => {
+    if (!saving && !saveDisabled) onSave()
+  }, [onSave, saving, saveDisabled])
+  useGlobalHotkey(matchesSaveShortcut, handleSaveShortcut, {
+    capture: true,
+    stopPropagation: true,
+    enabled: open,
+  })
+
   function handleOpenChange(next: boolean) {
     // Escape/Android back land here too; must not resolve as cancel behind a commit in flight.
     if (next || saving) return
