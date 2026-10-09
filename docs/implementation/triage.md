@@ -91,15 +91,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `userData` directory. The harness needs a fallback that exits the app
   from main or kills it after a timeout. Found in 4.2c's PR 2 review
   (2026-10-06).
-- **A `DialogContent` width override silently loses to
-  `sm:max-w-lg`.** The primitive (`components/ui/dialog.tsx`) sets
-  `max-w-[calc(100%-2rem)] sm:max-w-lg`, and tailwind-merge only
-  replaces a class with the same variant. An unprefixed `max-w-2xl`
-  therefore leaves the dialog at 32rem (512 px on web) from `sm` up,
-  and below `sm` it drops the side margin on web. The collision dialog shipped like this until
-  4.2c's visual review. A width prop, or a documented `sm:` override,
-  would stop the next dialog from repeating it. Found in 4.2c's
-  developer review (2026-10-07).
 - **The desktop window has no minimum width.** `createWindow` in
   `electron/main.ts` sets `width` and `height` but no `minWidth`, so the
   window can shrink to widths no desktop user works at, and layouts get

@@ -82,6 +82,8 @@ function DialogContent({
     <DialogPortal hostName={portalHost}>
       <DialogOverlay>
         <DialogPrimitive.Content
+          // A width override needs the `sm:` variant (`sm:max-w-xl`): tailwind-merge replaces
+          // only the same variant, so a bare `max-w-*` leaves the 32rem cap from `sm` up.
           className={cn(
             'relative z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             !scrollable && 'gap-4',
