@@ -585,13 +585,19 @@ async function listFillsSheet() {
   }, ANIMATION)
 }
 
-/** Waits until the list level's height holds still across several polls: the Sheet has settled. */
-async function waitForSheetSettled() {
+const sheetHeight = () => (listLayer().parentElement as HTMLElement).getBoundingClientRect().height
+
+/**
+ * Waits until the Sheet's content height holds still across several polls. Pass `changeFrom`
+ * where a resize is expected: a read taken before it lands would hold still at the old height.
+ */
+async function waitForSheetSettled(changeFrom?: number) {
   let last = -1
   let still = 0
   await waitFor(async () => {
     await new Promise((resolve) => requestAnimationFrame(resolve))
-    const height = (listLayer().parentElement as HTMLElement).getBoundingClientRect().height
+    const height = sheetHeight()
+    if (changeFrom != null) expect(Math.abs(height - changeFrom)).toBeGreaterThan(0.5)
     still = Math.abs(height - last) < 0.5 ? still + 1 : 0
     last = height
     expect(still).toBeGreaterThanOrEqual(5)
@@ -718,7 +724,13 @@ export const ReaderChipWindowRoundTripRecapsList: Story = {
     await userEvent.click(peekBack())
     await headIs('character')
     await waitForSheetSettled()
-    await withWindowResized(450, waitForSheetSettled)
+    const tall = sheetHeight()
+    let short = tall
+    await withWindowResized(450, async () => {
+      await waitForSheetSettled(tall)
+      short = sheetHeight()
+    })
+    await waitForSheetSettled(short)
     await settledListFillsSheet()
 
     await peekRow('Zed 02')
