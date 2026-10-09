@@ -563,12 +563,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([lesson](lessons-learned/portaled-overlay-outlives-screen-focus.md)).
   Pre-existing in all four detail heads; low risk because it is modal.
   Found in Slice 4.6 review.
-- **A toast intercepts clicks across the top strip on web.** (2026-10-08)
-  `components/ui/toast.tsx:200-208`: the toast's full-width fixed container
-  catches clicks on whatever sits under it (e.g. the Actions trigger) for
-  the 3-7 s the toast is up, despite `POINTER_EVENTS_BOX_NONE`; the toast's
-  own box doesn't overlap them. A real user bug from M3.12b; the 4.6 E2E's
-  third test waits about 3 s on it. Found in Slice 4.6 review.
 - **`import-dialog.stories.tsx` now imports the World and Plot import
   configs.** (2026-10-08) When M8.3 / M9.4 add more host stories, consider
   domain-owned `world-import.stories.tsx` / `plot-import.stories.tsx` next

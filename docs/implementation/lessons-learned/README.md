@@ -76,6 +76,10 @@ slice plans when relevant.
 - [A bubble-phase global hotkey never sees a key pressed inside a field](./rnweb-textinput-stops-keydown.md)
   — RN-Web's `TextInput` stops keydown propagation, so a shortcut that
   must fire from a field passes `capture: true` to `useGlobalHotkey`.
+- [Inline `pointerEvents: 'box-none'` does nothing on web](./rnweb-inline-box-none-dropped.md)
+  — RN-Web polyfills `box-none` only in compiled styles, so an inline
+  object leaves the view catching clicks; use the compiled
+  `POINTER_EVENTS_BOX_NONE` and hit-test with `elementFromPoint`.
 
 ### rn-primitives substrate
 

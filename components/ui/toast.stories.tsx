@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect } from 'react'
 import { View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, waitFor } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 import { toast, toastStore, type ToastItem } from '@/lib/toast'
@@ -81,6 +81,60 @@ export const RendersEnqueuedToast: Story = {
     const status = await screen.findByRole('status')
     await expect(status).toHaveTextContent('Smoke toast rendered.')
   },
+}
+
+/** Runs `play` in a window wide enough for a band beside the toast; a no-op resize outside Vitest. */
+async function withWideWindow(play: () => Promise<void>) {
+  const browser = await import('vitest/browser').catch(() => null)
+  const original = { width: window.innerWidth, height: window.innerHeight }
+  await browser?.page.viewport(1000, original.height)
+  try {
+    await play()
+  } finally {
+    await browser?.page.viewport(original.width, original.height)
+  }
+}
+
+const topmostAt = (box: DOMRect) =>
+  document.elementFromPoint(
+    Math.floor(box.left + box.width / 2),
+    Math.floor(box.top + box.height / 2),
+  )
+
+// The full-width container spans the top strip; only the toast itself may take the click.
+export const ClicksPassBesideToast: Story = {
+  parameters: { layout: 'fullscreen' },
+  beforeEach: () => {
+    toastStore.__reset()
+  },
+  render: () => (
+    <View className="min-h-screen">
+      <View className="absolute left-6 top-6">
+        <Button variant="secondary">
+          <Text>Beside</Text>
+        </Button>
+      </View>
+      <Toaster />
+    </View>
+  ),
+  play: () =>
+    withWideWindow(async () => {
+      toast.success('Covers the top strip.')
+      const status = await screen.findByRole('status')
+      const beside = screen.getByRole('button', { name: 'Beside' })
+      const besideBox = beside.getBoundingClientRect()
+      // Past the slide-in, so the toast sits in the strip it covers.
+      await waitFor(() =>
+        expect(status.getBoundingClientRect().bottom).toBeGreaterThan(besideBox.top),
+      )
+      const statusBox = status.getBoundingClientRect()
+      await expect(besideBox.right).toBeLessThan(statusBox.left)
+
+      const hit = topmostAt(besideBox)
+      await expect(hit != null && beside.contains(hit)).toBe(true)
+      const toastHit = topmostAt(statusBox)
+      await expect(toastHit != null && status.contains(toastHit)).toBe(true)
+    }),
 }
 
 // Static severity row — for visual / theme-matrix verification

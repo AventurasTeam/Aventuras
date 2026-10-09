@@ -72,3 +72,31 @@ export const LintedDraftRendersOverlay: Story = {
     expect(countMirrorsOf(canvasElement, 'brwn')).toBeGreaterThan(0)
   },
 }
+
+function mirrorOf(canvasElement: HTMLElement, text: string): HTMLElement {
+  const span = Array.from(canvasElement.querySelectorAll('span')).find(
+    (el) => el.children.length === 0 && (el.textContent ?? '').includes(text),
+  )
+  if (span == null) throw new Error(`no overlay span for ${text}`)
+  return span
+}
+
+function topmostAtCenterOf(el: HTMLElement): Element | null {
+  const box = el.getBoundingClientRect()
+  return document.elementFromPoint(
+    Math.floor(box.left + box.width / 2),
+    Math.floor(box.top + box.height / 2),
+  )
+}
+
+// The overlay covers the whole input: plain text must let the click reach the textarea,
+// while an underlined span takes it.
+export const LintedDraftLeavesTextareaClickable: Story = {
+  render: () => <EditableDemo lints={SAMPLE_LINTS} />,
+  play: ({ canvasElement }) => {
+    const textarea = canvasElement.querySelector('textarea')
+    expect(topmostAtCenterOf(mirrorOf(canvasElement, 'quick'))).toBe(textarea)
+    const lint = mirrorOf(canvasElement, 'brwn')
+    expect(topmostAtCenterOf(lint)).toBe(lint)
+  },
+}
