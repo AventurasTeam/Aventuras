@@ -134,7 +134,7 @@ export const Pending: Story = {
   },
 }
 
-/** touch.md → Touch-target floor: on phone the action fills a 44px head in every lead state. */
+/** touch.md → Touch-target floor: on phone the enabled action fills the 44px head, as tall as the lead's. */
 export const CandidatePhoneFloor: Story = {
   args: {
     name: 'Mira',

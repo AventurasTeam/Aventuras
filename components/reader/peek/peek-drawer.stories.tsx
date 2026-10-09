@@ -139,7 +139,7 @@ export const OpenOnKael: Story = {
   },
 }
 
-/** Focus lands on the drawer, not on a non-lead's `Set as lead` (developer, 2026-10-08). */
+/** Focus lands on the drawer, not on a non-lead's `Set as lead` (reader-composer.md → Peek drawer — peek implies rail open). */
 export const FocusLandsOnTheDrawer: Story = {
   args: { initialPeek: MIRA },
   play: async () => {
@@ -258,7 +258,7 @@ export const LorePeek: Story = {
   },
 }
 
-/** The drawer reads the link stores and the entry index above the Sheet's Portal. */
+/** A happening peek reads the link stores and the entry index. */
 export const HappeningPeek: Story = {
   args: { initialPeek: { category: 'happening', id: 'h_ambush' } },
   beforeEach: () => {

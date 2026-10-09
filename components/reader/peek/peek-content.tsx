@@ -26,7 +26,7 @@ export type PeekContentProps = {
   onRegionPress: PeekRegionPress
 }
 
-// In the phone Sheet the scroll view is gorhom's Animated one, which NativeWind never styles.
+// On native the phone Sheet's scroll view is gorhom's, which NativeWind never styles.
 const FILL = { flex: 1 } satisfies ViewStyle
 
 function identityOf(model: PeekModel, lead: PeekLeadControl): PeekHeadIdentity {

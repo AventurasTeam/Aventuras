@@ -56,7 +56,7 @@ function SetLeadAction({ lead, isPhone }: { lead: LeadCandidate; isPhone: boolea
         hitSlop={TAG_HIT_SLOP}
         className={cn(
           'shrink-0 rounded-sm px-1',
-          // touch.md floor: fill the phone head's 44px group (web's disabled wrapper doesn't).
+          // touch.md floor: fill the phone head's 44px group (ReasonTooltip's web box, present with a reason, doesn't).
           isPhone && 'justify-center self-stretch',
           disabled
             ? 'opacity-50'
