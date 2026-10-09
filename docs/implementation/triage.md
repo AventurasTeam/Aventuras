@@ -80,10 +80,6 @@ slice-planning gate forces its resolution before that slice is planned.
   duplicate chip keys and a duplicated tag in the submitted list; the
   merge writes the cleaned list. The plan kept tags exact for case only.
   Found in 4.2c's PR 2 review (2026-10-06).
-- **The collision dialog's merge error can scroll out of view.** The
-  inline error line sits at the end of the merge body's scroll content,
-  so with many tags a refusal can land below the fold. Found in 4.2c's
-  PR 2 review (2026-10-06).
 - **An E2E failure with a dirty pane hangs teardown.** When a test fails
   while a pane is dirty, the main process's armed close guard blocks
   `app.close()` (`e2e/harness/launch.ts`), so each spec's `afterAll`

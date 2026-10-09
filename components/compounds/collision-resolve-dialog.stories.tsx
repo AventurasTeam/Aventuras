@@ -828,6 +828,27 @@ export const MergeConvergesWhileOpen: Story = {
   },
 }
 
+// Enough tags on each side to push the merge body past the dialog's height cap.
+const manyTags = (prefix: string) => Array.from({ length: 40 }, (_, i) => `${prefix}-${i}`)
+
+export const MergeErrorStaysInView: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ tags: manyTags('a') })}
+      entityB={baseEntity({ id: 'ent_kael_2', tags: manyTags('b') })}
+      onResolve={resolveError}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+    const refusal = await screen.findByText('Write failed (story stub)')
+    const box = refusal.getBoundingClientRect()
+    expect(box.bottom).toBeLessThanOrEqual(window.innerHeight)
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+    expect(hit != null && refusal.contains(hit)).toBe(true)
+  },
+}
+
 export const MergeError: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveError} />,
   play: async () => {
