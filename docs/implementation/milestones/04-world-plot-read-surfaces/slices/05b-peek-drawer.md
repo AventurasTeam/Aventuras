@@ -66,8 +66,7 @@ Sheet.
 - **Peek head:** kind icon, name, the C1 recently-classified badge;
   for characters the `You` / `Protagonist` badge (mode-dependent copy)
   when lead, otherwise the inline `Set as lead` text-action calling
-  C5 and transitioning in place; portrait thumbnail slot (placeholder
-  until the asset link exists).
+  C5 and transitioning in place.
 - **Peek body:** entities — 4.2a's Overview in its `peek` variant at
   440 px, with `onRegionPress(tab)` routing to the World panel via C6's
   `tab` param; lore — chip row (injection chip when non-default,
@@ -141,35 +140,132 @@ Sheet.
 - **Thread / happening peek content.** Canon says the peek-head is
   unchanged for those kinds and defines no body; the summaries above
   are the default assumption — confirm and, if kept, add a line to
-  `reader-composer.md`.
+  `reader-composer.md`. Resolved (developer, 2026-10-08): kept,
+  read-only, nothing pressable; the thread body adds the non-default
+  injection chip, and a common-knowledge happening reads
+  `Common knowledge` in place of its aware count — see
+  [`reader-composer.md → State-field composition — thread and happening peek`](../../../../ui/screens/reader-composer/reader-composer.md#state-field-composition--thread-and-happening-peek).
 - **Deep-linked selection isn't revealed.** A row selected via the
   deep link is selected but not revealed in the list (its tier stays
   collapsed, the list sits at the top) — call the list's `revealRow`
-  once the story is hydrated.
+  once the story is hydrated. Resolved in planning (2026-10-08):
+  World's mount arrival calls `revealRow`, as Plot's already did. On
+  desktop and tablet the row's tier opens and the list scrolls to it.
+  On phone the list sits under the detail with `display: none`, so the
+  tier opens but the scroll is a no-op, and the first `←` shows the
+  tier open with the list at the top (Plot behaves the same); filed in
+  [`triage.md`](../../../triage.md).
 - **Read the lead through `resolveLead`** (4.2b): a reversal can leave
   `leadEntityId` dangling, and the You badge / peek `Set as lead` must
-  treat it as absent.
+  treat it as absent. Resolved in planning (2026-10-08): the peek
+  reads the lead from the rail's data, which resolves it through
+  `resolveLead`, so a dangling lead reads as absent and every active
+  character offers `Set as lead`.
 - **The branch-change reset is inherited.** The drawer reads
   `display.peek`, which `readerRailStore.enterBranch` clears on a branch
   change. The phone Sheet needs nothing: `RailSheet` resets to its opened
   state on every open, and a modal Sheet can't stay open across a branch
   change ([4.5a's notes](./05a-browse-rail.md#implementation-notes)).
+  Resolved in planning (2026-10-08): inherited as described; nothing
+  built.
 - **The desktop drawer renders only under an expanded rail.** Render it
   when `!isRailCollapsed && peek`: a peek can survive under a collapsed
   rail if the stored preference flips another way, such as a settings
-  import.
+  import. Resolved in planning (2026-10-08): the drawer mounts on
+  tablet and desktop only, and opens only while the reader is focused,
+  the rail shows expanded and the peek names a row that still resolves;
+  a peek found under a collapsed rail is also cleared, so the next
+  expand doesn't bring it back.
 - **A peek whose row is deleted while it is open.** Decide what the
-  drawer does; nothing in 4.5a covers it.
+  drawer does; nothing in 4.5a covers it. Resolved (developer,
+  2026-10-08): see Implementation notes.
 - **`Open in panel →` needs `ReaderBrowseChip`'s `setOpen`**, so
   `renderPeek` stays owned by `ReaderBrowseChip` rather than moving into
-  `RailSheet`, which holds the peek state.
+  `RailSheet`, which holds the peek state. Resolved in planning
+  (2026-10-08): as stated; `Open in panel →` and an Overview region
+  close the Sheet, then route, behind the Sheet's open guard, so a
+  second press during the close routes nothing.
 - **The lead label is derived in two places, and the peek would make
   three.** The mode to `LeadLabel` ternary lives in
   `app/world/[branchId].tsx:152-153` and
   `components/reader/rail/use-rail-data.ts`; the peek head would be a
   third copy. Add a `leadLabelFor(mode)` helper as part of this slice.
+  Resolved in planning (2026-10-08): `leadLabelFor(mode)` in
+  `lib/world/lead.ts`, which World, the rail and the peek call.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+Developer decisions that deviate from the brief or bind a later slice.
+Canon carries the detail; each line points to it.
+
+- **The desktop and tablet drawer is the blocking right `Sheet`**
+  (developer, 2026-10-08): a scrim and a focus trap, and Esc, `×` or a
+  click outside closes it, so the narrative and composer are inert
+  while it is open. The wireframe's phone-only backdrop changed with
+  it; see
+  [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout)
+  and [`layout.md → Sheet`](../../../../ui/foundations/mobile/layout.md#sheet).
+- **Focus lands on the drawer when it opens** (developer, 2026-10-08),
+  not on its first button: for a non-lead character that would be
+  `Set as lead`, which one stray key would fire and Ctrl-Z can't undo.
+  The target is the named `role="dialog"` element, made focusable with
+  `tabIndex` -1 on web and focused by ref in `onOpenAutoFocus`; Radix's
+  `event.currentTarget` there is its unnamed wrapper. On web the dialog
+  is refocused when `Set as lead` is swapped for the badge or becomes
+  disabled under focus, and on close focus returns to the element that
+  held it before the open (the rail row) unless the drawer routed away,
+  since the drawer opens from the store, not from a Radix trigger.
+- **Thread and happening peeks are read-only summaries** (developer,
+  2026-10-08); see
+  [`reader-composer.md → State-field composition — thread and happening peek`](../../../../ui/screens/reader-composer/reader-composer.md#state-field-composition--thread-and-happening-peek).
+- **A peeked row deleted while it is open closes the peek** (developer,
+  2026-10-08): the drawer closes and the store drops the peek; on phone
+  the Sheet returns to the list; no toast. Keeping the id would let an
+  undo that restores the row reopen it, per
+  [lessons-learned → No "harmless" id leaks](../../../lessons-learned/no-harmless-id-leaks.md).
+- **The portrait is the body's, not the head's** (developer,
+  2026-10-08): an entity peek's portrait is the Overview's own
+  `peek`-variant slot, so Scope: in dropped the head's thumbnail; see
+  [`reader-composer.md → Peek drawer — lead affordance for characters`](../../../../ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
+  and
+  [`entity.md → Why portrait lives only on Overview`](../../../../ui/patterns/entity.md#why-portrait-lives-only-on-overview).
+
+Implementer choices worth keeping:
+
+- **The peek's `Set as lead` shows no toast on success**, unlike
+  World's `⋯ → Set as lead`: the reader's re-anchor is the feedback
+  canon names. A refusal toasts its reason; a throw logs
+  `reader.peek_set_lead_failed` (see
+  [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory))
+  and toasts the generic failure. It gates on the reader's own
+  generation gate, through native `disabled` (disabled controls aren't
+  focusable, per
+  [`color.md → Disabled`](../../../../ui/foundations/color.md#disabled)).
+- **The phone head holds the 44 px touch floor** on its name group, so
+  it keeps one height across lead states
+  ([`touch.md`](../../../../ui/foundations/mobile/touch.md));
+  `Set as lead` and the foot link carry web focus rings.
+- **The slice's component tests are Storybook plays**, the Component
+  layer of
+  [`testing.md → Test taxonomy`](../../../../testing.md#test-taxonomy);
+  the component-identity check is the one vitest, beside unit tests for
+  the peek model, the body selection, `useSetLead`, `useRailPeek` and
+  `usePeekView`.
+- **The drawer reads its view above the right Sheet's Portal** and
+  hands it to `PeekContent` as props, since rn-primitives' native
+  Portal drops custom contexts
+  ([lessons-learned](../../../lessons-learned/rn-primitives-portal-context.md)).
+- **One lead badge and one injection chip**: `LeadTag` and
+  `InjectionModeChip` are extracted, so the rail row, World's Overview
+  and the peek render the same components.
+- **Rail rows no longer route out** on any tier; the C6 link lives on
+  the peek's foot and its Overview regions. `RailSheet` keeps its
+  `onRowPress` mode, which only its bare stories use.
+- **Review findings outside the slice** (web focus on disabled
+  controls, focus-ring drift, trigger-less overlay focus return, reader
+  shortcuts behind modal overlays, Plot row semantics, the phone
+  deep-link reveal, small duplications) are in
+  [`triage.md`](../../../triage.md).
+
+Peek quick-edits stay parked, now naming `entity.md` as a fourth doc in
+conflict; see [`parked.md → Peek quick-edits`](../../../../parked.md#peek-quick-edits).
