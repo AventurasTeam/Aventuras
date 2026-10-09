@@ -99,7 +99,7 @@ export type DomainRegistration = {
   rowKeepingColumns?: readonly [string, ...string[]]
 }
 
-type TableEntry = Omit<DomainRegistration, 'handlers'>
+export type TableEntry = Omit<DomainRegistration, 'handlers'>
 
 const actionRegistry = new Map<string, { table: string; handler: ActionHandler }>()
 const tableRegistry = new Map<string, TableEntry>()
