@@ -4,8 +4,15 @@ import type {
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
   WorldStateRecord,
-} from '$lib/types'
-import { canonicalId, cloneState, rowsOf, withRows, type TrackedRow, type TrackedState } from './state'
+} from '#lib/types/index.ts'
+import {
+  canonicalId,
+  cloneState,
+  rowsOf,
+  withRows,
+  type TrackedRow,
+  type TrackedState,
+} from './state'
 
 /** A database write that carries the live state along with the plan. */
 export type ReversalOp =
@@ -157,7 +164,10 @@ export function planReversal(input: ReversalInput): ReversalPlan {
 
   const earliest = headers[0]
   if (earliest) {
-    ws.state = { ...ws.state, timeTracker: earliest.clockBefore ? { ...earliest.clockBefore } : null }
+    ws.state = {
+      ...ws.state,
+      timeTracker: earliest.clockBefore ? { ...earliest.clockBefore } : null,
+    }
     ws.ops.push({ kind: 'clock', timeTracker: earliest.clockBefore })
     // Classifier-only history recorded the current location apart from the location rows.
     if (earliest.coverage === 'classifier') restoreCurrentLocation(ws, earliest.locationBefore)

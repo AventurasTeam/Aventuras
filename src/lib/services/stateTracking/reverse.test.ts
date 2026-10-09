@@ -6,7 +6,7 @@ import type {
   TrackedEntityType,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import { planReversal, type TrackedState } from '.'
 
 function character(id: string, fields: Partial<Character> = {}): Character {
@@ -155,7 +155,13 @@ describe('planReversal', () => {
       state: state([character('c', { relationship: 'C' })]),
       records: [
         change('e2', 'update', 'c', { relationship: 'A' }),
-        change('e3', 'update', 'c', { relationship: 'B' }, { origin: 'manual', after: { relationship: 'C' } }),
+        change(
+          'e3',
+          'update',
+          'c',
+          { relationship: 'B' },
+          { origin: 'manual', after: { relationship: 'C' } },
+        ),
       ],
       entryPositions: positions,
       keepManual: true,
@@ -169,7 +175,13 @@ describe('planReversal', () => {
     const plan = planReversal({
       state: state([character('c', { relationship: 'C' })]),
       records: [
-        change('e3', 'update', 'c', { relationship: 'B' }, { origin: 'manual', after: { relationship: 'C' } }),
+        change(
+          'e3',
+          'update',
+          'c',
+          { relationship: 'B' },
+          { origin: 'manual', after: { relationship: 'C' } },
+        ),
       ],
       entryPositions: positions,
       keepManual: false,
@@ -179,10 +191,16 @@ describe('planReversal', () => {
   })
 
   it('cannot keep a manual edit to an entity created in the range', () => {
-    const edit = change('e3', 'update', 'n', { description: null }, {
-      origin: 'manual',
-      after: { description: 'x' },
-    })
+    const edit = change(
+      'e3',
+      'update',
+      'n',
+      { description: null },
+      {
+        origin: 'manual',
+        after: { description: 'x' },
+      },
+    )
     const plan = planReversal({
       state: state([character('n', { description: 'x' })]),
       records: [change('e2', 'create', 'n', null), edit],
@@ -200,10 +218,16 @@ describe('planReversal', () => {
       state: state([override]),
       records: [
         change('e2', 'create', 'o', { ...parent }),
-        change('e3', 'update', 'o', { description: 'parent' }, {
-          origin: 'manual',
-          after: { description: 'mine' },
-        }),
+        change(
+          'e3',
+          'update',
+          'o',
+          { description: 'parent' },
+          {
+            origin: 'manual',
+            after: { description: 'mine' },
+          },
+        ),
       ],
       entryPositions: positions,
       keepManual: true,

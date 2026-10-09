@@ -10,6 +10,7 @@ export { planReversal, type ReversalInput, type ReversalOp, type ReversalPlan } 
 export { fromWorldStateDelta } from './legacy'
 export {
   isContinuous,
+  lastHeaderOnLine,
   resolveRun,
   type AnchorCandidate,
   type LineEntry,
@@ -17,3 +18,5 @@ export {
   type RunRefusal,
   type RunResult,
 } from './runs'
+export { RECORD_COLUMNS, recordToRow, rowToRecord } from './rows'
+export { changeRecord, changedFields, diffStates, type RecordContext } from './record'

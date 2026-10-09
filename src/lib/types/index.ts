@@ -1076,9 +1076,7 @@ export interface WorldStateBreakRecord extends WorldStateRecordBase {
 }
 
 export type WorldStateRecord =
-  | WorldStateChangeRecord
-  | WorldStateHeaderRecord
-  | WorldStateBreakRecord
+  WorldStateChangeRecord | WorldStateHeaderRecord | WorldStateBreakRecord
 
 export interface WorldStateSnapshot {
   id: string

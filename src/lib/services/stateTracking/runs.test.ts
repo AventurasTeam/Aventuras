@@ -3,8 +3,15 @@ import type {
   WorldStateBreakRecord,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
-} from '$lib/types'
-import { isContinuous, resolveRun, type AnchorCandidate, type LineEntry, type RunQuery } from '.'
+} from '#lib/types/index.ts'
+import {
+  isContinuous,
+  lastHeaderOnLine,
+  resolveRun,
+  type AnchorCandidate,
+  type LineEntry,
+  type RunQuery,
+} from '.'
 
 // Entry n is created at time 10n; its narration is classified at 10n + 1.
 const line: LineEntry[] = Array.from({ length: 6 }, (_, i) => ({
@@ -14,7 +21,11 @@ const line: LineEntry[] = Array.from({ length: 6 }, (_, i) => ({
   createdAt: 10 * (i + 1),
 }))
 
-function header(n: number, continuous = true, coverage: 'full' | 'classifier' = 'full'): WorldStateHeaderRecord {
+function header(
+  n: number,
+  continuous = true,
+  coverage: 'full' | 'classifier' = 'full',
+): WorldStateHeaderRecord {
   return {
     id: `h${n}`,
     storyId: 's',
@@ -49,7 +60,15 @@ function edit(n: number, at: number): WorldStateChangeRecord {
 }
 
 function brk(n: number, at: number): WorldStateBreakRecord {
-  return { id: `b${at}`, storyId: 's', branchId: null, entryId: `e${n}`, seq: at, createdAt: at, kind: 'break' }
+  return {
+    id: `b${at}`,
+    storyId: 's',
+    branchId: null,
+    entryId: `e${n}`,
+    seq: at,
+    createdAt: at,
+    kind: 'break',
+  }
 }
 
 const live: AnchorCandidate = { kind: 'live', id: null, position: 6, takenAt: 1000 }
@@ -123,7 +142,12 @@ describe('resolveRun', () => {
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 6))
     const closing: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 55 }
     const result = resolveRun(
-      query({ records, snapshotTimes: [55], candidates: [live, closing], tracking: { on: true, enabledSince: 58 } }),
+      query({
+        records,
+        snapshotTimes: [55],
+        candidates: [live, closing],
+        tracking: { on: true, enabledSince: 58 },
+      }),
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -144,5 +168,29 @@ describe('resolveRun', () => {
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), edit(5, 53)]
     const result = resolveRun(query({ records, snapshotTimes: [52], candidates: [snap] }))
     expect(result.ok && result.records.some((r) => r.createdAt === 53)).toBe(false)
+  })
+})
+
+describe('lastHeaderOnLine', () => {
+  const positions = new Map(line.map((e) => [e.id, e.position]))
+
+  it('finds the newest header before the entry and any break after it', () => {
+    const records = [header(1), header(2), brk(2, 25)]
+    expect(lastHeaderOnLine(records, positions, 3)).toEqual({ header: header(2), breakSince: true })
+    expect(lastHeaderOnLine([header(1), header(2)], positions, 3).breakSince).toBe(false)
+  })
+
+  it('ignores headers on entries that are not on the line', () => {
+    // A header written on another branch after tracking was turned on.
+    const elsewhere = { ...header(9), entryId: 'other-branch-entry', seq: 500, createdAt: 500 }
+    const result = lastHeaderOnLine([header(1), elsewhere], positions, 3)
+    expect(result.header).toEqual(header(1))
+  })
+
+  it('makes the first entry after re-enabling tracking start a new run', () => {
+    // Header 1 written at 11; tracking turned off, an edit, then on again at 15.
+    const { header: previous, breakSince } = lastHeaderOnLine([header(1)], positions, 2)
+    expect(isContinuous(previous, 15, breakSince)).toBe(false)
+    expect(isContinuous(previous, 5, breakSince)).toBe(true)
   })
 })

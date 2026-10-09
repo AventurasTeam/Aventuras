@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { StoryEntry, WorldStateDelta } from '$lib/types'
+import type { StoryEntry, WorldStateDelta } from '#lib/types/index.ts'
 import { fromWorldStateDelta, planReversal } from '.'
 
 const entry = {
@@ -56,7 +56,13 @@ describe('fromWorldStateDelta', () => {
     const plan = planReversal({
       state: {
         characters: [
-          { id: 'c-old', name: 'Aria', relationship: 'rival', status: 'active', traits: [] } as never,
+          {
+            id: 'c-old',
+            name: 'Aria',
+            relationship: 'rival',
+            status: 'active',
+            traits: [],
+          } as never,
           { id: 'c-new', name: 'New' } as never,
         ],
         locations: [

@@ -1,8 +1,4 @@
-import type {
-  StoryEntry,
-  WorldStateHeaderRecord,
-  WorldStateRecord,
-} from '$lib/types'
+import type { StoryEntry, WorldStateHeaderRecord, WorldStateRecord } from '#lib/types/index.ts'
 
 export type LineEntry = Pick<StoryEntry, 'id' | 'position' | 'type' | 'createdAt'>
 
@@ -22,6 +18,22 @@ export function isContinuous(
     previous.createdAt >= enabledSince &&
     !breakSincePrevious
   )
+}
+
+/** The last header on the line before `position`, and whether a break follows it. */
+export function lastHeaderOnLine(
+  records: WorldStateRecord[],
+  positions: Map<string, number>,
+  position: number,
+): { header: WorldStateHeaderRecord | null; breakSince: boolean } {
+  const onLine = records.filter((r) => (positions.get(r.entryId) ?? Infinity) < position)
+  let header: WorldStateHeaderRecord | null = null
+  for (const r of onLine) {
+    if (r.kind === 'header' && (!header || r.seq > header.seq)) header = r
+  }
+  const after = header?.seq ?? -Infinity
+  const breakSince = records.some((r) => r.kind === 'break' && r.seq > after)
+  return { header, breakSince }
 }
 
 export interface AnchorCandidate {
