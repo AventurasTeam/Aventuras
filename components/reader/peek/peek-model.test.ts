@@ -11,7 +11,6 @@ import {
   isLeadActionDisabled,
   peekLeadOf,
   peekFootHref,
-  peekLeadControl,
   peekModelOf,
   peekNameOf,
   peekRegionHref,
@@ -99,8 +98,8 @@ const TINTS: ReadonlyMap<string, RecentlyClassified> = new Map([
   ['h_ambush', 'fading'],
 ])
 
-/** Kael leads under `label`; a null label is synthetic: only `control.leadId` marks the lead. */
-function railData(label: LeadLabel | null = 'you'): RailData {
+/** Kael leads under `label`. */
+function railData(label: LeadLabel = 'you'): RailData {
   return {
     branchId: BRANCH,
     entities: [KAEL, MIRA, SAGE, BRAN, HOLLOW, BLADE, WATCH],
@@ -132,7 +131,6 @@ function modelOf(category: RailCategory, id: string, data = railData()): PeekMod
 
 function control(over: Partial<PeekLeadControl> = {}): PeekLeadControl {
   return {
-    leadId: 'char_kael',
     blocked: false,
     blockedReason: undefined,
     pending: false,
@@ -293,33 +291,6 @@ describe('peekLeadOf', () => {
     expect(peekLeadOf(modelOf('character', 'char_mira'), control({ pending: true }))).toMatchObject(
       { state: 'candidate', disabledReason: undefined, pending: true },
     )
-  })
-
-  it('disables Set as lead as "Already the lead" when the lead row has no label', () => {
-    expect(peekLeadOf(modelOf('character', 'char_kael', railData(null)), control())).toMatchObject({
-      state: 'candidate',
-      disabledReason: 'Already the lead',
-    })
-  })
-})
-
-describe('peekLeadControl', () => {
-  it('reads the lead off the rail data and passes the gate through', () => {
-    const onSetLead = vi.fn<(entityId: string) => void>()
-    expect(
-      peekLeadControl(railData(), {
-        blocked: true,
-        blockedReason: 'why',
-        pending: true,
-        onSetLead,
-      }),
-    ).toEqual({
-      leadId: 'char_kael',
-      blocked: true,
-      blockedReason: 'why',
-      pending: true,
-      onSetLead,
-    })
   })
 })
 

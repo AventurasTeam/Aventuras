@@ -4,7 +4,7 @@ import type { RailData } from '@/components/reader/rail/use-rail-data'
 import type { RailPeek } from '@/lib/reader-rail'
 
 import { PeekContent } from './peek-content'
-import { peekFootHref, peekLeadControl, peekRegionHref } from './peek-model'
+import { peekFootHref, peekRegionHref } from './peek-model'
 import { usePeekView } from './use-peek-view'
 import { useSetLead } from './use-set-lead'
 
@@ -43,7 +43,7 @@ export function RailSheetPeek({
       model={model}
       entityContext={entityContext}
       entryIndex={entryIndex}
-      lead={peekLeadControl(data, { blocked, blockedReason, pending, onSetLead: setLead })}
+      lead={{ blocked, blockedReason, pending, onSetLead: setLead }}
       chrome={{ kind: 'back', onBack }}
       onOpenInPanel={() => onOpenInPanel(peekFootHref(data, peek))}
       onRegionPress={(tab) => {

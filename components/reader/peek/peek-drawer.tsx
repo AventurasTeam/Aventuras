@@ -10,7 +10,6 @@ import { PeekContent } from './peek-content'
 import {
   isLeadActionDisabled,
   peekFootHref,
-  peekLeadControl,
   peekLeadOf,
   peekNameOf,
   peekRegionHref,
@@ -48,7 +47,7 @@ export function PeekDrawer({
   const { pending, setLead } = useSetLead(storyId)
   const gone = peek != null && model == null
   const open = visible && model != null
-  const control = peekLeadControl(data, { blocked, blockedReason, pending, onSetLead: setLead })
+  const control = { blocked, blockedReason, pending, onSetLead: setLead }
   const leadAffordance = model == null ? undefined : peekLeadOf(model, control)
   const isLead = leadAffordance?.state === 'lead'
   const leadActionDisabled = isLeadActionDisabled(leadAffordance)

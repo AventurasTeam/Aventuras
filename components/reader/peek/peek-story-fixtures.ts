@@ -210,7 +210,6 @@ export const PEEK_ENTITY_CONTEXT: PeekEntityContext = {
 }
 
 export const PEEK_LEAD_CONTROL: PeekLeadControl = {
-  leadId: 'char_kael',
   blocked: false,
   blockedReason: undefined,
   pending: false,

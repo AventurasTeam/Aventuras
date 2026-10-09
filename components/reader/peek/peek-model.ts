@@ -92,21 +92,11 @@ export function peekNameOf(model: PeekModel): string {
 }
 
 export type PeekLeadControl = {
-  /** `RailData.entityListSignals.leadId`. */
-  leadId: string | null
   blocked: boolean
   blockedReason: string | undefined
   /** A `Set as lead` call is in flight. */
   pending: boolean
   onSetLead: (entityId: string) => void
-}
-
-/** The lead always comes from the rail data, never from the caller. */
-export function peekLeadControl(
-  data: RailData,
-  rest: Omit<PeekLeadControl, 'leadId'>,
-): PeekLeadControl {
-  return { leadId: data.entityListSignals.leadId, ...rest }
 }
 
 /** The foot link: the owning panel with the peeked row selected. */
@@ -142,7 +132,8 @@ export function peekLeadOf(model: PeekModel, control: PeekLeadControl): PeekLead
   return {
     state: 'candidate',
     onSetLead: () => control.onSetLead(row.id),
-    disabledReason: leadDisabledReason(row, control.leadId, control.blocked, control.blockedReason),
+    // No lead id: the resolved lead returned above, so this row isn't it.
+    disabledReason: leadDisabledReason(row, null, control.blocked, control.blockedReason),
     pending: control.pending,
   }
 }
