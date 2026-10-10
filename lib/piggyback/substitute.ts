@@ -51,6 +51,7 @@ function withResolvedParent(create: NewLocationEmission, idMap: IdBiMap): NewLoc
     : { ...create, parent: resolveParent(create.parent, idMap) }
 }
 
+/** Expects normalized creates (trimmed handles): the fallback runs `normalizeCreates` first. */
 function declaredHandles(block: ParsedStateBlock): ReadonlySet<string> {
   return new Set([...(block.newLocations ?? []), ...(block.newItems ?? [])].map((c) => c.handle))
 }

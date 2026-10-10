@@ -204,7 +204,7 @@ const FIELD_PARSERS: readonly FieldParser[] = [
 
 // Content stops at the first `<`, so a create the stream cut off can't swallow the tags after it.
 function createTagPattern(tag: string): RegExp {
-  return new RegExp(`<${tag}(\\s[^>]*?)?(?:/>|>([^<]*)</${tag}>)`, 'g')
+  return new RegExp(`<${tag}(\\s[^<>]*?)?(?:/>|>([^<]*)</${tag}>)`, 'g')
 }
 
 function openedTagCount(segment: string, tag: string): number {

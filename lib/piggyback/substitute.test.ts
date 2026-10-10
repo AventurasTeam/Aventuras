@@ -209,6 +209,7 @@ describe('substitutePiggybackIds with creates', () => {
           create('new:c', 'new:a'),
           create('new:d', '[new:a]'),
           create('new:e', 'l9'),
+          create('new:g', '[l9]'),
           create('new:f'),
         ],
       },
@@ -221,6 +222,7 @@ describe('substitutePiggybackIds with creates', () => {
       'new:a',
       'new:a',
       'l9',
+      '[l9]',
       undefined,
     ])
   })

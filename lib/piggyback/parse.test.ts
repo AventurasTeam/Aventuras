@@ -683,6 +683,30 @@ describe('creation tags', () => {
     expect(result.malformedCreates).toBe(1)
   })
 
+  it('drops a create missing its > instead of reading the next tag as its attributes', () => {
+    const result = parseStateBlock(`<state>
+<scene_entities>c1</scene_entities>
+<new_location handle="new:a" name="Saltmere"
+<new_location name="the Docks" parent="l1">a pier</new_location>
+<current_location>new:a</current_location>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(2)
+    expect(result.block).toEqual({ sceneEntities: ['c1'], currentLocation: 'new:a' })
+  })
+
+  it('does not count a longer tag that starts like a create as a cut-off create', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_items>
+    <new_item handle="new:k" name="key">iron</new_item>
+  </new_items>
+  <new_locations></new_locations>
+</state>`)
+    expect(result.malformedCreates).toBe(0)
+    expect(result.block.newItems).toEqual([{ handle: 'new:k', name: 'key', description: 'iron' }])
+  })
+
   it('reads a block of creates alone as a report, not the empty-block failure', () => {
     const result = parseStateBlock(
       '<state><new_item handle="new:key" name="key">iron</new_item></state>',
