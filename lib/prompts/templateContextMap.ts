@@ -230,7 +230,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   classifierContext: [
     {
       name: 'turns',
-      type: 'WindowTurn[]',
+      type: '{ handle, content, scene, location }[]',
       category: 'Story',
       description:
         'Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.',

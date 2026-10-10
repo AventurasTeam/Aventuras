@@ -1,4 +1,4 @@
-import type { StoryEntry } from '@/lib/db'
+import { inheritedEntryMetadata, type StoryEntry } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
 
 export type WindowTurn = {
@@ -47,15 +47,18 @@ export function buildClassifierWindow(args: {
   // if they were narrated.
   const turns: WindowTurn[] = capped
     .filter((e) => e.kind !== 'system')
-    .map((e, i) => ({
-      handle: `t${i + 1}`,
-      entryId: e.id,
-      position: e.position,
-      content: promptProse(e),
+    .map((e, i) => {
       // User actions too: each carries the scene submitTurn inherited onto it.
-      sceneEntities: e.metadata?.sceneEntities ?? [],
-      currentLocationId: e.metadata?.currentLocationId ?? null,
-    }))
+      const { sceneEntities, currentLocationId } = inheritedEntryMetadata(e.metadata)
+      return {
+        handle: `t${i + 1}`,
+        entryId: e.id,
+        position: e.position,
+        content: promptProse(e),
+        sceneEntities,
+        currentLocationId,
+      }
+    })
   const coversThrough = capped.at(-1)?.position ?? floor
   const byHandle = new Map(turns.map((t) => [t.handle, t]))
   const head = turns.at(-1) ?? null

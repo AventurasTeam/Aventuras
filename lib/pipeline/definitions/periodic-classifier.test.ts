@@ -99,6 +99,7 @@ async function ctxWith(opts: {
   entities?: Entity[]
   relationships?: CharacterRelationship[]
   seedStatus?: Partial<ClassifierStatus>
+  entryMetadata?: StoryEntry['metadata']
   onWatermark?: (n: number) => void
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
@@ -142,7 +143,7 @@ async function ctxWith(opts: {
     await db.insert(storyEntries).values({
       ...e,
       chapterId: null,
-      metadata: {},
+      metadata: opts.entryMetadata ?? {},
       createdAt: 1,
     } as never)
 
@@ -318,6 +319,35 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).toContain('Kael sees')
     expect(prompt).toContain('as: ally')
     expect(prompt).not.toContain('rival')
+  })
+
+  // Fails if the phase stops filtering a saved scene to the branch's live entities:
+  // a deleted id would reach the prompt raw or take a placeholder that names nothing.
+  it("shows each turn's saved scene, leaving out ids the branch no longer has", async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+    } as unknown as Entity
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      entities: [kael],
+      entryMetadata: {
+        sceneEntities: [CHAR_KAEL, 'char_99999999-9999-9999-9999-999999999999'],
+        currentLocationId: 'loc_99999999-9999-9999-9999-999999999999',
+      },
+    })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    expect(prompt).toContain('[t1] scene: [c1]\nturn 1')
+    expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {

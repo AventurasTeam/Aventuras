@@ -138,8 +138,10 @@ describe('periodic classifier template', () => {
     expect(rendered).toContain('- [c2] Aria (character, staged) — His sister.\n')
   })
 
-  it('tells the model that prose naming an entity in its turn scene refers to it', () => {
+  it('tells the model that prose naming an entity in its turn scene or location refers to it', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
-    expect(rendered).toMatch(/Prose naming an entity in its turn's scene refers to that entity/)
+    expect(rendered).toMatch(
+      /Prose naming an entity in its turn's scene or at its location refers to that entity/,
+    )
   })
 })
