@@ -21,9 +21,17 @@ the insert itself. Three kinds of row:
   shadows (a copy-on-write override shadows its parent). `after` is kept for manual changes only.
 - **header** — one per narration classified while tracking is on, even when nothing changed, so
   "recorded, nothing changed" is not mistaken for "not recorded". It carries the clock and the
-  current location from before the classification, and `continuous`.
-- **break** — no reconstruction crosses it. Batch chapterization writes one before it classifies,
-  since it changes the world without per-entry records.
+  current location from before the classification, and `continuous`. An entry a story starts
+  from gets an empty, continuous one while tracking is on: a wizard's opening, and the last entry
+  of an imported SillyTavern chat.
+- **break** — no reconstruction crosses it. Only an export writes one, into the file, where it
+  cannot vouch for tracking since a branch's last record.
+
+A SillyTavern chat import replaces the whole main branch, its records included, so nothing tracked
+comes before it. The world-state choice and batch chapterization that follow it change the world
+without per-entry records, but before the next entry exists, so their changes belong to the last
+imported entry's state and a rebuild there is exact. The imported entries before it have no
+headers and stay refused.
 
 Every writer is covered: the classifier, lore management (automatic and Tidy lorebook), the
 Duplicates merge, lorebook file imports, and manual add, edit and delete in the world and lorebook
@@ -60,7 +68,8 @@ entry, regenerating a narration, a retry restore — keeps them.
 A header's `continuous` says tracking ran without interruption since the previous header on the
 same branch line: the branch's own entries, then its parent's up to the fork. It needs only
 `experimentalFeatures.trackingEnabledSince`, set when the feature is turned on: a previous header
-written before it cannot vouch. A sequence of continuous headers is a tracked run; no table stores
+written before it cannot vouch. With no previous header, the story's creation stands in for one,
+so the first narration of a story created while tracking was on starts a run. A sequence of continuous headers is a tracked run; no table stores
 runs, so they travel with the story.
 
 Moving a story between devices cannot carry the other device's toggles, so an export appends a
@@ -75,7 +84,20 @@ unrecorded wherever tracking could have been off: before a non-continuous header
 thing written while tracking was on (any record or snapshot proves that), after a break, and after
 the last record if tracking is off now or was turned on again since. A rebuild is refused when such
 a stretch falls between P and its anchor, when a narration in between has no header, or when the
-history in between is classifier-only.
+history in between is classifier-only. It is also refused when P itself has no header: an entry
+played untracked is the plainest sign that its state was never recorded.
+
+A refusal carries a `RunDiagnosis` the form lists under the warning: whether P has a header and
+when it was written, the nearest full state after P (or the one that passed), and the first thing
+breaking the tracked sequence between them — an unrecorded or classifier-only narration, a
+non-continuous header or a break and its entry, a re-enable after the last record, or a change
+written after the anchor.
+
+A refusal can be overruled under the form's Advanced fold. `resolveOverride` then builds the state
+from the nearest full state after P, undoing only what was recorded, or takes the nearest full
+state after or before P unchanged. Either way changes made in the gaps are wrong in it, so the form
+prefills the name with "Approximate — " for the reader to keep or clear; nothing else marks it.
+Such a checkpoint is never an anchor, like any other made after its entry had a successor.
 
 Closing snapshots make an interrupted run usable afterwards: turning the feature off snapshots every
 branch written to since it was turned on, before the setting changes, since lightweight branches

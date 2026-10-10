@@ -859,8 +859,8 @@ class DatabaseService {
 
   /**
    * Delete all main-branch entries for a story (branch_id IS NULL).
-   * Also clears related world_state_snapshots so stale snapshots don't
-   * reference non-existent entry positions after the import, and clears
+   * Also clears related world_state_snapshots and world_state_changes, which describe a story
+   * that no longer exists, and clears
    * main-branch chapters so none are left pointing at deleted entries
    * (chapters have no ON DELETE behavior tying them to story_entries).
    * Used by the SillyTavern chat import to overwrite story content.
@@ -874,6 +874,10 @@ class DatabaseService {
       ...deleteInStatements('checkpoints', 'id', checkpointIds),
       {
         sql: 'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
+      {
+        sql: 'DELETE FROM world_state_changes WHERE story_id = ? AND branch_id IS NULL',
         params: [storyId],
       },
       {

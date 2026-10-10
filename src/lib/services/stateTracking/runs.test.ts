@@ -9,6 +9,7 @@ import {
   lastCompletedEntry,
   lastHeaderOnLine,
   recordsForExport,
+  resolveOverride,
   resolveRun,
   type AnchorCandidate,
   type LineEntry,
@@ -89,13 +90,25 @@ function query(overrides: Partial<RunQuery>): RunQuery {
 
 describe('isContinuous', () => {
   it('needs a previous header written after tracking was last turned on', () => {
-    expect(isContinuous(header(1), 5, false)).toBe(true)
-    expect(isContinuous(header(1), 50, false)).toBe(false)
-    expect(isContinuous(null, 0, false)).toBe(false)
-    expect(isContinuous(header(1), 0, true)).toBe(false)
-    expect(isContinuous(header(1, true, 'classifier'), 0, false)).toBe(false)
+    expect(isContinuous(header(1), 5, false, 0)).toBe(true)
+    expect(isContinuous(header(1), 50, false, 0)).toBe(false)
+    expect(isContinuous(header(1), 0, true, 0)).toBe(false)
+    expect(isContinuous(header(1, true, 'classifier'), 0, false, 0)).toBe(false)
+  })
+
+  it('lets the first header vouch for a story created while tracking was on', () => {
+    expect(isContinuous(null, 5, false, 8)).toBe(true)
+    expect(isContinuous(null, 5, false, 3)).toBe(false)
+    expect(isContinuous(null, 5, true, 8)).toBe(false)
+    expect(isContinuous(null, null, false, 8)).toBe(false)
   })
 })
+
+/** The refusal reason and the gap it names, for the live anchor at entry 6. */
+function refusal(q: RunQuery) {
+  const result = resolveRun(q)
+  return result.ok ? null : { reason: result.reason, gap: result.diagnosis?.gap ?? null }
+}
 
 describe('resolveRun', () => {
   it('rebuilds from the live state across one continuous run', () => {
@@ -109,17 +122,47 @@ describe('resolveRun', () => {
 
   it('refuses a narration that was never recorded', () => {
     const records = [1, 2, 3, 5, 6].map((n) => header(n, n > 1))
-    expect(resolveRun(query({ records }))).toEqual({ ok: false, reason: 'untracked' })
+    expect(refusal(query({ records }))).toEqual({
+      reason: 'untracked',
+      gap: { cause: 'untracked', entryId: 'e4' },
+    })
   })
 
   it('refuses classifier-only history', () => {
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1, n === 5 ? 'classifier' : 'full'))
-    expect(resolveRun(query({ records }))).toEqual({ ok: false, reason: 'classifierOnly' })
+    expect(refusal(query({ records }))).toEqual({
+      reason: 'classifierOnly',
+      gap: { cause: 'classifierOnly', entryId: 'e5' },
+    })
   })
 
   it('refuses when tracking was off in between', () => {
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 5))
-    expect(resolveRun(query({ records }))).toEqual({ ok: false, reason: 'interrupted' })
+    expect(refusal(query({ records }))).toEqual({
+      reason: 'interrupted',
+      gap: { cause: 'header', entryId: 'e5', at: 51, since: 41 },
+    })
+  })
+
+  it('refuses an entry played untracked, and still names the full state after it', () => {
+    const records = [1, 2, 4, 5, 6].map((n) => header(n, n > 1))
+    const result = resolveRun(query({ records }))
+    expect(result).toEqual({
+      ok: false,
+      reason: 'targetUntracked',
+      diagnosis: { targetRecordedAt: null, anchor: live, gap: null },
+    })
+  })
+
+  it('diagnoses the nearest full state when none passes', () => {
+    const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
+    const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 4))
+    const result = resolveRun(query({ records, snapshotTimes: [52], candidates: [live, snap] }))
+    expect(!result.ok && result.diagnosis).toEqual({
+      targetRecordedAt: 31,
+      anchor: snap,
+      gap: { cause: 'header', entryId: 'e4', at: 41, since: 31 },
+    })
   })
 
   it('accepts an interruption before the entry after the target was created', () => {
@@ -129,13 +172,23 @@ describe('resolveRun', () => {
 
   it('refuses across batch chapterization', () => {
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), brk(4, 45)]
-    expect(resolveRun(query({ records }))).toEqual({ ok: false, reason: 'interrupted' })
+    expect(refusal(query({ records }))).toEqual({
+      reason: 'interrupted',
+      gap: { cause: 'break', entryId: 'e4', at: 45 },
+    })
   })
 
   it('refuses from the live state while tracking is off', () => {
-    expect(resolveRun(query({ tracking: { on: false, enabledSince: 0 } }))).toEqual({
-      ok: false,
+    expect(refusal(query({ tracking: { on: false, enabledSince: 0 } }))).toEqual({
       reason: 'interrupted',
+      gap: { cause: 'trackingOff' },
+    })
+  })
+
+  it('names a re-enable after the last record', () => {
+    expect(refusal(query({ tracking: { on: true, enabledSince: 500 } }))).toEqual({
+      reason: 'interrupted',
+      gap: { cause: 'enabledAfter', lastProofAt: 61, enabledSince: 500 },
     })
   })
 
@@ -173,6 +226,40 @@ describe('resolveRun', () => {
   })
 })
 
+describe('resolveOverride', () => {
+  // Tracking was off between entries 4 and 5, so resolveRun refuses entry 3.
+  const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 5))
+  const before: AnchorCandidate = { kind: 'checkpoint', id: 'cp', position: 2, takenAt: 25 }
+  const after: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
+  const gapped = query({ records, snapshotTimes: [52], candidates: [before, after, live] })
+
+  it('undoes what was recorded from the nearest full state after the entry', () => {
+    expect(resolveRun(gapped).ok).toBe(false)
+    const result = resolveOverride(gapped, 'undoRecorded')
+    expect(result.ok && result.anchor).toBe(after)
+    expect(result.ok && result.records.map((r) => r.entryId)).toEqual(['e4', 'e5'])
+  })
+
+  it('takes the nearest full state after the entry unchanged', () => {
+    expect(resolveOverride(gapped, 'nextAsIs')).toEqual({ ok: true, anchor: after, records: [] })
+  })
+
+  it('takes the nearest full state before the entry unchanged', () => {
+    expect(resolveOverride(gapped, 'previousAsIs')).toEqual({
+      ok: true,
+      anchor: before,
+      records: [],
+    })
+  })
+
+  it('has nothing to take when no full state precedes the entry', () => {
+    expect(resolveOverride(query({ records }), 'previousAsIs')).toEqual({
+      ok: false,
+      reason: 'noAnchor',
+    })
+  })
+})
+
 describe('lastHeaderOnLine', () => {
   const positions = new Map(line.map((e) => [e.id, e.position]))
 
@@ -192,8 +279,8 @@ describe('lastHeaderOnLine', () => {
   it('makes the first entry after re-enabling tracking start a new run', () => {
     // Header 1 written at 11; tracking turned off, an edit, then on again at 15.
     const { header: previous, breakSince } = lastHeaderOnLine([header(1)], positions, 2)
-    expect(isContinuous(previous, 15, breakSince)).toBe(false)
-    expect(isContinuous(previous, 5, breakSince)).toBe(true)
+    expect(isContinuous(previous, 15, breakSince, 0)).toBe(false)
+    expect(isContinuous(previous, 5, breakSince, 0)).toBe(true)
   })
 })
 

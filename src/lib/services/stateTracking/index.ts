@@ -13,8 +13,12 @@ export {
   lastCompletedEntry,
   lastHeaderOnLine,
   recordsForExport,
+  resolveOverride,
   resolveRun,
   type AnchorCandidate,
+  type GapOverride,
+  type RunDiagnosis,
+  type RunGap,
   type LineEntry,
   type RunQuery,
   type RunRefusal,
@@ -22,4 +26,4 @@ export {
 } from './runs'
 export { RECORD_COLUMNS, recordToRow, rowToRecord } from './rows'
 export { changeRecord, changedFields, diffStates, type RecordContext } from './record'
-export { describeChange, refusalMessage } from './describe'
+export { describeChange, gapMessage, refusalMessage } from './describe'

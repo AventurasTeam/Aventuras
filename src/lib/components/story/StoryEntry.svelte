@@ -19,8 +19,9 @@
     TimeTracker,
     WorldStateChangeRecord,
   } from '#lib/types/index.ts'
-  import { describeChange } from '#lib/services/stateTracking/index.ts'
-  import { story } from '#lib/stores/story.svelte.ts'
+  import { describeChange, gapMessage } from '#lib/services/stateTracking/index.ts'
+  import { story, type AnchorLabel, type PastCheckpointPreview } from '#lib/stores/story.svelte.ts'
+  import type { GapOverride } from '#lib/services/stateTracking/index.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import {
@@ -93,6 +94,7 @@
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '#lib/utils/inlineImageParser.ts'
@@ -443,20 +445,58 @@
   )
 
   // For a past entry: whether it can be rebuilt, and the manual changes that would undo.
-  let pastCheckpoint = $state<{
-    refusal: string | null
-    manual: WorldStateChangeRecord[]
-    unkeepable: WorldStateChangeRecord[]
-  } | null>(null)
+  let pastCheckpoint = $state<PastCheckpointPreview | null>(null)
   let keepManualInCheckpoint = $state(false)
   let savingCheckpoint = $state(false)
+  // A refused past checkpoint can still be built from a full state the reader picks.
+  let advancedOpen = $state(false)
+  let overruleGaps = $state(false)
+  let gapOverride = $state<GapOverride>('undoRecorded')
 
   async function openCheckpoint() {
     isCreatingCheckpoint = true
     pastCheckpoint = null
     keepManualInCheckpoint = false
-    if (!isLatestEntry) pastCheckpoint = await story.previewCheckpointAt(entry.id)
+    advancedOpen = false
+    overruleGaps = false
+    if (!isLatestEntry) {
+      pastCheckpoint = await story.previewCheckpointAt(entry.id)
+      gapOverride = pastCheckpoint.overrides?.next ? 'undoRecorded' : 'previousAsIs'
+    }
   }
+
+  function setOverruleGaps(checked: boolean) {
+    overruleGaps = checked
+    if (checked && !checkpointName.trim()) checkpointName = 'Approximate — '
+  }
+
+  const formatTime = (ms: number) => new Date(ms).toLocaleString()
+
+  function entryNumberOf(id: string): number | null {
+    const at = story.entries.find((e) => e.id === id)
+    return at ? entryNumber(at) : null
+  }
+
+  function anchorText(label: AnchorLabel): string {
+    if (label.kind === 'live') return 'the current state'
+    const at = story.entries.find((e) => e.position === label.position)
+    const number = at ? entryNumber(at) : label.position + 1
+    return label.kind === 'checkpoint'
+      ? `Checkpoint “${label.name ?? ''}” at entry ${number}`
+      : `Snapshot at entry ${number}`
+  }
+
+  const overriding = $derived(!!pastCheckpoint?.refusal && overruleGaps)
+  const overrideAnchor = $derived(
+    gapOverride === 'previousAsIs'
+      ? (pastCheckpoint?.overrides?.previous ?? null)
+      : (pastCheckpoint?.overrides?.next ?? null),
+  )
+  const showManualInCheckpoint = $derived(
+    !!pastCheckpoint &&
+      pastCheckpoint.manual.length > 0 &&
+      (!pastCheckpoint.refusal || (overriding && gapOverride === 'undoRecorded')),
+  )
 
   $effect(() => {
     if (ui.checkpointFormEntryId !== entry.id) return
@@ -466,7 +506,9 @@
   })
 
   const checkpointBlocked = $derived(
-    !isLatestEntry && (pastCheckpoint === null || pastCheckpoint.refusal !== null),
+    !isLatestEntry &&
+      (pastCheckpoint === null ||
+        (pastCheckpoint.refusal !== null && !(overriding && overrideAnchor))),
   )
 
   // Is this the last user_action in the story? (used for the regeneration hint)
@@ -492,6 +534,7 @@
       else {
         await story.createCheckpointAt(entry.id, checkpointName.trim(), {
           keepManual: keepManualInCheckpoint,
+          override: overriding ? gapOverride : undefined,
         })
       }
       isCreatingCheckpoint = false
@@ -2273,9 +2316,124 @@
           Checkpoints save the story state and allow branching.
         </p>
       {:else if pastCheckpoint === null}
-        <p class="text-muted-foreground text-xs italic">Checking the story after this entry…</p>
+        <p class="text-muted-foreground text-xs italic">
+          Checking the world state changes recorded after this entry…
+        </p>
       {:else if pastCheckpoint.refusal}
-        <p class="text-xs text-amber-500">{pastCheckpoint.refusal}</p>
+        <!-- The diagnosis below explains a refusal; the warning only heads it. -->
+        <p class="text-xs text-amber-500">
+          {pastCheckpoint.diagnosis
+            ? 'The world state at this entry cannot be rebuilt:'
+            : pastCheckpoint.refusal}
+        </p>
+        {#if pastCheckpoint.diagnosis}
+          {@const diagnosis = pastCheckpoint.diagnosis}
+          <ul class="text-muted-foreground space-y-1 text-xs">
+            {#snippet finding(ok: boolean, text: string)}
+              <li class="flex items-start gap-1.5">
+                {#if ok}
+                  <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+                {:else}
+                  <X class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+                {/if}
+                <span>{text}</span>
+              </li>
+            {/snippet}
+            {@render finding(
+              diagnosis.targetRecordedAt !== null,
+              diagnosis.targetRecordedAt !== null
+                ? `World state changes were recorded for entry ${entryNumber(entry)} on ${formatTime(diagnosis.targetRecordedAt)}.`
+                : `World state changes were not recorded for entry ${entryNumber(entry)}.`,
+            )}
+            {@render finding(
+              diagnosis.anchor !== null,
+              diagnosis.anchor
+                ? `Nearest full world state after it: ${anchorText(diagnosis.anchor)}.`
+                : 'No full world state was saved after it.',
+            )}
+            {#if diagnosis.anchor}
+              {@render finding(
+                diagnosis.gap === null,
+                diagnosis.gap
+                  ? gapMessage(diagnosis.gap, entryNumberOf, formatTime)
+                  : 'World state changes were recorded for every entry in between.',
+              )}
+            {/if}
+          </ul>
+        {/if}
+        {#if pastCheckpoint.overrides}
+          {@const overrides = pastCheckpoint.overrides}
+          <div class="text-muted-foreground text-xs">
+            <button
+              type="button"
+              class="hover:text-foreground flex items-center gap-1 font-medium"
+              onclick={() => (advancedOpen = !advancedOpen)}
+              aria-expanded={advancedOpen}
+              aria-controls="past-checkpoint-advanced"
+            >
+              {#if advancedOpen}
+                <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+              {:else}
+                <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+              {/if}
+              Advanced
+            </button>
+            {#if advancedOpen}
+              <div id="past-checkpoint-advanced" class="mt-2 space-y-2 pl-[1.125rem]">
+                <label class="flex items-center gap-2">
+                  <Checkbox
+                    checked={overruleGaps}
+                    onCheckedChange={(checked) => setOverruleGaps(checked === true)}
+                    disabled={savingCheckpoint}
+                  />
+                  Create it anyway, from:
+                </label>
+                {#snippet option(
+                  value: GapOverride,
+                  title: string,
+                  anchor: AnchorLabel | null,
+                  note?: string,
+                )}
+                  <div class="flex items-start gap-2">
+                    <RadioGroupItem
+                      {value}
+                      id={`gap-${value}-${entry.id}`}
+                      disabled={!anchor}
+                      class="mt-0.5"
+                    />
+                    <label for={`gap-${value}-${entry.id}`} class:opacity-50={!anchor}>
+                      <span class="text-foreground">{title}</span>
+                      <span class="block">
+                        {anchor ? anchorText(anchor) : 'There is none.'}{anchor && note
+                          ? ` ${note}`
+                          : ''}
+                      </span>
+                    </label>
+                  </div>
+                {/snippet}
+                <RadioGroup
+                  value={gapOverride}
+                  onValueChange={(v) => (gapOverride = v as GapOverride)}
+                  disabled={!overruleGaps || savingCheckpoint}
+                  class="gap-2 pl-6"
+                >
+                  {@render option(
+                    'undoRecorded',
+                    'The next full state, undoing what was recorded',
+                    overrides.next,
+                    '— changes that were not recorded stay in.',
+                  )}
+                  {@render option('nextAsIs', 'The next full state as it is', overrides.next)}
+                  {@render option(
+                    'previousAsIs',
+                    'The previous full state as it is',
+                    overrides.previous,
+                  )}
+                </RadioGroup>
+              </div>
+            {/if}
+          </div>
+        {/if}
       {:else}
         <div class="text-muted-foreground space-y-3 text-xs">
           <p>Checkpoints save the story state and allow branching.</p>
@@ -2303,26 +2461,26 @@
             {/if}
           </div>
         </div>
-        {#if pastCheckpoint.manual.length > 0}
-          {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
-          <p class="text-muted-foreground text-xs">
-            Some changes were made by a user after this entry:
-          </p>
-          <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
-            {#each pastCheckpoint.manual as change (change.id)}
-              <li>
-                {describeChange(change, (type, id) => story.trackedName(type, id))}
-                {#if unkeepable.has(change.id)}
-                  <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-          <label class="flex items-center gap-2 text-xs">
-            <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
-            Include them in the checkpoint
-          </label>
-        {/if}
+      {/if}
+      {#if pastCheckpoint && showManualInCheckpoint}
+        {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
+        <p class="text-muted-foreground text-xs">
+          Some changes were made by a user after this entry:
+        </p>
+        <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
+          {#each pastCheckpoint.manual as change (change.id)}
+            <li>
+              {describeChange(change, (type, id) => story.trackedName(type, id))}
+              {#if unkeepable.has(change.id)}
+                <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        <label class="flex items-center gap-2 text-xs">
+          <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
+          Include them in the checkpoint
+        </label>
       {/if}
     </div>
     <ResponsiveModal.Footer class="border-t px-6 py-4">

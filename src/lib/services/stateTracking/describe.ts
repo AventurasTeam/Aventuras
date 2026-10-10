@@ -1,5 +1,5 @@
 import type { TrackedEntityType, WorldStateChangeRecord } from '#lib/types/index.ts'
-import type { RunRefusal } from './runs'
+import type { RunGap, RunRefusal } from './runs'
 
 const NOUN: Record<TrackedEntityType, string> = {
   character: 'character',
@@ -41,13 +41,52 @@ export function describeChange(
 /** Why a checkpoint cannot be created at a past entry, for the reader. */
 export function refusalMessage(reason: RunRefusal): string {
   switch (reason) {
+    case 'targetUntracked':
+      return 'World state changes were not recorded for this entry, so its state is unknown.'
     case 'untracked':
-      return 'Part of the story after this entry was played without State Tracking, so its state cannot be rebuilt.'
+      return 'World state changes were not recorded for some entries after this one, so its state cannot be rebuilt.'
     case 'interrupted':
-      return 'State Tracking was interrupted after this entry, so changes may have been made without a record.'
+      return 'World state recording was interrupted after this entry, so some changes may be missing.'
     case 'classifierOnly':
-      return 'The story after this entry was tracked before lorebook and manual changes were recorded, so the lorebook at this entry cannot be rebuilt.'
+      return 'World state changes after this entry were recorded without lorebook and manual changes, so the lorebook at this entry cannot be rebuilt.'
     case 'noAnchor':
-      return 'There is no saved state after this entry to rebuild it from.'
+      return 'No full world state was saved after this entry to rebuild it from.'
+  }
+}
+
+/** What breaks the tracked sequence, for the reader. */
+export function gapMessage(
+  gap: RunGap,
+  entryNumberOf: (entryId: string) => number | null,
+  time: (ms: number) => string,
+): string {
+  const at = (entryId: string) => {
+    const n = entryNumberOf(entryId)
+    return n === null ? 'an entry not on this branch' : `entry ${n}`
+  }
+  switch (gap.cause) {
+    case 'untracked':
+      return `World state changes were not recorded for ${at(gap.entryId)}.`
+    case 'classifierOnly':
+      return `World state changes for ${at(gap.entryId)} were recorded without lorebook and manual changes, so the lorebook cannot be rebuilt.`
+    case 'header':
+      return gap.since === null
+        ? `World state changes were not recorded at some point before ${time(gap.at)}, when those of ${at(gap.entryId)} were.`
+        : `World state changes were not recorded for a while between ${time(gap.since)} and ${time(gap.at)}, before those of ${at(gap.entryId)}.`
+    case 'break':
+      return `World state changes may not have been recorded after ${at(gap.entryId)}: the story was exported on ${time(gap.at)} from a device that could not vouch for them.`
+    case 'trackingOff':
+      return 'World state changes are not being recorded: State Tracking is off.'
+    case 'enabledAfter': {
+      const { lastProofAt, enabledSince } = gap
+      if (enabledSince === null) {
+        return 'World state changes were not recorded at some point: State Tracking has no recorded start time.'
+      }
+      return lastProofAt === null
+        ? `World state changes were not recorded at some point before ${time(enabledSince)}, when State Tracking was last turned on.`
+        : `World state changes were not recorded for a while between ${time(lastProofAt)} and ${time(enabledSince)}, while State Tracking was off.`
+    }
+    case 'lateChange':
+      return `A world state change for ${at(gap.entryId)} was recorded on ${time(gap.at)}, after the full state it would be rebuilt from was saved on ${time(gap.anchorTakenAt)}.`
   }
 }

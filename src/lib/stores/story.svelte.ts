@@ -21,7 +21,6 @@ import type {
   ChangeOp,
   ChangeOrigin,
   TrackedEntityType,
-  WorldStateBreakRecord,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
   WorldStateRecord,
@@ -39,9 +38,15 @@ import {
   lastHeaderOnLine,
   planReversal,
   refusalMessage,
+  resolveOverride,
   resolveRun,
   rowsOf,
   type AnchorCandidate,
+  type GapOverride,
+  type RunQuery,
+  type RunDiagnosis,
+  type RunGap,
+  type RunRefusal,
   type RecordContext,
   type ReversalPlan,
   type TrackedState,
@@ -169,6 +174,38 @@ function mergeRuntimeVars(
 export interface RecordOptions {
   origin?: ChangeOrigin
   entryId?: string
+}
+
+class RefusalError extends Error {
+  constructor(
+    readonly reason: RunRefusal,
+    readonly diagnosis: RunDiagnosis | null = null,
+  ) {
+    super(refusalMessage(reason))
+  }
+}
+
+/** A full state a past checkpoint can be built from, for the reader. */
+export interface AnchorLabel {
+  kind: AnchorCandidate['kind']
+  name: string | null
+  position: number
+}
+
+export interface PastCheckpointPreview {
+  refusal: string | null
+  reason: RunRefusal | null
+  /** On a refusal, what the rebuild had and lacked. */
+  diagnosis: {
+    targetRecordedAt: number | null
+    anchor: AnchorLabel | null
+    gap: RunGap | null
+  } | null
+  /** Manual changes the rebuild would undo; on a refusal, those of the `undoRecorded` override. */
+  manual: WorldStateChangeRecord[]
+  unkeepable: WorldStateChangeRecord[]
+  /** On a refusal, the full states the reader may build it from anyway. */
+  overrides: { next: AnchorLabel | null; previous: AnchorLabel | null } | null
 }
 
 class StoryStore {
@@ -910,6 +947,19 @@ class StoryStore {
 
     // Reload entries into the store
     await this.reloadEntriesForCurrentBranch()
+
+    // The chat is the story's new start. What follows before the next turn — the world-state
+    // choice, batch chapterization — belongs to the last imported entry's state.
+    const last = this.entries[this.entries.length - 1]
+    if (last && settings.experimentalFeatures.stateTracking) {
+      const header = this.startHeader(
+        storyId,
+        last.id,
+        this.currentStory.timeTracker ?? null,
+        this.locations.find((l) => l.current)?.id ?? null,
+      )
+      await database.transaction([database.worldStateRecordStatement(header)])
+    }
   }
 
   /**
@@ -2099,19 +2149,29 @@ class StoryStore {
   }
 
   /** Marks the latest entry as a point no reconstruction crosses. */
-  private async recordBreak(): Promise<void> {
-    const ctx = this.recordContext()
-    if (!ctx) return
-    const brk: WorldStateBreakRecord = {
+  /**
+   * The header of an entry the story starts from — a wizard's opening, or the last entry of an
+   * imported chat. It has nothing to undo, and nothing tracked precedes it to interrupt.
+   */
+  private startHeader(
+    storyId: string,
+    entryId: string,
+    clockBefore: TimeTracker | null,
+    locationBefore: string | null,
+  ): WorldStateHeaderRecord {
+    return {
       id: crypto.randomUUID(),
-      storyId: ctx.storyId,
-      branchId: ctx.branchId,
-      entryId: ctx.entryId,
+      storyId,
+      branchId: null,
+      entryId,
       seq: 0,
       createdAt: Date.now(),
-      kind: 'break',
+      kind: 'header',
+      continuous: true,
+      clockBefore,
+      locationBefore,
+      coverage: 'full',
     }
-    await this.commit([], [brk])
   }
 
   /** The current name of a tracked row, for showing a change to the reader. */
@@ -3626,6 +3686,7 @@ class StoryStore {
             previous,
             settings.experimentalFeatures.trackingEnabledSince,
             breakSince,
+            this.currentStory.createdAt,
           ),
           clockBefore: stateBefore.timeTracker,
           locationBefore,
@@ -4112,9 +4173,6 @@ class StoryStore {
     this.chapterizationCancelRequested = false
     this.chapterizationProgress = { current: 0, total: 0 }
 
-    // The batch classifies without per-entry records, so no tracked run may cross it.
-    if (options.includeClassification) await this.recordBreak()
-
     try {
       const service = new ChapterBatchService({
         buildAndSaveChapter: this.buildAndSaveChapter.bind(this),
@@ -4278,7 +4336,8 @@ class StoryStore {
   private async rebuildPastState(
     entryId: string,
     keepManual: boolean,
-  ): Promise<{ entry: StoryEntry; plan: ReversalPlan }> {
+    override?: GapOverride,
+  ): Promise<{ entry: StoryEntry; plan: ReversalPlan; anchor: AnchorCandidate }> {
     if (!this.currentStory) throw new Error('No story loaded')
     if (!settings.experimentalFeatures.stateTracking) {
       throw new Error('A checkpoint at a past entry needs State Tracking')
@@ -4330,7 +4389,7 @@ class StoryStore {
         : []),
     ]
 
-    const run = resolveRun({
+    const query: RunQuery = {
       line: this.entries,
       records,
       snapshotTimes: snapshots.map((s) => s.createdAt),
@@ -4340,8 +4399,9 @@ class StoryStore {
         on: settings.experimentalFeatures.stateTracking,
         enabledSince: settings.experimentalFeatures.trackingEnabledSince,
       },
-    })
-    if (!run.ok) throw new Error(refusalMessage(run.reason))
+    }
+    const run = override ? resolveOverride(query, override) : resolveRun(query)
+    if (!run.ok) throw new RefusalError(run.reason, run.diagnosis)
 
     const state = await this.anchorState(run.anchor)
     const plan = planReversal({
@@ -4350,14 +4410,14 @@ class StoryStore {
       entryPositions: positions,
       keepManual,
     })
-    return { entry, plan }
+    return { entry, plan, anchor: run.anchor }
   }
 
   private async anchorState(anchor: AnchorCandidate): Promise<TrackedState> {
     if (anchor.kind === 'live') return this.trackedState()
     if (anchor.kind === 'checkpoint') {
       const cp = this.checkpoints.find((c) => c.id === anchor.id)
-      if (!cp?.lorebookEntriesSnapshot) throw new Error(refusalMessage('noAnchor'))
+      if (!cp?.lorebookEntriesSnapshot) throw new RefusalError('noAnchor')
       return {
         characters: cp.charactersSnapshot,
         locations: cp.locationsSnapshot,
@@ -4368,7 +4428,7 @@ class StoryStore {
       }
     }
     const snapshot = anchor.id ? await database.getWorldStateSnapshot(anchor.id) : null
-    if (!snapshot?.lorebookEntriesSnapshot) throw new Error(refusalMessage('noAnchor'))
+    if (!snapshot?.lorebookEntriesSnapshot) throw new RefusalError('noAnchor')
     return {
       characters: snapshot.charactersSnapshot,
       locations: snapshot.locationsSnapshot,
@@ -4383,24 +4443,63 @@ class StoryStore {
    * Whether a checkpoint can be created at a past entry, and which manual changes building it
    * would undo. `refusal` is the reason it cannot, for the reader.
    */
-  async previewCheckpointAt(entryId: string): Promise<{
-    refusal: string | null
-    manual: WorldStateChangeRecord[]
-    unkeepable: WorldStateChangeRecord[]
-  }> {
+  async previewCheckpointAt(entryId: string): Promise<PastCheckpointPreview> {
     try {
       const { plan } = await this.rebuildPastState(entryId, true)
-      return { refusal: null, manual: plan.manual, unkeepable: plan.unkeepable }
+      return {
+        refusal: null,
+        reason: null,
+        diagnosis: null,
+        manual: plan.manual,
+        unkeepable: plan.unkeepable,
+        overrides: null,
+      }
     } catch (error) {
-      return { refusal: errMessage(error), manual: [], unkeepable: [] }
+      const refusal = errMessage(error)
+      const reason = error instanceof RefusalError ? error.reason : null
+      const found = error instanceof RefusalError ? error.diagnosis : null
+      const diagnosis = found && {
+        targetRecordedAt: found.targetRecordedAt,
+        anchor: found.anchor && this.anchorLabel(found.anchor),
+        gap: found.gap,
+      }
+      const attempt = (override: GapOverride) =>
+        this.rebuildPastState(entryId, true, override).catch(() => null)
+      const [undo, next, previous] = await Promise.all([
+        attempt('undoRecorded'),
+        attempt('nextAsIs'),
+        attempt('previousAsIs'),
+      ])
+      if (!next && !previous) {
+        return { refusal, reason, diagnosis, manual: [], unkeepable: [], overrides: null }
+      }
+      return {
+        refusal,
+        reason,
+        diagnosis,
+        manual: undo?.plan.manual ?? [],
+        unkeepable: undo?.plan.unkeepable ?? [],
+        overrides: {
+          next: next ? this.anchorLabel(next.anchor) : null,
+          previous: previous ? this.anchorLabel(previous.anchor) : null,
+        },
+      }
     }
+  }
+
+  private anchorLabel(anchor: AnchorCandidate): AnchorLabel {
+    const name =
+      anchor.kind === 'checkpoint'
+        ? (this.checkpoints.find((cp) => cp.id === anchor.id)?.name ?? null)
+        : null
+    return { kind: anchor.kind, name, position: anchor.position }
   }
 
   /** A checkpoint at a past entry, holding the state as it was there. The story is unchanged. */
   async createCheckpointAt(
     entryId: string,
     name: string,
-    opts: { keepManual: boolean },
+    opts: { keepManual: boolean; override?: GapOverride },
   ): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNotBusy('create a checkpoint')
@@ -4408,7 +4507,7 @@ class StoryStore {
       throw new Error('This entry already has a checkpoint')
     }
 
-    const { entry, plan } = await this.rebuildPastState(entryId, opts.keepManual)
+    const { entry, plan } = await this.rebuildPastState(entryId, opts.keepManual, opts.override)
     const entries = this.entries.filter((e) => e.position <= entry.position)
     const kept = new Set(entries.map((e) => e.id))
     const record: CheckpointRecord = {
@@ -4433,7 +4532,7 @@ class StoryStore {
     const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
     const checkpoint: Checkpoint = { ...loaded, branchId: entry.branchId, anchored: true }
     this.checkpoints = [checkpoint, ...this.checkpoints]
-    log('Checkpoint created at past entry:', name, entry.position)
+    log('Checkpoint created at past entry:', name, entry.position, opts.override ?? '')
     eventBus.emit<CheckpointCreatedEvent>({
       type: 'CheckpointCreated',
       checkpointId: checkpoint.id,
@@ -5704,6 +5803,7 @@ class StoryStore {
     }
 
     // Add starting location
+    let startingLocationId: string | null = null
     if (data.startingLocation.name) {
       const locationTranslation = data.translations?.startingLocation
       log('Starting location translation data:', {
@@ -5733,6 +5833,7 @@ class StoryStore {
         translationLanguage: location.translationLanguage,
       })
       await database.addLocation(location)
+      startingLocationId = location.id
       log(
         'Added starting location:',
         location.name,
@@ -5810,6 +5911,16 @@ class StoryStore {
           : null,
       })
       log('Added opening scene')
+
+      if (settings.experimentalFeatures.stateTracking) {
+        const header = this.startHeader(
+          storyId,
+          openingEntry.id,
+          storyData.timeTracker ?? null,
+          startingLocationId,
+        )
+        await database.transaction([database.worldStateRecordStatement(header)])
+      }
     }
 
     // Add imported lorebook entries

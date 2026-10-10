@@ -12,7 +12,7 @@ function bodyOf(method: string): string {
   const start = source.search(new RegExp(`\\n  (private )?(async )?${method}\\(`))
   expect(start, `${method} not found`).toBeGreaterThan(-1)
   const next = source.slice(start + 1).search(/\n  (private |get |async |[a-zA-Z]+\()/)
-  return source.slice(start, start + 1 + next)
+  return next === -1 ? source.slice(start) : source.slice(start, start + 1 + next)
 }
 
 const WRITE_METHODS = [
@@ -55,11 +55,35 @@ describe('store writes', () => {
   })
 })
 
-describe('batch chapterization', () => {
-  it('breaks the tracked run before it classifies', () => {
-    const body = bodyOf('chapterizeFromBeginning')
-    expect(body.indexOf('await this.recordBreak()')).toBeGreaterThan(-1)
-    expect(body.indexOf('await this.recordBreak()')).toBeLessThan(body.indexOf('service.run('))
+describe('opening', () => {
+  it('heads the opening narration while tracking is on', () => {
+    const body = bodyOf('createStoryFromWizard')
+    expect(body).toContain('settings.experimentalFeatures.stateTracking')
+    expect(body).toContain('this.startHeader(')
+  })
+})
+
+describe('imported chat', () => {
+  it('drops the records of the story it replaces', () => {
+    expect(bodyOf('importSTChat')).toContain('database.clearStoryEntries(')
+    const database = readFileSync(
+      fileURLToPath(new URL('../database.ts', import.meta.url)),
+      'utf-8',
+    )
+    const clear = database.slice(database.indexOf('async clearStoryEntries('))
+    expect(clear.slice(0, clear.indexOf('\n  }\n'))).toContain(
+      'DELETE FROM world_state_changes WHERE story_id = ? AND branch_id IS NULL',
+    )
+  })
+
+  it('starts tracking at its last entry', () => {
+    const body = bodyOf('importSTChat')
+    expect(body).toContain('settings.experimentalFeatures.stateTracking')
+    expect(body).toContain('this.startHeader(')
+  })
+
+  it('is chapterized without breaking a run', () => {
+    expect(bodyOf('chapterizeFromBeginning')).not.toContain('break')
   })
 })
 
