@@ -1,15 +1,14 @@
 import type { FlagClearPatch, FlagRepointPatch, PipelineAction } from '@/lib/actions'
-import type { Entity, EntityState, ItemState } from '@/lib/db'
+import type { CollisionReason, Entity, EntityState, ItemState } from '@/lib/db'
 
 import { FLAG_CLEAR, withFlagWrites, type FlagWrite } from './collision-flags'
-import type { CollisionPair } from './collision-pair'
+import { pairSideOf, stillPaired, type CollisionPair, type PairSide } from './collision-pair'
 import { sameList } from './draft-text'
 import { tailSceneActions, type DeleteTail } from './entity-delete'
 import { stateOf } from './entity-draft'
 import { itemHasPosition, stateWithRefRewritten } from './entity-refs'
 import { canonicalRefsCleared, mergeLinks, type MergeLinkInput } from './merge-links'
 import { mergedTerms, type MergeDeselections, type MergedTerms } from './merge-terms'
-import { namesakeBasis, type NamesakeSide } from './namesakes'
 
 export const MERGE_SCALARS = [
   'name',
@@ -51,12 +50,22 @@ function takeScalar<K extends MergeScalar>(
   patch[field] = from[field]
 }
 
-/** The merged canonical's terms, and its name and keywords as the namesake rule reads them. */
+/** The merged canonical's terms, and the canonical as the pair rule reads it after the merge. */
 type Merged = {
   /** The merged row takes the loser's name: the one place the merge decides it. */
   nameFromOther: boolean
   terms: MergedTerms
-  side: NamesakeSide
+  side: PairSide
+}
+
+/**
+ * `row` as the flag rules read it once the merge lands (world.md → Surfacing): a place under the
+ * loser moves under the canonical, and the canonical's own ref to the loser collapses to the root.
+ */
+function postMergeSide(input: MergeContext, row: Entity): PairSide {
+  const side = pairSideOf(row)
+  if (side.parentId !== input.loser.id) return side
+  return { ...side, parentId: row.id === input.canonical.id ? null : input.canonical.id }
 }
 
 function mergedRow(input: MergeContext): Merged {
@@ -73,30 +82,41 @@ function mergedRow(input: MergeContext): Merged {
   return {
     nameFromOther,
     terms,
-    side: { name: nameFromOther ? loser.name : canonical.name, keywords: terms.keywords },
+    side: {
+      ...postMergeSide(input, canonical),
+      name: nameFromOther ? loser.name : canonical.name,
+      keywords: terms.keywords,
+    },
   }
 }
 
 /**
- * world.md → Reversibility, judged against the merged row: the canonical's flag stays on a live
- * namesake other than the loser; else it takes the loser's partner and reason if that is a live
- * namesake other than itself; else it clears.
+ * world.md → Reversibility, judged against the merged row as it stands after the merge: the
+ * canonical's flag stays on a live row other than the loser that it still pairs with under its own
+ * reason; else it takes the loser's partner and reason if that is a live row other than itself the
+ * merged row pairs with under the loser's reason; else it clears.
  */
 function canonicalFlagPatch(
   input: MergeContext,
-  merged: NamesakeSide,
+  merged: PairSide,
 ): FlagClearPatch | FlagRepointPatch | null {
   const { canonical, loser, branchEntities } = input
   const partnerId = canonical.nameCollisionPartnerId
   if (partnerId == null) return null
-  const liveNamesake = (id: string) => {
+  const pairsWith = (id: string, reason: CollisionReason) => {
     const row = branchEntities.find((e) => e.id === id)
-    return row != null && namesakeBasis(merged, row) != null
+    return row != null && stillPaired(reason, merged, postMergeSide(input, row))
   }
-  if (partnerId !== loser.id && liveNamesake(partnerId)) return null
+  const ownReason = canonical.nameCollisionReason
+  if (partnerId !== loser.id && ownReason != null && pairsWith(partnerId, ownReason)) return null
   const inherited = loser.nameCollisionPartnerId
   const reason = loser.nameCollisionReason
-  if (inherited != null && reason != null && inherited !== canonical.id && liveNamesake(inherited))
+  if (
+    inherited != null &&
+    reason != null &&
+    inherited !== canonical.id &&
+    pairsWith(inherited, reason)
+  )
     return { nameCollisionPartnerId: inherited, nameCollisionReason: reason }
   return FLAG_CLEAR
 }
@@ -123,16 +143,19 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
 
 /**
  * world.md → Reversibility: another row's flag on the loser re-points at the canonical; on either,
- * it clears once the row and the merged canonical aren't namesakes.
+ * it clears once that row and the merged canonical no longer pair under the row's reason, both read
+ * as they stand after the merge.
  */
-function otherFlagWrites(input: MergeContext, merged: NamesakeSide): FlagWrite[] {
+function otherFlagWrites(input: MergeContext, merged: PairSide): FlagWrite[] {
   const { canonical, loser, branchEntities } = input
   const writes: FlagWrite[] = []
   for (const row of branchEntities) {
     const partnerId = row.nameCollisionPartnerId
+    const reason = row.nameCollisionReason
     if (row.id === canonical.id || row.id === loser.id) continue
     if (partnerId !== loser.id && partnerId !== canonical.id) continue
-    if (namesakeBasis(row, merged) == null) writes.push({ id: row.id, clear: true })
+    if (reason == null || !stillPaired(reason, postMergeSide(input, row), merged))
+      writes.push({ id: row.id, clear: true })
     else if (partnerId === loser.id) writes.push({ id: row.id, partnerId: canonical.id })
   }
   return writes

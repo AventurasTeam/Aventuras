@@ -500,6 +500,114 @@ describe('entityMergeActions — collision flags', () => {
       updateOf('char_r', FLAG_CLEAR),
     ])
   })
+
+  describe("a place's parent after the merge", () => {
+    const place = (
+      id: string,
+      name: string,
+      parentId: string | null,
+      overrides: Partial<Entity> = {},
+    ): Entity => entity(id, 'location', { name, ...overrides }, { parent_location_id: parentId })
+    const deleteOf = (id: string) => ({
+      kind: 'deleteEntity',
+      source: 'user_edit',
+      payload: { branchId: 'b1', id },
+    })
+    const hollow = place('loc_p', 'Veil’s Hollow', null)
+    const quay = place('loc_q', 'The Quay', null)
+
+    it('clears a same-parent flag on the loser once the canonical sits under another parent', () => {
+      const stalls = place(
+        'loc_s',
+        'The Market Stalls',
+        'loc_p',
+        flaggedWith('loc_b', 'same-parent'),
+      )
+      const canonical = place('loc_a', 'The Market', 'loc_q')
+      const loser = place('loc_b', 'The Market', 'loc_p', flaggedWith('loc_a'))
+      expect(
+        merge({ canonical, loser, branchEntities: [hollow, quay, canonical, loser, stalls] })
+          .actions,
+      ).toStrictEqual([updateOf('loc_s', FLAG_CLEAR), deleteOf('loc_b')])
+
+      // A canonical under the loser's parent still shares the sibling's: the flag re-points.
+      const sibling = place('loc_a', 'The Market', 'loc_p')
+      const twin = place('loc_b', 'The Market', 'loc_p', flaggedWith('loc_a', 'same-parent'))
+      expect(
+        merge({ canonical: sibling, loser: twin, branchEntities: [hollow, sibling, twin, stalls] })
+          .actions,
+      ).toStrictEqual([updateOf('loc_s', { nameCollisionPartnerId: 'loc_a' }), deleteOf('loc_b')])
+    })
+
+    it("clears the canonical's same-parent flag on a former sibling once it leaves the loser", () => {
+      const inn = place('loc_b', 'The Old Inn', null)
+      const cellar = place(
+        'loc_a',
+        'The Old Inn Cellar',
+        'loc_b',
+        flaggedWith('loc_s', 'same-parent'),
+      )
+      const storeroom = place('loc_s', 'Inn Cellar', 'loc_b')
+      // The merge also keeps the name it drops as a keyword (world.md → Merge).
+      expect(
+        merge({ canonical: cellar, loser: inn, branchEntities: [inn, cellar, storeroom] }).actions,
+      ).toStrictEqual([
+        updateOf('loc_a', {
+          keywords: ['The Old Inn'],
+          state: { parent_location_id: null },
+          ...FLAG_CLEAR,
+        }),
+        updateOf('loc_s', { state: { parent_location_id: 'loc_a' } }),
+        deleteOf('loc_b'),
+      ])
+
+      // The same flag under a parent the merge leaves alone stays.
+      const housed = place(
+        'loc_a',
+        'The Old Inn Cellar',
+        'loc_p',
+        flaggedWith('loc_s', 'same-parent'),
+      )
+      const neighbour = place('loc_s', 'Inn Cellar', 'loc_p')
+      expect(
+        merge({ canonical: housed, loser: inn, branchEntities: [hollow, inn, housed, neighbour] })
+          .actions,
+      ).toStrictEqual([updateOf('loc_a', { keywords: ['The Old Inn'] }), deleteOf('loc_b')])
+    })
+
+    it('keeps a same-parent pair under the loser: both rows move to the canonical', () => {
+      const canonical = place('loc_a', 'The Hollow', null)
+      const loser = place('loc_b', 'The Hollow', null, flaggedWith('loc_a', 'same-parent'))
+      const inn = place('loc_i', 'The Inn', 'loc_b')
+      const yard = place('loc_j', 'The Inn Yard', 'loc_b', flaggedWith('loc_i', 'same-parent'))
+      expect(
+        merge({ canonical, loser, branchEntities: [canonical, loser, inn, yard] }).actions,
+      ).toStrictEqual([
+        updateOf('loc_i', { state: { parent_location_id: 'loc_a' } }),
+        updateOf('loc_j', { state: { parent_location_id: 'loc_a' } }),
+        deleteOf('loc_b'),
+      ])
+    })
+
+    it("takes the loser's same-parent partner only while the canonical shares its parent", () => {
+      const sibling = place('loc_s', 'The Market Stalls', 'loc_p')
+      const loser = place('loc_b', 'The Market', 'loc_p', flaggedWith('loc_s', 'same-parent'))
+      const across = place('loc_a', 'The Market', 'loc_q', flaggedWith('loc_b'))
+      expect(
+        merge({ canonical: across, loser, branchEntities: [hollow, quay, across, loser, sibling] })
+          .actions,
+      ).toStrictEqual([updateOf('loc_a', FLAG_CLEAR), deleteOf('loc_b')])
+
+      const beside = place('loc_a', 'The Market', 'loc_p', flaggedWith('loc_b'))
+      expect(
+        merge({ canonical: beside, loser, branchEntities: [hollow, beside, loser, sibling] })
+          .actions,
+      ).toStrictEqual([
+        updateOf('loc_a', { nameCollisionPartnerId: 'loc_s', nameCollisionReason: 'same-parent' }),
+        deleteOf('loc_b'),
+      ])
+    })
+  })
 })
 
 describe('entityMergeActions — inverse refs', () => {
