@@ -300,8 +300,12 @@ describe('keywords', () => {
 })
 
 describe('mergeChips', () => {
-  const chipsFor = (a: EntitySummary, b: EntitySummary, canonical: EntitySummary) =>
-    mergeChips(computeDivergence(a, b), canonical, canonical === a ? b : a)
+  const chipsFor = (
+    a: EntitySummary,
+    b: EntitySummary,
+    canonical: EntitySummary,
+    nameFromOther = false,
+  ) => mergeChips(computeDivergence(a, b), canonical, canonical === a ? b : a, nameFromOther)
 
   it("offers the canonical's terms in stored order, then the other row's additions sorted", () => {
     const a = baseEntity({ tags: ['sword', 'hero'], keywords: ['the wanderer', 'Kael'] })
@@ -330,6 +334,13 @@ describe('mergeChips', () => {
     const a = baseEntity({ tags: ['hero', 'sword'], keywords: ['the wanderer'] })
     const b = baseEntity({ id: 'ent_b', tags: ['sword', 'hero'], keywords: ['The Wanderer'] })
     expect(chipsFor(a, b, a)).toEqual({ tags: [], keywords: [] })
+  })
+
+  it("offers keyword chips for the name the merge doesn't keep, even when the keywords match", () => {
+    const a = baseEntity({ keywords: ['the wanderer'] })
+    const b = baseEntity({ id: 'ent_b', name: 'Kael Stormborn', keywords: ['The Wanderer'] })
+    expect(chipsFor(a, b, a).keywords).toEqual(['the wanderer', 'Kael Stormborn'])
+    expect(chipsFor(a, b, a, true).keywords).toEqual(['the wanderer', 'Kael'])
   })
 
   it('judges each list on its own', () => {

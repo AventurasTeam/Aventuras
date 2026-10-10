@@ -773,6 +773,65 @@ describe('resolveCollision — merge', () => {
   )
 })
 
+describe('resolveCollision — merge re-points and clears flags', () => {
+  it("re-points a flag on B at A and clears A's; CTRL-Z restores both, redo is exact", async () => {
+    await ctx.db.insert(entities).values(
+      row('char_c', 'character', 'Brannoc', 3, {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_b',
+        nameCollisionReason: 'alike',
+      }),
+    )
+    await setFlag('char_a', 'char_b')
+    const before = await worldSnapshot()
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+    const merged = await worldSnapshot()
+
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
+    expect(await entityRow('char_c')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_a',
+      nameCollisionReason: 'alike',
+    })
+    expect(
+      (await deltaRows()).filter((r) => r.targetId === 'char_c').map((r) => r.undoPayload),
+    ).toEqual([{ nameCollisionPartnerId: 'char_b' }])
+
+    const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_b',
+    })
+    expect(await entityRow('char_c')).toMatchObject({ nameCollisionPartnerId: 'char_b' })
+
+    await applyRedo(group, ctx)
+
+    expect(await worldSnapshot()).toEqual(merged)
+  })
+
+  it("adds the name the merge doesn't keep to the merged row's keywords", async () => {
+    await ctx.db
+      .update(entities)
+      .set({ name: 'Brannoc the Younger' })
+      .where(eq(entities.id, 'char_b'))
+    await hydrateStores()
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      name: 'Brannoc',
+      keywords: ['Brannoc the Younger'],
+    })
+  })
+})
+
 describe('resolveCollision — merge tags and keywords', () => {
   beforeEach(async () => {
     await setTerms('char_a', { tags: ['guard'], keywords: ['the guard'] })

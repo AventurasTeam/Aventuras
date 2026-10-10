@@ -356,9 +356,10 @@ function MergeBody({
     }
   })
 
+  const nameFromOther = state.fromOther.has('name')
   const chips = useMemo(
-    () => mergeChips(diff, canonical, nonCanonical),
-    [diff, canonical, nonCanonical],
+    () => mergeChips(diff, canonical, nonCanonical, nameFromOther),
+    [diff, canonical, nonCanonical, nameFromOther],
   )
 
   function handleConfirm() {

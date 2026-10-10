@@ -638,6 +638,43 @@ export const MergeKeywordUnion: Story = {
   },
 }
 
+// world.md → Merge: a partial pair's merge offers the name it doesn't keep as a keyword, even when
+// the two keyword lists match, and the chip follows the name choice.
+export const MergeAddsTheNameItDoesNotKeep: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ keywords: ['the wanderer'] })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        name: 'Kael Stormborn',
+        keywords: ['The Wanderer'],
+      })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await screen.findByRole('group', { name: KEYWORD_CHIPS })
+    expect(chipNames(KEYWORD_CHIPS)).toEqual(['the wanderer', 'Kael Stormborn'])
+
+    const name = screen.getByRole('radiogroup', { name: 'Name' })
+    await userEvent.click(within(name).getByRole('radio', { name: /^Newer · / }))
+    await waitFor(() => expect(chipNames(KEYWORD_CHIPS)).toEqual(['the wanderer', 'Kael']))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Kael' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
+      mode: 'merge',
+      canonicalId: entityA.id,
+      fromOther: ['name'],
+      deselectedTags: [],
+      deselectedKeywords: ['kael'],
+    })
+  },
+}
+
 export const MergeChipRemoveGlyph: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
   play: async () => {

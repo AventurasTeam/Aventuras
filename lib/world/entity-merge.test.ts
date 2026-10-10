@@ -305,6 +305,113 @@ describe('entityMergeActions — the canonical', () => {
   })
 })
 
+describe('entityMergeActions — collision flags', () => {
+  const updateOf = (id: string, patch: Record<string, unknown>) => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id, patch },
+  })
+
+  it('clears a flagged canonical whose partner is gone from the branch', () => {
+    const canonical = entity('char_a', 'character', flaggedWith('char_gone'))
+    expect(merge({ canonical, branchEntities: [canonical, B] }).actions).toStrictEqual([
+      updateOf('char_a', FLAG_CLEAR),
+      deleteLoser,
+    ])
+  })
+
+  it("keeps the canonical's flag on a live third row while the merged row still matches it", () => {
+    const third = entity('char_t', 'character')
+    const canonical = entity('char_a', 'character', flaggedWith('char_t'))
+    const loser = entity('char_b', 'character', {
+      name: 'Brannoc',
+      keywords: ['Kael'],
+      ...flaggedWith('char_a'),
+    })
+    const branchEntities = [canonical, loser, third]
+    const kept = merge({ canonical, loser, branchEntities, fromLoser: ['name'] })
+    expect(kept.actions).toStrictEqual([
+      updateOf('char_a', { name: 'Brannoc', keywords: ['Kael'] }),
+      deleteLoser,
+    ])
+
+    const dropped = merge({
+      canonical,
+      loser,
+      branchEntities,
+      fromLoser: ['name'],
+      deselectedKeywords: ['kael'],
+    })
+    expect(dropped.actions).toStrictEqual([
+      updateOf('char_a', { name: 'Brannoc', ...FLAG_CLEAR }),
+      deleteLoser,
+    ])
+  })
+
+  it('re-points a flag on the loser at the canonical and clears flags the merged row breaks', () => {
+    // Mira and Nell don't match the row they name: a keyword-only edit can leave a flag so.
+    const onLoser = entity('char_r', 'character', flaggedWith('char_b'))
+    const onCanonical = entity('char_s', 'character', flaggedWith('char_a'))
+    const staleOnLoser = entity('char_u', 'character', { name: 'Mira', ...flaggedWith('char_b') })
+    const staleOnCanonical = entity('char_v', 'character', {
+      name: 'Nell',
+      ...flaggedWith('char_a'),
+    })
+    const onThird = entity('char_w', 'character', { name: 'Mira', ...flaggedWith('char_m') })
+    const { actions } = merge({
+      branchEntities: [A, B, onLoser, onCanonical, staleOnLoser, staleOnCanonical, onThird, M],
+    })
+    expect(actions).toStrictEqual([
+      updateOf('char_r', { nameCollisionPartnerId: 'char_a' }),
+      updateOf('char_u', FLAG_CLEAR),
+      updateOf('char_v', FLAG_CLEAR),
+      deleteLoser,
+    ])
+  })
+
+  it('folds a re-point into the state patch of a row that held a ref to the loser', () => {
+    const hollow = entity('loc_a', 'location')
+    const twin = entity('loc_b', 'location', flaggedWith('loc_a'))
+    const cellar = entity('loc_c', 'location', flaggedWith('loc_b'), {
+      parent_location_id: 'loc_b',
+    })
+    const { actions } = merge({
+      canonical: hollow,
+      loser: twin,
+      branchEntities: [hollow, twin, cellar],
+    })
+    expect(ofKind(actions, 'updateEntity')).toStrictEqual([
+      updateOf('loc_c', {
+        state: { parent_location_id: 'loc_a' },
+        nameCollisionPartnerId: 'loc_a',
+      }),
+    ])
+  })
+
+  it("clears instead of re-pointing once the merge drops the loser's name", () => {
+    const canonical = entity('char_a', 'character')
+    const loser = entity('char_b', 'character', {
+      name: 'Brannoc',
+      keywords: ['Kael'],
+      ...flaggedWith('char_a'),
+    })
+    const namesake = entity('char_r', 'character', { name: 'Brannoc', ...flaggedWith('char_b') })
+    const branchEntities = [canonical, loser, namesake]
+
+    const kept = merge({ canonical, loser, branchEntities })
+    expect(ofKind(kept.actions, 'updateEntity')).toStrictEqual([
+      updateOf('char_a', { keywords: ['Brannoc', 'Kael'] }),
+      updateOf('char_r', { nameCollisionPartnerId: 'char_a' }),
+    ])
+
+    const dropped = merge({ canonical, loser, branchEntities, deselectedKeywords: ['brannoc'] })
+    expect(ofKind(dropped.actions, 'updateEntity')).toStrictEqual([
+      updateOf('char_a', { keywords: ['Kael'] }),
+      updateOf('char_r', FLAG_CLEAR),
+    ])
+  })
+})
+
 describe('entityMergeActions — inverse refs', () => {
   it('points every other entity at the canonical, one update each', () => {
     const hollow = entity('loc_a', 'location')
