@@ -56,3 +56,25 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **Keyword-term comparison lowercases instead of case-folding.**
+  `normalizeTerm` (`lib/keyword-terms.ts`) uses `toLowerCase()` while
+  canon says "case-folded", so "Strauß" and "STRAUSS", or Turkish "İ"
+  and "i", don't match. Pre-existing; it affects every keyword-term
+  comparison and the namesake matcher. Raised 2026-10-10 by the
+  partial-name collisions code review.
+
+- **The two `cosine` implementations disagree on bad input.**
+  `lib/retrieval/vector.ts:27` throws on a dimension mismatch and NaN,
+  while `lib/classifier/reconcile.ts` returns 0 for a zero norm
+  (reconciliation now treats zero and NaN vectors as unscored). Also
+  `l2Normalize` (`lib/embedder/local/pooling.ts:9`) passes zero and NaN
+  vectors through unchanged. Raised 2026-10-10 by the partial-name
+  collisions code review.
+
+- **The resolve dialog's Rename body keeps its input names when a row
+  is renamed elsewhere.** `RenameBody` in
+  `components/compounds/collision-resolve-dialog.tsx` resets only when
+  the pair's ids change, so an untouched form then reads as changed and
+  Save could send the old name back. Reasoned, not reproduced; rare.
+  Raised 2026-10-10 by the partial-name collisions code review.

@@ -51,23 +51,6 @@ for the placement rule.
   - Items share the gap: nothing machine-creates one, so an item first
     mentioned in prose can't be transferred.
 
-- **Implement partial-name collision detection.** Designed 2026-10-10
-  ([exploration record](./explorations/2026-10-10-partial-name-collisions.md));
-  the spec is canon:
-  [`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)
-  for each turn's saved scene, the alias rule and the alias list,
-  [`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)
-  for the matching rule, the decision table and the partner and reason,
-  [`edge-cases.md → Schema`](./memory/edge-cases.md#schema) for the two
-  `entities` columns and their CHECK, and
-  [`world.md → Collision review and entity merge`](./ui/screens/world/world.md#collision-review-and-entity-merge)
-  for World's pairing, copy and clear rules. It touches the classifier
-  (`lib/classifier`, its prompt, schema and context), `lib/world`'s
-  collision helpers and World's collision surfaces. The CHECK rebuilds
-  `entities`, so a development database holding flagged rows needs a
-  reseed. Lands as a standalone PR, before the location design reuses
-  the matcher.
-
 ## UX
 
 _None active._

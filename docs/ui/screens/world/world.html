@@ -1446,6 +1446,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   <div class="resolve-modal" data-pair="exact">
     <!-- Header from the two rows' current names; reason line from name_collision_reason;
          basis line only when the pair are namesakes through a keyword alone. Per world.md → Resolve dialog. -->
+    <!-- Phone layout per world.md → Resolve dialog: only the title and mode picker stay fixed; the reason, basis and description lines open the scrolling body. -->
     <div class="resolve-head">
       <div class="title"><span class="glyph">&#9888;</span> <span id="resolve-title">Two characters named &ldquo;Kael&rdquo;</span></div>
       <div class="reason" id="resolve-reason">Their descriptions differ.</div>
@@ -1559,7 +1560,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
       </div>
       <div class="rename-row">
         <div class="meta"><strong>Newer &middot; just now</strong></div>
-        <input type="text" id="rename-newer" value="Kael (the guardsman)">
+        <input type="text" id="rename-newer" value="Kaelan (the guardsman)">
       </div>
       <div class="state-note">
         Save stays disabled until both trimmed names are non-empty and stop matching by name &mdash; neither the same name nor one inside the other, so a change of letter case or leading and trailing spaces alone still collides. Keywords don&rsquo;t count. Both rows persist; a flag of the pair clears when it names the other row or a row that&rsquo;s gone.
@@ -1818,7 +1819,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   // button's "Merge into the <older|newer> <canonical-name>" follow the pick, so destructive
   // direction stays obvious
   const PAIRS = {
-    exact: { newer: 'Kael', rename: 'Kael (the guardsman)', title: 'Two characters named \u201cKael\u201d',
+    exact: { newer: 'Kael', rename: 'Kaelan (the guardsman)', title: 'Two characters named \u201cKael\u201d',
       reason: 'Their descriptions differ.', basis: '', keep: null },
     partial: { newer: 'Kael Stormborn', rename: 'Kael Stormborn', title: '\u201cKael Stormborn\u201d may be \u201cKael\u201d',
       reason: 'Their descriptions are partly alike.', basis: '',
