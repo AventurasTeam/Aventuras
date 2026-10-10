@@ -78,8 +78,10 @@ function mergedRow(input: MergeContext): Merged {
 }
 
 /**
- * world.md → Reversibility: the canonical's flag stays while it names a live namesake of the merged
- * row. Otherwise it takes over the loser's flag when that names one, and else clears.
+ * world.md → Reversibility: the canonical's flag stays when it names a live namesake of the merged
+ * row other than the loser. Otherwise (its partner was the loser, is gone, or no longer matches) it
+ * takes over the loser's partner when that is a live namesake of the merged row other than the
+ * canonical, keeping its own reason; else it clears.
  */
 function canonicalFlagPatch(
   input: MergeContext,
@@ -93,9 +95,7 @@ function canonicalFlagPatch(
     return row != null && namesakeBasis(merged, row) != null
   }
   if (partnerId !== loser.id && liveNamesake(partnerId)) return null
-  // The branch's row, not the pair's copy: every flag rule here reads one source.
-  const loserRow = branchEntities.find((e) => e.id === loser.id)
-  const inherited = loserRow?.nameCollisionFlag === 1 ? loserRow.nameCollisionPartnerId : null
+  const inherited = loser.nameCollisionPartnerId
   if (inherited != null && inherited !== canonical.id && liveNamesake(inherited))
     return { nameCollisionPartnerId: inherited }
   return FLAG_CLEAR

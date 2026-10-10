@@ -415,6 +415,25 @@ describe('entityMergeActions — collision flags', () => {
       ).toStrictEqual([updateOf('char_a', { nameCollisionPartnerId: 'char_t' }), deleteLoser])
     })
 
+    it("judges the loser's partner against the merged row, not the canonical before it", () => {
+      const brannoc = entity('char_a', 'character', { name: 'Brannoc', ...flaggedWith('char_b') })
+      const loser = loserNaming('char_t')
+      const { actions } = merge({
+        canonical: brannoc,
+        loser,
+        branchEntities: [brannoc, loser, third],
+        fromLoser: ['name'],
+      })
+      expect(actions).toStrictEqual([
+        updateOf('char_a', {
+          name: 'Kael',
+          keywords: ['Brannoc'],
+          nameCollisionPartnerId: 'char_t',
+        }),
+        deleteLoser,
+      ])
+    })
+
     it("clears it when the loser's partner is no namesake of the merged row", () => {
       const mira = entity('char_t', 'character', { name: 'Mira' })
       expect(
