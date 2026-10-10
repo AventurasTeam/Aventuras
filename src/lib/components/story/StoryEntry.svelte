@@ -2305,7 +2305,7 @@
       if (!open && !savingCheckpoint) cancelCheckpoint()
     }
   }
-  dismissible={false}
+  dismissible={!savingCheckpoint}
 >
   <ResponsiveModal.Content
     class="max-w-md gap-0 p-0"

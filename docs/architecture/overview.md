@@ -192,7 +192,9 @@ A dialog has exactly one dismiss control: either the header's X or a Cancel butt
 Two controls that do the same thing make the reader wonder how they differ, and a Cancel beside a
 confirming action is the clearer of the two wherever the dialog asks for a decision. Such a dialog
 passes `closeButton={false}` to `ResponsiveModal.Header`; the X stays for dialogs that only show
-something and have no action to cancel.
+something and have no action to cancel. The rule is about controls drawn on the dialog, not the
+platform's own gestures: on a phone the dialog is a drawer, and swiping it down stays available
+whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight.
 
 ## Data Model
 

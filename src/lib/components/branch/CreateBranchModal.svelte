@@ -53,7 +53,7 @@
       if (!next) cancel()
     }
   }
-  dismissible={false}
+  dismissible={!saving}
 >
   <ResponsiveModal.Content
     class="max-w-md gap-0 p-0"
