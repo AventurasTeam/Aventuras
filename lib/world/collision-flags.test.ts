@@ -448,6 +448,22 @@ describe('withFlagWrites', () => {
       cleared,
     )
   })
+
+  it('appends the writes of rows without a user update in first-seen order', () => {
+    expect(
+      withFlagWrites([], 'b1', [
+        { id: 'char_g', partnerId: 'char_a' },
+        { id: 'char_h', clear: true },
+      ]),
+    ).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'char_g', patch: { nameCollisionPartnerId: 'char_a' } },
+      },
+      clearOf('char_h'),
+    ])
+  })
 })
 
 describe('flag clears through the entity arm', () => {

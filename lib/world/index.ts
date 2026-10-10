@@ -31,15 +31,7 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
-export {
-  brokenFlags,
-  flagsNaming,
-  nameTakenByOther,
-  namesakeKey,
-  pairFlagsToClear,
-  withFlagWrites,
-} from './collision-flags'
-export type { FlagWrite } from './collision-flags'
+export { nameTakenByOther, namesakeKey } from './collision-flags'
 export { nameBasis, namesakeBasis } from './namesakes'
 export type { NameBasis, NamesakeMatch, NamesakeSide } from './namesakes'
 export {

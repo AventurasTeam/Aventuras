@@ -124,7 +124,13 @@ export function pairFlagsToClear(pair: CollisionPair, entities: readonly Entity[
 }
 
 /** A flag write World makes: the flag cleared with its partner and reason, or re-pointed. */
-export type FlagWrite = { id: string; clear: true } | { id: string; partnerId: string }
+export type FlagWrite =
+  | { id: string; clear: true }
+  /**
+   * A re-point targets a flagged row other than its new partner; the update handler refuses
+   * anything else.
+   */
+  | { id: string; partnerId: string }
 
 function isUserUpdateOf(action: PipelineAction, id: string): action is EntityUpdate {
   return action.kind === 'updateEntity' && action.source === 'user_edit' && action.payload.id === id
