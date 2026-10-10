@@ -1358,3 +1358,97 @@ export const KeepPartialPair: Story = {
     expect(screen.queryByText(/Polymorphic naming/)).toBeNull()
   },
 }
+
+// The newer row is the flagged one and spelled differently; the title keeps the older row's spelling.
+export const HeaderSameNameKeepsOlderSpelling: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={baseEntity({ id: 'ent_kael_2', name: 'kael', createdAt: NEWER_AT, keywords: [] })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
+  },
+}
+
+// The reason and basis lines are part of the dialog's description for assistive tech.
+export const ExplanationIsTheAccessibleDescription: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolf}
+      reason="in-scene"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    const dialog = await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')
+    expect(dialog).toHaveAccessibleDescription(
+      /Their descriptions differ, but "Kael" was in the scene/,
+    )
+    expect(dialog).toHaveAccessibleDescription(/"Kael" also goes by "the Grey Wolf"\./)
+    expect(dialog).toHaveAccessibleDescription(/Pick how to resolve this collision\./)
+  },
+}
+
+// On a phone the title and mode picker stay fixed; the explanation scrolls with the body.
+export const PhoneExplanationScrollsWithBody: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={{ ...kaelTheWolf, tags: manyTags('a') }}
+      entityB={{ ...greyWolf, tags: manyTags('b') }}
+      reason="in-scene"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // useTier reads RN-Web's Dimensions, which updates a tick after the viewport global lands.
+    await waitFor(() => expect(window.innerWidth).toBeLessThan(500))
+    const confirm = await screen.findByRole('button', { name: /^Merge into/ })
+    const panel = confirm.closest('[role="dialog"]') as HTMLElement
+    let scroller: HTMLElement | null = null
+    for (const candidate of Array.from(panel.querySelectorAll<HTMLElement>('div'))) {
+      const overflowY = getComputedStyle(candidate).overflowY
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        candidate.scrollHeight > candidate.clientHeight
+      ) {
+        scroller = candidate
+        break
+      }
+    }
+    expect(scroller).not.toBeNull()
+
+    const reason = screen.getByText(/^Their descriptions differ, but "Kael" was in the scene/)
+    expect(scroller!.contains(reason)).toBe(true)
+    expect(scroller!.contains(screen.getByText('"Kael" also goes by "the Grey Wolf".'))).toBe(true)
+    expect(scroller!.contains(screen.getByText(/^Pick how to resolve this collision\./))).toBe(true)
+    expect(panel).toHaveAccessibleDescription(
+      /Their descriptions differ, but "Kael" was in the scene/,
+    )
+    // 119px is what the merge body kept before the reason and basis lines existed.
+    expect(scroller!.clientHeight).toBeGreaterThanOrEqual(119)
+  },
+}
+
+export const PhoneKeepModeKeepsTheExplanation: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolf}
+      reason="alike"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    await waitFor(() => expect(window.innerWidth).toBeLessThan(500))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    const dialog = await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')
+    expect(await within(dialog).findByText('Their descriptions read alike.')).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleDescription(/Their descriptions read alike\./)
+  },
+}
