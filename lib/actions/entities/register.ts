@@ -129,6 +129,8 @@ function fullRow(entry: NewEntity): Entity {
   }
 }
 
+const SELF_PARTNER = 'an entity cannot be its own collision partner'
+
 // edge-cases.md → Schema's CHECK, refused here rather than failing as SQL.
 function flagTripleIssue(row: Entity): string | null {
   const partner = row.nameCollisionPartnerId
@@ -140,6 +142,7 @@ function flagTripleIssue(row: Entity): string | null {
   if (row.nameCollisionFlag !== 1)
     return `nameCollisionFlag must be 0 or 1, got ${row.nameCollisionFlag}`
   if (partner == null || partner === '') return 'a flagged entity needs a collision partner'
+  if (partner === row.id) return SELF_PARTNER
   if (reason == null || !COLLISION_REASONS.includes(reason))
     return `a flagged entity needs a collision reason, got ${String(reason)}`
   return null
@@ -160,6 +163,7 @@ function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string
     typeof patch.nameCollisionPartnerId === 'string' &&
     patch.nameCollisionPartnerId !== ''
   if (!repoints) return 'collision flag columns take only a clear or a partner re-point'
+  if (patch.nameCollisionPartnerId === current.id) return SELF_PARTNER
   return current.nameCollisionFlag === 1 ? null : 'only a flagged entity has a partner to re-point'
 }
 

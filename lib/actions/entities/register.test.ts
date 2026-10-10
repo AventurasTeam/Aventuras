@@ -675,6 +675,11 @@ describe('collision flag columns', () => {
       'an unflagged entity has no collision partner or reason',
     ],
     ['a flag of 2', { nameCollisionFlag: 2 }, 'nameCollisionFlag must be 0 or 1, got 2'],
+    [
+      'a flag naming the row itself',
+      { nameCollisionPartnerId: 'char_1' },
+      'an entity cannot be its own collision partner',
+    ],
   ] as const)('refuses a create with %s, writing nothing', async (_label, overrides, reason) => {
     const { db, ctx } = await setup()
 
@@ -833,6 +838,12 @@ describe('collision flag columns', () => {
       'collision flag columns take only a clear or a partner re-point',
     ],
     [
+      'a re-point at the row itself',
+      FLAGGED,
+      { nameCollisionPartnerId: 'char_1' },
+      'an entity cannot be its own collision partner',
+    ],
+    [
       'a present-but-undefined partner',
       FLAGGED,
       { name: 'Kaelin', nameCollisionPartnerId: undefined },
@@ -855,21 +866,44 @@ describe('collision flag columns', () => {
   })
 
   // edge-cases.md → Schema: the migration's CHECK holds even for a write that skips the handlers.
-  it('has the CHECK refuse a flag with no partner, on insert and on update', async () => {
-    const { db, ctx } = await setup()
-    await seedChar(ctx, CHAR)
-    const flaggedAlone: NewEntity = { ...CHAR, id: 'char_9', nameCollisionFlag: 1 }
+  describe.each([
+    ['a flag with no partner', { nameCollisionFlag: 1, nameCollisionReason: 'distinct' }],
+    [
+      'a flag with a partner but no reason',
+      { nameCollisionFlag: 1, nameCollisionPartnerId: 'char_2' },
+    ],
+    ['no flag with a partner', { nameCollisionFlag: 0, nameCollisionPartnerId: 'char_2' }],
+    ['no flag with a reason', { nameCollisionFlag: 0, nameCollisionReason: 'distinct' }],
+  ] as const)('the CHECK refuses %s', (_label, columns) => {
+    const refusal = 'CHECK constraint failed: entities_name_collision_pair'
 
-    await expect(
-      ctx.runInTransaction([db.insert(entities).values(flaggedAlone).toSQL()]),
-    ).rejects.toThrow('CHECK constraint failed: entities_name_collision_pair')
-    await expect(
-      ctx.runInTransaction([
-        db.update(entities).set({ nameCollisionFlag: 1 }).where(eq(entities.id, 'char_1')).toSQL(),
-      ]),
-    ).rejects.toThrow('CHECK constraint failed: entities_name_collision_pair')
+    it('on insert', async () => {
+      const { db, ctx } = await setup()
+      await seedChar(ctx, CHAR)
 
-    expect(await rowFor(db, 'char_9')).toBeUndefined()
-    expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
+      await expect(
+        ctx.runInTransaction([
+          db
+            .insert(entities)
+            .values({ ...CHAR, id: 'char_9', ...columns })
+            .toSQL(),
+        ]),
+      ).rejects.toThrow(refusal)
+
+      expect(await rowFor(db, 'char_9')).toBeUndefined()
+    })
+
+    it('on update', async () => {
+      const { db, ctx } = await setup()
+      await seedChar(ctx, CHAR)
+
+      await expect(
+        ctx.runInTransaction([
+          db.update(entities).set(columns).where(eq(entities.id, 'char_1')).toSQL(),
+        ]),
+      ).rejects.toThrow(refusal)
+
+      expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
+    })
   })
 })

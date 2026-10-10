@@ -257,6 +257,15 @@ function namesId(value: unknown, id: string): boolean {
   )
 }
 
+// edge-cases.md → Schema: an entity's collision partner is a plain id outside the reference
+// registry, so a gone partner is dormant, never a reason to refuse.
+function referencingPayload(d: Delta, rewritten: ReadonlyMap<string, Record<string, unknown>>) {
+  const payload = rewritten.get(d.id) ?? d.undoPayload
+  if (d.targetTable !== 'entities' || payload == null) return payload
+  const { nameCollisionPartnerId: _partner, ...rest } = payload
+  return rest
+}
+
 // generation-pipeline.md → Reverse-replay: a later CTRL-Z of the pruned delete's group would
 // restore a dead id. A group-mate this plan rewrites is read as rewritten.
 async function refuseWriteBack(
@@ -279,7 +288,7 @@ async function refuseWriteBack(
         (d) =>
           d.actionId === holder.actionId &&
           !settled.has(d.id) &&
-          namesId(rewritten.get(d.id) ?? d.undoPayload, holder.targetId),
+          namesId(referencingPayload(d, rewritten), holder.targetId),
       )
       if (hit)
         throw new ReversalIntegrityError(

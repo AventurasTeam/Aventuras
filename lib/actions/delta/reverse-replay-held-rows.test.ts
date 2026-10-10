@@ -755,6 +755,18 @@ describe('the write-back refusal', () => {
     await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
   })
 
+  // edge-cases.md → Schema: the partner is a plain id outside the reference registry.
+  it('does not read a flag partner in an entities undo payload as a reference', async () => {
+    await seedWriteBack({ nameCollisionPartnerId: 'char_p' })
+
+    expect(await reverseReplayDeltas('act_pass', ctx)).toBe(1)
+  })
+
+  it('still refuses a payload naming the removed id beside a flag partner', async () => {
+    await seedWriteBack({ nameCollisionPartnerId: 'char_p', state: { faction_id: 'char_p' } })
+    await expectRefusedUnwritten(() => reverseReplayDeltas('act_pass', ctx))
+  })
+
   it("reads a group-mate's payload as this reversal leaves it, not as stored", async () => {
     // One action deletes char_y, capturing a relationship naming char_p, then char_p; the
     // reversal strips that relationship from char_y's delete, so nothing left names char_p.
