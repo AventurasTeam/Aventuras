@@ -1,6 +1,5 @@
 import type { FlagClearPatch, PipelineAction } from '@/lib/actions'
 import type { Entity, EntityKind } from '@/lib/db'
-import { normalizeTerm } from '@/lib/keyword-terms'
 
 import type { CollisionPair } from './collision-pair'
 import { nameBasis, namesakeBasis, type NamesakeSide } from './namesakes'
@@ -14,11 +13,6 @@ export const FLAG_CLEAR = {
   nameCollisionPartnerId: null,
   nameCollisionReason: null,
 } as const satisfies FlagClearPatch
-
-/** The classifier's namesake rule: same kind, same normalizeTerm name. */
-export function namesakeKey(entity: Pick<Entity, 'kind' | 'name'>): string {
-  return `${entity.kind}:${normalizeTerm(entity.name)}`
-}
 
 /**
  * Whether a same-kind row outside `exclude` already has `name` (staged and retired rows count):

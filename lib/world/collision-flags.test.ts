@@ -18,14 +18,12 @@ import {
   type EntityState,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import {
   brokenFlags,
   FLAG_CLEAR,
   flagsNaming,
-  namesakeKey,
   nameTakenByOther,
   pairFlagsToClear,
   withFlagClears,
@@ -100,21 +98,6 @@ describe('nameTakenByOther', () => {
     expect(taken('Harbor')).toBe(false)
     expect(taken('Harbor', [], 'location')).toBe(true)
     expect(taken('   ')).toBe(false)
-  })
-})
-
-describe('namesakeKey', () => {
-  it.each([' Kael ', 'KAEL', 'Kae\u0301l', 'Ka\u00e9l'])(
-    'keys by the keyword-term normalization for %j',
-    (name) => {
-      expect(namesakeKey({ kind: 'character', name })).toBe(`character:${normalizeTerm(name)}`)
-    },
-  )
-
-  it('keys by kind as well as name', () => {
-    expect(namesakeKey({ kind: 'character', name: 'Kael' })).not.toBe(
-      namesakeKey({ kind: 'location', name: 'Kael' }),
-    )
   })
 })
 
