@@ -18,6 +18,15 @@ export const STATE_CREATE_TAGS = { newLocation: 'new_location', newItem: 'new_it
 /** A create's handle namespace, so it can't be mistaken for a listed placeholder. */
 export const CREATE_HANDLE_PREFIX = 'new:'
 
+// The prompt displays each entity's placeholder in brackets ("[c1] Kael")
+// for readability, but the emission grammar wants the bare placeholder back
+// (docs/memory/piggyback.md → Trailing block format) — unwrap an optional
+// bracket pair so a model that echoes the display form still resolves.
+export function unwrapBracket(ref: string): string {
+  const match = /^\[(.+)\]$/.exec(ref)
+  return match ? match[1] : ref
+}
+
 /** A ref in the create namespace: the prefix and at least one character after it. */
 export function isCreateHandle(ref: string): boolean {
   return ref.startsWith(CREATE_HANDLE_PREFIX) && ref.length > CREATE_HANDLE_PREFIX.length

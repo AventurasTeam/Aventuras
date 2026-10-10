@@ -1,6 +1,6 @@
 import { MalformedPlaceholderError, type IdBiMap } from '@/lib/ids'
 
-import { isCreateHandle } from './tags'
+import { isCreateHandle, unwrapBracket } from './tags'
 import type {
   NewLocationEmission,
   ParsedTransfers,
@@ -9,15 +9,6 @@ import type {
 } from './types'
 
 type SubstituteResult = { block: ParsedStateBlock; failures: ParseFieldFailure[] }
-
-// The prompt displays each entity's placeholder in brackets ("[c1] Kael")
-// for readability, but the emission grammar wants the bare placeholder back
-// (docs/memory/piggyback.md → Trailing block format) — unwrap an optional
-// bracket pair so a model that echoes the display form still resolves.
-function unwrapBracket(ref: string): string {
-  const match = /^\[(.+)\]$/.exec(ref)
-  return match ? match[1] : ref
-}
 
 // Strict by design: the classifier's contract is that it only ever
 // references entities it was actually shown, so anything that doesn't

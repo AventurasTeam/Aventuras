@@ -12,6 +12,7 @@ import {
   SUGGESTION_ITEM_TAG,
   SUGGESTIONS_ROOT_TAG,
   TRAILING_ROOT_TAGS,
+  unwrapBracket,
 } from './tags'
 import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES } from './types'
 import type {
@@ -202,7 +203,8 @@ const FIELD_PARSERS: readonly FieldParser[] = [
   { field: 'retrievalQueries', tag: STATE_TAGS.retrievalQueries, parse: parseRetrievalQueries },
 ]
 
-// Content stops at the first `<`, so a create the stream cut off can't swallow the tags after it.
+// Neither the attributes nor the content cross a `<`, so a create the stream cut off can't swallow
+// the tags after it.
 function createTagPattern(tag: string): RegExp {
   return new RegExp(`<${tag}(\\s[^<>]*?)?(?:/>|>([^<]*)</${tag}>)`, 'g')
 }
@@ -214,48 +216,84 @@ function openedTagCount(segment: string, tag: string): number {
 type ParsedCreates = {
   found: Pick<ParsedStateBlock, 'newLocations' | 'newItems'>
   /** Create tags opened but never formed whole: cut off, or content holding a `<`. */
-  unmatched: number
+  unclosed: number
+  /** Whole create tags dropped for attribute text that isn't entirely `key="value"` pairs. */
+  badAttributes: number
+}
+
+// Linear: each pair starts at a whitespace run and ends at its closing quote.
+const WELL_FORMED_ATTRIBUTES = /^(?:\s+[\w-]+="[^"]*")*\s*$/
+
+const XML_ENTITIES: Record<string, string> = {
+  quot: '"',
+  apos: "'",
+  lt: '<',
+  gt: '>',
+  amp: '&',
+}
+
+// One pass, so `&amp;lt;` reads `&lt;` and not `<`. Only name and description are prose.
+function decodeEntities(text: string): string {
+  return text.replace(/&(quot|apos|lt|gt|amp);/g, (_, entity: string) => XML_ENTITIES[entity] ?? '')
 }
 
 // Unlike FIELD_PARSERS' first-occurrence segments, a create tag repeats and carries attributes.
+// Reads every whole tag of one kind; one whose attribute text isn't well-formed is only counted.
+function readCreates(
+  segment: string,
+  tag: string,
+): { creates: { attrs: Record<string, string>; text: string }[]; badAttributes: number } {
+  const creates: { attrs: Record<string, string>; text: string }[] = []
+  let badAttributes = 0
+  for (const [, attrText = '', text = ''] of segment.matchAll(createTagPattern(tag))) {
+    if (!WELL_FORMED_ATTRIBUTES.test(attrText)) badAttributes += 1
+    else creates.push({ attrs: parseAttributes(attrText), text })
+  }
+  return { creates, badAttributes }
+}
+
+// The two kinds differ only in `parent`, which a location alone keeps.
 function parseCreates(segment: string): ParsedCreates {
-  const newLocations: NewLocationEmission[] = []
-  for (const [, attrText = '', text = ''] of segment.matchAll(
-    createTagPattern(STATE_CREATE_TAGS.newLocation),
-  )) {
-    const attrs = parseAttributes(attrText)
-    newLocations.push({
+  const locations = readCreates(segment, STATE_CREATE_TAGS.newLocation)
+  const items = readCreates(segment, STATE_CREATE_TAGS.newItem)
+  const newLocations = locations.creates.map(
+    ({ attrs, text }): NewLocationEmission => ({
       handle: attrs.handle ?? '',
-      name: attrs.name ?? '',
-      description: text.trim(),
+      name: decodeEntities(attrs.name ?? ''),
+      description: decodeEntities(text.trim()),
       ...(attrs.parent !== undefined ? { parent: attrs.parent } : {}),
-    })
-  }
-  const newItems: NewItemEmission[] = []
-  for (const [, attrText = '', text = ''] of segment.matchAll(
-    createTagPattern(STATE_CREATE_TAGS.newItem),
-  )) {
-    const attrs = parseAttributes(attrText)
-    newItems.push({ handle: attrs.handle ?? '', name: attrs.name ?? '', description: text.trim() })
-  }
-  const unmatched =
-    openedTagCount(segment, STATE_CREATE_TAGS.newLocation) -
-    newLocations.length +
-    openedTagCount(segment, STATE_CREATE_TAGS.newItem) -
-    newItems.length
+    }),
+  )
+  const newItems = items.creates.map(
+    ({ attrs, text }): NewItemEmission => ({
+      handle: attrs.handle ?? '',
+      name: decodeEntities(attrs.name ?? ''),
+      description: decodeEntities(text.trim()),
+    }),
+  )
+  const wholeTags =
+    newLocations.length + locations.badAttributes + newItems.length + items.badAttributes
   return {
     found: {
       ...(newLocations.length > 0 ? { newLocations } : {}),
       ...(newItems.length > 0 ? { newItems } : {}),
     },
-    unmatched,
+    unclosed:
+      openedTagCount(segment, STATE_CREATE_TAGS.newLocation) +
+      openedTagCount(segment, STATE_CREATE_TAGS.newItem) -
+      wholeTags,
+    badAttributes: locations.badAttributes + items.badAttributes,
   }
+}
+
+function bareHandle(handle: string): string {
+  return unwrapBracket(handle.trim()).trim()
 }
 
 /**
  * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
- * declared (locations before items); trims what it keeps, and drops a blank parent. Never a field
- * failure: one bad create must not hand the whole turn to the fallback.
+ * declared (locations before items); unwraps a bracketed handle, trims what it keeps, and drops a
+ * blank parent. Never a field failure: one bad create must not hand the whole turn to the fallback.
  */
 export function normalizeCreates(block: ParsedStateBlock): {
   block: ParsedStateBlock
@@ -275,7 +313,7 @@ export function normalizeCreates(block: ParsedStateBlock): {
     return true
   }
   const locations = (newLocations ?? []).flatMap((create): NewLocationEmission[] => {
-    const handle = create.handle.trim()
+    const handle = bareHandle(create.handle)
     const name = create.name.trim()
     if (!accepts(handle, name)) return []
     const parent = create.parent?.trim() ?? ''
@@ -289,7 +327,7 @@ export function normalizeCreates(block: ParsedStateBlock): {
     ]
   })
   const items = (newItems ?? []).flatMap((create): NewItemEmission[] => {
-    const handle = create.handle.trim()
+    const handle = bareHandle(create.handle)
     const name = create.name.trim()
     return accepts(handle, name) ? [{ handle, name, description: create.description.trim() }] : []
   })
@@ -301,6 +339,10 @@ export function normalizeCreates(block: ParsedStateBlock): {
     },
     malformed,
   }
+}
+
+function stateClosed(raw: string): boolean {
+  return raw.indexOf(`</${STATE_ROOT_TAG}>`, raw.indexOf(`<${STATE_ROOT_TAG}>`)) !== -1
 }
 
 function emptyBlockDetail(stateSegment: string, malformedCreates: number): string {
@@ -343,7 +385,12 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
 
   const creates = parseCreates(stateSegment)
   const normalized = normalizeCreates({ ...block, ...creates.found })
-  const malformedCreates = creates.unmatched + normalized.malformed
+  const malformedCreates = creates.unclosed + creates.badAttributes + normalized.malformed
+
+  // A stream cut off inside a create may have lost the tags after it (the refs that name it), so
+  // the fallback must fire; the same create in a closed block is only counted.
+  if (creates.unclosed > 0 && !stateClosed(raw))
+    failures.push({ field: 'state', detail: 'block cut off inside a create' })
 
   // Deliberately stricter than assertNotTruncated's field-level rule: an empty
   // <visual_changes> reports "none", but there is no such thing as a turn with no

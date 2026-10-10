@@ -655,13 +655,125 @@ describe('creation tags', () => {
     expect(result.block.newItems).toBeUndefined()
   })
 
-  it('counts a create the stream cut off, keeping the fields before it', () => {
+  // Developer decision (Q2): a stream cut off inside a create may have lost the tags after it
+  // (the refs that name it), so the fallback fires; the fields before it are kept.
+  it('fails the state block when the stream was cut off inside a create', () => {
     const result = parseStateBlock(`<state>
   <scene_entities>c1</scene_entities>
   <new_location handle="new:a" name="A">a pier below`)
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block cut off inside a create' }])
+    expect(result.block).toEqual({ sceneEntities: ['c1'] })
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('leaves a cut-off block with only whole creates as a clean parse', () => {
+    const result = parseStateBlock(
+      '<state><new_item handle="new:k" name="key">iron</new_item><scene_entities>c1',
+    )
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(0)
+  })
+
+  it('leaves a whole create with bad attributes warn-only even in a cut-off block', () => {
+    const result = parseStateBlock(
+      `<state><new_item handle="new:k" name='key'>iron</new_item><scene_entities>c1`,
+    )
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(1)
+  })
+
+  it('keeps a closed block with an unclosed create warn-only', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:a" name="A">a pier below
+</state>`)
     expect(result.failures).toEqual([])
     expect(result.block).toEqual({ sceneEntities: ['c1'] })
     expect(result.malformedCreates).toBe(1)
+  })
+
+  // Developer decision (Q1): attribute text must be entirely key="value" pairs.
+  it.each([
+    ['an unescaped quote in a value', 'name="the "Rusty" Anchor"'],
+    ['single quotes', `name="Anchor" parent='l1'`],
+    ['spaces around =', 'name="Anchor" parent = "l1"'],
+    ['a bare word', 'name="Anchor" hidden'],
+    ['a stray slash', 'name="Anchor" /x'],
+  ])('drops and counts a create with %s in its attributes', (_label, attrs) => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_item handle="new:a" ${attrs}>x</new_item>
+  <new_item handle="new:ok" name="ok">y</new_item>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newItems).toEqual([{ handle: 'new:ok', name: 'ok', description: 'y' }])
+  })
+
+  it('drops a self-closed create with malformed attributes, counting it once', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_location handle="new:a" name='A' />
+</state>`)
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newLocations).toBeUndefined()
+  })
+
+  it('counts a bare create with no attributes once', () => {
+    const result = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
+  <new_item>iron</new_item>
+</state>`)
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newItems).toBeUndefined()
+  })
+
+  it('counts a malformed-attribute create and a duplicate handle separately', () => {
+    const result = parseStateBlock(`<state>
+  <new_item handle="new:a" name="A">x</new_item>
+  <new_item handle="new:a" name="B">dup</new_item>
+  <new_item handle="new:c" name='C'>bad</new_item>
+</state>`)
+    expect(result.malformedCreates).toBe(2)
+  })
+
+  // Developer decision (Q1): the five XML entities, decoded in name and description only.
+  it('decodes the five XML entities in a name and a description, in one pass', () => {
+    const { block } = parseStateBlock(`<state>
+  <new_location handle="new:a" name="the &quot;Rusty&quot; Anchor">a &lt;b&gt; sign</new_location>
+  <new_location handle="new:b" name="Salt &amp; Pepper Inn">it&apos;s &amp;lt;</new_location>
+</state>`)
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a', name: 'the "Rusty" Anchor', description: 'a <b> sign' },
+      { handle: 'new:b', name: 'Salt & Pepper Inn', description: "it's &lt;" },
+    ])
+  })
+
+  it('decodes entities in an item the same way', () => {
+    const { block } = parseStateBlock(
+      '<state><new_item handle="new:k" name="Salt &amp; Pepper">a &lt;b&gt; &amp;lt;</new_item></state>',
+    )
+    expect(block.newItems).toEqual([
+      { handle: 'new:k', name: 'Salt & Pepper', description: 'a <b> &lt;' },
+    ])
+  })
+
+  it('does not decode entities in a handle or a parent', () => {
+    const { block } = parseStateBlock(
+      '<state><new_location handle="new:a&amp;b" parent="l&amp;1" name="A" /></state>',
+    )
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a&amp;b', name: 'A', description: '', parent: 'l&amp;1' },
+    ])
+  })
+
+  // Developer decision (Q3): a model that echoes the prompt's bracket form still declares the handle.
+  it('unwraps a bracketed handle', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><new_item handle="[new:key]" name="key">iron</new_item></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.newItems).toEqual([{ handle: 'new:key', name: 'key', description: 'iron' }])
   })
 
   it('keeps a cut-off create from swallowing the create after it', () => {
@@ -765,6 +877,22 @@ describe('normalizeCreates', () => {
         { handle: 'new:b', name: 'B', description: '', parent: 'l1' },
       ],
     })
+  })
+
+  it('unwraps brackets on a handle before judging it', () => {
+    const { block, malformed } = normalizeCreates({
+      newLocations: [
+        { handle: ' [new:a] ', name: 'A', description: '' },
+        { handle: '[new:]', name: 'B', description: '' },
+        { handle: '[new:a', name: 'C', description: '' },
+        { handle: '[ new:b ]', name: 'D', description: '' },
+      ],
+    })
+    expect(malformed).toBe(2)
+    expect(block.newLocations).toEqual([
+      { handle: 'new:a', name: 'A', description: '' },
+      { handle: 'new:b', name: 'D', description: '' },
+    ])
   })
 
   it('removes a list it emptied, and an empty list it was given', () => {
