@@ -73,6 +73,10 @@ text in the action input cannot open a panel. Because swipes inside a panel bubb
 opposite edge's band. On a phone neither does: the sidebar is capped at 288px and the navigation
 panel at `100vw - 3rem`.
 
+The one swipe inside a panel that does not bubble up is over the Branches panel's tree while it is
+wider than the sidebar: the tree stops it at `touchstart`, so it scrolls the tree and changes no
+tab and no panel, even at the tree's end.
+
 ## Drawer swipes, and the one place we reach into `vaul`
 
 A drawer that holds unsaved work has to answer a swipe with a question rather than a close, and
@@ -198,6 +202,7 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   shown; with them off, the jump lands on the chapter's first entry. A chapter or tail row
   never switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
   history while the chapter is in the current branch's view all the same.
+
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
   per entry type, but every creation path initialised them blank and nothing ever wrote one

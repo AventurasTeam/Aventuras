@@ -92,7 +92,7 @@
     </div>
 
     <!-- Panel content -->
-    <div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-y-auto p-3">
+    <div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
       <Tabs.Content value="characters" class="mt-0 h-full space-y-4">
         <CharacterPanel />
       </Tabs.Content>
