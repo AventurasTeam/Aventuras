@@ -167,7 +167,7 @@ function buildResolution(
         : { status: 'ok', actions: plan.actions }
     }
     case 'keep':
-      return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }
+      return { status: 'ok', actions: entityKeepActions({ branchId, pair, branchEntities }) }
   }
 }
 

@@ -895,29 +895,38 @@ export const RenameCaseOnly: Story = {
   play: async () => {
     await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
     const save = () => screen.getByRole('button', { name: 'Save renames' })
+    const prompt = 'Change at least one name to clear the collision.'
     expect(save()).toBeDisabled()
-    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
     // Nothing edited yet: the disabled reason says what the help line says.
-    expect(save().closest('[title]')).toHaveAttribute(
-      'title',
-      'Change at least one name to clear the collision.',
-    )
+    expect(save().closest('[title]')).toHaveAttribute('title', prompt)
 
     const inputs = await screen.findAllByRole('textbox')
+    // A trailing space trims back to the current name: still the plain prompt.
+    await userEvent.type(inputs[1], ' ')
+    expect(save()).toBeDisabled()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
+
     await userEvent.clear(inputs[1])
     await userEvent.type(inputs[1], 'KAEL')
 
-    expect(await screen.findByText(/still collide/)).toBeInTheDocument()
+    expect(await screen.findByText(/still match/)).toBeInTheDocument()
     expect(save()).toBeDisabled()
     expect(save().closest('[title]')).toHaveAttribute(
       'title',
-      expect.stringContaining('still collide'),
+      expect.stringContaining('still match'),
     )
 
+    // One name inside the other still matches.
     await userEvent.type(inputs[1], ' the Guard')
+    expect(screen.getByText(/still match/)).toBeInTheDocument()
+    expect(save()).toBeDisabled()
+
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
 
     await waitFor(() => expect(save()).not.toBeDisabled())
-    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
   },
 }
 
@@ -956,13 +965,14 @@ export const RenameSubmitsTrimmedChanges: Story = {
     const inputs = await screen.findAllByRole('textbox')
     // A gains only a trailing space, which trims back to its current name.
     await userEvent.type(inputs[0], ' ')
-    await userEvent.type(inputs[1], ' the Guard  ')
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], ' Jorin  ')
     await userEvent.click(screen.getByRole('button', { name: 'Save renames' }))
 
     await waitFor(() => expect(lastResolution).not.toBeNull())
     expect(lastResolution).toEqual({
       mode: 'rename',
-      renames: [{ id: 'ent_kael_2', newName: 'Kael the Guard' }],
+      renames: [{ id: 'ent_kael_2', newName: 'Jorin' }],
     })
   },
 }
@@ -987,7 +997,9 @@ export const Blocked: Story = {
 
     await userEvent.click(screen.getByRole('radio', { name: 'Rename one' }))
     const inputs = await screen.findAllByRole('textbox')
-    await userEvent.type(inputs[1], ' the Guard')
+    // A rename that would otherwise save.
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
     expect(screen.getByRole('button', { name: 'Save renames' })).toBeDisabled()
     expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
 
@@ -1003,9 +1015,10 @@ export const RenameLoading: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     // Switch to rename mode via the segment.
     await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
-    // Dirty the first input so the Save button enables.
+    // Rename the first row so the Save button enables.
     const inputs = await screen.findAllByRole('textbox')
-    await userEvent.type(inputs[0], ' edit')
+    await userEvent.clear(inputs[0])
+    await userEvent.type(inputs[0], 'Jorin')
     await userEvent.click(await screen.findByRole('button', { name: 'Save renames' }))
   },
 }

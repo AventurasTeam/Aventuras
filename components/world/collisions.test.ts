@@ -61,7 +61,11 @@ describe('deriveCollisions', () => {
 
     const lookup = collisionPairOf([base, first, second], ['base', 'f1'])
     if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
-    const kept = entityKeepActions({ branchId: 'br_1', pair: lookup.pair })
+    const kept = entityKeepActions({
+      branchId: 'br_1',
+      pair: lookup.pair,
+      branchEntities: [base, first, second],
+    })
     const after = deriveCollisions(withFlagsCleared([base, first, second], kept))
 
     expect(after.has('f1')).toBe(false)

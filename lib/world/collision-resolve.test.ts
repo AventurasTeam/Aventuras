@@ -12,8 +12,12 @@ import {
   type EntityRename,
 } from './collision-resolve'
 
-/** `partnerId` flags the row against that namesake; null leaves it unflagged. */
-function character(id: string, name: string, partnerId: string | null = null): Entity {
+function character(
+  id: string,
+  name: string,
+  partnerId: string | null = null,
+  overrides: Partial<Entity> = {},
+): Entity {
   return {
     id,
     branchId: 'b1',
@@ -33,6 +37,7 @@ function character(id: string, name: string, partnerId: string | null = null): E
     embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,
+    ...overrides,
   }
 }
 
@@ -42,8 +47,14 @@ const clear = (id: string) => ({
   payload: { branchId: 'b1', id, patch: FLAG_CLEAR },
 })
 
-function pairOf(first: Entity, second: Entity): CollisionPair {
-  const lookup = collisionPairOf([first, second], [first.id, second.id])
+const renamed = (id: string, name: string, cleared = false) => ({
+  kind: 'updateEntity',
+  source: 'user_edit',
+  payload: { branchId: 'b1', id, patch: cleared ? { name, ...FLAG_CLEAR } : { name } },
+})
+
+function pairOf(first: Entity, second: Entity, others: readonly Entity[] = []): CollisionPair {
+  const lookup = collisionPairOf([first, second, ...others], [first.id, second.id])
   if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
   return lookup.pair
 }
@@ -52,23 +63,37 @@ const A = character('char_a', 'Kael')
 const B = character('char_b', 'Kael', 'char_a')
 
 describe('renameIssue', () => {
+  const issue = (names: [string, string], original: [string, string] = ['Kael', 'Kael']) =>
+    renameIssue(original, names)
+
   it('refuses a blank name on either side', () => {
-    expect(renameIssue('character', ['  ', 'Kael'])).toBe(RENAME_ISSUE.emptyName)
-    expect(renameIssue('character', ['Kael', ''])).toBe(RENAME_ISSUE.emptyName)
-    expect(renameIssue('character', ['', ' '])).toBe(RENAME_ISSUE.emptyName)
+    expect(issue(['  ', 'Jorin'])).toBe(RENAME_ISSUE.emptyName)
+    expect(issue(['Jorin', ''])).toBe(RENAME_ISSUE.emptyName)
+    expect(issue(['', ' '])).toBe(RENAME_ISSUE.emptyName)
   })
 
-  it('refuses names the namesake rule still pairs, a case-only change included', () => {
-    expect(renameIssue('character', ['Kael', 'Kael'])).toBe(RENAME_ISSUE.stillColliding)
-    expect(renameIssue('character', ['Kael', ' KAEL '])).toBe(RENAME_ISSUE.stillColliding)
+  it('refuses a rename that leaves both trimmed names as they were', () => {
+    expect(issue(['Kael', 'Kael'])).toBe(RENAME_ISSUE.unchanged)
+    expect(issue([' Kael ', 'Kael  '])).toBe(RENAME_ISSUE.unchanged)
+    expect(issue(['Kael', 'Kael'], [' Kael ', 'Kael'])).toBe(RENAME_ISSUE.unchanged)
+    expect(issue(['Marta', 'The Innkeeper'], ['Marta', 'The Innkeeper'])).toBe(
+      RENAME_ISSUE.unchanged,
+    )
   })
 
-  it('accepts names that stop colliding', () => {
-    expect(renameIssue('character', ['Kael', 'Kael the guard'])).toBeNull()
+  it('refuses names that still match: case aside, interior spacing aside, or one inside the other', () => {
+    expect(issue(['Kael', 'KAEL'])).toBe(RENAME_ISSUE.stillColliding)
+    expect(issue(['Kael the', 'Kael  the'])).toBe(RENAME_ISSUE.stillColliding)
+    expect(issue(['Kael', 'Kael the guard'])).toBe(RENAME_ISSUE.stillColliding)
+    expect(issue(['the Innkeeper', 'Innkeeper'], ['Innkeeper', 'Innkeeper'])).toBe(
+      RENAME_ISSUE.stillColliding,
+    )
   })
 
-  it('counts interior spacing as a difference, unlike spaces at either end', () => {
-    expect(renameIssue('character', ['Kael the', 'Kael  the'])).toBeNull()
+  it('accepts names that stop matching, a pair that matched through a keyword included', () => {
+    expect(issue(['Kael', 'Jorin'])).toBeNull()
+    expect(issue(['Kael', 'Kaelen'])).toBeNull()
+    expect(issue(['Marta', 'Innkeeper Grell'], ['Marta', 'The Innkeeper'])).toBeNull()
   })
 })
 
@@ -80,7 +105,7 @@ describe('entityRenameActions', () => {
   ) =>
     entityRenameActions({
       branchId: 'b1',
-      pair: pairOf(first, second),
+      pair: pairOf(first, second, others),
       renames,
       branchEntities: [first, second, ...others],
     })
@@ -107,150 +132,156 @@ describe('entityRenameActions', () => {
         [A, B],
         [
           { id: 'char_a', name: 'Kael' },
-          { id: 'char_b', name: 'kael' },
+          { id: 'char_b', name: 'Kael the guard' },
         ],
       ),
     ).toStrictEqual({ issue: RENAME_ISSUE.stillColliding })
+    expect(plan([A, B], [])).toStrictEqual({ issue: RENAME_ISSUE.unchanged })
   })
 
   it('names each row by its id, and keeps the name of a row with no entry', () => {
-    const renamedB = {
-      actions: [
-        {
-          kind: 'updateEntity',
-          source: 'user_edit',
-          payload: {
-            branchId: 'b1',
-            id: 'char_b',
-            patch: { name: 'Kael the guard', ...FLAG_CLEAR },
-          },
-        },
-      ],
-    }
+    const renamedB = { actions: [renamed('char_b', 'Jorin', true)] }
     expect(
       plan(
         [A, B],
         [
-          { id: 'char_b', name: 'Kael the guard' },
+          { id: 'char_b', name: 'Jorin' },
           { id: 'char_a', name: 'Kael' },
         ],
       ),
     ).toStrictEqual(renamedB)
-    expect(plan([A, B], [{ id: 'char_b', name: 'Kael the guard' }])).toStrictEqual(renamedB)
+    expect(plan([A, B], [{ id: 'char_b', name: 'Jorin' }])).toStrictEqual(renamedB)
   })
 
   it('renames the flagged row and clears its flag in one update', () => {
-    expect(rename([A, B], ['Kael', ' Kael the guard '])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: {
-          branchId: 'b1',
-          id: 'char_b',
-          patch: { name: 'Kael the guard', ...FLAG_CLEAR },
-        },
-      },
-    ])
+    expect(rename([A, B], ['Kael', ' Jorin '])).toStrictEqual([renamed('char_b', 'Jorin', true)])
   })
 
   it('renames the other row and clears the flagged one in a second update', () => {
-    expect(rename([A, B], ['Kael the elder', 'Kael'])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: { branchId: 'b1', id: 'char_a', patch: { name: 'Kael the elder' } },
-      },
+    expect(rename([A, B], ['Brannoc', 'Kael'])).toStrictEqual([
+      renamed('char_a', 'Brannoc'),
       clear('char_b'),
     ])
   })
 
   it('leaves a row whose stored name only differs by surrounding space unrenamed', () => {
     const spaced = character('char_a', ' Kael ')
-    expect(rename([spaced, B], [' Kael ', 'Kael the guard'])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: {
-          branchId: 'b1',
-          id: 'char_b',
-          patch: { name: 'Kael the guard', ...FLAG_CLEAR },
-        },
-      },
+    expect(rename([spaced, B], [' Kael ', 'Jorin'])).toStrictEqual([
+      renamed('char_b', 'Jorin', true),
     ])
   })
 
-  it('clears the flagged row of the pair even where another namesake keeps it paired', () => {
-    const elder = character('char_x', 'Kael')
-    expect(rename([A, B], ['Kael the elder', 'Kael'], [elder])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: { branchId: 'b1', id: 'char_a', patch: { name: 'Kael the elder' } },
-      },
+  it('resolves a contained pair once neither name holds the other', () => {
+    const stormborn = character('char_b', 'Kael Stormborn', 'char_a')
+    expect(rename([A, stormborn], ['Kael', 'Stormborn'])).toStrictEqual([
+      renamed('char_b', 'Stormborn', true),
+    ])
+  })
+
+  it('resolves a keyword pair by a name change, whether or not the keyword still matches', () => {
+    const marta = character('char_a', 'Marta', null, { keywords: ['the innkeeper'] })
+    const keeper = character('char_b', 'The Innkeeper', 'char_a')
+    expect(rename([marta, keeper], ['Marta', 'Innkeeper Grell'])).toStrictEqual([
+      renamed('char_b', 'Innkeeper Grell', true),
+    ])
+    expect(rename([marta, keeper], ['Marta Vell', 'The Innkeeper'])).toStrictEqual([
+      renamed('char_a', 'Marta Vell'),
       clear('char_b'),
     ])
   })
 
-  it('clears both rows when both are flagged', () => {
+  it('clears both rows when their flags name each other', () => {
     const flaggedA = character('char_a', 'Kael', 'char_b')
-    expect(rename([flaggedA, B], ['Kael the elder', 'Kael'])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: {
-          branchId: 'b1',
-          id: 'char_a',
-          patch: { name: 'Kael the elder', ...FLAG_CLEAR },
-        },
-      },
+    expect(rename([flaggedA, B], ['Brannoc', 'Kael'])).toStrictEqual([
+      renamed('char_a', 'Brannoc', true),
       clear('char_b'),
     ])
   })
 
-  it('clears a third flagged row the rename leaves without a namesake', () => {
+  it('clears a pair row whose partner is gone', () => {
+    const dormantA = character('char_a', 'Kael', 'char_gone')
+    expect(rename([dormantA, B], ['Kael', 'Jorin'])).toStrictEqual([
+      renamed('char_b', 'Jorin', true),
+      clear('char_a'),
+    ])
+  })
+
+  it('keeps a pair row’s flag on a live third row that stays its namesake', () => {
+    const third = character('char_c', 'Kael Stormborn')
+    const flaggedA = character('char_a', 'Kael', 'char_c')
+    expect(rename([flaggedA, B], ['Kael', 'Jorin'], [third])).toStrictEqual([
+      renamed('char_b', 'Jorin', true),
+    ])
+  })
+
+  it('clears a pair row’s flag on a live third row once the rename breaks it', () => {
+    const third = character('char_c', 'Kael Stormborn')
+    const flaggedA = character('char_a', 'Kael', 'char_c')
+    expect(rename([flaggedA, B], ['Brannoc', 'Kael'], [third])).toStrictEqual([
+      renamed('char_a', 'Brannoc', true),
+      clear('char_b'),
+    ])
+  })
+
+  it('judges a renamed pair row by its stored keywords too', () => {
+    const third = character('char_c', 'Kael Stormborn')
+    const flaggedA = character('char_a', 'Kael', 'char_c', { keywords: ['Kael Stormborn'] })
+    expect(rename([flaggedA, B], ['Brannoc', 'Kael'], [third])).toStrictEqual([
+      renamed('char_a', 'Brannoc'),
+      clear('char_b'),
+    ])
+  })
+
+  it('clears a third row’s flag on a renamed pair row it no longer matches', () => {
     const third = character('char_c', 'Kael', 'char_a')
-    expect(rename([A, B], ['Kael the elder', 'Kael the guard'], [third])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: { branchId: 'b1', id: 'char_a', patch: { name: 'Kael the elder' } },
-      },
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: {
-          branchId: 'b1',
-          id: 'char_b',
-          patch: { name: 'Kael the guard', ...FLAG_CLEAR },
-        },
-      },
+    expect(rename([A, B], ['Brannoc', 'Kael'], [third])).toStrictEqual([
+      renamed('char_a', 'Brannoc'),
+      clear('char_b'),
       clear('char_c'),
     ])
   })
 
-  it('leaves a third flagged row that keeps a namesake alone', () => {
+  it('leaves a third row’s flag whose pair the rename never touched', () => {
     const third = character('char_c', 'Kael', 'char_a')
-    expect(rename([A, B], ['Kael', 'Kael the guard'], [third]).map((a) => a.payload)).toStrictEqual(
-      [{ branchId: 'b1', id: 'char_b', patch: { name: 'Kael the guard', ...FLAG_CLEAR } }],
-    )
+    expect(rename([A, B], ['Kael', 'Jorin'], [third])).toStrictEqual([
+      renamed('char_b', 'Jorin', true),
+    ])
   })
 })
 
 describe('entityKeepActions', () => {
-  it('clears each flagged row of the pair and nothing else', () => {
-    const keep = (first: Entity, second: Entity) =>
-      entityKeepActions({ branchId: 'b1', pair: pairOf(first, second) })
+  const keep = (first: Entity, second: Entity, others: Entity[] = []) =>
+    entityKeepActions({
+      branchId: 'b1',
+      pair: pairOf(first, second, others),
+      branchEntities: [first, second, ...others],
+    })
+
+  it('clears the flagged row whose partner is the other row, and nothing else', () => {
     expect(keep(A, B)).toStrictEqual([clear('char_b')])
+  })
+
+  it('clears both rows when their flags name each other', () => {
     expect(keep(character('char_a', 'Kael', 'char_b'), B)).toStrictEqual([
       clear('char_a'),
       clear('char_b'),
     ])
   })
 
+  it('clears a pair row whose partner is gone', () => {
+    expect(keep(character('char_a', 'Kael', 'char_gone'), B)).toStrictEqual([
+      clear('char_a'),
+      clear('char_b'),
+    ])
+  })
+
+  it('keeps a pair row’s flag that names a live third row', () => {
+    const third = character('char_c', 'Kael')
+    expect(keep(character('char_a', 'Kael', 'char_c'), B, [third])).toStrictEqual([clear('char_b')])
+  })
+
   it('has no pair to keep once neither row is flagged', () => {
-    expect(
-      collisionPairOf([A, character('char_b', 'Kael', null)], ['char_a', 'char_b']),
-    ).toStrictEqual({
+    expect(collisionPairOf([A, character('char_b', 'Kael')], ['char_a', 'char_b'])).toStrictEqual({
       miss: COLLISION_PAIR_MISS.notFlagged,
     })
   })

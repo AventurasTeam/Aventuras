@@ -216,7 +216,7 @@
     "nameTaken": "Another row already has that name.",
     "renameIssue": {
       "emptyName": "A name can't be empty.",
-      "stillColliding": "These names still collide: letter case and spaces at either end don't count as a difference."
+      "stillColliding": "These names still match: the same name, or one inside the other. Letter case and spaces at either end don't count as a difference."
     },
     "keepConfirm": "Keep as distinct",
     "keepBody": "Both \"{{name}}\" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.",

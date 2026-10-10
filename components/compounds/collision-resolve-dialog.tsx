@@ -75,6 +75,7 @@ const OVERLAP_NOTES = [
 
 const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
+  [RENAME_ISSUE.unchanged]: () => t('collisionDialog.renameHelp'),
   [RENAME_ISSUE.stillColliding]: () => t('collisionDialog.renameIssue.stillColliding'),
 }
 
@@ -796,10 +797,8 @@ function RenameBody({
     setNameB(entityB.name)
   }
 
-  const issue = renameIssue(entityA.kind, [nameA, nameB])
-  const untouched = nameA === entityA.name && nameB === entityB.name
-  const help =
-    untouched || issue == null ? t('collisionDialog.renameHelp') : RENAME_ISSUE_TEXT[issue]()
+  const issue = renameIssue([entityA.name, entityB.name], [nameA, nameB])
+  const help = issue == null ? t('collisionDialog.renameHelp') : RENAME_ISSUE_TEXT[issue]()
   const captionA = sideCaption('A', entityA, nowMs)
   const captionB = sideCaption('B', entityB, nowMs)
 

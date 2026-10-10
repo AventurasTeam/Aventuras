@@ -27,7 +27,6 @@ import {
   flagsNaming,
   namesakeKey,
   nameTakenByOther,
-  orphanedFlags,
   pairFlagsToClear,
   withFlagClears,
   withFlagWrites,
@@ -116,94 +115,6 @@ describe('namesakeKey', () => {
     expect(namesakeKey({ kind: 'character', name: 'Kael' })).not.toBe(
       namesakeKey({ kind: 'location', name: 'Kael' }),
     )
-  })
-})
-
-describe('orphanedFlags', () => {
-  const kael = flagged('char_f', 'Kael', 'char_p')
-  const twin = entity('char_p', 'kael ')
-
-  it('returns a flagged row whose partner is deleted', () => {
-    expect(orphanedFlags({ entities: [kael, twin], removed: new Set(['char_p']) })).toStrictEqual([
-      'char_f',
-    ])
-  })
-
-  it('returns a flagged row whose partner is renamed away', () => {
-    expect(
-      orphanedFlags({ entities: [kael, twin], renamed: new Map([['char_p', 'Brannoc']]) }),
-    ).toStrictEqual(['char_f'])
-  })
-
-  it('returns a flagged row renamed to a name no one else has', () => {
-    expect(
-      orphanedFlags({ entities: [kael, twin], renamed: new Map([['char_f', 'Kael the guard']]) }),
-    ).toStrictEqual(['char_f'])
-  })
-
-  it('returns nothing for a case-only rename of the partner', () => {
-    expect(
-      orphanedFlags({ entities: [kael, twin], renamed: new Map([['char_p', 'KAEL']]) }),
-    ).toStrictEqual([])
-  })
-
-  it('returns nothing while a third namesake remains', () => {
-    const third = entity('char_q', 'Kael')
-    expect(
-      orphanedFlags({ entities: [kael, twin, third], removed: new Set(['char_p']) }),
-    ).toStrictEqual([])
-  })
-
-  it('never returns the removed row, only the partner it leaves alone', () => {
-    const flaggedTwin = flagged('char_p', 'Kael', 'char_f')
-    expect(
-      orphanedFlags({ entities: [kael, flaggedTwin], removed: new Set(['char_f']) }),
-    ).toStrictEqual(['char_p'])
-  })
-
-  it('leaves a row already orphaned before the write untouched', () => {
-    const lone = flagged('char_l', 'Lone', 'char_gone')
-    const mira = entity('char_m', 'Mira')
-    const miraTwin = entity('char_n', 'Mira')
-    expect(
-      orphanedFlags({ entities: [lone, mira, miraTwin], removed: new Set(['char_n']) }),
-    ).toStrictEqual([])
-  })
-
-  it('counts staged and retired namesakes', () => {
-    const staged = entity('char_s', 'Kael', { status: 'staged' })
-    const retired = entity('char_r', 'Kael', { status: 'retired' })
-    expect(orphanedFlags({ entities: [kael, staged], removed: new Set(['char_s']) })).toStrictEqual(
-      ['char_f'],
-    )
-    expect(
-      orphanedFlags({ entities: [kael, staged, retired], removed: new Set(['char_r']) }),
-    ).toStrictEqual([])
-  })
-
-  it('does not count a same-name row of another kind', () => {
-    const place = entity('loc_k', 'Kael', {}, 'location')
-    expect(
-      orphanedFlags({ entities: [kael, twin, place], removed: new Set(['char_p']) }),
-    ).toStrictEqual(['char_f'])
-  })
-
-  it('returns a flagged row renamed out of a group that still pairs without it', () => {
-    const f = flagged('char_f', 'Kael', 'char_p')
-    const p = entity('char_p', 'Kael')
-    const q = entity('char_q', 'Kael')
-    expect(
-      orphanedFlags({ entities: [f, p, q], renamed: new Map([['char_f', 'Kael the guard']]) }),
-    ).toStrictEqual(['char_f'])
-  })
-
-  it('leaves a flagged row renamed onto another row’s name', () => {
-    const f = flagged('char_f', 'Kael', 'char_p')
-    const p = entity('char_p', 'Kael')
-    const m = entity('char_m', 'Mira')
-    expect(
-      orphanedFlags({ entities: [f, p, m], renamed: new Map([['char_f', 'Mira']]) }),
-    ).toStrictEqual([])
   })
 })
 

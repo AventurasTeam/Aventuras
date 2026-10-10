@@ -39,41 +39,6 @@ export function nameTakenByOther(input: {
   )
 }
 
-function countKeys(rows: Iterable<Pick<Entity, 'kind' | 'name'>>): Map<string, number> {
-  const counts = new Map<string, number>()
-  for (const row of rows) {
-    const key = namesakeKey(row)
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  return counts
-}
-
-/**
- * Flagged rows the write leaves with no same-kind namesake although they had one before: World
- * can't pair them, so their flag could never be cleared. Rows already orphaned stay untouched.
- */
-export function orphanedFlags(input: {
-  /** The branch's entities before the write. */
-  entities: readonly Entity[]
-  removed?: ReadonlySet<string>
-  /** id → new name. */
-  renamed?: ReadonlyMap<string, string>
-}): string[] {
-  const { entities, removed = new Set<string>(), renamed = new Map<string, string>() } = input
-  const after = (e: Entity) => ({ kind: e.kind, name: renamed.get(e.id) ?? e.name })
-  const before = countKeys(entities)
-  const left = countKeys(entities.filter((e) => !removed.has(e.id)).map(after))
-  return entities
-    .filter(
-      (e) =>
-        e.nameCollisionFlag === 1 &&
-        !removed.has(e.id) &&
-        (before.get(namesakeKey(e)) ?? 0) > 1 &&
-        (left.get(namesakeKey(after(e))) ?? 0) <= 1,
-    )
-    .map((e) => e.id)
-}
-
 /** Rows outside `removed` whose flag names a row in it: world.md → Delete. */
 export function flagsNaming(entities: readonly Entity[], removed: ReadonlySet<string>): string[] {
   return entities

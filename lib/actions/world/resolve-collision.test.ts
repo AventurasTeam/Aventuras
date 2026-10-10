@@ -1003,13 +1003,15 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
 
 describe('resolveCollision — rename', () => {
   it('renames only B and clears its flag in that same delta', async () => {
-    expect(await resolveCollision('b1', renameTo('Brannoc', ' Brannoc the Younger '), ctx)).toEqual(
-      { status: 'ok' },
-    )
+    expect(await resolveCollision('b1', renameTo('Brannoc', ' Bran the Younger '), ctx)).toEqual({
+      status: 'ok',
+    })
 
     expect(await entityRow('char_b')).toMatchObject({
-      name: 'Brannoc the Younger',
+      name: 'Bran the Younger',
       nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
     })
     const rows = await deltaRows()
     expect(rows).toHaveLength(1)
@@ -1017,12 +1019,7 @@ describe('resolveCollision — rename', () => {
       targetTable: 'entities',
       targetId: 'char_b',
       op: 'update',
-      undoPayload: {
-        name: 'Brannoc',
-        nameCollisionFlag: 1,
-        nameCollisionPartnerId: 'char_a',
-        nameCollisionReason: 'distinct',
-      },
+      undoPayload: { name: 'Brannoc', nameCollisionFlag: 1, nameCollisionPartnerId: 'char_a' },
     })
   })
 
@@ -1030,7 +1027,7 @@ describe('resolveCollision — rename', () => {
     const resolution: CollisionResolution = {
       mode: 'rename',
       renames: [
-        { id: 'char_b', name: 'Brannoc the Younger' },
+        { id: 'char_b', name: 'Bran the Younger' },
         { id: 'char_a', name: 'Brannoc' },
       ],
     }
@@ -1038,26 +1035,37 @@ describe('resolveCollision — rename', () => {
     expect(await resolveCollision('b1', resolution, ctx)).toEqual({ status: 'ok' })
 
     expect((await entityRow('char_a'))?.name).toBe('Brannoc')
-    expect((await entityRow('char_b'))?.name).toBe('Brannoc the Younger')
+    expect((await entityRow('char_b'))?.name).toBe('Bran the Younger')
     expect((await deltaRows()).map((r) => r.targetId)).toEqual(['char_b'])
   })
 
   it('CTRL-Z restores both names and flags; redo renames and clears again', async () => {
     await setFlag('char_a', 'char_b')
     const before = await worldSnapshot()
-    await resolveCollision('b1', renameTo('Brannoc', 'Brannoc the Younger'), ctx)
+    await resolveCollision('b1', renameTo('Brannoc', 'Bran the Younger'), ctx)
     const renamed = await worldSnapshot()
-    expect(await entityRow('char_a')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 0 })
+    expect(await entityRow('char_a')).toMatchObject({
+      name: 'Brannoc',
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+    })
     expect(await entityRow('char_b')).toMatchObject({
-      name: 'Brannoc the Younger',
+      name: 'Bran the Younger',
       nameCollisionFlag: 0,
     })
 
     const group = await undoAll()
 
     expect(await worldSnapshot()).toEqual(before)
-    expect(await entityRow('char_b')).toMatchObject({ name: 'Brannoc', nameCollisionFlag: 1 })
-    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(1)
+    expect(await entityRow('char_b')).toMatchObject({
+      name: 'Brannoc',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_a',
+    })
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_b',
+    })
 
     await applyRedo(group, ctx)
 
@@ -1065,7 +1073,9 @@ describe('resolveCollision — rename', () => {
   })
 
   it.each([
+    ['an untouched rename', 'Brannoc'],
     ['a case-only rename', 'BRANNOC'],
+    ['a name holding the other', 'Brannoc the Younger'],
     ['an empty name', '   '],
   ])('refuses %s with invalid-rename and writes nothing', async (_, name) => {
     expect(await resolveCollision('b1', renameTo('Brannoc', name), ctx)).toMatchObject({
@@ -1077,26 +1087,54 @@ describe('resolveCollision — rename', () => {
 })
 
 describe('resolveCollision — keep as distinct', () => {
-  it('clears the flag on each flagged row of the pair; CTRL-Z re-flags both', async () => {
+  it('clears the flag on each pair row naming the other; CTRL-Z re-flags both', async () => {
     await setFlag('char_a', 'char_b')
+    const before = await worldSnapshot()
 
     expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
 
     const rows = await deltaRows()
     expect(rows.map((r) => r.targetId).sort()).toEqual(['char_a', 'char_b'])
     expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
-    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(0)
-    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
+    for (const id of ['char_a', 'char_b'])
+      expect(await entityRow(id)).toMatchObject({
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      })
 
     await undoAll()
 
-    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(1)
-    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(1)
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await entityRow('char_a')).toMatchObject({ nameCollisionPartnerId: 'char_b' })
+    expect(await entityRow('char_b')).toMatchObject({ nameCollisionPartnerId: 'char_a' })
   })
 
   it('writes one delta when only one row of the pair is flagged', async () => {
     await resolveCollision('b1', KEEP_A_B, ctx)
     expect((await deltaRows()).map((r) => r.targetId)).toEqual(['char_b'])
+  })
+
+  it('keeps a pair row’s flag that names a live third row', async () => {
+    await ctx.db.insert(entities).values(row('char_c', 'character', 'Brannoc', 3))
+    await setFlag('char_a', 'char_c')
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_c',
+    })
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
+  })
+
+  it('clears a pair row whose partner is gone from the branch', async () => {
+    await setFlag('char_a', 'char_gone')
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
+
+    expect((await entityRow('char_a'))?.nameCollisionFlag).toBe(0)
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
   })
 })
 
