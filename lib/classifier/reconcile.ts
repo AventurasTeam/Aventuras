@@ -89,6 +89,9 @@ export function decideReconcile(namesakes: readonly ScoredNamesake[]): Reconcile
 
 const hasText = (text: string | null): text is string => text != null && text.trim() !== ''
 
+// cosine reads a zero vector as 0 and a NaN as NaN: a fabricated score either way.
+const scorable = (v: Float32Array): boolean => v.every(Number.isFinite) && v.some((x) => x !== 0)
+
 /**
  * Every scorable namesake is embedded alongside the candidate in ONE call and compared in
  * memory, so the decision never depends on whether their vec0 rows have been drained yet.
@@ -114,8 +117,10 @@ async function similarities(
   const dim = vectors[0]?.length ?? 0
   if (vectors.length !== sent.length + 1 || dim === 0 || vectors.some((v) => v.length !== dim))
     return unscored
+  if (!scorable(vectors[0])) return unscored
   const scores: (number | null)[] = [...unscored]
-  for (const [i, s] of sent.entries()) scores[s.index] = cosine(vectors[0], vectors[i + 1])
+  for (const [i, s] of sent.entries())
+    scores[s.index] = scorable(vectors[i + 1]) ? cosine(vectors[0], vectors[i + 1]) : null
   return scores
 }
 

@@ -248,7 +248,8 @@ export async function* periodicClassifierPhase(
     // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
     // fields, so a key built from an unbounded one measures text no row holds.
     const stored = clampEmbeddedCharacter(candidate)
-    // The planner drops a blank name, and its empty key would match any blank-named row.
+    // The planner drops a blank name; its keywords could still name a row and spend an
+    // embed call on a decision nothing reads.
     if (stored.name === '') continue
     decisions.set(
       candidate.handle,

@@ -218,6 +218,13 @@ async function drain(ctx: PhaseContext) {
   }
 }
 
+const createdEntry = (events: unknown[]) =>
+  (
+    events.find((e) => (e as { action: { kind: string } }).action.kind === 'createEntity') as
+      | { action: { payload: { entry: Record<string, unknown> } } }
+      | undefined
+  )?.action.payload.entry
+
 describe('periodicClassifierPhase', () => {
   beforeEach(() => {
     // resetAllMocks, not clearAllMocks: a leaked mockResolvedValue would let a
@@ -766,10 +773,7 @@ describe('periodicClassifierPhase', () => {
       const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
       const { events } = await drain(h.ctx)
 
-      const created = events.find(
-        (e) => (e as { action: { kind: string } }).action.kind === 'createEntity',
-      ) as { action: { payload: { entry: Record<string, unknown> } } }
-      expect(created.action.payload.entry).toMatchObject({
+      expect(createdEntry(events)).toMatchObject({
         nameCollisionFlag: 1,
         nameCollisionPartnerId: 'char_user',
         nameCollisionReason: 'distinct',
@@ -830,10 +834,7 @@ describe('periodicClassifierPhase', () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [innkeeper] })
     const { events } = await drain(h.ctx)
 
-    const created = events.find(
-      (e) => (e as { action: { kind: string } }).action.kind === 'createEntity',
-    ) as { action: { payload: { entry: Record<string, unknown> } } }
-    expect(created.action.payload.entry).toMatchObject({
+    expect(createdEntry(events)).toMatchObject({
       name: 'Marta',
       nameCollisionFlag: 1,
       nameCollisionPartnerId: CHAR_KAEL,
@@ -865,12 +866,6 @@ describe('periodicClassifierPhase', () => {
           dim: 2,
         })),
       )
-    const createdEntry = (events: unknown[]) =>
-      (
-        events.find((e) => (e as { action: { kind: string } }).action.kind === 'createEntity') as
-          | { action: { payload: { entry: Record<string, unknown> } } }
-          | undefined
-      )?.action.payload.entry
 
     it('flags a partial namesake in the scene as in-scene, with it as the partner', async () => {
       configureClassifierEmbedder(
@@ -975,14 +970,15 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('never reconciles a blank-named candidate against a blank-named row', async () => {
+  // A blank name matches no row, but a keyword naming one would still make a namesake.
+  it('never reconciles a blank-named candidate, even one whose keywords name a row', async () => {
     const embedder = vi.fn(async () => ({ vectors: [], dim: 3 }))
     configureClassifierEmbedder(embedder)
-    const blankRow = {
+    const staged = {
       id: CHAR_KAEL,
       branchId: 'b1',
       kind: 'character',
-      name: '',
+      name: 'Kael',
       status: 'staged',
       description: 'A courier.',
       keywords: [],
@@ -990,10 +986,10 @@ describe('periodicClassifierPhase', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction({
-        newCharacters: [{ handle: 'nc1', name: ' ', description: 'Someone.', keywords: [] }],
+        newCharacters: [{ handle: 'nc1', name: ' ', description: 'Someone.', keywords: ['Kael'] }],
       }),
     })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [blankRow] })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
     const { events } = await drain(h.ctx)
 
     expect(embedder).not.toHaveBeenCalled()

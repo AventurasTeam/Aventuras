@@ -233,6 +233,34 @@ describe('decideReconcile', () => {
         decideReconcile([namesake('char_b', 'exact', null), namesake('char_a', 'exact', null)]),
       ).toEqual(flagOf('char_a', 'no-signal'))
     })
+
+    // Two adjacent keys disagree: the earlier key decides.
+    it('ranks the in-scene ahead of the exact', () => {
+      expect(
+        decideReconcile([
+          namesake('char_exact', 'exact', 0.6),
+          namesake('char_scene', 'partial', 0.6, true),
+        ]),
+      ).toEqual(flagOf('char_scene', 'ambiguous'))
+    })
+
+    it('ranks the exact ahead of the unflagged', () => {
+      expect(
+        decideReconcile([
+          namesake('char_part', 'partial', 0.6),
+          namesake('char_exact', 'exact', 0.6, false, { nameCollisionFlag: 1 }),
+        ]),
+      ).toEqual(flagOf('char_exact', 'ambiguous'))
+    })
+
+    it('ranks the unflagged ahead of the older', () => {
+      expect(
+        decideReconcile([
+          namesake('char_old', 'exact', 0.3, false, { nameCollisionFlag: 1, createdAt: 1 }),
+          namesake('char_new', 'exact', 0.3, false, { createdAt: 5 }),
+        ]),
+      ).toEqual(flagOf('char_new', 'distinct'))
+    })
   })
 })
 
@@ -400,6 +428,15 @@ describe('reconcileNewCharacter', () => {
       ).toEqual(flagOf('char_1', 'no-signal'))
     })
 
+    it('when the candidate vector is zero', async () => {
+      expect(
+        await decide(async () => ({
+          vectors: [new Float32Array([0, 0]), new Float32Array([1, 0])],
+          dim: 2,
+        })),
+      ).toEqual(flagOf('char_1', 'no-signal'))
+    })
+
     it('when the vectors are empty', async () => {
       expect(
         await decide(async () => ({
@@ -407,6 +444,30 @@ describe('reconcileNewCharacter', () => {
           dim: 0,
         })),
       ).toEqual(flagOf('char_1', 'no-signal'))
+    })
+  })
+
+  // cosine would read a zero vector as 0 and a NaN as NaN, a score nothing earned.
+  describe.each([
+    ['a zero vector', [0, 0]],
+    ['a NaN component', [Number.NaN, 1]],
+  ])('a namesake embedded as %s is unscored', (_, components) => {
+    const decide = (name: string) =>
+      reconcileNewCharacter(candidate(), {
+        entities: [row({ name })],
+        embedDescriptions: async () => ({
+          vectors: [new Float32Array([1, 0]), new Float32Array(components)],
+          dim: 2,
+        }),
+        scene: null,
+      })
+
+    it('flagging an exact namesake no-signal', async () => {
+      expect(await decide('Eldrin')).toEqual(flagOf('char_1', 'no-signal'))
+    })
+
+    it('flagging a partial namesake outside the scene no-signal', async () => {
+      expect(await decide('Eldrin Vane')).toEqual(flagOf('char_1', 'no-signal'))
     })
   })
 
