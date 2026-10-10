@@ -890,7 +890,7 @@ export const RenameMode: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
 }
 
-export const RenameCaseOnly: Story = {
+export const RenameValidation: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
@@ -924,6 +924,35 @@ export const RenameCaseOnly: Story = {
 
     await userEvent.clear(inputs[1])
     await userEvent.type(inputs[1], 'Jorin')
+
+    await waitFor(() => expect(save()).not.toBeDisabled())
+    expect(screen.getByText(prompt)).toBeInTheDocument()
+  },
+}
+
+// world.md → Rename: keywords don't count, so a pair that matches through one passes once a name changes.
+export const RenameKeywordPair: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ id: 'ent_marta', name: 'Marta', keywords: ['the innkeeper'] })}
+      entityB={baseEntity({
+        id: 'ent_keeper',
+        name: 'The Innkeeper',
+        createdAt: new Date().toISOString(),
+        keywords: [],
+      })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const save = () => screen.getByRole('button', { name: 'Save renames' })
+    const prompt = 'Change at least one name to clear the collision.'
+    expect(save()).toBeDisabled()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
+
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.type(inputs[0], ' Vell')
 
     await waitFor(() => expect(save()).not.toBeDisabled())
     expect(screen.getByText(prompt)).toBeInTheDocument()

@@ -61,6 +61,8 @@ function pairOf(first: Entity, second: Entity, others: readonly Entity[] = []): 
 
 const A = character('char_a', 'Kael')
 const B = character('char_b', 'Kael', 'char_a')
+const marta = character('char_a', 'Marta', null, { keywords: ['the innkeeper'] })
+const keeper = character('char_b', 'The Innkeeper', 'char_a')
 
 describe('renameIssue', () => {
   const issue = (names: [string, string], original: [string, string] = ['Kael', 'Kael']) =>
@@ -137,6 +139,7 @@ describe('entityRenameActions', () => {
       ),
     ).toStrictEqual({ issue: RENAME_ISSUE.stillColliding })
     expect(plan([A, B], [])).toStrictEqual({ issue: RENAME_ISSUE.unchanged })
+    expect(plan([marta, keeper], [])).toStrictEqual({ issue: RENAME_ISSUE.unchanged })
   })
 
   it('names each row by its id, and keeps the name of a row with no entry', () => {
@@ -179,8 +182,6 @@ describe('entityRenameActions', () => {
   })
 
   it('resolves a keyword pair by a name change, whether or not the keyword still matches', () => {
-    const marta = character('char_a', 'Marta', null, { keywords: ['the innkeeper'] })
-    const keeper = character('char_b', 'The Innkeeper', 'char_a')
     expect(rename([marta, keeper], ['Marta', 'Innkeeper Grell'])).toStrictEqual([
       renamed('char_b', 'Innkeeper Grell', true),
     ])

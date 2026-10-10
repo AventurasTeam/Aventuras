@@ -1072,6 +1072,21 @@ describe('resolveCollision — rename', () => {
     expect(await worldSnapshot()).toEqual(renamed)
   })
 
+  it('keeps a pair row’s flag that names a live third row', async () => {
+    await ctx.db.insert(entities).values(row('char_c', 'character', 'Brannoc', 3))
+    await setFlag('char_a', 'char_c')
+
+    expect(await resolveCollision('b1', renameTo('Brannoc', 'Bran the Younger'), ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await entityRow('char_a')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_c',
+    })
+    expect(await entityRow('char_b')).toMatchObject({ nameCollisionFlag: 0 })
+  })
+
   it.each([
     ['an untouched rename', 'Brannoc'],
     ['a case-only rename', 'BRANNOC'],
