@@ -39,14 +39,14 @@
   const edgeWidth = () => (window.innerWidth <= DESKTOP_BREAKPOINT ? 30 : 20)
 
   // Read off the shell rather than an overlay strip, which would take the taps of whatever lies under it.
+  // Each edge listens only while neither panel is open: a swipe in an open panel belongs to its tabs.
   function handleEdgeSwipeLeft(event: SwipeEvent) {
     if (event.startX < window.innerWidth - edgeWidth()) return
-    if (story.currentStory && !ui.sidebarOpen) {
+    if (story.currentStory && !ui.sidebarOpen && !ui.navPanelOpen) {
       ui.toggleSidebar()
     }
   }
 
-  // Only while neither panel is open: a right swipe in the open sidebar belongs to its tabs.
   function handleEdgeSwipeRight(event: SwipeEvent) {
     if (event.startX > edgeWidth()) return
     if (story.currentStory && !ui.sidebarOpen && !ui.navPanelOpen) {

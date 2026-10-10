@@ -60,10 +60,10 @@ the panel forgetting what you were doing.
 
 ## Edge swipes
 
-The edge swipes that open the two side panels live in `AppShell.svelte` and are deliberately
-asymmetric. The right one opens the sidebar whenever it is closed; the left one only while
-_neither_ panel is open, because a right-swipe inside the open sidebar already belongs to that
-sidebar's tab strip and must not also open the panel behind it.
+The edge swipes that open the two side panels live in `AppShell.svelte`, and each listens only
+while _neither_ panel is open: a swipe inside an open panel belongs to that panel's tab strip, and
+one panel must never open over the other. For the same reason the header's right-panel control
+closes the navigation panel first wherever the panels overlay the story.
 
 They are read off the shell itself, counting only gestures that _start_ within 30px of an edge (20px
 above the mobile breakpoint), not from invisible strips over the page. A strip takes every tap that
@@ -72,6 +72,10 @@ that band. A gesture that starts in a text field is never a swipe, so placing a 
 text in the action input cannot open a panel. Because swipes inside a panel bubble up to the shell, a panel must never reach the
 opposite edge's band. On a phone neither does: the sidebar is capped at 288px and the navigation
 panel at `100vw - 3rem`.
+
+The one swipe inside a panel that may not bubble up is over the Branches panel's tree. When the tree
+could still scroll in the swipe's direction as the gesture starts, it stops the `touchend`, so the
+swipe scrolls the tree and changes no tab and no panel. At the tree's edge the swipe goes through.
 
 ## Drawer swipes, and the one place we reach into `vaul`
 
@@ -198,6 +202,7 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   shown; with them off, the jump lands on the chapter's first entry. A chapter or tail row
   never switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
   history while the chapter is in the current branch's view all the same.
+
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
   per entry type, but every creation path initialised them blank and nothing ever wrote one
