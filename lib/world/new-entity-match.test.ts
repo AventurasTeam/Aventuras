@@ -68,7 +68,7 @@ describe('matchNewLocation', () => {
     expect(matchNewLocation(candidate, [{ ...MARKET, status: 'retired' }])).toEqual(PLAIN)
   })
 
-  it('flags a sibling whose name sits inside the candidate same-parent', () => {
+  it('flags same-parent a sibling whose name sits inside the candidate', () => {
     expect(
       matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, [MARKET]),
     ).toEqual(flaggedWith('loc_market'))
@@ -105,6 +105,17 @@ describe('matchNewLocation', () => {
     expect(
       matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, entities),
     ).toEqual(flaggedWith('loc_b'))
+  })
+
+  it('ignores a retired, non-location or other-parent row on the partial path', () => {
+    const entities = [
+      place('loc_retired', 'Market', 'loc_hollow', { status: 'retired' }),
+      thing('item_stalls', 'Market Stalls'),
+      place('loc_other', 'Drowned Market', 'loc_elsewhere'),
+    ]
+    expect(
+      matchNewLocation({ name: 'The Drowned Market Stalls', parentId: 'loc_hollow' }, entities),
+    ).toEqual(PLAIN)
   })
 
   it('reuses an exact sibling ahead of an older partial one', () => {

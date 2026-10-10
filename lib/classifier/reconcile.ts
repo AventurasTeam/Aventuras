@@ -87,7 +87,10 @@ export function decideReconcile(namesakes: readonly ScoredNamesake[]): Reconcile
   return { kind: 'create', flag: { partnerId: partner.entity.id, reason: reasonOf(partner) } }
 }
 
-export type ItemMatchFlag = { partnerId: string; reason: 'alike' | 'ambiguous' }
+export type ItemMatchFlag = {
+  partnerId: string
+  reason: Extract<CollisionReason, 'alike' | 'ambiguous'>
+}
 
 /**
  * piggyback.md → Matching before creating: an item is never reused. The most similar exact
