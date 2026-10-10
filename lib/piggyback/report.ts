@@ -6,13 +6,17 @@ type StateReport = NonNullable<EntryMetadata['stateReport']>
 type ReportedLocation = NonNullable<StateReport['newLocations']>[number]
 type ReportedItem = NonNullable<StateReport['newItems']>[number]
 
-// Both ways: the fallback reads a prior report's create lists back in as a TurnCreatesReport.
-type _CreatesMatch = [NewLocationReport, NewItemReport] extends [ReportedLocation, ReportedItem]
-  ? [ReportedLocation, ReportedItem] extends [NewLocationReport, NewItemReport]
-    ? true
-    : never
+// Both ways, with the same keys: the fallback reads a prior report's create lists back in as
+// a TurnCreatesReport. Assignability alone passes an extra optional key on either side.
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never]
+  ? true
   : never
-const _createsChecks: [_CreatesMatch] = [true]
+type Matches<A, B> = [A] extends [B] ? ([B] extends [A] ? SameKeys<A, B> : never) : never
+type _CreatesMatch = [
+  Matches<NewLocationReport, ReportedLocation>,
+  Matches<NewItemReport, ReportedItem>,
+]
+const _createsChecks: _CreatesMatch = [true, true]
 void _createsChecks
 
 type BuildReportArgs = {

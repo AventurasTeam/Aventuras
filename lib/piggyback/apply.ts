@@ -39,7 +39,7 @@ type BuildArgs = {
   /** This turn's planned creates, looked up like stored rows: a new place can be the scene's
    *  location, and a new item can change hands. */
   createdRows?: readonly Entity[]
-  /** Staged rows a create matched instead of creating; promoted like a staged scene member. */
+  /** Rows a create reused; the staged ones are promoted like a staged scene member. */
   reusedIds?: readonly string[]
   previousMetadata: PreviousMetadata
   branchId: string

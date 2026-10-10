@@ -1059,7 +1059,7 @@ describe("buildPiggybackActions with this turn's creates", () => {
     expect(result.metadata.currentLocationId).toBe('loc_1')
   })
 
-  it('moves a new item into a holder like any item', () => {
+  it('moves a new item into a holder like any item, without looking it up', () => {
     const key = mockEntity({
       id: 'item_key',
       kind: 'item',
@@ -1120,6 +1120,17 @@ describe("buildPiggybackActions with this turn's creates", () => {
       reusedIds: ['loc_hall', 'loc_yard'],
     })
     expect(promotes(result)).toEqual([promoteOf('loc_hall')])
+  })
+
+  // A rejected current_location names no place, so it introduces nothing.
+  it('does not promote a staged non-location the block names as the scene', () => {
+    const ghost = mockEntity({ id: 'char_ghost', status: 'staged' })
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'char_ghost' },
+      entities: [hero, ghost],
+    })
+    expect(result.applied.currentLocationRejected).toBe(true)
+    expect(promotes(result)).toEqual([])
   })
 
   // Auto-promote keys on the block naming the place; an inherited location names nothing.
