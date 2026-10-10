@@ -1,8 +1,15 @@
-import type { PipelineAction } from '@/lib/actions'
+import type { FlagClearPatch, PipelineAction } from '@/lib/actions'
 import type { Entity, EntityKind } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 type EntityUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
+
+/** The patch that clears a collision flag: the flag, its partner and its reason together. */
+export const FLAG_CLEAR = {
+  nameCollisionFlag: 0,
+  nameCollisionPartnerId: null,
+  nameCollisionReason: null,
+} as const satisfies FlagClearPatch
 
 /** The classifier's namesake rule: same kind, same normalizeTerm name. */
 export function namesakeKey(entity: Pick<Entity, 'kind' | 'name'>): string {
@@ -81,13 +88,13 @@ export function withFlagClears(
       out.push({
         kind: 'updateEntity',
         source: 'user_edit',
-        payload: { branchId, id, patch: { nameCollisionFlag: 0 } },
+        payload: { branchId, id, patch: FLAG_CLEAR },
       })
       continue
     }
     out[index] = {
       ...update,
-      payload: { ...update.payload, patch: { ...update.payload.patch, nameCollisionFlag: 0 } },
+      payload: { ...update.payload, patch: { ...update.payload.patch, ...FLAG_CLEAR } },
     }
   }
   return out

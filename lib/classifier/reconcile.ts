@@ -1,4 +1,4 @@
-import type { Entity } from '@/lib/db'
+import type { CollisionReason, Entity } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
@@ -8,11 +8,18 @@ export const TAU_LOW = 0.5
 
 /** Why a create was flagged. Both the low and the ambiguous band create-with-flag,
  * so the band is carried explicitly for the collision-review surface. */
-export type FlagReason = 'distinct' | 'ambiguous' | 'no-signal'
+export type FlagReason = Extract<CollisionReason, 'distinct' | 'ambiguous' | 'no-signal'>
 
 export type ReconcileDecision =
   | { kind: 'create'; flagged: false }
-  | { kind: 'create'; flagged: true; similarity: number | null; flagReason: FlagReason }
+  | {
+      kind: 'create'
+      flagged: true
+      similarity: number | null
+      flagReason: FlagReason
+      /** The namesake the row is flagged against: the best-scoring one, else the first. */
+      partnerId: string
+    }
   | { kind: 'promote'; entityId: string; similarity: number }
   | { kind: 'known'; entityId: string; similarity: number }
 
@@ -89,7 +96,13 @@ export async function reconcileNewCharacter(
   // A namesake exists but is indistinguishable: defer to the user rather than
   // silently merge or promote the wrong character.
   if (best == null)
-    return { kind: 'create', flagged: true, similarity: null, flagReason: 'no-signal' }
+    return {
+      kind: 'create',
+      flagged: true,
+      similarity: null,
+      flagReason: 'no-signal',
+      partnerId: namesakes[0].id,
+    }
 
   if (best.similarity >= TAU_HIGH) {
     return best.entity.status === 'staged'
@@ -101,5 +114,6 @@ export async function reconcileNewCharacter(
     flagged: true,
     similarity: best.similarity,
     flagReason: best.similarity < TAU_LOW ? 'distinct' : 'ambiguous',
+    partnerId: best.entity.id,
   }
 }

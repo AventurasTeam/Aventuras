@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import type { Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
 import {
   branches,
+  COLLISION_REASONS,
   emptyEntityState,
   entities,
   entityStateColumnSchema,
@@ -37,7 +38,7 @@ import {
   updateItemPositionHandler,
 } from './state-patch-actions'
 
-type EntityUpdatePatch = Partial<{
+type EntityColumnPatch = Partial<{
   name: string
   description: string | null
   status: Entity['status']
@@ -47,12 +48,31 @@ type EntityUpdatePatch = Partial<{
   keywords: string[]
   priority: number
   state: EntityState
-  /**
-   * User paths only clear the flag; the classifier sets it at create. Omit the key to leave it: an
-   * explicit undefined is refused.
-   */
-  nameCollisionFlag: 0
 }>
+
+/** Clears a collision flag with its partner and reason, all three in one write. */
+export type FlagClearPatch = {
+  nameCollisionFlag: 0
+  nameCollisionPartnerId: null
+  nameCollisionReason: null
+}
+
+/** Points a flagged row at another partner, leaving its flag and reason as they are. */
+export type FlagRepointPatch = {
+  nameCollisionPartnerId: string
+  nameCollisionFlag?: never
+  nameCollisionReason?: never
+}
+
+type NoFlagPatch = {
+  nameCollisionFlag?: never
+  nameCollisionPartnerId?: never
+  nameCollisionReason?: never
+}
+
+// The classifier sets the flag at create; a user write only clears it or re-points the partner
+// (data-model.md → Authorship contract). Omit a key to leave it: an explicit undefined is refused.
+type EntityUpdatePatch = EntityColumnPatch & (NoFlagPatch | FlagClearPatch | FlagRepointPatch)
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -77,7 +97,11 @@ export const UPDATABLE = [
   'priority',
   'state',
   'nameCollisionFlag',
+  'nameCollisionPartnerId',
+  'nameCollisionReason',
 ] as const
+
+const FLAG_COLUMNS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
 
 function fullRow(entry: NewEntity): Entity {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
@@ -91,6 +115,8 @@ function fullRow(entry: NewEntity): Entity {
     retiredReason: entry.retiredReason ?? null,
     injectionMode: entry.injectionMode,
     nameCollisionFlag: entry.nameCollisionFlag ?? 0,
+    nameCollisionPartnerId: entry.nameCollisionPartnerId ?? null,
+    nameCollisionReason: entry.nameCollisionReason ?? null,
     state: entry.state ?? emptyEntityState(entry.kind),
     tags: entry.tags ?? [],
     keywords: entry.keywords ?? [],
@@ -101,6 +127,40 @@ function fullRow(entry: NewEntity): Entity {
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
+}
+
+// edge-cases.md → Schema's CHECK, refused here rather than failing as SQL.
+function flagTripleIssue(row: Entity): string | null {
+  const partner = row.nameCollisionPartnerId
+  const reason = row.nameCollisionReason
+  if (row.nameCollisionFlag === 0)
+    return partner == null && reason == null
+      ? null
+      : 'an unflagged entity has no collision partner or reason'
+  if (row.nameCollisionFlag !== 1)
+    return `nameCollisionFlag must be 0 or 1, got ${row.nameCollisionFlag}`
+  if (partner == null || partner === '') return 'a flagged entity needs a collision partner'
+  if (reason == null || !COLLISION_REASONS.includes(reason))
+    return `a flagged entity needs a collision reason, got ${String(reason)}`
+  return null
+}
+
+// entityWriteSchema omits the flag columns, so its parse strips them instead of checking them.
+function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string | null {
+  const named = FLAG_COLUMNS.filter((col) => col in patch)
+  if (named.length === 0) return null
+  const clears =
+    named.length === FLAG_COLUMNS.length &&
+    patch.nameCollisionFlag === 0 &&
+    patch.nameCollisionPartnerId === null &&
+    patch.nameCollisionReason === null
+  if (clears) return null
+  const repoints =
+    named.length === 1 &&
+    typeof patch.nameCollisionPartnerId === 'string' &&
+    patch.nameCollisionPartnerId !== ''
+  if (!repoints) return 'collision flag columns take only a clear or a partner re-point'
+  return current.nameCollisionFlag === 1 ? null : 'only a flagged entity has a partner to re-point'
 }
 
 // data-model.md → LocationState: the pre-commit walk, on every entity-handler write.
@@ -135,6 +195,8 @@ const createHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.safeParse(row)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity: ${scalars.error.message}` }
+  const flagIssue = flagTripleIssue(row)
+  if (flagIssue != null) return { status: 'rejected', reason: `invalid entity: ${flagIssue}` }
   const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid ${row.kind} state: ${parsed.error.message}` }
@@ -181,12 +243,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.partial().safeParse(patch)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity patch: ${scalars.error.message}` }
-  // entityWriteSchema omits the flag, so the parse above strips it instead of checking it.
-  if ('nameCollisionFlag' in patch && patch.nameCollisionFlag !== 0)
-    return {
-      status: 'rejected',
-      reason: 'invalid entity patch: nameCollisionFlag can only be cleared',
-    }
+  const flagIssue = flagPatchIssue(patch, current)
+  if (flagIssue != null) return { status: 'rejected', reason: `invalid entity patch: ${flagIssue}` }
 
   if (patch.state !== undefined) {
     const parsed = entityStateSchemaForKind(current.kind).safeParse(patch.state)

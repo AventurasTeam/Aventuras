@@ -578,9 +578,21 @@ const patchChar = (patch: EntityPatch, actionId: string) => ({
   branchId: 'br_1',
 })
 
-describe('collision flag clear', () => {
+describe('collision flag columns', () => {
+  const FLAGGED = {
+    ...CHAR,
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: 'char_2',
+    nameCollisionReason: 'distinct',
+  } satisfies NewEntity
+  const CLEAR = {
+    nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
+  } as const
+
   async function seedChar(ctx: Awaited<ReturnType<typeof setup>>['ctx'], entry: NewEntity) {
-    await applyDeltaAction(
+    return applyDeltaAction(
       {
         action: { kind: 'createEntity', source: 'user_edit', payload: { entry } },
         actionId: 'act_c',
@@ -593,71 +605,271 @@ describe('collision flag clear', () => {
   const deltasOf = (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
     db.select().from(deltas).where(eq(deltas.actionId, actionId))
 
-  it('clears the flag in one delta whose undo re-flags, without dirtying the vector', async () => {
-    const { db, ctx } = await setup()
-    await seedChar(ctx, { ...CHAR, nameCollisionFlag: 1, embeddingStale: 0 })
+  async function flagColumns(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
+    const row = await rowFor(db, id)
+    return [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+  }
 
-    const result = await applyDeltaAction(patchChar({ nameCollisionFlag: 0 }, 'act_keep'), ctx)
+  function storeFlagColumns(id: string) {
+    const row = entitiesStore.getById(id)
+    return [row?.nameCollisionFlag, row?.nameCollisionPartnerId, row?.nameCollisionReason]
+  }
+
+  it('creates a flagged row with its partner and reason, in the DB and the store', async () => {
+    const { db, ctx } = await setup()
+
+    expect(await seedChar(ctx, FLAGGED)).toMatchObject({ status: 'ok' })
+
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_2', 'distinct'])
+    expect(storeFlagColumns('char_1')).toEqual([1, 'char_2', 'distinct'])
+  })
+
+  it('creates an unflagged row with no partner or reason when the entry omits them', async () => {
+    const { db, ctx } = await setup()
+
+    expect(await seedChar(ctx, CHAR)).toMatchObject({ status: 'ok' })
+
+    expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
+    expect(storeFlagColumns('char_1')).toEqual([0, null, null])
+  })
+
+  // The partner stays out of REF_COLUMNS: a flag naming a gone row is dormant, not refused.
+  it('accepts a flagged create whose partner the branch does not have', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await seedChar(ctx, { ...FLAGGED, nameCollisionPartnerId: 'char_gone' })
 
     expect(result).toMatchObject({ status: 'ok' })
-    const row = await rowFor(db, 'char_1')
-    expect(row.nameCollisionFlag).toBe(0)
-    expect(row.embeddingStale).toBe(0)
-    expect(entitiesStore.getById('char_1')?.nameCollisionFlag).toBe(0)
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_gone', 'distinct'])
+  })
+
+  it.each([
+    [
+      'a flag with no partner',
+      { nameCollisionPartnerId: null },
+      'a flagged entity needs a collision partner',
+    ],
+    [
+      'a flag with an empty partner',
+      { nameCollisionPartnerId: '' },
+      'a flagged entity needs a collision partner',
+    ],
+    [
+      'a flag with no reason',
+      { nameCollisionReason: null },
+      'a flagged entity needs a collision reason, got null',
+    ],
+    [
+      'a flag with an unknown reason',
+      { nameCollisionReason: 'similar' as never },
+      'a flagged entity needs a collision reason, got similar',
+    ],
+    [
+      'no flag with a partner',
+      { nameCollisionFlag: 0, nameCollisionReason: null },
+      'an unflagged entity has no collision partner or reason',
+    ],
+    [
+      'no flag with a reason',
+      { nameCollisionFlag: 0, nameCollisionPartnerId: null },
+      'an unflagged entity has no collision partner or reason',
+    ],
+    ['a flag of 2', { nameCollisionFlag: 2 }, 'nameCollisionFlag must be 0 or 1, got 2'],
+  ] as const)('refuses a create with %s, writing nothing', async (_label, overrides, reason) => {
+    const { db, ctx } = await setup()
+
+    expect(await seedChar(ctx, { ...FLAGGED, ...overrides })).toEqual({
+      status: 'rejected',
+      reason: `invalid entity: ${reason}`,
+    })
+
+    expect(await rowFor(db, 'char_1')).toBeUndefined()
+    expect(await db.select().from(deltas)).toHaveLength(0)
+    expect(entitiesStore.getById('char_1')).toBeUndefined()
+  })
+
+  it('clears all three in one delta whose reversal re-flags, without dirtying the vector', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, { ...FLAGGED, embeddingStale: 0 })
+
+    const result = await applyDeltaAction(patchChar(CLEAR, 'act_keep'), ctx)
+
+    expect(result).toMatchObject({ status: 'ok' })
+    expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
+    expect(storeFlagColumns('char_1')).toEqual([0, null, null])
+    expect((await rowFor(db, 'char_1')).embeddingStale).toBe(0)
     const logged = await deltasOf(db, 'act_keep')
     expect(logged).toHaveLength(1)
-    expect(logged[0].undoPayload).toEqual({ nameCollisionFlag: 1 })
+    expect(logged[0].undoPayload).toEqual({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'distinct',
+    })
 
     expect(await reverseReplayDeltas('act_keep', ctx)).toBe(1)
-    expect((await rowFor(db, 'char_1')).nameCollisionFlag).toBe(1)
-    expect(entitiesStore.getById('char_1')?.nameCollisionFlag).toBe(1)
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_2', 'distinct'])
+    expect(storeFlagColumns('char_1')).toEqual([1, 'char_2', 'distinct'])
   })
 
   it('carries a rename and the clear as one delta', async () => {
     const { db, ctx } = await setup()
-    await seedChar(ctx, { ...CHAR, nameCollisionFlag: 1 })
+    await seedChar(ctx, FLAGGED)
 
-    await applyDeltaAction(patchChar({ name: 'Kaelin', nameCollisionFlag: 0 }, 'act_rename'), ctx)
+    await applyDeltaAction(patchChar({ name: 'Kaelin', ...CLEAR }, 'act_rename'), ctx)
 
     const logged = await deltasOf(db, 'act_rename')
     expect(logged).toHaveLength(1)
-    expect(logged[0].undoPayload).toEqual({ name: 'Kael', nameCollisionFlag: 1 })
-    const row = await rowFor(db, 'char_1')
-    expect(row.name).toBe('Kaelin')
-    expect(row.nameCollisionFlag).toBe(0)
+    expect(logged[0].undoPayload).toEqual({
+      name: 'Kael',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'distinct',
+    })
+    expect((await rowFor(db, 'char_1')).name).toBe('Kaelin')
+    expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
   })
 
   it('drops a clear on an unflagged row, so a clear-only patch is the noop refusal', async () => {
     const { db, ctx } = await setup()
     await seedChar(ctx, CHAR)
 
-    const result = await applyDeltaAction(patchChar({ nameCollisionFlag: 0 }, 'act_keep'), ctx)
+    const result = await applyDeltaAction(patchChar(CLEAR, 'act_keep'), ctx)
 
     expect(result).toEqual({ status: 'rejected', reason: 'no-op entity patch', code: 'noop' })
     expect(await db.select().from(deltas)).toHaveLength(1)
   })
 
-  // The type admits 0 or undefined: a cast reaches 1, and an explicit undefined compiles but must
-  // be refused.
-  it('refuses a flag value other than 0, so no user path can set it', async () => {
+  it('re-points a flagged row in one delta whose reversal restores the old partner', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, FLAGGED)
+
+    const result = await applyDeltaAction(
+      patchChar({ nameCollisionPartnerId: 'char_3' }, 'act_point'),
+      ctx,
+    )
+
+    expect(result).toMatchObject({ status: 'ok' })
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_3', 'distinct'])
+    expect(storeFlagColumns('char_1')).toEqual([1, 'char_3', 'distinct'])
+    const logged = await deltasOf(db, 'act_point')
+    expect(logged).toHaveLength(1)
+    expect(logged[0].undoPayload).toEqual({ nameCollisionPartnerId: 'char_2' })
+
+    expect(await reverseReplayDeltas('act_point', ctx)).toBe(1)
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_2', 'distinct'])
+    expect(storeFlagColumns('char_1')).toEqual([1, 'char_2', 'distinct'])
+  })
+
+  it('folds a re-point into a state patch as one delta', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, FLAGGED)
+    const state = { ...CHAR.state, traits: ['wary'] } as EntityState
+
+    const result = await applyDeltaAction(
+      patchChar({ state, nameCollisionPartnerId: 'char_3' }, 'act_fold'),
+      ctx,
+    )
+
+    expect(result).toMatchObject({ status: 'ok' })
+    const row = await rowFor(db, 'char_1')
+    expect(row.state).toMatchObject({ traits: ['wary'] })
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_3', 'distinct'])
+    const logged = await deltasOf(db, 'act_fold')
+    expect(logged).toHaveLength(1)
+    expect(Object.keys(logged[0].undoPayload ?? {}).sort()).toEqual([
+      'nameCollisionPartnerId',
+      'state',
+    ])
+  })
+
+  // A cast slips these past the patch type, and no type knows whether the row is flagged.
+  it.each([
+    [
+      'a re-point of an unflagged row',
+      CHAR,
+      { nameCollisionPartnerId: 'char_3' },
+      'only a flagged entity has a partner to re-point',
+    ],
+    [
+      'the flag alone',
+      FLAGGED,
+      { nameCollisionFlag: 0 },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a flag set',
+      CHAR,
+      { nameCollisionFlag: 1 },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a nulled partner alone',
+      FLAGGED,
+      { nameCollisionPartnerId: null },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a reason alone',
+      FLAGGED,
+      { nameCollisionReason: 'alike' },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a re-point with a reason',
+      FLAGGED,
+      { nameCollisionPartnerId: 'char_3', nameCollisionReason: 'alike' },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'an empty partner',
+      FLAGGED,
+      { nameCollisionPartnerId: '' },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a clear with a partner',
+      FLAGGED,
+      { ...CLEAR, nameCollisionPartnerId: 'char_3' },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a present-but-undefined partner',
+      FLAGGED,
+      { name: 'Kaelin', nameCollisionPartnerId: undefined },
+      'nameCollisionPartnerId is undefined',
+    ],
+  ] as const)('refuses %s, writing nothing', async (_label, seed, patch, reason) => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, seed)
+    const before = await rowFor(db, 'char_1')
+
+    expect(
+      await applyDeltaAction(patchChar(patch as unknown as EntityPatch, 'act_bad'), ctx),
+    ).toEqual({
+      status: 'rejected',
+      reason: `invalid entity patch: ${reason}`,
+    })
+
+    expect(await rowFor(db, 'char_1')).toEqual(before)
+    expect(await db.select().from(deltas)).toHaveLength(1)
+  })
+
+  // edge-cases.md → Schema: the migration's CHECK holds even for a write that skips the handlers.
+  it('has the CHECK refuse a flag with no partner, on insert and on update', async () => {
     const { db, ctx } = await setup()
     await seedChar(ctx, CHAR)
-    const refusal = {
-      status: 'rejected',
-      reason: 'invalid entity patch: nameCollisionFlag can only be cleared',
-    }
+    const flaggedAlone: NewEntity = { ...CHAR, id: 'char_9', nameCollisionFlag: 1 }
 
-    const set = { nameCollisionFlag: 1 } as unknown as EntityPatch
-    expect(await applyDeltaAction(patchChar(set, 'act_set'), ctx)).toEqual(refusal)
-    expect((await rowFor(db, 'char_1')).nameCollisionFlag).toBe(0)
+    await expect(
+      ctx.runInTransaction([db.insert(entities).values(flaggedAlone).toSQL()]),
+    ).rejects.toThrow('CHECK constraint failed: entities_name_collision_pair')
+    await expect(
+      ctx.runInTransaction([
+        db.update(entities).set({ nameCollisionFlag: 1 }).where(eq(entities.id, 'char_1')).toSQL(),
+      ]),
+    ).rejects.toThrow('CHECK constraint failed: entities_name_collision_pair')
 
-    // A present-but-undefined key would reach the store patch as an undefined flag.
-    const blank = { name: 'Kaelin', nameCollisionFlag: undefined }
-    expect(await applyDeltaAction(patchChar(blank, 'act_blank'), ctx)).toEqual({
-      status: 'rejected',
-      reason: 'invalid entity patch: nameCollisionFlag is undefined',
-    })
-    expect((await rowFor(db, 'char_1')).name).toBe('Kael')
-    expect(await db.select().from(deltas)).toHaveLength(1)
+    expect(await rowFor(db, 'char_9')).toBeUndefined()
+    expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
   })
 })

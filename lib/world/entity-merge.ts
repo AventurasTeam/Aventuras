@@ -1,6 +1,7 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity, EntityState, ItemState } from '@/lib/db'
 
+import { FLAG_CLEAR } from './collision-flags'
 import type { CollisionPair } from './collision-pair'
 import { sameList } from './draft-text'
 import { tailSceneActions, type DeleteTail } from './entity-delete'
@@ -58,14 +59,13 @@ function canonicalPatch(input: MergeContext): EntityPatch {
   const { tags, keywords } = mergedTerms({ canonical, other: loser }, input)
   const rewritten = canonicalRefsCleared(canonical, loser.id)
   const state = adoptedPlacement(input, rewritten) ?? rewritten
-  // Spread, never `nameCollisionFlag: undefined`: the update arm refuses any value but 0.
-  return {
+  const patch: EntityPatch = {
     ...scalars,
     ...(sameList(tags, canonical.tags) ? {} : { tags }),
     ...(sameList(keywords, canonical.keywords) ? {} : { keywords }),
-    ...(canonical.nameCollisionFlag === 1 ? { nameCollisionFlag: 0 as const } : {}),
     ...(state == null ? {} : { state }),
   }
+  return canonical.nameCollisionFlag === 1 ? { ...patch, ...FLAG_CLEAR } : patch
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   type EntityState,
 } from '@/lib/db'
 
+import { FLAG_CLEAR } from './collision-flags'
 import { entityDeleteActions } from './entity-delete'
 
 function entity(id: string, kind: EntityKind, state: Partial<EntityState> = {}): Entity {
@@ -21,6 +22,8 @@ function entity(id: string, kind: EntityKind, state: Partial<EntityState> = {}):
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: { ...emptyEntityState(kind), ...state } as EntityState,
     tags: [],
     keywords: [],
@@ -219,17 +222,19 @@ describe('entityDeleteActions — orphaned collision flags', () => {
     id: string,
     kind: EntityKind,
     name: string,
-    flag: number,
+    partnerId: string | null,
     state: Partial<EntityState> = {},
   ): Entity => ({
     ...entity(id, kind, state),
     name,
-    nameCollisionFlag: flag,
+    nameCollisionFlag: partnerId == null ? 0 : 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: partnerId == null ? null : 'distinct',
   })
 
   it('clears the flag of the namesake the delete leaves without a partner, before the delete', () => {
-    const target = named('char_x', 'character', 'Kael', 0)
-    const twin = named('char_t', 'character', 'kael', 1)
+    const target = named('char_x', 'character', 'Kael', null)
+    const twin = named('char_t', 'character', 'kael', 'char_x')
     expect(
       entityDeleteActions({ branchId: 'b1', target, branchEntities: [target, twin], tail: null })
         .actions,
@@ -237,15 +242,15 @@ describe('entityDeleteActions — orphaned collision flags', () => {
       {
         kind: 'updateEntity',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'char_t', patch: { nameCollisionFlag: 0 } },
+        payload: { branchId: 'b1', id: 'char_t', patch: FLAG_CLEAR },
       },
       { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: 'b1', id: 'char_x' } },
     ])
   })
 
   it('folds the clear into the ref patch of a namesake that named the target', () => {
-    const target = named('loc_a', 'location', 'Hollow', 0)
-    const child = named('loc_b', 'location', 'Hollow', 1, { parent_location_id: 'loc_a' })
+    const target = named('loc_a', 'location', 'Hollow', null)
+    const child = named('loc_b', 'location', 'Hollow', 'loc_a', { parent_location_id: 'loc_a' })
     const plan = entityDeleteActions({
       branchId: 'b1',
       target,
@@ -258,7 +263,7 @@ describe('entityDeleteActions — orphaned collision flags', () => {
       payload: {
         branchId: 'b1',
         id: 'loc_b',
-        patch: { state: { parent_location_id: null }, nameCollisionFlag: 0 },
+        patch: { state: { parent_location_id: null }, ...FLAG_CLEAR },
       },
     })
     expect(plan.actions).toHaveLength(2)
@@ -266,9 +271,9 @@ describe('entityDeleteActions — orphaned collision flags', () => {
   })
 
   it('leaves a flagged row that keeps another namesake alone', () => {
-    const target = named('char_x', 'character', 'Kael', 0)
-    const twin = named('char_t', 'character', 'Kael', 1)
-    const third = named('char_u', 'character', 'Kael', 0)
+    const target = named('char_x', 'character', 'Kael', null)
+    const twin = named('char_t', 'character', 'Kael', 'char_u')
+    const third = named('char_u', 'character', 'Kael', null)
     expect(
       entityDeleteActions({
         branchId: 'b1',

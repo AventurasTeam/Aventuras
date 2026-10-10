@@ -30,6 +30,8 @@ function entity(id: string, kind: EntityKind, state: Partial<EntityState> = {}):
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: { ...emptyEntityState(kind), ...state } as EntityState,
     tags: [],
     keywords: [],

@@ -78,6 +78,8 @@ describe('lib/stores public surface', () => {
       retiredReason: null,
       injectionMode: 'auto',
       nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
       keywords: [],
       priority: 0,
       state: null,

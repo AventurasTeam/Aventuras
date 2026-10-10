@@ -208,6 +208,8 @@ export function buildClassifierActions(
             status: 'active',
             injectionMode: 'auto',
             nameCollisionFlag: decision.flagged ? 1 : 0,
+            nameCollisionPartnerId: decision.flagged ? decision.partnerId : null,
+            nameCollisionReason: decision.flagged ? decision.flagReason : null,
             // Nothing embeds on the write path: the sync stage owns the vector.
             embeddingStale: 1,
             createdAt: timestamp,

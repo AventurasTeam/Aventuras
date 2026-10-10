@@ -16,6 +16,8 @@ function row(id: string, name: string, overrides: Partial<Entity> = {}): Entity 
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: emptyEntityState(kind),
     tags: [],
     keywords: [],
@@ -28,7 +30,11 @@ function row(id: string, name: string, overrides: Partial<Entity> = {}): Entity 
 }
 
 const OLDER = row('char_a', 'Kael')
-const NEWER = row('char_b', ' KAEL ', { nameCollisionFlag: 1 })
+const NEWER = row('char_b', ' KAEL ', {
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: 'char_a',
+  nameCollisionReason: 'distinct',
+})
 
 describe('collisionPairOf', () => {
   it('returns two namesakes in the order asked for, a case and space variant included', () => {

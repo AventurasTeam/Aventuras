@@ -36,6 +36,8 @@ describe('buildClassifierContext', () => {
           retiredReason: null,
           injectionMode: 'auto',
           nameCollisionFlag: 0,
+          nameCollisionPartnerId: null,
+          nameCollisionReason: null,
           state: { traits: ['wry'] },
           tags: ['secret'],
           embeddingStale: 1,

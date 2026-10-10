@@ -19,6 +19,8 @@ const ROW_BASE = {
   retiredReason: null,
   injectionMode: 'auto',
   nameCollisionFlag: 1,
+  nameCollisionPartnerId: 'char_9b2e',
+  nameCollisionReason: 'distinct',
   tags: [],
   keywords: [],
   priority: 0,

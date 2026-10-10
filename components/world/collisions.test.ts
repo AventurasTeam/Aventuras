@@ -17,6 +17,8 @@ function entity(id: string, name: string, overrides: Partial<Entity> = {}): Enti
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],
@@ -28,6 +30,13 @@ function entity(id: string, name: string, overrides: Partial<Entity> = {}): Enti
   }
 }
 
+const flaggedWith = (partnerId: string, createdAt?: number): Partial<Entity> => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: 'distinct',
+  ...(createdAt == null ? {} : { createdAt }),
+})
+
 function withFlagsCleared(rows: readonly Entity[], actions: readonly PipelineAction[]): Entity[] {
   const cleared = new Set(
     actions.flatMap((action) =>
@@ -36,14 +45,18 @@ function withFlagsCleared(rows: readonly Entity[], actions: readonly PipelineAct
         : [],
     ),
   )
-  return rows.map((row) => (cleared.has(row.id) ? { ...row, nameCollisionFlag: 0 } : row))
+  return rows.map((row) =>
+    cleared.has(row.id)
+      ? { ...row, nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null }
+      : row,
+  )
 }
 
 describe('deriveCollisions', () => {
   it('after a keep on one pair of three namesakes, the other flagged row keeps its strip', () => {
     const base = entity('base', 'Sage', { createdAt: 1 })
-    const first = entity('f1', 'Sage', { nameCollisionFlag: 1, createdAt: 2 })
-    const second = entity('f2', 'Sage', { nameCollisionFlag: 1, createdAt: 3 })
+    const first = entity('f1', 'Sage', flaggedWith('base', 2))
+    const second = entity('f2', 'Sage', flaggedWith('base', 3))
     expect(deriveCollisions([base, first, second]).get('f1')?.otherId).toBe('base')
 
     const lookup = collisionPairOf([base, first, second], ['base', 'f1'])
@@ -58,7 +71,7 @@ describe('deriveCollisions', () => {
   it('pairs a flagged row with its unflagged same-kind namesake, case-insensitively', () => {
     const map = deriveCollisions([
       entity('old', 'Brannoc', { status: 'staged' }),
-      entity('new', ' brannoc', { nameCollisionFlag: 1, createdAt: 2 }),
+      entity('new', ' brannoc', flaggedWith('old', 2)),
     ])
     expect([...map.entries()]).toEqual([['new', { otherId: 'old', otherName: 'Brannoc' }]])
   })
@@ -66,7 +79,7 @@ describe('deriveCollisions', () => {
   it('pairs namesakes across composed and decomposed spellings', () => {
     const map = deriveCollisions([
       entity('old', 'Zoë'),
-      entity('new', 'Zoë', { nameCollisionFlag: 1, createdAt: 2 }),
+      entity('new', 'Zoë', flaggedWith('old', 2)),
     ])
     expect([...map.entries()]).toEqual([['new', { otherId: 'old', otherName: 'Zoë' }]])
   })
@@ -74,7 +87,7 @@ describe('deriveCollisions', () => {
   it('ignores same-name rows of another kind and unflagged rows', () => {
     const map = deriveCollisions([
       entity('loc', 'Brannoc', { kind: 'location' }),
-      entity('new', 'Brannoc', { nameCollisionFlag: 1 }),
+      entity('new', 'Brannoc', flaggedWith('gone')),
       entity('a', 'Mira'),
       entity('b', 'Mira'),
     ])
@@ -84,8 +97,8 @@ describe('deriveCollisions', () => {
   it('with three namesakes every flagged row points at the unflagged one', () => {
     const map = deriveCollisions([
       entity('base', 'Sage', { createdAt: 1 }),
-      entity('f1', 'Sage', { nameCollisionFlag: 1, createdAt: 2 }),
-      entity('f2', 'Sage', { nameCollisionFlag: 1, createdAt: 3 }),
+      entity('f1', 'Sage', flaggedWith('base', 2)),
+      entity('f2', 'Sage', flaggedWith('base', 3)),
     ])
     expect(map.get('f1')?.otherId).toBe('base')
     expect(map.get('f2')?.otherId).toBe('base')
@@ -93,7 +106,7 @@ describe('deriveCollisions', () => {
 
   it('finds the unflagged namesake even when it appears after the flagged row', () => {
     const map = deriveCollisions([
-      entity('f1', 'Sage', { nameCollisionFlag: 1, createdAt: 2 }),
+      entity('f1', 'Sage', flaggedWith('base', 2)),
       entity('base', 'Sage', { createdAt: 1 }),
     ])
     expect(map.get('f1')?.otherId).toBe('base')
@@ -101,8 +114,8 @@ describe('deriveCollisions', () => {
 
   it('falls back to the oldest other flagged namesake when none is unflagged', () => {
     const map = deriveCollisions([
-      entity('f1', 'Sage', { nameCollisionFlag: 1, createdAt: 2 }),
-      entity('f2', 'Sage', { nameCollisionFlag: 1, createdAt: 3 }),
+      entity('f1', 'Sage', flaggedWith('f2', 2)),
+      entity('f2', 'Sage', flaggedWith('f1', 3)),
     ])
     expect(map.get('f1')?.otherId).toBe('f2')
     expect(map.get('f2')?.otherId).toBe('f1')
@@ -110,24 +123,24 @@ describe('deriveCollisions', () => {
 
   it('breaks a createdAt tie in the flagged fallback by id, not input order', () => {
     const map = deriveCollisions([
-      entity('ccc', 'Sage', { nameCollisionFlag: 1, createdAt: 3 }),
-      entity('bbb', 'Sage', { nameCollisionFlag: 1, createdAt: 2 }),
-      entity('aaa', 'Sage', { nameCollisionFlag: 1, createdAt: 2 }),
+      entity('ccc', 'Sage', flaggedWith('aaa', 3)),
+      entity('bbb', 'Sage', flaggedWith('aaa', 2)),
+      entity('aaa', 'Sage', flaggedWith('bbb', 2)),
     ])
     expect(map.get('ccc')?.otherId).toBe('aaa')
   })
 
   it('prefers the unflagged namesake even when a flagged one is older', () => {
     const map = deriveCollisions([
-      entity('f_old', 'Sage', { nameCollisionFlag: 1, createdAt: 1 }),
-      entity('f_new', 'Sage', { nameCollisionFlag: 1, createdAt: 2 }),
+      entity('f_old', 'Sage', flaggedWith('base', 1)),
+      entity('f_new', 'Sage', flaggedWith('base', 2)),
       entity('base', 'Sage', { createdAt: 3 }),
     ])
     expect(map.get('f_new')?.otherId).toBe('base')
   })
 
   it('picks the unflagged namesake deterministically regardless of input order', () => {
-    const flagged = entity('flagged', 'Sage', { nameCollisionFlag: 1, createdAt: 3 })
+    const flagged = entity('flagged', 'Sage', flaggedWith('older', 3))
     const older = entity('older', 'Sage', { createdAt: 1 })
     const newer = entity('newer', 'Sage', { createdAt: 2 })
 

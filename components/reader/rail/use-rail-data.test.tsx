@@ -40,6 +40,8 @@ function entity(id: string, kind: Entity['kind'], extra: Partial<Entity> = {}): 
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],
@@ -142,7 +144,11 @@ function openStory(over: { branchId?: string; mode?: 'adventure' | 'creative'; l
 
 const ENTITIES = [
   entity('char_kael', 'character'),
-  entity('char_mira', 'character', { nameCollisionFlag: 1 }),
+  entity('char_mira', 'character', {
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: 'char_kael',
+    nameCollisionReason: 'distinct',
+  }),
   entity('item_blade', 'item'),
   entity('loc_hollow', 'location'),
   entity('fac_watch', 'faction'),

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { emptyEntityState, type Entity } from '@/lib/db'
 
+import { FLAG_CLEAR } from './collision-flags'
 import { collisionPairOf, type CollisionPair } from './collision-pair'
 import {
   entityKeepActions,
@@ -11,7 +12,8 @@ import {
   type EntityRename,
 } from './collision-resolve'
 
-function character(id: string, name: string, flag = 0): Entity {
+/** `partnerId` flags the row against that namesake; null leaves it unflagged. */
+function character(id: string, name: string, partnerId: string | null = null): Entity {
   return {
     id,
     branchId: 'b1',
@@ -21,7 +23,9 @@ function character(id: string, name: string, flag = 0): Entity {
     status: 'active',
     retiredReason: null,
     injectionMode: 'auto',
-    nameCollisionFlag: flag,
+    nameCollisionFlag: partnerId == null ? 0 : 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: partnerId == null ? null : 'distinct',
     state: emptyEntityState('character'),
     tags: [],
     keywords: [],
@@ -35,7 +39,7 @@ function character(id: string, name: string, flag = 0): Entity {
 const clear = (id: string) => ({
   kind: 'updateEntity',
   source: 'user_edit',
-  payload: { branchId: 'b1', id, patch: { nameCollisionFlag: 0 } },
+  payload: { branchId: 'b1', id, patch: FLAG_CLEAR },
 })
 
 function pairOf(first: Entity, second: Entity): CollisionPair {
@@ -45,7 +49,7 @@ function pairOf(first: Entity, second: Entity): CollisionPair {
 }
 
 const A = character('char_a', 'Kael')
-const B = character('char_b', 'Kael', 1)
+const B = character('char_b', 'Kael', 'char_a')
 
 describe('renameIssue', () => {
   it('refuses a blank name on either side', () => {
@@ -118,7 +122,7 @@ describe('entityRenameActions', () => {
           payload: {
             branchId: 'b1',
             id: 'char_b',
-            patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+            patch: { name: 'Kael the guard', ...FLAG_CLEAR },
           },
         },
       ],
@@ -143,7 +147,7 @@ describe('entityRenameActions', () => {
         payload: {
           branchId: 'b1',
           id: 'char_b',
-          patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+          patch: { name: 'Kael the guard', ...FLAG_CLEAR },
         },
       },
     ])
@@ -169,7 +173,7 @@ describe('entityRenameActions', () => {
         payload: {
           branchId: 'b1',
           id: 'char_b',
-          patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+          patch: { name: 'Kael the guard', ...FLAG_CLEAR },
         },
       },
     ])
@@ -188,7 +192,7 @@ describe('entityRenameActions', () => {
   })
 
   it('clears both rows when both are flagged', () => {
-    const flaggedA = character('char_a', 'Kael', 1)
+    const flaggedA = character('char_a', 'Kael', 'char_b')
     expect(rename([flaggedA, B], ['Kael the elder', 'Kael'])).toStrictEqual([
       {
         kind: 'updateEntity',
@@ -196,7 +200,7 @@ describe('entityRenameActions', () => {
         payload: {
           branchId: 'b1',
           id: 'char_a',
-          patch: { name: 'Kael the elder', nameCollisionFlag: 0 },
+          patch: { name: 'Kael the elder', ...FLAG_CLEAR },
         },
       },
       clear('char_b'),
@@ -204,7 +208,7 @@ describe('entityRenameActions', () => {
   })
 
   it('clears a third flagged row the rename leaves without a namesake', () => {
-    const third = character('char_c', 'Kael', 1)
+    const third = character('char_c', 'Kael', 'char_a')
     expect(rename([A, B], ['Kael the elder', 'Kael the guard'], [third])).toStrictEqual([
       {
         kind: 'updateEntity',
@@ -217,7 +221,7 @@ describe('entityRenameActions', () => {
         payload: {
           branchId: 'b1',
           id: 'char_b',
-          patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+          patch: { name: 'Kael the guard', ...FLAG_CLEAR },
         },
       },
       clear('char_c'),
@@ -225,9 +229,9 @@ describe('entityRenameActions', () => {
   })
 
   it('leaves a third flagged row that keeps a namesake alone', () => {
-    const third = character('char_c', 'Kael', 1)
+    const third = character('char_c', 'Kael', 'char_a')
     expect(rename([A, B], ['Kael', 'Kael the guard'], [third]).map((a) => a.payload)).toStrictEqual(
-      [{ branchId: 'b1', id: 'char_b', patch: { name: 'Kael the guard', nameCollisionFlag: 0 } }],
+      [{ branchId: 'b1', id: 'char_b', patch: { name: 'Kael the guard', ...FLAG_CLEAR } }],
     )
   })
 })
@@ -237,7 +241,7 @@ describe('entityKeepActions', () => {
     const keep = (first: Entity, second: Entity) =>
       entityKeepActions({ branchId: 'b1', pair: pairOf(first, second) })
     expect(keep(A, B)).toStrictEqual([clear('char_b')])
-    expect(keep(character('char_a', 'Kael', 1), B)).toStrictEqual([
+    expect(keep(character('char_a', 'Kael', 'char_b'), B)).toStrictEqual([
       clear('char_a'),
       clear('char_b'),
     ])

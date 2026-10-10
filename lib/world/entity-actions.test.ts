@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { emptyEntityState, type CharacterState, type Entity } from '@/lib/db'
 
+import { FLAG_CLEAR } from './collision-flags'
 import { entityActions } from './entity-actions'
 import {
   characterDraftFrom,
@@ -34,6 +35,8 @@ const KAEL: Entity = {
   retiredReason: null,
   injectionMode: 'always',
   nameCollisionFlag: 0,
+  nameCollisionPartnerId: null,
+  nameCollisionReason: null,
   state: KAEL_STATE,
   tags: [' courier'],
   keywords: ['the courier', 'The Courier'],
@@ -650,7 +653,13 @@ describe('one position per item', () => {
 })
 
 describe('orphaned collision flags', () => {
-  const TWIN: Entity = { ...KAEL, id: 'char_twin', nameCollisionFlag: 1 }
+  const TWIN: Entity = {
+    ...KAEL,
+    id: 'char_twin',
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: 'char_kael',
+    nameCollisionReason: 'distinct',
+  }
 
   function rename(row: Entity, name: string, branchEntities: readonly Entity[]) {
     return entityActions({
@@ -675,13 +684,18 @@ describe('orphaned collision flags', () => {
       {
         kind: 'updateEntity',
         source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'char_twin', patch: { nameCollisionFlag: 0 } },
+        payload: { branchId: 'br_1', id: 'char_twin', patch: FLAG_CLEAR },
       },
     ])
   })
 
   it('folds the clear into the update of a flagged row renamed away', () => {
-    const flaggedKael: Entity = { ...KAEL, nameCollisionFlag: 1 }
+    const flaggedKael: Entity = {
+      ...KAEL,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_twin',
+      nameCollisionReason: 'distinct',
+    }
     const twin: Entity = { ...KAEL, id: 'char_twin' }
     expect(rename(flaggedKael, 'Kael Vane', [flaggedKael, twin])).toStrictEqual([
       {
@@ -690,7 +704,7 @@ describe('orphaned collision flags', () => {
         payload: {
           branchId: 'br_1',
           id: 'char_kael',
-          patch: { name: 'Kael Vane', nameCollisionFlag: 0 },
+          patch: { name: 'Kael Vane', ...FLAG_CLEAR },
         },
       },
     ])

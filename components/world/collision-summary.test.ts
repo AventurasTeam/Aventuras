@@ -179,7 +179,13 @@ beforeEach(async () => {
       'Brannoc',
       2,
       { inventory: ['item_a', 'item_y', 'item_z'] },
-      { nameCollisionFlag: 1, embeddingStale: 1, description: 'A smith.' },
+      {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_a',
+        nameCollisionReason: 'distinct',
+        embeddingStale: 1,
+        description: 'A smith.',
+      },
     ),
     entity('char_c', 'character', 'Mira', 1, {
       current_location_id: 'loc_a',

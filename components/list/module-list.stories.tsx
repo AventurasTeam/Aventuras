@@ -28,6 +28,8 @@ function character(id: string, name: string, status: Entity['status']): Entity {
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],

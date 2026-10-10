@@ -317,7 +317,16 @@ describe('buildClassifierActions', () => {
 
   it('creates a new character with the reconcile decision applied', () => {
     const decisions = new Map<string, ReconcileDecision>([
-      ['h1', { kind: 'create', flagged: true, similarity: 0.6, flagReason: 'ambiguous' }],
+      [
+        'h1',
+        {
+          kind: 'create',
+          flagged: true,
+          similarity: 0.6,
+          flagReason: 'ambiguous',
+          partnerId: 'char_kael',
+        },
+      ],
     ])
     const { planned, handleMap } = buildClassifierActions(
       {
@@ -339,11 +348,44 @@ describe('buildClassifierActions', () => {
     expect(planned[0].action).toMatchObject({
       kind: 'createEntity',
       payload: {
-        entry: { name: 'Eldrin', status: 'active', nameCollisionFlag: 1, embeddingStale: 1 },
+        entry: {
+          name: 'Eldrin',
+          status: 'active',
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: 'char_kael',
+          nameCollisionReason: 'ambiguous',
+          embeddingStale: 1,
+        },
       },
     })
     expect(handleMap.get('h1')).toBe(payloadOf<{ entry: { id: string } }>(planned[0]).entry.id)
     expect(planned[0].entryId).toBe('e1')
+  })
+
+  it('creates an unflagged character with no partner or reason', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'h1',
+            name: 'Eldrin',
+            description: 'A dragon.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+      },
+      { ...base, decisions: new Map([['h1', { kind: 'create', flagged: false }]]) },
+    )
+    expect(planned[0].action).toMatchObject({
+      kind: 'createEntity',
+      payload: {
+        entry: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+      },
+    })
   })
 
   it('promotes instead of creating when reconcile said promote', () => {

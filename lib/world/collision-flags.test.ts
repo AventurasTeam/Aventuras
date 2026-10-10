@@ -21,7 +21,13 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore } from '@/lib/stores'
 
-import { namesakeKey, nameTakenByOther, orphanedFlags, withFlagClears } from './collision-flags'
+import {
+  FLAG_CLEAR,
+  namesakeKey,
+  nameTakenByOther,
+  orphanedFlags,
+  withFlagClears,
+} from './collision-flags'
 import { entityActions } from './entity-actions'
 import { entityDeleteActions } from './entity-delete'
 import { characterDraftFrom } from './entity-draft'
@@ -43,6 +49,8 @@ function entity(
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: { ...emptyEntityState(kind), ...state } as EntityState,
     tags: [],
     keywords: [],
@@ -54,8 +62,13 @@ function entity(
   }
 }
 
-const flagged = (id: string, name: string, overrides: Partial<Entity> = {}) =>
-  entity(id, name, { nameCollisionFlag: 1, ...overrides })
+const flagged = (id: string, name: string, partnerId: string, overrides: Partial<Entity> = {}) =>
+  entity(id, name, {
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: 'distinct',
+    ...overrides,
+  })
 
 describe('nameTakenByOther', () => {
   const branch = [
@@ -98,7 +111,7 @@ describe('namesakeKey', () => {
 })
 
 describe('orphanedFlags', () => {
-  const kael = flagged('char_f', 'Kael')
+  const kael = flagged('char_f', 'Kael', 'char_p')
   const twin = entity('char_p', 'kael ')
 
   it('returns a flagged row whose partner is deleted', () => {
@@ -133,14 +146,14 @@ describe('orphanedFlags', () => {
   })
 
   it('never returns the removed row, only the partner it leaves alone', () => {
-    const flaggedTwin = flagged('char_p', 'Kael')
+    const flaggedTwin = flagged('char_p', 'Kael', 'char_f')
     expect(
       orphanedFlags({ entities: [kael, flaggedTwin], removed: new Set(['char_f']) }),
     ).toStrictEqual(['char_p'])
   })
 
   it('leaves a row already orphaned before the write untouched', () => {
-    const lone = flagged('char_l', 'Lone')
+    const lone = flagged('char_l', 'Lone', 'char_gone')
     const mira = entity('char_m', 'Mira')
     const miraTwin = entity('char_n', 'Mira')
     expect(
@@ -167,7 +180,7 @@ describe('orphanedFlags', () => {
   })
 
   it('returns a flagged row renamed out of a group that still pairs without it', () => {
-    const f = flagged('char_f', 'Kael')
+    const f = flagged('char_f', 'Kael', 'char_p')
     const p = entity('char_p', 'Kael')
     const q = entity('char_q', 'Kael')
     expect(
@@ -176,12 +189,22 @@ describe('orphanedFlags', () => {
   })
 
   it('leaves a flagged row renamed onto another row’s name', () => {
-    const f = flagged('char_f', 'Kael')
+    const f = flagged('char_f', 'Kael', 'char_p')
     const p = entity('char_p', 'Kael')
     const m = entity('char_m', 'Mira')
     expect(
       orphanedFlags({ entities: [f, p, m], renamed: new Map([['char_f', 'Mira']]) }),
     ).toStrictEqual([])
+  })
+})
+
+describe('FLAG_CLEAR', () => {
+  it('clears the flag with its partner and reason', () => {
+    expect(FLAG_CLEAR).toStrictEqual({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
   })
 })
 
@@ -200,13 +223,22 @@ describe('withFlagClears', () => {
         payload: {
           branchId: 'b1',
           id: 'char_f',
-          patch: { name: 'Kael the guard', nameCollisionFlag: 0 },
+          patch: {
+            name: 'Kael the guard',
+            nameCollisionFlag: 0,
+            nameCollisionPartnerId: null,
+            nameCollisionReason: null,
+          },
         },
       },
       {
         kind: 'updateEntity',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'char_p', patch: { nameCollisionFlag: 0 } },
+        payload: {
+          branchId: 'b1',
+          id: 'char_p',
+          patch: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+        },
       },
     ])
   })
@@ -229,7 +261,11 @@ describe('withFlagClears', () => {
       {
         kind: 'updateEntity',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'x', patch: { nameCollisionFlag: 0 } },
+        payload: {
+          branchId: 'b1',
+          id: 'x',
+          patch: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+        },
       },
     ])
   })
@@ -241,7 +277,11 @@ describe('withFlagClears', () => {
       {
         kind: 'updateEntity',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'char_f', patch: { nameCollisionFlag: 0 } },
+        payload: {
+          branchId: 'b1',
+          id: 'char_f',
+          patch: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+        },
       },
     ])
   })
@@ -262,13 +302,14 @@ describe('orphan clears through the entity arm', () => {
     return (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
   }
 
-  async function flagOf(ctx: DbCtx, id: string): Promise<number | undefined> {
+  /** The row's flag, partner and reason; undefined when the row is gone. */
+  async function flagOf(ctx: DbCtx, id: string) {
     const [row] = await ctx.db.select().from(entities).where(eq(entities.id, id))
-    return row?.nameCollisionFlag
+    return row && [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
   }
 
   it('a save renaming the flagged row away commits its name and clear as one delta', async () => {
-    const kael = flagged('char_f', 'Kael')
+    const kael = flagged('char_f', 'Kael', 'char_p')
     const twin = entity('char_p', 'Kael')
     const ctx = await setup([kael, twin])
     const actions = entityActions({
@@ -287,17 +328,26 @@ describe('orphan clears through the entity arm', () => {
     expect(
       await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
     ).toStrictEqual({ status: 'ok' })
-    expect(await flagOf(ctx, 'char_f')).toBe(0)
+    expect(await flagOf(ctx, 'char_f')).toStrictEqual([0, null, null])
     const rows = await deltaRows(ctx)
     expect(rows).toHaveLength(1)
-    expect(rows[0].undoPayload).toStrictEqual({ name: 'Kael', nameCollisionFlag: 1 })
+    expect(rows[0].undoPayload).toStrictEqual({
+      name: 'Kael',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_p',
+      nameCollisionReason: 'distinct',
+    })
   })
 
   it('a delete folds the clear into the partner’s ref patch, and undo re-flags it', async () => {
     const place = entity('loc_a', 'Hollow', {}, 'location')
-    const child = entity('loc_b', 'Hollow', { nameCollisionFlag: 1 }, 'location', {
-      parent_location_id: 'loc_a',
-    })
+    const child = entity(
+      'loc_b',
+      'Hollow',
+      { nameCollisionFlag: 1, nameCollisionPartnerId: 'loc_a', nameCollisionReason: 'distinct' },
+      'location',
+      { parent_location_id: 'loc_a' },
+    )
     const ctx = await setup([place, child])
     const { actions } = entityDeleteActions({
       branchId: 'b1',
@@ -309,23 +359,25 @@ describe('orphan clears through the entity arm', () => {
     expect(
       await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
     ).toStrictEqual({ status: 'ok' })
-    expect(await flagOf(ctx, 'loc_b')).toBe(0)
+    expect(await flagOf(ctx, 'loc_b')).toStrictEqual([0, null, null])
     const childDeltas = (await deltaRows(ctx)).filter((d) => d.targetId === 'loc_b')
     expect(childDeltas).toHaveLength(1)
     expect(Object.keys(childDeltas[0].undoPayload ?? {}).sort()).toStrictEqual([
       'nameCollisionFlag',
+      'nameCollisionPartnerId',
+      'nameCollisionReason',
       'state',
     ])
 
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows(ctx) })
     await (await prepareUndo(set, ctx)).reverse()
-    expect(await flagOf(ctx, 'loc_b')).toBe(1)
-    expect(await flagOf(ctx, 'loc_a')).toBe(0)
+    expect(await flagOf(ctx, 'loc_b')).toStrictEqual([1, 'loc_a', 'distinct'])
+    expect(await flagOf(ctx, 'loc_a')).toStrictEqual([0, null, null])
   })
 
   it('a delete clears an unreferencing partner, and undo re-flags it and restores the target', async () => {
     const target = entity('char_x', 'Kael')
-    const partner = flagged('char_p', 'Kael')
+    const partner = flagged('char_p', 'Kael', 'char_x')
     const ctx = await setup([target, partner])
     const { actions } = entityDeleteActions({
       branchId: 'b1',
@@ -337,12 +389,12 @@ describe('orphan clears through the entity arm', () => {
     expect(
       await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
     ).toStrictEqual({ status: 'ok' })
-    expect(await flagOf(ctx, 'char_p')).toBe(0)
+    expect(await flagOf(ctx, 'char_p')).toStrictEqual([0, null, null])
     expect(await flagOf(ctx, 'char_x')).toBeUndefined()
 
     const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows(ctx) })
     await (await prepareUndo(set, ctx)).reverse()
-    expect(await flagOf(ctx, 'char_p')).toBe(1)
-    expect(await flagOf(ctx, 'char_x')).toBe(0)
+    expect(await flagOf(ctx, 'char_p')).toStrictEqual([1, 'char_x', 'distinct'])
+    expect(await flagOf(ctx, 'char_x')).toStrictEqual([0, null, null])
   })
 })

@@ -160,6 +160,8 @@ function entity(id: string, kind: Entity['kind'], name: string): Entity {
     priority: 0,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     embeddingStale: 0,

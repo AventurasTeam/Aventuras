@@ -55,6 +55,8 @@ const NEWER = makeEntity({
   description: 'A smuggler who runs the river gate after dark.',
   status: 'active',
   nameCollisionFlag: 1,
+  nameCollisionPartnerId: 'char_brannoc',
+  nameCollisionReason: 'distinct',
   tags: ['smuggler'],
   keywords: ['the river gate'],
   state: emptyEntityState('character'),

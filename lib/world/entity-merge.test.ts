@@ -11,6 +11,7 @@ import {
   type HappeningInvolvement,
 } from '@/lib/db'
 
+import { FLAG_CLEAR } from './collision-flags'
 import { collisionPairOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
 import { referencingEntities } from './entity-refs'
@@ -32,6 +33,8 @@ function entity(
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: { ...emptyEntityState(kind), ...state } as EntityState,
     tags: [],
     keywords: [],
@@ -58,6 +61,12 @@ const aware = (
   retrievalCount: 0,
   source: null,
   ...fields,
+})
+
+const flaggedWith = (partnerId: string): Partial<Entity> => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: 'distinct',
 })
 
 const involved = (
@@ -93,7 +102,7 @@ function sequentialIds(): (prefix: string) => string {
 }
 
 const A = entity('char_a', 'character')
-const B = entity('char_b', 'character', { nameCollisionFlag: 1 })
+const B = entity('char_b', 'character', flaggedWith('char_a'))
 // Bystanders the link rows name.
 const M = entity('char_m', 'character', { name: 'Mira' })
 const N = entity('char_n', 'character', { name: 'Nell' })
@@ -202,7 +211,10 @@ describe('entityMergeActions — the canonical', () => {
   })
 
   it('takes the chosen scalars that differ and clears a flagged canonical', () => {
-    const canonical = entity('char_a', 'character', { nameCollisionFlag: 1, description: 'old' })
+    const canonical = entity('char_a', 'character', {
+      ...flaggedWith('char_b'),
+      description: 'old',
+    })
     const loser = entity('char_b', 'character', {
       description: 'a guardsman',
       priority: 40,
@@ -219,7 +231,7 @@ describe('entityMergeActions — the canonical', () => {
       payload: {
         branchId: 'b1',
         id: 'char_a',
-        patch: { description: 'a guardsman', priority: 40, nameCollisionFlag: 0 },
+        patch: { description: 'a guardsman', priority: 40, ...FLAG_CLEAR },
       },
     })
   })
@@ -773,7 +785,7 @@ describe('entityMergeActions — scene effects', () => {
 describe('entityMergeActions — the group', () => {
   it('orders canonical, refs, awareness, involvements, relationships, tail, delete, all user edits', () => {
     const walker = entity('char_w', 'character', {}, { faction_id: 'fac_x' })
-    const factionA = entity('fac_a', 'faction', { nameCollisionFlag: 1 })
+    const factionA = entity('fac_a', 'faction', flaggedWith('fac_b'))
     const factionB = entity('fac_b', 'faction')
     const member = entity('char_1', 'character', {}, { faction_id: 'fac_b' })
     const factions = merge({
@@ -794,7 +806,7 @@ describe('entityMergeActions — the group', () => {
     ])
 
     const characters = merge({
-      canonical: entity('char_a', 'character', { nameCollisionFlag: 1 }),
+      canonical: entity('char_a', 'character', flaggedWith('char_b')),
       awareness: [aware('haw_1', 'char_b', 'hap_1')],
       involvements: [involved('hinv_1', 'char_b', 'hap_1', null)],
       relationships: [rel('rel_1', 'char_b', 'char_m', 'friend', null)],

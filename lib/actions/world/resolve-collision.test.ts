@@ -99,6 +99,12 @@ function row(
   }
 }
 
+const flaggedWith = (partnerId: string): Partial<NewEntity> => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: 'distinct',
+})
+
 const characterState = (state: Partial<CharacterState>): CharacterState => ({
   ...emptyEntityState('character'),
   ...state,
@@ -175,8 +181,16 @@ async function setTail(metadata: EntryMetadata): Promise<void> {
   await ctx.db.update(storyEntries).set({ metadata }).where(eq(storyEntries.id, 'entry_2'))
 }
 
-async function setFlag(id: string, flag: 0 | 1): Promise<void> {
-  await ctx.db.update(entities).set({ nameCollisionFlag: flag }).where(eq(entities.id, id))
+/** Flags `id` against `partnerId` (reason `distinct`); null clears the flag with both. */
+async function setFlag(id: string, partnerId: string | null): Promise<void> {
+  await ctx.db
+    .update(entities)
+    .set({
+      nameCollisionFlag: partnerId == null ? 0 : 1,
+      nameCollisionPartnerId: partnerId,
+      nameCollisionReason: partnerId == null ? null : 'distinct',
+    })
+    .where(eq(entities.id, id))
   await hydrateStores()
 }
 
@@ -304,16 +318,16 @@ beforeEach(async () => {
   await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
   await db.insert(entities).values([
     row('char_lead', 'character', 'Kael', 1),
-    row('char_kael2', 'character', 'Kael', 2, { nameCollisionFlag: 1 }),
+    row('char_kael2', 'character', 'Kael', 2, flaggedWith('char_lead')),
     row('char_a', 'character', 'Brannoc', 1),
-    row('char_b', 'character', 'Brannoc', 2, { nameCollisionFlag: 1 }),
+    row('char_b', 'character', 'Brannoc', 2, flaggedWith('char_a')),
     row('char_o', 'character', 'Vorne', 1, {
       state: characterState({ current_location_id: 'loc_b', inventory: ['item_b'] }),
     }),
     row('loc_a', 'location', 'Harbor', 1),
-    row('loc_b', 'location', 'Harbor', 2, { nameCollisionFlag: 1 }),
+    row('loc_b', 'location', 'Harbor', 2, flaggedWith('loc_a')),
     row('item_a', 'item', 'Lantern', 1),
-    row('item_b', 'item', 'Lantern', 2, { nameCollisionFlag: 1 }),
+    row('item_b', 'item', 'Lantern', 2, flaggedWith('item_a')),
   ])
   await db.insert(happenings).values([
     { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
@@ -424,7 +438,7 @@ beforeEach(async () => {
 
 describe('resolveCollision — merge', () => {
   it('moves B onto A under one action_id and leaves B gone with no vectors', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
     expect(vectorCount('char_b')).toBe(2)
 
     expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
@@ -472,7 +486,7 @@ describe('resolveCollision — merge', () => {
   })
 
   it('CTRL-Z restores B with every row it held, re-flagged and stale; redo merges again', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
     const before = await worldSnapshot()
     await resolveCollision('b1', MERGE_B_INTO_A, ctx)
     const merged = await worldSnapshot()
@@ -628,7 +642,7 @@ describe('resolveCollision — merge', () => {
   })
 
   it('merges a namesake into the lead: the loser goes, the lead stays and loses its flag', async () => {
-    await setFlag('char_lead', 1)
+    await setFlag('char_lead', 'char_kael2')
 
     expect(await resolveCollision('b1', mergeInto('char_lead', 'char_kael2'), ctx)).toEqual({
       status: 'ok',
@@ -1003,7 +1017,12 @@ describe('resolveCollision — rename', () => {
       targetTable: 'entities',
       targetId: 'char_b',
       op: 'update',
-      undoPayload: { name: 'Brannoc', nameCollisionFlag: 1 },
+      undoPayload: {
+        name: 'Brannoc',
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_a',
+        nameCollisionReason: 'distinct',
+      },
     })
   })
 
@@ -1024,7 +1043,7 @@ describe('resolveCollision — rename', () => {
   })
 
   it('CTRL-Z restores both names and flags; redo renames and clears again', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
     const before = await worldSnapshot()
     await resolveCollision('b1', renameTo('Brannoc', 'Brannoc the Younger'), ctx)
     const renamed = await worldSnapshot()
@@ -1059,7 +1078,7 @@ describe('resolveCollision — rename', () => {
 
 describe('resolveCollision — keep as distinct', () => {
   it('clears the flag on each flagged row of the pair; CTRL-Z re-flags both', async () => {
-    await setFlag('char_a', 1)
+    await setFlag('char_a', 'char_b')
 
     expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
 

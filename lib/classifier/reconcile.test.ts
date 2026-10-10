@@ -78,6 +78,7 @@ describe('reconcileNewCharacter', () => {
       flagged: true,
       similarity: 0.1,
       flagReason: 'distinct',
+      partnerId: 'char_1',
     })
   })
 
@@ -91,6 +92,7 @@ describe('reconcileNewCharacter', () => {
       flagged: true,
       similarity: 0.6,
       flagReason: 'ambiguous',
+      partnerId: 'char_1',
     })
   })
 
@@ -117,6 +119,7 @@ describe('reconcileNewCharacter', () => {
       flagged: true,
       similarity: null,
       flagReason: 'no-signal',
+      partnerId: 'char_1',
     })
   })
 
@@ -146,6 +149,7 @@ describe('reconcileNewCharacter', () => {
       flagged: true,
       similarity: TAU_LOW,
       flagReason: 'ambiguous',
+      partnerId: 'char_1',
     })
   })
 
@@ -162,6 +166,7 @@ describe('reconcileNewCharacter', () => {
       flagged: true,
       similarity: null,
       flagReason: 'no-signal',
+      partnerId: 'char_1',
     })
   })
 
@@ -218,6 +223,7 @@ describe('reconcileNewCharacter', () => {
       flagged: true,
       similarity: null,
       flagReason: 'no-signal',
+      partnerId: 'char_1',
     })
   })
 
@@ -232,7 +238,44 @@ describe('reconcileNewCharacter', () => {
         })),
       },
     )
-    expect(decision).toMatchObject({ flagReason: 'no-signal' })
+    expect(decision).toMatchObject({ flagReason: 'no-signal', partnerId: 'char_a' })
+  })
+
+  it('flags against the best-scoring namesake when none absorbs', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      {
+        entities: [entity({ id: 'char_low' }), entity({ id: 'char_mid' })],
+        embedDescriptions: vi.fn(async () => ({
+          vectors: [
+            new Float32Array([1, 0]),
+            new Float32Array([0.2, Math.sqrt(1 - 0.2 ** 2)]),
+            new Float32Array([0.6, Math.sqrt(1 - 0.6 ** 2)]),
+          ],
+          dim: 2,
+        })),
+      },
+    )
+    expect(decision).toEqual({
+      kind: 'create',
+      flagged: true,
+      similarity: 0.6,
+      flagReason: 'ambiguous',
+      partnerId: 'char_mid',
+    })
+  })
+
+  it('flags against the first namesake when none is scored', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      {
+        entities: [entity({ id: 'char_first' }), entity({ id: 'char_second' })],
+        embedDescriptions: async () => {
+          throw new Error('embedder offline')
+        },
+      },
+    )
+    expect(decision).toMatchObject({ flagReason: 'no-signal', partnerId: 'char_first' })
   })
 })
 
