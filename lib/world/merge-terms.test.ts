@@ -101,6 +101,13 @@ describe('mergedTerms — the name the merge does not keep', () => {
     expect(addedNameKeyword(rows, true)).toBeNull()
   })
 
+  it('adds nothing for a blank name it does not keep', () => {
+    expect(addedNameKeyword({ canonical, other: { ...stormborn, name: '  ' } }, false)).toBeNull()
+    expect(
+      addedNameKeyword({ canonical: { ...canonical, name: '  ' }, other: stormborn }, true),
+    ).toBeNull()
+  })
+
   it("adds the other row's name, trimmed, among its additions when the canonical's is kept", () => {
     const rows = { canonical, other: { ...stormborn, name: ' Kael Stormborn ' } }
     expect(keywordsOf(rows)).toStrictEqual([

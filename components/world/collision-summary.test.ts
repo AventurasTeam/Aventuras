@@ -402,7 +402,8 @@ describe('collisionPair', () => {
         counts.involvements - counts.overlap.involvements,
       )
       const rewrittenOthers = written('updateEntity').filter(
-        (a) => a.payload.id !== canonicalId && a.payload.id !== loserId,
+        (a) =>
+          a.payload.id !== canonicalId && a.payload.id !== loserId && 'state' in a.payload.patch,
       )
       expect(rewrittenOthers).toHaveLength(counts.inverseRefs)
     },

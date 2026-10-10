@@ -52,7 +52,12 @@ function takeScalar<K extends MergeScalar>(
 }
 
 /** The merged canonical's terms, and its name and keywords as the namesake rule reads them. */
-type Merged = { terms: MergedTerms; side: NamesakeSide }
+type Merged = {
+  /** The merged row takes the loser's name: the one place the merge decides it. */
+  nameFromOther: boolean
+  terms: MergedTerms
+  side: NamesakeSide
+}
 
 function mergedRow(input: MergeContext): Merged {
   const { canonical, loser } = input
@@ -66,6 +71,7 @@ function mergedRow(input: MergeContext): Merged {
     },
   )
   return {
+    nameFromOther,
     terms,
     side: { name: nameFromOther ? loser.name : canonical.name, keywords: terms.keywords },
   }
@@ -88,7 +94,8 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
   const { canonical, loser } = input
   const scalars: Partial<Pick<Entity, MergeScalar>> = {}
   for (const field of input.fromLoser) {
-    if (loser[field] !== canonical[field]) takeScalar(scalars, field, loser)
+    const takes = field === 'name' ? merged.nameFromOther : loser[field] !== canonical[field]
+    if (takes) takeScalar(scalars, field, loser)
   }
   const { tags, keywords } = merged.terms
   const rewritten = canonicalRefsCleared(canonical, loser.id)

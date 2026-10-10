@@ -369,6 +369,18 @@ describe('entityMergeActions — collision flags', () => {
     ])
   })
 
+  it('writes no flag to the loser, even one the merged row stops matching', () => {
+    const canonical = entity('char_a', 'character', { keywords: ['Brannoc'] })
+    const loser = entity('char_b', 'character', { name: 'Brannoc', ...flaggedWith('char_a') })
+    const { actions } = merge({
+      canonical,
+      loser,
+      branchEntities: [canonical, loser],
+      deselectedKeywords: ['brannoc'],
+    })
+    expect(actions).toStrictEqual([updateOf('char_a', { keywords: [] }), deleteLoser])
+  })
+
   it('folds a re-point into the state patch of a row that held a ref to the loser', () => {
     const hollow = entity('loc_a', 'location')
     const twin = entity('loc_b', 'location', flaggedWith('loc_a'))
