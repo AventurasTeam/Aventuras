@@ -311,6 +311,7 @@ test.describe.serial('World collision resolve', () => {
     const head = await logHead(page, pair.branchId)
 
     await world.resolveButton(page).click()
+    await expect(world.collisionReason(page, 'distinct')).toBeVisible()
     await world.collisionMode(page, 'keep').click()
     await world.keepConfirm(page).click()
 

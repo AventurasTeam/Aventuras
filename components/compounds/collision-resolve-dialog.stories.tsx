@@ -1099,6 +1099,12 @@ export const RenameLoading: Story = {
 
 export const KeepMode: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    expect(
+      await screen.findByText(/^Both "Kael" entities will continue to exist with the same name\./),
+    ).toBeInTheDocument()
+  },
 }
 
 export const KeepLoading: Story = {
@@ -1176,5 +1182,179 @@ export const MergeManyTags: Story = {
     scroller!.scrollTop = scroller!.scrollHeight
     expect(confirm.getBoundingClientRect().top).toBeCloseTo(before, 0)
     expect(confirm.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+  },
+}
+
+// world.md → Resolve dialog: pairs that match by name, by containment and through a keyword.
+const NEWER_AT = new Date().toISOString()
+const olderKael = baseEntity({ keywords: [] })
+const newerKael = baseEntity({ id: 'ent_kael_2', createdAt: NEWER_AT, keywords: [] })
+const stormborn = baseEntity({
+  id: 'ent_kael_2',
+  name: 'Kael Stormborn',
+  createdAt: NEWER_AT,
+  keywords: [],
+})
+const kaelTheWolf = baseEntity({ keywords: ['the Grey Wolf'] })
+const greyWolf = baseEntity({
+  id: 'ent_kael_2',
+  name: 'the Grey Wolf',
+  createdAt: NEWER_AT,
+  keywords: [],
+})
+const greyWolfCallingKael = { ...greyWolf, keywords: ['Kael'] }
+const innkeeper = baseEntity({ id: 'ent_inn_1', name: 'The Innkeeper', keywords: [] })
+const marta = baseEntity({
+  id: 'ent_marta_2',
+  name: 'Marta',
+  createdAt: NEWER_AT,
+  keywords: ['the innkeeper'],
+})
+
+// The dialog is named by its title.
+const dialogNamed = (name: string) => screen.findByRole('dialog', { name })
+const BASIS = / also goes by /
+
+export const HeaderSameName: Story = {
+  render: () => <ControlledDialog entityA={olderKael} entityB={newerKael} onResolve={resolveOk} />,
+  play: async () => {
+    expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions differ.')).toBeInTheDocument()
+    expect(screen.queryByText(BASIS)).toBeNull()
+  },
+}
+
+export const HeaderContainedAmbiguous: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={stormborn}
+      reason="ambiguous"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "Kael Stormborn" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions are partly alike.')).toBeInTheDocument()
+    expect(screen.queryByText(BASIS)).toBeNull()
+  },
+}
+
+// The older row can be the flagged one: a merge re-points a flag at whichever row survives.
+export const HeaderInSceneOlderFlagged: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={stormborn}
+      flaggedId={olderKael.id}
+      reason="in-scene"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "Kael" may be "Kael Stormborn"')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared.',
+      ),
+    ).toBeInTheDocument()
+  },
+}
+
+export const HeaderKeywordAlike: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolf}
+      reason="alike"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions read alike.')).toBeInTheDocument()
+    expect(screen.getByText('"Kael" also goes by "the Grey Wolf".')).toBeInTheDocument()
+  },
+}
+
+// The flagged row holds the keyword; a pair matching only through one keeps with the partial panel.
+export const HeaderKeywordHeldByFlagged: Story = {
+  render: () => <ControlledDialog entityA={innkeeper} entityB={marta} onResolve={resolveOk} />,
+  play: async () => {
+    expect(await dialogNamed('⚠ "Marta" may be "The Innkeeper"')).toBeInTheDocument()
+    expect(screen.getByText('"Marta" also goes by "the innkeeper".')).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    expect(
+      await screen.findByText(
+        '"The Innkeeper" and "Marta" will both continue to exist. The flag clears; no other writes.',
+      ),
+    ).toBeInTheDocument()
+  },
+}
+
+// Each row's keywords hold the other's name: the basis line names the flagged row's.
+export const HeaderKeywordBothWays: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolfCallingKael}
+      reason="alike"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('"the Grey Wolf" also goes by "Kael".')).toBeInTheDocument()
+  },
+}
+
+export const HeaderNoSignal: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={newerKael}
+      reason="no-signal"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
+    expect(screen.getByText("Their descriptions couldn't be compared.")).toBeInTheDocument()
+  },
+}
+
+// A rename on another surface that keeps the pair flagged re-derives the header.
+let renameNow: (() => void) | null = null
+function RenamedWhileOpen() {
+  const [b, setB] = useState(newerKael)
+  useEffect(() => {
+    renameNow = () => setB(stormborn)
+    return () => {
+      renameNow = null
+    }
+  }, [])
+  return <ControlledDialog entityA={olderKael} entityB={b} onResolve={resolveOk} />
+}
+
+export const HeaderFollowsALiveRename: Story = {
+  render: () => <RenamedWhileOpen />,
+  play: async () => {
+    await dialogNamed('⚠ Two characters named "Kael"')
+    renameNow?.()
+    expect(await dialogNamed('⚠ "Kael Stormborn" may be "Kael"')).toBeInTheDocument()
+  },
+}
+
+export const KeepPartialPair: Story = {
+  render: () => <ControlledDialog entityA={olderKael} entityB={stormborn} onResolve={resolveOk} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    expect(
+      await screen.findByText(
+        '"Kael" and "Kael Stormborn" will both continue to exist. The flag clears; no other writes.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Polymorphic naming/)).toBeNull()
   },
 }

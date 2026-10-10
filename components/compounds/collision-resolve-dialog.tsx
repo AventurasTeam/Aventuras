@@ -22,7 +22,7 @@ import type { CollisionReason } from '@/lib/db'
 import { relativeTimeLabel, t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
-import { RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
+import { nameBasis, namesakeBasis, RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
 
 import {
   computeDivergence,
@@ -80,12 +80,51 @@ const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.stillColliding]: () => t('collisionDialog.renameIssue.stillColliding'),
 }
 
+type PairNames = { flagged: string; other: string }
+
+const REASON_TEXT: Record<CollisionReason, (names: PairNames) => string> = {
+  alike: () => t('collisionDialog.reason.alike'),
+  ambiguous: () => t('collisionDialog.reason.ambiguous'),
+  distinct: () => t('collisionDialog.reason.distinct'),
+  'in-scene': ({ flagged, other }) => t('collisionDialog.reason.inScene', { flagged, other }),
+  'no-signal': () => t('collisionDialog.reason.noSignal'),
+}
+
+type CollisionHeader = { title: string; reason: string; basis: string | null }
+
+/** world.md → Resolve dialog, from the rows' current names and keywords; never stored. */
+function collisionHeader(
+  entityA: EntitySummary,
+  entityB: EntitySummary,
+  flaggedId: string,
+  reason: CollisionReason,
+): CollisionHeader {
+  const [flagged, other]: readonly [EntitySummary, EntitySummary] =
+    flaggedId === entityB.id ? [entityB, entityA] : [entityA, entityB]
+  const names: PairNames = { flagged: flagged.name, other: other.name }
+  const match = namesakeBasis(flagged, other)
+  return {
+    title:
+      nameBasis(flagged.name, other.name) === 'same-name'
+        ? t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })
+        : t('collisionDialog.titleMayBe', names),
+    reason: REASON_TEXT[reason](names),
+    basis:
+      match?.basis === 'keyword'
+        ? t('collisionDialog.basis', {
+            holder: match.holder === 'first' ? flagged.name : other.name,
+            keyword: match.keyword,
+          })
+        : null,
+  }
+}
+
 type CollisionResolveDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
   entityB: EntitySummary // newer
-  /** The flagged row the strip was opened from: the header names it first, and `reason` is its. */
+  /** The row whose flag names the other, preferring the one the strip was opened from: the header names it first, and `reason` is its. */
   flaggedId: string
   /** That row's `name_collision_reason`, for the reason line. */
   reason: CollisionReason
@@ -143,6 +182,8 @@ export function CollisionResolveDialog({
   onOpenChange,
   entityA,
   entityB,
+  flaggedId,
+  reason,
   onResolve,
   blockedReason,
   isNameTaken,
@@ -154,6 +195,7 @@ export function CollisionResolveDialog({
   const [nowMs] = useState(() => Date.now())
 
   const diff = useMemo(() => computeDivergence(entityA, entityB), [entityA, entityB])
+  const header = collisionHeader(entityA, entityB, flaggedId, reason)
 
   async function handleSubmit(resolution: Resolution) {
     setSubmitting(true)
@@ -191,9 +233,13 @@ export function CollisionResolveDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-2xl lg:max-w-4xl" scrollable={false}>
         <DialogHeader>
-          <DialogTitle>
-            {t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })}
-          </DialogTitle>
+          <DialogTitle>{header.title}</DialogTitle>
+          <Text size="sm">{header.reason}</Text>
+          {header.basis != null ? (
+            <Text size="sm" variant="muted">
+              {header.basis}
+            </Text>
+          ) : null}
           <DialogDescription>{t('collisionDialog.description')}</DialogDescription>
         </DialogHeader>
 
@@ -235,7 +281,8 @@ export function CollisionResolveDialog({
         )}
         {mode === 'keep' && (
           <KeepBody
-            name={entityA.name}
+            olderName={entityA.name}
+            newerName={entityB.name}
             onSubmit={handleSubmit}
             onCancel={onCancel}
             submitting={submitting}
@@ -858,9 +905,22 @@ function RenameBody({
   )
 }
 
-type KeepBodyProps = BodyProps & { name: string }
+type KeepBodyProps = BodyProps & { olderName: string; newerName: string }
 
-function KeepBody({ name, onSubmit, onCancel, submitting, blockedReason, error }: KeepBodyProps) {
+function KeepBody({
+  olderName,
+  newerName,
+  onSubmit,
+  onCancel,
+  submitting,
+  blockedReason,
+  error,
+}: KeepBodyProps) {
+  // world.md → Keep as distinct: the same-name limitation is cited only when the names are the same.
+  const body =
+    nameBasis(olderName, newerName) === 'same-name'
+      ? t('collisionDialog.keepBody', { name: olderName })
+      : t('collisionDialog.keepBodyPartial', { older: olderName, newer: newerName })
   return (
     <ModeBody
       confirmLabel={t('collisionDialog.keepConfirm')}
@@ -871,7 +931,7 @@ function KeepBody({ name, onSubmit, onCancel, submitting, blockedReason, error }
       error={error}
     >
       <Text size="sm" variant="muted">
-        {t('collisionDialog.keepBody', { name })}
+        {body}
       </Text>
     </ModeBody>
   )
