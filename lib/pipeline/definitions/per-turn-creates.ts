@@ -115,14 +115,15 @@ function keptLocationHandles(block: ParsedStateBlock): Set<string> {
   return kept
 }
 
-/** A new item stays only when a transfer hands it to a character. */
+/** A new item stays only when the last transfer naming it leaves it with a character. */
 function keptItemHandles(block: ParsedStateBlock, byId: ReadonlyMap<string, Entity>): Set<string> {
   const declared = new Set((block.newItems ?? []).map((i) => i.handle))
+  const lastTo = new Map<string, string | undefined>()
+  for (const transfer of block.transfers?.items ?? [])
+    if (declared.has(transfer.id)) lastTo.set(transfer.id, transfer.to)
   const kept = new Set<string>()
-  for (const transfer of block.transfers?.items ?? []) {
-    if (!declared.has(transfer.id) || transfer.to === undefined) continue
-    if (byId.get(transfer.to)?.kind === 'character') kept.add(transfer.id)
-  }
+  for (const [handle, to] of lastTo)
+    if (to !== undefined && byId.get(to)?.kind === 'character') kept.add(handle)
   return kept
 }
 
@@ -420,7 +421,10 @@ export async function planTurnCreates(input: {
   }
 }
 
-/** A failed fold: nothing is created; every create reports `dropped`, every declared handle is dropped where it stands. */
+/**
+ * A failed fold: nothing is created; every create reports `dropped`, every declared handle is
+ * dropped where it stands.
+ */
 export function skipTurnCreates(block: ParsedStateBlock): TurnCreatePlan {
   const none = new Map<string, string>()
   return {

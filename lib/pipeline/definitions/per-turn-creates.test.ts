@@ -10,6 +10,7 @@ import { planTurnCreates, skipTurnCreates } from './per-turn-creates'
 
 const BRANCH = 'b1'
 const HERO = 'char_00000000-0000-4000-8000-000000000001'
+const MIRA = 'char_00000000-0000-4000-8000-000000000002'
 const ELDRA = 'loc_00000000-0000-4000-8000-0000000000a1'
 const PORT = 'loc_00000000-0000-4000-8000-0000000000a2'
 const MARKET = 'loc_00000000-0000-4000-8000-0000000000a3'
@@ -206,6 +207,7 @@ describe('planTurnCreates — kept only if used', () => {
   })
 
   it('keeps a new item only when a transfer gives it to a character', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug')
     const plan = await runPlanner({
       newItems: [
         { handle: 'new:key', name: 'rusted key', description: 'an iron key' },
@@ -252,6 +254,48 @@ describe('planTurnCreates — kept only if used', () => {
         description: 'a coin from nowhere',
         outcome: 'dropped',
       },
+    ])
+    expect(debugSpy).toHaveBeenCalledWith('classifier.create_dropped', {
+      kind: 'item',
+      handle: 'new:map',
+      name: 'sea chart',
+    })
+  })
+
+  it('drops a new item taken and then put down in the same block', async () => {
+    const plan = await runPlanner({
+      newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+      transfers: {
+        items: [
+          { id: 'new:key', to: HERO, slot: 'inventory' },
+          { id: 'new:key', from: HERO, slot: 'inventory' },
+        ],
+        stackables: [],
+      },
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.block.transfers).toEqual({ items: [], stackables: [] })
+    expect(plan.report.newItems[0]?.outcome).toBe('dropped')
+  })
+
+  it('keeps a new item taken and then given to another character', async () => {
+    const plan = await runPlanner(
+      {
+        newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        transfers: {
+          items: [
+            { id: 'new:key', to: HERO, slot: 'inventory' },
+            { id: 'new:key', from: HERO, to: MIRA, slot: 'inventory' },
+          ],
+          stackables: [],
+        },
+      },
+      { entities: world(row({ id: MIRA, kind: 'character', name: 'Mira' })) },
+    )
+    expect(createdEntries(plan.creates).map((e) => e.id)).toEqual(['item_new_1'])
+    expect(plan.block.transfers?.items.map((t) => [t.id, t.to])).toEqual([
+      ['item_new_1', HERO],
+      ['item_new_1', MIRA],
     ])
   })
 
@@ -487,6 +531,26 @@ describe('planTurnCreates — matching', () => {
     expect(createdEntries(plan.creates)).toEqual([
       expect.objectContaining({ name: 'The Drowned Market', nameCollisionFlag: 0 }),
     ])
+  })
+
+  it('creates a new place inside a new namesake, not an alias of it', async () => {
+    const plan = await runPlanner({
+      newLocations: [
+        { handle: 'new:outer', name: 'The Keep', description: 'a squat tower', parent: ELDRA },
+        {
+          handle: 'new:inner',
+          name: 'the keep',
+          description: 'its inner ward',
+          parent: 'new:outer',
+        },
+      ],
+      currentLocation: 'new:inner',
+    })
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+      ['loc_new_1', { parent_location_id: ELDRA }],
+      ['loc_new_2', { parent_location_id: 'loc_new_1' }],
+    ])
+    expect(plan.block.currentLocation).toBe('loc_new_2')
   })
 
   it('maps a second new place with the same name and parent onto the first', async () => {
