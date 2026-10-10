@@ -682,6 +682,7 @@ export default function WorldRoute() {
           entityB={collision.pair.sides[1]}
           flaggedId={collision.pair.flaggedId}
           reason={collision.pair.reason}
+          parentName={collision.pair.parentName}
           onResolve={collision.resolve}
           blockedReason={collisionBlocked}
           isNameTaken={collisionNameTaken}

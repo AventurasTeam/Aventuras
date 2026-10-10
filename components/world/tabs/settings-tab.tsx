@@ -17,9 +17,17 @@ export function SettingsTab({
   control,
   blocked,
   blockedReason,
-}: Gate & { control: Control<EntityBaseDraft> }) {
+  isPlace = false,
+}: Gate & {
+  control: Control<EntityBaseDraft>
+  /** A location: the injection hint adds what each mode does to the location map. */
+  isPlace?: boolean
+}) {
   const status = useWatch({ control, name: 'status' })
   const gate = { blocked, blockedReason }
+  const injectionHint = isPlace
+    ? `${t('world:fields.injectionOverride')} ${t('world:fields.injectionPlaceMap')}`
+    : t('world:fields.injectionOverride')
   return (
     <View className="gap-4">
       <Controller
@@ -45,10 +53,7 @@ export function SettingsTab({
         control={control}
         name="injectionMode"
         render={({ field }) => (
-          <FormRow
-            label={t('world:fields.injectionMode')}
-            hint={t('world:fields.injectionOverride')}
-          >
+          <FormRow label={t('world:fields.injectionMode')} hint={injectionHint}>
             {/* Options with help text make Select render radio. */}
             <Select
               label={t('world:fields.injectionMode')}

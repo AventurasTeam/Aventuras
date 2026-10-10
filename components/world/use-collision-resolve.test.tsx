@@ -7,6 +7,7 @@ import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
 import {
   emptyEntityState,
   type CharacterRelationship,
+  type CollisionReason,
   type Entity,
   type Happening,
   type HappeningAwareness,
@@ -296,6 +297,57 @@ describe('useCollisionResolve → opening', () => {
     const result = openPair()
     act(() => result.current.close())
     expect(result.current.pair).toBeNull()
+  })
+})
+
+describe('useCollisionResolve → the shared parent', () => {
+  const place = (id: string, name: string, parentId: string | null, over: Partial<Entity> = {}) =>
+    makeEntity({ id, kind: 'location', name, state: { parent_location_id: parentId }, ...over })
+  const HOLLOW = place('loc_hollow', 'Veil’s Hollow', null, { createdAt: 100 })
+  const marketUnder = (parentId: string | null) =>
+    place('loc_market', 'The Drowned Market', parentId, { createdAt: 1_000 })
+  const stallsUnder = (parentId: string | null, reason: CollisionReason = 'same-parent') =>
+    place('loc_stalls', 'The Drowned Market Stalls', parentId, {
+      createdAt: 2_000,
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'loc_market',
+      nameCollisionReason: reason,
+    })
+
+  // The strip asks from the flagged (newer) row.
+  function openPlaces(rows: Entity[]): CollisionDialogPair {
+    entitiesStore.hydrate(BRANCH, rows)
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run))
+    act(() => result.current.request('loc_stalls', 'loc_market'))
+    return openedPair(result)
+  }
+
+  it('names the parent a same-parent pair shares', () => {
+    expect(
+      openPlaces([HOLLOW, marketUnder('loc_hollow'), stallsUnder('loc_hollow')]),
+    ).toMatchObject({ flaggedId: 'loc_stalls', reason: 'same-parent', parentName: 'Veil’s Hollow' })
+  })
+
+  it('names no parent for a same-parent pair at the root', () => {
+    const pair = openPlaces([HOLLOW, marketUnder(null), stallsUnder(null)])
+    expect(pair.reason).toBe('same-parent')
+    expect(pair).not.toHaveProperty('parentName')
+  })
+
+  it('names no parent when the shared parent is no row on the branch', () => {
+    const pair = openPlaces([marketUnder('loc_gone'), stallsUnder('loc_gone')])
+    expect(pair.reason).toBe('same-parent')
+    expect(pair).not.toHaveProperty('parentName')
+  })
+
+  it('names no parent for another reason, even under one', () => {
+    const pair = openPlaces([
+      HOLLOW,
+      marketUnder('loc_hollow'),
+      stallsUnder('loc_hollow', 'distinct'),
+    ])
+    expect(pair.reason).toBe('distinct')
+    expect(pair).not.toHaveProperty('parentName')
   })
 })
 

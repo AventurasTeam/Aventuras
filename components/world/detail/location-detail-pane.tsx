@@ -93,7 +93,7 @@ export function LocationDetailPane({
         />
       </TabsContent>
       <TabsContent value="settings">
-        <SettingsTab control={asBaseControl(control)} {...gate} />
+        <SettingsTab control={asBaseControl(control)} isPlace {...gate} />
       </TabsContent>
       <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
     </EntityDetailFrame>
