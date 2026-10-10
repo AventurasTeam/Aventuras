@@ -119,7 +119,7 @@ prevent that: it runs `build-desktop.yml`, `build-android.yml` and `build-ios.ym
 `publish: false` on a weekly schedule (Fridays, the day after Rust's stable release day), on pushes
 to `master` that touch dependency or workflow files, and on manual dispatch, so the caches those
 jobs leave behind on `master` are the ones a release restores. It skips the push
-`scripts/release.js` makes when it fast-forwards a version bump onto `master`: every cache key below
+`scripts/release.js` makes when it pushes a version bump to `master`: every cache key below
 already ignores the app's own version, so that push can only rebuild for nothing.
 
 - **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
@@ -296,22 +296,21 @@ limit. A 403 is reported as a network-kind error.
 
 ### Cutting a New Release
 
-`npm run release -- <patch|minor|major|prerelease|x.y.z> [--dry-run] [--no-merge-back]`
+`npm run release -- <patch|minor|major|prerelease|x.y.z> [--dry-run]`
 (wraps `scripts/release.js`) automates version bumps:
 
-1. Creates a `release/vX.Y.Z` branch.
-2. Bumps the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `Cargo.toml`,
+1. Bumps the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `Cargo.toml`,
    and `Cargo.lock`.
-3. Commits, tags `vX.Y.Z`, and pushes the branch + tag together.
-4. Fast-forwards the branch it was run from onto the bump and pushes it, so the version on `master`
-   is the version released. Skip with `--no-merge-back`.
+2. Commits the bump on the branch it was run from and tags it `vX.Y.Z`.
+3. Pushes the branch and the tag in one atomic push, so the version on `master` is the version
+   released and the tag can never point at a commit `master` lacks.
 
 Note the `--`: without it npm consumes the flags before the script sees them.
 
-Every precondition — a clean tree, a version that moves forward, and a tag/branch that does not
-already exist locally **or on the remote** — is checked before anything is written, and a failure
-after that point deletes the branch and tag it created and returns to the original branch. Use
-`--dry-run` to run the checks and stop.
+Every precondition — a clean tree, a version that moves forward, a tag that does not already exist
+locally **or on the remote**, and a remote branch that is an ancestor of the local one — is checked
+before anything is written. A failure after that point resets the branch to where it started and
+deletes the tag. Use `--dry-run` to run the checks and stop.
 
 Only `X.Y.Z` and `X.Y.Z-pre.N` are accepted. Other pre-release spellings are valid semver but match
 neither workflow trigger, so they would tag and build nothing.

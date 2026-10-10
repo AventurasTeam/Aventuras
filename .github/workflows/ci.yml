@@ -42,8 +42,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # scripts/release.js fast-forwards `master` onto a `chore: bump version to X` commit that
-  # touches only version fields. Every cache key here (rust-cache, the Gradle basic provider,
+  # scripts/release.js pushes a `chore: bump version to X` commit to `master` alongside the tag.
+  # It touches only version fields. Every cache key here (rust-cache, the Gradle basic provider,
   # lockfile-hash.js) is already insensitive to that change, so a run triggered by it would
   # rebuild for nothing; the next scheduled or manual run still warms caches for any real
   # dependency change made in the same push.

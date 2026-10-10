@@ -1,15 +1,15 @@
 /**
- * Cut a release: bump every file that carries the version, tag it, push it, and bring the
- * bump back onto the branch the release was cut from.
+ * Cut a release: bump every file that carries the version, commit it on the current branch,
+ * tag it, and push the branch and tag together.
  *
  * Usage:
- *   npm run release -- <major|minor|patch|prerelease|X.Y.Z> [--dry-run] [--no-merge-back]
+ *   npm run release -- <major|minor|patch|prerelease|X.Y.Z> [--dry-run]
  *
  * Note the `--`: without it npm eats the flags before the script sees them.
  *
  * Every precondition, including the ones that need the network, is checked before anything
- * is written; a failure after that point deletes the branch and tag it created and returns
- * to the branch it started on.
+ * is written; a failure after that point resets the branch to where it started and deletes
+ * the tag.
  */
 
 import fs from 'fs'
@@ -21,7 +21,7 @@ import { detectPackageManager, commandFor } from './package-manager.js'
 
 const rootDir = process.cwd()
 
-const KNOWN_FLAGS = ['--dry-run', '--no-merge-back']
+const KNOWN_FLAGS = ['--dry-run']
 
 const args = process.argv.slice(2)
 const flags = new Set(args.filter((a) => a.startsWith('-')))
@@ -33,7 +33,6 @@ const unknownArgs = [
 ]
 const inputArg = positionals[0]
 const dryRun = flags.has('--dry-run')
-const mergeBack = !flags.has('--no-merge-back')
 
 /** Run a command without a shell, so no argument can be interpolated into one. */
 function run(cmd, cmdArgs, opts = {}) {
@@ -82,8 +81,8 @@ const { ref: REMOTE, label: REMOTE_LABEL } = pickReleaseRemote(tryGit('remote', 
 // Pre-flight. Nothing below this block writes anything.
 // ---------------------------------------------------------------------------
 
-// Rejected rather than ignored: both flags are safety flags, so a typo in `--dry-run`
-// runs a real release against a repository the author believed was untouched.
+// Rejected rather than ignored: a typo in `--dry-run` runs a real release against a
+// repository the author believed was untouched.
 if (unknownArgs.length > 0) {
   fail(
     `Unrecognised argument${unknownArgs.length > 1 ? 's' : ''}: ${unknownArgs.join(', ')}`,
@@ -127,7 +126,6 @@ if (compareVersions(newVersion, currentVersion) <= 0) {
 }
 
 const tag = `v${newVersion}`
-const releaseBranch = `release/${tag}`
 
 const status = git('status', '--porcelain')
 if (status) {
@@ -141,6 +139,7 @@ const startBranch = git('rev-parse', '--abbrev-ref', 'HEAD')
 if (startBranch === 'HEAD') {
   fail('HEAD is detached.', 'Check out the branch you want to release from.')
 }
+const startCommit = git('rev-parse', 'HEAD')
 
 if (tryGit('rev-parse', '--verify', `refs/tags/${tag}`).ok) {
   fail(
@@ -150,17 +149,10 @@ if (tryGit('rev-parse', '--verify', `refs/tags/${tag}`).ok) {
   )
 }
 
-if (tryGit('rev-parse', '--verify', `refs/heads/${releaseBranch}`).ok) {
-  fail(
-    `Branch ${releaseBranch} already exists locally.`,
-    `Delete it: git branch -D ${releaseBranch}`,
-  )
-}
-
 // The network checks are here, with the cheap ones, because the whole point is that
 // nothing is written until every answer is in.
 console.log(`Checking ${REMOTE_LABEL} for ${tag}...`)
-const remoteRefs = tryGit('ls-remote', REMOTE, `refs/tags/${tag}`, `refs/heads/${releaseBranch}`)
+const remoteRefs = tryGit('ls-remote', REMOTE, `refs/tags/${tag}`, `refs/heads/${startBranch}`)
 if (!remoteRefs.ok) {
   fail(
     'Could not reach the release remote.',
@@ -169,18 +161,27 @@ if (!remoteRefs.ok) {
       'longer accepts a password for.',
   )
 }
-if (remoteRefs.out.includes(`refs/tags/${tag}`)) {
+const remoteShas = new Map()
+for (const line of remoteRefs.out.split('\n')) {
+  const [sha, ref] = line.split(/\s+/)
+  if (sha && ref) remoteShas.set(ref, sha)
+}
+if (remoteShas.has(`refs/tags/${tag}`)) {
   fail(`Tag ${tag} already exists on the remote.`, 'That version has already been released.')
 }
-if (remoteRefs.out.includes(`refs/heads/${releaseBranch}`)) {
-  fail(`Branch ${releaseBranch} already exists on the remote.`)
+// A remote branch this checkout is not built on would reject the push after the bump is
+// already committed and tagged.
+const remoteBranchSha = remoteShas.get(`refs/heads/${startBranch}`)
+if (remoteBranchSha && !tryGit('merge-base', '--is-ancestor', remoteBranchSha, 'HEAD').ok) {
+  fail(
+    `${startBranch} on the remote has commits this checkout lacks.`,
+    `Pull them, then retry: git pull ${REMOTE} ${startBranch}`,
+  )
 }
 
 console.log(`\n${currentVersion} → ${newVersion}`)
-console.log(`  branch:      ${releaseBranch}`)
-console.log(`  tag:         ${tag}`)
+console.log(`  push:        ${startBranch} + ${tag}`)
 console.log(`  remote:      ${REMOTE_LABEL}`)
-console.log(`  merge back:  ${mergeBack ? startBranch : 'no (--no-merge-back)'}`)
 
 if (dryRun) {
   console.log('\n--dry-run: every check passed, nothing was written.')
@@ -201,23 +202,17 @@ const versionFiles = [
   },
 ]
 
-let branchCreated = false
 let tagCreated = false
 
 function rollback() {
   console.error('\nRolling back...')
-  // `--force` discards whatever the failed run had written into the tree.
-  const checkedOut = tryGit('checkout', '--force', startBranch).ok
+  // The hard reset discards whatever the failed run had written into the tree.
+  const reset = tryGit('reset', '--hard', startCommit).ok
   if (tagCreated) tryGit('tag', '-d', tag)
-  if (branchCreated) tryGit('branch', '-D', releaseBranch)
-  if (!checkedOut) console.error(`  could not check out ${startBranch}; left the tree as it is.`)
+  if (!reset) console.error(`  could not reset ${startBranch}; left the tree as it is.`)
 }
 
 try {
-  console.log(`\nCreating ${releaseBranch}...`)
-  git('checkout', '-b', releaseBranch)
-  branchCreated = true
-
   console.log('Updating package.json and package-lock.json...')
   npm(['version', newVersion, '--no-git-tag-version'], { stdio: 'inherit' })
 
@@ -286,41 +281,12 @@ try {
   git('tag', tag)
   tagCreated = true
 
-  console.log(`Pushing ${releaseBranch} and ${tag}...`)
-  git('push', '--atomic', REMOTE, releaseBranch, tag)
+  console.log(`Pushing ${startBranch} and ${tag}...`)
+  git('push', '--atomic', REMOTE, startBranch, tag)
 } catch (error) {
   console.error(`\n✗ Release failed: ${error.message}`)
   rollback()
   process.exit(1)
 }
 
-// ---------------------------------------------------------------------------
-// The release is out. Everything past this point is best-effort.
-// ---------------------------------------------------------------------------
-
-console.log(`\n✓ Released ${tag}`)
-
-if (!mergeBack) {
-  console.log(
-    `\n  ${startBranch} still holds ${currentVersion}; the bump is only on ${releaseBranch}.`,
-  )
-  process.exit(0)
-}
-
-// Not rolled back on failure: the tag is pushed and the release is building, so a
-// protected branch or a race here is a reason to print two commands, not to unpick it.
-try {
-  console.log(`\nBringing the bump back onto ${startBranch}...`)
-  git('checkout', startBranch)
-  // `--ff-only`: anything else means someone moved `startBranch` meanwhile, and resolving
-  // that is not this script's decision.
-  git('merge', '--ff-only', releaseBranch)
-  git('push', REMOTE, startBranch)
-  console.log(`✓ ${startBranch} is at ${newVersion}`)
-} catch (error) {
-  console.error(`\n! ${tag} is released, but ${startBranch} was not updated: ${error.message}`)
-  console.error('  Finish by hand when convenient:')
-  console.error(`    git checkout ${startBranch} && git merge --ff-only ${releaseBranch}`)
-  console.error(`    git push ${REMOTE} ${startBranch}`)
-  process.exit(1)
-}
+console.log(`\n✓ Released ${tag}; ${startBranch} is at ${newVersion}`)
