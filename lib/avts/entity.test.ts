@@ -169,6 +169,16 @@ describe('entityExport', () => {
     })
   })
 
+  it.each([KAEL, TAVERN, SWORD, GUILD])(
+    'leaves the collision flag, partner and reason out of a $kind export',
+    (row) => {
+      const payload = payloadOf(row)
+      expect(payload).not.toHaveProperty('nameCollisionFlag')
+      expect(payload).not.toHaveProperty('nameCollisionPartnerId')
+      expect(payload).not.toHaveProperty('nameCollisionReason')
+    },
+  )
+
   it.each([KAEL, TAVERN, SWORD, GUILD])('re-imports a $kind export unchanged', (row) => {
     const payload = payloadOf(row)
     expect(EntityImportSchema.parse(payload)).toEqual(payload)
@@ -217,6 +227,8 @@ describe('EntityImportSchema', () => {
       branchId: 'br_x',
       embeddingStale: 0,
       nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_y',
+      nameCollisionReason: 'distinct',
       createdAt: 1,
       updatedAt: 2,
       state: {

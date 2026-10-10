@@ -29,6 +29,8 @@ const SERVER_OWNED_KEYS = [
   'branchId',
   'embeddingStale',
   'nameCollisionFlag',
+  'nameCollisionPartnerId',
+  'nameCollisionReason',
   'createdAt',
   'updatedAt',
 ]
