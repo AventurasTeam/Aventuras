@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest'
 
+import type { WindowTurn } from '@/lib/classifier'
 import type { CharacterRelationship, Entity } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
 import { VARIABLES } from '@/lib/prompts'
 
 import { buildClassifierContext } from './classifier-context'
 
+const turn = (over: Partial<WindowTurn> = {}): WindowTurn => ({
+  handle: 't1',
+  entryId: 'entry_x',
+  position: 1,
+  content: 'prose',
+  sceneEntities: [],
+  currentLocationId: null,
+  ...over,
+})
+
 describe('buildClassifierContext', () => {
   it('emits exactly the variables pinned for the classifierContext group, nothing more', () => {
     const context = buildClassifierContext({
-      window: { turns: [{ handle: 't1', entryId: 'e1', position: 1, content: 'prose' }] } as never,
+      window: { turns: [turn()] } as never,
       entities: [],
       happenings: [],
       relationships: [],
@@ -36,6 +47,8 @@ describe('buildClassifierContext', () => {
           retiredReason: null,
           injectionMode: 'auto',
           nameCollisionFlag: 0,
+          nameCollisionPartnerId: null,
+          nameCollisionReason: null,
           state: { traits: ['wry'] },
           tags: ['secret'],
           embeddingStale: 1,
@@ -49,7 +62,7 @@ describe('buildClassifierContext', () => {
     })
     const [entity] = context.entities as Record<string, unknown>[]
     expect(Object.keys(entity).sort()).toEqual(
-      ['description', 'id', 'kind', 'name', 'status'].sort(),
+      ['description', 'id', 'keywords', 'kind', 'name', 'status'].sort(),
     )
   })
 
@@ -57,7 +70,7 @@ describe('buildClassifierContext', () => {
     const idMap = new IdBiMap()
     const context = buildClassifierContext({
       window: {
-        turns: [{ handle: 't1', entryId: 'entry_x', position: 1, content: 'Kael char_ prose' }],
+        turns: [turn({ content: 'Kael char_ prose' })],
       } as never,
       entities: [
         {
@@ -80,11 +93,9 @@ describe('buildClassifierContext', () => {
     expect((context.turns as { handle: string }[])[0].handle).toBe('t1')
   })
 
-  it('projects turns down to handle and content only', () => {
+  it('projects turns down to handle, content, scene and location', () => {
     const context = buildClassifierContext({
-      window: {
-        turns: [{ handle: 't1', entryId: 'entry_x', position: 7, content: 'prose' }],
-      } as never,
+      window: { turns: [turn({ position: 7 })] } as never,
       entities: [],
       happenings: [],
       relationships: [],
@@ -92,7 +103,7 @@ describe('buildClassifierContext', () => {
     })
     // A raw entry id in the prompt would be an id the model can neither use nor
     // resolve, and position is meaningless to it.
-    expect(context.turns).toEqual([{ handle: 't1', content: 'prose' }])
+    expect(context.turns).toEqual([{ handle: 't1', content: 'prose', scene: [], location: null }])
   })
 
   const AEFRE = 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -149,5 +160,60 @@ describe('buildClassifierContext', () => {
       idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([])
+  })
+
+  describe('saved scene', () => {
+    const FORD = 'loc_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
+    const GONE = 'char_99999999-9999-9999-9999-999999999999'
+    const GONE_LOC = 'loc_99999999-9999-9999-9999-999999999999'
+    const location = (id: string, name: string) =>
+      ({ id, kind: 'location', name, description: null, status: 'active' }) as unknown as Entity
+
+    // Entities walk first, so a scene listing BAEL before AEFRE still numbers the
+    // roster in roster order.
+    it("substitutes each turn's scene and location to the roster's placeholders", () => {
+      const context = buildClassifierContext({
+        window: {
+          turns: [turn({ sceneEntities: [BAEL, AEFRE], currentLocationId: FORD })],
+        } as never,
+        entities: [character(AEFRE, 'Aefre'), character(BAEL, 'Bael'), location(FORD, 'The ford')],
+        happenings: [],
+        relationships: [],
+        idMap: new IdBiMap(),
+      })
+      expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2', 'l1'])
+      expect(context.turns).toEqual([
+        { handle: 't1', content: 'prose', scene: ['c2', 'c1'], location: 'l1' },
+      ])
+    })
+
+    it('leaves out a scene or location id the branch no longer has, unallocated', () => {
+      const idMap = new IdBiMap()
+      const context = buildClassifierContext({
+        window: {
+          turns: [turn({ sceneEntities: [AEFRE, GONE], currentLocationId: GONE_LOC })],
+        } as never,
+        entities: [character(AEFRE, 'Aefre')],
+        happenings: [],
+        relationships: [],
+        idMap,
+      })
+      expect(context.turns).toEqual([
+        { handle: 't1', content: 'prose', scene: ['c1'], location: null },
+      ])
+      expect(idMap.getPlaceholderFor(GONE)).toBeUndefined()
+      expect(idMap.getPlaceholderFor(GONE_LOC)).toBeUndefined()
+    })
+  })
+
+  it("carries each entity's stored keywords", () => {
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [{ ...character(AEFRE, 'Aefre'), keywords: ['the Grey Wolf'] } as Entity],
+      happenings: [],
+      relationships: [],
+      idMap: new IdBiMap(),
+    })
+    expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual(['the Grey Wolf'])
   })
 })

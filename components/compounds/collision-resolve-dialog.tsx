@@ -1,6 +1,15 @@
 import * as RadioGroupBase from '@rn-primitives/radio-group'
 import { X } from 'lucide-react-native'
-import { useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { Platform, Pressable, ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -18,10 +27,11 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import type { CollisionReason } from '@/lib/db'
 import { relativeTimeLabel, t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
-import { RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
+import { nameBasis, namesakeBasis, RENAME_ISSUE, renameIssue, type RenameIssue } from '@/lib/world'
 
 import {
   computeDivergence,
@@ -75,14 +85,90 @@ const OVERLAP_NOTES = [
 
 const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
   [RENAME_ISSUE.emptyName]: () => t('collisionDialog.renameIssue.emptyName'),
+  [RENAME_ISSUE.unchanged]: () => t('collisionDialog.renameHelp'),
   [RENAME_ISSUE.stillColliding]: () => t('collisionDialog.renameIssue.stillColliding'),
 }
+
+type PairNames = { flagged: string; other: string }
+
+const REASON_TEXT: Record<CollisionReason, (names: PairNames) => string> = {
+  alike: () => t('collisionDialog.reason.alike'),
+  ambiguous: () => t('collisionDialog.reason.ambiguous'),
+  distinct: () => t('collisionDialog.reason.distinct'),
+  'in-scene': ({ flagged, other }) => t('collisionDialog.reason.inScene', { flagged, other }),
+  'no-signal': () => t('collisionDialog.reason.noSignal'),
+}
+
+type CollisionHeader = {
+  title: string
+  /** The two current names are the same name, which picks the title and the Keep copy. */
+  sameName: boolean
+  reason: string
+  basis: string | null
+}
+
+/** world.md → Resolve dialog, from the rows' current names and keywords; never stored. */
+function collisionHeader(
+  entityA: EntitySummary,
+  entityB: EntitySummary,
+  flaggedId: string,
+  reason: CollisionReason,
+): CollisionHeader {
+  const [flagged, other]: readonly [EntitySummary, EntitySummary] =
+    flaggedId === entityB.id ? [entityB, entityA] : [entityA, entityB]
+  const names: PairNames = { flagged: flagged.name, other: other.name }
+  const match = namesakeBasis(flagged, other)
+  const sameName = nameBasis(flagged.name, other.name) === 'same-name'
+  return {
+    title: sameName
+      ? t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })
+      : t('collisionDialog.titleMayBe', names),
+    sameName,
+    reason: REASON_TEXT[reason](names),
+    basis:
+      match?.basis === 'keyword'
+        ? t('collisionDialog.basis', {
+            holder: match.holder === 'first' ? flagged.name : other.name,
+            keyword: match.keyword,
+          })
+        : null,
+  }
+}
+
+/** The dialog's accessible description: the reason, the basis and the picker's hint. */
+function Explanation({ header }: { header: CollisionHeader }) {
+  const lines = (
+    <View className="gap-2">
+      <Text size="sm">{header.reason}</Text>
+      {header.basis != null ? (
+        <Text size="sm" variant="muted">
+          {header.basis}
+        </Text>
+      ) : null}
+      <Text size="sm" variant="muted">
+        {t('collisionDialog.description')}
+      </Text>
+    </View>
+  )
+  // Native has no description wiring to attach to.
+  return Platform.OS === 'web' ? <DialogDescription asChild>{lines}</DialogDescription> : lines
+}
+
+// On a phone the header can't spare the room, so ModeBody scrolls the explanation first.
+const LeadContext = createContext<ReactNode>(null)
 
 type CollisionResolveDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
   entityB: EntitySummary // newer
+  /**
+   * The row whose flag names the other, preferring the strip's: the header names it first and
+   * `reason` is its.
+   */
+  flaggedId: string
+  /** That row's `name_collision_reason`, for the reason line. */
+  reason: CollisionReason
   /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
@@ -137,6 +223,8 @@ export function CollisionResolveDialog({
   onOpenChange,
   entityA,
   entityB,
+  flaggedId,
+  reason,
   onResolve,
   blockedReason,
   isNameTaken,
@@ -148,6 +236,9 @@ export function CollisionResolveDialog({
   const [nowMs] = useState(() => Date.now())
 
   const diff = useMemo(() => computeDivergence(entityA, entityB), [entityA, entityB])
+  const header = collisionHeader(entityA, entityB, flaggedId, reason)
+  const phone = useTier() === 'phone'
+  const explanation = <Explanation header={header} />
 
   async function handleSubmit(resolution: Resolution) {
     setSubmitting(true)
@@ -185,10 +276,8 @@ export function CollisionResolveDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-2xl lg:max-w-4xl" scrollable={false}>
         <DialogHeader>
-          <DialogTitle>
-            {t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })}
-          </DialogTitle>
-          <DialogDescription>{t('collisionDialog.description')}</DialogDescription>
+          <DialogTitle>{header.title}</DialogTitle>
+          {phone ? null : explanation}
         </DialogHeader>
 
         <Select
@@ -200,43 +289,47 @@ export function CollisionResolveDialog({
           disabled={submitting}
         />
 
-        {mode === 'merge' && (
-          <MergeBody
-            entityA={entityA}
-            entityB={entityB}
-            diff={diff}
-            nowMs={nowMs}
-            onSubmit={handleSubmit}
-            onCancel={onCancel}
-            submitting={submitting}
-            blockedReason={blockedReason}
-            error={error}
-            onChoice={() => setError(null)}
-          />
-        )}
-        {mode === 'rename' && (
-          <RenameBody
-            entityA={entityA}
-            entityB={entityB}
-            nowMs={nowMs}
-            isNameTaken={isNameTaken}
-            onSubmit={handleSubmit}
-            onCancel={onCancel}
-            submitting={submitting}
-            blockedReason={blockedReason}
-            error={error}
-          />
-        )}
-        {mode === 'keep' && (
-          <KeepBody
-            name={entityA.name}
-            onSubmit={handleSubmit}
-            onCancel={onCancel}
-            submitting={submitting}
-            blockedReason={blockedReason}
-            error={error}
-          />
-        )}
+        <LeadContext.Provider value={phone ? explanation : null}>
+          {mode === 'merge' && (
+            <MergeBody
+              entityA={entityA}
+              entityB={entityB}
+              diff={diff}
+              nowMs={nowMs}
+              onSubmit={handleSubmit}
+              onCancel={onCancel}
+              submitting={submitting}
+              blockedReason={blockedReason}
+              error={error}
+              onChoice={() => setError(null)}
+            />
+          )}
+          {mode === 'rename' && (
+            <RenameBody
+              entityA={entityA}
+              entityB={entityB}
+              nowMs={nowMs}
+              isNameTaken={isNameTaken}
+              onSubmit={handleSubmit}
+              onCancel={onCancel}
+              submitting={submitting}
+              blockedReason={blockedReason}
+              error={error}
+            />
+          )}
+          {mode === 'keep' && (
+            <KeepBody
+              sameName={header.sameName}
+              olderName={entityA.name}
+              newerName={entityB.name}
+              onSubmit={handleSubmit}
+              onCancel={onCancel}
+              submitting={submitting}
+              blockedReason={blockedReason}
+              error={error}
+            />
+          )}
+        </LeadContext.Provider>
       </DialogContent>
     </Dialog>
   )
@@ -264,6 +357,7 @@ function ModeBody({
   blockedReason,
   error,
 }: ModeBodyProps) {
+  const lead = useContext(LeadContext)
   const disabledReason = blockedReason ?? confirmIssue
   return (
     <View className="shrink gap-4">
@@ -272,6 +366,7 @@ function ModeBody({
         className="shrink"
         contentContainerClassName="gap-4"
       >
+        {lead}
         {children}
       </ScrollView>
       {/* Beside the actions, not after the content: a long merge body would scroll it out of view. */}
@@ -355,9 +450,10 @@ function MergeBody({
     }
   })
 
+  const nameFromOther = state.fromOther.has('name')
   const chips = useMemo(
-    () => mergeChips(diff, canonical, nonCanonical),
-    [diff, canonical, nonCanonical],
+    () => mergeChips(diff, canonical, nonCanonical, nameFromOther),
+    [diff, canonical, nonCanonical, nameFromOther],
   )
 
   function handleConfirm() {
@@ -796,10 +892,8 @@ function RenameBody({
     setNameB(entityB.name)
   }
 
-  const issue = renameIssue(entityA.kind, [nameA, nameB])
-  const untouched = nameA === entityA.name && nameB === entityB.name
-  const help =
-    untouched || issue == null ? t('collisionDialog.renameHelp') : RENAME_ISSUE_TEXT[issue]()
+  const issue = renameIssue([entityA.name, entityB.name], [nameA, nameB])
+  const help = issue == null ? t('collisionDialog.renameHelp') : RENAME_ISSUE_TEXT[issue]()
   const captionA = sideCaption('A', entityA, nowMs)
   const captionB = sideCaption('B', entityB, nowMs)
 
@@ -853,9 +947,22 @@ function RenameBody({
   )
 }
 
-type KeepBodyProps = BodyProps & { name: string }
+type KeepBodyProps = BodyProps & { sameName: boolean; olderName: string; newerName: string }
 
-function KeepBody({ name, onSubmit, onCancel, submitting, blockedReason, error }: KeepBodyProps) {
+function KeepBody({
+  sameName,
+  olderName,
+  newerName,
+  onSubmit,
+  onCancel,
+  submitting,
+  blockedReason,
+  error,
+}: KeepBodyProps) {
+  // world.md → Keep as distinct: the same-name limitation is cited only when the names are the same.
+  const body = sameName
+    ? t('collisionDialog.keepBody', { name: olderName })
+    : t('collisionDialog.keepBodyPartial', { older: olderName, newer: newerName })
   return (
     <ModeBody
       confirmLabel={t('collisionDialog.keepConfirm')}
@@ -866,7 +973,7 @@ function KeepBody({ name, onSubmit, onCancel, submitting, blockedReason, error }
       error={error}
     >
       <Text size="sm" variant="muted">
-        {t('collisionDialog.keepBody', { name })}
+        {body}
       </Text>
     </ModeBody>
   )

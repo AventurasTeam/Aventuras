@@ -67,6 +67,21 @@ export const classifierExtractionSchema = z.object({
       }),
     )
     .default([]),
+  aliases: z
+    .array(
+      z.object({
+        /** Placeholder of a listed entity, any kind. */
+        ref: z.string(),
+        terms: z
+          .array(z.string())
+          .default([])
+          .describe(
+            'Titles, epithets or name forms the prose used for this entity that its line does not show.',
+          ),
+        sourceTurn: z.string().optional(),
+      }),
+    )
+    .default([]),
 })
 
 export type ClassifierExtraction = z.infer<typeof classifierExtractionSchema>

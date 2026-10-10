@@ -245,6 +245,8 @@ describe('buildGenerationContext', () => {
           retiredReason: null,
           injectionMode: 'auto',
           nameCollisionFlag: 0,
+          nameCollisionPartnerId: null,
+          nameCollisionReason: null,
           state: { traits: ['stoic'] },
           tags: ['secret'],
           embeddingStale: 1,

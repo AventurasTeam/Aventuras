@@ -31,7 +31,9 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
-export { nameTakenByOther, namesakeKey } from './collision-flags'
+export { nameTakenByOther } from './collision-flags'
+export { nameBasis, namesakeBasis } from './namesakes'
+export type { NameBasis, NamesakeMatch, NamesakeSide } from './namesakes'
 export {
   entityKeepActions,
   entityRenameActions,
@@ -39,8 +41,13 @@ export {
   renameIssue,
 } from './collision-resolve'
 export type { EntityRename, EntityRenamePlan, RenameIssue } from './collision-resolve'
-export { COLLISION_PAIR_MISS, collisionPairOf } from './collision-pair'
-export type { CollisionPair, CollisionPairLookup, CollisionPairMiss } from './collision-pair'
+export { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf } from './collision-pair'
+export type {
+  CollisionPair,
+  CollisionPairLookup,
+  CollisionPairMiss,
+  FlaggedEntity,
+} from './collision-pair'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
 export { deleteTailOf, entityDeleteActions } from './entity-delete'
@@ -51,8 +58,8 @@ export { entityMergeActions, MERGE_SCALARS } from './entity-merge'
 export type { EntityMergeInput, MergeScalar } from './entity-merge'
 export { mergeLinks } from './merge-links'
 export type { MergeOverlap } from './merge-links'
-export { mergedTerms } from './merge-terms'
-export type { MergeDeselections } from './merge-terms'
+export { addedNameKeyword, mergedTerms } from './merge-terms'
+export type { MergeDeselections, MergeTermChoices } from './merge-terms'
 export { cleanList } from './draft-text'
 export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
 export type { LoreDraft } from './lore-draft'

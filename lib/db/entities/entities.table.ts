@@ -9,7 +9,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
-import { INJECTION_MODES } from '../enums'
+import { COLLISION_REASONS, INJECTION_MODES } from '../enums'
 import type { EntityState } from './entities-types'
 import { branches } from '../stories/stories.table'
 
@@ -27,6 +27,8 @@ export const entities = sqliteTable(
     retiredReason: text('retired_reason'),
     injectionMode: text('injection_mode', { enum: INJECTION_MODES }).notNull(),
     nameCollisionFlag: integer('name_collision_flag').notNull().default(0),
+    nameCollisionPartnerId: text('name_collision_partner_id'),
+    nameCollisionReason: text('name_collision_reason', { enum: COLLISION_REASONS }),
     state: text('state', { mode: 'json' }).$type<EntityState>(),
     tags: text('tags', { mode: 'json' })
       .$type<string[]>()
@@ -46,6 +48,11 @@ export const entities = sqliteTable(
     index('entities_stale_idx')
       .on(t.branchId)
       .where(sql`${t.embeddingStale} = 1`),
+    // edge-cases.md → Schema: a flag always names its partner and reason, and only a flag does.
+    check(
+      'entities_name_collision_pair',
+      sql`(${t.nameCollisionFlag} = 0 AND ${t.nameCollisionPartnerId} IS NULL AND ${t.nameCollisionReason} IS NULL) OR (${t.nameCollisionFlag} = 1 AND ${t.nameCollisionPartnerId} IS NOT NULL AND ${t.nameCollisionReason} IS NOT NULL)`,
+    ),
   ],
 )
 

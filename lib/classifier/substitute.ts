@@ -1,7 +1,7 @@
 import type { IdBiMap } from '@/lib/ids'
 
 /** Schema fields whose string value is an entity reference. Must stay in sync
- * with plan.ts's `resolveRef` call sites. */
+ * with the planner's ref consumers. */
 export const PLACEHOLDER_FIELDS = ['ref', 'subject', 'object'] as const
 
 /**

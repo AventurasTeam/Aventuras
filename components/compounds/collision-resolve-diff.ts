@@ -1,6 +1,7 @@
 import type { Entity, EntityKind, InjectionMode } from '@/lib/db'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 import {
+  addedNameKeyword,
   cleanList,
   MERGE_SCALARS,
   mergedTerms,
@@ -123,16 +124,22 @@ export type MergeChips = { tags: string[]; keywords: string[] }
 
 const NO_DESELECTIONS: MergeDeselections = { deselectedTags: [], deselectedKeywords: [] }
 
-/** The chips a merge offers, in write order; a list the two rows agree on offers none. */
+/**
+ * The chips a merge offers, in write order. A list the two rows agree on offers none, except that
+ * keywords show when the merge adds the name it doesn't keep.
+ */
 export function mergeChips(
   diff: DiffPayload,
   canonical: EntitySummary,
   other: EntitySummary,
+  nameFromOther: boolean,
 ): MergeChips {
-  const all = mergedTerms({ canonical, other }, NO_DESELECTIONS)
+  const rows = { canonical, other }
+  const all = mergedTerms(rows, { ...NO_DESELECTIONS, nameFromOther })
+  const addsName = addedNameKeyword(rows, nameFromOther) != null
   return {
     tags: diff.tags == null ? [] : all.tags,
-    keywords: diff.keywords == null ? [] : all.keywords,
+    keywords: diff.keywords == null && !addsName ? [] : all.keywords,
   }
 }
 

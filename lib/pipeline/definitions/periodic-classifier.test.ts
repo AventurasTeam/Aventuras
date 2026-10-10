@@ -99,6 +99,8 @@ async function ctxWith(opts: {
   entities?: Entity[]
   relationships?: CharacterRelationship[]
   seedStatus?: Partial<ClassifierStatus>
+  /** Saved metadata per entry position; the other entries get `{}`. */
+  entryMetadata?: Record<number, StoryEntry['metadata']>
   onWatermark?: (n: number) => void
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
@@ -142,7 +144,7 @@ async function ctxWith(opts: {
     await db.insert(storyEntries).values({
       ...e,
       chapterId: null,
-      metadata: {},
+      metadata: opts.entryMetadata?.[e.position] ?? {},
       createdAt: 1,
     } as never)
 
@@ -202,6 +204,7 @@ const extraction = (over: Partial<Record<string, unknown>> = {}) => ({
   relationships: [],
   statusFlips: [],
   newCharacters: [],
+  aliases: [],
   ...over,
 })
 
@@ -215,6 +218,13 @@ async function drain(ctx: PhaseContext) {
     events.push(next.value)
   }
 }
+
+const createdEntry = (events: unknown[]) =>
+  (
+    events.find((e) => (e as { action: { kind: string } }).action.kind === 'createEntity') as
+      | { action: { payload: { entry: Record<string, unknown> } } }
+      | undefined
+  )?.action.payload.entry
 
 describe('periodicClassifierPhase', () => {
   beforeEach(() => {
@@ -318,6 +328,38 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).toContain('Kael sees')
     expect(prompt).toContain('as: ally')
     expect(prompt).not.toContain('rival')
+  })
+
+  // Fails if the phase stops filtering a saved scene to the branch's live entities:
+  // a deleted id would reach the prompt raw or take a placeholder that names nothing.
+  it("shows each turn's saved scene, leaving out ids the branch no longer has", async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+    } as unknown as Entity
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      entities: [kael],
+      entryMetadata: {
+        1: {
+          sceneEntities: [CHAR_KAEL, 'char_99999999-9999-9999-9999-999999999999'],
+          currentLocationId: 'loc_99999999-9999-9999-9999-999999999999',
+          worldTime: 0,
+        },
+      },
+    })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    expect(prompt).toContain('[t1] scene: [c1]\nturn 1')
+    expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {
@@ -625,6 +667,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Kael',
       status: 'active',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -731,10 +774,11 @@ describe('periodicClassifierPhase', () => {
       const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
       const { events } = await drain(h.ctx)
 
-      const created = events.find(
-        (e) => (e as { action: { kind: string } }).action.kind === 'createEntity',
-      ) as { action: { payload: { entry: { nameCollisionFlag: number } } } }
-      expect(created.action.payload.entry.nameCollisionFlag).toBe(1)
+      expect(createdEntry(events)).toMatchObject({
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_user',
+        nameCollisionReason: 'distinct',
+      })
     })
 
     it('drops a fact about a character the user deleted mid-call', async () => {
@@ -760,14 +804,182 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('never reconciles a blank-named candidate against a blank-named row', async () => {
-    const embedder = vi.fn(async () => ({ vectors: [], dim: 3 }))
-    configureClassifierEmbedder(embedder)
-    const blankRow = {
+  // A keyword hit makes a namesake too (classifier.md -> Namesakes), so the candidate's
+  // keywords must reach reconciliation. No embedder is wired: the namesake is unscored.
+  it("matches a namesake through the candidate's keywords", async () => {
+    const innkeeper = {
       id: CHAR_KAEL,
       branchId: 'b1',
       kind: 'character',
-      name: '',
+      name: 'The Innkeeper',
+      status: 'active',
+      description: 'Keeps the Gull.',
+      keywords: [],
+      nameCollisionFlag: 0,
+      createdAt: 1,
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:m',
+            name: 'Marta',
+            description: 'Runs the inn.',
+            keywords: ['the innkeeper'],
+            sourceTurn: 't1',
+          },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [innkeeper] })
+    const { events } = await drain(h.ctx)
+
+    expect(createdEntry(events)).toMatchObject({
+      name: 'Marta',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: CHAR_KAEL,
+      nameCollisionReason: 'no-signal',
+    })
+  })
+
+  // classifier.md -> Disambiguation -> Signals: scene presence reads the saved scene of
+  // the candidate's own sourceTurn, never the head's after a fallback.
+  describe('scene presence', () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+      nameCollisionFlag: 0,
+      createdAt: 1,
+    } as unknown as Entity
+    const kaelInScene = (position: number) => ({
+      [position]: { sceneEntities: [CHAR_KAEL], currentLocationId: null, worldTime: 0 },
+    })
+    const ambiguous = () =>
+      configureClassifierEmbedder(
+        vi.fn(async () => ({
+          vectors: [Float32Array.from([1, 0]), Float32Array.from([0.6, 0.8])],
+          dim: 2,
+        })),
+      )
+
+    it('flags a partial namesake in the scene as in-scene, with it as the partner', async () => {
+      configureClassifierEmbedder(
+        vi.fn(async () => ({
+          vectors: [Float32Array.from([1, 0, 0]), Float32Array.from([0, 1, 0])],
+          dim: 3,
+        })),
+      )
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newCharacters: [
+            {
+              handle: 'new:k',
+              name: 'Kael',
+              description: 'A smith.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [{ ...kael, name: 'Kael Stormborn' }],
+        entryMetadata: kaelInScene(1),
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(createdEntry(events)).toMatchObject({
+        name: 'Kael',
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: CHAR_KAEL,
+        nameCollisionReason: 'in-scene',
+      })
+    })
+
+    it("absorbs an ambiguous exact namesake in the scene of the candidate's turn", async () => {
+      ambiguous()
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newCharacters: [
+            {
+              handle: 'new:k',
+              name: 'Kael',
+              description: 'The courier, back from the ford.',
+              keywords: [],
+              sourceTurn: 't2',
+            },
+          ],
+          happenings: [
+            { title: 'A', sourceTurn: 't2', involvements: [{ ref: 'new:k' }], awareness: [] },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [kael],
+        entryMetadata: kaelInScene(2),
+      })
+      const { events } = await drain(h.ctx)
+
+      const actions = events.map(
+        (e) => (e as { action: { kind: string; payload: unknown } }).action,
+      )
+      expect(actions.map((a) => a.kind)).toEqual(['createHappening', 'createHappeningInvolvement'])
+      expect(actions[1].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
+    })
+
+    it('ignores the head scene when the sourceTurn falls back to the window head', async () => {
+      ambiguous()
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newCharacters: [
+            {
+              handle: 'new:k',
+              name: 'Kael',
+              description: 'The courier, back from the ford.',
+              keywords: [],
+              sourceTurn: 't9',
+            },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [kael],
+        entryMetadata: kaelInScene(2),
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(createdEntry(events)).toMatchObject({
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: CHAR_KAEL,
+        nameCollisionReason: 'ambiguous',
+      })
+    })
+  })
+
+  // A blank name matches no row, but a keyword naming one would still make a namesake.
+  it('never reconciles a blank-named candidate, even one whose keywords name a row', async () => {
+    const embedder = vi.fn(async () => ({ vectors: [], dim: 3 }))
+    configureClassifierEmbedder(embedder)
+    const staged = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
       status: 'staged',
       description: 'A courier.',
       keywords: [],
@@ -775,10 +987,10 @@ describe('periodicClassifierPhase', () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction({
-        newCharacters: [{ handle: 'nc1', name: ' ', description: 'Someone.', keywords: [] }],
+        newCharacters: [{ handle: 'nc1', name: ' ', description: 'Someone.', keywords: ['Kael'] }],
       }),
     })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [blankRow] })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
     const { events } = await drain(h.ctx)
 
     expect(embedder).not.toHaveBeenCalled()
@@ -799,6 +1011,7 @@ describe('periodicClassifierPhase', () => {
       name: 'K'.repeat(120),
       status: 'active',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -838,6 +1051,7 @@ describe('periodicClassifierPhase', () => {
       status: 'active',
       // What a previous pass wrote: already cut to the embedded-column bound.
       description: 'D'.repeat(1200),
+      keywords: [],
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',

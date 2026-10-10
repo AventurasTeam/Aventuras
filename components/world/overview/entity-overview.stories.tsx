@@ -21,6 +21,8 @@ function makeEntity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind' | 'n
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],

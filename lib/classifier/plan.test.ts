@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
+import type { ClassifierExtraction } from './schema'
 import { buildClassifierWindow } from './window'
 
 // `.find()` / `.filter()` on action.kind doesn't narrow the PipelineAction union,
@@ -31,7 +32,15 @@ const entityRow = (id: string, status = 'active', name = id, keywords: string[] 
   }) as never
 
 const nonCharacterRow = (id: string, kind: string) =>
-  ({ id, branchId: 'branch_1', kind, name: id, description: 'x', status: 'active' }) as never
+  ({
+    id,
+    branchId: 'branch_1',
+    kind,
+    name: id,
+    description: 'x',
+    status: 'active',
+    keywords: [],
+  }) as never
 
 const base = {
   branchId: 'branch_1',
@@ -61,6 +70,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -75,6 +85,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -98,6 +109,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -123,6 +135,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [{ ref: 'char_kael', to: 'retired', reason: '\n', sourceTurn: 't2' }],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -156,6 +169,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -171,6 +185,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -194,6 +209,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       { ...base, entities: [entityRow('char_a'), entityRow('char_b')] },
     )
@@ -217,6 +233,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -236,6 +253,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -253,6 +271,7 @@ describe('buildClassifierActions', () => {
         ],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -272,6 +291,7 @@ describe('buildClassifierActions', () => {
         ],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -287,6 +307,7 @@ describe('buildClassifierActions', () => {
         ],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -305,6 +326,7 @@ describe('buildClassifierActions', () => {
           { ref: 'char_kael', to: 'retired', reason: 'killed at the ford', sourceTurn: 't2' },
         ],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -317,7 +339,7 @@ describe('buildClassifierActions', () => {
 
   it('creates a new character with the reconcile decision applied', () => {
     const decisions = new Map<string, ReconcileDecision>([
-      ['h1', { kind: 'create', flagged: true, similarity: 0.6, flagReason: 'ambiguous' }],
+      ['h1', { kind: 'create', flag: { partnerId: 'char_a', reason: 'in-scene' } }],
     ])
     const { planned, handleMap } = buildClassifierActions(
       {
@@ -333,17 +355,52 @@ describe('buildClassifierActions', () => {
             sourceTurn: 't1',
           },
         ],
+        aliases: [],
       },
       { ...base, decisions },
     )
     expect(planned[0].action).toMatchObject({
       kind: 'createEntity',
       payload: {
-        entry: { name: 'Eldrin', status: 'active', nameCollisionFlag: 1, embeddingStale: 1 },
+        entry: {
+          name: 'Eldrin',
+          status: 'active',
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: 'char_a',
+          nameCollisionReason: 'in-scene',
+          embeddingStale: 1,
+        },
       },
     })
     expect(handleMap.get('h1')).toBe(payloadOf<{ entry: { id: string } }>(planned[0]).entry.id)
     expect(planned[0].entryId).toBe('e1')
+  })
+
+  it('creates an unflagged character with no partner or reason', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [
+          {
+            handle: 'h1',
+            name: 'Eldrin',
+            description: 'A dragon.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        aliases: [],
+      },
+      { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
+    )
+    expect(planned[0].action).toMatchObject({
+      kind: 'createEntity',
+      payload: {
+        entry: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+      },
+    })
   })
 
   it('promotes instead of creating when reconcile said promote', () => {
@@ -364,6 +421,7 @@ describe('buildClassifierActions', () => {
             sourceTurn: 't1',
           },
         ],
+        aliases: [],
       },
       { ...base, decisions },
     )
@@ -375,9 +433,7 @@ describe('buildClassifierActions', () => {
   })
 
   it('resolves a temp handle used later in the same reply to the allocated id', () => {
-    const decisions = new Map<string, ReconcileDecision>([
-      ['h1', { kind: 'create', flagged: false }],
-    ])
+    const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
     const { planned } = buildClassifierActions(
       {
         happenings: [
@@ -394,6 +450,7 @@ describe('buildClassifierActions', () => {
             sourceTurn: 't1',
           },
         ],
+        aliases: [],
       },
       { ...base, decisions },
     )
@@ -413,6 +470,7 @@ describe('buildClassifierActions', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -421,9 +479,7 @@ describe('buildClassifierActions', () => {
   })
 
   it('orders creates before the rows that reference them', () => {
-    const decisions = new Map<string, ReconcileDecision>([
-      ['h1', { kind: 'create', flagged: false }],
-    ])
+    const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
     const { planned } = buildClassifierActions(
       {
         happenings: [
@@ -434,6 +490,7 @@ describe('buildClassifierActions', () => {
         newCharacters: [
           { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
         ],
+        aliases: [],
       },
       { ...base, decisions },
     )
@@ -454,6 +511,7 @@ describe('buildClassifierActions', () => {
           relationships: [],
           statusFlips: [],
           newCharacters: [],
+          aliases: [],
         },
         base,
       )
@@ -522,6 +580,7 @@ describe('buildClassifierActions', () => {
           relationships: [],
           statusFlips: [],
           newCharacters: [],
+          aliases: [],
         },
         { ...base, entities },
       )
@@ -536,6 +595,7 @@ describe('buildClassifierActions', () => {
           relationships: [{ subject: 'char_a', object: 'loc_1', kind: 'guards', sourceTurn: 't1' }],
           statusFlips: [],
           newCharacters: [],
+          aliases: [],
         },
         { ...base, entities },
       )
@@ -552,6 +612,7 @@ describe('buildClassifierActions', () => {
           relationships: [],
           statusFlips: [],
           newCharacters: [],
+          aliases: [],
         },
         { ...base, entities },
       )
@@ -571,6 +632,7 @@ describe('buildClassifierActions', () => {
           newCharacters: [
             { handle: 'h9', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
+          aliases: [],
         },
         base,
       )
@@ -587,8 +649,9 @@ describe('buildClassifierActions', () => {
           newCharacters: [
             { handle: 'h1', name: '  ', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
+          aliases: [],
         },
-        { ...base, decisions: new Map([['h1', { kind: 'create', flagged: false }]]) },
+        { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
       )
       expect(planned).toHaveLength(0)
       expect(unresolvedRefs).toEqual(['h1'])
@@ -606,6 +669,7 @@ describe('buildClassifierActions', () => {
           newCharacters: [
             { handle: 'h1', name: 'char_a', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
+          aliases: [],
         },
         { ...base, decisions },
       )
@@ -616,9 +680,7 @@ describe('buildClassifierActions', () => {
     // Rebinding the handle would retarget every ref emitted before the duplicate,
     // including ones the model wrote for the first character.
     it('keeps the first binding when a handle is reused, and reports the collision', () => {
-      const decisions = new Map<string, ReconcileDecision>([
-        ['h1', { kind: 'create', flagged: false }],
-      ])
+      const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
       const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
         {
           happenings: [],
@@ -628,6 +690,7 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'First', description: 'x', keywords: [], sourceTurn: 't1' },
             { handle: 'h1', name: 'Second', description: 'y', keywords: [], sourceTurn: 't1' },
           ],
+          aliases: [],
         },
         { ...base, decisions },
       )
@@ -651,6 +714,7 @@ describe('buildClassifierActions', () => {
         relationships: [{ subject: 'char_a', object: 'char_a', kind: 'rival', sourceTurn: 't1' }],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -665,6 +729,7 @@ describe('buildClassifierActions', () => {
           relationships: [],
           statusFlips: [{ ref, to, sourceTurn: 't1' }] as never,
           newCharacters: [],
+          aliases: [],
         },
         { ...base, entities },
       )
@@ -702,6 +767,7 @@ describe('buildClassifierActions', () => {
             { ref: 'char_a', to: 'retired', sourceTurn: 't2' },
           ],
           newCharacters: [],
+          aliases: [],
         },
         { ...base, entities: [entityRow('char_a')] },
       )
@@ -720,6 +786,7 @@ describe('buildClassifierActions', () => {
           newCharacters: [
             { handle: 'h1', name: 'char_s', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
+          aliases: [],
         },
         { ...base, decisions, entities: [entityRow('char_s', 'staged')] },
       )
@@ -730,9 +797,7 @@ describe('buildClassifierActions', () => {
     })
 
     it('retires a character created earlier in the same reply', () => {
-      const decisions = new Map<string, ReconcileDecision>([
-        ['h1', { kind: 'create', flagged: false }],
-      ])
+      const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
       const { planned } = buildClassifierActions(
         {
           happenings: [],
@@ -741,6 +806,7 @@ describe('buildClassifierActions', () => {
           newCharacters: [
             { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
+          aliases: [],
         },
         { ...base, decisions },
       )
@@ -759,6 +825,7 @@ describe('entity keywords', () => {
     relationships: [],
     statusFlips: [],
     newCharacters: [{ handle: 'new:k', name: 'Kael', description: 'A courier.', keywords }],
+    aliases: [],
   })
 
   const decide = (decision: ReconcileDecision) => new Map([['new:k', decision]])
@@ -767,7 +834,7 @@ describe('entity keywords', () => {
   it('seeds keywords on a created character', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
       ...base,
-      decisions: decide({ kind: 'create', flagged: false }),
+      decisions: decide({ kind: 'create', flag: null }),
     })
     expect(payloadOf<{ entry: { keywords: string[] } }>(planned[0]).entry.keywords).toEqual([
       'the grey wolf',
@@ -843,6 +910,7 @@ describe('entity keywords', () => {
             keywords: ['The Grey Wolf', 'the innkeeper'],
           },
         ],
+        aliases: [],
       },
       {
         ...base,
@@ -880,6 +948,7 @@ describe('entity keywords', () => {
             keywords: ['the grey wolf', 'the innkeeper'],
           },
         ],
+        aliases: [],
       },
       {
         ...base,
@@ -915,6 +984,7 @@ describe('entity keywords', () => {
             sourceTurn: 't1',
           },
         ],
+        aliases: [],
       },
       {
         ...base,
@@ -935,6 +1005,163 @@ describe('entity keywords', () => {
   })
 })
 
+// classifier.md → What the classifier writes → Entity keywords: later passes append
+// through the alias list, append-and-deduplicate, never remove.
+describe('alias list', () => {
+  const reply = (
+    aliases: ClassifierExtraction['aliases'],
+    newCharacters: ClassifierExtraction['newCharacters'] = [],
+  ): ClassifierExtraction => ({
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters,
+    aliases,
+  })
+  const kael = entityRow('char_kael', 'active', 'Kael', ['the courier'])
+  const appendOf = (
+    id: string,
+    keywords: string[],
+    proseEntryId: string,
+    entryId = proseEntryId,
+  ) => ({
+    action: {
+      kind: 'appendEntityKeywords',
+      source: 'periodic_classifier',
+      payload: { branchId: 'branch_1', id, keywords, proseEntryId },
+    },
+    entryId,
+  })
+
+  it('appends to a listed character only the terms its line lacks', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply([{ ref: 'char_kael', terms: ['the Grey Wolf', 'The Courier'], sourceTurn: 't2' }]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([appendOf('char_kael', ['the Grey Wolf'], 'e2')])
+    expect(unresolvedRefs).toEqual([])
+  })
+
+  it('appends to a listed entity of any kind', () => {
+    const ford = nonCharacterRow('loc_ford', 'location')
+    const { planned } = buildClassifierActions(
+      reply([{ ref: 'loc_ford', terms: ['the crossing'], sourceTurn: 't1' }]),
+      { ...base, entities: [ford] },
+    )
+    expect(planned).toEqual([appendOf('loc_ford', ['the crossing'], 'e1')])
+  })
+
+  // canon: the ref names a listed entity. A handle's row is this reply's create.
+  it('reports a newCharacters handle as unresolved and writes nothing for it', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply(
+        [{ ref: 'new:j', terms: ['the ferryman'], sourceTurn: 't1' }],
+        [{ handle: 'new:j', name: 'Jorin', description: 'x', keywords: [], sourceTurn: 't1' }],
+      ),
+      { ...base, decisions: new Map([['new:j', { kind: 'create', flag: null }]]) },
+    )
+    expect(planned.map((p) => p.action.kind)).toEqual(['createEntity'])
+    expect(unresolvedRefs).toEqual(['new:j'])
+  })
+
+  // canon: the ref names a listed entity, so a handle reconciliation absorbed into one is no ref.
+  it('reports a handle absorbed into a listed row as unresolved, and appends nothing for it', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply(
+        [{ ref: 'new:k', terms: ['the rider'], sourceTurn: 't2' }],
+        [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'x',
+            keywords: ['the Grey Wolf'],
+            sourceTurn: 't1',
+          },
+        ],
+      ),
+      {
+        ...base,
+        entities: [kael],
+        decisions: new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+      },
+    )
+    expect(planned).toEqual([appendOf('char_kael', ['the Grey Wolf'], 'e1')])
+    expect(unresolvedRefs).toEqual(['new:k'])
+  })
+
+  it('reports an unknown ref as unresolved', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply([{ ref: 'c9', terms: ['the ferryman'], sourceTurn: 't1' }]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([])
+    expect(unresolvedRefs).toEqual(['c9'])
+  })
+
+  // No write means no anchor: an unattributed entry that adds nothing counts no fallback.
+  it('plans nothing, and resolves no anchor, when every term is held or blank', () => {
+    const { planned, fellBackCount } = buildClassifierActions(
+      reply([{ ref: 'char_kael', terms: ['THE COURIER ', '  '] }]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([])
+    expect(fellBackCount).toBe(0)
+  })
+
+  it('dates an unattributed alias by the oldest turn and anchors it at the head', () => {
+    const { planned, fellBackCount } = buildClassifierActions(
+      reply([{ ref: 'char_kael', terms: ['the rider'] }]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([appendOf('char_kael', ['the rider'], 'e1', 'e3')])
+    expect(fellBackCount).toBe(1)
+  })
+
+  it('de-duplicates two entries for one entity against each other', () => {
+    const { planned } = buildClassifierActions(
+      reply([
+        { ref: 'char_kael', terms: ['the Grey Wolf'], sourceTurn: 't1' },
+        {
+          ref: 'char_kael',
+          terms: ['the grey wolf', 'The Courier', 'the rider'],
+          sourceTurn: 't3',
+        },
+      ]),
+      { ...base, entities: [kael] },
+    )
+    expect(planned).toEqual([
+      appendOf('char_kael', ['the Grey Wolf'], 'e1'),
+      appendOf('char_kael', ['the rider'], 'e3'),
+    ])
+  })
+
+  it('de-duplicates against keywords an absorb in the same reply appended', () => {
+    const { planned } = buildClassifierActions(
+      reply(
+        [{ ref: 'char_kael', terms: ['the grey wolf', 'the rider'], sourceTurn: 't2' }],
+        [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'x',
+            keywords: ['the Grey Wolf'],
+            sourceTurn: 't1',
+          },
+        ],
+      ),
+      {
+        ...base,
+        entities: [kael],
+        decisions: new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+      },
+    )
+    expect(planned).toEqual([
+      appendOf('char_kael', ['the Grey Wolf'], 'e1'),
+      appendOf('char_kael', ['the rider'], 'e2'),
+    ])
+  })
+})
+
 // cadence.md → User edits and classifier writes.
 describe('prose source on guarded writes', () => {
   it("stamps each guarded write with its own fact's anchor as proseEntryId", () => {
@@ -952,6 +1179,7 @@ describe('prose source on guarded writes', () => {
           { handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'], sourceTurn: 't1' },
           { handle: 'h2', name: 'A', description: 'x', keywords: ['the wolf'], sourceTurn: 't2' },
         ],
+        aliases: [],
       },
       {
         ...base,
@@ -993,6 +1221,7 @@ describe('prose source on guarded writes', () => {
         relationships: [{ subject: 'char_kael', object: 'char_aria', kind: 'sister' }],
         statusFlips: [{ ref: 'char_a', to: 'retired' }],
         newCharacters: [{ handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'] }],
+        aliases: [],
       },
       {
         ...base,
@@ -1031,10 +1260,11 @@ describe('embedded-column bounds', () => {
     relationships: [],
     statusFlips: [],
     newCharacters: [{ handle: 'h1', name, description, keywords: [], sourceTurn: 't1' }],
+    aliases: [],
   })
   const deps = {
     ...base,
-    decisions: new Map([['h1', { kind: 'create', flagged: false }]]),
+    decisions: new Map([['h1', { kind: 'create', flag: null }]]),
   } as never
   const entryOf = (planned: PlannedWrite[]) =>
     payloadOf<{ entry: { name: string; description: string } }>(planned[0]).entry
@@ -1107,6 +1337,7 @@ describe('embedded-column bounds', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )
@@ -1124,6 +1355,7 @@ describe('embedded-column bounds', () => {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        aliases: [],
       },
       base,
     )

@@ -207,7 +207,9 @@ export function buildClassifierActions(
             keywords,
             status: 'active',
             injectionMode: 'auto',
-            nameCollisionFlag: decision.flagged ? 1 : 0,
+            nameCollisionFlag: decision.flag == null ? 0 : 1,
+            nameCollisionPartnerId: decision.flag?.partnerId ?? null,
+            nameCollisionReason: decision.flag?.reason ?? null,
             // Nothing embeds on the write path: the sync stage owns the vector.
             embeddingStale: 1,
             createdAt: timestamp,
@@ -216,6 +218,32 @@ export function buildClassifierActions(
         },
       },
       entryId,
+    })
+  }
+
+  // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
+  // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
+  for (const alias of extraction.aliases) {
+    const current = index.get(alias.ref)
+    if (current == null) {
+      unresolvedRefs.push(alias.ref)
+      continue
+    }
+    const added = newTerms(current.keywords, alias.terms)
+    if (added.length === 0) continue
+    index.set(alias.ref, { ...current, keywords: [...current.keywords, ...added] })
+    planned.push({
+      action: {
+        kind: 'appendEntityKeywords',
+        source: SOURCE,
+        payload: {
+          branchId,
+          id: alias.ref,
+          keywords: added,
+          proseEntryId: proseSource(alias.sourceTurn),
+        },
+      },
+      entryId: anchor(alias.sourceTurn),
     })
   }
 

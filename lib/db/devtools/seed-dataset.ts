@@ -497,6 +497,8 @@ const heroEntities: NewEntity[] = [
     status: 'active',
     injectionMode: 'auto',
     nameCollisionFlag: 1,
+    nameCollisionPartnerId: ID.brannoc,
+    nameCollisionReason: 'distinct',
     tags: ['smuggler'],
     keywords: ['the river gate'],
     priority: 10,

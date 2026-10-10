@@ -2,11 +2,12 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { type EntitySummary, type Resolution } from '@/components/compounds/collision-resolve-diff'
+import { type Resolution } from '@/components/compounds/collision-resolve-diff'
 import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
 import {
   emptyEntityState,
   type CharacterRelationship,
+  type Entity,
   type Happening,
   type HappeningAwareness,
   type HappeningInvolvement,
@@ -24,7 +25,11 @@ import {
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
-import { collisionResolveProp, useCollisionResolve } from './use-collision-resolve'
+import {
+  collisionResolveProp,
+  useCollisionResolve,
+  type CollisionDialogPair,
+} from './use-collision-resolve'
 
 const resolveCollision = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/actions', async (importOriginal) => ({
@@ -32,8 +37,6 @@ vi.mock('@/lib/actions', async (importOriginal) => ({
   resolveCollision,
 }))
 vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-
-type Pair = readonly [EntitySummary, EntitySummary]
 
 const ctx = {} as DbCtx
 const BRANCH = 'br_1'
@@ -55,11 +58,25 @@ const NEWER = makeEntity({
   description: 'A smuggler who runs the river gate after dark.',
   status: 'active',
   nameCollisionFlag: 1,
+  nameCollisionPartnerId: 'char_brannoc',
+  nameCollisionReason: 'distinct',
   tags: ['smuggler'],
   keywords: ['the river gate'],
   state: emptyEntityState('character'),
   createdAt: 2_000,
 })
+const UNFLAGGED = {
+  nameCollisionFlag: 0,
+  nameCollisionPartnerId: null,
+  nameCollisionReason: null,
+} as const
+// Two rows can name each other, as a merge's re-point can leave them.
+const OLDER_NAMING_NEWER: Entity = {
+  ...OLDER,
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: NEWER.id,
+  nameCollisionReason: 'alike',
+}
 const LEAD_TEXT =
   "The story's lead can't be the row a merge removes. Pick it as the row that survives, or use Set as lead on another character first."
 const IN_FLIGHT_TEXT = "Couldn't resolve while generation is in flight."
@@ -120,7 +137,9 @@ function openPair(guard: (proceed: () => void) => void = run) {
   return result
 }
 
-function openedPair(result: { current: ReturnType<typeof useCollisionResolve> }): Pair {
+function openedPair(result: {
+  current: ReturnType<typeof useCollisionResolve>
+}): CollisionDialogPair {
   const pair = result.current.pair
   if (pair == null) throw new Error('expected an open pair')
   return pair
@@ -175,7 +194,8 @@ describe('useCollisionResolve → opening', () => {
 
     act(() => proceed?.())
 
-    expect(result.current.pair?.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
+    expect(result.current.pair?.sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
+    expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
   })
 
   it('does not re-render on store patches while no pair is open', () => {
@@ -199,16 +219,16 @@ describe('useCollisionResolve → opening', () => {
 
   it('re-derives the open pair when a link or translation row lands', () => {
     const result = openPair()
-    expect(openedPair(result)[1].relationCounts.awarenessRows).toBe(0)
-    expect(openedPair(result)[1].relationCounts.translationRows).toBe(0)
+    expect(openedPair(result).sides[1].relationCounts.awarenessRows).toBe(0)
+    expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(0)
 
     act(() => {
       happeningAwarenessStore.hydrate(BRANCH, [awareness('haw_1', NEWER.id)])
       translationsStore.hydrate(BRANCH, [translation('tr_1', NEWER.id)])
     })
 
-    expect(openedPair(result)[1].relationCounts.awarenessRows).toBe(1)
-    expect(openedPair(result)[1].relationCounts.translationRows).toBe(1)
+    expect(openedPair(result).sides[1].relationCounts.awarenessRows).toBe(1)
+    expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(1)
   })
 
   it('closes once a row of the pair is gone, and stays closed when an undo brings it back', () => {
@@ -221,18 +241,55 @@ describe('useCollisionResolve → opening', () => {
     expect(result.current.pair).toBeNull()
   })
 
-  it('closes once the two rows stop being namesakes', () => {
+  it('closes once the flag is cleared elsewhere, and stays closed when an undo re-flags it', () => {
+    const result = openPair()
+
+    act(() => entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, ...UNFLAGGED }]))
+    expect(result.current.pair).toBeNull()
+
+    act(() => entitiesStore.hydrate(BRANCH, [OLDER, NEWER]))
+    expect(result.current.pair).toBeNull()
+  })
+
+  it('stays open on a rename that keeps the flag', () => {
     const result = openPair()
     act(() =>
       entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'Brannoc of the river gate' }]),
     )
-    expect(result.current.pair).toBeNull()
+    expect(result.current.pair?.sides[1].name).toBe('Brannoc of the river gate')
+    expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
   })
 
-  it('stays open across a case-only rename, which still collides', () => {
+  it('reads the flag from the requested row when both rows name each other', () => {
+    entitiesStore.hydrate(BRANCH, [OLDER_NAMING_NEWER, NEWER])
     const result = openPair()
-    act(() => entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'BRANNOC' }]))
-    expect(result.current.pair?.[1].name).toBe('BRANNOC')
+    expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
+  })
+
+  it('takes the flag and reason from the other row once only it names the pair', () => {
+    entitiesStore.hydrate(BRANCH, [OLDER_NAMING_NEWER, NEWER])
+    const result = openPair()
+
+    act(() => entitiesStore.hydrate(BRANCH, [OLDER_NAMING_NEWER, { ...NEWER, ...UNFLAGGED }]))
+
+    expect(result.current.pair?.sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
+    expect(result.current.pair).toMatchObject({ flaggedId: OLDER.id, reason: 'alike' })
+  })
+
+  it('never opens two rows of different kinds, even when a flag names the other', () => {
+    const harbor = makeEntity({
+      id: 'loc_harbor',
+      kind: 'location',
+      name: 'Brannoc',
+      state: emptyEntityState('location'),
+      createdAt: 500,
+    })
+    entitiesStore.hydrate(BRANCH, [OLDER, harbor, { ...NEWER, nameCollisionPartnerId: harbor.id }])
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run))
+
+    act(() => result.current.request(NEWER.id, harbor.id))
+
+    expect(result.current.pair).toBeNull()
   })
 
   it('close() drops the open pair', () => {

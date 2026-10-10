@@ -157,6 +157,15 @@
       "item": "⚠ Two items named \"{{name}}\"",
       "faction": "⚠ Two factions named \"{{name}}\""
     },
+    "titleMayBe": "⚠ \"{{flagged}}\" may be \"{{other}}\"",
+    "reason": {
+      "alike": "Their descriptions read alike.",
+      "ambiguous": "Their descriptions are partly alike.",
+      "distinct": "Their descriptions differ.",
+      "inScene": "Their descriptions differ, but \"{{other}}\" was in the scene where \"{{flagged}}\" first appeared.",
+      "noSignal": "Their descriptions couldn't be compared."
+    },
+    "basis": "\"{{holder}}\" also goes by \"{{keyword}}\".",
     "description": "Pick how to resolve this collision. Switching modes discards in-progress choices.",
     "modeLabel": "Resolution path",
     "mode": {
@@ -216,10 +225,11 @@
     "nameTaken": "Another row already has that name.",
     "renameIssue": {
       "emptyName": "A name can't be empty.",
-      "stillColliding": "These names still collide: letter case and spaces at either end don't count as a difference."
+      "stillColliding": "These names still match: the same name, or one name's words inside the other's. Letter case and extra spaces don't count as a difference."
     },
     "keepConfirm": "Keep as distinct",
     "keepBody": "Both \"{{name}}\" entities will continue to exist with the same name. Retrieval treats them by id, but storyteller responses may conflate them in prose. Polymorphic naming is a documented v1 limitation — the schema doesn't enforce unique names. The flag clears; no other writes.",
+    "keepBodyPartial": "\"{{older}}\" and \"{{newer}}\" will both continue to exist. The flag clears; no other writes.",
     "failed": "Resolution failed"
   },
   "importDialog": {

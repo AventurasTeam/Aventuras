@@ -47,6 +47,8 @@ function entity(id: string, branchId = 'b1'): Entity {
     status: 'active',
     retiredReason: null,
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     injectionMode: 'auto',
     state: null,
     embeddingStale: 0,

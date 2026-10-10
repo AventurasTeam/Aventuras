@@ -99,6 +99,8 @@ function fullEntityPayload(id: string, links: Record<string, unknown[]>) {
     ...characterRow(id, `Gone ${id}`),
     retiredReason: null,
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: {
       visual: { hair: 'dark' },
       traits: ['wary', 'loyal'],

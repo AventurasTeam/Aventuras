@@ -23,6 +23,8 @@ function entity(injectionMode: InjectionMode): Entity {
     retiredReason: null,
     injectionMode,
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],

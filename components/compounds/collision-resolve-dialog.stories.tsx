@@ -5,6 +5,7 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import type { CollisionReason } from '@/lib/db'
 import { themes } from '@/lib/themes'
 
 import { CollisionResolveDialog } from './collision-resolve-dialog'
@@ -117,6 +118,8 @@ function ControlledDialog({
   initialOpen = true,
   entityA: a,
   entityB: b,
+  flaggedId = b.id,
+  reason = 'distinct',
   onResolve,
   blockedReason,
   isNameTaken,
@@ -124,6 +127,9 @@ function ControlledDialog({
   initialOpen?: boolean
   entityA: EntitySummary
   entityB: EntitySummary
+  /** The classifier flags the newer row at create, so the newer row by default. */
+  flaggedId?: string
+  reason?: CollisionReason
   onResolve: (r: Resolution) => Promise<void>
   blockedReason?: string
   isNameTaken?: (name: string) => boolean
@@ -139,6 +145,8 @@ function ControlledDialog({
         onOpenChange={setOpen}
         entityA={a}
         entityB={b}
+        flaggedId={flaggedId}
+        reason={reason}
         onResolve={onResolve}
         blockedReason={blockedReason}
         isNameTaken={isNameTaken}
@@ -638,6 +646,43 @@ export const MergeKeywordUnion: Story = {
   },
 }
 
+// world.md → Merge: a partial pair's merge offers the name it doesn't keep as a keyword, even when
+// the two keyword lists match, and the chip follows the name choice.
+export const MergeAddsTheNameItDoesNotKeep: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ keywords: ['the wanderer'] })}
+      entityB={baseEntity({
+        id: 'ent_kael_2',
+        name: 'Kael Stormborn',
+        keywords: ['The Wanderer'],
+      })}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await screen.findByRole('group', { name: KEYWORD_CHIPS })
+    expect(chipNames(KEYWORD_CHIPS)).toEqual(['the wanderer', 'Kael Stormborn'])
+
+    const name = screen.getByRole('radiogroup', { name: 'Name' })
+    await userEvent.click(within(name).getByRole('radio', { name: /^Newer · / }))
+    await waitFor(() => expect(chipNames(KEYWORD_CHIPS)).toEqual(['the wanderer', 'Kael']))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Kael' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
+      mode: 'merge',
+      canonicalId: entityA.id,
+      fromOther: ['name'],
+      deselectedTags: [],
+      deselectedKeywords: ['kael'],
+    })
+  },
+}
+
 export const MergeChipRemoveGlyph: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
   play: async () => {
@@ -890,34 +935,72 @@ export const RenameMode: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
 }
 
-export const RenameCaseOnly: Story = {
+export const RenameValidation: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
     const save = () => screen.getByRole('button', { name: 'Save renames' })
+    const prompt = 'Change at least one name to clear the collision.'
     expect(save()).toBeDisabled()
-    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
     // Nothing edited yet: the disabled reason says what the help line says.
-    expect(save().closest('[title]')).toHaveAttribute(
-      'title',
-      'Change at least one name to clear the collision.',
-    )
+    expect(save().closest('[title]')).toHaveAttribute('title', prompt)
 
     const inputs = await screen.findAllByRole('textbox')
+    // A trailing space trims back to the current name: still the plain prompt.
+    await userEvent.type(inputs[1], ' ')
+    expect(save()).toBeDisabled()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
+
     await userEvent.clear(inputs[1])
     await userEvent.type(inputs[1], 'KAEL')
 
-    expect(await screen.findByText(/still collide/)).toBeInTheDocument()
+    expect(await screen.findByText(/still match/)).toBeInTheDocument()
     expect(save()).toBeDisabled()
     expect(save().closest('[title]')).toHaveAttribute(
       'title',
-      expect.stringContaining('still collide'),
+      expect.stringContaining('still match'),
     )
 
+    // One name inside the other still matches.
     await userEvent.type(inputs[1], ' the Guard')
+    expect(screen.getByText(/still match/)).toBeInTheDocument()
+    expect(save()).toBeDisabled()
+
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
 
     await waitFor(() => expect(save()).not.toBeDisabled())
-    expect(screen.getByText('Change at least one name to clear the collision.')).toBeInTheDocument()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
+  },
+}
+
+// world.md → Rename: keywords don't count, so a pair matching through one passes after a rename.
+export const RenameKeywordPair: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={baseEntity({ id: 'ent_marta', name: 'Marta', keywords: ['the innkeeper'] })}
+      entityB={baseEntity({
+        id: 'ent_keeper',
+        name: 'The Innkeeper',
+        createdAt: new Date().toISOString(),
+        keywords: [],
+      })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    const save = () => screen.getByRole('button', { name: 'Save renames' })
+    const prompt = 'Change at least one name to clear the collision.'
+    expect(save()).toBeDisabled()
+    expect(screen.getByText(prompt)).toBeInTheDocument()
+
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.type(inputs[0], ' Vell')
+
+    await waitFor(() => expect(save()).not.toBeDisabled())
+    expect(screen.getByText(prompt)).toBeInTheDocument()
   },
 }
 
@@ -956,13 +1039,14 @@ export const RenameSubmitsTrimmedChanges: Story = {
     const inputs = await screen.findAllByRole('textbox')
     // A gains only a trailing space, which trims back to its current name.
     await userEvent.type(inputs[0], ' ')
-    await userEvent.type(inputs[1], ' the Guard  ')
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], ' Jorin  ')
     await userEvent.click(screen.getByRole('button', { name: 'Save renames' }))
 
     await waitFor(() => expect(lastResolution).not.toBeNull())
     expect(lastResolution).toEqual({
       mode: 'rename',
-      renames: [{ id: 'ent_kael_2', newName: 'Kael the Guard' }],
+      renames: [{ id: 'ent_kael_2', newName: 'Jorin' }],
     })
   },
 }
@@ -987,7 +1071,9 @@ export const Blocked: Story = {
 
     await userEvent.click(screen.getByRole('radio', { name: 'Rename one' }))
     const inputs = await screen.findAllByRole('textbox')
-    await userEvent.type(inputs[1], ' the Guard')
+    // A rename that would otherwise save.
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
     expect(screen.getByRole('button', { name: 'Save renames' })).toBeDisabled()
     expect(screen.getByText(GATE_REASON)).toBeInTheDocument()
 
@@ -1003,15 +1089,22 @@ export const RenameLoading: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     // Switch to rename mode via the segment.
     await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
-    // Dirty the first input so the Save button enables.
+    // Rename the first row so the Save button enables.
     const inputs = await screen.findAllByRole('textbox')
-    await userEvent.type(inputs[0], ' edit')
+    await userEvent.clear(inputs[0])
+    await userEvent.type(inputs[0], 'Jorin')
     await userEvent.click(await screen.findByRole('button', { name: 'Save renames' }))
   },
 }
 
 export const KeepMode: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveOk} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    expect(
+      await screen.findByText(/^Both "Kael" entities will continue to exist with the same name\./),
+    ).toBeInTheDocument()
+  },
 }
 
 export const KeepLoading: Story = {
@@ -1089,5 +1182,273 @@ export const MergeManyTags: Story = {
     scroller!.scrollTop = scroller!.scrollHeight
     expect(confirm.getBoundingClientRect().top).toBeCloseTo(before, 0)
     expect(confirm.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+  },
+}
+
+// world.md → Resolve dialog: pairs that match by name, by containment and through a keyword.
+const NEWER_AT = new Date().toISOString()
+const olderKael = baseEntity({ keywords: [] })
+const newerKael = baseEntity({ id: 'ent_kael_2', createdAt: NEWER_AT, keywords: [] })
+const stormborn = baseEntity({
+  id: 'ent_kael_2',
+  name: 'Kael Stormborn',
+  createdAt: NEWER_AT,
+  keywords: [],
+})
+const kaelTheWolf = baseEntity({ keywords: ['the Grey Wolf'] })
+const greyWolf = baseEntity({
+  id: 'ent_kael_2',
+  name: 'the Grey Wolf',
+  createdAt: NEWER_AT,
+  keywords: [],
+})
+const greyWolfCallingKael = { ...greyWolf, keywords: ['Kael'] }
+const innkeeper = baseEntity({ id: 'ent_inn_1', name: 'The Innkeeper', keywords: [] })
+const marta = baseEntity({
+  id: 'ent_marta_2',
+  name: 'Marta',
+  createdAt: NEWER_AT,
+  keywords: ['the innkeeper'],
+})
+
+// The dialog is named by its title.
+const dialogNamed = (name: string) => screen.findByRole('dialog', { name })
+const BASIS = / also goes by /
+
+export const HeaderSameName: Story = {
+  render: () => <ControlledDialog entityA={olderKael} entityB={newerKael} onResolve={resolveOk} />,
+  play: async () => {
+    expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions differ.')).toBeInTheDocument()
+    expect(screen.queryByText(BASIS)).toBeNull()
+  },
+}
+
+export const HeaderContainedAmbiguous: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={stormborn}
+      reason="ambiguous"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "Kael Stormborn" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions are partly alike.')).toBeInTheDocument()
+    expect(screen.queryByText(BASIS)).toBeNull()
+  },
+}
+
+// The older row can be the flagged one: a merge re-points a flag at whichever row survives.
+export const HeaderInSceneOlderFlagged: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={stormborn}
+      flaggedId={olderKael.id}
+      reason="in-scene"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "Kael" may be "Kael Stormborn"')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared.',
+      ),
+    ).toBeInTheDocument()
+  },
+}
+
+export const HeaderKeywordAlike: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolf}
+      reason="alike"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions read alike.')).toBeInTheDocument()
+    expect(screen.getByText('"Kael" also goes by "the Grey Wolf".')).toBeInTheDocument()
+  },
+}
+
+// The flagged row holds the keyword; a pair matching only through one keeps with the partial panel.
+export const HeaderKeywordHeldByFlagged: Story = {
+  render: () => <ControlledDialog entityA={innkeeper} entityB={marta} onResolve={resolveOk} />,
+  play: async () => {
+    expect(await dialogNamed('⚠ "Marta" may be "The Innkeeper"')).toBeInTheDocument()
+    expect(screen.getByText('"Marta" also goes by "the innkeeper".')).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    expect(
+      await screen.findByText(
+        '"The Innkeeper" and "Marta" will both continue to exist. The flag clears; no other writes.',
+      ),
+    ).toBeInTheDocument()
+  },
+}
+
+// Each row's keywords hold the other's name: the basis line names the flagged row's.
+export const HeaderKeywordBothWays: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolfCallingKael}
+      reason="alike"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('"the Grey Wolf" also goes by "Kael".')).toBeInTheDocument()
+  },
+}
+
+export const HeaderNoSignal: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={newerKael}
+      reason="no-signal"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
+    expect(screen.getByText("Their descriptions couldn't be compared.")).toBeInTheDocument()
+  },
+}
+
+// A rename on another surface that keeps the pair flagged re-derives the header.
+let renameNow: (() => void) | null = null
+function RenamedWhileOpen() {
+  const [b, setB] = useState(newerKael)
+  useEffect(() => {
+    renameNow = () => setB(stormborn)
+    return () => {
+      renameNow = null
+    }
+  }, [])
+  return <ControlledDialog entityA={olderKael} entityB={b} onResolve={resolveOk} />
+}
+
+export const HeaderFollowsALiveRename: Story = {
+  render: () => <RenamedWhileOpen />,
+  play: async () => {
+    await dialogNamed('⚠ Two characters named "Kael"')
+    renameNow?.()
+    expect(await dialogNamed('⚠ "Kael Stormborn" may be "Kael"')).toBeInTheDocument()
+  },
+}
+
+export const KeepPartialPair: Story = {
+  render: () => <ControlledDialog entityA={olderKael} entityB={stormborn} onResolve={resolveOk} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    expect(
+      await screen.findByText(
+        '"Kael" and "Kael Stormborn" will both continue to exist. The flag clears; no other writes.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Polymorphic naming/)).toBeNull()
+  },
+}
+
+// The newer row is flagged and spelled differently; the title keeps the older row's spelling.
+export const HeaderSameNameKeepsOlderSpelling: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={baseEntity({ id: 'ent_kael_2', name: 'kael', createdAt: NEWER_AT, keywords: [] })}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
+  },
+}
+
+// The reason and basis lines are part of the dialog's description for assistive tech.
+export const ExplanationIsTheAccessibleDescription: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolf}
+      reason="in-scene"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    const dialog = await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')
+    expect(dialog).toHaveAccessibleDescription(
+      /Their descriptions differ, but "Kael" was in the scene/,
+    )
+    expect(dialog).toHaveAccessibleDescription(/"Kael" also goes by "the Grey Wolf"\./)
+    expect(dialog).toHaveAccessibleDescription(/Pick how to resolve this collision\./)
+  },
+}
+
+// On a phone the title and mode picker stay fixed; the explanation scrolls with the body.
+export const PhoneExplanationScrollsWithBody: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={{ ...kaelTheWolf, tags: manyTags('a') }}
+      entityB={{ ...greyWolf, tags: manyTags('b') }}
+      reason="in-scene"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    // useTier reads RN-Web's Dimensions, which updates a tick after the viewport global lands.
+    await waitFor(() => expect(window.innerWidth).toBeLessThan(500))
+    const confirm = await screen.findByRole('button', { name: /^Merge into/ })
+    const panel = confirm.closest('[role="dialog"]') as HTMLElement
+    let scroller: HTMLElement | null = null
+    for (const candidate of Array.from(panel.querySelectorAll<HTMLElement>('div'))) {
+      const overflowY = getComputedStyle(candidate).overflowY
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        candidate.scrollHeight > candidate.clientHeight
+      ) {
+        scroller = candidate
+        break
+      }
+    }
+    expect(scroller).not.toBeNull()
+
+    const reason = screen.getByText(/^Their descriptions differ, but "Kael" was in the scene/)
+    expect(scroller!.contains(reason)).toBe(true)
+    expect(scroller!.contains(screen.getByText('"Kael" also goes by "the Grey Wolf".'))).toBe(true)
+    expect(scroller!.contains(screen.getByText(/^Pick how to resolve this collision\./))).toBe(true)
+    expect(panel).toHaveAccessibleDescription(
+      /Their descriptions differ, but "Kael" was in the scene/,
+    )
+    // Invariant: the merge body keeps at least 119px however many lines the explanation adds.
+    expect(scroller!.clientHeight).toBeGreaterThanOrEqual(119)
+  },
+}
+
+export const PhoneKeepModeKeepsTheExplanation: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => (
+    <ControlledDialog
+      entityA={kaelTheWolf}
+      entityB={greyWolf}
+      reason="alike"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    await waitFor(() => expect(window.innerWidth).toBeLessThan(500))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    const dialog = await dialogNamed('⚠ "the Grey Wolf" may be "Kael"')
+    expect(await within(dialog).findByText('Their descriptions read alike.')).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleDescription(/Their descriptions read alike\./)
   },
 }

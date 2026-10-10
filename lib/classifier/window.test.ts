@@ -108,3 +108,54 @@ describe('buildClassifierWindow', () => {
     expect(w.resolveHandle(undefined)).toEqual({ entryId: 'e2', fellBack: true })
   })
 })
+
+// classifier.md → What the classifier reads: each turn carries the scene saved on it.
+describe('saved scene per turn', () => {
+  const scened = (
+    position: number,
+    id: string,
+    kind: string,
+    metadata: { sceneEntities: string[]; currentLocationId: string | null } | null,
+  ) => ({ id, position, kind, content: `prose ${position}`, metadata }) as never
+
+  const w = buildClassifierWindow({
+    entries: [
+      scened(1, 'e1', 'ai_reply', {
+        sceneEntities: ['char_a', 'item_b'],
+        currentLocationId: 'loc_c',
+      }),
+      // A user action carries the scene submitTurn inherited onto it.
+      scened(2, 'e2', 'user_action', { sceneEntities: ['char_d'], currentLocationId: null }),
+      scened(3, 'e3', 'ai_reply', null),
+    ],
+    processedThrough: 0,
+    maxEntries: 20,
+  })
+
+  it("copies each entry's sceneEntities and currentLocationId onto its turn", () => {
+    expect(w.turns.map((t) => [t.sceneEntities, t.currentLocationId])).toEqual([
+      [['char_a', 'item_b'], 'loc_c'],
+      [['char_d'], null],
+      [[], null],
+    ])
+  })
+
+  it('returns the saved scene of the turn a handle names, the head included', () => {
+    expect(w.sceneOf('t1')).toEqual(new Set(['char_a', 'item_b']))
+    expect(w.sceneOf('t2')).toEqual(new Set(['char_d']))
+    // Naming the head directly is not a fallback: its own (empty) scene comes back.
+    expect(w.sceneOf('t3')).toEqual(new Set())
+  })
+
+  it('returns null for a handle that falls back to the window head', () => {
+    const headed = buildClassifierWindow({
+      entries: [
+        scened(1, 'e1', 'ai_reply', { sceneEntities: ['char_a'], currentLocationId: null }),
+      ],
+      processedThrough: 0,
+      maxEntries: 20,
+    })
+    expect(headed.sceneOf('t9')).toBeNull()
+    expect(headed.sceneOf(undefined)).toBeNull()
+  })
+})
