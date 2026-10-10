@@ -9,8 +9,8 @@ documents rather than chases.
 
 ## Name collision and disambiguation
 
-Two layers handle the case where the AI invents a character with the
-same name as an existing (often staged) entity.
+Two layers handle the case where the AI invents a character whose name
+matches an existing (often staged) entity's, exactly or in part.
 
 ### Layer A — retrieval-time same-name suppression
 
@@ -31,7 +31,7 @@ Reuses the entity-name index. Heuristic (text scan), not LLM.
 structural floor seats `always` rows before pool assembly, so they
 never reach the filter — and that is the behaviour we want, because
 suppression would otherwise block its own resolution. Layer B promotes
-from the entity index and runs on the periodic classifier's cadence,
+an exact namesake and runs on the periodic classifier's cadence,
 but the fast path is piggyback: the model can only name an entity in
 `<scene_entities>` if that entity's id was in the prompt. Suppressing a
 row keeps it out of the prompt, which keeps the model from naming it,
@@ -61,22 +61,15 @@ shows the model.
 
 ### Layer B — code-side reconciliation at extraction
 
-Per turn the classifier runs, when it extracts a "new character"
-mention from prose:
-
-1. **Name lookup** against the entity index. O(1).
-2. **No name match** → genuinely novel character; create fresh.
-3. **Name match found** → embedding similarity between extracted
-   description and existing description.
-   - **High** (`sim ≥ τ_high`) → promote staged → active OR treat as
-     existing active mention. Update if the extract adds info.
-   - **Low** (`sim < τ_low`) → create new entity, set
-     `name_collision_flag = true`. Surfaces in the World panel for
-     user review.
-   - **Ambiguous** (`τ_low ≤ sim < τ_high`) → conservative create-new
-     with the flag.
-
-Tunable thresholds; defaults TBD empirically.
+Each pass, every character the classifier extracts as new is compared
+with the branch's exact and partial namesakes, by description
+similarity and by whether the namesake is in the scene of the turn
+that introduced it. A strong exact match is absorbed into the existing
+row; any other exact match, and a partial one with a second signal,
+is created with `name_collision_flag = 1` for World-panel review,
+naming the namesake it was compared against. The rule, the signals and the decision table
+live in
+[`classifier.md → Disambiguation on new-character mentions`](./classifier.md#disambiguation-on-new-character-mentions).
 
 ### Schema
 
@@ -84,13 +77,16 @@ Tunable thresholds; defaults TBD empirically.
 entities {
   ... existing fields ...
   name_collision_flag INTEGER DEFAULT 0   -- 1 = review needed
+  name_collision_partner_id TEXT          -- the namesake compared against, same branch
+  name_collision_reason TEXT              -- alike | ambiguous | distinct | in-scene | no-signal
+  CHECK (flag 0: partner and reason null; flag 1: both set)
 }
 ```
 
-Flag clears when the user resolves the collision (merge, rename, or
-keep as distinct), or when a rename or delete leaves no same-kind
-namesake
-([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)).
+The partner is a plain id, outside the reversal reference registry, so
+a flag whose partner is gone stays dormant rather than being refused.
+When a flag shows and when it clears live in
+[`world.md → Surfacing`](../ui/screens/world/world.md#surfacing).
 
 ### Polymorphic naming — v1 limitation
 
@@ -145,8 +141,8 @@ user wrote the action introducing them):
    prose.
 2. Code-side reconciliation runs (see
    [Layer B](#layer-b--code-side-reconciliation-at-extraction)).
-3. If the description matches a staged entity, classifier promotes via
-   the standard status-flip path.
+3. If the description matches a staged entity of the same name, the
+   classifier promotes it via the standard status-flip path.
 
 ### Prompt framing
 

@@ -29,8 +29,8 @@ the shape.
   trailing tagged block, computed bookkeeping, jsonrepair fallback,
   capability gate, mode-mixing across a story.
 - **[classifier.md](./classifier.md)** — periodic classifier
-  contract: write set, disambiguation on new-character mentions,
-  background-task framing.
+  contract: what it reads, write set, disambiguation on new-character
+  mentions, background-task framing.
 - **[chapter-close.md](./chapter-close.md)** — 5-phase chapter-close
   pipeline: catch-up, boundary selection, metadata, lore-mgmt
   (5 sub-jobs), lifecycle review, failure modes, manual close.

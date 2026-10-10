@@ -51,60 +51,22 @@ for the placement rule.
   - Items share the gap: nothing machine-creates one, so an item first
     mentioned in prose can't be transferred.
 
-- **Name-collision detection misses partial-name duplicates.** Layer B
-  reconciliation (`lib/classifier/reconcile.ts`) gates on an exact
-  `normalizeTerm` name match against existing characters, so "Kael" and
-  "Kael Stormborn" never reach the embedding comparison: the classifier
-  creates a second row with no flag, and no surface offers a merge.
-  Keywords and aliases are not consulted either. Only characters are
-  reconciled at all, though canon gives the flag to all four kinds.
-  Scene presence is unused too: the classifier's window carries each
-  turn's prose but not the `sceneEntities` saved in its metadata, and
-  Layer B compares names and descriptions only, so a "new" character in
-  a turn whose scene already names the existing row (strong evidence of
-  a classifier miss) still lands as a flagged duplicate. Revisit
-  together, developer-requested: feed each window turn its saved
-  metadata state, resolve or promote such a character to the existing
-  row, and consider correcting past entries' scene presence once a
-  duplicate is resolved — a merge rewrites only the tail scene, so
-  earlier entries keep naming the deleted loser and render it as
-  "Entity no longer exists". Found during 4.2c planning (2026-10-06);
-  the classifier is M3.3's substrate, outside 4.2c's scope.
-  Verified 2026-10-09, with four corrections. Exact matching is canon's
-  own rule
-  ([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)),
-  so partial matching is a canon change. Only characters are reconciled
-  because only characters are machine-created (the extraction schema
-  has `newCharacters` alone); the four-kinds line in `world.md` is
-  about the column. Earlier entries render the loser as an
-  Unknown-entity chip, and leaving them so is canon
-  ([`world.md → Delete`](./ui/screens/world/world.md#delete)), so
-  correcting past scenes would reverse a decision rather than close a
-  gap. And every collision surface keys on the exact name (the derived
-  pairs, `collisionPairOf`, orphaned-flag clears, the pill's count), so a
-  partial-name flag would be invisible and unresolvable without the
-  stored partner in the next entry. The design questions are the
-  developer's: what counts as a namesake (token prefix, a keyword or
-  alias hit, scene presence), and whether a partial match flags the row
-  or resolves to the existing one. Routed from triage 2026-10-09.
-- **The classifier drops why it flagged a row.** `reconcileNewCharacter`
-  returns a `FlagReason` (`distinct`, `ambiguous`, `no-signal`), the
-  similarity and the best-matching namesake, and its type comment says
-  the reason is "carried explicitly for the collision-review surface",
-  but `lib/classifier/plan.ts` persists only the 0/1 flag. The resolve
-  dialog could say "descriptions differ" or "couldn't compare", and a
-  stored partner id would let World pair the flagged row with the
-  namesake the classifier actually compared rather than guessing by
-  name. Both need a schema column. Found during 4.2c planning
-  (2026-10-06). Verified 2026-10-09: the decision carries the reason and
-  similarity but not the namesake, which `reconcile.ts` computes and
-  drops, so storing a partner widens its return type too. A partner id
-  is an id inside a column: rename, merge and delete would have to clear
-  or rewrite it, the family of
-  [the parked JSON-columns gap](./parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns).
-  World's name-based guess differs from the classifier's comparison only
-  with three or more namesakes. Moves with the entry above. Routed from
-  triage 2026-10-09.
+- **Implement partial-name collision detection.** Designed 2026-10-10
+  ([exploration record](./explorations/2026-10-10-partial-name-collisions.md));
+  the spec is canon:
+  [`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)
+  for each turn's saved scene, the alias rule and the alias list,
+  [`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)
+  for the matching rule, the decision table and the partner and reason,
+  [`edge-cases.md → Schema`](./memory/edge-cases.md#schema) for the two
+  `entities` columns and their CHECK, and
+  [`world.md → Collision review and entity merge`](./ui/screens/world/world.md#collision-review-and-entity-merge)
+  for World's pairing, copy and clear rules. It touches the classifier
+  (`lib/classifier`, its prompt, schema and context), `lib/world`'s
+  collision helpers and World's collision surfaces. The CHECK rebuilds
+  `entities`, so a development database holding flagged rows needs a
+  reseed. Lands as a standalone PR, before the location design reuses
+  the matcher.
 
 ## UX
 

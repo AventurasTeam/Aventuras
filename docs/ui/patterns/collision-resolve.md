@@ -59,6 +59,10 @@ type CollisionResolveDialogProps = {
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
   entityB: EntitySummary // newer
+  /** The flagged row the strip was opened from: the header names it first, and `reason` is its. */
+  flaggedId: string
+  /** That row's `name_collision_reason`, for the reason line. */
+  reason: CollisionReason // alike | ambiguous | distinct | in-scene | no-signal
   /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
@@ -71,6 +75,14 @@ type CollisionResolveDialogProps = {
 The caller sorts by `createdAt` before passing, matching the spec's
 "older = default canonical" rule. The dialog never reorders
 internally — caller data is the source of truth.
+
+The header, the reason line and the basis line follow
+[`world.md → Resolve dialog`](../screens/world/world.md#resolve-dialog).
+The header and the basis line read the pair's match from
+`namesakeBasis` (lib/world): the classifier's namesake rule applied to
+the two rows' current names and keywords, answering same name, one
+name inside the other, or a keyword hit. They are derived, not stored,
+so a rename that keeps the pair matching re-derives them.
 
 A refusal shows inline until the user answers it: the next submit,
 a mode switch, or any merge choice changed (canonical, field or
@@ -183,7 +195,11 @@ are then (`mergedTerms`, lib/world): the union of both rows' terms
 minus the dropped, keywords de-duplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
 entry (a shared one in the canonical's spelling), tags trimmed and
-de-duplicated exactly. Each list keeps the canonical's own entries
+de-duplicated exactly. When the two names differ, the name the merge
+doesn't keep (the canonical's when `fromOther` holds `name`, else the
+non-canonical's) joins the keyword union, unless the merged row already
+answers to it through its kept name or a keyword in the union; a drop
+of it is sent like any other. Each list keeps the canonical's own entries
 in their stored order, then the other row's remaining additions
 sorted, and a list that comes out equal to the canonical's isn't
 written. So a keyword the classifier adds to either row while the
@@ -193,10 +209,12 @@ shown are sent: when the two sides come to agree on a list while
 the dialog is open, its chips go and so do its drops.
 
 The rename array is sparse: only entities whose name actually
-changed are included, trimmed. Validation: both trimmed names must be
-non-empty and must stop colliding under the namesake rule (same
-kind, same `normalizeTerm` name), so a case-only change still
-collides; the action refuses `invalid-rename` otherwise.
+changed are included, trimmed. Validation: a name must change, both
+trimmed names must be non-empty, and they must stop matching by name
+(neither the same `normalizeTerm` name nor one name's words inside the
+other's), so a case-only change still collides. Keywords don't count,
+since the form edits names only. The action refuses `invalid-rename`
+otherwise.
 
 ### Divergence computation
 
@@ -287,10 +305,10 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
 - **Merge** — always enabled once the canonical is picked. Init
   defaults canonical to A, so this is true from open. The user
   cannot get stuck in an un-submittable state.
-- **Rename** — enabled when both trimmed names are non-empty and
-  no longer collide under the namesake rule. A case-only change
-  still collides, so leaving both names as they are never enables
-  it.
+- **Rename** — enabled when a name changed, both trimmed names are
+  non-empty, and they no longer match by name
+  ([Resolution shape](#resolution-shape)). A case-only change still
+  collides, and leaving both names as they are never enables it.
 - **Keep** — always enabled.
 - **Blocked** — while `blockedReason` is set, every submit
   disables and the reason shows under the footer. The caller's
@@ -322,7 +340,8 @@ empty, and `deselectedTags = []` and `deselectedKeywords = []`.
    carries its side's caption itself instead, without the suffix. From the keyboard a field is
    one tab stop, on its checked radio: Space checks the focused radio
    and the arrow keys move the check.
-3. **Keyword union** (when `diff.keywords != null`) — single row
+3. **Keyword union** (when `diff.keywords != null`, or the merge
+   would add the name it doesn't keep) — single row
    labeled "Keywords", identical in shape to the tag row below it and
    rendered directly above it.
 4. **Tag union** (when `diff.tags != null`) — single row labeled
@@ -362,8 +381,9 @@ fails it, and otherwise (untouched, or valid) shows the plain
 prompt to change a name.
 Footer: `[ Cancel ]` · `[ Save renames ]`.
 
-**Keep as distinct** — single muted paragraph (verbatim from
-[`world.md → Keep as distinct`](../screens/world/world.md#keep-as-distinct)),
+**Keep as distinct** — single muted paragraph, verbatim from
+[`world.md → Keep as distinct`](../screens/world/world.md#keep-as-distinct):
+the same-name panel, or the partial-pair one when the names differ;
 footer: `[ Cancel ]` · `[ Keep as distinct ]`.
 
 **Phone tier and native tiers** — the dialog stays a Modal on
@@ -382,6 +402,7 @@ its value, and is named by both (`Older · 3 days ago: active`).
 ```ts
 type CollisionListRowProps = {
   row: ListRowProps // forwarded verbatim
+  // otherName: the stored partner's name.
   collision: { otherName: string; onJumpToOther: () => void } & (
     | { onResolve: () => void; resolveDisabledReason?: never }
     // Resolve stays visible but inert; the reason doubles as its tooltip and a11y hint.

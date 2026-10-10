@@ -497,9 +497,9 @@ cascade covers:
     `currentLocationId`, so the next turn doesn't inherit it. Earlier
     entries keep the id and render it as an Unknown-entity chip
     ([`entry-card.md → World-state panel`](../../patterns/entry-card.md#world-state-panel)).
-  - **Orphaned collision flags.** A flagged row the delete leaves
-    with no same-kind namesake has its flag cleared in the same
-    action ([Surfacing](#surfacing)).
+  - **Collision flags naming it.** A flagged row whose partner is
+    the deleted row has its flag cleared in the same action
+    ([Surfacing](#surfacing)).
 - **Lore.** The row, its translations and its vectors in every dim
   family.
 - **A thread.** The row, its translations and its vectors in every
@@ -843,17 +843,21 @@ lore-specific deviation.
 ## Collision review and entity merge
 
 The classifier writes `name_collision_flag = true` on a
-freshly-created entity when the prose-extracted description
-didn't match an existing same-name entity strongly enough to
-promote the existing one. The flag means "this could be a
-duplicate; the user should decide." Schema and classifier rules
+freshly-created entity when it may duplicate an existing
+namesake: a row of the same name it didn't match strongly enough
+to absorb into, or a partial namesake that a similar description
+or a shared scene makes likely. It stores that namesake as the
+row's partner, and why it flagged. The flag means "this could be
+a duplicate; the user should decide." Schema and classifier rules
 live in
-[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation).
+[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation)
+and
+[`memory/classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions).
 
 The World panel is the only surface where the flag is resolved.
 Three resolution paths are offered: **merge** the two rows into
 one canonical entity, **rename** one to make them genuinely
-distinct, or **keep as distinct** and accept both same-name rows.
+distinct, or **keep as distinct** and accept both rows.
 Lore has no collision flag — only the four entity kinds
 (character / location / item / faction) carry it.
 
@@ -864,7 +868,7 @@ view" signal. Chrome appears wherever the flag exists; no extra
 discovery step.
 
 1. **Top-bar review pill** — when one or more entities on the
-   current branch carry `name_collision_flag = true`, a
+   current branch carry a flag that pairs (below), a
    `⚠ N need review` pill renders inline in the World top-bar,
    alongside the
    [generation status pill](../../principles.md#universal-in-story-chrome).
@@ -874,7 +878,7 @@ discovery step.
    to glyph + count (`⚠ N`) parallel to the gen pill.
 2. **Per-row collision strip — always visible on flagged rows.**
    Each flagged row carries an inline strip below the standard
-   row composition: `⚠ Collides with <other-name>` link plus a
+   row composition: `⚠ Collides with <partner-name>` link plus a
    `Resolve →` button. Renders unconditionally — no filter
    activation, no extra tap to expose. Flagged rows show signal
    in-place wherever they live in the list (Active, Staged, or
@@ -903,17 +907,34 @@ lands on: keyboard focus on web, the screen reader's on native.
 On web, a surface that takes focus before the jump lands (a menu
 opened in the meantime) keeps it.
 
-A row's namesakes are the other rows of its kind whose names match
-under the classifier's normalization (trimmed and case-folded),
-staged and retired rows included. A flagged row with no namesake
-left (an orphan) has nothing to pair with, so it gets no strip and
-counts toward no pill or badge. Writes keep orphans from forming: a
-rename (a detail-pane Save, or the dialog's [Rename](#rename)) or a
-[delete](#delete) that leaves a flagged row without a namesake
-clears that row's flag in the same action, delta-logged, so CTRL-Z
-re-flags it. A reversal can still leave one, such as undoing a
-namesake's create; it stays hidden until a later namesake pairs it
-again, and resolving that pair clears it.
+A flagged row pairs with its stored partner, the namesake the
+classifier compared it against, so the strip names exactly that row
+and nothing is guessed from names. Two rows are namesakes under the
+classifier's rule
+([`classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)):
+same kind, and the same name trimmed and case-folded, one name's
+words inside the other's, or one name among the other's keywords;
+staged and retired rows included. A flag whose partner the branch no
+longer has is dormant: it has nothing to pair with, so it gets no
+strip and counts toward no pill or badge. Writes keep dormant flags
+from forming, each in the same action and delta-logged, so CTRL-Z
+re-flags the row:
+
+- a [delete](#delete) clears the flag of every row whose partner it
+  removes;
+- a rename (a detail-pane Save, or the dialog's [Rename](#rename))
+  after which a flagged row and its partner stop being namesakes
+  clears that row's flag;
+- a [merge](#merge) re-points a flag whose partner it deletes at the
+  surviving row, and then clears any flag pairing the surviving row
+  that isn't a namesake pair any more, since the merge can change
+  its name.
+
+A reversal can still leave one, such as undoing the partner's
+create. It stays hidden until the partner returns (ids are never
+reused, so only the same row can) or until resolving a pair that
+includes its row clears it
+([Authorship and 3+ collisions](#authorship-and-3-collisions)).
 
 A "Needs review" filter chip was considered and rejected:
 filter chips are for browsing modes, and a collision is an
@@ -923,8 +944,24 @@ user and the action with no compensating browsing benefit.
 ### Resolve dialog
 
 `Resolve →` opens a modal anchored to the World panel. Header
-states the collision (`⚠ Two characters named "Kael"`) and
-offers the three resolution paths as a primary action picker:
+states the collision from the two rows' current names:
+`⚠ Two characters named "Kael"` when the names are the same, and
+`⚠ "Kael" may be "Kael Stormborn"` otherwise, the row the strip was
+opened from first. Under it, a reason line gives why the classifier
+flagged that row:
+
+| Stored reason | Line                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `alike`       | Their descriptions read alike.                                                                |
+| `ambiguous`   | Their descriptions are partly alike.                                                          |
+| `distinct`    | Their descriptions differ.                                                                    |
+| `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
+| `no-signal`   | Their descriptions couldn't be compared.                                                      |
+
+When the two are namesakes only through a keyword, a basis line
+names it, read from the current keywords:
+`"Marta" also goes by "the innkeeper".` The dialog then offers the
+three resolution paths as a primary action picker:
 
 ```
 [ Merge into one ] [ Rename one ] [ Keep as distinct ]
@@ -938,16 +975,16 @@ or Esc).
 When the open row has unsaved edits, `Resolve →` routes through
 the pane's Save / Discard / Cancel guard first, as [Delete](#delete)
 does. While open, the dialog reads both rows live: it closes on its
-own once either row is gone or the two stop colliding (a rename on
-another surface), and when the screen loses focus. A refusal shows
-inline in the dialog, which stays open. A resolution that lands
+own once either row is gone or the pair stops being flagged (a
+rename on another surface that clears it), and when the screen loses
+focus. A refusal shows inline in the dialog, which stays open. A resolution that lands
 closes it and toasts the result ("Merged into <name>.", "Names
 saved.", "Kept as distinct."); a refusal that arrives after the
 dialog has closed shows as an error toast instead, worded without
 the dialog's advice (no row to pick any more). After a
 resolution the list re-derives — the pill count drops and the strip
-goes; with 3+ namesakes, another flagged row keeps its strip
-([Authorship and 3+ collisions](#authorship-and-3-collisions)).
+goes; with 3+ namesakes, a flag naming a row outside the pair keeps
+its strip ([Authorship and 3+ collisions](#authorship-and-3-collisions)).
 
 #### Merge
 
@@ -992,6 +1029,12 @@ Field-level rules:
   the canonical's own list as it is. Union rather than canonical-side
   because keywords drive retrieval matching, so dropping the losing
   side's aliases would narrow what the merged entity can be found by.
+  When the two names differ (a partial pair), the name the merge
+  doesn't keep joins the union as one more keyword, on by default
+  and deselectable like the rest, so retrieval and later matching
+  still find the merged entity by it. It's left out when the merged
+  entity already answers to it, and the row renders for it even when
+  the two keyword sets match.
 - **`tags[]`** — union by default with a per-tag deselect.
   Renders only when the two tag sets differ. The merged list, here
   and for keywords, keeps the canonical's entries in their order,
@@ -1134,21 +1177,25 @@ Newer · just now:     [ Kael (the guardsman)       ]
 
 Editing either field dirties the form. Save commits under one
 delta `action_id`: an `updateEntity` per row whose name changed,
-and the flag cleared on each flagged row of the pair (folded into
-that row's rename when it has one). Any other flagged row the
-rename leaves with no namesake has its flag cleared too
+and the flag cleared on each row of the pair whose partner is the
+other row or is gone (folded into that row's rename when it has
+one). A flag on any other row clears too when the rename leaves
+that row and its partner no longer namesakes
 ([Surfacing](#surfacing)). No other writes — both rows continue to
 exist. Names save trimmed.
 
-Validation: both trimmed names must be non-empty and must stop
-colliding under the namesake rule ([Surfacing](#surfacing)), so a
-change of letter case alone still collides. Save disables until
-that holds, and the help line says which rule fails (an untouched
-form shows the plain prompt to change a name).
+Validation: a name must change, both trimmed names must be
+non-empty, and they must stop matching by name: neither the same
+name trimmed and case-folded, nor one name's words inside the
+other's. So a change of letter case alone still collides. Keywords
+don't count, since the form edits names only, so a pair that matched
+through a keyword passes once a name changes. Save disables until that holds, and the help line says
+which rule fails (an untouched form shows the plain prompt to change
+a name).
 
-A name another row outside the pair already has, under the same
-namesake rule, shows `Another row already has that name.` under its
-field. It's a hint, not a block: the user may keep it, as Keep as
+A name another row outside the pair already has, the same name
+trimmed and case-folded, shows `Another row already has that name.`
+under its field. It's a hint, not a block: the user may keep it, as Keep as
 distinct allows, and the save writes no flag for the new pair. The
 detail pane's name field shows the same hint for a typed name that
 matches any other row of its kind, in create mode too.
@@ -1171,11 +1218,17 @@ Footer:
 [ Cancel ]                              [ Keep as distinct ]
 ```
 
-Confirming clears the flag on each flagged row of the pair, one
-delta per row, without writing anything else. Clearing only the
-newer row would leave an older flagged row, or a pair flagged on
-both sides, with no way to resolve it. The user is opting into the
-v1 limitation with eyes open.
+On a partial pair the panel reads "`Kael` and `Kael Stormborn` will
+both continue to exist. The flag clears; no other writes." The
+same-name limitation doesn't apply, so it isn't cited.
+
+Confirming clears the flag on each row of the pair whose partner is
+the other row or is gone, one delta per row, without writing
+anything else. Clearing only the row the strip was opened from would
+leave a flag on the other row that names it, or names a row that's
+gone, with nothing left to resolve it; a flag naming a live third row
+stays, as its own question. On a same-name pair the user is opting
+into the v1 limitation with eyes open.
 
 ### Reversibility
 
@@ -1192,7 +1245,8 @@ Merge writes, in order:
   non-canonical's `at_location_id` when the canonical item has no
   position of its own (no holder, no placement), so the merged item
   keeps whichever position either side had, and the flag clear when
-  the canonical is flagged.
+  the canonical's partner is the non-canonical, is gone, or isn't the
+  merged canonical's namesake.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
   one patch per entity, a character's `lastSeenAt` location among
@@ -1204,6 +1258,12 @@ Merge writes, in order:
   at the canonical. Within one character, `equipped_items` and
   `inventory` count as one list for that de-duplication, equipped
   winning.
+- `entities` op=`update` on every other flagged row whose partner is
+  the non-canonical or the canonical: a partner naming the
+  non-canonical becomes the canonical, and the flag clears (with its
+  partner and reason) when the row and the merged canonical aren't
+  namesakes; no write when neither applies. Folded into that row's
+  `state` patch above when it has one.
 - `happening_awareness` op=`create` per moved row, on the
   canonical, carrying the row's `retrieval_count`. A row for a
   happening the canonical already knows, or one gone from the branch,
@@ -1245,9 +1305,10 @@ the canonical, unless a copy names a row that pass created
 (rollback and regenerate sweep the merge group too and take them).
 CTRL-Z restores the non-canonical as it was, with its original link
 rows and translations, the refs and the tail scene; puts the
-canonical's earlier columns back (scalars, tags, keywords, flag and
-`state`, a tracked location included); and removes the rows the
-merge created on the canonical.
+canonical's earlier columns back (scalars, tags, keywords, the flag
+with its partner and reason, and `state`, a tracked location
+included); re-points the flags it moved back at the non-canonical;
+and removes the rows the merge created on the canonical.
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
@@ -1260,8 +1321,8 @@ non-trivial wiring lives below the surface.
 
 Rename writes an `entities` op=`update` per renamed row, and one
 per flag it clears on a row it doesn't rename. Keep as distinct
-writes one `entities` op=`update` per flagged row of the pair. Both
-unwind as one step, like the merge.
+writes one `entities` op=`update` per row of the pair whose flag it
+clears. Both unwind as one step, like the merge.
 
 ### Edit restrictions during in-flight generation
 
@@ -1278,7 +1339,7 @@ discovery isn't gated, only the write.
 ### Authorship and 3+ collisions
 
 Resolution writes deltas with `source = user_edit`. The classifier
-sets the flag at create
+sets the flag, with its partner and reason, at create
 ([authorship contract](../../../data-model.md#authorship-contract));
 clearing it is always a user write, delta-logged, so CTRL-Z
 re-flags the row. Where
@@ -1291,14 +1352,14 @@ classifier first wrote it.
 Only what the resolution changes counts — an unchanged column isn't
 written.
 
-The dialog handles two-side merges only. When 3+ entities
-collide on the same name, the user iterates: resolve any pair,
-and a flagged row outside it keeps its strip, now paired with a
-remaining namesake. A strip names one partner per flagged row, an
-unflagged namesake first, and keep or rename clears the flag on each
-flagged row of the resolved pair even when that row has another
-namesake the strip never named. So a remainder re-surfaces only
-while it is itself flagged. N-way merge UI is not v1.
+The dialog handles two-side merges only. When 3+ entities are
+namesakes, the user iterates: each flagged row's strip names its own
+stored partner, and resolving a pair clears only the flags of that
+pair that name each other or name a row that's gone. A flag on a row
+of the pair that names a live third row stays, since it is a separate
+question, and a merge that deletes a flagged row's partner re-points
+the flag at the surviving row. So a dormant flag clears the next time
+its row is in a resolved pair. N-way merge UI is not v1.
 
 ## Mobile expression
 

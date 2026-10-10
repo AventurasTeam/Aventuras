@@ -9,6 +9,37 @@ shape per [`generation-pipeline.md`](../generation-pipeline.md); see
 [Background-task framing](#background-task-framing) below for its
 declaration values.
 
+## What the classifier reads
+
+The prompt carries the branch's world as lists the classifier
+addresses by placeholder id
+([ID handling](#id-handling-in-classifier-output)):
+
+- **Known entities** — every entity on the branch, of any kind and
+  status, with its description. The classifier sees the whole roster,
+  so the [reconciliation](#disambiguation-on-new-character-mentions)
+  below is a backstop for a row the model missed, not a lookup the
+  model can't do.
+- **Known relationships** — the stored views, as the relationships
+  bullet below describes.
+- **Known happenings** — the branch's happenings by title.
+- **Turns to classify** — the window's entries by turn handle, each
+  with its prose and the scene saved on it: the entry's
+  `sceneEntities` and `currentLocationId`
+  ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
+  as the same placeholder ids. The saved scene includes the user's
+  corrections and carries forward over a turn that reported none. An
+  id the branch no longer has is left out, so no raw id reaches the
+  prompt; an entry with no saved scene, such as a user action, shows
+  none.
+
+Two rules lean on the scene and the roster. Prose naming an entity in
+a turn's scene refers to that entity. And a shortened or fuller name,
+a title or an alias of a listed character is that character, unless
+the prose shows it is someone else: it takes the listed id rather than
+a `newCharacters` entry, and the new name form goes in the reply's
+alias list (the keywords bullet below).
+
 ## What the classifier writes
 
 - **Happenings** — `happenings`, `happening_involvements`,
@@ -29,9 +60,11 @@ declaration values.
   prose stands too, even when written before the pass started (see
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
-- **First-introduction descriptions** — when the classifier extracts
-  a genuinely new character (no name match against existing
-  entities), it authors the initial `description` from prose. After
+- **First-introduction descriptions** — when the classifier creates
+  a character, one the
+  [reconciliation](#disambiguation-on-new-character-mentions) didn't
+  absorb into an existing row, it authors the initial `description`
+  from prose. After
   first introduction, the classifier never amends `description` (the
   authorship contract in
   [`data-model.md → World-state storage`](../data-model.md#world-state-storage)
@@ -43,9 +76,11 @@ declaration values.
   an entity on its name plus this list — see
   [`retrieval.md → Keywords schema`](./retrieval.md#keywords-schema).
   Unlike `description`, keywords are **not** frozen after first
-  introduction: later passes may append newly-observed references.
-  Writes are strictly append-and-deduplicate against the row as it
-  stands when the write lands, and never remove, so user-authored
+  introduction: later passes append newly-observed references through
+  the reply's alias list, which names a listed entity of any kind and
+  the titles, epithets or name forms the prose used for it. Writes
+  are strictly append-and-deduplicate against the row as it stands
+  when the write lands, and never remove, so user-authored
   aliases survive every subsequent pass, including one added while the
   pass ran. An alias the user removed after the fact's prose is not
   re-added ([user precedence](./cadence.md#user-edits-and-classifier-writes)).
@@ -143,32 +178,85 @@ appends touch no embedded field. If a future extension lets the
 classifier modify an embedded field, it flags the row dirty the same
 way — no special path required.
 
-The transient embedding computed in the disambiguation flow below
-(extracted description for the similarity check) is a decision-time
-computation, not a persisted embedding write — outside this
-boundary.
+The transient embeddings computed in the disambiguation flow below
+(the candidate's and its namesakes' descriptions, for the similarity
+check) are a decision-time computation, not a persisted embedding
+write — outside this boundary.
 
 ## Disambiguation on new-character mentions
 
 For every "new character" candidate the classifier extracts, code-side
-reconciliation runs before the create / promote decision. Flow:
+reconciliation runs before the create / promote decision. It compares
+the candidate with the branch's characters (active, staged, retired)
+and decides whether to absorb it into one of them, create it flagged
+for World-panel review, or create it plain. Candidates in one reply
+are not compared with each other.
 
-1. **Name lookup** against the entity index (active, staged, retired).
-   O(1) hash check. The classifier itself doesn't need to know about
-   every character; the index does.
-2. **No name match** → genuinely novel character. Create fresh entity.
-3. **Name match found** → embedding similarity between the
-   classifier-extracted description and the existing entity's
-   description. Existing entity's embedding is cached (see
-   [`retrieval.md → Embedding infrastructure`](./retrieval.md#embedding-infrastructure));
-   the extracted description embeds once.
-   - **High similarity** (`sim ≥ τ_high`) → promote staged → active OR
-     treat as already-known active mention. Update entity if the
-     extracted description adds information.
-   - **Low similarity** (`sim < τ_low`) → create new entity with
-     `name_collision_flag = true` for World-panel review.
-   - **Ambiguous** (`τ_low ≤ sim < τ_high`) → conservative create-new
-     with the flag, defer to user.
+**Namesakes.** Names compare under the keyword-term normalization
+(trimmed, case-folded, NFC), split into words on whitespace.
+
+- **Exact** — the two names are equal.
+- **Partial** — not exact, and either one name's words appear inside
+  the other's, whole and contiguous ("Kael" in "Kael Stormborn",
+  "Innkeeper" in "the Innkeeper", but not "John" in "Johnson"), or one
+  row's name is among the other's keywords (a candidate "Marta" whose
+  keywords hold "the innkeeper", against a row named "the Innkeeper").
+
+The rule pairs rows of one kind, works for any kind, and lives in
+`lib/world` beside World's pairing. Only characters are reconciled, because only characters are
+machine-created. A name in a script written without spaces never
+contains another, so it matches only exactly or through a keyword.
+
+**Signals.**
+
+- **Similarity** — every namesake's description is embedded with the
+  candidate's in one call and compared by cosine, so the decision
+  never depends on whether a vec0 row has drained. A namesake with a
+  blank description has no score, and neither does any namesake when
+  the call fails or its vectors don't line up (an embedder swap in
+  progress).
+- **Scene presence** — whether the namesake is in the saved
+  `sceneEntities` of the candidate's `sourceTurn`. Ignored when that
+  handle fell back to the window head, since the head's scene isn't
+  the candidate's.
+
+**Decision.** The first row that applies wins:
+
+| Condition                                                                                     | Outcome                                                                                                    |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| An exact namesake scores `sim ≥ τ_high`, or scores `τ_low ≤ sim < τ_high` and is in the scene | **Absorb** into the best-scoring such row: promote it if staged, otherwise treat the mention as that row's |
+| Any exact namesake                                                                            | Create with `name_collision_flag = 1`                                                                      |
+| A partial namesake scores `sim ≥ τ_low`, is in the scene, or has no score                     | Create with the flag                                                                                       |
+| Otherwise                                                                                     | Create, unflagged                                                                                          |
+
+An exact name keeps the similarity bands, the scene breaking the
+ambiguous band's tie. A partial match never absorbs: a misattribution
+lands the reply's involvements, awareness and relationships on the
+wrong row unreviewed, and nothing splits them apart again. So it flags
+only with a second signal and otherwise creates a plain row. Without a
+score nothing absorbs; the namesake flags, deferring to the user.
+Absorbing appends the candidate's new keywords to the row; its
+description stays, per the first-introduction rule above.
+
+**Partner and reason.** A flagged create stores in
+`name_collision_partner_id` the namesake it was compared against: the
+first of the namesakes that qualified to flag it (every exact one, and
+a partial one under the third row's conditions), ordered by score with
+the unscored last, then in-scene first, then exact before partial, then
+unflagged, older and by id. `name_collision_reason` records why, read
+from that partner:
+
+| Reason      | Partner                              |
+| ----------- | ------------------------------------ |
+| `alike`     | Partial, `sim ≥ τ_high`              |
+| `ambiguous` | `τ_low ≤ sim < τ_high`               |
+| `distinct`  | Exact, `sim < τ_low`                 |
+| `in-scene`  | Partial, `sim < τ_low`, in the scene |
+| `no-signal` | No score                             |
+
+World pairs a flagged row with its partner and states the reason in
+the resolve dialog
+([`world.md → Collision review and entity merge`](../ui/screens/world/world.md#collision-review-and-entity-merge)).
 
 Thresholds (`τ_high`, `τ_low`) are tunable. Defaults TBD empirically
 once real story data exists; sensible starting ranges (e.g. 0.75 /
@@ -180,13 +268,13 @@ The periodic classifier runs as a background pipeline — a Pipeline
 declaration in the framework's registry, same shape as per-turn and
 chapter-close but with different concurrency / gating values:
 
-| Field                           | Value                                                                                                                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                               |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                  |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                              |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                       |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities (first-introduction description, keywords, collision flag), entity status flips with retired reasons, entity keyword appends, character relationships |
+| Field                           | Value                                                                                                                                                                                                                                                                                               |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                             |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                                                                                |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                                                                                            |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                                                                                     |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities (first-introduction description, keywords, collision flag with its partner and reason), entity status flips with retired reasons, entity keyword appends (aliases and absorbed candidates), character relationships |
 
 Write-set boundaries between the classifier and the piggyback / per-turn
 pipeline are enforced via narrow action functions named for field-set

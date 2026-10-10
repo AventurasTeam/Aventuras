@@ -305,6 +305,10 @@
   .resolve-head .title { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
   .resolve-head .title .glyph { color: var(--warn); }
   .resolve-head .sub { margin-top: 4px; font-size: 11px; color: var(--ink-muted); }
+  .resolve-head .reason { margin-top: 6px; font-size: 12px; color: var(--ink); }
+  /* Partial and keyword pairs differ by name, so the merge grid adds a name radio and a keywords row. */
+  .resolve-modal[data-pair="exact"] .pair-only { display: none; }
+  .resolve-modal:not([data-pair="partial"]) .partial-only { display: none; }
   .resolve-paths { padding: 12px 18px 0; display: flex; gap: 6px; flex-wrap: wrap; }
   .resolve-path-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; color: var(--ink); cursor: pointer; }
   .resolve-path-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
@@ -588,6 +592,12 @@
     <button class="rb-btn" data-resolve="merge">merge</button>
     <button class="rb-btn" data-resolve="rename">rename</button>
     <button class="rb-btn" data-resolve="keep">keep distinct</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">pair:</span>
+    <button class="rb-btn active" data-pair="exact">same name</button>
+    <button class="rb-btn" data-pair="partial">partial name</button>
+    <button class="rb-btn" data-pair="keyword">via keyword</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu &middot; flip viewport via 1/2/3</span>
 </div>
@@ -1433,9 +1443,13 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
 <!-- Resolve dialog — collision-flag resolution. Three paths: merge, rename,
      keep as distinct. Per world.md → Resolve dialog. -->
 <div class="resolve-overlay" id="resolve-overlay">
-  <div class="resolve-modal">
+  <div class="resolve-modal" data-pair="exact">
+    <!-- Header from the two rows' current names; reason line from name_collision_reason;
+         basis line only when the pair are namesakes through a keyword alone. Per world.md → Resolve dialog. -->
     <div class="resolve-head">
-      <div class="title"><span class="glyph">&#9888;</span> Two characters named &ldquo;Kael&rdquo;</div>
+      <div class="title"><span class="glyph">&#9888;</span> <span id="resolve-title">Two characters named &ldquo;Kael&rdquo;</span></div>
+      <div class="reason" id="resolve-reason">Their descriptions differ.</div>
+      <div class="sub" id="resolve-basis" hidden></div>
       <div class="sub">Resolve the collision so retrieval and prose treat the entity unambiguously.</div>
     </div>
     <div class="resolve-paths" id="resolve-paths">
@@ -1451,7 +1465,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           Kael &middot; Older &middot; 3 days ago
         </div>
         <div class="seg" data-canon="B" data-name="Kael" data-word="newer">
-          Kael &middot; Newer &middot; just now
+          <span class="newer-name">Kael</span> &middot; Newer &middot; just now
         </div>
       </div>
       <!-- Only fields that diverge between the two rows render here.
@@ -1460,6 +1474,22 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <span class="h">field</span>
         <span class="h">Older &middot; 3 days ago<span class="canon-suffix" data-side="A"> &middot; Canonical</span></span>
         <span class="h">Newer &middot; just now<span class="canon-suffix" data-side="B" hidden> &middot; Canonical</span></span>
+
+        <span class="row-l pair-only">name</span>
+        <span class="row-v pair-only">
+          <input type="radio" name="f-name" data-side="A" checked>
+          <span class="row-prose">
+            <span class="prose-body">Kael</span>
+            <span class="side-meta">Older &middot; 3 days ago</span>
+          </span>
+        </span>
+        <span class="row-v pair-only">
+          <input type="radio" name="f-name" data-side="B">
+          <span class="row-prose">
+            <span class="prose-body newer-name">Kael</span>
+            <span class="side-meta">Newer &middot; just now</span>
+          </span>
+        </span>
 
         <span class="row-l">description</span>
         <span class="row-v">
@@ -1485,6 +1515,16 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           <span class="side-meta">union by default &middot; tap a tag to deselect</span>
         </span>
 
+        <!-- The name the merge doesn't keep joins the keywords, unless the merged entity
+             already answers to it (the keyword pair: Kael already lists "the Grey Wolf"). -->
+        <span class="row-l pair-only">keywords</span>
+        <span class="row-v span2 tags-row pair-only">
+          <span class="tags-list">
+            <code>the Grey Wolf</code> &middot; <code>the bounty hunter</code><span class="partial-only"> &middot; <code>Kael Stormborn</code> (name not kept)</span>
+          </span>
+          <span class="side-meta">union by default &middot; tap a keyword to deselect</span>
+        </span>
+
         <span class="row-l">state JSON</span>
         <span class="row-v span2 muted">follows the canonical row &middot; edit on detail pane after merge</span>
       </div>
@@ -1492,7 +1532,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <code>state</code> JSON is taken whole-side from canonical (per-kind shape &mdash; character / location / item / faction). To pick the loser&rsquo;s state, re-pick canonical above.
       </div>
       <div class="relations-block">
-        <div class="h">Moves on merge (Kael &rarr; Kael)</div>
+        <div class="h">Moves on merge (<span class="newer-name">Kael</span> &rarr; Kael)</div>
         <ul>
           <li>Awareness rows: 4</li>
           <li>Involvements: 2</li>
@@ -1519,16 +1559,16 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
       </div>
       <div class="rename-row">
         <div class="meta"><strong>Newer &middot; just now</strong></div>
-        <input type="text" value="Kael (the guardsman)">
+        <input type="text" id="rename-newer" value="Kael (the guardsman)">
       </div>
       <div class="state-note">
-        Save stays disabled until both trimmed names are non-empty and no longer collide &mdash; a change of letter case or leading and trailing spaces alone still collides. Both rows persist; each flagged row of the pair clears its <code>name_collision_flag</code>.
+        Save stays disabled until both trimmed names are non-empty and stop matching by name &mdash; neither the same name nor one inside the other, so a change of letter case or leading and trailing spaces alone still collides. Keywords don&rsquo;t count. Both rows persist; a flag of the pair clears when it names the other row or a row that&rsquo;s gone.
       </div>
     </div>
 
     <!-- KEEP body — confirmation panel -->
     <div class="resolve-body" data-path="keep">
-      <div class="distinct-warn">
+      <div class="distinct-warn" id="keep-copy">
         Both <b>Kael</b> entities will continue to exist with the same name.
         Retrieval treats them by id, but storyteller responses may conflate them in prose.
         Polymorphic naming is a documented v1 limitation &mdash; the schema doesn&rsquo;t enforce
@@ -1777,6 +1817,35 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   // canon-picker segment — the header row's "· Canonical" suffix, the divergent radios and the primary
   // button's "Merge into the <older|newer> <canonical-name>" follow the pick, so destructive
   // direction stays obvious
+  const PAIRS = {
+    exact: { newer: 'Kael', rename: 'Kael (the guardsman)', title: 'Two characters named \u201cKael\u201d',
+      reason: 'Their descriptions differ.', basis: '', keep: null },
+    partial: { newer: 'Kael Stormborn', rename: 'Kael Stormborn', title: '\u201cKael Stormborn\u201d may be \u201cKael\u201d',
+      reason: 'Their descriptions are partly alike.', basis: '',
+      keep: '<b>Kael</b> and <b>Kael Stormborn</b> will both continue to exist. The flag clears; no other writes.' },
+    keyword: { newer: 'the Grey Wolf', rename: 'the Grey Wolf', title: '\u201cthe Grey Wolf\u201d may be \u201cKael\u201d',
+      reason: 'Their descriptions read alike.', basis: '\u201cKael\u201d also goes by \u201cthe Grey Wolf\u201d.',
+      keep: '<b>Kael</b> and <b>the Grey Wolf</b> will both continue to exist. The flag clears; no other writes.' },
+  };
+  const exactKeep = document.getElementById('keep-copy')?.innerHTML ?? '';
+  function setPair(p) {
+    const pair = PAIRS[p];
+    document.querySelectorAll('[data-pair]').forEach(b => { if (b.classList.contains('rb-btn')) b.classList.toggle('active', b.dataset.pair === p); });
+    document.querySelector('.resolve-modal').dataset.pair = p;
+    document.getElementById('resolve-title').textContent = pair.title;
+    document.getElementById('resolve-reason').textContent = pair.reason;
+    const basis = document.getElementById('resolve-basis');
+    basis.textContent = pair.basis;
+    basis.hidden = pair.basis === '';
+    document.querySelectorAll('.newer-name').forEach(x => { x.textContent = pair.newer; });
+    document.querySelector('.canon-picker .seg[data-canon="B"]').dataset.name = pair.newer;
+    document.getElementById('rename-newer').value = pair.rename;
+    document.getElementById('keep-copy').innerHTML = pair.keep ?? exactKeep;
+    const active = document.querySelector('.resolve-path-btn.active');
+    if (active?.dataset.path === 'merge') document.getElementById('resolve-primary-label').textContent = mergeLabel();
+  }
+  document.querySelectorAll('.rb-btn[data-pair]').forEach(b => b.addEventListener('click', () => setPair(b.dataset.pair)));
+
   function mergeLabel() {
     const seg = document.querySelector('.canon-picker .seg.active');
     return 'Merge into the ' + (seg?.dataset.word ?? '') + ' ' + (seg?.dataset.name ?? '');

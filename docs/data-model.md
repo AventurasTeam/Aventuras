@@ -82,7 +82,9 @@ erDiagram
         json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
-        integer name_collision_flag "0 | 1; 1 = same-name collision detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
+        integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
+        text name_collision_partner_id "set iff flagged: the same-branch namesake the classifier compared the row against, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
+        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | no-signal, why the classifier flagged"
         json state "typed per kind"
         json tags
         integer embedding_stale "0 | 1; 1 = embedded fields (name/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
@@ -1073,21 +1075,21 @@ via dotted paths. The split:
 
 Per-field "who writes / when":
 
-| Field group                                 | First write                             | Subsequent writes                                         |
-| ------------------------------------------- | --------------------------------------- | --------------------------------------------------------- |
-| `description` (top-level)                   | Whoever spawns the entity               | User-only in v1                                           |
-| `name_collision_flag` (top-level)           | Classifier at create (Layer B)          | User-only, clearing only, delta-logged                    |
-| `visual.*`                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change        |
-| `traits`, `drives`                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form |
-| `voice`                                     | Classifier from prose, or user via form | Both                                                      |
-| `current_location_id`                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
-| `equipped_items`, `inventory`, `stackables` | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
-| `faction_id`                                | Classifier or user                      | Both                                                      |
-| `lastSeenAt`                                | Classifier-only                         | Classifier-only                                           |
-| `parent_location_id`                        | User at creation                        | User-only in v1                                           |
-| `condition` (Location/Item)                 | Classifier or user                      | Both                                                      |
-| `standing`, `agenda` (Faction)              | Classifier or user                      | Classifier (chapter-close) + user                         |
-| `at_location_id` (Item)                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                |
+| Field group                                                 | First write                             | Subsequent writes                                                     |
+| ----------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
+| `description` (top-level)                                   | Whoever spawns the entity               | User-only in v1                                                       |
+| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier at create (Layer B)          | User-only: clearing, or a merge re-pointing the partner; delta-logged |
+| `visual.*`                                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change                    |
+| `traits`, `drives`                                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form             |
+| `voice`                                                     | Classifier from prose, or user via form | Both                                                                  |
+| `current_location_id`                                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
+| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
+| `faction_id`                                                | Classifier or user                      | Both                                                                  |
+| `lastSeenAt`                                                | Classifier-only                         | Classifier-only                                                       |
+| `parent_location_id`                                        | User at creation                        | User-only in v1                                                       |
+| `condition` (Location/Item)                                 | Classifier or user                      | Both                                                                  |
+| `standing`, `agenda` (Faction)                              | Classifier or user                      | Classifier (chapter-close) + user                                     |
+| `at_location_id` (Item)                                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
 
 Manual user edit vs classifier overwrite policy is parked as an
 architecture concern. v1 lean: classifier writes from prose-evidenced
@@ -3207,11 +3209,12 @@ Per-row payloads carry one row's portable columns under the keys the
 app itself uses (camelCase, as the raw JSON viewer shows them; an
 entity's `state` keeps its stored keys). They leave out the
 server-owned columns (`id`, `branch_id`, `embedding_stale`,
-`name_collision_flag`, the timestamps) and every branch-local id:
-the entity and entry references inside an entity's `state`, a
-thread's or happening's entry references, and link rows such as
-involvements, awareness and relationships. A per-row file is meant
-to land on any story, where those ids would dangle. On import such
+`name_collision_flag` with its partner and reason, the timestamps)
+and every branch-local id: the entity and entry references inside an
+entity's `state`, a thread's or happening's entry references, and
+link rows such as involvements, awareness and relationships. A
+per-row file is meant to land on any story, where those ids would
+dangle. On import such
 keys are dropped, not rejected, and the row is created with a fresh
 id. One is read before it is dropped: a happening's
 `occurredAtEntryId` still counts for the
