@@ -83,7 +83,7 @@ erDiagram
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
-        text name_collision_partner_id "set iff flagged: the same-branch namesake the classifier compared the row against, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
+        text name_collision_partner_id "set iff flagged: the same-branch namesake the classifier compared the row against, or the row a merge re-pointed it at, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
         text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | no-signal, why the classifier flagged"
         json state "typed per kind"
         json tags
@@ -1075,21 +1075,21 @@ via dotted paths. The split:
 
 Per-field "who writes / when":
 
-| Field group                                                 | First write                             | Subsequent writes                                                     |
-| ----------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| `description` (top-level)                                   | Whoever spawns the entity               | User-only in v1                                                       |
-| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier at create (Layer B)          | User-only: clearing, or a merge re-pointing the partner; delta-logged |
-| `visual.*`                                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change                    |
-| `traits`, `drives`                                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form             |
-| `voice`                                                     | Classifier from prose, or user via form | Both                                                                  |
-| `current_location_id`                                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
-| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
-| `faction_id`                                                | Classifier or user                      | Both                                                                  |
-| `lastSeenAt`                                                | Classifier-only                         | Classifier-only                                                       |
-| `parent_location_id`                                        | User at creation                        | User-only in v1                                                       |
-| `condition` (Location/Item)                                 | Classifier or user                      | Both                                                                  |
-| `standing`, `agenda` (Faction)                              | Classifier or user                      | Classifier (chapter-close) + user                                     |
-| `at_location_id` (Item)                                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
+| Field group                                                 | First write                             | Subsequent writes                                                                                                                                  |
+| ----------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description` (top-level)                                   | Whoever spawns the entity               | User-only in v1                                                                                                                                    |
+| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier at create (Layer B)          | User-only: clearing, or a merge re-pointing the partner (with the deleted row's reason when it takes over the deleted row's partner); delta-logged |
+| `visual.*`                                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change                                                                                                 |
+| `traits`, `drives`                                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form                                                                                          |
+| `voice`                                                     | Classifier from prose, or user via form | Both                                                                                                                                               |
+| `current_location_id`                                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                                                                                                         |
+| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                     | Classifier per-turn primary; user can edit                                                                                                         |
+| `faction_id`                                                | Classifier or user                      | Both                                                                                                                                               |
+| `lastSeenAt`                                                | Classifier-only                         | Classifier-only                                                                                                                                    |
+| `parent_location_id`                                        | User at creation                        | User-only in v1                                                                                                                                    |
+| `condition` (Location/Item)                                 | Classifier or user                      | Both                                                                                                                                               |
+| `standing`, `agenda` (Faction)                              | Classifier or user                      | Classifier (chapter-close) + user                                                                                                                  |
+| `at_location_id` (Item)                                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                                                                                                         |
 
 Manual user edit vs classifier overwrite policy is parked as an
 architecture concern. v1 lean: classifier writes from prose-evidenced

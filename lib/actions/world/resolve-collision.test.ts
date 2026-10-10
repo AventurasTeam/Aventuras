@@ -18,6 +18,7 @@ import {
   storyEntries,
   translations,
   type CharacterState,
+  type CollisionReason,
   type Delta,
   type Entity,
   type EntityKind,
@@ -181,14 +182,18 @@ async function setTail(metadata: EntryMetadata): Promise<void> {
   await ctx.db.update(storyEntries).set({ metadata }).where(eq(storyEntries.id, 'entry_2'))
 }
 
-/** Flags `id` against `partnerId` (reason `distinct`); null clears the flag with both. */
-async function setFlag(id: string, partnerId: string | null): Promise<void> {
+/** Flags `id` against `partnerId` (reason `distinct` unless given); null clears the flag with both. */
+async function setFlag(
+  id: string,
+  partnerId: string | null,
+  reason: CollisionReason = 'distinct',
+): Promise<void> {
   await ctx.db
     .update(entities)
     .set({
       nameCollisionFlag: partnerId == null ? 0 : 1,
       nameCollisionPartnerId: partnerId,
-      nameCollisionReason: partnerId == null ? null : 'distinct',
+      nameCollisionReason: partnerId == null ? null : reason,
     })
     .where(eq(entities.id, id))
   await hydrateStores()
@@ -833,9 +838,9 @@ describe('resolveCollision — merge re-points and clears flags', () => {
 })
 
 describe("resolveCollision — merge re-points the canonical at the loser's partner", () => {
-  it('points A at the namesake B named; CTRL-Z points it back at B, redo at the namesake', async () => {
+  it("points A at the namesake B named, with B's reason; CTRL-Z restores both, redo re-takes them", async () => {
     await ctx.db.insert(entities).values(row('char_t', 'character', 'Brannoc', 3))
-    await setFlag('char_b', 'char_t')
+    await setFlag('char_b', 'char_t', 'in-scene')
     await setFlag('char_a', 'char_b')
     const before = await worldSnapshot()
 
@@ -846,7 +851,7 @@ describe("resolveCollision — merge re-points the canonical at the loser's part
       return [found?.nameCollisionFlag, found?.nameCollisionPartnerId, found?.nameCollisionReason]
     }
 
-    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'distinct'])
+    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'in-scene'])
     expect(await flagOf('char_t')).toEqual([0, null, null])
 
     const group = await undoAll()
@@ -857,7 +862,7 @@ describe("resolveCollision — merge re-points the canonical at the loser's part
     await applyRedo(group, ctx)
 
     expect(await worldSnapshot()).toEqual(merged)
-    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'distinct'])
+    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'in-scene'])
   })
 })
 

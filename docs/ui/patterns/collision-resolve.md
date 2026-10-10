@@ -92,7 +92,7 @@ The dialog is 42rem wide from `sm` and 56rem from `lg`, so the merge
 table's columns have room: 672 and 896 px on web, 588 and 784 dp on
 native, where NativeWind's rem is 14. Below `sm` (the phone tier) it
 keeps the `Dialog` primitive's side margin, and the title and mode
-picker stay fixed while the description, reason and basis lines
+picker stay fixed while the reason, basis and description lines
 become the first block of the scrolling body, so the merge choices
 keep their room. Wider tiers keep the fixed header. Those lines
 together are the dialog's accessible description.

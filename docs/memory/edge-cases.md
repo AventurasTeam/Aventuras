@@ -77,7 +77,7 @@ live in
 entities {
   ... existing fields ...
   name_collision_flag INTEGER DEFAULT 0   -- 1 = review needed
-  name_collision_partner_id TEXT          -- the namesake compared against, same branch
+  name_collision_partner_id TEXT          -- the namesake compared against, or the row a merge re-pointed it at, same branch
   name_collision_reason TEXT              -- alike | ambiguous | distinct | in-scene | no-signal
   CHECK (flag 0: partner and reason null; flag 1: both set)
 }

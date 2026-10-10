@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
+import type { CollisionReason, Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
 import {
   branches,
   COLLISION_REASONS,
@@ -57,11 +57,14 @@ export type FlagClearPatch = {
   nameCollisionReason: null
 }
 
-/** Points a flagged row at another partner, leaving its flag and reason as they are. */
+/**
+ * Points a flagged row at another partner, leaving its flag as it is. The reason stays too unless
+ * the patch carries the one that describes the new pairing (a merge taking over the loser's partner).
+ */
 export type FlagRepointPatch = {
   nameCollisionPartnerId: string
+  nameCollisionReason?: CollisionReason
   nameCollisionFlag?: never
-  nameCollisionReason?: never
 }
 
 type NoFlagPatch = {
@@ -158,10 +161,13 @@ function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string
     patch.nameCollisionPartnerId === null &&
     patch.nameCollisionReason === null
   if (clears) return null
+  const reason = patch.nameCollisionReason
   const repoints =
-    named.length === 1 &&
+    named.every((col) => col !== 'nameCollisionFlag') &&
     typeof patch.nameCollisionPartnerId === 'string' &&
-    patch.nameCollisionPartnerId !== ''
+    patch.nameCollisionPartnerId !== '' &&
+    (!('nameCollisionReason' in patch) ||
+      (typeof reason === 'string' && COLLISION_REASONS.some((r) => r === reason)))
   if (!repoints) return 'collision flag columns take only a clear or a partner re-point'
   if (patch.nameCollisionPartnerId === current.id) return SELF_PARTNER
   return current.nameCollisionFlag === 1 ? null : 'only a flagged entity has a partner to re-point'

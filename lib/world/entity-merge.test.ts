@@ -4,6 +4,7 @@ import type { PipelineAction } from '@/lib/actions'
 import {
   emptyEntityState,
   type CharacterRelationship,
+  type CollisionReason,
   type Entity,
   type EntityKind,
   type EntityState,
@@ -63,10 +64,10 @@ const aware = (
   ...fields,
 })
 
-const flaggedWith = (partnerId: string): Partial<Entity> => ({
+const flaggedWith = (partnerId: string, reason: CollisionReason = 'distinct'): Partial<Entity> => ({
   nameCollisionFlag: 1,
   nameCollisionPartnerId: partnerId,
-  nameCollisionReason: 'distinct',
+  nameCollisionReason: reason,
 })
 
 const involved = (
@@ -402,7 +403,8 @@ describe('entityMergeActions — collision flags', () => {
 
   describe("the canonical inherits the loser's question", () => {
     const canonical = entity('char_a', 'character', flaggedWith('char_b'))
-    const loserNaming = (partnerId: string) => entity('char_b', 'character', flaggedWith(partnerId))
+    const loserNaming = (partnerId: string) =>
+      entity('char_b', 'character', flaggedWith(partnerId, 'in-scene'))
     const third = entity('char_t', 'character')
 
     it("re-points the canonical's flag at the loser's partner while the merged row matches it", () => {
@@ -412,7 +414,10 @@ describe('entityMergeActions — collision flags', () => {
           loser: loserNaming('char_t'),
           branchEntities: [canonical, loserNaming('char_t'), third],
         }).actions,
-      ).toStrictEqual([updateOf('char_a', { nameCollisionPartnerId: 'char_t' }), deleteLoser])
+      ).toStrictEqual([
+        updateOf('char_a', { nameCollisionPartnerId: 'char_t', nameCollisionReason: 'in-scene' }),
+        deleteLoser,
+      ])
     })
 
     it("judges the loser's partner against the merged row, not the canonical before it", () => {
@@ -429,6 +434,7 @@ describe('entityMergeActions — collision flags', () => {
           name: 'Kael',
           keywords: ['Brannoc'],
           nameCollisionPartnerId: 'char_t',
+          nameCollisionReason: 'in-scene',
         }),
         deleteLoser,
       ])

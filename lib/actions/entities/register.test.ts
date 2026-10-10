@@ -765,6 +765,30 @@ describe('collision flag columns', () => {
     expect(storeFlagColumns('char_1')).toEqual([1, 'char_2', 'distinct'])
   })
 
+  it('re-points with the new reason in one delta whose reversal restores both', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, FLAGGED)
+
+    const result = await applyDeltaAction(
+      patchChar({ nameCollisionPartnerId: 'char_3', nameCollisionReason: 'in-scene' }, 'act_both'),
+      ctx,
+    )
+
+    expect(result).toMatchObject({ status: 'ok' })
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_3', 'in-scene'])
+    expect(storeFlagColumns('char_1')).toEqual([1, 'char_3', 'in-scene'])
+    const logged = await deltasOf(db, 'act_both')
+    expect(logged).toHaveLength(1)
+    expect(logged[0].undoPayload).toEqual({
+      nameCollisionPartnerId: 'char_2',
+      nameCollisionReason: 'distinct',
+    })
+
+    expect(await reverseReplayDeltas('act_both', ctx)).toBe(1)
+    expect(await flagColumns(db, 'char_1')).toEqual([1, 'char_2', 'distinct'])
+    expect(storeFlagColumns('char_1')).toEqual([1, 'char_2', 'distinct'])
+  })
+
   it('folds a re-point into a state patch as one delta', async () => {
     const { db, ctx } = await setup()
     await seedChar(ctx, FLAGGED)
@@ -820,9 +844,15 @@ describe('collision flag columns', () => {
       'collision flag columns take only a clear or a partner re-point',
     ],
     [
-      'a re-point with a reason',
+      'a re-point with a reason outside the set',
       FLAGGED,
-      { nameCollisionPartnerId: 'char_3', nameCollisionReason: 'alike' },
+      { nameCollisionPartnerId: 'char_3', nameCollisionReason: 'bogus' },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
+      'a re-point with a nulled reason',
+      FLAGGED,
+      { nameCollisionPartnerId: 'char_3', nameCollisionReason: null },
       'collision flag columns take only a clear or a partner re-point',
     ],
     [
