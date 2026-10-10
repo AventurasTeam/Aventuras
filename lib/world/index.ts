@@ -86,3 +86,10 @@ export {
   visualParts,
 } from './overview'
 export type { CarryingSummary, ChipPreview } from './overview'
+export {
+  buildLocationMap,
+  heldItemLines,
+  listedAncestorNames,
+  looseItemLines,
+} from './location-map'
+export type { HeldItemLine, LocationMapRow, LooseItemLine } from './location-map'
