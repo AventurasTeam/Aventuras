@@ -1,6 +1,6 @@
 /**
- * Cut a release: bump every file that carries the version, commit it on the current branch,
- * tag it, and push the branch and tag together.
+ * Cut a release: bump every file that carries the version, commit it on `master`, tag it,
+ * and push the branch and tag together. Refuses to run from any other branch.
  *
  * Usage:
  *   npm run release -- <major|minor|patch|prerelease|X.Y.Z> [--dry-run]
@@ -20,6 +20,8 @@ import { pickReleaseRemote } from './remote.js'
 import { detectPackageManager, commandFor } from './package-manager.js'
 
 const rootDir = process.cwd()
+
+const RELEASE_BRANCH = 'master'
 
 const KNOWN_FLAGS = ['--dry-run']
 
@@ -136,8 +138,13 @@ if (status) {
 }
 
 const startBranch = git('rev-parse', '--abbrev-ref', 'HEAD')
-if (startBranch === 'HEAD') {
-  fail('HEAD is detached.', 'Check out the branch you want to release from.')
+if (startBranch !== RELEASE_BRANCH) {
+  fail(
+    startBranch === 'HEAD'
+      ? 'HEAD is detached.'
+      : `Releases are cut from ${RELEASE_BRANCH}, but this is ${startBranch}.`,
+    `Check out ${RELEASE_BRANCH}, then retry.`,
+  )
 }
 const startCommit = git('rev-parse', 'HEAD')
 

@@ -301,7 +301,7 @@ limit. A 403 is reported as a network-kind error.
 
 1. Bumps the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `Cargo.toml`,
    and `Cargo.lock`.
-2. Commits the bump on the branch it was run from and tags it `vX.Y.Z`.
+2. Commits the bump on `master` and tags it `vX.Y.Z`. It refuses to run from any other branch.
 3. Pushes the branch and the tag in one atomic push, so the version on `master` is the version
    released and the tag can never point at a commit `master` lacks.
 
