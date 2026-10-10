@@ -13,6 +13,7 @@ import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { blankToNull } from '@/lib/text'
 
 import { brokenFlags, withFlagClears } from './collision-flags'
+import { pairSideOf, type PairSide } from './collision-pair'
 import { cleanList, sameList } from './draft-text'
 import {
   heldItems,
@@ -374,8 +375,9 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
 }
 
 /**
- * A create, or an update's changed columns and state paths, plus relationship writes; on a rename,
- * also a flag clear on each row the saved name and keywords no longer make its partner's namesake.
+ * A create, or an update's changed columns and state paths, plus relationship writes; on a rename
+ * or a re-parent, also a flag clear on each row the saved name, keywords and parent leave unpaired
+ * from its partner (world.md → Surfacing).
  */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args
@@ -425,8 +427,15 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
       ),
     )
   }
-  if (row == null || columns?.name === undefined) return actions
-  const saved = { name: columns.name, keywords: columns.keywords ?? row.keywords }
+  if (row == null || columns == null) return actions
+  const before = pairSideOf(row)
+  const parentId = args.kind === 'location' ? args.draft.parentLocationId : before.parentId
+  if (columns.name === undefined && parentId === before.parentId) return actions
+  const saved: PairSide = {
+    name: columns.name ?? row.name,
+    keywords: columns.keywords ?? row.keywords,
+    parentId,
+  }
   const broken = brokenFlags({ entities: args.branchEntities, after: new Map([[row.id, saved]]) })
   return withFlagClears(actions, branchId, broken)
 }

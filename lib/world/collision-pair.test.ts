@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import { emptyEntityState, type Entity, type EntityKind } from '@/lib/db'
 
-import { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf } from './collision-pair'
+import {
+  COLLISION_PAIR_MISS,
+  collisionPairOf,
+  flaggedSideOf,
+  pairSideOf,
+  sharesRequiredParent,
+  stillPaired,
+  type PairSide,
+} from './collision-pair'
 
 function row(id: string, name: string, overrides: Partial<Entity> = {}): Entity {
   const kind: EntityKind = overrides.kind ?? 'character'
@@ -34,6 +42,14 @@ const flaggedWith = (partnerId: string, reason: Entity['nameCollisionReason'] = 
   nameCollisionPartnerId: partnerId,
   nameCollisionReason: reason,
 })
+
+const place = (
+  id: string,
+  name: string,
+  parentId: string | null,
+  overrides: Partial<Entity> = {},
+): Entity =>
+  row(id, name, { kind: 'location', state: { parent_location_id: parentId }, ...overrides })
 
 const OLDER = row('char_a', 'Kael')
 const NEWER = row('char_b', 'Kael Stormborn', flaggedWith('char_a', 'ambiguous'))
@@ -93,5 +109,110 @@ describe('collisionPairOf', () => {
     expect(collisionPairOf([OLDER, other], ['char_a', other.id])).toEqual({
       miss: COLLISION_PAIR_MISS.notFlagged,
     })
+  })
+})
+
+describe('pairSideOf', () => {
+  it("reads a place's parent, and no parent at the root or for another kind", () => {
+    expect(
+      pairSideOf(place('loc_s', 'The Stalls', 'loc_p', { keywords: ['the stalls'] })),
+    ).toStrictEqual({ name: 'The Stalls', keywords: ['the stalls'], parentId: 'loc_p' })
+    expect(pairSideOf(place('loc_r', 'The Quay', null)).parentId).toBeNull()
+    expect(
+      pairSideOf(row('loc_n', 'Nowhere', { kind: 'location', state: null })).parentId,
+    ).toBeNull()
+    expect(pairSideOf(OLDER).parentId).toBeNull()
+  })
+})
+
+describe('sharesRequiredParent', () => {
+  const a: PairSide = { name: 'The Market', keywords: [], parentId: 'loc_p' }
+  const b: PairSide = { name: 'The Quay', keywords: [], parentId: 'loc_p' }
+
+  it('reads the parent clause alone, names aside', () => {
+    expect(sharesRequiredParent('same-parent', a, b)).toBe(true)
+    expect(sharesRequiredParent('same-parent', a, { ...b, parentId: 'loc_q' })).toBe(false)
+    expect(sharesRequiredParent('same-parent', a, { ...b, parentId: null })).toBe(false)
+    expect(sharesRequiredParent('alike', a, { ...b, parentId: 'loc_q' })).toBe(true)
+  })
+})
+
+describe('stillPaired', () => {
+  const side = (name: string, parentId: string | null): PairSide => ({
+    name,
+    keywords: [],
+    parentId,
+  })
+
+  it('needs a shared parent only for a same-parent flag, the root counting as one parent', () => {
+    expect(
+      stillPaired('same-parent', side('The Market', 'loc_p'), side('The Market Stalls', 'loc_p')),
+    ).toBe(true)
+    expect(
+      stillPaired('same-parent', side('The Market', null), side('The Market Stalls', null)),
+    ).toBe(true)
+    expect(
+      stillPaired('same-parent', side('The Market', 'loc_p'), side('The Market Stalls', 'loc_q')),
+    ).toBe(false)
+    expect(
+      stillPaired('same-parent', side('The Market', null), side('The Market Stalls', 'loc_p')),
+    ).toBe(false)
+    expect(
+      stillPaired('distinct', side('The Market', 'loc_p'), side('The Market Stalls', 'loc_q')),
+    ).toBe(true)
+  })
+
+  it('needs the two to stay namesakes under every reason', () => {
+    expect(stillPaired('same-parent', side('The Market', 'loc_p'), side('The Quay', 'loc_p'))).toBe(
+      false,
+    )
+    expect(stillPaired('distinct', side('Kael', null), side('Brannoc', null))).toBe(false)
+  })
+})
+
+describe('collisionPairOf — the same-parent clause', () => {
+  const MARKET = place('loc_m', 'The Market', 'loc_p')
+  const stallsUnder = (
+    parentId: string | null,
+    reason: Entity['nameCollisionReason'] = 'same-parent',
+  ) => place('loc_s', 'The Market Stalls', parentId, flaggedWith('loc_m', reason))
+
+  it('pairs a same-parent flag while the two share a parent, the root included', () => {
+    const stalls = stallsUnder('loc_p')
+    expect(collisionPairOf([MARKET, stalls], ['loc_s', 'loc_m'])).toEqual({
+      pair: [stalls, MARKET],
+    })
+    const rootMarket = place('loc_m', 'The Market', null)
+    const rootStalls = stallsUnder(null)
+    expect(collisionPairOf([rootMarket, rootStalls], ['loc_s', 'loc_m'])).toEqual({
+      pair: [rootStalls, rootMarket],
+    })
+  })
+
+  it.each([
+    ['under two parents', 'loc_q'],
+    ['between the root and a parent', null],
+  ])('misses a same-parent pair split %s, asked either way round', (_, parentId) => {
+    const split = stallsUnder(parentId)
+    expect(collisionPairOf([MARKET, split], ['loc_s', 'loc_m'])).toEqual({
+      miss: COLLISION_PAIR_MISS.notFlagged,
+    })
+    expect(collisionPairOf([MARKET, split], ['loc_m', 'loc_s'])).toEqual({
+      miss: COLLISION_PAIR_MISS.notFlagged,
+    })
+  })
+
+  it('pairs a place flagged for another reason whatever its parent', () => {
+    const stalls = stallsUnder('loc_q', 'distinct')
+    expect(collisionPairOf([MARKET, stalls], ['loc_s', 'loc_m'])).toEqual({
+      pair: [stalls, MARKET],
+    })
+  })
+
+  it('reads the flag that holds when both rows name each other', () => {
+    const split = stallsUnder('loc_q')
+    const naming = place('loc_m', 'The Market', 'loc_p', flaggedWith('loc_s', 'distinct'))
+    expect(flaggedSideOf(split, naming)).toBe(naming)
+    expect(collisionPairOf([naming, split], ['loc_s', 'loc_m'])).toEqual({ pair: [split, naming] })
   })
 })
