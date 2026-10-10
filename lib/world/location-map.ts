@@ -1,16 +1,12 @@
 import type { Entity } from '@/lib/db'
-import { collate, compareId } from '@/lib/list-modules'
 
 import { stateOf } from './entity-draft'
+import { byName } from './overview'
 import { parentChainIds, parentOfLocations } from './parent-chain'
 
 export type LocationMapRow = { id: string; name: string; depth: number }
 export type HeldItemLine = { id: string; name: string; equipped: boolean }
 export type LooseItemLine = { id: string; name: string }
-
-function byName(a: Entity, b: Entity): number {
-  return collate(a.name, b.name) || a.createdAt - b.createdAt || compareId(a.id, b.id)
-}
 
 // The structural floor seats the current location whatever its injection mode, so the map
 // lists it too (piggyback.md → What the writer sees).
