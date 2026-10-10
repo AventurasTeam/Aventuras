@@ -710,6 +710,14 @@ describe('creation tags', () => {
     expect(result.block.newItems).toEqual([{ handle: 'new:ok', name: 'ok', description: 'y' }])
   })
 
+  it('reads a hyphenated attribute key whole, so it cannot overwrite handle or name', () => {
+    const { block, failures } = parseStateBlock(`<state>
+  <new_location handle="new:a" name="A" alt-name="B" x-handle="new:z">x</new_location>
+</state>`)
+    expect(failures).toEqual([])
+    expect(block.newLocations).toEqual([{ handle: 'new:a', name: 'A', description: 'x' }])
+  })
+
   it('drops a self-closed create with malformed attributes, counting it once', () => {
     const result = parseStateBlock(`<state>
   <scene_entities>c1</scene_entities>
