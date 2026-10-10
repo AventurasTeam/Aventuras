@@ -120,6 +120,7 @@ function ControlledDialog({
   entityB: b,
   flaggedId = b.id,
   reason = 'distinct',
+  parentName,
   onResolve,
   blockedReason,
   isNameTaken,
@@ -130,6 +131,7 @@ function ControlledDialog({
   /** The classifier flags the newer row at create, so the newer row by default. */
   flaggedId?: string
   reason?: CollisionReason
+  parentName?: string
   onResolve: (r: Resolution) => Promise<void>
   blockedReason?: string
   isNameTaken?: (name: string) => boolean
@@ -147,6 +149,7 @@ function ControlledDialog({
         entityB={b}
         flaggedId={flaggedId}
         reason={reason}
+        parentName={parentName}
         onResolve={onResolve}
         blockedReason={blockedReason}
         isNameTaken={isNameTaken}
@@ -1321,6 +1324,64 @@ export const HeaderNoSignal: Story = {
   play: async () => {
     expect(await dialogNamed('⚠ Two characters named "Kael"')).toBeInTheDocument()
     expect(screen.getByText("Their descriptions couldn't be compared.")).toBeInTheDocument()
+  },
+}
+
+// world.md → Resolve dialog: a place the per-turn writer created beside a similarly named sibling.
+const placeOf = (id: string, name: string, createdAt: string): EntitySummary =>
+  baseEntity({ id, kind: 'location', name, createdAt, keywords: [], tags: [], state: {} })
+const market = placeOf('loc_market', 'The Drowned Market', '2026-05-01T00:00:00Z')
+const stalls = placeOf('loc_stalls', 'The Drowned Market Stalls', NEWER_AT)
+const STALLS_MAY_BE_MARKET = '⚠ "The Drowned Market Stalls" may be "The Drowned Market"'
+
+export const SameParent: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={market}
+      entityB={stalls}
+      reason="same-parent"
+      parentName="Veil’s Hollow"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed(STALLS_MAY_BE_MARKET)).toBeInTheDocument()
+    expect(screen.getByText('Both are in "Veil’s Hollow".')).toBeInTheDocument()
+    expect(screen.queryByText('Both are top-level places.')).toBeNull()
+  },
+}
+
+export const SameParentAtRoot: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={market}
+      entityB={stalls}
+      reason="same-parent"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed(STALLS_MAY_BE_MARKET)).toBeInTheDocument()
+    expect(screen.getByText('Both are top-level places.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Both are in /)).toBeNull()
+  },
+}
+
+// Only `same-parent` reads the parent: any other reason keeps its own line.
+export const ParentNameOnlyForSameParent: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={market}
+      entityB={stalls}
+      reason="distinct"
+      parentName="Veil’s Hollow"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed(STALLS_MAY_BE_MARKET)).toBeInTheDocument()
+    expect(screen.getByText('Their descriptions differ.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Both are /)).toBeNull()
   },
 }
 
