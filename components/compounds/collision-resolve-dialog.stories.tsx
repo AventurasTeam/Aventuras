@@ -5,6 +5,7 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import type { CollisionReason } from '@/lib/db'
 import { themes } from '@/lib/themes'
 
 import { CollisionResolveDialog } from './collision-resolve-dialog'
@@ -117,6 +118,8 @@ function ControlledDialog({
   initialOpen = true,
   entityA: a,
   entityB: b,
+  flaggedId = b.id,
+  reason = 'distinct',
   onResolve,
   blockedReason,
   isNameTaken,
@@ -124,6 +127,9 @@ function ControlledDialog({
   initialOpen?: boolean
   entityA: EntitySummary
   entityB: EntitySummary
+  /** The classifier flags the newer row at create, so the newer row by default. */
+  flaggedId?: string
+  reason?: CollisionReason
   onResolve: (r: Resolution) => Promise<void>
   blockedReason?: string
   isNameTaken?: (name: string) => boolean
@@ -139,6 +145,8 @@ function ControlledDialog({
         onOpenChange={setOpen}
         entityA={a}
         entityB={b}
+        flaggedId={flaggedId}
+        reason={reason}
         onResolve={onResolve}
         blockedReason={blockedReason}
         isNameTaken={isNameTaken}

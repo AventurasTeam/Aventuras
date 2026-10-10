@@ -281,10 +281,10 @@ export default function WorldRoute() {
       ? undefined
       : (name: string) =>
           nameTakenByOther({
-            kind: collisionPair[0].kind,
+            kind: collisionPair.sides[0].kind,
             name,
             entities,
-            exclude: new Set(collisionPair.map((side) => side.id)),
+            exclude: new Set(collisionPair.sides.map((side) => side.id)),
           })
   // `open={focused}` already hides the dialog under a pushed screen; closing it here keeps it
   // from reopening when focus returns.
@@ -678,8 +678,10 @@ export default function WorldRoute() {
           onOpenChange={(next) => {
             if (!next) closeCollision()
           }}
-          entityA={collision.pair[0]}
-          entityB={collision.pair[1]}
+          entityA={collision.pair.sides[0]}
+          entityB={collision.pair.sides[1]}
+          flaggedId={collision.pair.flaggedId}
+          reason={collision.pair.reason}
           onResolve={collision.resolve}
           blockedReason={collisionBlocked}
           isNameTaken={collisionNameTaken}

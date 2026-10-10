@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import type { CollisionReason } from '@/lib/db'
 import { relativeTimeLabel, t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
 import { cn } from '@/lib/utils'
@@ -84,6 +85,10 @@ type CollisionResolveDialogProps = {
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
   entityB: EntitySummary // newer
+  /** The flagged row the strip was opened from: the header names it first, and `reason` is its. */
+  flaggedId: string
+  /** That row's `name_collision_reason`, for the reason line. */
+  reason: CollisionReason
   /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */

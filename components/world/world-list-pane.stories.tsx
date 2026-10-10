@@ -412,6 +412,27 @@ export const CollapsedWithBadge: Story = {
   },
 }
 
+// world.md → Surfacing: a flag whose partner the branch no longer has is dormant.
+const DORMANT = entity('char_wren', 'character', 'Wren', {
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: 'char_gone',
+  nameCollisionReason: 'distinct',
+})
+
+/** A dormant flag in the same tier: no strip, and no count in the collapsed tier's badge. */
+export const DormantFlagShowsNowhere: Story = {
+  args: { entities: [...ENTITIES, DORMANT] },
+  beforeEach: () => {
+    listCollapseStore.setCollapsed('character', 'active', true, new Set(['staged', 'retired']))
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: '1 in Active needs review' }))
+    expect(await screen.findByRole('link', { name: '⚠ Collides with Brannoc' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Wren' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /^⚠ Collides with / })).toHaveLength(1)
+  },
+}
+
 /** The imperative handle the top-bar pill calls: expands the tier and scrolls to the row. */
 export const RevealFromOutside: Story = {
   args: { fillers: 'active', showRevealButton: true },
