@@ -93,3 +93,5 @@ export {
   looseItemLines,
 } from './location-map'
 export type { HeldItemLine, LocationMapRow, LooseItemLine } from './location-map'
+export { itemNamesakes, matchNewLocation } from './new-entity-match'
+export type { PlaceMatch } from './new-entity-match'

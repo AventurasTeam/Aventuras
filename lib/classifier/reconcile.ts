@@ -87,6 +87,30 @@ export function decideReconcile(namesakes: readonly ScoredNamesake[]): Reconcile
   return { kind: 'create', flag: { partnerId: partner.entity.id, reason: reasonOf(partner) } }
 }
 
+export type ItemMatchFlag = { partnerId: string; reason: 'alike' | 'ambiguous' }
+
+/**
+ * piggyback.md → Matching before creating: an item is never reused. The most similar exact
+ * namesake at or above τ_low flags it, older then id on a tie; an unscored one never does.
+ */
+export function decideNewItem(
+  scored: readonly { entity: Entity; similarity: number | null }[],
+): ItemMatchFlag | null {
+  const [best] = scored
+    .filter(
+      (s): s is { entity: Entity; similarity: number } =>
+        s.similarity !== null && s.similarity >= TAU_LOW,
+    )
+    .sort(
+      (a, b) =>
+        b.similarity - a.similarity ||
+        a.entity.createdAt - b.entity.createdAt ||
+        (a.entity.id < b.entity.id ? -1 : a.entity.id > b.entity.id ? 1 : 0),
+    )
+  if (best === undefined) return null
+  return { partnerId: best.entity.id, reason: best.similarity >= TAU_HIGH ? 'alike' : 'ambiguous' }
+}
+
 const hasText = (text: string | null): text is string => text != null && text.trim() !== ''
 
 // cosine reads a zero vector as 0 and a NaN as NaN: a fabricated score either way.
@@ -96,7 +120,7 @@ const scorable = (v: Float32Array): boolean => v.every(Number.isFinite) && v.som
  * One embed call for the candidate and every scorable namesake, compared in memory: independent of
  * vec0 drain state. Index-aligned with `descriptions`; null where unscored.
  */
-async function similarities(
+export async function scoreDescriptions(
   candidate: string,
   descriptions: readonly (string | null)[],
   embed: EmbedDescriptions,
@@ -144,7 +168,7 @@ export async function reconcileNewCharacter(
   }
   if (matched.length === 0) return { kind: 'create', flag: null }
 
-  const scores = await similarities(
+  const scores = await scoreDescriptions(
     candidate.description,
     matched.map((m) => m.entity.description),
     deps.embedDescriptions,
