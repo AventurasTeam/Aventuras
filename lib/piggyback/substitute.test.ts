@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { IdBiMap } from '@/lib/ids'
 
 import { substitutePiggybackIds } from './substitute'
+import type { ParsedStateBlock } from './types'
 
 function mapWith(uuids: string[]): IdBiMap {
   const idMap = new IdBiMap()
@@ -111,5 +112,126 @@ describe('substitutePiggybackIds', () => {
     )
     expect(result.block.transfers).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
+  })
+})
+
+describe('substitutePiggybackIds with creates', () => {
+  const LOC = 'loc_00000000-0000-4000-8000-000000000001'
+  const CHAR = 'char_00000000-0000-4000-8000-000000000002'
+  const ITEM = 'item_00000000-0000-4000-8000-000000000003'
+  // Allocation order pins l1 / c1 / i1.
+  const idMap = () => mapWith([LOC, CHAR, ITEM])
+  const docks = { handle: 'new:docks', name: 'the Docks', description: 'a pier', parent: 'l1' }
+  const key = { handle: 'new:key', name: 'rusted key', description: 'an iron key' }
+
+  it('passes a declared handle through in the scene, the location and a transfer item', () => {
+    const result = substitutePiggybackIds(
+      {
+        newLocations: [docks],
+        newItems: [key],
+        sceneEntities: ['c1', 'new:key'],
+        currentLocation: 'new:docks',
+        transfers: { items: [{ id: 'new:key', slot: 'inventory', to: 'c1' }], stackables: [] },
+      },
+      idMap(),
+    )
+    expect(result.failures).toEqual([])
+    expect(result.block.sceneEntities).toEqual([CHAR, 'new:key'])
+    expect(result.block.currentLocation).toBe('new:docks')
+    expect(result.block.transfers?.items).toEqual([{ id: 'new:key', slot: 'inventory', to: CHAR }])
+  })
+
+  it('unwraps a bracketed handle like a bracketed placeholder', () => {
+    const result = substitutePiggybackIds(
+      { newLocations: [docks], currentLocation: '[new:docks]' },
+      idMap(),
+    )
+    expect(result.failures).toEqual([])
+    expect(result.block.currentLocation).toBe('new:docks')
+  })
+
+  const undeclared: [keyof ParsedStateBlock, ParsedStateBlock][] = [
+    ['sceneEntities', { sceneEntities: ['c1', 'new:ghost'] }],
+    ['currentLocation', { currentLocation: 'new:ghost' }],
+    [
+      'transfers',
+      { transfers: { items: [{ id: 'new:ghost', slot: 'inventory', to: 'c1' }], stackables: [] } },
+    ],
+  ]
+  it.each(undeclared)('fails %s on a handle no create declares', (field, refs) => {
+    const result = substitutePiggybackIds({ newItems: [key], ...refs }, idMap())
+    expect(result.block[field]).toBeUndefined()
+    expect(result.failures).toEqual([{ field, detail: expect.any(String) }])
+  })
+
+  it('refuses a declared handle as a transfer holder or a visual change target', () => {
+    const result = substitutePiggybackIds(
+      {
+        newItems: [key],
+        visualChanges: [{ id: 'new:key', type: 'attire', text: 'rusted' }],
+        transfers: { items: [{ id: 'i1', slot: 'inventory', to: 'new:key' }], stackables: [] },
+      },
+      idMap(),
+    )
+    expect(result.block.visualChanges).toBeUndefined()
+    expect(result.block.transfers).toBeUndefined()
+    expect(result.failures.map((f) => f.field)).toEqual(['visualChanges', 'transfers'])
+  })
+
+  it.each([
+    [
+      'an item transfer from',
+      { items: [{ id: 'i1', slot: 'inventory' as const, from: 'new:key' }] },
+    ],
+    ['a stackable to', { stackables: [{ key: 'gold', amount: 1, to: 'new:key' }] }],
+    ['a stackable from', { stackables: [{ key: 'gold', amount: 1, from: 'new:key' }] }],
+  ])('refuses a declared handle in %s', (_label, partial) => {
+    const result = substitutePiggybackIds(
+      { newItems: [key], transfers: { items: [], stackables: [], ...partial } },
+      idMap(),
+    )
+    expect(result.block.transfers).toBeUndefined()
+    expect(result.failures.map((f) => f.field)).toEqual(['transfers'])
+  })
+
+  it('substitutes a create parent leniently', () => {
+    const create = (handle: string, parent?: string) => ({
+      handle,
+      name: handle,
+      description: '',
+      ...(parent !== undefined ? { parent } : {}),
+    })
+    const result = substitutePiggybackIds(
+      {
+        newLocations: [
+          create('new:a', 'l1'),
+          create('new:b', '[l1]'),
+          create('new:c', 'new:a'),
+          create('new:d', '[new:a]'),
+          create('new:e', 'l9'),
+          create('new:f'),
+        ],
+      },
+      idMap(),
+    )
+    expect(result.failures).toEqual([])
+    expect(result.block.newLocations?.map((c) => c.parent)).toEqual([
+      LOC,
+      LOC,
+      'new:a',
+      'new:a',
+      'l9',
+      undefined,
+    ])
+  })
+
+  it('leaves names, descriptions and the item list as emitted, and the input untouched', () => {
+    // A name or description that reads like a placeholder is text, never a ref.
+    const placeholderish = { handle: 'new:c', name: 'c1', description: 'l1', parent: 'l1' }
+    const block: ParsedStateBlock = { newLocations: [placeholderish], newItems: [key] }
+    const result = substitutePiggybackIds(block, idMap())
+    expect(result.block.newLocations).toEqual([{ ...placeholderish, parent: LOC }])
+    expect(result.block.newItems).toEqual([key])
+    expect(block.newLocations?.[0]?.parent).toBe('l1')
   })
 })

@@ -4,7 +4,9 @@ import type { StoryEntry } from '@/lib/db'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 import {
+  isCreateHandle,
   RETRIEVAL_QUERY_ITEM_TAG,
+  STATE_CREATE_TAGS,
   STATE_ROOT_TAG,
   STATE_TAGS,
   SUGGESTION_ITEM_TAG,
@@ -14,6 +16,8 @@ import {
 import { MAX_RETRIEVAL_QUERIES, VISUAL_CHANGE_TYPES } from './types'
 import type {
   ItemTransfer,
+  NewItemEmission,
+  NewLocationEmission,
   SuggestionRef,
   ParseFieldFailure,
   ParsedStateBlock,
@@ -198,12 +202,121 @@ const FIELD_PARSERS: readonly FieldParser[] = [
   { field: 'retrievalQueries', tag: STATE_TAGS.retrievalQueries, parse: parseRetrievalQueries },
 ]
 
+// Content stops at the first `<`, so a create the stream cut off can't swallow the tags after it.
+function createTagPattern(tag: string): RegExp {
+  return new RegExp(`<${tag}(\\s[^>]*?)?(?:/>|>([^<]*)</${tag}>)`, 'g')
+}
+
+function openedTagCount(segment: string, tag: string): number {
+  return segment.match(new RegExp(`<${tag}[\\s/>]`, 'g'))?.length ?? 0
+}
+
+type ParsedCreates = {
+  found: Pick<ParsedStateBlock, 'newLocations' | 'newItems'>
+  /** Create tags opened but never formed whole: cut off, or content holding a `<`. */
+  unmatched: number
+}
+
+// Unlike FIELD_PARSERS' first-occurrence segments, a create tag repeats and carries attributes.
+function parseCreates(segment: string): ParsedCreates {
+  const newLocations: NewLocationEmission[] = []
+  for (const [, attrText = '', text = ''] of segment.matchAll(
+    createTagPattern(STATE_CREATE_TAGS.newLocation),
+  )) {
+    const attrs = parseAttributes(attrText)
+    newLocations.push({
+      handle: attrs.handle ?? '',
+      name: attrs.name ?? '',
+      description: text.trim(),
+      ...(attrs.parent !== undefined ? { parent: attrs.parent } : {}),
+    })
+  }
+  const newItems: NewItemEmission[] = []
+  for (const [, attrText = '', text = ''] of segment.matchAll(
+    createTagPattern(STATE_CREATE_TAGS.newItem),
+  )) {
+    const attrs = parseAttributes(attrText)
+    newItems.push({ handle: attrs.handle ?? '', name: attrs.name ?? '', description: text.trim() })
+  }
+  const unmatched =
+    openedTagCount(segment, STATE_CREATE_TAGS.newLocation) -
+    newLocations.length +
+    openedTagCount(segment, STATE_CREATE_TAGS.newItem) -
+    newItems.length
+  return {
+    found: {
+      ...(newLocations.length > 0 ? { newLocations } : {}),
+      ...(newItems.length > 0 ? { newItems } : {}),
+    },
+    unmatched,
+  }
+}
+
+/**
+ * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
+ * declared (locations before items); trims what it keeps, and drops a blank parent. Never a field
+ * failure: one bad create must not hand the whole turn to the fallback.
+ */
+export function normalizeCreates(block: ParsedStateBlock): {
+  block: ParsedStateBlock
+  malformed: number
+} {
+  const { newLocations, newItems, ...rest } = block
+  if (newLocations === undefined && newItems === undefined) return { block, malformed: 0 }
+
+  const declared = new Set<string>()
+  let malformed = 0
+  const accepts = (handle: string, name: string): boolean => {
+    if (!isCreateHandle(handle) || name === '' || declared.has(handle)) {
+      malformed += 1
+      return false
+    }
+    declared.add(handle)
+    return true
+  }
+  const locations = (newLocations ?? []).flatMap((create): NewLocationEmission[] => {
+    const handle = create.handle.trim()
+    const name = create.name.trim()
+    if (!accepts(handle, name)) return []
+    const parent = create.parent?.trim() ?? ''
+    return [
+      {
+        handle,
+        name,
+        description: create.description.trim(),
+        ...(parent !== '' ? { parent } : {}),
+      },
+    ]
+  })
+  const items = (newItems ?? []).flatMap((create): NewItemEmission[] => {
+    const handle = create.handle.trim()
+    const name = create.name.trim()
+    return accepts(handle, name) ? [{ handle, name, description: create.description.trim() }] : []
+  })
+  return {
+    block: {
+      ...rest,
+      ...(locations.length > 0 ? { newLocations: locations } : {}),
+      ...(items.length > 0 ? { newItems: items } : {}),
+    },
+    malformed,
+  }
+}
+
+function emptyBlockDetail(stateSegment: string, malformedCreates: number): string {
+  if (stateSegment.trim().length === 0) return 'block was empty or truncated at the open tag'
+  return malformedCreates > 0
+    ? 'block held only malformed creates'
+    : 'block content matched no known field tag'
+}
+
 // Segment isolation + per-field best-effort parse: one failing top-level tag
 // never blocks another (docs/memory/piggyback.md, C2 contract). Called on the
 // FULL raw model output (prose + trailing block) — extracts <state> first.
 export function parseStateBlock(raw: string): ParseStateBlockResult {
   const stateSegment = extractSegment(raw, STATE_ROOT_TAG, STATE_ROOT_TAG)
-  if (stateSegment === undefined) return { block: {}, failures: [], blockFound: false }
+  if (stateSegment === undefined)
+    return { block: {}, failures: [], blockFound: false, malformedCreates: 0 }
 
   const block: ParsedStateBlock = {}
   const failures: ParseFieldFailure[] = []
@@ -228,21 +341,20 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
     }
   }
 
+  const creates = parseCreates(stateSegment)
+  const normalized = normalizeCreates({ ...block, ...creates.found })
+  const malformedCreates = creates.unmatched + normalized.malformed
+
   // Deliberately stricter than assertNotTruncated's field-level rule: an empty
   // <visual_changes> reports "none", but there is no such thing as a turn with no
   // state, so an empty <state> means the same as a MISSING one — which already
   // fires the fallback. Left unrecorded it reads as a clean parse instead, and
   // suppresses the very recovery it needs (per-turn.ts -> piggybackOutcome).
-  if (Object.keys(block).length === 0 && failures.length === 0)
-    failures.push({
-      field: 'state',
-      detail:
-        stateSegment.trim().length === 0
-          ? 'block was empty or truncated at the open tag'
-          : 'block content matched no known field tag',
-    })
+  // Judged after the creates: creates alone are a report, malformed ones alone are not.
+  if (Object.keys(normalized.block).length === 0 && failures.length === 0)
+    failures.push({ field: 'state', detail: emptyBlockDetail(stateSegment, malformedCreates) })
 
-  return { block, failures, blockFound: true }
+  return { block: normalized.block, failures, blockFound: true, malformedCreates }
 }
 
 // <item category="cat1">complete prose</item> — one entry per chip slot.

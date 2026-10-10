@@ -42,6 +42,15 @@ export type ItemTransfer = {
 export type StackableTransfer = { key: string; amount: number; to?: string; from?: string }
 export type ParsedTransfers = { items: ItemTransfer[]; stackables: StackableTransfer[] }
 
+/** `parent` is a placeholder or another create's handle as emitted; an id once substituted. */
+export type NewLocationEmission = {
+  handle: string
+  name: string
+  description: string
+  parent?: string
+}
+export type NewItemEmission = { handle: string; name: string; description: string }
+
 export type ParsedStateBlock = {
   sceneEntities?: string[]
   currentLocation?: string
@@ -50,6 +59,9 @@ export type ParsedStateBlock = {
   transfers?: ParsedTransfers
   summary?: string
   retrievalQueries?: string[]
+  /** Creates this block declares; its other fields name them by `handle`. */
+  newLocations?: NewLocationEmission[]
+  newItems?: NewItemEmission[]
 }
 
 // `'state'` is the block-level failure: a <state> that parsed into no field at all.
@@ -59,6 +71,8 @@ export type ParseStateBlockResult = {
   block: ParsedStateBlock
   failures: ParseFieldFailure[]
   blockFound: boolean
+  /** Creates dropped as malformed, or opened and never closed; 0 when the block was not found. */
+  malformedCreates: number
 }
 
 // `categoryRef` is the prompt-side placeholder (cat1, cat2…), not a category

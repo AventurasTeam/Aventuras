@@ -1,6 +1,12 @@
 import { MalformedPlaceholderError, type IdBiMap } from '@/lib/ids'
 
-import type { ParsedTransfers, ParseFieldFailure, ParsedStateBlock } from './types'
+import { isCreateHandle } from './tags'
+import type {
+  NewLocationEmission,
+  ParsedTransfers,
+  ParseFieldFailure,
+  ParsedStateBlock,
+} from './types'
 
 type SubstituteResult = { block: ParsedStateBlock; failures: ParseFieldFailure[] }
 
@@ -23,11 +29,42 @@ function resolveRef(ref: string, idMap: IdBiMap): string {
   return uuid
 }
 
-function resolveTransfers(transfers: ParsedTransfers, idMap: IdBiMap): ParsedTransfers {
+// A `new:` ref stays a handle for the create planner, but only one this block's creates declare;
+// any other fails its field like an unknown placeholder.
+function resolveRefOrHandle(ref: string, idMap: IdBiMap, handles: ReadonlySet<string>): string {
+  const bare = unwrapBracket(ref)
+  if (!isCreateHandle(bare)) return resolveRef(ref, idMap)
+  if (handles.has(bare)) return bare
+  throw new MalformedPlaceholderError(ref)
+}
+
+// Lenient: the planner drops a parent it can't resolve to the root rather than failing the turn.
+function resolveParent(ref: string, idMap: IdBiMap): string {
+  const bare = unwrapBracket(ref)
+  if (isCreateHandle(bare)) return bare
+  return idMap.getUuidFor(bare) ?? ref
+}
+
+function withResolvedParent(create: NewLocationEmission, idMap: IdBiMap): NewLocationEmission {
+  return create.parent === undefined
+    ? create
+    : { ...create, parent: resolveParent(create.parent, idMap) }
+}
+
+function declaredHandles(block: ParsedStateBlock): ReadonlySet<string> {
+  return new Set([...(block.newLocations ?? []), ...(block.newItems ?? [])].map((c) => c.handle))
+}
+
+// A transfer's item may be one this block creates; its holders are always listed entities.
+function resolveTransfers(
+  transfers: ParsedTransfers,
+  idMap: IdBiMap,
+  handles: ReadonlySet<string>,
+): ParsedTransfers {
   return {
     items: transfers.items.map((item) => ({
       ...item,
-      id: resolveRef(item.id, idMap),
+      id: resolveRefOrHandle(item.id, idMap, handles),
       ...(item.to !== undefined ? { to: resolveRef(item.to, idMap) } : {}),
       ...(item.from !== undefined ? { from: resolveRef(item.from, idMap) } : {}),
     })),
@@ -60,21 +97,29 @@ function resolveField<K extends keyof ParsedStateBlock>(
 }
 
 // Only the actual ID-bearing sub-fields are resolved (id/to/from, never
-// type/text/slot/key/amount) — granularity matches parseStateBlock's: an
-// unresolvable reference fails only the field it lives in, never a sibling
-// field (docs/memory/piggyback.md → Parse strategy and failure recovery).
+// type/text/slot/key/amount, nor a create's name or description) — granularity
+// matches parseStateBlock's: an unresolvable reference fails only the field it
+// lives in, never a sibling field (docs/memory/piggyback.md → Parse strategy and
+// failure recovery).
 export function substitutePiggybackIds(block: ParsedStateBlock, idMap: IdBiMap): SubstituteResult {
   const result: ParsedStateBlock = { ...block }
   const failures: ParseFieldFailure[] = []
+  const handles = declaredHandles(block)
 
   resolveField(
     result,
     'sceneEntities',
-    (ids, m) => ids.map((id) => resolveRef(id, m)),
+    (ids, m) => ids.map((id) => resolveRefOrHandle(id, m, handles)),
     idMap,
     failures,
   )
-  resolveField(result, 'currentLocation', (id, m) => resolveRef(id, m), idMap, failures)
+  resolveField(
+    result,
+    'currentLocation',
+    (id, m) => resolveRefOrHandle(id, m, handles),
+    idMap,
+    failures,
+  )
   resolveField(
     result,
     'visualChanges',
@@ -82,7 +127,15 @@ export function substitutePiggybackIds(block: ParsedStateBlock, idMap: IdBiMap):
     idMap,
     failures,
   )
-  resolveField(result, 'transfers', resolveTransfers, idMap, failures)
+  resolveField(
+    result,
+    'transfers',
+    (transfers, m) => resolveTransfers(transfers, m, handles),
+    idMap,
+    failures,
+  )
+  if (result.newLocations !== undefined)
+    result.newLocations = result.newLocations.map((create) => withResolvedParent(create, idMap))
 
   return { block: result, failures }
 }
