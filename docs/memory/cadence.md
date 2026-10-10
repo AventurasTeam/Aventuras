@@ -158,21 +158,26 @@ bias prompts more rigorously.
 ## Concurrency
 
 The piggyback agent and the periodic classifier write to disjoint
-field sets, with one documented overlap on `entities.status`.
+field sets, with one documented overlap on `entities.status`. Both
+create entities, but of disjoint kinds: piggyback the locations and
+items its state names
+([`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)),
+the classifier characters.
 
-| Field                                                                    | Piggyback                                           | Classifier                                           |
-| ------------------------------------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------- |
-| `story_entries.metadata` (current entry)                                 | ✓                                                   | —                                                    |
-| `entities.state.visual.*`                                                | ✓                                                   | —                                                    |
-| `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓                                                   | —                                                    |
-| `entities.status`                                                        | ✓ (staged → active only, on `sceneEntities` ID hit) | ✓ (staged → active slow path; active → retired)      |
-| `entities.description`                                                   | —                                                   | ✓ (first introduction only; see authorship contract) |
-| `entities.keywords`                                                      | —                                                   | ✓ (append-only; new characters and later passes)     |
-| `entities.retired_reason`                                                | —                                                   | ✓ (with active → retired)                            |
-| `happenings`                                                             | —                                                   | ✓                                                    |
-| `happening_involvements`                                                 | —                                                   | ✓                                                    |
-| `happening_awareness`                                                    | —                                                   | ✓                                                    |
-| `character_relationships`                                                | —                                                   | ✓                                                    |
+| Field                                                                    | Piggyback                                                                                                 | Classifier                                           |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `story_entries.metadata` (current entry)                                 | ✓                                                                                                         | —                                                    |
+| `entities.state.visual.*`                                                | ✓                                                                                                         | —                                                    |
+| `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓                                                                                                         | —                                                    |
+| `entities.status`                                                        | ✓ (staged → active only, on a `sceneEntities` or `<current_location>` ID hit, or a reused staged sibling) | ✓ (staged → active slow path; active → retired)      |
+| `entities` creates (name, description, collision flag, partner, reason)  | ✓ (locations and items)                                                                                   | ✓ (characters)                                       |
+| `entities.description`                                                   | ✓ (its own creates only)                                                                                  | ✓ (first introduction only; see authorship contract) |
+| `entities.keywords`                                                      | —                                                                                                         | ✓ (append-only; new characters and later passes)     |
+| `entities.retired_reason`                                                | —                                                                                                         | ✓ (with active → retired)                            |
+| `happenings`                                                             | —                                                                                                         | ✓                                                    |
+| `happening_involvements`                                                 | —                                                                                                         | ✓                                                    |
+| `happening_awareness`                                                    | —                                                                                                         | ✓                                                    |
+| `character_relationships`                                                | —                                                                                                         | ✓                                                    |
 
 **Field-overlap invariant.** `entities.status` is the only field
 both writers touch. They never collide on the same entity at the

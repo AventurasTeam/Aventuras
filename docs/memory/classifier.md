@@ -204,8 +204,10 @@ are not compared with each other.
   keywords hold "the innkeeper", against a row named "the Innkeeper").
 
 The rule pairs rows of one kind, works for any kind, and lives in
-`lib/world` beside World's pairing. Only characters are reconciled, because only characters are
-machine-created. A name in a script written without spaces never
+`lib/world` beside World's pairing. The classifier reconciles
+characters, the only kind it creates; the per-turn writer's locations
+and items match under their own rules
+([`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)). A name in a script written without spaces never
 contains another, so it matches only exactly or through a keyword.
 
 **Signals.**
@@ -256,8 +258,11 @@ from that partner:
 | `in-scene`  | Partial, `sim < τ_low`, in the scene |
 | `no-signal` | No score                             |
 
-World pairs a flagged row with its partner and states the reason in
-the resolve dialog
+The per-turn writer adds one more reason, `same-parent`, for a
+location it creates beside a similarly named sibling, and gives an
+item's exact namesake `alike` or `ambiguous` by the same bands. World pairs a
+flagged row with its partner and states the reason in the resolve
+dialog
 ([`world.md → Collision review and entity merge`](../ui/screens/world/world.md#collision-review-and-entity-merge)).
 
 Thresholds (`τ_high`, `τ_low`) are tunable. Defaults TBD empirically

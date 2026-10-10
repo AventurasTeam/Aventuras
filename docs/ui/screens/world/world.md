@@ -393,7 +393,11 @@ Same fields for every kind:
   here propagate to the Overview status pill.
 - `injection_mode` (enum select with explanation): `always` /
   `auto` (default) / `disabled`. Includes the standard
-  in-line explanation about scene-presence override.
+  in-line explanation about scene-presence override. For a place it
+  adds that `always` and `auto` keep its name on the location map and
+  govern only its description, while `disabled` takes it off the map
+  too, unless it is the current location
+  ([`piggyback.md → What the writer sees`](../../../memory/piggyback.md#what-the-writer-sees)).
 - `retired_reason` (text, conditional): only enabled when
   `status === 'retired'`.
 - `keywords` (chip row with `+ add`): aliases, titles and relational
@@ -842,17 +846,19 @@ lore-specific deviation.
 
 ## Collision review and entity merge
 
-The classifier writes `name_collision_flag = true` on a
-freshly-created entity when it may duplicate an existing
-namesake: a row of the same name it didn't match strongly enough
-to absorb into, or a partial namesake that a similar description
-or a shared scene makes likely. It stores that namesake as the
+The classifier, or the per-turn writer creating a place or an
+item, writes `name_collision_flag = true` on a freshly-created
+entity when it may duplicate an existing namesake: a row of the
+same name it didn't match strongly enough to absorb into, or a
+partial namesake that a similar description, a shared scene or,
+for a place, a shared parent makes likely. It stores that namesake as the
 row's partner, and why it flagged. The flag means "this could be
 a duplicate; the user should decide." Schema and classifier rules
 live in
-[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation)
+[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation),
+[`memory/classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)
 and
-[`memory/classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions).
+[`memory/piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating).
 
 The World panel is the only surface where the flag is resolved.
 Three resolution paths are offered: **merge** the two rows into
@@ -907,14 +913,16 @@ lands on: keyboard focus on web, the screen reader's on native.
 On web, a surface that takes focus before the jump lands (a menu
 opened in the meantime) keeps it.
 
-A flagged row pairs with its stored partner, the namesake the
-classifier compared it against, so the strip names exactly that row
+A flagged row pairs with its stored partner, the namesake its
+writer compared it against, so the strip names exactly that row
 and nothing is guessed from names. Two rows are namesakes under the
 classifier's rule
 ([`classifier.md → Disambiguation`](../../../memory/classifier.md#disambiguation-on-new-character-mentions)):
 same kind, and the same name trimmed and case-folded, one name's
 words inside the other's, or one name among the other's keywords;
-staged and retired rows included. A flag whose partner the branch no
+staged and retired rows included. A location pair flagged
+`same-parent` is a pair only while the two share a parent
+([`piggyback.md → Matching before creating`](../../../memory/piggyback.md#matching-before-creating)). A flag whose partner the branch no
 longer has is dormant: it has nothing to pair with, so it gets no
 strip and counts toward no pill or badge. Writes keep dormant flags
 from forming, each in the same action and delta-logged, so CTRL-Z
@@ -925,12 +933,14 @@ re-flags the row:
 - a rename (a detail-pane Save, or the dialog's [Rename](#rename))
   after which a flagged row and its partner stop being namesakes
   clears that row's flag;
+- a re-parent (a detail-pane Save) that separates a `same-parent`
+  pair clears the flag, as a rename does;
 - a [merge](#merge) re-points a flag whose partner it deletes at the
   surviving row, and then clears any flag pairing the surviving row
   that isn't a namesake pair any more, since the merge can change
-  its name. A surviving row whose own flag named the deleted row
-  takes the deleted row's live partner and reason instead
-  ([Reversibility](#reversibility)).
+  its name, or a place's parent. A surviving row whose own flag named
+  the deleted row takes the deleted row's live partner and reason
+  instead ([Reversibility](#reversibility)).
 
 A reversal can still leave one, such as undoing the partner's
 create. It stays hidden until the partner returns (ids are never
@@ -947,10 +957,11 @@ user and the action with no compensating browsing benefit.
 
 `Resolve →` opens a modal anchored to the World panel. Header
 states the collision from the two rows' current names:
-`⚠ Two characters named "Kael"` when the names are the same, and
+`⚠ Two characters named "Kael"` when the names are the same (places,
+items or factions by the pair's kind), and
 `⚠ "Kael" may be "Kael Stormborn"` otherwise, the row the strip was
-opened from first. Under it, a reason line gives why the classifier
-flagged that row:
+opened from first. Under it, a reason line gives why that row was
+flagged:
 
 | Stored reason | Line                                                                                          |
 | ------------- | --------------------------------------------------------------------------------------------- |
@@ -959,6 +970,7 @@ flagged that row:
 | `distinct`    | Their descriptions differ.                                                                    |
 | `in-scene`    | Their descriptions differ, but "Kael Stormborn" was in the scene where "Kael" first appeared. |
 | `no-signal`   | Their descriptions couldn't be compared.                                                      |
+| `same-parent` | Both are in "The Rusty Anchor". (At the root: Both are top-level places.)                     |
 
 When the two are namesakes only through a keyword, a basis line
 names it, read from the current keywords:
@@ -1348,7 +1360,8 @@ discovery isn't gated, only the write.
 ### Authorship and 3+ collisions
 
 Resolution writes deltas with `source = user_edit`. The classifier
-sets the flag, with its partner and reason, at create
+or the per-turn writer sets the flag, with its partner and reason, at
+create
 ([authorship contract](../../../data-model.md#authorship-contract));
 clearing it is always a user write, delta-logged, so CTRL-Z
 re-flags the row. Where

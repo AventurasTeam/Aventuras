@@ -62,7 +62,9 @@ type CollisionResolveDialogProps = {
   /** The row whose flag names the other, preferring the one the strip was opened from: the header names it first, and `reason` is its. */
   flaggedId: string
   /** That row's `name_collision_reason`, for the reason line. */
-  reason: CollisionReason // alike | ambiguous | distinct | in-scene | no-signal
+  reason: CollisionReason // alike | ambiguous | distinct | in-scene | no-signal | same-parent
+  /** The shared parent's name, for the `same-parent` reason line; absent at the root. */
+  parentName?: string
   /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */

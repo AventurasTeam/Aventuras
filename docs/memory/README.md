@@ -26,8 +26,9 @@ the shape.
   `partialChapterBuffer` / `protectedBuffer` /
   `classifierCadence`), concurrency contract.
 - **[piggyback.md](./piggyback.md)** — per-turn writes contract:
-  trailing tagged block, computed bookkeeping, jsonrepair fallback,
-  capability gate, mode-mixing across a story.
+  trailing tagged block, new locations and items, computed
+  bookkeeping, jsonrepair fallback, capability gate, mode-mixing
+  across a story.
 - **[classifier.md](./classifier.md)** — periodic classifier
   contract: what it reads, write set, disambiguation on new-character
   mentions, background-task framing.

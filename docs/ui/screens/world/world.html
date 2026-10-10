@@ -308,7 +308,7 @@
   .resolve-head .reason { margin-top: 6px; font-size: 12px; color: var(--ink); }
   /* Partial and keyword pairs differ by name, so the merge grid adds a name radio and a keywords row. */
   .resolve-modal[data-pair="exact"] .pair-only { display: none; }
-  .resolve-modal:not([data-pair="partial"]) .partial-only { display: none; }
+  .resolve-modal:not([data-pair="partial"]):not([data-pair="place"]) .partial-only { display: none; }
   .resolve-paths { padding: 12px 18px 0; display: flex; gap: 6px; flex-wrap: wrap; }
   .resolve-path-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; color: var(--ink); cursor: pointer; }
   .resolve-path-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
@@ -598,6 +598,7 @@
     <button class="rb-btn active" data-pair="exact">same name</button>
     <button class="rb-btn" data-pair="partial">partial name</button>
     <button class="rb-btn" data-pair="keyword">via keyword</button>
+    <button class="rb-btn" data-pair="place">same place parent</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu &middot; flip viewport via 1/2/3</span>
 </div>
@@ -1463,7 +1464,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <div class="resolve-body active" data-path="merge">
       <div class="canon-picker" id="canon-picker">
         <div class="seg active" data-canon="A" data-name="Kael" data-word="older">
-          Kael &middot; Older &middot; 3 days ago
+          <span class="older-name">Kael</span> &middot; Older &middot; 3 days ago
         </div>
         <div class="seg" data-canon="B" data-name="Kael" data-word="newer">
           <span class="newer-name">Kael</span> &middot; Newer &middot; just now
@@ -1480,7 +1481,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <span class="row-v pair-only">
           <input type="radio" name="f-name" data-side="A" checked>
           <span class="row-prose">
-            <span class="prose-body">Kael</span>
+            <span class="prose-body older-name">Kael</span>
             <span class="side-meta">Older &middot; 3 days ago</span>
           </span>
         </span>
@@ -1521,7 +1522,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <span class="row-l pair-only">keywords</span>
         <span class="row-v span2 tags-row pair-only">
           <span class="tags-list">
-            <code>the Grey Wolf</code> &middot; <code>the bounty hunter</code><span class="partial-only"> &middot; <code>Kael Stormborn</code> (name not kept)</span>
+            <code>the Grey Wolf</code> &middot; <code>the bounty hunter</code><span class="partial-only"> &middot; <code class="newer-name">Kael Stormborn</code> (name not kept)</span>
           </span>
           <span class="side-meta">union by default &middot; tap a keyword to deselect</span>
         </span>
@@ -1533,7 +1534,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <code>state</code> JSON is taken whole-side from canonical (per-kind shape &mdash; character / location / item / faction). To pick the loser&rsquo;s state, re-pick canonical above.
       </div>
       <div class="relations-block">
-        <div class="h">Moves on merge (<span class="newer-name">Kael</span> &rarr; Kael)</div>
+        <div class="h">Moves on merge (<span class="newer-name">Kael</span> &rarr; <span class="older-name">Kael</span>)</div>
         <ul>
           <li>Awareness rows: 4</li>
           <li>Involvements: 2</li>
@@ -1556,7 +1557,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     <div class="resolve-body" data-path="rename">
       <div class="rename-row">
         <div class="meta"><strong>Older &middot; 3 days ago</strong></div>
-        <input type="text" value="Kael">
+        <input type="text" id="rename-older" value="Kael">
       </div>
       <div class="rename-row">
         <div class="meta"><strong>Newer &middot; just now</strong></div>
@@ -1819,14 +1820,19 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   // button's "Merge into the <older|newer> <canonical-name>" follow the pick, so destructive
   // direction stays obvious
   const PAIRS = {
-    exact: { newer: 'Kael', rename: 'Kaelan (the guardsman)', title: 'Two characters named \u201cKael\u201d',
+    exact: { older: 'Kael', newer: 'Kael', rename: 'Kaelan (the guardsman)', title: 'Two characters named \u201cKael\u201d',
       reason: 'Their descriptions differ.', basis: '', keep: null },
-    partial: { newer: 'Kael Stormborn', rename: 'Kael Stormborn', title: '\u201cKael Stormborn\u201d may be \u201cKael\u201d',
+    partial: { older: 'Kael', newer: 'Kael Stormborn', rename: 'Kael Stormborn', title: '\u201cKael Stormborn\u201d may be \u201cKael\u201d',
       reason: 'Their descriptions are partly alike.', basis: '',
       keep: '<b>Kael</b> and <b>Kael Stormborn</b> will both continue to exist. The flag clears; no other writes.' },
-    keyword: { newer: 'the Grey Wolf', rename: 'the Grey Wolf', title: '\u201cthe Grey Wolf\u201d may be \u201cKael\u201d',
+    keyword: { older: 'Kael', newer: 'the Grey Wolf', rename: 'the Grey Wolf', title: '\u201cthe Grey Wolf\u201d may be \u201cKael\u201d',
       reason: 'Their descriptions read alike.', basis: '\u201cKael\u201d also goes by \u201cthe Grey Wolf\u201d.',
       keep: '<b>Kael</b> and <b>the Grey Wolf</b> will both continue to exist. The flag clears; no other writes.' },
+    // A location the per-turn writer created beside a similarly named sibling (reason same-parent).
+    // Only the names, header, reason and keep copy change; the body keeps the character sample.
+    place: { older: 'the wine cellar', newer: 'the cellar', rename: 'the cellar', title: '\u201cthe cellar\u201d may be \u201cthe wine cellar\u201d',
+      reason: 'Both are in \u201cThe Rusty Anchor\u201d.', basis: '',
+      keep: '<b>the wine cellar</b> and <b>the cellar</b> will both continue to exist. The flag clears; no other writes.' },
   };
   const exactKeep = document.getElementById('keep-copy')?.innerHTML ?? '';
   function setPair(p) {
@@ -1839,6 +1845,9 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     basis.textContent = pair.basis;
     basis.hidden = pair.basis === '';
     document.querySelectorAll('.newer-name').forEach(x => { x.textContent = pair.newer; });
+    document.querySelectorAll('.older-name').forEach(x => { x.textContent = pair.older; });
+    document.querySelector('.canon-picker .seg[data-canon="A"]').dataset.name = pair.older;
+    document.getElementById('rename-older').value = pair.older;
     document.querySelector('.canon-picker .seg[data-canon="B"]').dataset.name = pair.newer;
     document.getElementById('rename-newer').value = pair.rename;
     document.getElementById('keep-copy').innerHTML = pair.keep ?? exactKeep;
