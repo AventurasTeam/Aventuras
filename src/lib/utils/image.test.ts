@@ -8,6 +8,8 @@ import {
   expectedPixels,
   normalizeImageDataUrl,
   base64ImageMime,
+  bytesToBase64,
+  base64ToBytes,
   storyImageMode,
   IMAGE_ORIENTATIONS,
   IMAGE_SIZE_TIERS,
@@ -215,5 +217,19 @@ describe('base64ImageMime', () => {
     ['AAAA', 'image/png'],
   ])('sniffs %s as %s', (b64, mime) => {
     expect(base64ImageMime(b64)).toBe(mime)
+  })
+})
+
+describe('bytesToBase64 / base64ToBytes', () => {
+  it('round-trips data longer than one encoding chunk', () => {
+    const bytes = Uint8Array.from({ length: 0x8000 * 2 + 5 }, (_, i) => i % 256)
+    const encoded = bytesToBase64(bytes)
+    expect(encoded).toBe(btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join('')))
+    expect(base64ToBytes(encoded)).toEqual(bytes)
+  })
+
+  it('handles empty input', () => {
+    expect(bytesToBase64(new Uint8Array())).toBe('')
+    expect(base64ToBytes('')).toEqual(new Uint8Array())
   })
 })
