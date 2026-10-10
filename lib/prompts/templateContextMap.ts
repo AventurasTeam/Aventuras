@@ -233,14 +233,15 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'WindowTurn[]',
       category: 'Story',
       description:
-        'Unclassified prose window, each turn carrying the provenance handle (t1..tN) the model must tag its facts with.',
+        'Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.',
       required: true,
     },
     {
       name: 'entities',
       type: 'Entity[]',
       category: 'Entities',
-      description: 'Branch entities (id/kind/name/description/status) — the placeholder universe.',
+      description:
+        'Branch entities (id/kind/name/description/status/keywords) — the placeholder universe.',
       required: true,
     },
     {

@@ -4,7 +4,7 @@ export const PERIODIC_CLASSIFIER = `You are extracting structured world state fr
 
 Known entities, referenced only by the ID shown in brackets — write it without the brackets, never invent one:
 {%- for e in entities %}
-- [{{ e.id }}] {{ e.name }} ({{ e.kind }}{% if e.status != 'active' %}, {{ e.status }}{% endif %}){% if e.description %} — {{ e.description }}{% endif %}
+- [{{ e.id }}] {{ e.name }} ({{ e.kind }}{% if e.status != 'active' %}, {{ e.status }}{% endif %}){% if e.description %} — {{ e.description }}{% endif %}{% if e.keywords.size > 0 %} (also called: {{ e.keywords | join: ', ' }}){% endif %}
 {%- endfor %}
 {%- unless entities and entities.size > 0 %}
 (none)
@@ -26,9 +26,10 @@ Known happenings, same ID rule:
 (none)
 {%- endunless %}
 
-Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it:
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. The turn's scene and location, by the same ID rule, may follow the handle; its prose starts on the next line:
 {%- for turn in turns %}
-[{{ turn.handle }}] {{ turn.content }}
+[{{ turn.handle }}]{% if turn.scene.size > 0 %} scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}{% if turn.location %}{% if turn.scene.size > 0 %};{% endif %} location: [{{ turn.location }}]{% endif %}
+{{ turn.content }}
 {%- endfor %}
 
 Rules:
@@ -39,5 +40,6 @@ Rules:
 - Relationships. The Known relationships list is the current state, whoever wrote it. Emit (subject, object, kind) only when these turns establish a view or change a listed one; never restate a listed view. A change means the relationship itself moved (trust broken, a new role); the same relationship in other words is not a change. If Kael is listed as seeing Aria as sister and he calls her "dear sister", emit nothing; if he disowns her, emit the new view. subject is the character whose perspective the prose expresses. Fill ONLY the perspective the prose shows — do not infer the inverse from biology or convention. "Kael called Aria sister" is Kael's view of Aria and says nothing about Aria's view of Kael.
 - Retirement. Move an entity to retired only on unambiguous finality: death stated plainly, explicit exile with no return arc, structural dissolution. Ambiguous prose does NOT retire anyone — a character who "wandered off" or was "badly hurt" stays active.
 - Promotion. Move a staged character to active only when the prose actually brings them into the scene.
+- Scene. A turn's scene lists the entities the story had in that scene when the turn was saved. Prose naming an entity in its turn's scene refers to that entity.
 - New characters. A character the prose introduces who is not in the list above goes in newCharacters with a handle you choose. The handle MUST start with "new:" (for example "new:captain") so it can never be confused with an ID from the lists above. Reference that same handle in any involvement, awareness or relationship in this reply. Also give keywords: the titles, epithets and relational references the prose used for that character alongside their name (for example "the Grey Wolf", "the innkeeper"). Omit the name itself, which retrieval already matches, and return an empty array when the prose used none.
 - Silence is valid. Return empty arrays for anything the prose does not support.`

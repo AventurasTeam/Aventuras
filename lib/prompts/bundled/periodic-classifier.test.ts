@@ -6,12 +6,34 @@ import { renderTemplate, TEMPLATE_IDS } from '..'
 
 const context = {
   turns: [
-    { handle: 't1', content: 'Kael falls at the ford, lifeless.' },
-    { handle: 't2', content: 'Aria hears of it from Jorin.' },
+    { handle: 't1', content: 'Kael falls at the ford, lifeless.', scene: ['c1'], location: 'l1' },
+    { handle: 't2', content: 'Aria hears of it from Jorin.', scene: [], location: null },
   ],
   entities: [
-    { id: 'c1', name: 'Kael', kind: 'character', status: 'active', description: 'A courier.' },
-    { id: 'c2', name: 'Aria', kind: 'character', status: 'staged', description: 'His sister.' },
+    {
+      id: 'c1',
+      name: 'Kael',
+      kind: 'character',
+      status: 'active',
+      description: 'A courier.',
+      keywords: ['the Grey Wolf', 'the courier'],
+    },
+    {
+      id: 'c2',
+      name: 'Aria',
+      kind: 'character',
+      status: 'staged',
+      description: 'His sister.',
+      keywords: [],
+    },
+    {
+      id: 'l1',
+      name: 'The ford',
+      kind: 'location',
+      status: 'active',
+      description: null,
+      keywords: [],
+    },
   ],
   happenings: [{ id: 'hp1', title: 'The satchel was stolen' }],
   relationships: [
@@ -84,5 +106,40 @@ describe('periodic classifier template', () => {
   it('renders a stored relationship view as a subject-sees-object line', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
     expect(rendered).toContain('- [c1] Kael sees [c2] Aria as: sister')
+  })
+
+  // classifier.md → What the classifier reads: the saved scene rides each turn.
+  it("shows a turn's saved scene and location after its handle, prose on the next line", () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toContain(
+      '[t1] scene: [c1]; location: [l1]\nKael falls at the ford, lifeless.',
+    )
+    expect(rendered).toContain('\n[t2]\nAria hears of it from Jorin.')
+    expect(rendered).toContain('scene and location, by the same ID rule, may follow the handle')
+  })
+
+  it('renders a scene without a location, and a location without a scene', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, {
+      ...context,
+      turns: [
+        { handle: 't1', content: 'Both are here.', scene: ['c1', 'c2'], location: null },
+        { handle: 't2', content: 'At the ford.', scene: [], location: 'l1' },
+      ],
+    })
+    expect(rendered).toContain('[t1] scene: [c1], [c2]\nBoth are here.')
+    expect(rendered).toContain('[t2] location: [l1]\nAt the ford.')
+  })
+
+  it("lists an entity's stored keywords on its line, and nothing when it has none", () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toContain(
+      '- [c1] Kael (character) — A courier. (also called: the Grey Wolf, the courier)\n',
+    )
+    expect(rendered).toContain('- [c2] Aria (character, staged) — His sister.\n')
+  })
+
+  it('tells the model that prose naming an entity in its turn scene refers to it', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toMatch(/Prose naming an entity in its turn's scene refers to that entity/)
   })
 })

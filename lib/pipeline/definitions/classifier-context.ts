@@ -55,10 +55,9 @@ export function buildClassifierContext(args: {
   idMap: IdBiMap
 }): Record<string, unknown> {
   const { window, entities, happenings, relationships, idMap } = args
+  const known = new Set(entities.map((e) => e.id))
   const context = {
-    // entryId/position stay out: the model addresses turns by handle only, and
-    // entry_* is not substitutable, so leaking it would put a raw id in the prompt.
-    turns: window.turns.map((t) => ({ handle: t.handle, content: t.content })),
+    // Before turns: substituteIds allocates in walk order, so the roster numbers first.
     // Projected to the fields templateContextMap documents, like happenings
     // below. Narrower than generationContext's on purpose: the classifier reads
     // prose and has no use for injectionMode, which is a retrieval-time knob.
@@ -68,6 +67,18 @@ export function buildClassifierContext(args: {
       name: e.name,
       description: e.description,
       status: e.status,
+      keywords: e.keywords,
+    })),
+    // entryId/position stay out: the model addresses turns by handle only, and
+    // entry_* is not substitutable, so leaking it would put a raw id in the prompt.
+    // A saved scene can name a row deleted since; unfiltered, substituteIds would
+    // allocate it a placeholder.
+    turns: window.turns.map((t) => ({
+      handle: t.handle,
+      content: t.content,
+      scene: t.sceneEntities.filter((id) => known.has(id)),
+      location:
+        t.currentLocationId != null && known.has(t.currentLocationId) ? t.currentLocationId : null,
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
     relationships: projectRelationships(relationships, entities),

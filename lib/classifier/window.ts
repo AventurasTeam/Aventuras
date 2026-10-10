@@ -1,7 +1,16 @@
 import type { StoryEntry } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
 
-export type WindowTurn = { handle: string; entryId: string; position: number; content: string }
+export type WindowTurn = {
+  handle: string
+  entryId: string
+  position: number
+  content: string
+  /** The entry's saved metadata.sceneEntities; [] when it has no metadata. */
+  sceneEntities: readonly string[]
+  /** The entry's saved metadata.currentLocationId; null when it has none. */
+  currentLocationId: string | null
+}
 
 export type ClassifierWindow = {
   turns: readonly WindowTurn[]
@@ -12,6 +21,8 @@ export type ClassifierWindow = {
   truncated: boolean
   isEmpty: boolean
   resolveHandle: (handle: string | undefined) => { entryId: string; fellBack: boolean }
+  /** The saved scene of the turn `handle` names; null when the handle falls back to the window head. */
+  sceneOf: (handle: string | undefined) => ReadonlySet<string> | null
 }
 
 // `entry_*` is deliberately absent from SUBSTITUTABLE_PREFIXES, so the id walker
@@ -34,17 +45,21 @@ export function buildClassifierWindow(args: {
   // Prose only: the template asks for facts "the turn whose prose produced it",
   // and a persisted <suggestions> block offers actions the story never took as
   // if they were narrated.
-  const turns = capped
+  const turns: WindowTurn[] = capped
     .filter((e) => e.kind !== 'system')
     .map((e, i) => ({
       handle: `t${i + 1}`,
       entryId: e.id,
       position: e.position,
       content: promptProse(e),
+      // User actions too: each carries the scene submitTurn inherited onto it.
+      sceneEntities: e.metadata?.sceneEntities ?? [],
+      currentLocationId: e.metadata?.currentLocationId ?? null,
     }))
   const coversThrough = capped.at(-1)?.position ?? floor
   const byHandle = new Map(turns.map((t) => [t.handle, t]))
   const head = turns.at(-1) ?? null
+  const turnOf = (handle: string | undefined) => (handle != null ? byHandle.get(handle) : undefined)
 
   return {
     turns,
@@ -53,11 +68,16 @@ export function buildClassifierWindow(args: {
     truncated,
     isEmpty: turns.length === 0,
     resolveHandle: (handle) => {
-      const hit = handle != null ? byHandle.get(handle) : undefined
+      const hit = turnOf(handle)
       if (hit) return { entryId: hit.entryId, fellBack: false }
       // Unattributed fallback: the window head, so the fact reverses on any
       // reversal into its window but never survives as an orphan.
       return { entryId: head?.entryId ?? '', fellBack: true }
+    },
+    // Never the head's scene on a fallback: it isn't the unattributed fact's.
+    sceneOf: (handle) => {
+      const hit = turnOf(handle)
+      return hit ? new Set(hit.sceneEntities) : null
     },
   }
 }
