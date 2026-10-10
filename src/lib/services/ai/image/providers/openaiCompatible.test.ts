@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./fetchAdapter', () => ({
   imageFetch: vi.fn(),
-  imageGetFetch: vi.fn(),
+  fetchImageBase64: vi.fn(),
 }))
 
 import { generateOpenAICompatible } from './openaiCompatible'
-import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { imageFetch, fetchImageBase64 } from './fetchAdapter'
 
 const PNG = 'iVBORw0KGgo='
 const JPEG = '/9j/4AAQSkZJRg=='
@@ -67,6 +67,7 @@ describe('generateOpenAICompatible', () => {
     const call = vi.mocked(imageFetch).mock.calls[0][0]
     expect(call.url).toBe('https://example.test/v1/images/edits')
     expect(call.headers).toEqual({ Authorization: 'Bearer sk-test' })
+    expect(call.serviceId).toBe('test-image-edit')
 
     const form = sentForm()
     expect(form.getAll('image')).toHaveLength(1)
@@ -84,14 +85,6 @@ describe('generateOpenAICompatible', () => {
     expect(files.map((f) => f.name)).toEqual(['reference-1.png', 'reference-2.jpg'])
   })
 
-  it('trims references to maxReferences', async () => {
-    await generateOpenAICompatible({ ...base, referenceImages: [PNG, JPEG], maxReferences: 1 })
-
-    const form = sentForm()
-    expect(form.getAll('image')).toHaveLength(1)
-    expect(form.getAll('image[]')).toHaveLength(0)
-  })
-
   it('stringifies extraFields into the form', async () => {
     await generateOpenAICompatible({
       ...base,
@@ -101,23 +94,32 @@ describe('generateOpenAICompatible', () => {
     expect(sentForm().get('safe')).toBe('false')
   })
 
-  it('fetches a url result without Authorization and returns base64', async () => {
+  it('downloads a url result and returns base64', async () => {
     vi.mocked(imageFetch).mockResolvedValue(
       jsonResponse({ data: [{ url: 'https://cdn.test/a.png', revised_prompt: 'rp' }] }),
     )
-    vi.mocked(imageGetFetch).mockResolvedValue({
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-    } as unknown as Response)
+    vi.mocked(fetchImageBase64).mockResolvedValue('DOWNLOADED')
 
     const result = await generateOpenAICompatible(base)
 
-    expect(vi.mocked(imageGetFetch).mock.calls[0][0]).toBe('https://cdn.test/a.png')
-    expect(vi.mocked(imageGetFetch).mock.calls[0][1]).toBeUndefined()
-    expect(result).toEqual({ base64: btoa('\x01\x02\x03'), revisedPrompt: 'rp' })
+    expect(fetchImageBase64).toHaveBeenCalledWith('https://cdn.test/a.png', {
+      signal: undefined,
+      serviceId: 'test-image',
+    })
+    expect(result).toEqual({ base64: 'DOWNLOADED', revisedPrompt: 'rp' })
   })
 
   it('throws when the response carries no image', async () => {
     vi.mocked(imageFetch).mockResolvedValue(jsonResponse({ data: [] }))
-    await expect(generateOpenAICompatible(base)).rejects.toThrow('No image data')
+    await expect(generateOpenAICompatible(base)).rejects.toThrow('No image data in test-image')
+  })
+
+  it('names the service when the body is not JSON', async () => {
+    vi.mocked(imageFetch).mockResolvedValue({
+      json: async () => {
+        throw new SyntaxError('Unexpected token')
+      },
+    } as unknown as Response)
+    await expect(generateOpenAICompatible(base)).rejects.toThrow('No image data in test-image')
   })
 })

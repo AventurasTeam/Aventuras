@@ -1,8 +1,7 @@
 /**
  * Pollinations Image Provider
  *
- * Generation goes through the shared OpenAI-compatible request (openaiCompatible.ts)
- * against gen.pollinations.ai/v1. Model discovery uses Pollinations' own catalogue.
+ * Generates against gen.pollinations.ai/v1; model discovery uses Pollinations' own catalogue.
  */
 
 import { specToPixels, formatImageSize } from '$lib/utils/image'
@@ -59,7 +58,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         prompt,
         size: formatImageSize(specToPixels(spec)),
         referenceImages,
-        extraFields: { safe: false },
+        extraFields: { safe: false, nologo: true },
         signal,
         serviceId: 'pollinations-image',
       })

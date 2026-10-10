@@ -30,11 +30,12 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     name: 'Google AI Studio',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, signal } = options
+      const { model, prompt, spec, referenceImages, signal } = options
+      const images = takesReferences(model) ? referenceImages : undefined
 
       const result = await generateImage({
         model: googleSDK.image(model),
-        prompt,
+        prompt: images?.length ? { text: prompt, images } : prompt,
         aspectRatio: specToAspectRatio(spec, GOOGLE_ASPECT_RATIOS) as `${number}:${number}`,
         abortSignal: signal,
       })
@@ -98,7 +99,7 @@ async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise
           id,
           name: m.displayName || id,
           description: m.description,
-          supportsImg2Img: supportsImg2Img(id),
+          ...referenceSupport(id),
         }
       })
 
@@ -109,9 +110,17 @@ async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise
   }
 }
 
-function supportsImg2Img(id: string): boolean {
-  // Gemini image models (nano banana) and Imagen 4 support img2img
-  return isGoogleImageModel(id) || id === 'imagen-4.0-generate-001'
+// The SDK sends only `gemini-*` ids down the Gemini path; any other id is treated as Imagen,
+// which throws on input images.
+function takesReferences(id: string): boolean {
+  return id.startsWith('gemini-')
+}
+
+function referenceSupport(
+  id: string,
+): Pick<ImageModelInfo, 'supportsImg2Img' | 'maxReferenceImages'> {
+  const accepted = takesReferences(id)
+  return { supportsImg2Img: accepted, maxReferenceImages: accepted ? undefined : 0 }
 }
 
 function getFallbackImageModels(): ImageModelInfo[] {
@@ -120,19 +129,19 @@ function getFallbackImageModels(): ImageModelInfo[] {
       id: 'imagen-4.0-generate-001',
       name: 'Imagen 4',
       description: 'Vertex served Imagen 4.0 model',
-      supportsImg2Img: supportsImg2Img('imagen-4.0-generate-001'),
+      ...referenceSupport('imagen-4.0-generate-001'),
     },
     {
       id: 'imagen-4.0-ultra-generate-001',
       name: 'Imagen 4 Ultra',
       description: 'Vertex served Imagen 4.0 ultra model',
-      supportsImg2Img: supportsImg2Img('imagen-4.0-ultra-generate-001'),
+      ...referenceSupport('imagen-4.0-ultra-generate-001'),
     },
     {
       id: 'imagen-4.0-fast-generate-001',
       name: 'Imagen 4 Fast',
       description: 'Vertex served Imagen 4.0 Fast model',
-      supportsImg2Img: supportsImg2Img('imagen-4.0-fast-generate-001'),
+      ...referenceSupport('imagen-4.0-fast-generate-001'),
     },
   ]
 }

@@ -53,6 +53,8 @@ export interface ImageModelInfo {
   name: string
   description?: string
   supportsImg2Img: boolean
+  /** How many reference images one request takes; absent means no known limit. */
+  maxReferenceImages?: number
   /**
    * The exact values this model accepts for its size parameter, verbatim.
    *

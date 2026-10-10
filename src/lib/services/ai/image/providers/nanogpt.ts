@@ -1,9 +1,3 @@
-/**
- * NanoGPT Image Provider
- *
- * Generation goes through the shared OpenAI-compatible request (openaiCompatible.ts).
- */
-
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -16,7 +10,7 @@ import { generateOpenAICompatible } from './openaiCompatible'
 import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '$lib/utils/image'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
-// The old default, still stored on profiles migrated from an API profile.
+// The text provider's default host, copied onto image profiles migrated from an API profile.
 const LEGACY_BASE_URL = 'https://nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
 
@@ -82,6 +76,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
             name: m.name || m.model || '',
             description: m.description,
             supportsImg2Img,
+            maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
             costPerImage,
             supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
           }

@@ -19,14 +19,26 @@ vi.mock('$lib/stores/debug.svelte', () => ({
 vi.mock('./fetchAdapter', () => ({
   imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
+  fetchImageBase64: vi.fn(),
 }))
 
 vi.mock('./openai', () => ({
   createOpenAIProvider: vi.fn(),
 }))
 
-import { imageGetFetch } from './fetchAdapter'
+vi.mock('./comfy', () => ({
+  createComfyProvider: vi.fn(),
+}))
+
+vi.mock('./google', () => ({
+  createGoogleProvider: vi.fn(),
+}))
+
+import { fetchImageBase64 } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
+import { createComfyProvider } from './comfy'
+import { createGoogleProvider } from './google'
+import type { ImageModelInfo } from './types'
 import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
@@ -103,37 +115,122 @@ describe('Image Provider Registry', () => {
       ).rejects.toThrow('Image profile not found: non-existent-id')
     })
 
-    it('hands adapters raw base64 for data: and http(s) references', async () => {
-      const generate = vi.fn(async () => ({ base64: 'RESULT' }))
-      vi.mocked(createOpenAIProvider).mockReturnValue({
-        id: 'openai',
-        name: 'OpenAI',
+    // The model list is cached per key, so each case gets its own.
+    let keyCounter = 0
+    function setup(providerType: 'openai' | 'google' | 'comfyui', models: ImageModelInfo[] = []) {
+      const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+      const provider = {
+        id: providerType,
+        name: providerType,
         generate,
-        listModels: vi.fn(async () => []),
-      })
+        listModels: vi.fn(async () => models),
+      }
+      vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createGoogleProvider).mockReturnValue(provider)
+      vi.mocked(createComfyProvider).mockReturnValue(provider)
       vi.mocked(settings.getImageProfile).mockReturnValue({
-        providerType: 'openai',
-        apiKey: 'sk-secret',
+        providerType,
+        apiKey: `sk-key-${keyCounter++}`,
       } as ReturnType<typeof settings.getImageProfile>)
-      vi.mocked(imageGetFetch).mockResolvedValue({
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-      } as unknown as Response)
+      vi.mocked(fetchImageBase64).mockResolvedValue('DOWNLOADED')
+      return generate
+    }
+
+    it('hands adapters raw base64 for data: and http(s) references', async () => {
+      const generate = setup('openai')
 
       await generateImage({
         profileId: 'p',
         model: 'gpt-image-1',
         prompt: 'x',
-        referenceImages: ['data:image/png;base64,AAAA', 'https://img.test/a.png', 'BBBB'],
+        referenceImages: [
+          'data:image/png;base64,AAAA',
+          'https://img.test/a.png',
+          'data:application/octet-stream;base64,CCCC',
+          'BBBB',
+        ],
       })
 
-      const fetched = vi
-        .mocked(imageGetFetch)
-        .mock.calls.find((c) => c[0] === 'https://img.test/a.png')
-      expect(fetched).toBeDefined()
-      expect(fetched![1]).toBeUndefined()
-      expect((generate.mock.calls[0] as unknown[])[0]).toMatchObject({
-        referenceImages: ['AAAA', btoa('\x01\x02\x03'), 'BBBB'],
+      expect(fetchImageBase64).toHaveBeenCalledWith('https://img.test/a.png', expect.anything())
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['AAAA', 'DOWNLOADED', 'CCCC', 'BBBB'] }),
+      )
+    })
+
+    it('trims references to the model limit before downloading any', async () => {
+      const generate = setup('openai', [
+        { id: 'dall-e-2', name: 'dall-e-2', supportsImg2Img: true, maxReferenceImages: 1 },
+      ])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'dall-e-2',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
       })
+
+      expect(fetchImageBase64).toHaveBeenCalledTimes(1)
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
+    it('hands Google raw base64 references', async () => {
+      const generate = setup('google')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gemini-2.5-flash-image',
+        prompt: 'x',
+        referenceImages: ['data:image/png;base64,AAAA', 'https://img.test/a.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['AAAA', 'DOWNLOADED'] }),
+      )
+    })
+
+    it('downloads no reference for a model that takes none', async () => {
+      const generate = setup('google', [
+        {
+          id: 'imagen-4.0-generate-001',
+          name: 'Imagen 4',
+          supportsImg2Img: false,
+          maxReferenceImages: 0,
+        },
+      ])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'imagen-4.0-generate-001',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+    })
+
+    it('sends no references, and downloads none, to a provider that ignores them', async () => {
+      const generate = setup('comfyui')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
+    })
+
+    it('passes no references when none were given', async () => {
+      const generate = setup('openai')
+
+      await generateImage({ profileId: 'p', model: 'gpt-image-1', prompt: 'x' })
+
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
     })
   })
 })

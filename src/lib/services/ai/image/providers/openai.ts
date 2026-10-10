@@ -1,11 +1,8 @@
 /**
  * OpenAI Image Provider
  *
- * Generation goes through the shared OpenAI-compatible request (openaiCompatible.ts).
- *
- * Models are fetched live from {baseUrl}/models and filtered by image-capable prefixes.
- * Known models are enriched with size/img2img metadata; unknown future models get defaults.
- * Falls back to a hardcoded list if the API call fails.
+ * Models are fetched live from {baseUrl}/models and filtered by image-capable prefixes;
+ * a failed fetch yields an empty list.
  */
 
 import { specToPixels, formatImageSize } from '$lib/utils/image'
@@ -42,8 +39,6 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
         prompt,
         size: formatImageSize(specToPixels(spec)),
         referenceImages,
-        // dall-e edits take a single image.
-        maxReferences: model.startsWith('dall-e-') ? 1 : undefined,
         signal,
         serviceId: 'openai-image',
       })
@@ -76,6 +71,8 @@ async function fetchOpenAIImageModels(baseUrl: string, apiKey: string): Promise<
           id,
           name: id,
           supportsImg2Img: true,
+          // dall-e edits take a single image.
+          maxReferenceImages: id.startsWith('dall-e-') ? 1 : undefined,
         }
       })
   } catch {

@@ -8,6 +8,7 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '$lib/stores/debug.svelte'
+import { bytesToBase64 } from '$lib/utils/image'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
@@ -147,6 +148,15 @@ export async function imageFetch(options: {
   } finally {
     clearTimeout(timeoutId)
   }
+}
+
+/** Downloads an image from a third-party host as raw base64. Never sends an API key. */
+export async function fetchImageBase64(
+  url: string,
+  options?: { signal?: AbortSignal; serviceId?: string },
+): Promise<string> {
+  const response = await imageGetFetch(url, undefined, options)
+  return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
 }
 
 /**

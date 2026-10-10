@@ -8,7 +8,7 @@
 
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
-import { parseImageSpec, describeImageSpec, bytesToBase64, type ImageSpec } from '$lib/utils/image'
+import { parseImageSpec, describeImageSpec, type ImageSpec } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -16,7 +16,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { createLogger } from '$lib/log'
-import { imageGetFetch } from './fetchAdapter'
+import { fetchImageBase64 } from './fetchAdapter'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -69,6 +69,19 @@ const PROVIDER_REQUIRES_API_KEY: Record<ImageProviderType, boolean> = {
   a1111: false,
 }
 
+/** Whether the adapter sends reference images; the rest would only waste the download. */
+const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
+  nanogpt: true,
+  openai: true,
+  openrouter: true,
+  pollinations: true,
+  google: true,
+  chutes: false,
+  zhipu: false,
+  comfyui: false,
+  a1111: false,
+}
+
 // ============================================================================
 // Model Cache
 // ============================================================================
@@ -105,16 +118,10 @@ export function requiresApiKey(providerType: string): boolean {
 
 /** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
 async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
-  if (image.startsWith('data:')) return image.replace(/^data:image\/[^;]+;base64,/, '')
   if (/^https?:\/\//i.test(image)) {
-    // A third-party host: no Authorization header.
-    const response = await imageGetFetch(image, undefined, {
-      signal,
-      serviceId: 'image-reference',
-    })
-    return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
+    return fetchImageBase64(image, { signal, serviceId: 'image-reference' })
   }
-  return image
+  return image.replace(/^data:[^,]*;base64,/, '')
 }
 
 /**
@@ -164,7 +171,13 @@ export async function generateImage(options: {
   const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
 
   const cleanRefs =
-    referenceImages && (await Promise.all(referenceImages.map((img) => toRawBase64(img, signal))))
+    referenceImages && PROVIDER_READS_REFERENCES[profile.providerType]
+      ? await Promise.all(
+          referenceImages
+            .slice(0, modelInfo?.maxReferenceImages)
+            .map((img) => toRawBase64(img, signal)),
+        )
+      : undefined
 
   return provider.generate({
     model,

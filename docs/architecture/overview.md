@@ -451,8 +451,10 @@ it does not offer answers with the nearest thing it does, which is not the same 
 
 OpenAI, NanoGPT and Pollinations share one OpenAI-compatible request (`openaiCompatible.ts`):
 `/images/generations`, or `/images/edits` as multipart when there are references. Each keeps its own
-model discovery and size handling. `http(s)` references are fetched to base64 in the registry, so
-every adapter receives raw base64.
+model discovery and size handling. The registry hands references only to the providers that send
+them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
+adapter receives raw base64. Google takes them on `gemini-*` image models only; the SDK sends any
+other id down the Imagen path, which rejects input images.
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see

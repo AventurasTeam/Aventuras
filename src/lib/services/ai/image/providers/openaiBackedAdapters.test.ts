@@ -8,12 +8,12 @@ vi.mock('./openaiCompatible', () => ({
   generateOpenAICompatible: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 
+import { imageGetFetch } from './fetchAdapter'
 import { generateOpenAICompatible } from './openaiCompatible'
 import { createNanoGPTProvider } from './nanogpt'
 import { createPollinationsProvider } from './pollinations'
 import { createOpenAIProvider } from './openai'
 import { POLLINATIONS_DEFAULT_MODEL_ID } from '../constants'
-import { formatImageSize, specToPixels } from '$lib/utils/image'
 import type { ImageGenerateOptions } from './types'
 
 const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
@@ -24,7 +24,10 @@ const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions
   ...over,
 })
 
-const lastCall = () => vi.mocked(generateOpenAICompatible).mock.calls[0][0]
+const lastCall = () => vi.mocked(generateOpenAICompatible).mock.lastCall![0]
+
+const modelsResponse = (body: unknown) =>
+  ({ ok: true, json: async () => body }) as unknown as Response
 
 describe('NanoGPT adapter', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -71,8 +74,8 @@ describe('Pollinations adapter', () => {
   it('calls /v1 with the content filter off', async () => {
     await createPollinationsProvider({ apiKey: 'k' }).generate(options())
     expect(lastCall().baseUrl).toBe('https://gen.pollinations.ai/v1')
-    expect(lastCall().extraFields).toEqual({ safe: false })
-    expect(lastCall().size).toBe(formatImageSize(specToPixels(options().spec)))
+    expect(lastCall().extraFields).toEqual({ safe: false, nologo: true })
+    expect(lastCall().size).toBe('1536x1536')
   })
 
   it('falls back to the default model', async () => {
@@ -91,14 +94,44 @@ describe('Pollinations adapter', () => {
 describe('OpenAI adapter', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('limits dall-e models to one reference', async () => {
-    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ model: 'dall-e-2' }))
-    expect(lastCall().maxReferences).toBe(1)
+  it('generates against the OpenAI host', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ model: 'gpt-image-1' }))
+    expect(lastCall().baseUrl).toBe('https://api.openai.com/v1')
+    expect(lastCall().serviceId).toBe('openai-image')
   })
 
-  it('passes every reference for other models', async () => {
-    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ model: 'gpt-image-1' }))
-    expect(lastCall().maxReferences).toBeUndefined()
-    expect(lastCall().baseUrl).toBe('https://api.openai.com/v1')
+  it('limits dall-e models to one reference', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({ data: [{ id: 'dall-e-2' }, { id: 'gpt-image-1' }, { id: 'gpt-4o' }] }),
+    )
+    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    expect(models.map((m) => [m.id, m.maxReferenceImages])).toEqual([
+      ['dall-e-2', 1],
+      ['gpt-image-1', undefined],
+    ])
+  })
+})
+
+describe('NanoGPT model catalogue', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('limits img2img models without multi-image support to one reference', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({
+        models: {
+          image: {
+            a: { name: 'a', model: 'a', tags: ['image-to-image'] },
+            b: { name: 'b', model: 'b', tags: ['image-to-image'], supportsMultipleImg2Img: true },
+            c: { name: 'c', model: 'c' },
+          },
+        },
+      }),
+    )
+    const models = await createNanoGPTProvider({ apiKey: 'k' }).listModels()
+    expect(models.map((m) => [m.id, m.maxReferenceImages])).toEqual([
+      ['a', 1],
+      ['b', undefined],
+      ['c', undefined],
+    ])
   })
 })
