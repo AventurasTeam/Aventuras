@@ -132,6 +132,11 @@ so the two write sets stay disjoint by kind.
   (`Here: [i7] the iron chest`). An item in a holder's line isn't
   repeated in the scene list.
 
+Both go in the prompt's user half
+([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)):
+they change whenever a place or an item is created, and the system half
+must not.
+
 ### Creating a place or an item
 
 ```xml
@@ -428,6 +433,12 @@ entity roster with bracketed IDs. The narrative sees only in-scene plus
 retrieved entities, while the fallback must be able to name an entity
 in `sceneEntities` that neither set contains. The two contexts are not
 symmetric in both directions.
+
+Its system half is the calendar vocabulary, and everything else, the
+report directives included, is its user half
+([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)).
+A fallback recovering from a failed piggyback parse carries no cache
+marker.
 
 **Marking the extraction target is mandatory, not stylistic.**
 `lastTurns` has a fixed floor — the last two non-system entries — that

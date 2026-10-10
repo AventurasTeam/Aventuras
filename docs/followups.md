@@ -27,6 +27,29 @@ for the placement rule.
   matcher, flag, partner and reason columns, so it lands after the
   partial-name collision PR.
 
+- **Implement system and user prompt halves.** Designed 2026-10-11
+  ([exploration record](./explorations/2026-10-11-system-and-user-prompt-halves.md));
+  the spec is canon:
+  [`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)
+  for the template shape, the placement rule, the bundled split and the
+  cache marker, with
+  [`→ Structured output`](./architecture.md#structured-output--the-json-contract-is-not-pack-content)
+  for where the JSON contract goes, and the per-template notes in
+  [`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)
+  and
+  [`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads).
+  It splits the per-turn and fallback templates the locations-and-items
+  work edits, so it lands after that PR. The periodic classifier now
+  reads its rules before its data: run the real-provider classifier
+  smoke spec before and after. The narrator's output-format line leaves
+  the end of the prompt, also unmeasured. The mock LLM's schema
+  extraction (`scripts/mock-llm/routing.ts`) brackets the block with the
+  closing line, which moves to the user message, so its end delimiter
+  becomes the end of the system message. Confirm on an Anthropic story,
+  through Diagnostics' HTTP capture, that the narrative call reads its
+  cache; whether a streamed capture keeps the usage events is
+  unchecked.
+
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
   extraction, reconciled by Layer B
@@ -57,6 +80,19 @@ for the placement rule.
   ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)),
   so the design decides whether chapter close may rewrite one.
 
+- **Prompt content pass.** The
+  [system and user halves](./architecture.md#system-and-user-halves)
+  moved today's prompts into the new shape without rewriting them, and
+  the content still needs writing: the narrator's standing instructions
+  (its role, the story's mode and lead), which today are one
+  output-format line; the wizard's system halves, empty because each
+  shared context macro mixes the output contract with grounding that
+  changes as the user fills the wizard in, so each splits into a
+  contract macro and a grounding macro; and the blocks the split left in
+  a user half only because they point at its content by position. v1
+  work, since the shipped prompts have to be good, once the halves land.
+  Raised 2026-10-11.
+
 ## UX
 
 - **Per-turn token usage breakdown.** Every turn records the tokens
@@ -68,5 +104,8 @@ for the placement rule.
   ([`memory/probe.md`](./memory/probe.md)) cover only retrieval's pools
   and the structural floor, and only on captured turns; the design
   should build on the probe's accounting rather than beside it, and
-  shows whether the location map needs collapsing as a story grows.
+  shows whether the location map needs collapsing as a story grows. The
+  breakdown also records each call's cache read and write tokens
+  (`usage.inputTokenDetails`), the only measure of whether a cache
+  marker pays.
   Wanted in v1, design deferred. Raised by the developer 2026-10-10.

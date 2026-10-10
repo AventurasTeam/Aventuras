@@ -97,8 +97,8 @@ read them.
   not the builder. But the builder asks the engine which variables the
   template actually references (following `{% include %}`), and skips
   the read behind one it never mentions; the variable is still there,
-  just empty. The classifier template names neither `entries` nor any
-  scene variable, so its build issues one query instead of four.
+  just empty. The fallback classifier template reads `lastTurns` and
+  never names `entries`, so its build skips the prompt-buffer read.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)
@@ -209,6 +209,63 @@ to be tuned and so the half most likely to drift. A refine template
 reads `current` and `instruction`; it carries no `guidance`, which
 steers a generate.
 
+### System and user halves
+
+Every template has two Liquid sources, a **system half** and a **user
+half**, and a call sends them as a system message followed by one user
+message. The narrative call is exactly that pair; an agent that loops
+over tool calls sends the pair first and appends its steps after it.
+
+- **Both halves render against the same context.** Either may include
+  any macro its group allows, the include validator checks both, and
+  a template reads the union of what its halves read, so an unread
+  variable still costs no query.
+- **A blank system half is legal.** The call then sends no system
+  message, since providers reject an empty one, unless the
+  [structured-output contract](#structured-output--the-json-contract-is-not-pack-content)
+  supplies one.
+- **A blank user half is a template error,** raised the way a render
+  failure is: there would be nothing for the model to answer.
+
+**The system half is stable.** It holds what stays the same across a
+story's calls of that template, its standing instructions and the
+story definition, and must render byte-identically from one call to the
+next unless the user edits the story. Everything that changes per call
+goes in the user half: the scene, retrieval, the history, and a format
+directive that depends on a per-call flag. Providers send the system
+message first and cache from the start of the request, so one per-call
+byte there moves the prefix every one of them reuses. Like the
+[empty-bucket rule](#empty-retrieval-buckets--author-contract), this is
+an author contract; the deferred
+[pack validator](./parked.md#pack-validation-contract) warns on a
+system half that reads a per-call variable. A block that points at
+user-half content by position ("the LAST entry above") stays in the
+user half beside it.
+
+**The cache marker.** OpenAI-compatible servers generally reuse a
+request's longest matching token prefix on their own, so for them the
+order of the blocks is what counts. Anthropic
+caches only at an explicit breakpoint, so on an `anthropic` provider the
+call layer marks the last system block of the request as sent, the
+structured-output contract included. Anthropic ignores a marker whose
+prefix is too short, at no cost, and charges extra to write the cache,
+so the marker goes only on calls that follow each other at a turn's
+pace: the narrative call, and the piggyback fallback classifier when it
+is the turn's regular classifier because piggyback isn't firing. The
+periodic classifier, suggestion refresh and the wizard carry none.
+Wider caching is
+[parked](./parked.md#prompt-cache-optimization).
+
+The bundled pack splits its templates this way:
+
+| Template                      | System half                                                                     | User half                                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-turn narrative            | Setting, Genre, Tone, Calendar, the output-format line                          | In scene, Current location, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission             |
+| Piggyback fallback classifier | Calendar                                                                        | Everything else in its order: the ID roster, the scene, the location map and held items, the memory blocks, the turns and the report directives that follow them |
+| Periodic classifier           | The role line and the rules                                                     | The Known lists and the turns                                                                                                                                    |
+| Suggestion refresh            | Setting, Genre, Tone                                                            | In scene, Story so far, the next-turn options and the reader's draft                                                                                             |
+| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one | Everything                                                                                                                                                       |
+
 ### Structured output — the JSON contract is not pack content
 
 Agent calls that parse a typed reply (wizard assist, classifiers)
@@ -218,11 +275,20 @@ edit can never break reply parsing. Field descriptions authored with
 `.describe()` on the schema reach the model as comments on the
 rendered interface. The profile's `structuredOutput` param picks the
 mechanism: `force-on` sends the schema as the provider-native
-response format; `force-off` appends it to the prompt as a
+response format; `force-off` renders it into the prompt as a
 TypeScript `interface Response` block via AI SDK middleware
 (`lib/ai/prompt-schema.ts`); `auto` takes the prompt-injection path
 until provider capability detection lands, at which point it will
 follow the detected capability.
+
+The injected contract is split across the
+[two halves](#system-and-user-halves). Its lead-in and the interface
+block go at the end of the system message, which the middleware
+creates when the template's system half is blank: the contract is
+fixed per call site, so it belongs to the stable prefix. Its closing
+"Output ONLY the JSON object" line goes at the end of the user message,
+where the models that need the prompt-injection path follow a format
+instruction best.
 
 ### Template and macro id space
 
@@ -264,7 +330,8 @@ any `{% for x in retrieved* %}` lacks a sibling or wrapping
 A **pack is a complete, self-contained bundle** of prompts + macros.
 It contains the full required surface — every template the app
 invokes, every macro the app's templates include — not a patch layer
-on top of a default.
+on top of a default. A template is its
+[two halves](#system-and-user-halves); a macro is one source.
 
 **Creation flow:** a user creating a custom pack starts with a **full
 copy of the default pack**. Every prompt and macro is already there;
@@ -316,20 +383,20 @@ buried in code that isn't reachable from a template.
 Different surfaces need different variable sets. The template registry
 maps every `templateId` to exactly one group:
 
-| Group               | Consumers                                                                                                                                                                                                               |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generationContext` | Pipeline + post-pipeline generation templates: classifier, narrative, suggestions, action-choices, chapter-analysis, chapter-summarization, translate-\*, style-reviewer, agentic-retrieval, image-prompt-analysis, ... |
-| `wizard`            | Story-creation flow: setting expansion, character elaboration, opening generation, supporting characters                                                                                                                |
-| `vault`             | Vault (reusable library) AI interactions                                                                                                                                                                                |
-| `lore`              | Lore-management agent templates (at chapter close)                                                                                                                                                                      |
-| `import`            | Character-card imports, vault imports, lorebook classifiers                                                                                                                                                             |
-| `portrait`          | Character portrait generation                                                                                                                                                                                           |
-| `translateWizard`   | Translation-wizard flow                                                                                                                                                                                                 |
-| `staticContent`     | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                                                         |
+| Group               | Consumers                                                                                                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generationContext` | Pipeline + post-pipeline generation templates: fallback classifier, narrative, suggestions, action-choices, chapter-analysis, chapter-summarization, translate-\*, style-reviewer, agentic-retrieval, image-prompt-analysis, ... |
+| `classifierContext` | The periodic classifier: the unclassified turn window with each turn's saved scene, and the branch's entity, relationship and happening rosters                                                                                  |
+| `wizard`            | Story-creation flow: setting expansion, character elaboration, opening generation, supporting characters                                                                                                                         |
+| `vault`             | Vault (reusable library) AI interactions                                                                                                                                                                                         |
+| `lore`              | Lore-management agent templates (at chapter close)                                                                                                                                                                               |
+| `import`            | Character-card imports, vault imports, lorebook classifiers                                                                                                                                                                      |
+| `portrait`          | Character portrait generation                                                                                                                                                                                                    |
+| `translateWizard`   | Translation-wizard flow                                                                                                                                                                                                          |
+| `staticContent`     | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                                                                  |
 
-For v1 ship `generationContext` + `wizard` (likely — wizard lands with
-the first "create a story" flow). The others land with their
-corresponding features. The group system itself is day-one
+V1 ships `generationContext`, `classifierContext` and `wizard`. The
+others land with their corresponding features. The group system itself is day-one
 infrastructure; without it the prompt editor can't provide autocomplete
 or validate references.
 

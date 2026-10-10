@@ -228,6 +228,11 @@ mismatches on pack load" without specifying:
     to the active+in-scene iteration. Flag for the design
     pass; harder to mechanically detect than the empty-bundle
     case.
+  - **System-half stability** — a template's system half that
+    reads a variable changing per call
+    ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
+    Needs the variable registry to tag each variable as stable
+    or per-call.
 - **What it surfaces — severity: warnings, not errors.** The
   validator surfaces issues as warnings in the editor; never
   blocks save or pack activation on user-authored packs. User
@@ -1143,6 +1148,49 @@ refused state in
 Parked 2026-10-05; the signal to revisit is a non-periodic machine
 source writing a table with row-keeping columns, or a user write to
 one gaining an entry anchor.
+
+#### Prompt-cache optimization
+
+The [system and user halves](./architecture.md#system-and-user-halves)
+cache only the system prefix, and only on the calls that recur at a
+turn's pace. Beyond that:
+
+- **The history.** With `fullChapterInBuffer` off, the window drops the
+  oldest pair every turn
+  ([`cadence.md → Composition rule`](./memory/cadence.md#composition-rule)),
+  so nothing from the history on is reusable on any provider. Sliding
+  in steps of several turns would hold the window's head still between
+  steps, at the price of a window that varies by a step's worth of
+  entries.
+- **More Anthropic markers.** After the stable blocks of a user half;
+  on the newest message of each step of an agentic tool loop, which
+  resends the whole prompt every step and wants all of it cached; and a
+  1-hour TTL for the periodic classifier, whose passes are often more
+  than 5 minutes apart.
+- **Claude through OpenRouter.** It goes through the `openai-compatible`
+  provider, which sends no Anthropic marker.
+- **Measurement.** How each provider and server actually reuses a
+  prefix. Legacy v1 found `llama-server` with a sliding-window model
+  reusing nothing once a prompt diverged about 8k tokens before its
+  end, so order alone may not serve every server.
+
+Parked 2026-10-11; the signal is the prompt shapes settling, through
+the prompt content pass in
+[`followups.md → Data-model`](./followups.md#data-model), with test data
+and per-provider measurements to tune against.
+
+#### A model whose chat template rejects the system role
+
+Most calls now send a system message, from the template's system half
+or, on the prompt-injection path, from the structured-output contract,
+which adds one even when the system half is blank. Some older chat templates
+refuse the role (Gemma 2's under `llama-server --jinja`, as recalled
+rather than checked), which fails the call outright. Legacy v1 sent a
+system message on every call without such reports. The fix would be a
+model capability, detected and user-overridable like the others, that
+folds the system half into the start of the user message. Parked
+2026-10-11; the signal is a report of a model failing on the system
+role.
 
 ### Memory pipeline (parked)
 
