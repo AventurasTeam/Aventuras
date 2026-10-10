@@ -21,7 +21,7 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { collisionPairOf, flaggedSideOf, stateOf, type FlaggedEntity } from '@/lib/world'
+import { collisionPairOf, flaggedSideOf, pairSideOf, type FlaggedEntity } from '@/lib/world'
 
 import { collisionRejectionText } from './collision-copy'
 import { collisionPair } from './collision-summary'
@@ -32,7 +32,7 @@ export type CollisionDialogPair = {
   /** The row whose flag names the other: the requested flagged row when it still does. */
   flaggedId: string
   reason: CollisionReason
-  /** The shared parent's name for a `same-parent` pair; absent at the root. */
+  /** The shared parent's name for a `same-parent` pair; absent at the root or when it names no row. */
   parentName?: string
 }
 
@@ -64,7 +64,7 @@ function inBranch<Row extends { branchId: string }>(
  */
 function sharedParentName(flagged: FlaggedEntity, entities: readonly Entity[]): string | undefined {
   if (flagged.nameCollisionReason !== 'same-parent') return undefined
-  const parentId = stateOf(flagged, 'location').parent_location_id
+  const { parentId } = pairSideOf(flagged)
   if (parentId == null) return undefined
   return entities.find((e) => e.id === parentId)?.name
 }

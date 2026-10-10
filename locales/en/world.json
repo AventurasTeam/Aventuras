@@ -190,7 +190,7 @@
       "disabledHelp": "Never injected automatically."
     },
     "injectionOverride": "An active entity in the current scene is always injected, whatever this says.",
-    "injectionPlaceMap": "For a place, Always and Auto keep its name on the location map and govern only its description; Disabled takes it off the map too, unless the scene is there.",
+    "injectionPlaceMap": "For a place, Always and Auto keep its name on the location map and govern only its description; Disabled takes it off the map too, unless it is the current location.",
     "retiredReason": "Retired reason",
     "retiredReasonPlaceholder": "e.g. killed by Kael",
     "retiredReasonHint": "Only for a retired entity.",
