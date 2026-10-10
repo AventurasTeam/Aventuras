@@ -89,16 +89,32 @@
     panel.scrollTop += nearestDelta(rowBox.top, rowBox.bottom, panelBox.top, panelBox.bottom)
   }
 
-  /** While the tree overflows, a sideways swipe over it belongs to the tree, not to `swipe`. */
+  /**
+   * A sideways swipe over the tree belongs to the tree while, at its start, the tree could still
+   * scroll that way; at the edge it reaches the sidebar's and shell's `swipe` as usual.
+   */
   function keepsSidewaysSwipes(node: HTMLElement) {
-    // Native, not `ontouchstart`: Svelte delegates that to the root, past the ancestors' listeners.
+    let startX = 0
+    let canScrollBack = false
+    let canScrollForward = false
+
     function onTouchStart(e: TouchEvent) {
-      if (node.scrollWidth > node.clientWidth) e.stopPropagation()
+      startX = e.touches[0]?.clientX ?? 0
+      canScrollBack = node.scrollLeft > 1
+      canScrollForward = node.scrollLeft + node.clientWidth < node.scrollWidth - 1
+    }
+    // Native, not `ontouchend`: Svelte delegates that to the root, past the ancestors' listeners.
+    // Stopping the end leaves `swipe` with a start it never finishes, so it fires nothing.
+    function onTouchEnd(e: TouchEvent) {
+      const deltaX = (e.changedTouches[0]?.clientX ?? startX) - startX
+      if ((deltaX > 0 && canScrollBack) || (deltaX < 0 && canScrollForward)) e.stopPropagation()
     }
     node.addEventListener('touchstart', onTouchStart, { passive: true })
+    node.addEventListener('touchend', onTouchEnd, { passive: true })
     return {
       destroy() {
         node.removeEventListener('touchstart', onTouchStart)
+        node.removeEventListener('touchend', onTouchEnd)
       },
     }
   }

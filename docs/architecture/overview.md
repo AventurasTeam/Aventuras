@@ -73,9 +73,9 @@ text in the action input cannot open a panel. Because swipes inside a panel bubb
 opposite edge's band. On a phone neither does: the sidebar is capped at 288px and the navigation
 panel at `100vw - 3rem`.
 
-The one swipe inside a panel that does not bubble up is over the Branches panel's tree while it is
-wider than the sidebar: the tree stops it at `touchstart`, so it scrolls the tree and changes no
-tab and no panel, even at the tree's end.
+The one swipe inside a panel that may not bubble up is over the Branches panel's tree. When the tree
+could still scroll in the swipe's direction as the gesture starts, it stops the `touchend`, so the
+swipe scrolls the tree and changes no tab and no panel. At the tree's edge the swipe goes through.
 
 ## Drawer swipes, and the one place we reach into `vaul`
 
