@@ -60,10 +60,10 @@ the panel forgetting what you were doing.
 
 ## Edge swipes
 
-The edge swipes that open the two side panels live in `AppShell.svelte` and are deliberately
-asymmetric. The right one opens the sidebar whenever it is closed; the left one only while
-_neither_ panel is open, because a right-swipe inside the open sidebar already belongs to that
-sidebar's tab strip and must not also open the panel behind it.
+The edge swipes that open the two side panels live in `AppShell.svelte`, and each listens only
+while _neither_ panel is open: a swipe inside an open panel belongs to that panel's tab strip, and
+one panel must never open over the other. For the same reason the header's right-panel control
+closes the navigation panel first wherever the panels overlay the story.
 
 They are read off the shell itself, counting only gestures that _start_ within 30px of an edge (20px
 above the mobile breakpoint), not from invisible strips over the page. A strip takes every tap that

@@ -37,6 +37,12 @@
   let showMobileMenu = $state(false)
   let showPanelMenu = $state(false)
 
+  // Where the panels overlay the story, the sidebar would open over the navigation panel.
+  function toggleRightPanel() {
+    if (!ui.sidebarOpen) ui.closeNavPanelOnMobile()
+    ui.toggleSidebar()
+  }
+
   // The menus are mounted only while there is a story, so closing one closes the menu's
   // own `bind:open` write-back with it: a binding that does not get to run leaves the state
   // `true`, and the menu springs open by itself on returning to a story. Reset here rather
@@ -411,7 +417,7 @@
         icon={PanelRight}
         variant="text"
         class="text-muted-foreground hover:text-primary hidden min-h-11 min-w-11 sm:flex"
-        onclick={() => ui.toggleSidebar()}
+        onclick={toggleRightPanel}
         title={ui.sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
       />
       <!-- Both panels from one button: the edge swipes are unreliable on some devices. -->
@@ -432,7 +438,7 @@
             <PanelLeft class="text-muted-foreground h-4 w-4" />
             Left panel
           </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => ui.toggleSidebar()}>
+          <DropdownMenu.Item onclick={toggleRightPanel}>
             <PanelRight class="text-muted-foreground h-4 w-4" />
             Right panel
           </DropdownMenu.Item>
