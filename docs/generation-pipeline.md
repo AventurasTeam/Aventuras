@@ -2036,7 +2036,8 @@ to any of these alongside whatever causes the relaxation.
   the kind-keyed `generationContext` getter.
 - **Disjoint write sets between concurrent pipelines.** Per-turn
   (and its piggyback / fallback-classifier variants) writes a
-  different field set from the periodic classifier. Prose-enforced
+  different field set from the periodic classifier, and creates
+  different entity kinds. Prose-enforced
   via narrow action functions named for their field-set scope. Any
   new action function should be reviewed for write-set overlap
   with concurrent pipelines.

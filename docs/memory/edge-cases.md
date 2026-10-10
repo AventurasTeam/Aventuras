@@ -10,7 +10,10 @@ documents rather than chases.
 ## Name collision and disambiguation
 
 Two layers handle the case where the AI invents a character whose name
-matches an existing (often staged) entity's, exactly or in part.
+matches an existing (often staged) entity's, exactly or in part. A
+place or an item the per-turn writer creates is matched when it is
+created instead
+([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating)).
 
 ### Layer A — retrieval-time same-name suppression
 
@@ -52,6 +55,12 @@ story running that mode, which is Layer A switched off; and the
 exemption's justification is per-row user intent, which a story-wide
 mode is not.
 
+**The location map is exempt as well.** It lists staged locations by
+name only, so it can't feed a staged row's details into the narrative,
+and naming the place there is how a move to it resolves: the writer
+uses its id, or a re-created name reuses it
+([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating)).
+
 **Layer A's window is an approximation.** The scan reads the prompt
 buffer rather than the genuinely un-classified set, so it
 over-suppresses while `classifierCadence` is under
@@ -78,7 +87,7 @@ entities {
   ... existing fields ...
   name_collision_flag INTEGER DEFAULT 0   -- 1 = review needed
   name_collision_partner_id TEXT          -- the namesake compared against, same branch
-  name_collision_reason TEXT              -- alike | ambiguous | distinct | in-scene | no-signal
+  name_collision_reason TEXT              -- alike | ambiguous | distinct | in-scene | no-signal | same-parent
   CHECK (flag 0: partner and reason null; flag 1: both set)
 }
 ```
@@ -119,6 +128,8 @@ Two paths to staged → active. Both converge on the same end state.
 
 When piggyback's `sceneEntities` includes an entity ID currently at
 `status='staged'`, that's a strong signal of intentional introduction.
+So is a `<current_location>` naming a staged location, or a new
+location reusing a staged sibling.
 Piggyback processing auto-promotes inline:
 
 1. Detect staged-ID in emitted `sceneEntities`.

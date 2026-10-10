@@ -188,15 +188,15 @@ external override prop, same as reasoning expansion.
 
 ### Panel anatomy
 
-| Group                 | Source                                     | Rendered when                    | Editable  |
-| --------------------- | ------------------------------------------ | -------------------------------- | --------- |
-| **Scene**             | absolute triple, ids resolved to names     | always                           | tail only |
-| **Changes this turn** | `stateReport.visualChanges` / `.transfers` | either is non-empty              | never     |
-| **Reported delta**    | `stateReport.worldTimeDelta`               | present                          | never     |
-| **Summary**           | `metadata.summary`                         | present                          | never     |
-| **Retrieval asks**    | `metadata.retrievalQueries`                | non-empty                        | never     |
-| **Parse failure**     | `stateReport.failedFields` / `.raw`        | `failedFields` non-empty         | never     |
-| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`    | no `stateReport`, markup present | never     |
+| Group                 | Source                                                                     | Rendered when                    | Editable  |
+| --------------------- | -------------------------------------------------------------------------- | -------------------------------- | --------- |
+| **Scene**             | absolute triple, ids resolved to names                                     | always                           | tail only |
+| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any is non-empty                 | never     |
+| **Reported delta**    | `stateReport.worldTimeDelta`                                               | present                          | never     |
+| **Summary**           | `metadata.summary`                                                         | present                          | never     |
+| **Retrieval asks**    | `metadata.retrievalQueries`                                                | non-empty                        | never     |
+| **Parse failure**     | `stateReport.failedFields` / `.raw`                                        | `failedFields` non-empty         | never     |
+| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`                                    | no `stateReport`, markup present | never     |
 
 **Retrieval asks** lists what the turn's classifier requested for the
 next turn's retrieval — the
@@ -218,8 +218,10 @@ in the same place across entries.
 **Changes this turn** renders one line per reported mutation: a visual
 change as name, category and its full-replace text; an item transfer
 as item, recipient and prior holder when tracked; a stackable as key,
-amount and the same holders. These exist nowhere else once the block
-is stripped from `content` — deltas carry the applied effect, not the
+amount and the same holders; a new place or item as `New place:` or
+`New item:` and its name, or `Matched place:` and the reused row's name.
+A dropped create isn't listed; the per-turn inspector shows it. These
+exist nowhere else once the block is stripped from `content` — deltas carry the applied effect, not the
 narration of it.
 
 **Reported delta** renders `worldTimeDelta` raw, in seconds, exactly

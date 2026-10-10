@@ -1081,7 +1081,7 @@ in `lib/db/entities/entity-state-schema.ts`), and
 reversal that removes an entity could leave one of them naming it.
 
 Not reachable for `state`, verified by reading in the 2026-10-05
-triage pass: only characters are ever machine-created
+triage pass: the periodic classifier creates only characters
 (`lib/classifier/plan.ts`), and no `state` field names a character;
 CTRL-Z is newest-first, and rollback and regenerate windows take every
 later write; prose-edit sweeps spare entity creates; and a no-gate
@@ -1095,9 +1095,23 @@ with no refusal. A dangling id renders as "Entity no longer exists"
 `namesId` in `lib/actions/delta/reverse-replay.ts` already walks
 nested payloads, so the write-back refusal covers ids in `state`.
 
+The first revisit signal, a machine writer creating entities other
+than characters, fired 2026-10-10, when the per-turn writer began creating
+locations and items
+([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items)),
+whose ids land in `currentLocationId`, `sceneEntities`, characters'
+`current_location_id`, `inventory` and `equipped_items`, and a child
+location's `parent_location_id`. Re-checked by reading the reversal
+canon, still not reachable: a create sits in its turn's action group,
+so the reasons above hold for it, with a branch fork's reverse-apply
+also taking every later write and an aborted turn having nothing after
+it. The boot-recovery caveat above stands.
+
 A fix is a JSON-path reference registry the closure queries through
-`json_each`. Parked 2026-10-05; the signal to revisit is a machine
-writer that creates entities other than characters.
+`json_each`. Parked 2026-10-05, re-checked 2026-10-10; the signal to
+revisit now is the periodic classifier creating entities other than
+characters (the factions and mentioned-places followup), since its
+passes are reversed by positional sweeps while later turns stay.
 
 The group runner's conflict check has the same blind spot and would be
 the registry's second consumer: `rowRefs` (`lib/actions/delta/live-refs.ts`)

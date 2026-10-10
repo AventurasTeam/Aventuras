@@ -1173,6 +1173,14 @@ The retrieval pool per type after the structural floor is satisfied.
 | Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                |
 | `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                                                                                                                                                                      |
 
+Beside the floor, the per-turn prompt carries the location map, every
+listed location's name and id as a tree, and in-scene characters' held
+items
+([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)).
+They bypass the ranker and are seated unconditionally, so they count
+with the floor's tokens
+([Structural floor takes budget first](#structural-floor-takes-budget-first)).
+
 ### Chapter summaries pool
 
 Closed `chapters` rows form a separate retrieval pool. Each chapter's
@@ -1534,7 +1542,8 @@ without breaking changes.
 
 The numbers in per-type budgets apply to **what's left after the
 structural floor seats**. Recent buffer + active+in-scene entities +
-their location + active threads consume tokens unconditionally. Then
+their location + active threads, and the location map and held items
+beside them, consume tokens unconditionally. Then
 prompt-overhead reservation. Then the per-type retrieval budgets
 allocate the remainder.
 

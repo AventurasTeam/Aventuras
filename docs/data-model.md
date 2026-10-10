@@ -82,9 +82,9 @@ erDiagram
         json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
-        integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
-        text name_collision_partner_id "set iff flagged: the same-branch namesake the classifier compared the row against, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
-        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | no-signal, why the classifier flagged"
+        integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, detected when the classifier or the per-turn writer creates the row; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
+        text name_collision_partner_id "set iff flagged: the same-branch namesake the row's writer compared it against, which World pairs it with; a gone partner leaves the flag dormant. See docs/memory/classifier.md → Disambiguation"
+        text name_collision_reason "set iff flagged: alike | ambiguous | distinct | in-scene | no-signal | same-parent, why the classifier or the per-turn writer flagged"
         json state "typed per kind"
         json tags
         integer embedding_stale "0 | 1; 1 = embedded fields (name/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
@@ -746,7 +746,8 @@ entity where `kind=location`, giving locations a containment hierarchy
 `current_location_id` / items' `at_location_id`, which are _positional_
 (where something is right now); `parent_location_id` is _compositional_
 (this place is part of that place). Prompt rendering walks the parent
-chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
+chain at runtime (`The Rusty Anchor — in Port Vellis › Eldra`, see
+[`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)).
 Cycle prevention is app-layer — SQLite can't enforce it.
 
 **Cycle guard owner.** The action-layer mutator that writes
@@ -764,17 +765,21 @@ happen in real data).
 already stored above the proposed parent rather than the write (mirrors the
 gate-rejection shape at
 [`generation-pipeline.md → Action rejection`](./generation-pipeline.md#action-rejection--defense-in-depth)).
-A classifier writer never lets a looping parent reach the mutator: its
-planner runs the same walk against the branch's locations and drops the
-fact, the way the periodic planner drops a ref it can't resolve. A
+A machine writer never lets a looping parent reach the mutator: its
+planner runs the same walk against the branch's locations first and
+drops the parent, the way the periodic planner drops a ref it can't
+resolve. A
 rejection that did reach the orchestrator would fail the whole run
 (see the run state transitions in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle)),
 and neither the phase nor the LLM retry tier can recover it — the retry
 finishes before any write is emitted, and a phase never sees a write's
-result. No classifier path writes `parent_location_id` in v1. User
-edits surface as a form-validation error in the World panel — user
-fixes or leaves it.
+result. The one machine path that writes `parent_location_id` is the
+per-turn writer creating a location, which on a broken chain creates
+it at the root
+([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items));
+re-parenting an existing location stays user-only. User edits surface as a form-validation error in the World
+panel — user fixes or leaves it.
 
 **Why so few fields.** Locations are dramatically less dynamic than
 characters. Type, appearance, atmosphere, landmark features all
@@ -1075,21 +1080,21 @@ via dotted paths. The split:
 
 Per-field "who writes / when":
 
-| Field group                                                 | First write                             | Subsequent writes                                                     |
-| ----------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| `description` (top-level)                                   | Whoever spawns the entity               | User-only in v1                                                       |
-| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier at create (Layer B)          | User-only: clearing, or a merge re-pointing the partner; delta-logged |
-| `visual.*`                                                  | Classifier from prose, or user via form | Both — classifier evolves on observed prose change                    |
-| `traits`, `drives`                                          | Classifier from prose, or user via form | Classifier (chapter-close lore-mgmt only) + user via form             |
-| `voice`                                                     | Classifier from prose, or user via form | Both                                                                  |
-| `current_location_id`                                       | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
-| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
-| `faction_id`                                                | Classifier or user                      | Both                                                                  |
-| `lastSeenAt`                                                | Classifier-only                         | Classifier-only                                                       |
-| `parent_location_id`                                        | User at creation                        | User-only in v1                                                       |
-| `condition` (Location/Item)                                 | Classifier or user                      | Both                                                                  |
-| `standing`, `agenda` (Faction)                              | Classifier or user                      | Classifier (chapter-close) + user                                     |
-| `at_location_id` (Item)                                     | Classifier per-turn                     | Classifier per-turn primary; user can edit                            |
+| Field group                                                 | First write                                            | Subsequent writes                                                     |
+| ----------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------- |
+| `description` (top-level)                                   | Whoever spawns the entity                              | User-only in v1                                                       |
+| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier (Layer B) or the per-turn writer, at create | User-only: clearing, or a merge re-pointing the partner; delta-logged |
+| `visual.*`                                                  | Classifier from prose, or user via form                | Both — classifier evolves on observed prose change                    |
+| `traits`, `drives`                                          | Classifier from prose, or user via form                | Classifier (chapter-close lore-mgmt only) + user via form             |
+| `voice`                                                     | Classifier from prose, or user via form                | Both                                                                  |
+| `current_location_id`                                       | Classifier per-turn                                    | Classifier per-turn primary; user can edit                            |
+| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                                    | Classifier per-turn primary; user can edit                            |
+| `faction_id`                                                | Classifier or user                                     | Both                                                                  |
+| `lastSeenAt`                                                | Classifier-only                                        | Classifier-only                                                       |
+| `parent_location_id`                                        | User, or the per-turn writer creating the location     | User-only in v1                                                       |
+| `condition` (Location/Item)                                 | Classifier or user                                     | Both                                                                  |
+| `standing`, `agenda` (Faction)                              | Classifier or user                                     | Classifier (chapter-close) + user                                     |
+| `at_location_id` (Item)                                     | Classifier per-turn                                    | Classifier per-turn primary; user can edit                            |
 
 Manual user edit vs classifier overwrite policy is parked as an
 architecture concern. v1 lean: classifier writes from prose-evidenced
@@ -1816,6 +1821,8 @@ story_entries.metadata: {
     currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
     transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
+    newLocations?: { handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused' | 'dropped'; id?: string; parentDropped?: true }[]  // as emitted, post-substitution, with what apply.ts made of it; see memory/piggyback.md → New locations and items
+    newItems?: { handle: string; name: string; description: string; outcome: 'created' | 'dropped'; id?: string }[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }
@@ -1877,7 +1884,7 @@ absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
 **The report records what was emitted and what `apply.ts` did with
-it.** Two fields can differ from the absolute state beside them:
+it.** Three things can differ from the absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
   `kind='location'` entity, and the previous location is inherited
@@ -1885,6 +1892,11 @@ it.** Two fields can differ from the absolute state beside them:
 - `worldTimeDelta` is clamped to `0` when negative or non-finite, and
   to the remaining headroom when it would push `worldTime` past the
   ceiling. `worldTimeDeltaApplied` records what landed.
+- A create in `newLocations` or `newItems` is created, reused (a
+  location's exact sibling) or dropped (unused), and a location's
+  parent can be dropped to the root. Its `outcome`, `id` and
+  `parentDropped` record that, and the report's other fields carry the
+  resolved id in place of the `new:` handle.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location
