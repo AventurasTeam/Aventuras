@@ -4,6 +4,7 @@ import type { PipelineAction } from '@/lib/actions'
 import {
   emptyEntityState,
   type CharacterRelationship,
+  type CollisionReason,
   type Entity,
   type EntityKind,
   type EntityState,
@@ -11,7 +12,8 @@ import {
   type HappeningInvolvement,
 } from '@/lib/db'
 
-import { collisionPairOf, type CollisionPair } from './collision-pair'
+import { FLAG_CLEAR } from './collision-flags'
+import { collisionPairOf, flaggedSideOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
 import { referencingEntities } from './entity-refs'
 import { mergeLinks } from './merge-links'
@@ -32,6 +34,8 @@ function entity(
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: { ...emptyEntityState(kind), ...state } as EntityState,
     tags: [],
     keywords: [],
@@ -58,6 +62,12 @@ const aware = (
   retrievalCount: 0,
   source: null,
   ...fields,
+})
+
+const flaggedWith = (partnerId: string, reason: CollisionReason = 'distinct'): Partial<Entity> => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: reason,
 })
 
 const involved = (
@@ -93,13 +103,19 @@ function sequentialIds(): (prefix: string) => string {
 }
 
 const A = entity('char_a', 'character')
-const B = entity('char_b', 'character', { nameCollisionFlag: 1 })
+const B = entity('char_b', 'character', flaggedWith('char_a'))
 // Bystanders the link rows name.
 const M = entity('char_m', 'character', { name: 'Mira' })
 const N = entity('char_n', 'character', { name: 'Nell' })
 
+/**
+ * The pair `collisionPairOf` mints: when neither flag names the other, the second is flagged
+ * with the first as partner, since these tests don't care about the rows' own flags.
+ */
 function pairOf(first: Entity, second: Entity): CollisionPair {
-  const lookup = collisionPairOf([first, second], [first.id, second.id])
+  const paired =
+    flaggedSideOf(first, second) == null ? { ...second, ...flaggedWith(first.id) } : second
+  const lookup = collisionPairOf([first, paired], [first.id, paired.id])
   if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
   return lookup.pair
 }
@@ -202,7 +218,10 @@ describe('entityMergeActions — the canonical', () => {
   })
 
   it('takes the chosen scalars that differ and clears a flagged canonical', () => {
-    const canonical = entity('char_a', 'character', { nameCollisionFlag: 1, description: 'old' })
+    const canonical = entity('char_a', 'character', {
+      ...flaggedWith('char_b'),
+      description: 'old',
+    })
     const loser = entity('char_b', 'character', {
       description: 'a guardsman',
       priority: 40,
@@ -219,7 +238,7 @@ describe('entityMergeActions — the canonical', () => {
       payload: {
         branchId: 'b1',
         id: 'char_a',
-        patch: { description: 'a guardsman', priority: 40, nameCollisionFlag: 0 },
+        patch: { description: 'a guardsman', priority: 40, ...FLAG_CLEAR },
       },
     })
   })
@@ -283,6 +302,203 @@ describe('entityMergeActions — the canonical', () => {
       tags: ['courier'],
       keywords: ['the courier'],
     })
+  })
+})
+
+describe('entityMergeActions — collision flags', () => {
+  const updateOf = (id: string, patch: Record<string, unknown>) => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id, patch },
+  })
+
+  it('clears a flagged canonical whose partner is gone from the branch', () => {
+    const canonical = entity('char_a', 'character', flaggedWith('char_gone'))
+    expect(merge({ canonical, branchEntities: [canonical, B] }).actions).toStrictEqual([
+      updateOf('char_a', FLAG_CLEAR),
+      deleteLoser,
+    ])
+  })
+
+  it("keeps the canonical's flag on a live third row while the merged row still matches it", () => {
+    const third = entity('char_t', 'character')
+    const canonical = entity('char_a', 'character', flaggedWith('char_t'))
+    const loser = entity('char_b', 'character', {
+      name: 'Brannoc',
+      keywords: ['Kael'],
+      ...flaggedWith('char_a'),
+    })
+    const branchEntities = [canonical, loser, third]
+    const kept = merge({ canonical, loser, branchEntities, fromLoser: ['name'] })
+    expect(kept.actions).toStrictEqual([
+      updateOf('char_a', { name: 'Brannoc', keywords: ['Kael'] }),
+      deleteLoser,
+    ])
+
+    const dropped = merge({
+      canonical,
+      loser,
+      branchEntities,
+      fromLoser: ['name'],
+      deselectedKeywords: ['kael'],
+    })
+    expect(dropped.actions).toStrictEqual([
+      updateOf('char_a', { name: 'Brannoc', ...FLAG_CLEAR }),
+      deleteLoser,
+    ])
+  })
+
+  it('re-points a flag on the loser at the canonical and clears flags the merged row breaks', () => {
+    // Mira and Nell don't match the row they name: a keyword-only edit can leave a flag so.
+    const onLoser = entity('char_r', 'character', flaggedWith('char_b'))
+    const onCanonical = entity('char_s', 'character', flaggedWith('char_a'))
+    const staleOnLoser = entity('char_u', 'character', { name: 'Mira', ...flaggedWith('char_b') })
+    const staleOnCanonical = entity('char_v', 'character', {
+      name: 'Nell',
+      ...flaggedWith('char_a'),
+    })
+    const onThird = entity('char_w', 'character', { name: 'Mira', ...flaggedWith('char_m') })
+    const { actions } = merge({
+      branchEntities: [A, B, onLoser, onCanonical, staleOnLoser, staleOnCanonical, onThird, M],
+    })
+    expect(actions).toStrictEqual([
+      updateOf('char_r', { nameCollisionPartnerId: 'char_a' }),
+      updateOf('char_u', FLAG_CLEAR),
+      updateOf('char_v', FLAG_CLEAR),
+      deleteLoser,
+    ])
+  })
+
+  it('writes no flag to the loser, even one the merged row stops matching', () => {
+    const canonical = entity('char_a', 'character', { keywords: ['Brannoc'] })
+    const loser = entity('char_b', 'character', { name: 'Brannoc', ...flaggedWith('char_a') })
+    const { actions } = merge({
+      canonical,
+      loser,
+      branchEntities: [canonical, loser],
+      deselectedKeywords: ['brannoc'],
+    })
+    expect(actions).toStrictEqual([updateOf('char_a', { keywords: [] }), deleteLoser])
+  })
+
+  it('folds a re-point into the state patch of a row that held a ref to the loser', () => {
+    const hollow = entity('loc_a', 'location')
+    const twin = entity('loc_b', 'location', flaggedWith('loc_a'))
+    const cellar = entity('loc_c', 'location', flaggedWith('loc_b'), {
+      parent_location_id: 'loc_b',
+    })
+    const { actions } = merge({
+      canonical: hollow,
+      loser: twin,
+      branchEntities: [hollow, twin, cellar],
+    })
+    expect(ofKind(actions, 'updateEntity')).toStrictEqual([
+      updateOf('loc_c', {
+        state: { parent_location_id: 'loc_a' },
+        nameCollisionPartnerId: 'loc_a',
+      }),
+    ])
+  })
+
+  describe("the canonical inherits the loser's question", () => {
+    const canonical = entity('char_a', 'character', flaggedWith('char_b'))
+    const loserNaming = (partnerId: string) =>
+      entity('char_b', 'character', flaggedWith(partnerId, 'in-scene'))
+    const third = entity('char_t', 'character')
+
+    it("re-points the canonical's flag at the loser's partner while the merged row matches it", () => {
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_t'),
+          branchEntities: [canonical, loserNaming('char_t'), third],
+        }).actions,
+      ).toStrictEqual([
+        updateOf('char_a', { nameCollisionPartnerId: 'char_t', nameCollisionReason: 'in-scene' }),
+        deleteLoser,
+      ])
+    })
+
+    it("judges the loser's partner against the merged row, not the canonical before it", () => {
+      const brannoc = entity('char_a', 'character', { name: 'Brannoc', ...flaggedWith('char_b') })
+      const loser = loserNaming('char_t')
+      const { actions } = merge({
+        canonical: brannoc,
+        loser,
+        branchEntities: [brannoc, loser, third],
+        fromLoser: ['name'],
+      })
+      expect(actions).toStrictEqual([
+        updateOf('char_a', {
+          name: 'Kael',
+          keywords: ['Brannoc'],
+          nameCollisionPartnerId: 'char_t',
+          nameCollisionReason: 'in-scene',
+        }),
+        deleteLoser,
+      ])
+    })
+
+    it("clears it when the loser's partner is no namesake of the merged row", () => {
+      const mira = entity('char_t', 'character', { name: 'Mira' })
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_t'),
+          branchEntities: [canonical, loserNaming('char_t'), mira],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+
+    it("clears it when the loser's partner is gone from the branch", () => {
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_gone'),
+          branchEntities: [canonical, loserNaming('char_gone'), third],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+
+    it('clears it when the loser names the canonical', () => {
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_a'),
+          branchEntities: [canonical, loserNaming('char_a'), third],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+
+    it('clears it when the loser is unflagged', () => {
+      const loser = entity('char_b', 'character')
+      expect(
+        merge({ canonical, loser, branchEntities: [canonical, loser, third] }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+  })
+
+  it("clears instead of re-pointing once the merge drops the loser's name", () => {
+    const canonical = entity('char_a', 'character')
+    const loser = entity('char_b', 'character', {
+      name: 'Brannoc',
+      keywords: ['Kael'],
+      ...flaggedWith('char_a'),
+    })
+    const namesake = entity('char_r', 'character', { name: 'Brannoc', ...flaggedWith('char_b') })
+    const branchEntities = [canonical, loser, namesake]
+
+    const kept = merge({ canonical, loser, branchEntities })
+    expect(ofKind(kept.actions, 'updateEntity')).toStrictEqual([
+      updateOf('char_a', { keywords: ['Brannoc', 'Kael'] }),
+      updateOf('char_r', { nameCollisionPartnerId: 'char_a' }),
+    ])
+
+    const dropped = merge({ canonical, loser, branchEntities, deselectedKeywords: ['brannoc'] })
+    expect(ofKind(dropped.actions, 'updateEntity')).toStrictEqual([
+      updateOf('char_a', { keywords: ['Kael'] }),
+      updateOf('char_r', FLAG_CLEAR),
+    ])
   })
 })
 
@@ -773,7 +989,7 @@ describe('entityMergeActions — scene effects', () => {
 describe('entityMergeActions — the group', () => {
   it('orders canonical, refs, awareness, involvements, relationships, tail, delete, all user edits', () => {
     const walker = entity('char_w', 'character', {}, { faction_id: 'fac_x' })
-    const factionA = entity('fac_a', 'faction', { nameCollisionFlag: 1 })
+    const factionA = entity('fac_a', 'faction', flaggedWith('fac_b'))
     const factionB = entity('fac_b', 'faction')
     const member = entity('char_1', 'character', {}, { faction_id: 'fac_b' })
     const factions = merge({
@@ -794,7 +1010,7 @@ describe('entityMergeActions — the group', () => {
     ])
 
     const characters = merge({
-      canonical: entity('char_a', 'character', { nameCollisionFlag: 1 }),
+      canonical: entity('char_a', 'character', flaggedWith('char_b')),
       awareness: [aware('haw_1', 'char_b', 'hap_1')],
       involvements: [involved('hinv_1', 'char_b', 'hap_1', null)],
       relationships: [rel('rel_1', 'char_b', 'char_m', 'friend', null)],

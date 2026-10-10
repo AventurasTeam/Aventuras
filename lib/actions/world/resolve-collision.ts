@@ -116,8 +116,8 @@ function missRefusal(lookup: CollisionPairMiss): Refusal {
       return refusal(COLLISION_REJECTION.notFound, 'a row cannot collide with itself')
     case COLLISION_PAIR_MISS.notFound:
       return refusal(COLLISION_REJECTION.notFound, `entity ${lookup.id} not found`)
-    case COLLISION_PAIR_MISS.notColliding:
-      return refusal(COLLISION_REJECTION.notFound, 'the two rows no longer collide')
+    case COLLISION_PAIR_MISS.notFlagged:
+      return refusal(COLLISION_REJECTION.notFound, 'the two rows are no longer flagged as a pair')
   }
 }
 
@@ -167,7 +167,7 @@ function buildResolution(
         : { status: 'ok', actions: plan.actions }
     }
     case 'keep':
-      return { status: 'ok', actions: entityKeepActions({ branchId, pair }) }
+      return { status: 'ok', actions: entityKeepActions({ branchId, pair, branchEntities }) }
   }
 }
 

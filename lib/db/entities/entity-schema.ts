@@ -11,6 +11,8 @@ export const entityWriteSchema = createInsertSchema(entities, {
   id: true,
   branchId: true,
   nameCollisionFlag: true,
+  nameCollisionPartnerId: true,
+  nameCollisionReason: true,
   state: true,
   embeddingStale: true,
   createdAt: true,

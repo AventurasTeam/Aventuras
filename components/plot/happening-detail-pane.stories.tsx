@@ -46,6 +46,8 @@ function entity(id: string, kind: Entity['kind'], name: string): Entity {
     retiredReason: null,
     injectionMode: 'auto',
     nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
     state: null,
     tags: [],
     keywords: [],

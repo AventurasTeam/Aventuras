@@ -1,5 +1,5 @@
-export { INJECTION_MODES, THREAD_STATUSES } from './enums'
-export type { InjectionMode, ThreadStatus } from './enums'
+export { COLLISION_REASONS, INJECTION_MODES, THREAD_STATUSES } from './enums'
+export type { CollisionReason, InjectionMode, ThreadStatus } from './enums'
 export {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,

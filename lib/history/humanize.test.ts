@@ -165,6 +165,32 @@ describe('humanizeDelta', () => {
     expect(view.fieldPath).toBe('nameCollisionFlag')
   })
 
+  it('reads a clear of the flag, its partner and its reason as one Collision flag field', () => {
+    const view = humanizeDelta(
+      own(
+        delta({
+          undoPayload: {
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_brannoc',
+            nameCollisionReason: 'distinct',
+          },
+        }),
+      ),
+      context,
+    )
+    expect(view.summary).toBe('Modified Collision flag')
+    expect(view.fieldPath).toBe('nameCollisionFlag, nameCollisionPartnerId, nameCollisionReason')
+  })
+
+  it('reads a partner re-point as a Collision flag change', () => {
+    const view = humanizeDelta(
+      own(delta({ undoPayload: { nameCollisionPartnerId: 'char_brannoc' } })),
+      context,
+    )
+    expect(view.summary).toBe('Modified Collision flag')
+    expect(view.fieldPath).toBe('nameCollisionPartnerId')
+  })
+
   it('falls back to "Modified" with no field path when an update carries no readable columns', () => {
     const view = humanizeDelta(own(delta({ undoPayload: {} })), context)
     expect(view.summary).toBe('Modified')

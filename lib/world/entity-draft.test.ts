@@ -44,6 +44,8 @@ const KAEL: Entity = {
   retiredReason: 'Left the guild after the ambush.',
   injectionMode: 'always',
   nameCollisionFlag: 0,
+  nameCollisionPartnerId: null,
+  nameCollisionReason: null,
   state: KAEL_STATE,
   tags: ['courier'],
   keywords: ['the courier'],

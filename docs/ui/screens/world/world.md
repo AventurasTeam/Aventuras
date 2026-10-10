@@ -938,7 +938,9 @@ re-flags the row:
 - a [merge](#merge) re-points a flag whose partner it deletes at the
   surviving row, and then clears any flag pairing the surviving row
   that isn't a namesake pair any more, since the merge can change
-  its name, or a place's parent.
+  its name, or a place's parent. A surviving row whose own flag named
+  the deleted row takes the deleted row's live partner and reason
+  instead ([Reversibility](#reversibility)).
 
 A reversal can still leave one, such as undoing the partner's
 create. It stays hidden until the partner returns (ids are never
@@ -982,7 +984,10 @@ three resolution paths as a primary action picker:
 Default is `Merge` — the most common intended resolution. Each
 path collapses the dialog to a different body shape (below).
 All paths are dismissible without writes (`Cancel` in the footer
-or Esc).
+or Esc). On phone only, the title and the mode picker stay fixed
+while the reason, basis and description lines become the first block
+of the scrolling body, so the merge choices keep their room; wider
+tiers keep the fixed header.
 
 When the open row has unsaved edits, `Resolve →` routes through
 the pane's Save / Discard / Cancel guard first, as [Delete](#delete)
@@ -1184,7 +1189,7 @@ Body is a single inline rename form, two rows stacked:
 
 ```
 Older · 3 days ago:   [ Kael                       ]
-Newer · just now:     [ Kael (the guardsman)       ]
+Newer · just now:     [ Kaelan (the guardsman)     ]
 ```
 
 Editing either field dirties the form. Save commits under one
@@ -1256,9 +1261,13 @@ Merge writes, in order:
   array drops it — since a location can't parent itself), the
   non-canonical's `at_location_id` when the canonical item has no
   position of its own (no holder, no placement), so the merged item
-  keeps whichever position either side had, and the flag clear when
-  the canonical's partner is the non-canonical, is gone, or isn't the
-  merged canonical's namesake.
+  keeps whichever position either side had, and the canonical's flag
+  when the merge changes it. The flag stays when it names a live
+  namesake of the merged row other than the non-canonical. Otherwise
+  (its partner is the non-canonical, is gone, or isn't the merged
+  row's namesake) the canonical takes over the non-canonical's own
+  partner and reason when that row is live, isn't the canonical and
+  is a namesake of the merged row; else the flag clears.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
   one patch per entity, a character's `lastSeenAt` location among
@@ -1371,8 +1380,11 @@ stored partner, and resolving a pair clears only the flags of that
 pair that name each other or name a row that's gone. A flag on a row
 of the pair that names a live third row stays, since it is a separate
 question, and a merge that deletes a flagged row's partner re-points
-the flag at the surviving row. So a dormant flag clears the next time
-its row is in a resolved pair. N-way merge UI is not v1.
+the flag at the surviving row. A surviving row whose own partner was
+the deleted row takes the deleted row's live partner and reason
+instead, when that row is a namesake of the merged row.
+So a dormant flag clears the next time its row is in a resolved
+pair. N-way merge UI is not v1.
 
 ## Mobile expression
 
@@ -1488,7 +1500,10 @@ overflows.
   per
   [`mobile/layout.md → Mapping — desktop to mobile`](../../foundations/mobile/layout.md#mapping--desktop-to-mobile);
   it has no Sheet expression. Its body scrolls and its footer stays
-  put. The merge body's column grid ([Merge](#merge)) stacks: each
+  put. Its title and mode picker stay fixed, while the reason, basis
+  and description lines open the scrolling body so the merge choices
+  keep their room; wider tiers keep the fixed header
+  ([Resolve dialog](#resolve-dialog)). The merge body's column grid ([Merge](#merge)) stacks: each
   divergent field is a section (field name as header, then a radio
   row per side), and with no column headers to read, each radio
   carries an inline age caption under its value. The canonical

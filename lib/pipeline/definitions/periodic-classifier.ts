@@ -248,11 +248,15 @@ export async function* periodicClassifierPhase(
     // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
     // fields, so a key built from an unbounded one measures text no row holds.
     const stored = clampEmbeddedCharacter(candidate)
-    // The planner drops a blank name, and its empty key would match any blank-named row.
+    // The planner drops a blank name, yet its keywords can still name a row: reconciling
+    // it would spend an embed call on a decision nothing reads.
     if (stored.name === '') continue
     decisions.set(
       candidate.handle,
-      await reconcileNewCharacter(stored, { entities: current, embedDescriptions }),
+      await reconcileNewCharacter(
+        { ...stored, keywords: candidate.keywords },
+        { entities: current, embedDescriptions, scene: window.sceneOf(candidate.sourceTurn) },
+      ),
     )
   }
 

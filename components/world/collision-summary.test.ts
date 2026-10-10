@@ -54,6 +54,13 @@ function entity(
   }
 }
 
+/** The classifier flagged this row with `partnerId` as its namesake. */
+const flaggedWith = (partnerId: string): Partial<NewEntity> => ({
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: partnerId,
+  nameCollisionReason: 'distinct',
+})
+
 const translation = (
   id: string,
   targetKind: 'entity' | 'character_relationship',
@@ -179,7 +186,13 @@ beforeEach(async () => {
       'Brannoc',
       2,
       { inventory: ['item_a', 'item_y', 'item_z'] },
-      { nameCollisionFlag: 1, embeddingStale: 1, description: 'A smith.' },
+      {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_a',
+        nameCollisionReason: 'distinct',
+        embeddingStale: 1,
+        description: 'A smith.',
+      },
     ),
     entity('char_c', 'character', 'Mira', 1, {
       current_location_id: 'loc_a',
@@ -187,15 +200,15 @@ beforeEach(async () => {
       inventory: ['item_a'],
     }),
     entity('loc_a', 'location', 'Harbor', 1),
-    entity('loc_b', 'location', 'Harbor', 2, { parent_location_id: 'loc_a' }),
+    entity('loc_b', 'location', 'Harbor', 2, { parent_location_id: 'loc_a' }, flaggedWith('loc_a')),
     entity('loc_c', 'location', 'Dock', 1, { parent_location_id: 'loc_a' }),
     entity('item_a', 'item', 'Lantern', 5),
-    entity('item_b', 'item', 'Lantern', 5, { at_location_id: 'loc_a' }),
+    entity('item_b', 'item', 'Lantern', 5, { at_location_id: 'loc_a' }, flaggedWith('item_a')),
     entity('item_x', 'item', 'Rope', 1),
     entity('item_y', 'item', 'Coin', 1),
     entity('item_z', 'item', 'Key', 1),
     entity('fac_a', 'faction', 'Guild', 1),
-    entity('fac_b', 'faction', 'Guild', 2),
+    entity('fac_b', 'faction', 'Guild', 2, {}, flaggedWith('fac_a')),
     entity('char_x', 'character', 'Xan', 1),
     // Carries both Lanterns: a merge leaves them one, so they don't lose the item.
     entity('char_k', 'character', 'Kes', 1, { inventory: ['item_a', 'item_b'] }),
@@ -205,7 +218,7 @@ beforeEach(async () => {
     // item_q is held and item_p is nowhere: no position on either side of the pair to drop for.
     entity('char_h', 'character', 'Holden', 1, { inventory: ['item_q'] }),
     entity('item_p', 'item', 'Pebble', 1),
-    entity('item_q', 'item', 'Pebble', 2),
+    entity('item_q', 'item', 'Pebble', 2, {}, flaggedWith('item_p')),
   ])
   await db.insert(happenings).values([
     { id: 'hap_1', branchId: 'b1', title: 'Fire', createdAt: 1, updatedAt: 1 },
@@ -389,7 +402,8 @@ describe('collisionPair', () => {
         counts.involvements - counts.overlap.involvements,
       )
       const rewrittenOthers = written('updateEntity').filter(
-        (a) => a.payload.id !== canonicalId && a.payload.id !== loserId,
+        (a) =>
+          a.payload.id !== canonicalId && a.payload.id !== loserId && 'state' in a.payload.patch,
       )
       expect(rewrittenOthers).toHaveLength(counts.inverseRefs)
     },

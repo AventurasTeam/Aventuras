@@ -48,6 +48,7 @@ export {
 } from './world/resolve-collision'
 export { deleteEntityRow } from './row-delete/delete-entity'
 export type { EntityCascadeLinkTable } from './entities/entity-cascade'
+export type { FlagClearPatch, FlagRepointPatch } from './entities/register'
 export {
   deleteRow,
   ROW_DELETE_REJECTION,

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { emptyEntityState, type CharacterState, type Entity } from '@/lib/db'
 
+import { FLAG_CLEAR } from './collision-flags'
 import { entityActions } from './entity-actions'
 import {
   characterDraftFrom,
   factionDraftFrom,
   itemDraftFrom,
   locationDraftFrom,
+  type CharacterDraft,
   type RelationshipDraft,
   type RelationshipLink,
 } from './entity-draft'
@@ -34,6 +36,8 @@ const KAEL: Entity = {
   retiredReason: null,
   injectionMode: 'always',
   nameCollisionFlag: 0,
+  nameCollisionPartnerId: null,
+  nameCollisionReason: null,
   state: KAEL_STATE,
   tags: [' courier'],
   keywords: ['the courier', 'The Courier'],
@@ -649,60 +653,82 @@ describe('one position per item', () => {
   })
 })
 
-describe('orphaned collision flags', () => {
-  const TWIN: Entity = { ...KAEL, id: 'char_twin', nameCollisionFlag: 1 }
+describe('collision flags a rename breaks', () => {
+  const flagOn = (partnerId: string): Partial<Entity> => ({
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: 'distinct',
+  })
+  const TWIN: Entity = { ...KAEL, id: 'char_twin', ...flagOn('char_kael') }
+  const MARTA: Entity = { ...KAEL, id: 'char_marta', name: 'Marta', keywords: ['the innkeeper'] }
+  const KEEPER: Entity = {
+    ...KAEL,
+    id: 'char_keeper',
+    name: 'The Innkeeper',
+    keywords: [],
+    ...flagOn('char_marta'),
+  }
 
-  function rename(row: Entity, name: string, branchEntities: readonly Entity[]) {
+  function save(row: Entity, changes: Partial<CharacterDraft>, branchEntities: readonly Entity[]) {
     return entityActions({
       branchEntities,
       kind: 'character',
       row,
       keywordsBase: row.keywords,
-      draft: { ...characterDraftFrom(row, []), name },
+      draft: { ...characterDraftFrom(row, []), ...changes },
       relationships: [],
       relationshipsBase: [],
       ...AT,
+      id: row.id,
     })
   }
 
-  it('clears the flag of the namesake a rename leaves without a partner', () => {
-    expect(rename(KAEL, 'Kael Vane', [KAEL, TWIN])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'char_kael', patch: { name: 'Kael Vane' } },
-      },
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'char_twin', patch: { nameCollisionFlag: 0 } },
-      },
+  const updateOf = (id: string, patch: Record<string, unknown>) => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id, patch },
+  })
+
+  it('clears the flag of a row whose partner a rename takes out of its namesakes', () => {
+    expect(save(KAEL, { name: 'Brannoc' }, [KAEL, TWIN])).toStrictEqual([
+      updateOf('char_kael', { name: 'Brannoc' }),
+      updateOf('char_twin', FLAG_CLEAR),
+    ])
+  })
+
+  it('keeps the flag while the new name still holds the partner’s', () => {
+    expect(save(KAEL, { name: 'Kael Vane' }, [KAEL, TWIN])).toStrictEqual([
+      updateOf('char_kael', { name: 'Kael Vane' }),
     ])
   })
 
   it('folds the clear into the update of a flagged row renamed away', () => {
-    const flaggedKael: Entity = { ...KAEL, nameCollisionFlag: 1 }
+    const flaggedKael: Entity = { ...KAEL, ...flagOn('char_twin') }
     const twin: Entity = { ...KAEL, id: 'char_twin' }
-    expect(rename(flaggedKael, 'Kael Vane', [flaggedKael, twin])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: {
-          branchId: 'br_1',
-          id: 'char_kael',
-          patch: { name: 'Kael Vane', nameCollisionFlag: 0 },
-        },
-      },
+    expect(save(flaggedKael, { name: 'Brannoc' }, [flaggedKael, twin])).toStrictEqual([
+      updateOf('char_kael', { name: 'Brannoc', ...FLAG_CLEAR }),
     ])
   })
 
   it('clears nothing for a case-only rename', () => {
-    expect(rename(KAEL, 'KAEL', [KAEL, TWIN])).toStrictEqual([
-      {
-        kind: 'updateEntity',
-        source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'char_kael', patch: { name: 'KAEL' } },
-      },
+    expect(save(KAEL, { name: 'KAEL' }, [KAEL, TWIN])).toStrictEqual([
+      updateOf('char_kael', { name: 'KAEL' }),
+    ])
+  })
+
+  it('judges a rename by the keywords the save writes', () => {
+    expect(save(MARTA, { name: 'Marta Vell' }, [MARTA, KEEPER])).toStrictEqual([
+      updateOf('char_marta', { name: 'Marta Vell' }),
+    ])
+    expect(save(MARTA, { name: 'Marta Vell', keywords: [] }, [MARTA, KEEPER])).toStrictEqual([
+      updateOf('char_marta', { name: 'Marta Vell', keywords: [] }),
+      updateOf('char_keeper', FLAG_CLEAR),
+    ])
+  })
+
+  it('clears nothing on a save that keeps the name, whatever its keywords', () => {
+    expect(save(MARTA, { keywords: [] }, [MARTA, KEEPER])).toStrictEqual([
+      updateOf('char_marta', { keywords: [] }),
     ])
   })
 })

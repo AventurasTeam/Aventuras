@@ -16,8 +16,9 @@ addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)):
 
 - **Known entities** — every entity on the branch, of any kind and
-  status, with its description. The classifier sees the whole roster,
-  so the [reconciliation](#disambiguation-on-new-character-mentions)
+  status, with its description and keywords. The classifier sees the
+  whole roster, so the
+  [reconciliation](#disambiguation-on-new-character-mentions)
   below is a backstop for a row the model missed, not a lookup the
   model can't do.
 - **Known relationships** — the stored views, as the relationships
@@ -28,10 +29,10 @@ addresses by placeholder id
   `sceneEntities` and `currentLocationId`
   ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
   as the same placeholder ids. The saved scene includes the user's
-  corrections and carries forward over a turn that reported none. An
-  id the branch no longer has is left out, so no raw id reaches the
-  prompt; an entry with no saved scene, such as a user action, shows
-  none.
+  corrections and carries forward over a turn that reported none, a
+  user action among them: it carries the scene saved before it. An id
+  the branch no longer has is left out, so no raw id reaches the
+  prompt; an entry with no saved scene shows none.
 
 Two rules lean on the scene and the roster. Prose naming an entity in
 a turn's scene refers to that entity. And a shortened or fuller name,
@@ -214,8 +215,9 @@ contains another, so it matches only exactly or through a keyword.
 - **Similarity** — every namesake's description is embedded with the
   candidate's in one call and compared by cosine, so the decision
   never depends on whether a vec0 row has drained. A namesake with a
-  blank description has no score, and neither does any namesake when
-  the call fails or its vectors don't line up (an embedder swap in
+  blank description has no score. No namesake has one when the
+  candidate's own description is blank (no call is made), when the
+  call fails, or when its vectors don't line up (an embedder swap in
   progress).
 - **Scene presence** — whether the namesake is in the saved
   `sceneEntities` of the candidate's `sourceTurn`. Ignored when that
