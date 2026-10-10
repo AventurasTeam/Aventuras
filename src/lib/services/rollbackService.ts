@@ -32,7 +32,8 @@ export interface RollbackInput {
   state: TrackedState
   /** Change records on the branch line. */
   records: WorldStateRecord[]
-  keepManual: boolean
+  /** Which of the reader's and Tidy's changes to apply again after the revert. */
+  keep: { manual: boolean; tidy: boolean }
 }
 
 export interface RollbackSummary {
@@ -64,7 +65,7 @@ export function planRollback(input: RollbackInput): ReversalPlan & { records: Wo
     state: input.state,
     records,
     entryPositions: new Map(input.entries.map((e) => [e.id, e.position])),
-    keepManual: input.keepManual,
+    keep: input.keep,
   })
   return { ...plan, records }
 }
@@ -150,8 +151,11 @@ class RollbackService {
       entriesProcessed: input.entries.filter((e) => e.position >= input.fromPosition).length,
       entriesWithRecords: new Set(plan.records.map((r) => r.entryId)).size,
       changesUndone: plan.records.filter((r) => r.kind === 'change').length,
-      manualKept: input.keepManual ? plan.manual.length - plan.unkeepable.length : 0,
-      unkeepable: input.keepManual ? plan.unkeepable.length : 0,
+      manualKept:
+        (input.keep.manual ? plan.manual.length : 0) +
+        (input.keep.tidy ? plan.tidy.length : 0) -
+        plan.unkeepable.length,
+      unkeepable: plan.unkeepable.length,
       restoredTimeTracker: plan.ops.some((op) => op.kind === 'clock'),
     }
     log('Rollback complete:', summary)

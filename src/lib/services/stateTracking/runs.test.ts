@@ -80,7 +80,7 @@ function query(overrides: Partial<RunQuery>): RunQuery {
   return {
     line,
     records: [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)),
-    snapshotTimes: [],
+    snapshots: [],
     target: 3,
     candidates: [live],
     tracking: { on: true, enabledSince: 0 },
@@ -140,7 +140,7 @@ describe('resolveRun', () => {
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 5))
     expect(refusal(query({ records }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'header', entryId: 'e5', at: 51, since: 41 },
+      gap: { cause: 'header', entryId: 'e5', sinceEntryId: 'e4' },
     })
   })
 
@@ -150,18 +150,35 @@ describe('resolveRun', () => {
     expect(result).toEqual({
       ok: false,
       reason: 'targetUntracked',
-      diagnosis: { targetRecordedAt: null, anchor: live, gap: null },
+      diagnosis: { target: 'untracked', anchor: live, gap: null },
     })
   })
 
   it('diagnoses the nearest full state when none passes', () => {
     const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 4))
-    const result = resolveRun(query({ records, snapshotTimes: [52], candidates: [live, snap] }))
+    const result = resolveRun(
+      query({ records, snapshots: [{ entryId: 'e5', takenAt: 52 }], candidates: [live, snap] }),
+    )
     expect(!result.ok && result.diagnosis).toEqual({
-      targetRecordedAt: 31,
+      target: 'recorded',
       anchor: snap,
-      gap: { cause: 'header', entryId: 'e4', at: 41, since: 31 },
+      gap: { cause: 'header', entryId: 'e4', sinceEntryId: 'e3' },
+    })
+  })
+
+  it('names old records, not a pause, on a story played before full recording began', () => {
+    // Tracked in the old form up to entry 6; the new build turned full recording on at 500.
+    const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, false, 'classifier')), edit(4, 41)]
+    const result = resolveRun(query({ records, tracking: { on: true, enabledSince: 500 } }))
+    expect(result).toEqual({
+      ok: false,
+      reason: 'targetClassifierOnly',
+      diagnosis: {
+        target: 'classifierOnly',
+        anchor: live,
+        gap: { cause: 'classifierOnly', entryId: 'e4' },
+      },
     })
   })
 
@@ -174,7 +191,7 @@ describe('resolveRun', () => {
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), brk(4, 45)]
     expect(refusal(query({ records }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'break', entryId: 'e4', at: 45 },
+      gap: { cause: 'break', entryId: 'e4' },
     })
   })
 
@@ -188,7 +205,7 @@ describe('resolveRun', () => {
   it('names a re-enable after the last record', () => {
     expect(refusal(query({ tracking: { on: true, enabledSince: 500 } }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'enabledAfter', lastProofAt: 61, enabledSince: 500 },
+      gap: { cause: 'enabledAfter', sinceEntryId: 'e6', enabledSince: 500 },
     })
   })
 
@@ -199,7 +216,7 @@ describe('resolveRun', () => {
     const result = resolveRun(
       query({
         records,
-        snapshotTimes: [55],
+        snapshots: [{ entryId: 'e5', takenAt: 55 }],
         candidates: [live, closing],
         tracking: { on: true, enabledSince: 58 },
       }),
@@ -211,17 +228,24 @@ describe('resolveRun', () => {
     }
   })
 
-  it('skips an anchor taken before a change that belongs to the target', () => {
+  it('applies a change that belongs to the target but was written after the anchor', () => {
     const early: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 4, takenAt: 41 }
-    const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), edit(3, 42)]
-    const result = resolveRun(query({ records, snapshotTimes: [41], candidates: [early, live] }))
-    expect(result.ok && result.anchor).toBe(live)
+    const late = edit(3, 42)
+    const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), late]
+    const result = resolveRun(
+      query({ records, snapshots: [{ entryId: 'e4', takenAt: 41 }], candidates: [early, live] }),
+    )
+    expect(result.ok && result.anchor).toBe(early)
+    expect(result.ok && result.late).toEqual([late])
+    expect(result.ok && result.records.map((r) => r.entryId)).toEqual(['e4'])
   })
 
   it('does not undo changes written after the anchor was taken', () => {
     const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), edit(5, 53)]
-    const result = resolveRun(query({ records, snapshotTimes: [52], candidates: [snap] }))
+    const result = resolveRun(
+      query({ records, snapshots: [{ entryId: 'e5', takenAt: 52 }], candidates: [snap] }),
+    )
     expect(result.ok && result.records.some((r) => r.createdAt === 53)).toBe(false)
   })
 })
@@ -231,7 +255,11 @@ describe('resolveOverride', () => {
   const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 5))
   const before: AnchorCandidate = { kind: 'checkpoint', id: 'cp', position: 2, takenAt: 25 }
   const after: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
-  const gapped = query({ records, snapshotTimes: [52], candidates: [before, after, live] })
+  const gapped = query({
+    records,
+    snapshots: [{ entryId: 'e5', takenAt: 52 }],
+    candidates: [before, after, live],
+  })
 
   it('undoes what was recorded from the nearest full state after the entry', () => {
     expect(resolveRun(gapped).ok).toBe(false)
@@ -241,7 +269,12 @@ describe('resolveOverride', () => {
   })
 
   it('takes the nearest full state after the entry unchanged', () => {
-    expect(resolveOverride(gapped, 'nextAsIs')).toEqual({ ok: true, anchor: after, records: [] })
+    expect(resolveOverride(gapped, 'nextAsIs')).toEqual({
+      ok: true,
+      anchor: after,
+      records: [],
+      late: [],
+    })
   })
 
   it('takes the nearest full state before the entry unchanged', () => {
@@ -249,6 +282,7 @@ describe('resolveOverride', () => {
       ok: true,
       anchor: before,
       records: [],
+      late: [],
     })
   })
 

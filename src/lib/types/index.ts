@@ -1028,7 +1028,11 @@ export interface WorldStateDelta {
  */
 export type TrackedEntityType = 'character' | 'location' | 'item' | 'story_beat' | 'lorebook_entry'
 
-export type ChangeOrigin = 'agent' | 'manual'
+/**
+ * Who made a change: the classifier or another automatic writer (`agent`), lore management after
+ * a chapter (`chapter`), a lore management run the reader started (`tidy`), or the reader.
+ */
+export type ChangeOrigin = 'agent' | 'chapter' | 'tidy' | 'manual'
 
 /** `softDelete` sets the row's tombstone flag; `delete` removes the row. */
 export type ChangeOp = 'create' | 'update' | 'delete' | 'softDelete'
@@ -1046,9 +1050,10 @@ interface WorldStateRecordBase {
 /**
  * One write to one entity. `entityId` is the row written, which on a lightweight branch can be
  * an override or a tombstone.
- * - create: `before` is the row this one shadows (null for a new entity); `after` is the full row
- *   for a manual change.
- * - update: `before`/`after` hold only the changed fields; `after` for a manual change only.
+ * - create: `before` is the row this one shadows (null for a new entity); `after` is the full row.
+ * - update: `before`/`after` hold only the changed fields.
+ * `after` is absent on the classifier's records: they are written with the snapshot that follows
+ * them, so none is ever applied late.
  * - delete / softDelete: `before` is the full row.
  */
 export interface WorldStateChangeRecord extends WorldStateRecordBase {

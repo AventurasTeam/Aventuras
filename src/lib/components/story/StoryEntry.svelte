@@ -47,6 +47,7 @@
     MilestoneIcon,
     ChevronDown,
     ChevronRight,
+    TriangleAlert,
   } from '@lucide/svelte'
   import { aiService } from '#lib/services/ai/index.ts'
   import { aiTTSService } from '#lib/services/ai/utils/TTSService.ts'
@@ -337,11 +338,15 @@
   let isEditing = $state(false)
   let editContent = $state('')
   let isDeleting = $state(false)
-  // Manual changes a revert-on-delete from here would undo; null until known.
+  // The reader's and Tidy's changes a revert-on-delete from here would undo; null until known.
   let revertPreview = $state<{
     manual: WorldStateChangeRecord[]
+    tidy: WorldStateChangeRecord[]
     unkeepable: WorldStateChangeRecord[]
   } | null>(null)
+  const revertUndoesKept = $derived(
+    !!revertPreview && revertPreview.manual.length + revertPreview.tidy.length > 0,
+  )
 
   async function startDelete() {
     isDeleting = true
@@ -447,6 +452,7 @@
   // For a past entry: whether it can be rebuilt, and the manual changes that would undo.
   let pastCheckpoint = $state<PastCheckpointPreview | null>(null)
   let keepManualInCheckpoint = $state(false)
+  let keepTidyInCheckpoint = $state(false)
   let savingCheckpoint = $state(false)
   // A refused past checkpoint can still be built from a full state the reader picks.
   let advancedOpen = $state(false)
@@ -457,6 +463,7 @@
     isCreatingCheckpoint = true
     pastCheckpoint = null
     keepManualInCheckpoint = false
+    keepTidyInCheckpoint = false
     advancedOpen = false
     overruleGaps = false
     if (!isLatestEntry) {
@@ -470,20 +477,20 @@
     if (checked && !checkpointName.trim()) checkpointName = 'Approximate — '
   }
 
-  const formatTime = (ms: number) => new Date(ms).toLocaleString()
-
   function entryNumberOf(id: string): number | null {
     const at = story.entries.find((e) => e.id === id)
     return at ? entryNumber(at) : null
   }
+
+  const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
 
   function anchorText(label: AnchorLabel): string {
     if (label.kind === 'live') return 'the current state'
     const at = story.entries.find((e) => e.position === label.position)
     const number = at ? entryNumber(at) : label.position + 1
     return label.kind === 'checkpoint'
-      ? `Checkpoint “${label.name ?? ''}” at entry ${number}`
-      : `Snapshot at entry ${number}`
+      ? `checkpoint “${label.name ?? ''}” at entry ${number}`
+      : `a snapshot at entry ${number}`
   }
 
   const overriding = $derived(!!pastCheckpoint?.refusal && overruleGaps)
@@ -492,10 +499,9 @@
       ? (pastCheckpoint?.overrides?.previous ?? null)
       : (pastCheckpoint?.overrides?.next ?? null),
   )
-  const showManualInCheckpoint = $derived(
-    !!pastCheckpoint &&
-      pastCheckpoint.manual.length > 0 &&
-      (!pastCheckpoint.refusal || (overriding && gapOverride === 'undoRecorded')),
+  // What the rebuild undoes is shown only for a rebuild that undoes: a clean one, or the override.
+  const showUndoneInCheckpoint = $derived(
+    !!pastCheckpoint && (!pastCheckpoint.refusal || (overriding && gapOverride === 'undoRecorded')),
   )
 
   $effect(() => {
@@ -534,6 +540,7 @@
       else {
         await story.createCheckpointAt(entry.id, checkpointName.trim(), {
           keepManual: keepManualInCheckpoint,
+          keepTidy: keepTidyInCheckpoint,
           override: overriding ? gapOverride : undefined,
         })
       }
@@ -2022,26 +2029,23 @@
       </div>
     {:else if isDeleting}
       <div class="space-y-2">
-        {#if revertPreview && revertPreview.manual.length > 0}
-          {@const unkeepable = new Set(revertPreview.unkeepable.map((r) => r.id))}
+        {#if revertPreview && revertUndoesKept}
           <p class="text-muted-foreground text-sm">
-            Delete this entry? The revert would also undo changes you made by hand:
+            Delete this entry? The revert would also undo these changes.
           </p>
-          <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
-            {#each revertPreview.manual as change (change.id)}
-              <li>
-                {describeChange(change, (type, id) => story.trackedName(type, id))}
-                {#if unkeepable.has(change.id)}
-                  <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
-                {/if}
-              </li>
-            {/each}
-          </ul>
+          {#if revertPreview.manual.length > 0}
+            <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
+            {@render changeList(revertPreview.manual, revertPreview.unkeepable)}
+          {/if}
+          {#if revertPreview.tidy.length > 0}
+            <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
+            {@render changeList(revertPreview.tidy, revertPreview.unkeepable)}
+          {/if}
         {:else}
           <p class="text-muted-foreground text-sm">Delete this entry?</p>
         {/if}
         <div class="flex flex-wrap gap-2">
-          {#if revertPreview && revertPreview.manual.length > 0}
+          {#if revertUndoesKept}
             <Button
               variant="destructive"
               size="sm"
@@ -2049,7 +2053,7 @@
               class="h-9 px-3"
             >
               <Trash2 class="mr-1.5 h-4 w-4" />
-              Delete, keep my edits
+              Delete, keep them
             </Button>
             <Button
               variant="destructive"
@@ -2277,6 +2281,20 @@
 {/snippet}
 
 <!-- View/Edit Image Modal -->
+{#snippet changeList(changes: WorldStateChangeRecord[], unkeepable: WorldStateChangeRecord[])}
+  {@const lost = new Set(unkeepable.map((r) => r.id))}
+  <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
+    {#each changes as change (change.id)}
+      <li>
+        {describeChange(change, (type, id) => story.trackedName(type, id))}
+        {#if lost.has(change.id)}
+          <span class="text-amber-500">— cannot be kept: what it changed is gone</span>
+        {/if}
+      </li>
+    {/each}
+  </ul>
+{/snippet}
+
 <CreateBranchModal bind:open={isBranching} checkpoint={entryCheckpoint ?? null} />
 
 <!-- Modal: the story must not change while the checkpoint is described and taken. -->
@@ -2317,45 +2335,54 @@
         </p>
       {:else if pastCheckpoint === null}
         <p class="text-muted-foreground text-xs italic">
-          Checking the world state changes recorded after this entry…
+          Checking the recorded world state changes…
         </p>
       {:else if pastCheckpoint.refusal}
         <!-- The diagnosis below explains a refusal; the warning only heads it. -->
         <p class="text-xs text-amber-500">
           {pastCheckpoint.diagnosis
-            ? 'The world state at this entry cannot be rebuilt:'
+            ? 'The world state at this entry cannot be rebuilt.'
             : pastCheckpoint.refusal}
         </p>
         {#if pastCheckpoint.diagnosis}
           {@const diagnosis = pastCheckpoint.diagnosis}
           <ul class="text-muted-foreground space-y-1 text-xs">
-            {#snippet finding(ok: boolean, text: string)}
+            <!-- An old record holds part of the history, so it warns rather than fails. -->
+            {#snippet finding(status: 'ok' | 'warn' | 'fail', text: string)}
               <li class="flex items-start gap-1.5">
-                {#if ok}
+                {#if status === 'ok'}
                   <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+                {:else if status === 'warn'}
+                  <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
                 {:else}
-                  <X class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <X class="mt-px h-3.5 w-3.5 shrink-0 text-red-500" />
                 {/if}
                 <span>{text}</span>
               </li>
             {/snippet}
             {@render finding(
-              diagnosis.targetRecordedAt !== null,
-              diagnosis.targetRecordedAt !== null
-                ? `World state changes were recorded for entry ${entryNumber(entry)} on ${formatTime(diagnosis.targetRecordedAt)}.`
-                : `World state changes were not recorded for entry ${entryNumber(entry)}.`,
-            )}
+              diagnosis.target === 'recorded'
+                ? 'ok'
+                : diagnosis.target === 'classifierOnly'
+                  ? 'warn'
+                  : 'fail',
+              diagnosis.target === 'recorded'
+                ? `World state changes were recorded for entry ${entryNumber(entry)}.`
+                : diagnosis.target === 'classifierOnly'
+                  ? `Entry ${entryNumber(entry)} has an old record without the lorebook.`
+                  : `World state changes were not recorded for entry ${entryNumber(entry)}.`,
+            )}.` : `World state changes were not recorded for entry ${entryNumber(entry)}.`, )}
             {@render finding(
-              diagnosis.anchor !== null,
+              diagnosis.anchor ? 'ok' : 'fail',
               diagnosis.anchor
-                ? `Nearest full world state after it: ${anchorText(diagnosis.anchor)}.`
-                : 'No full world state was saved after it.',
+                ? `The nearest full world state is ${anchorText(diagnosis.anchor)}.`
+                : 'No full world state was saved after this entry.',
             )}
             {#if diagnosis.anchor}
               {@render finding(
-                diagnosis.gap === null,
+                !diagnosis.gap ? 'ok' : diagnosis.gap.cause === 'classifierOnly' ? 'warn' : 'fail',
                 diagnosis.gap
-                  ? gapMessage(diagnosis.gap, entryNumberOf, formatTime)
+                  ? gapMessage(diagnosis.gap, entryNumberOf)
                   : 'World state changes were recorded for every entry in between.',
               )}
             {/if}
@@ -2386,7 +2413,7 @@
                     onCheckedChange={(checked) => setOverruleGaps(checked === true)}
                     disabled={savingCheckpoint}
                   />
-                  Create it anyway, from:
+                  Create it anyway:
                 </label>
                 {#snippet option(
                   value: GapOverride,
@@ -2404,9 +2431,8 @@
                     <label for={`gap-${value}-${entry.id}`} class:opacity-50={!anchor}>
                       <span class="text-foreground">{title}</span>
                       <span class="block">
-                        {anchor ? anchorText(anchor) : 'There is none.'}{anchor && note
-                          ? ` ${note}`
-                          : ''}
+                        {anchor ? `${capitalize(anchorText(anchor))}.` : 'None was saved.'}
+                        {anchor && note ? note : ''}
                       </span>
                     </label>
                   </div>
@@ -2419,14 +2445,14 @@
                 >
                   {@render option(
                     'undoRecorded',
-                    'The next full state, undoing what was recorded',
+                    'Undo the recorded changes from the next full state',
                     overrides.next,
-                    '— changes that were not recorded stay in.',
+                    'Changes that were not recorded stay in.',
                   )}
-                  {@render option('nextAsIs', 'The next full state as it is', overrides.next)}
+                  {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
                   {@render option(
                     'previousAsIs',
-                    'The previous full state as it is',
+                    'Copy the previous full state',
                     overrides.previous,
                   )}
                 </RadioGroup>
@@ -2462,25 +2488,34 @@
           </div>
         </div>
       {/if}
-      {#if pastCheckpoint && showManualInCheckpoint}
-        {@const unkeepable = new Set(pastCheckpoint.unkeepable.map((r) => r.id))}
-        <p class="text-muted-foreground text-xs">
-          Some changes were made by a user after this entry:
-        </p>
-        <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
-          {#each pastCheckpoint.manual as change (change.id)}
-            <li>
-              {describeChange(change, (type, id) => story.trackedName(type, id))}
-              {#if unkeepable.has(change.id)}
-                <span class="text-amber-500">— cannot be kept: what it changed is removed</span>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-        <label class="flex items-center gap-2 text-xs">
-          <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
-          Include them in the checkpoint
-        </label>
+      {#if pastCheckpoint && showUndoneInCheckpoint}
+        {#if pastCheckpoint.manual.length > 0}
+          <p class="text-muted-foreground text-xs">
+            Some changes were made by a user after this entry:
+          </p>
+          {@render changeList(pastCheckpoint.manual, pastCheckpoint.unkeepable)}
+          <label class="flex items-center gap-2 text-xs">
+            <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
+            Include them in the checkpoint
+          </label>
+        {/if}
+        {#if pastCheckpoint.tidy.length > 0}
+          <p class="text-muted-foreground text-xs">
+            Lore management you ran after this entry made these changes:
+          </p>
+          {@render changeList(pastCheckpoint.tidy, pastCheckpoint.unkeepable)}
+          <label class="flex items-center gap-2 text-xs">
+            <Checkbox bind:checked={keepTidyInCheckpoint} disabled={savingCheckpoint} />
+            Include them in the checkpoint
+          </label>
+        {/if}
+        {#if pastCheckpoint.chapters > 0}
+          <p class="text-muted-foreground text-xs">
+            Lorebook updates from {pastCheckpoint.chapters === 1
+              ? 'a chapter'
+              : `${pastCheckpoint.chapters} chapters`} written after this entry are not included.
+          </p>
+        {/if}
       {/if}
     </div>
     <ResponsiveModal.Footer class="border-t px-6 py-4">

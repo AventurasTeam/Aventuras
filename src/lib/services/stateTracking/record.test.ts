@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Character } from '#lib/types/index.ts'
-import { changedFields, diffStates, planReversal, type RecordContext, type TrackedState } from '.'
+import {
+  changeRecord,
+  changedFields,
+  diffStates,
+  planReversal,
+  type RecordContext,
+  type TrackedState,
+} from '.'
 
 const ctx: RecordContext = { storyId: 's', branchId: 'b', entryId: 'e1', origin: 'agent' }
 
@@ -78,9 +85,23 @@ describe('diffStates', () => {
       state: after,
       records,
       entryPositions: new Map([['e1', 1]]),
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     const ids = (s: TrackedState) => s.characters.map((c) => [c.id, c.relationship]).sort()
     expect(ids(plan.state)).toEqual(ids(before))
+  })
+})
+
+describe('changeRecord', () => {
+  it('keeps the new values, so a late change can be applied onto a saved state', () => {
+    const record = changeRecord(
+      { ...ctx, origin: 'chapter' },
+      'lorebook_entry',
+      'l',
+      'update',
+      { description: 'old' },
+      { description: 'new' },
+    )
+    expect(record.after).toEqual({ description: 'new' })
   })
 })

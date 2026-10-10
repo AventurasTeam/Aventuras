@@ -76,7 +76,7 @@ describe('fromWorldStateDelta', () => {
       },
       records,
       entryPositions: new Map([['e5', 5]]),
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters.map((c) => [c.id, c.relationship])).toEqual([['c-old', 'ally']])
     expect(plan.state.locations.find((l) => l.current)?.id).toBe('loc-1')

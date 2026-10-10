@@ -43,28 +43,23 @@ describe('describeChange', () => {
 })
 
 describe('gapMessage', () => {
-  const number = (id: string) => (id === 'e5' ? 5 : null)
-  const time = (ms: number) => `t${ms}`
+  const number = (id: string) => ({ e3: 3, e5: 5 })[id] ?? null
 
-  it('points at the entry whose header broke the run', () => {
-    expect(gapMessage({ cause: 'header', entryId: 'e5', at: 51, since: 41 }, number, time)).toBe(
-      'World state changes were not recorded for a while between t41 and t51, before those of entry 5.',
+  it('names the entries a pause in tracking lies between', () => {
+    expect(gapMessage({ cause: 'header', entryId: 'e5', sinceEntryId: 'e3' }, number)).toBe(
+      'State Tracking was off between entry 3 and entry 5.',
     )
   })
 
-  it('gives both times when tracking was turned on after the last record', () => {
-    const message = gapMessage(
-      { cause: 'enabledAfter', lastProofAt: 61, enabledSince: 500 },
-      number,
-      time,
-    )
-    expect(message).toContain('t61')
-    expect(message).toContain('t500')
+  it('names the last recorded entry before a re-enable', () => {
+    expect(
+      gapMessage({ cause: 'enabledAfter', sinceEntryId: 'e3', enabledSince: 500 }, number),
+    ).toBe('State Tracking was off after entry 3.')
   })
 
-  it('says when the entry is not on this branch', () => {
-    expect(gapMessage({ cause: 'break', entryId: 'x', at: 1 }, number, time)).toContain(
-      'an entry not on this branch',
+  it('says when the entry is on another branch', () => {
+    expect(gapMessage({ cause: 'untracked', entryId: 'x' }, number)).toBe(
+      'World state changes were not recorded for an entry on another branch.',
     )
   })
 })

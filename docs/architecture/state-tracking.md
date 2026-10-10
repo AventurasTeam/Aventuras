@@ -33,12 +33,21 @@ without per-entry records, but before the next entry exists, so their changes be
 imported entry's state and a rebuild there is exact. The imported entries before it have no
 headers and stay refused.
 
-Every writer is covered: the classifier, lore management (automatic and Tidy lorebook), the
+Every writer is covered: the classifier, lore management (after a chapter, and Tidy), the
 Duplicates merge, lorebook file imports, and manual add, edit and delete in the world and lorebook
-panels. Each change carries its origin — `agent` for the classifier and automatic lore management,
-`manual` for the rest, Tidy included — and is attached to the latest entry of the branch it was made
-on. A lore session attaches to the last completed entry when it started, so a session overlapping a
-turn never lands on that turn's entries.
+panels. Each change carries its origin and is attached to an entry:
+
+- `agent` — the classifier, on its narration, and other automatic writes such as a generated
+  portrait, on the latest entry.
+- `chapter` — lore management after a chapter, on the narration of the turn that created it, or on
+  the last completed entry for a chapter made by hand. That is where the new lore starts to shape
+  generation, so a checkpoint before it holds the lore its entries were written with.
+- `tidy` — a lore management run the reader started, on the last completed entry when it started.
+- `manual` — the reader's edits in the world and lorebook panels, the Duplicates merge and lorebook
+  file imports, on the last completed entry.
+
+A session overlapping a turn never lands on that turn's entries. Every change keeps its new values
+in `after` except the classifier's, which no saved state can predate (see below).
 
 Store writes commit the entity row and its record in one `database.transaction`. The classifier is
 the exception: it writes through many direct calls, so it clones the in-memory state at the start and
@@ -54,14 +63,16 @@ classifier was all it recorded.
 
 `planReversal` replays records newest first over a copy of a state, so for every field the earliest
 recorded value is the one left standing, and a create later deleted cancels out. It returns the
-resulting state and the database operations that would produce it. With `keepManual`, manual changes
-are applied again afterwards from their `after` values; one whose entity no longer exists (an
-automatic change in the range created it) is reported as unkeepable rather than dropped silently.
+resulting state and the database operations that would produce it. The reader's and Tidy's changes
+can each be kept: they are applied again afterwards from their `after` values, and one whose entity
+no longer exists (an automatic change in the range created it) is reported as unkeepable rather than
+dropped silently.
 
 Revert on delete runs that plan over the live state and executes it in one transaction, so it lands
-whole or not at all. When it would undo manual changes, the delete confirmation lists them and the
-reader chooses to keep them or not. Every revert the reader did not answer — dismissing an error
-entry, regenerating a narration, a retry restore — keeps them.
+whole or not at all. When it would undo the reader's or Tidy's changes, the delete confirmation
+lists them, each group under its own heading, and the reader keeps them or not. Every revert the
+reader did not answer — dismissing an error entry, regenerating a narration, a retry restore —
+keeps them.
 
 ## Tracked runs
 
@@ -84,14 +95,27 @@ unrecorded wherever tracking could have been off: before a non-continuous header
 thing written while tracking was on (any record or snapshot proves that), after a break, and after
 the last record if tracking is off now or was turned on again since. A rebuild is refused when such
 a stretch falls between P and its anchor, when a narration in between has no header, or when the
-history in between is classifier-only. It is also refused when P itself has no header: an entry
-played untracked is the plainest sign that its state was never recorded.
+history in between is classifier-only. It is also refused when P itself has no header, or only an
+old classifier-only one: its own state was never fully recorded. What the entries show is checked
+before what is inferred from times, and old records prove nothing about tracking: they were written
+whatever the reader did by hand, so a story played before full recording began reports its old
+records, not a pause.
 
-A refusal carries a `RunDiagnosis` the form lists under the warning: whether P has a header and
-when it was written, the nearest full state after P (or the one that passed), and the first thing
-breaking the tracked sequence between them — an unrecorded or classifier-only narration, a
-non-continuous header or a break and its entry, a re-enable after the last record, or a change
-written after the anchor.
+A saved state can predate changes that belong to it. Lore management and Tidy run in the background
+and can finish after the snapshot of an entry they attach to at or before it, and the reader can
+edit after a snapshot of the latest entry. `resolveRun` returns those as `late`; `planReversal`
+applies them onto the saved state from their `after` values, in write order, before undoing. A
+snapshot therefore never stops being usable for its own entry, and nothing is skipped or rewritten
+for it. The classifier's changes need no `after`: a snapshot is taken after its own classification,
+and every later classification belongs to a later entry.
+
+A refusal carries a `RunDiagnosis` the form lists under the warning: whether P has a header, the
+nearest full state after P (or the one that passed), and the first thing breaking the tracked
+sequence between them — an unrecorded or classifier-only narration, a non-continuous header or a
+break and its entry, or a re-enable after the last record — located by entry numbers.
+
+A rebuild that goes through lists the reader's and Tidy's changes it undoes, each with its own
+choice to include them, and notes how many chapters' lorebook updates it leaves out.
 
 A refusal can be overruled under the form's Advanced fold. `resolveOverride` then builds the state
 from the nearest full state after P, undoing only what was recorded, or takes the nearest full

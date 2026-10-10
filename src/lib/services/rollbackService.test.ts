@@ -99,7 +99,7 @@ function input(overrides: Partial<RollbackInput>): RollbackInput {
     entries: [legacyEntry],
     state,
     records: [],
-    keepManual: false,
+    keep: { manual: false, tidy: false },
     ...overrides,
   }
 }

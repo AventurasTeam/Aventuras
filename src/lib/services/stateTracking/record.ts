@@ -61,13 +61,14 @@ export function changeRecord(
     entityId,
     op,
     before: before ? { ...before } : null,
-    after: ctx.origin === 'manual' && after ? { ...after } : null,
+    after: after ? { ...after } : null,
   }
 }
 
 /**
  * The records that turn `before` into `after`. A new row that overrides a row which left the
- * list is recorded as a create shadowing it, as a copy-on-write override is.
+ * list is recorded as a create shadowing it, as a copy-on-write override is. These are the
+ * classifier's, so they carry no `after`.
  */
 export function diffStates(
   before: TrackedState,
@@ -101,5 +102,5 @@ export function diffStates(
       records.push(changeRecord(ctx, type, row.id, 'delete', row, null))
     }
   }
-  return records
+  return records.map((r) => ({ ...r, after: null }))
 }

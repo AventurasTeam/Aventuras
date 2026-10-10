@@ -185,6 +185,9 @@ class RefusalError extends Error {
   }
 }
 
+/** A preview keeps everything it can, so it reports which kept changes cannot be applied. */
+const KEEP_ALL = { manual: true, tidy: true }
+
 /** A full state a past checkpoint can be built from, for the reader. */
 export interface AnchorLabel {
   kind: AnchorCandidate['kind']
@@ -197,13 +200,17 @@ export interface PastCheckpointPreview {
   reason: RunRefusal | null
   /** On a refusal, what the rebuild had and lacked. */
   diagnosis: {
-    targetRecordedAt: number | null
+    target: RunDiagnosis['target']
     anchor: AnchorLabel | null
     gap: RunGap | null
   } | null
   /** Manual changes the rebuild would undo; on a refusal, those of the `undoRecorded` override. */
   manual: WorldStateChangeRecord[]
+  /** Changes from lore management the reader ran, likewise. */
+  tidy: WorldStateChangeRecord[]
   unkeepable: WorldStateChangeRecord[]
+  /** How many chapters' lore management the rebuild undoes. */
+  chapters: number
   /** On a refusal, the full states the reader may build it from anyway. */
   overrides: { next: AnchorLabel | null; previous: AnchorLabel | null } | null
 }
@@ -1268,7 +1275,10 @@ class StoryStore {
     return entry
   }
 
-  /** Undoes the world state recorded for entries at or after `position` on this branch. */
+  /**
+   * Undoes the world state recorded for entries at or after `position` on this branch. With
+   * `keepManual`, the reader's changes and Tidy's are applied again.
+   */
   private async rollbackFrom(position: number, keepManual: boolean): Promise<RollbackSummary> {
     if (!this.currentStory) throw new Error('No story loaded')
     return rollbackService.rollbackFromPosition({
@@ -1278,21 +1288,23 @@ class StoryStore {
       entries: this.entries,
       state: this.trackedState(),
       records: await this.lineRecords(),
-      keepManual,
+      keep: { manual: keepManual, tidy: keepManual },
     })
   }
 
   /**
-   * The manual changes a revert-on-delete from this entry would undo, and those that could not
-   * be kept. Empty when the delete would not revert anything.
+   * The reader's and Tidy's changes a revert-on-delete from this entry would undo, and those
+   * that could not be kept. Empty when the delete would not revert anything.
    */
-  async previewRevert(
-    entryId: string,
-  ): Promise<{ manual: WorldStateChangeRecord[]; unkeepable: WorldStateChangeRecord[] }> {
+  async previewRevert(entryId: string): Promise<{
+    manual: WorldStateChangeRecord[]
+    tidy: WorldStateChangeRecord[]
+    unkeepable: WorldStateChangeRecord[]
+  }> {
     const entry = this.entries.find((e) => e.id === entryId)
     const reverts =
       settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
-    if (!this.currentStory || !entry || !reverts) return { manual: [], unkeepable: [] }
+    if (!this.currentStory || !entry || !reverts) return { manual: [], tidy: [], unkeepable: [] }
     const plan = planRollback({
       storyId: this.currentStory.id,
       branchId: this.currentStory.currentBranchId ?? null,
@@ -1300,9 +1312,9 @@ class StoryStore {
       entries: this.entries,
       state: this.trackedState(),
       records: await this.lineRecords(),
-      keepManual: true,
+      keep: { manual: true, tidy: true },
     })
-    return { manual: plan.manual, unkeepable: plan.unkeepable }
+    return { manual: plan.manual, tidy: plan.tidy, unkeepable: plan.unkeepable }
   }
 
   // Delete a story entry
@@ -4224,7 +4236,7 @@ class StoryStore {
           },
           loreCallbacks: buildLoreManagementCallbacks(
             { storyId: this.currentStory.id, branchId: this.currentStory.currentBranchId },
-            { origin: 'agent' },
+            { origin: 'chapter' },
           ),
           loreUICallbacks: buildLoreManagementUICallbacks({
             onStatus: (status) => {
@@ -4335,7 +4347,7 @@ class StoryStore {
    */
   private async rebuildPastState(
     entryId: string,
-    keepManual: boolean,
+    keep: { manual: boolean; tidy: boolean },
     override?: GapOverride,
   ): Promise<{ entry: StoryEntry; plan: ReversalPlan; anchor: AnchorCandidate }> {
     if (!this.currentStory) throw new Error('No story loaded')
@@ -4392,7 +4404,7 @@ class StoryStore {
     const query: RunQuery = {
       line: this.entries,
       records,
-      snapshotTimes: snapshots.map((s) => s.createdAt),
+      snapshots: snapshots.map((s) => ({ entryId: s.entryId, takenAt: s.createdAt })),
       target: entry.position,
       candidates,
       tracking: {
@@ -4407,8 +4419,9 @@ class StoryStore {
     const plan = planReversal({
       state,
       records: run.records,
+      late: run.late,
       entryPositions: positions,
-      keepManual,
+      keep,
     })
     return { entry, plan, anchor: run.anchor }
   }
@@ -4445,13 +4458,15 @@ class StoryStore {
    */
   async previewCheckpointAt(entryId: string): Promise<PastCheckpointPreview> {
     try {
-      const { plan } = await this.rebuildPastState(entryId, true)
+      const { plan } = await this.rebuildPastState(entryId, KEEP_ALL)
       return {
         refusal: null,
         reason: null,
         diagnosis: null,
         manual: plan.manual,
+        tidy: plan.tidy,
         unkeepable: plan.unkeepable,
+        chapters: plan.chapters,
         overrides: null,
       }
     } catch (error) {
@@ -4459,26 +4474,37 @@ class StoryStore {
       const reason = error instanceof RefusalError ? error.reason : null
       const found = error instanceof RefusalError ? error.diagnosis : null
       const diagnosis = found && {
-        targetRecordedAt: found.targetRecordedAt,
+        target: found.target,
         anchor: found.anchor && this.anchorLabel(found.anchor),
         gap: found.gap,
       }
       const attempt = (override: GapOverride) =>
-        this.rebuildPastState(entryId, true, override).catch(() => null)
+        this.rebuildPastState(entryId, KEEP_ALL, override).catch(() => null)
       const [undo, next, previous] = await Promise.all([
         attempt('undoRecorded'),
         attempt('nextAsIs'),
         attempt('previousAsIs'),
       ])
       if (!next && !previous) {
-        return { refusal, reason, diagnosis, manual: [], unkeepable: [], overrides: null }
+        return {
+          refusal,
+          reason,
+          diagnosis,
+          manual: [],
+          tidy: [],
+          unkeepable: [],
+          chapters: 0,
+          overrides: null,
+        }
       }
       return {
         refusal,
         reason,
         diagnosis,
         manual: undo?.plan.manual ?? [],
+        tidy: undo?.plan.tidy ?? [],
         unkeepable: undo?.plan.unkeepable ?? [],
+        chapters: undo?.plan.chapters ?? 0,
         overrides: {
           next: next ? this.anchorLabel(next.anchor) : null,
           previous: previous ? this.anchorLabel(previous.anchor) : null,
@@ -4499,7 +4525,7 @@ class StoryStore {
   async createCheckpointAt(
     entryId: string,
     name: string,
-    opts: { keepManual: boolean; override?: GapOverride },
+    opts: { keepManual: boolean; keepTidy: boolean; override?: GapOverride },
   ): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNotBusy('create a checkpoint')
@@ -4507,7 +4533,11 @@ class StoryStore {
       throw new Error('This entry already has a checkpoint')
     }
 
-    const { entry, plan } = await this.rebuildPastState(entryId, opts.keepManual, opts.override)
+    const { entry, plan } = await this.rebuildPastState(
+      entryId,
+      { manual: opts.keepManual, tidy: opts.keepTidy },
+      opts.override,
+    )
     const entries = this.entries.filter((e) => e.position <= entry.position)
     const kept = new Set(entries.map((e) => e.id))
     const record: CheckpointRecord = {

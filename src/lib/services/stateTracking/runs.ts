@@ -1,4 +1,9 @@
-import type { StoryEntry, WorldStateHeaderRecord, WorldStateRecord } from '#lib/types/index.ts'
+import type {
+  StoryEntry,
+  WorldStateChangeRecord,
+  WorldStateHeaderRecord,
+  WorldStateRecord,
+} from '#lib/types/index.ts'
 
 export type LineEntry = Pick<StoryEntry, 'id' | 'position' | 'type' | 'createdAt'>
 
@@ -56,7 +61,12 @@ export interface AnchorCandidate {
 }
 
 export type RunRefusal =
-  'targetUntracked' | 'untracked' | 'interrupted' | 'classifierOnly' | 'noAnchor'
+  | 'targetUntracked'
+  | 'targetClassifierOnly'
+  | 'untracked'
+  | 'interrupted'
+  | 'classifierOnly'
+  | 'noAnchor'
 
 /** The first thing that breaks the tracked sequence between an entry and a full state. */
 export type RunGap =
@@ -64,24 +74,35 @@ export type RunGap =
   | { cause: 'untracked'; entryId: string }
   /** A narration recorded before lorebook and manual changes were. */
   | { cause: 'classifierOnly'; entryId: string }
-  /** A header written as not continuing the run before it. */
-  | { cause: 'header'; entryId: string; at: number; since: number | null }
+  /**
+   * A header written as not continuing the run before it. `sinceEntryId` is the entry of the
+   * last thing recorded before it, if any.
+   */
+  | { cause: 'header'; entryId: string; sinceEntryId: string | null }
   /** An export that could not vouch for tracking since the branch's last record. */
-  | { cause: 'break'; entryId: string; at: number }
+  | { cause: 'break'; entryId: string }
   | { cause: 'trackingOff' }
-  /** Tracking was turned on after the last thing it wrote, or has no start time. */
-  | { cause: 'enabledAfter'; lastProofAt: number | null; enabledSince: number | null }
-  /** A change belonging to the target, written after the full state was taken. */
-  | { cause: 'lateChange'; entryId: string; at: number; anchorTakenAt: number }
+  /**
+   * Tracking was turned on after the last thing it recorded, at `sinceEntryId`; null when only
+   * legacy records exist. `enabledSince` is null when tracking has no start time.
+   */
+  | { cause: 'enabledAfter'; sinceEntryId: string | null; enabledSince: number | null }
 
 export type RunResult =
-  | { ok: true; anchor: AnchorCandidate; records: WorldStateRecord[] }
+  | {
+      ok: true
+      anchor: AnchorCandidate
+      /** Records to undo from the anchor. */
+      records: WorldStateRecord[]
+      /** Changes that belong to the target but were written after the anchor was saved. */
+      late: WorldStateChangeRecord[]
+    }
   | { ok: false; reason: RunRefusal; diagnosis?: RunDiagnosis }
 
 /** Why a past state was refused, as the three things a rebuild needs. */
 export interface RunDiagnosis {
-  /** When the entry's own header was written; null when it was played untracked. */
-  targetRecordedAt: number | null
+  /** How the entry's own changes were recorded: in full, in the old classifier-only form, or not. */
+  target: 'recorded' | 'classifierOnly' | 'untracked'
   /** The nearest full state after the entry, or the one that passed. */
   anchor: AnchorCandidate | null
   /** The first break in the tracked sequence between the entry and `anchor`. */
@@ -93,8 +114,8 @@ export interface RunQuery {
   line: LineEntry[]
   /** Every record on the branch line, legacy deltas included. */
   records: WorldStateRecord[]
-  /** When each automatic or closing snapshot on the branch was taken. */
-  snapshotTimes: number[]
+  /** The automatic and closing snapshots on the branch: their entry and when each was taken. */
+  snapshots: { entryId: string; takenAt: number }[]
   target: number
   candidates: AnchorCandidate[]
   tracking: { on: boolean; enabledSince: number | null }
@@ -111,14 +132,22 @@ interface Interval {
  * written only while tracking is on (a record, a snapshot) proves tracking was on at that moment.
  */
 function suspectIntervals(query: RunQuery): Interval[] {
-  const tracked = query.records.filter((r) => r.kind !== 'header' || r.coverage === 'full')
+  // Old classifier-only records were written whatever the reader did by hand, so they prove nothing.
+  const legacy = new Set(
+    query.records
+      .filter((r) => r.kind === 'header' && r.coverage === 'classifier')
+      .map((r) => r.entryId),
+  )
+  const tracked = query.records.filter((r) => !legacy.has(r.entryId))
   const proofs = [
-    ...tracked.filter((r) => r.kind !== 'break').map((r) => r.createdAt),
-    ...query.snapshotTimes,
-  ].sort((a, b) => a - b)
+    ...tracked
+      .filter((r) => r.kind !== 'break')
+      .map((r) => ({ at: r.createdAt, entryId: r.entryId })),
+    ...query.snapshots.map((s) => ({ at: s.takenAt, entryId: s.entryId })),
+  ].sort((a, b) => a.at - b.at)
   const lastProofBefore = (t: number) => {
-    let found = -Infinity
-    for (const p of proofs) if (p < t) found = p
+    let found: { at: number; entryId: string } | null = null
+    for (const p of proofs) if (p.at < t) found = p
     return found
   }
   const headers = tracked
@@ -130,14 +159,9 @@ function suspectIntervals(query: RunQuery): Interval[] {
     if (header.continuous) continue
     const since = lastProofBefore(header.createdAt)
     intervals.push({
-      from: since,
+      from: since?.at ?? -Infinity,
       to: header.createdAt,
-      cause: {
-        cause: 'header',
-        entryId: header.entryId,
-        at: header.createdAt,
-        since: Number.isFinite(since) ? since : null,
-      },
+      cause: { cause: 'header', entryId: header.entryId, sinceEntryId: since?.entryId ?? null },
     })
   }
   for (const brk of tracked.filter((r) => r.kind === 'break')) {
@@ -145,21 +169,18 @@ function suspectIntervals(query: RunQuery): Interval[] {
     intervals.push({
       from: brk.createdAt,
       to: next?.createdAt ?? Infinity,
-      cause: { cause: 'break', entryId: brk.entryId, at: brk.createdAt },
+      cause: { cause: 'break', entryId: brk.entryId },
     })
   }
-  const lastProof = proofs.length > 0 ? proofs[proofs.length - 1] : -Infinity
+  const lastProof = proofs.length > 0 ? proofs[proofs.length - 1] : null
+  const lastProofAt = lastProof?.at ?? -Infinity
   const { on, enabledSince } = query.tracking
-  if (!on) intervals.push({ from: lastProof, to: Infinity, cause: { cause: 'trackingOff' } })
-  else if (enabledSince === null || enabledSince > lastProof) {
+  if (!on) intervals.push({ from: lastProofAt, to: Infinity, cause: { cause: 'trackingOff' } })
+  else if (enabledSince === null || enabledSince > lastProofAt) {
     intervals.push({
-      from: lastProof,
+      from: lastProofAt,
       to: enabledSince ?? Infinity,
-      cause: {
-        cause: 'enabledAfter',
-        lastProofAt: Number.isFinite(lastProof) ? lastProof : null,
-        enabledSince,
-      },
+      cause: { cause: 'enabledAfter', sinceEntryId: lastProof?.entryId ?? null, enabledSince },
     })
   }
   return intervals
@@ -172,8 +193,6 @@ function suspectIntervals(query: RunQuery): Interval[] {
 export function resolveRun(query: RunQuery): RunResult {
   const line = [...query.line].sort((a, b) => a.position - b.position)
   const next = line.find((e) => e.position > query.target)
-  const positions = new Map(line.map((e) => [e.id, e.position]))
-  const positionOf = (r: WorldStateRecord) => positions.get(r.entryId) ?? -Infinity
   const intervals = suspectIntervals(query)
 
   const headersByEntry = new Map<string, WorldStateHeaderRecord>()
@@ -189,29 +208,26 @@ export function resolveRun(query: RunQuery): RunResult {
   const passed = checked.find((c) => c.gap === null)
   const diagnosed = passed ?? checked[0]
   const diagnosis: RunDiagnosis = {
-    targetRecordedAt: targetHeader?.createdAt ?? null,
+    target: !targetHeader
+      ? 'untracked'
+      : targetHeader.coverage === 'classifier'
+        ? 'classifierOnly'
+        : 'recorded',
     anchor: diagnosed?.anchor ?? null,
     gap: diagnosed?.gap ?? null,
   }
 
-  if (!targetHeader) return { ok: false, reason: 'targetUntracked', diagnosis }
+  if (diagnosis.target === 'untracked') return { ok: false, reason: 'targetUntracked', diagnosis }
+  if (diagnosis.target === 'classifierOnly') {
+    return { ok: false, reason: 'targetClassifierOnly', diagnosis }
+  }
   if (!diagnosed) return { ok: false, reason: 'noAnchor', diagnosis }
   if (!passed) return { ok: false, reason: refusalFor(diagnosed.gap!), diagnosis }
-  const anchor = passed.anchor
-  const records = query.records.filter(
-    (r) =>
-      positionOf(r) > query.target &&
-      positionOf(r) <= anchor.position &&
-      r.createdAt <= anchor.takenAt,
-  )
-  return { ok: true, anchor, records }
+  return { ok: true, ...rebuildFrom(query, passed.anchor) }
 
   function checkAnchor(anchor: AnchorCandidate): RunGap | null {
     if (!next) return null
-    const from = next.createdAt
-    const interval = intervals.find((i) => i.from < anchor.takenAt && i.to > from)
-    if (interval) return interval.cause
-
+    // What the entries show comes before what is inferred from times.
     for (const entry of line) {
       if (entry.position <= query.target || entry.position > anchor.position) continue
       if (entry.type !== 'narration') continue
@@ -220,17 +236,9 @@ export function resolveRun(query: RunQuery): RunResult {
       if (header.coverage === 'classifier') return { cause: 'classifierOnly', entryId: entry.id }
     }
 
-    // A change that belongs to the target's state but came after the anchor is not in it.
-    const missed = query.records.find(
-      (r) => r.kind === 'change' && positionOf(r) <= query.target && r.createdAt > anchor.takenAt,
-    )
-    if (!missed) return null
-    return {
-      cause: 'lateChange',
-      entryId: missed.entryId,
-      at: missed.createdAt,
-      anchorTakenAt: anchor.takenAt,
-    }
+    const from = next.createdAt
+    const interval = intervals.find((i) => i.from < anchor.takenAt && i.to > from)
+    return interval?.cause ?? null
   }
 }
 
@@ -247,15 +255,12 @@ export type GapOverride = 'undoRecorded' | 'nextAsIs' | 'previousAsIs'
  * only what was recorded, or from the nearest full state on either side, taken unchanged.
  */
 export function resolveOverride(query: RunQuery, override: GapOverride): RunResult {
-  const positions = new Map(query.line.map((e) => [e.id, e.position]))
-  const positionOf = (r: WorldStateRecord) => positions.get(r.entryId) ?? -Infinity
-
   if (override === 'previousAsIs') {
     const previous = query.candidates
       .filter((c) => c.position <= query.target)
       .sort((a, b) => b.position - a.position || b.takenAt - a.takenAt)[0]
     return previous
-      ? { ok: true, anchor: previous, records: [] }
+      ? { ok: true, anchor: previous, records: [], late: [] }
       : { ok: false, reason: 'noAnchor' }
   }
 
@@ -263,12 +268,31 @@ export function resolveOverride(query: RunQuery, override: GapOverride): RunResu
     .filter((c) => c.position >= query.target)
     .sort((a, b) => a.takenAt - b.takenAt)[0]
   if (!next) return { ok: false, reason: 'noAnchor' }
-  if (override === 'nextAsIs') return { ok: true, anchor: next, records: [] }
+  if (override === 'nextAsIs') return { ok: true, anchor: next, records: [], late: [] }
+  return { ok: true, ...rebuildFrom(query, next) }
+}
+
+/**
+ * What rebuilding `query.target` from `anchor` takes: the records it holds for later entries,
+ * to undo, and the changes for the target or earlier written after it was saved, to apply.
+ */
+function rebuildFrom(
+  query: RunQuery,
+  anchor: AnchorCandidate,
+): { anchor: AnchorCandidate; records: WorldStateRecord[]; late: WorldStateChangeRecord[] } {
+  const positions = new Map(query.line.map((e) => [e.id, e.position]))
+  const positionOf = (r: WorldStateRecord) => positions.get(r.entryId) ?? -Infinity
   const records = query.records.filter(
     (r) =>
-      positionOf(r) > query.target && positionOf(r) <= next.position && r.createdAt <= next.takenAt,
+      positionOf(r) > query.target &&
+      positionOf(r) <= anchor.position &&
+      r.createdAt <= anchor.takenAt,
   )
-  return { ok: true, anchor: next, records }
+  const late = query.records.filter(
+    (r): r is WorldStateChangeRecord =>
+      r.kind === 'change' && positionOf(r) <= query.target && r.createdAt > anchor.takenAt,
+  )
+  return { anchor, records, late }
 }
 
 /**

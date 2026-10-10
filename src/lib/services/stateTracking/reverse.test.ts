@@ -95,7 +95,7 @@ describe('planReversal', () => {
         change('e1', 'update', 'c', { relationship: 'A' }),
       ],
       entryPositions: positions,
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters[0].relationship).toBe('A')
   })
@@ -106,7 +106,7 @@ describe('planReversal', () => {
       state: state([]),
       records: [change('e1', 'create', 'n', null), change('e2', 'delete', 'n', { ...created })],
       entryPositions: positions,
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters).toEqual([])
   })
@@ -117,7 +117,7 @@ describe('planReversal', () => {
       state: state([]),
       records: [change('e1', 'softDelete', 'g', { ...gone, deleted: true })],
       entryPositions: positions,
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters).toEqual([{ ...gone, deleted: false }])
     expect(plan.ops).toContainEqual({
@@ -134,7 +134,7 @@ describe('planReversal', () => {
       state: state([override]),
       records: [change('e1', 'create', 'o', { ...parent })],
       entryPositions: positions,
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters.map((c) => c.id)).toEqual(['p'])
     expect(plan.ops).toEqual([{ kind: 'delete', entityType: 'character', id: 'o' }])
@@ -145,7 +145,7 @@ describe('planReversal', () => {
       state: state([]),
       records: [header('e3', 9), header('e2', 5)],
       entryPositions: positions,
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.timeTracker?.days).toBe(5)
   })
@@ -164,7 +164,7 @@ describe('planReversal', () => {
         ),
       ],
       entryPositions: positions,
-      keepManual: true,
+      keep: { manual: true, tidy: false },
     })
     expect(plan.state.characters[0].relationship).toBe('C')
     expect(plan.manual).toHaveLength(1)
@@ -184,7 +184,7 @@ describe('planReversal', () => {
         ),
       ],
       entryPositions: positions,
-      keepManual: false,
+      keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters[0].relationship).toBe('B')
     expect(plan.manual).toHaveLength(1)
@@ -205,7 +205,7 @@ describe('planReversal', () => {
       state: state([character('n', { description: 'x' })]),
       records: [change('e2', 'create', 'n', null), edit],
       entryPositions: positions,
-      keepManual: true,
+      keep: { manual: true, tidy: false },
     })
     expect(plan.state.characters).toEqual([])
     expect(plan.unkeepable).toEqual([edit])
@@ -230,11 +230,64 @@ describe('planReversal', () => {
         ),
       ],
       entryPositions: positions,
-      keepManual: true,
+      keep: { manual: true, tidy: false },
     })
     expect(plan.state.characters).toEqual([
       expect.objectContaining({ id: 'o', description: 'mine', overridesId: 'p' }),
     ])
     expect(plan.unkeepable).toEqual([])
+  })
+
+  it('applies late changes before undoing', () => {
+    const plan = planReversal({
+      state: state([character('c', { relationship: 'B' })]),
+      late: [
+        change(
+          'e1',
+          'update',
+          'c',
+          { relationship: 'B' },
+          { origin: 'chapter', after: { relationship: 'L' } },
+        ),
+      ],
+      records: [change('e3', 'update', 'c', { relationship: 'A' })],
+      entryPositions: positions,
+      keep: { manual: false, tidy: false },
+    })
+    expect(plan.state.characters[0].relationship).toBe('A')
+  })
+
+  it('lists Tidy apart from manual changes and keeps it on its own choice', () => {
+    const plan = planReversal({
+      state: state([character('c', { relationship: 'T' })]),
+      records: [
+        change(
+          'e3',
+          'update',
+          'c',
+          { relationship: 'A' },
+          { origin: 'tidy', after: { relationship: 'T' } },
+        ),
+      ],
+      entryPositions: positions,
+      keep: { manual: false, tidy: true },
+    })
+    expect(plan.manual).toEqual([])
+    expect(plan.tidy).toHaveLength(1)
+    expect(plan.state.characters[0].relationship).toBe('T')
+  })
+
+  it('counts the chapters whose lore it undoes', () => {
+    const plan = planReversal({
+      state: state([character('c')]),
+      records: [
+        change('e2', 'update', 'c', {}, { origin: 'chapter' }),
+        change('e2', 'update', 'c', {}, { origin: 'chapter' }),
+        change('e3', 'update', 'c', {}, { origin: 'chapter' }),
+      ],
+      entryPositions: positions,
+      keep: { manual: false, tidy: false },
+    })
+    expect(plan.chapters).toBe(2)
   })
 })

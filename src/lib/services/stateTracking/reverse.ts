@@ -29,7 +29,13 @@ export interface ReversalInput {
   records: WorldStateRecord[]
   /** Story position of every entry a record is attached to. */
   entryPositions: Map<string, number>
-  keepManual: boolean
+  /**
+   * Changes that belong to the state being rebuilt but were written after `state` was saved.
+   * They are applied first, in write order.
+   */
+  late?: WorldStateChangeRecord[]
+  /** Which of the reader's and Tidy's changes to apply again after the reversal. */
+  keep: { manual: boolean; tidy: boolean }
 }
 
 export interface ReversalPlan {
@@ -37,8 +43,12 @@ export interface ReversalPlan {
   ops: ReversalOp[]
   /** Manual changes in the range, oldest first. */
   manual: WorldStateChangeRecord[]
-  /** Manual changes that could not be applied again, because what they changed is gone. */
+  /** Changes from lore management the reader ran, in the range, oldest first. */
+  tidy: WorldStateChangeRecord[]
+  /** Kept changes that could not be applied again, because what they changed is gone. */
   unkeepable: WorldStateChangeRecord[]
+  /** How many chapters' lore management the range undoes. */
+  chapters: number
 }
 
 function byStoryOrder(positions: Map<string, number>) {
@@ -107,7 +117,7 @@ class Workspace {
     }
   }
 
-  /** Applies a manual change again. False when what it changed no longer exists. */
+  /** Applies a change again from its `after`. False when what it changed no longer exists. */
   redo(record: WorldStateChangeRecord): boolean {
     const { entityType: type, entityId: id } = record
     switch (record.op) {
@@ -150,8 +160,8 @@ class Workspace {
 }
 
 /**
- * Undoes `records` over `state`, newest first, so that for every field the earliest recorded
- * value is the one left standing. With `keepManual`, manual changes are then applied again,
+ * Applies `late` over `state`, then undoes `records`, newest first, so that for every field the
+ * earliest recorded value is the one left standing. The kept origins are then applied again,
  * oldest first.
  */
 export function planReversal(input: ReversalInput): ReversalPlan {
@@ -160,6 +170,7 @@ export function planReversal(input: ReversalInput): ReversalPlan {
   const headers = ordered.filter((r): r is WorldStateHeaderRecord => r.kind === 'header')
 
   const ws = new Workspace(input.state)
+  for (const record of [...(input.late ?? [])].sort((a, b) => a.seq - b.seq)) ws.redo(record)
   for (const record of [...changes].reverse()) ws.undo(record)
 
   const earliest = headers[0]
@@ -174,12 +185,15 @@ export function planReversal(input: ReversalInput): ReversalPlan {
   }
 
   const manual = changes.filter((r) => r.origin === 'manual')
+  const tidy = changes.filter((r) => r.origin === 'tidy')
+  const kept = changes.filter(
+    (r) => (input.keep.manual && r.origin === 'manual') || (input.keep.tidy && r.origin === 'tidy'),
+  )
   const unkeepable: WorldStateChangeRecord[] = []
-  if (input.keepManual) {
-    for (const record of manual) if (!ws.redo(record)) unkeepable.push(record)
-  }
+  for (const record of kept) if (!ws.redo(record)) unkeepable.push(record)
+  const chapters = new Set(changes.filter((r) => r.origin === 'chapter').map((r) => r.entryId)).size
 
-  return { state: ws.state, ops: ws.ops, manual, unkeepable }
+  return { state: ws.state, ops: ws.ops, manual, tidy, unkeepable, chapters }
 }
 
 function restoreCurrentLocation(ws: Workspace, locationId: string | null): void {
