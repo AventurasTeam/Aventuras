@@ -252,7 +252,10 @@ export async function* periodicClassifierPhase(
     if (stored.name === '') continue
     decisions.set(
       candidate.handle,
-      await reconcileNewCharacter(stored, { entities: current, embedDescriptions }),
+      await reconcileNewCharacter(
+        { ...stored, keywords: candidate.keywords },
+        { entities: current, embedDescriptions, scene: window.sceneOf(candidate.sourceTurn) },
+      ),
     )
   }
 

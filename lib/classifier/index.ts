@@ -4,14 +4,8 @@ export type { ClassifierWindow, WindowTurn } from './window'
 export { classifierExtractionSchema } from './schema'
 export type { ClassifierExtraction } from './schema'
 export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
-export {
-  cosine,
-  normalizeCollisionName,
-  reconcileNewCharacter,
-  TAU_HIGH,
-  TAU_LOW,
-} from './reconcile'
-export type { EmbedDescriptions, FlagReason, ReconcileDecision } from './reconcile'
+export { cosine, decideReconcile, reconcileNewCharacter, TAU_HIGH, TAU_LOW } from './reconcile'
+export type { EmbedDescriptions, ReconcileDecision, ScoredNamesake } from './reconcile'
 export { buildClassifierActions, clampEmbeddedCharacter } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
 export { createClassifierScheduler } from './scheduler'

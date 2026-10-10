@@ -317,16 +317,7 @@ describe('buildClassifierActions', () => {
 
   it('creates a new character with the reconcile decision applied', () => {
     const decisions = new Map<string, ReconcileDecision>([
-      [
-        'h1',
-        {
-          kind: 'create',
-          flagged: true,
-          similarity: 0.6,
-          flagReason: 'ambiguous',
-          partnerId: 'char_kael',
-        },
-      ],
+      ['h1', { kind: 'create', flag: { partnerId: 'char_a', reason: 'in-scene' } }],
     ])
     const { planned, handleMap } = buildClassifierActions(
       {
@@ -352,8 +343,8 @@ describe('buildClassifierActions', () => {
           name: 'Eldrin',
           status: 'active',
           nameCollisionFlag: 1,
-          nameCollisionPartnerId: 'char_kael',
-          nameCollisionReason: 'ambiguous',
+          nameCollisionPartnerId: 'char_a',
+          nameCollisionReason: 'in-scene',
           embeddingStale: 1,
         },
       },
@@ -378,7 +369,7 @@ describe('buildClassifierActions', () => {
           },
         ],
       },
-      { ...base, decisions: new Map([['h1', { kind: 'create', flagged: false }]]) },
+      { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
     )
     expect(planned[0].action).toMatchObject({
       kind: 'createEntity',
@@ -417,9 +408,7 @@ describe('buildClassifierActions', () => {
   })
 
   it('resolves a temp handle used later in the same reply to the allocated id', () => {
-    const decisions = new Map<string, ReconcileDecision>([
-      ['h1', { kind: 'create', flagged: false }],
-    ])
+    const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
     const { planned } = buildClassifierActions(
       {
         happenings: [
@@ -463,9 +452,7 @@ describe('buildClassifierActions', () => {
   })
 
   it('orders creates before the rows that reference them', () => {
-    const decisions = new Map<string, ReconcileDecision>([
-      ['h1', { kind: 'create', flagged: false }],
-    ])
+    const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
     const { planned } = buildClassifierActions(
       {
         happenings: [
@@ -630,7 +617,7 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: '  ', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
         },
-        { ...base, decisions: new Map([['h1', { kind: 'create', flagged: false }]]) },
+        { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
       )
       expect(planned).toHaveLength(0)
       expect(unresolvedRefs).toEqual(['h1'])
@@ -658,9 +645,7 @@ describe('buildClassifierActions', () => {
     // Rebinding the handle would retarget every ref emitted before the duplicate,
     // including ones the model wrote for the first character.
     it('keeps the first binding when a handle is reused, and reports the collision', () => {
-      const decisions = new Map<string, ReconcileDecision>([
-        ['h1', { kind: 'create', flagged: false }],
-      ])
+      const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
       const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
         {
           happenings: [],
@@ -772,9 +757,7 @@ describe('buildClassifierActions', () => {
     })
 
     it('retires a character created earlier in the same reply', () => {
-      const decisions = new Map<string, ReconcileDecision>([
-        ['h1', { kind: 'create', flagged: false }],
-      ])
+      const decisions = new Map<string, ReconcileDecision>([['h1', { kind: 'create', flag: null }]])
       const { planned } = buildClassifierActions(
         {
           happenings: [],
@@ -809,7 +792,7 @@ describe('entity keywords', () => {
   it('seeds keywords on a created character', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf']), {
       ...base,
-      decisions: decide({ kind: 'create', flagged: false }),
+      decisions: decide({ kind: 'create', flag: null }),
     })
     expect(payloadOf<{ entry: { keywords: string[] } }>(planned[0]).entry.keywords).toEqual([
       'the grey wolf',
@@ -1076,7 +1059,7 @@ describe('embedded-column bounds', () => {
   })
   const deps = {
     ...base,
-    decisions: new Map([['h1', { kind: 'create', flagged: false }]]),
+    decisions: new Map([['h1', { kind: 'create', flag: null }]]),
   } as never
   const entryOf = (planned: PlannedWrite[]) =>
     payloadOf<{ entry: { name: string; description: string } }>(planned[0]).entry

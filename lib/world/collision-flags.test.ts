@@ -5,7 +5,6 @@ import type { PipelineAction } from '@/lib/actions'
 import { applyDeltaActionGroup } from '@/lib/actions/delta/apply-delta-action'
 import { prepareUndo } from '@/lib/actions/delta/redo'
 import { selectReversalSet } from '@/lib/actions/delta/row-closure'
-import { normalizeCollisionName } from '@/lib/classifier'
 import {
   branches,
   deltas,
@@ -19,6 +18,7 @@ import {
   type EntityState,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import {
@@ -95,11 +95,9 @@ describe('nameTakenByOther', () => {
 
 describe('namesakeKey', () => {
   it.each([' Kael ', 'KAEL', 'Kae\u0301l', 'Ka\u00e9l'])(
-    'agrees with the classifier’s namesake rule for %j',
+    'keys by the keyword-term normalization for %j',
     (name) => {
-      expect(namesakeKey({ kind: 'character', name })).toBe(
-        `character:${normalizeCollisionName(name)}`,
-      )
+      expect(namesakeKey({ kind: 'character', name })).toBe(`character:${normalizeTerm(name)}`)
     },
   )
 
