@@ -217,7 +217,7 @@ describe('entityDeleteActions', () => {
   })
 })
 
-describe('entityDeleteActions — orphaned collision flags', () => {
+describe('entityDeleteActions — collision flags naming it', () => {
   const named = (
     id: string,
     kind: EntityKind,
@@ -231,10 +231,15 @@ describe('entityDeleteActions — orphaned collision flags', () => {
     nameCollisionPartnerId: partnerId,
     nameCollisionReason: partnerId == null ? null : 'distinct',
   })
+  const deleteOf = (id: string) => ({
+    kind: 'deleteEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id },
+  })
 
-  it('clears the flag of the namesake the delete leaves without a partner, before the delete', () => {
+  it('clears the flag of a row whose partner is the target, before the delete', () => {
     const target = named('char_x', 'character', 'Kael', null)
-    const twin = named('char_t', 'character', 'kael', 'char_x')
+    const twin = named('char_t', 'character', 'Kael Stormborn', 'char_x')
     expect(
       entityDeleteActions({ branchId: 'b1', target, branchEntities: [target, twin], tail: null })
         .actions,
@@ -244,11 +249,11 @@ describe('entityDeleteActions — orphaned collision flags', () => {
         source: 'user_edit',
         payload: { branchId: 'b1', id: 'char_t', patch: FLAG_CLEAR },
       },
-      { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: 'b1', id: 'char_x' } },
+      deleteOf('char_x'),
     ])
   })
 
-  it('folds the clear into the ref patch of a namesake that named the target', () => {
+  it('folds the clear into the ref patch of a row that named the target', () => {
     const target = named('loc_a', 'location', 'Hollow', null)
     const child = named('loc_b', 'location', 'Hollow', 'loc_a', { parent_location_id: 'loc_a' })
     const plan = entityDeleteActions({
@@ -270,9 +275,9 @@ describe('entityDeleteActions — orphaned collision flags', () => {
     expect(plan.references).toBe(1)
   })
 
-  it('leaves a flagged row that keeps another namesake alone', () => {
+  it('clears it even while a same-name third row remains', () => {
     const target = named('char_x', 'character', 'Kael', null)
-    const twin = named('char_t', 'character', 'Kael', 'char_u')
+    const twin = named('char_t', 'character', 'Kael', 'char_x')
     const third = named('char_u', 'character', 'Kael', null)
     expect(
       entityDeleteActions({
@@ -280,7 +285,25 @@ describe('entityDeleteActions — orphaned collision flags', () => {
         target,
         branchEntities: [target, twin, third],
         tail: null,
-      }).actions.map((a) => a.kind),
-    ).toStrictEqual(['deleteEntity'])
+      }).actions.map((a) => a.payload),
+    ).toStrictEqual([
+      { branchId: 'b1', id: 'char_t', patch: FLAG_CLEAR },
+      { branchId: 'b1', id: 'char_x' },
+    ])
+  })
+
+  it('leaves a flag naming another row, a namesake of the target, or a row already gone', () => {
+    const target = named('char_x', 'character', 'Kael', null)
+    const twin = named('char_t', 'character', 'Kael', 'char_u')
+    const third = named('char_u', 'character', 'Kael', null)
+    const dormant = named('char_d', 'character', 'Kael', 'char_gone')
+    expect(
+      entityDeleteActions({
+        branchId: 'b1',
+        target,
+        branchEntities: [target, twin, third, dormant],
+        tail: null,
+      }).actions,
+    ).toStrictEqual([deleteOf('char_x')])
   })
 })

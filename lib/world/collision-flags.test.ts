@@ -22,15 +22,21 @@ import { normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
 
 import {
+  brokenFlags,
   FLAG_CLEAR,
+  flagsNaming,
   namesakeKey,
   nameTakenByOther,
   orphanedFlags,
+  pairFlagsToClear,
   withFlagClears,
+  withFlagWrites,
 } from './collision-flags'
+import { collisionPairOf } from './collision-pair'
 import { entityActions } from './entity-actions'
 import { entityDeleteActions } from './entity-delete'
 import { characterDraftFrom } from './entity-draft'
+import type { NamesakeSide } from './namesakes'
 
 function entity(
   id: string,
@@ -72,21 +78,26 @@ const flagged = (id: string, name: string, partnerId: string, overrides: Partial
 
 describe('nameTakenByOther', () => {
   const branch = [
-    entity('char_a', 'Kael'),
+    entity('char_a', 'Kael Stormborn'),
     entity('char_b', 'Jorin', { status: 'retired' }),
     entity('loc_a', 'Harbor', {}, 'location'),
   ]
   const taken = (name: string, exclude: string[] = [], kind: EntityKind = 'character') =>
     nameTakenByOther({ kind, name, entities: branch, exclude: new Set(exclude) })
 
-  it('finds a same-kind row under the namesake rule, retired rows included', () => {
-    expect(taken('  kael ')).toBe(true)
+  it('finds a same-kind row with the same name, retired rows included', () => {
+    expect(taken('  kael stormborn ')).toBe(true)
+    expect(taken('Kael  Stormborn')).toBe(true)
     expect(taken('JORIN')).toBe(true)
-    expect(taken('Kael Stormborn')).toBe(false)
+  })
+
+  it('does not count one name inside the other', () => {
+    expect(taken('Kael')).toBe(false)
+    expect(taken('Jorin the Elder')).toBe(false)
   })
 
   it('skips the excluded rows, another kind and a blank name', () => {
-    expect(taken('Kael', ['char_a'])).toBe(false)
+    expect(taken('Jorin', ['char_b'])).toBe(false)
     expect(taken('Harbor')).toBe(false)
     expect(taken('Harbor', [], 'location')).toBe(true)
     expect(taken('   ')).toBe(false)
@@ -285,7 +296,161 @@ describe('withFlagClears', () => {
   })
 })
 
-describe('orphan clears through the entity arm', () => {
+describe('flagsNaming', () => {
+  it('returns each row outside the removed set whose flag names a removed row', () => {
+    const rows = [
+      entity('char_p', 'Kael'),
+      flagged('char_f', 'Kael', 'char_p'),
+      flagged('char_g', 'Kael Stormborn', 'char_p'),
+      flagged('char_h', 'Kael', 'char_q'),
+      entity('char_q', 'Kael'),
+    ]
+    expect(flagsNaming(rows, new Set(['char_p']))).toStrictEqual(['char_f', 'char_g'])
+  })
+
+  it('never returns a removed row, even one whose flag names another removed row', () => {
+    const rows = [flagged('char_f', 'Kael', 'char_p'), entity('char_p', 'Kael')]
+    expect(flagsNaming(rows, new Set(['char_f', 'char_p']))).toStrictEqual([])
+  })
+})
+
+describe('brokenFlags', () => {
+  const partner = entity('char_p', 'Kael Stormborn')
+  const kael = flagged('char_f', 'Kael', 'char_p')
+  const broken = (rows: Entity[], after: [string, NamesakeSide][]) =>
+    brokenFlags({ entities: rows, after: new Map(after) })
+
+  it('returns a flagged row renamed out of its partner’s namesakes', () => {
+    expect(broken([partner, kael], [['char_f', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([
+      'char_f',
+    ])
+  })
+
+  it('returns a flagged row whose partner is renamed away', () => {
+    expect(broken([partner, kael], [['char_p', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([
+      'char_f',
+    ])
+  })
+
+  it('keeps a flag whose pair still matches by name, case aside, or through a keyword', () => {
+    expect(broken([partner, kael], [['char_f', { name: 'KAEL', keywords: [] }]])).toStrictEqual([])
+    expect(
+      broken([partner, kael], [['char_p', { name: 'Kael Stormborn the Elder', keywords: [] }]]),
+    ).toStrictEqual([])
+    expect(
+      broken([partner, kael], [['char_f', { name: 'Brannoc', keywords: ['Kael Stormborn'] }]]),
+    ).toStrictEqual([])
+  })
+
+  it('reads a row outside `after` with its stored name and keywords', () => {
+    const known = { ...partner, keywords: ['Brannoc'] }
+    expect(broken([known, kael], [['char_f', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([])
+  })
+
+  it('judges only flags with a side in `after`', () => {
+    const stale = flagged('char_o', 'Mira', 'char_p')
+    expect(
+      broken([partner, kael, stale], [['char_f', { name: 'KAEL', keywords: [] }]]),
+    ).toStrictEqual([])
+  })
+
+  it('leaves a dormant flag, whose partner the branch no longer has', () => {
+    const dormant = flagged('char_d', 'Kael', 'char_gone')
+    expect(broken([dormant], [['char_d', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([])
+  })
+})
+
+describe('pairFlagsToClear', () => {
+  const pairOf = (rows: Entity[], ids: readonly [string, string]) => {
+    const lookup = collisionPairOf(rows, ids)
+    if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
+    return lookup.pair
+  }
+  const older = entity('char_a', 'Kael')
+  const newer = flagged('char_b', 'Kael', 'char_a')
+
+  it('returns the flagged row whose partner is the other row, and no unflagged row', () => {
+    const rows = [older, newer]
+    expect(pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows)).toStrictEqual(['char_b'])
+  })
+
+  it('returns a pair row whose partner is gone from the branch', () => {
+    const dormant = flagged('char_a', 'Kael', 'char_gone')
+    const rows = [dormant, newer]
+    expect(pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows)).toStrictEqual([
+      'char_a',
+      'char_b',
+    ])
+  })
+
+  it('keeps a pair row’s flag that names a live third row', () => {
+    const third = entity('char_c', 'Kael')
+    const naming = flagged('char_a', 'Kael', 'char_c')
+    const rows = [naming, newer, third]
+    expect(pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows)).toStrictEqual(['char_b'])
+  })
+})
+
+describe('withFlagWrites', () => {
+  const stateUpdate: PipelineAction = {
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id: 'char_f', patch: { state: emptyEntityState('character') } },
+  }
+  const clearOf = (id: string): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id, patch: FLAG_CLEAR },
+  })
+
+  it('folds a re-point into the row’s user update and appends one for a row without', () => {
+    expect(
+      withFlagWrites([stateUpdate], 'b1', [
+        { id: 'char_f', partnerId: 'char_a' },
+        { id: 'char_g', partnerId: 'char_a' },
+      ]),
+    ).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: 'b1',
+          id: 'char_f',
+          patch: { state: emptyEntityState('character'), nameCollisionPartnerId: 'char_a' },
+        },
+      },
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'char_g', patch: { nameCollisionPartnerId: 'char_a' } },
+      },
+    ])
+  })
+
+  it('resolves a clear and a re-point for one row to the clear, in either order', () => {
+    expect(
+      withFlagWrites([], 'b1', [
+        { id: 'char_f', partnerId: 'char_a' },
+        { id: 'char_f', clear: true },
+      ]),
+    ).toStrictEqual([clearOf('char_f')])
+    expect(
+      withFlagWrites([], 'b1', [
+        { id: 'char_f', clear: true },
+        { id: 'char_f', partnerId: 'char_a' },
+      ]),
+    ).toStrictEqual([clearOf('char_f')])
+  })
+
+  it('keeps a clear an earlier step already folded into the row', () => {
+    const cleared = withFlagClears([stateUpdate], 'b1', ['char_f'])
+    expect(withFlagWrites(cleared, 'b1', [{ id: 'char_f', partnerId: 'char_a' }])).toStrictEqual(
+      cleared,
+    )
+  })
+})
+
+describe('flag clears through the entity arm', () => {
   async function setup(rows: Entity[]): Promise<DbCtx> {
     const test = await createTestDb()
     const ctx: DbCtx = { db: test.db, runInTransaction: test.runInTransaction }
@@ -300,29 +465,45 @@ describe('orphan clears through the entity arm', () => {
     return (await ctx.db.select().from(deltas).orderBy(desc(deltas.logPosition))) as Delta[]
   }
 
-  /** The row's flag, partner and reason; undefined when the row is gone. */
   async function flagOf(ctx: DbCtx, id: string) {
     const [row] = await ctx.db.select().from(entities).where(eq(entities.id, id))
-    return row && [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+    return row == null
+      ? undefined
+      : [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+  }
+
+  const flagColumns = (row: Entity) => [
+    row.nameCollisionFlag,
+    row.nameCollisionPartnerId,
+    row.nameCollisionReason,
+  ]
+
+  async function undoEverything(ctx: DbCtx): Promise<void> {
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows(ctx) })
+    await (await prepareUndo(set, ctx)).reverse()
+  }
+
+  function renameTo(row: Entity, name: string, branchEntities: Entity[]): PipelineAction[] {
+    return entityActions({
+      kind: 'character',
+      draft: { ...characterDraftFrom(row, []), name },
+      relationships: [],
+      relationshipsBase: [],
+      keywordsBase: row.keywords,
+      branchId: 'b1',
+      row,
+      branchEntities,
+      id: row.id,
+      now: 2,
+    })
   }
 
   it('a save renaming the flagged row away commits its name and clear as one delta', async () => {
     const kael = flagged('char_f', 'Kael', 'char_p')
     const twin = entity('char_p', 'Kael')
     const ctx = await setup([kael, twin])
-    const actions = entityActions({
-      kind: 'character',
-      draft: { ...characterDraftFrom(kael, []), name: 'Kael the guard' },
-      relationships: [],
-      relationshipsBase: [],
-      keywordsBase: [],
-      branchId: 'b1',
-      row: kael,
-      branchEntities: [kael, twin],
-      id: 'char_f',
-      now: 2,
-    })
 
+    const actions = renameTo(kael, 'Brannoc', [kael, twin])
     expect(
       await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
     ).toStrictEqual({ status: 'ok' })
@@ -333,8 +514,24 @@ describe('orphan clears through the entity arm', () => {
       name: 'Kael',
       nameCollisionFlag: 1,
       nameCollisionPartnerId: 'char_p',
-      nameCollisionReason: 'distinct',
+      nameCollisionReason: kael.nameCollisionReason,
     })
+
+    await undoEverything(ctx)
+    expect(await flagOf(ctx, 'char_f')).toStrictEqual(flagColumns(kael))
+  })
+
+  it('a save that keeps the partner’s name inside the new one writes only the name', async () => {
+    const kael = flagged('char_f', 'Kael', 'char_p')
+    const twin = entity('char_p', 'Kael')
+    const ctx = await setup([kael, twin])
+
+    const actions = renameTo(kael, 'Kael Stormborn', [kael, twin])
+    expect(
+      await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
+    ).toStrictEqual({ status: 'ok' })
+    expect(await flagOf(ctx, 'char_f')).toStrictEqual(flagColumns(kael))
+    expect((await deltaRows(ctx))[0].undoPayload).toStrictEqual({ name: 'Kael' })
   })
 
   it('a delete folds the clear into the partner’s ref patch, and undo re-flags it', async () => {
@@ -367,20 +564,20 @@ describe('orphan clears through the entity arm', () => {
       'state',
     ])
 
-    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows(ctx) })
-    await (await prepareUndo(set, ctx)).reverse()
+    await undoEverything(ctx)
     expect(await flagOf(ctx, 'loc_b')).toStrictEqual([1, 'loc_a', 'distinct'])
     expect(await flagOf(ctx, 'loc_a')).toStrictEqual([0, null, null])
   })
 
-  it('a delete clears an unreferencing partner, and undo re-flags it and restores the target', async () => {
+  it('a delete clears the flag naming it while a same-name third row remains, and undo re-flags it', async () => {
     const target = entity('char_x', 'Kael')
     const partner = flagged('char_p', 'Kael', 'char_x')
-    const ctx = await setup([target, partner])
+    const third = entity('char_q', 'Kael')
+    const ctx = await setup([target, partner, third])
     const { actions } = entityDeleteActions({
       branchId: 'b1',
       target,
-      branchEntities: [target, partner],
+      branchEntities: [target, partner, third],
       tail: null,
     })
 
@@ -390,9 +587,8 @@ describe('orphan clears through the entity arm', () => {
     expect(await flagOf(ctx, 'char_p')).toStrictEqual([0, null, null])
     expect(await flagOf(ctx, 'char_x')).toBeUndefined()
 
-    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows(ctx) })
-    await (await prepareUndo(set, ctx)).reverse()
-    expect(await flagOf(ctx, 'char_p')).toStrictEqual([1, 'char_x', 'distinct'])
+    await undoEverything(ctx)
+    expect(await flagOf(ctx, 'char_p')).toStrictEqual(flagColumns(partner))
     expect(await flagOf(ctx, 'char_x')).toStrictEqual([0, null, null])
   })
 })

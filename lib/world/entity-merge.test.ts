@@ -12,7 +12,7 @@ import {
 } from '@/lib/db'
 
 import { FLAG_CLEAR } from './collision-flags'
-import { collisionPairOf, type CollisionPair } from './collision-pair'
+import { collisionPairOf, flaggedSideOf, type CollisionPair } from './collision-pair'
 import { entityMergeActions, type EntityMergeInput } from './entity-merge'
 import { referencingEntities } from './entity-refs'
 import { mergeLinks } from './merge-links'
@@ -107,8 +107,15 @@ const B = entity('char_b', 'character', flaggedWith('char_a'))
 const M = entity('char_m', 'character', { name: 'Mira' })
 const N = entity('char_n', 'character', { name: 'Nell' })
 
+/**
+ * The pair `collisionPairOf` mints. When neither row's flag names the other, the second is
+ * flagged with the first as partner: these tests merge rows whose flags they don't care about,
+ * and the loser's flag goes with its delete.
+ */
 function pairOf(first: Entity, second: Entity): CollisionPair {
-  const lookup = collisionPairOf([first, second], [first.id, second.id])
+  const paired =
+    flaggedSideOf(first, second) == null ? { ...second, ...flaggedWith(first.id) } : second
+  const lookup = collisionPairOf([first, paired], [first.id, paired.id])
   if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
   return lookup.pair
 }

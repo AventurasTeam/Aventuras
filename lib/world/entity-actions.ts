@@ -12,7 +12,7 @@ import {
 import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { blankToNull } from '@/lib/text'
 
-import { orphanedFlags, withFlagClears } from './collision-flags'
+import { brokenFlags, withFlagClears } from './collision-flags'
 import { cleanList, sameList } from './draft-text'
 import {
   heldItems,
@@ -374,8 +374,9 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
 }
 
 /**
- * A create or the changed columns and state paths of an update, plus relationship writes, plus a
- * flag clear on each flagged row the rename leaves without a namesake.
+ * A create or the changed columns and state paths of an update, plus relationship writes, plus on a
+ * rename a flag clear on each row the saved name and keywords leave no longer its partner's
+ * namesake.
  */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args
@@ -383,6 +384,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
     throw new Error(`entityActions: ${row.kind} row saved as ${args.kind}`)
   const actions: PipelineAction[] = []
   const state = nextState(args)
+  const columns = row == null ? null : columnPatch(row, draft, args.keywordsBase)
   if (row == null) {
     const entry: NewEntity = {
       id,
@@ -403,10 +405,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
     }
     actions.push({ kind: 'createEntity', source: 'user_edit', payload: { entry } })
   } else {
-    const patch = {
-      ...columnPatch(row, draft, args.keywordsBase),
-      ...(state != null ? { state } : {}),
-    }
+    const patch = { ...columns, ...(state != null ? { state } : {}) }
     if (Object.keys(patch).length > 0) {
       actions.push({
         kind: 'updateEntity',
@@ -427,11 +426,8 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
       ),
     )
   }
-  const name = draft.name.trim()
-  if (row == null || name === row.name.trim()) return actions
-  const orphans = orphanedFlags({
-    entities: args.branchEntities,
-    renamed: new Map([[row.id, name]]),
-  })
-  return withFlagClears(actions, branchId, orphans)
+  if (row == null || columns?.name === undefined) return actions
+  const saved = { name: columns.name, keywords: columns.keywords ?? row.keywords }
+  const broken = brokenFlags({ entities: args.branchEntities, after: new Map([[row.id, saved]]) })
+  return withFlagClears(actions, branchId, broken)
 }

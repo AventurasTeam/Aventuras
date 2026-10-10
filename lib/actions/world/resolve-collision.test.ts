@@ -1225,13 +1225,37 @@ describe('resolveCollision — refusals', () => {
     expect(await deltaRows()).toEqual([])
   })
 
-  it('refuses not-found when the two rows no longer share a name', async () => {
-    entitiesStore.patch('b1', { op: 'update', id: 'char_b', columns: { name: 'Bran' } })
+  it('refuses not-found once neither row’s flag names the other', async () => {
+    entitiesStore.patch('b1', {
+      op: 'update',
+      id: 'char_b',
+      columns: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+    })
 
     expect(await resolveCollision('b1', KEEP_A_B, ctx)).toMatchObject({
       status: 'rejected',
       code: 'not-found',
+      reason: 'the two rows are no longer flagged as a pair',
     })
     expect(await deltaRows()).toEqual([])
+  })
+
+  it('refuses not-found for two rows whose flags name other rows', async () => {
+    const keep: CollisionResolution = { mode: 'keep', ids: ['char_b', 'char_kael2'] }
+
+    expect(await resolveCollision('b1', keep, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+})
+
+describe('resolveCollision — pairs by the stored partner', () => {
+  it('resolves a pair whose names stopped matching while the flag still names the other', async () => {
+    entitiesStore.patch('b1', { op: 'update', id: 'char_b', columns: { name: 'Bran' } })
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toEqual({ status: 'ok' })
+    expect((await entityRow('char_b'))?.nameCollisionFlag).toBe(0)
   })
 })

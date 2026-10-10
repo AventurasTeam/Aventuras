@@ -1,7 +1,7 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity, StoryEntry } from '@/lib/db'
 
-import { orphanedFlags, withFlagClears } from './collision-flags'
+import { flagsNaming, withFlagClears } from './collision-flags'
 import { stateOf } from './entity-draft'
 import { heldElsewhere, stateWithRefRewritten, unheldItemsWithout } from './entity-refs'
 
@@ -89,9 +89,10 @@ export function tailSceneActions(
 }
 
 /**
- * world.md → Delete, plus clears for orphaned flags. Handlers read pre-group state: order is free.
- * Replaces the whole `state` from this snapshot, so a write landing in between is lost — safe only
- * while nothing else writes `state` alongside user edits (the periodic classifier doesn't).
+ * world.md → Delete, collision flags naming the target included. Handlers read pre-group state:
+ * order is free. Replaces the whole `state` from this snapshot, so a write landing in between is
+ * lost — safe only while nothing else writes `state` alongside user edits (the periodic classifier
+ * doesn't).
  */
 export function entityDeleteActions({
   branchId,
@@ -111,10 +112,10 @@ export function entityDeleteActions({
     })
   }
   const tailDrop = tailSceneActions(branchId, tail, target.id, null)
-  const orphans = orphanedFlags({ entities: branchEntities, removed: new Set([target.id]) })
+  const naming = flagsNaming(branchEntities, new Set([target.id]))
   return {
     actions: [
-      ...withFlagClears([...updates, ...tailDrop], branchId, orphans),
+      ...withFlagClears([...updates, ...tailDrop], branchId, naming),
       { kind: 'deleteEntity', source: 'user_edit', payload: { branchId, id: target.id } },
     ],
     references: updates.length,

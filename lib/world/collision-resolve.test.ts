@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyEntityState, type Entity } from '@/lib/db'
 
 import { FLAG_CLEAR } from './collision-flags'
-import { collisionPairOf, type CollisionPair } from './collision-pair'
+import { COLLISION_PAIR_MISS, collisionPairOf, type CollisionPair } from './collision-pair'
 import {
   entityKeepActions,
   entityRenameActions,
@@ -245,6 +245,13 @@ describe('entityKeepActions', () => {
       clear('char_a'),
       clear('char_b'),
     ])
-    expect(keep(A, character('char_b', 'Kael'))).toStrictEqual([])
+  })
+
+  it('has no pair to keep once neither row is flagged', () => {
+    expect(
+      collisionPairOf([A, character('char_b', 'Kael', null)], ['char_a', 'char_b']),
+    ).toStrictEqual({
+      miss: COLLISION_PAIR_MISS.notFlagged,
+    })
   })
 })

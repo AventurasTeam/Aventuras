@@ -31,7 +31,15 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
-export { nameTakenByOther, namesakeKey } from './collision-flags'
+export {
+  brokenFlags,
+  flagsNaming,
+  nameTakenByOther,
+  namesakeKey,
+  pairFlagsToClear,
+  withFlagWrites,
+} from './collision-flags'
+export type { FlagWrite } from './collision-flags'
 export { nameBasis, namesakeBasis } from './namesakes'
 export type { NameBasis, NamesakeMatch, NamesakeSide } from './namesakes'
 export {
@@ -41,8 +49,13 @@ export {
   renameIssue,
 } from './collision-resolve'
 export type { EntityRename, EntityRenamePlan, RenameIssue } from './collision-resolve'
-export { COLLISION_PAIR_MISS, collisionPairOf } from './collision-pair'
-export type { CollisionPair, CollisionPairLookup, CollisionPairMiss } from './collision-pair'
+export { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf } from './collision-pair'
+export type {
+  CollisionPair,
+  CollisionPairLookup,
+  CollisionPairMiss,
+  FlaggedEntity,
+} from './collision-pair'
 export { entityActions } from './entity-actions'
 export type { EntitySaveInput } from './entity-actions'
 export { deleteTailOf, entityDeleteActions } from './entity-delete'
