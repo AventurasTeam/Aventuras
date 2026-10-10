@@ -204,6 +204,7 @@ const extraction = (over: Partial<Record<string, unknown>> = {}) => ({
   relationships: [],
   statusFlips: [],
   newCharacters: [],
+  aliases: [],
   ...over,
 })
 

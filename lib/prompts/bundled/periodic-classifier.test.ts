@@ -141,7 +141,23 @@ describe('periodic classifier template', () => {
   it('tells the model that prose naming an entity in its turn scene or location refers to it', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
     expect(rendered).toMatch(
-      /Prose naming an entity in its turn's scene or at its location refers to that entity/,
+      /Prose naming an entity in its turn's scene, or its location, refers to that entity/,
     )
+  })
+
+  // classifier.md → What the classifier reads: a name form of a listed character takes its ID.
+  it('steers a name form of a listed character to its ID and the alias list', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toMatch(
+      /A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else/,
+    )
+    expect(rendered).toMatch(/put the new name form in aliases/)
+  })
+
+  // A schema field the prompt never asks for is a field the model never fills.
+  it('asks for an aliases entry for a listed entity of any kind', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toMatch(/- Aliases\. When the prose calls a listed entity of any kind/)
+    expect(rendered).toMatch(/Leave out forms its line already shows/)
   })
 })

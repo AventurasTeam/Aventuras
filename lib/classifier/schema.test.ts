@@ -10,7 +10,18 @@ describe('classifierExtractionSchema', () => {
       relationships: [],
       statusFlips: [],
       newCharacters: [],
+      aliases: [],
     })
+  })
+
+  it('parses an alias entry, defaulting its terms', () => {
+    const parsed = classifierExtractionSchema.parse({
+      aliases: [{ ref: 'c1', terms: ['the Grey Wolf'], sourceTurn: 't2' }, { ref: 'l1' }],
+    })
+    expect(parsed.aliases).toEqual([
+      { ref: 'c1', terms: ['the Grey Wolf'], sourceTurn: 't2' },
+      { ref: 'l1', terms: [] },
+    ])
   })
 
   it('parses a happening with nested involvements and awareness', () => {

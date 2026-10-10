@@ -221,6 +221,34 @@ export function buildClassifierActions(
     })
   }
 
+  // Listed entities only: a newCharacters handle's row is created by this reply and
+  // already carries its keywords. newTerms keeps a term the snapshot or an earlier
+  // write in this reply holds from being resent.
+  const listed = new Set(entities.map((e) => e.id))
+  for (const alias of extraction.aliases) {
+    const current = listed.has(alias.ref) ? index.get(alias.ref) : undefined
+    if (current == null) {
+      unresolvedRefs.push(alias.ref)
+      continue
+    }
+    const added = newTerms(current.keywords, alias.terms)
+    if (added.length === 0) continue
+    index.set(alias.ref, { ...current, keywords: [...current.keywords, ...added] })
+    planned.push({
+      action: {
+        kind: 'appendEntityKeywords',
+        source: SOURCE,
+        payload: {
+          branchId,
+          id: alias.ref,
+          keywords: added,
+          proseEntryId: proseSource(alias.sourceTurn),
+        },
+      },
+      entryId: anchor(alias.sourceTurn),
+    })
+  }
+
   for (const happening of extraction.happenings) {
     // Its involvements and awareness nest under it, so dropping it strands nothing.
     const title = nonBlank(happening.title)
