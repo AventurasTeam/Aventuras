@@ -75,6 +75,18 @@ export type ParseStateBlockResult = {
   malformedCreates: number
 }
 
+/** A `<new_location>` and what became of it; `parent` is the resolved id, or as emitted when dropped. */
+export type NewLocationReport = NewLocationEmission & {
+  outcome: 'created' | 'reused' | 'dropped'
+  /** The row it created or reused; absent when dropped. */
+  id?: string
+  /** Its parent couldn't be used, so it went to the root. */
+  parentDropped?: true
+}
+/** An item is never reused. */
+export type NewItemReport = NewItemEmission & { outcome: 'created' | 'dropped'; id?: string }
+export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
+
 // `categoryRef` is the prompt-side placeholder (cat1, cat2…), not a category
 // id — the emission map resolves it (lib/piggyback/suggestion-slots.ts).
 //

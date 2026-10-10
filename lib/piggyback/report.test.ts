@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildStateReport } from './report'
+import type { NewItemReport, NewLocationReport } from './types'
 
 describe('buildStateReport', () => {
   it('records the emitted values, not the applied ones', () => {
@@ -171,5 +172,86 @@ describe('buildStateReport', () => {
     expect(report?.visualChanges).toEqual([{ id: 'char_a', type: 'attire', text: 'muddied cloak' }])
     expect(report?.transfers?.items[0]?.from).toBe('char_b')
     expect(report?.transfers?.stackables[0]?.key).toBe('gold')
+  })
+})
+
+describe("buildStateReport with this turn's creates", () => {
+  const docks: NewLocationReport = {
+    handle: 'new:docks',
+    name: 'the Docks',
+    description: 'a rotting pier',
+    parent: 'loc_town',
+    outcome: 'created',
+    id: 'loc_docks',
+  }
+  const apple: NewItemReport = {
+    handle: 'new:apple',
+    name: 'apple',
+    description: 'eaten on the spot',
+    outcome: 'dropped',
+  }
+
+  it("records both lists beside the block's resolved fields", () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { currentLocation: 'loc_docks' },
+      failures: [],
+      creates: { newLocations: [docks], newItems: [apple] },
+    })
+    expect(report).toEqual({
+      layer: 'piggyback_tagged_block',
+      currentLocation: 'loc_docks',
+      newLocations: [docks],
+      newItems: [apple],
+    })
+  })
+
+  it('omits an empty list', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { currentLocation: 'loc_docks' },
+      failures: [],
+      creates: { newLocations: [docks], newItems: [] },
+    })
+    expect(report).toEqual({
+      layer: 'piggyback_tagged_block',
+      currentLocation: 'loc_docks',
+      newLocations: [docks],
+    })
+  })
+
+  // The planner hands on the block without its create lists, so a creates-only block
+  // arrives here empty and still reported.
+  it('reports a block that carried only creates', () => {
+    const report = buildStateReport({
+      layer: 'per_turn_classifier',
+      block: {},
+      failures: [],
+      creates: { newLocations: [], newItems: [apple] },
+    })
+    expect(report).toEqual({ layer: 'per_turn_classifier', newItems: [apple] })
+  })
+
+  it('returns undefined when the block and both lists are empty', () => {
+    expect(
+      buildStateReport({
+        layer: 'piggyback_tagged_block',
+        block: {},
+        failures: [],
+        creates: { newLocations: [], newItems: [] },
+      }),
+    ).toBeUndefined()
+  })
+
+  it('takes the lists from creates, never from the block', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: {
+        sceneEntities: ['char_a'],
+        newLocations: [{ handle: 'new:x', name: 'X', description: '' }],
+      },
+      failures: [],
+    })
+    expect(report).toEqual({ layer: 'piggyback_tagged_block', sceneEntities: ['char_a'] })
   })
 })

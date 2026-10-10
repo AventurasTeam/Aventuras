@@ -1000,3 +1000,136 @@ describe('buildPiggybackActions', () => {
     })
   })
 })
+
+// piggyback.md → New locations and items: the planner's rows join the lookup before they exist.
+describe("buildPiggybackActions with this turn's creates", () => {
+  const previousMetadata = { sceneEntities: ['char_1'], currentLocationId: 'loc_1', worldTime: 100 }
+  const hero = mockEntity({ id: 'char_1' })
+  const docks = mockEntity({
+    id: 'loc_docks',
+    kind: 'location',
+    name: 'the Docks',
+    state: { parent_location_id: null },
+  })
+  const mill = mockEntity({
+    id: 'loc_mill',
+    kind: 'location',
+    name: 'the Mill',
+    status: 'staged',
+    state: { parent_location_id: null },
+  })
+  const build = (args: Partial<Parameters<typeof buildPiggybackActions>[0]>) =>
+    buildPiggybackActions({
+      source: 'piggyback_tagged_block',
+      entryId: 'entry_2',
+      block: {},
+      entities: [hero],
+      previousMetadata,
+      branchId: 'main',
+      ...args,
+    })
+  const promotes = (result: ReturnType<typeof buildPiggybackActions>) =>
+    result.actions.filter((a) => a.kind === 'promoteStagedEntity')
+  const promoteOf = (id: string) => ({
+    kind: 'promoteStagedEntity',
+    source: 'piggyback_tagged_block',
+    payload: { branchId: 'main', id, proseEntryId: null },
+  })
+
+  it('accepts a location this turn creates as the scene, and moves the scene there', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_docks' },
+      createdRows: [docks],
+    })
+    expect(result.applied.currentLocationRejected).toBe(false)
+    expect(result.metadata.currentLocationId).toBe('loc_docks')
+    expect(result.actions.filter((a) => a.kind === 'updateEntityLocationTracking')).toEqual([
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'main', id: 'char_1', currentLocationId: 'loc_docks' },
+      },
+    ])
+  })
+
+  // The control for the case above: without the planner's rows the id is unknown.
+  it('refuses the same id when the planned rows are not passed', () => {
+    const result = build({ block: { sceneEntities: ['char_1'], currentLocation: 'loc_docks' } })
+    expect(result.applied.currentLocationRejected).toBe(true)
+    expect(result.metadata.currentLocationId).toBe('loc_1')
+  })
+
+  it('moves a new item into a holder like any item', () => {
+    const key = mockEntity({
+      id: 'item_key',
+      kind: 'item',
+      name: 'rusted key',
+      state: { at_location_id: null },
+    })
+    const result = build({
+      block: {
+        transfers: { items: [{ id: 'item_key', slot: 'inventory', to: 'char_1' }], stackables: [] },
+      },
+      createdRows: [key],
+    })
+    expect(
+      result.actions.filter(
+        (a) => a.kind === 'updateEntityInventory' || a.kind === 'updateItemPosition',
+      ),
+    ).toEqual([
+      {
+        kind: 'updateEntityInventory',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'main', id: 'char_1', equipped_items: [], inventory: ['item_key'] },
+      },
+    ])
+  })
+
+  it('promotes a staged location the block names as the scene', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_mill' },
+      entities: [hero, mill],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_mill')])
+  })
+
+  it('promotes it once when the scene and the reused ids name it too', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1', 'loc_mill'], currentLocation: 'loc_mill' },
+      entities: [hero, mill],
+      reusedIds: ['loc_mill'],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_mill')])
+  })
+
+  it('promotes a staged row a create reused, and leaves an active one', () => {
+    const hall = mockEntity({
+      id: 'loc_hall',
+      kind: 'location',
+      status: 'staged',
+      state: { parent_location_id: null },
+    })
+    const yard = mockEntity({
+      id: 'loc_yard',
+      kind: 'location',
+      state: { parent_location_id: null },
+    })
+    const result = build({
+      block: { sceneEntities: ['char_1'] },
+      entities: [hero, hall, yard],
+      reusedIds: ['loc_hall', 'loc_yard'],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_hall')])
+  })
+
+  // Auto-promote keys on the block naming the place; an inherited location names nothing.
+  it('does not promote a staged location the turn only inherited', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'] },
+      entities: [hero, mill],
+      previousMetadata: { ...previousMetadata, currentLocationId: 'loc_mill' },
+    })
+    expect(result.metadata.currentLocationId).toBe('loc_mill')
+    expect(promotes(result)).toEqual([])
+  })
+})

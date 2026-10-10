@@ -44,10 +44,13 @@ export function scenePromotionActions(args: {
   source: DeltaSource
   entities: readonly Entity[]
   sceneEntities: readonly string[]
+  /** More ids to promote when staged (a staged current location, reused siblings); de-duplicated. */
+  alsoIds?: readonly string[]
 }): PipelineAction[] {
-  const { branchId, source, entities, sceneEntities } = args
+  const { branchId, source, entities, sceneEntities, alsoIds = [] } = args
   const byId = new Map(entities.map((e) => [e.id, e]))
-  return sceneEntities
+  // A second promote for one row claims entities.status again, which applyDeltaActionGroup rejects.
+  return [...new Set([...sceneEntities, ...alsoIds])]
     .filter((id) => byId.get(id)?.status === 'staged')
     .map(
       (id) =>

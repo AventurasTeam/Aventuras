@@ -1,12 +1,23 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { ParsedStateBlock } from './types'
+import type { NewItemReport, NewLocationReport, ParsedStateBlock, TurnCreatesReport } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
+type ReportedLocation = NonNullable<StateReport['newLocations']>[number]
+type ReportedItem = NonNullable<StateReport['newItems']>[number]
+
+// Both ways: the fallback reads a prior report's create lists back in as a TurnCreatesReport.
+type _CreatesMatch = [NewLocationReport, NewItemReport] extends [ReportedLocation, ReportedItem]
+  ? [ReportedLocation, ReportedItem] extends [NewLocationReport, NewItemReport]
+    ? true
+    : never
+  : never
+const _createsChecks: [_CreatesMatch] = [true]
+void _createsChecks
 
 type BuildReportArgs = {
   layer: StateReport['layer']
-  /** Post-substitution: real entity ids, not the prompt's placeholders. */
+  /** Post-substitution and post-planning: real entity ids, never placeholders or create handles. */
   block: ParsedStateBlock
   /** Widened to plain strings: a report read back from the column has already lost
    *  the `keyof ParsedStateBlock` narrowing, and the fallback re-supplies its own. */
@@ -15,6 +26,8 @@ type BuildReportArgs = {
   raw?: string
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */
   applied?: { worldTimeDelta: number; currentLocationRejected: boolean }
+  /** What became of each create this turn. A list is written only when it holds an entry. */
+  creates?: TurnCreatesReport
 }
 
 /**
@@ -22,11 +35,20 @@ type BuildReportArgs = {
  * `summary`/`retrievalQueries` omitted: they already live top-level on EntryMetadata.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
-  const { layer, block, failures, raw, applied } = args
+  const { layer, block, failures, raw, applied, creates } = args
+  const newLocations = creates?.newLocations ?? []
+  const newItems = creates?.newItems ?? []
   // Emptiness is judged on the block as emitted, summary included: a block carrying only
   // a summary reported state, and suppressing its report would badge the turn as one
-  // where piggyback never ran.
-  if (Object.keys(block).length === 0 && failures.length === 0) return undefined
+  // where piggyback never ran. The create lists count too: the planner hands on the block
+  // without them, so a block of creates alone arrives here empty.
+  if (
+    Object.keys(block).length === 0 &&
+    failures.length === 0 &&
+    newLocations.length === 0 &&
+    newItems.length === 0
+  )
+    return undefined
 
   return {
     layer,
@@ -41,6 +63,8 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       : {}),
     ...(block.visualChanges !== undefined ? { visualChanges: block.visualChanges } : {}),
     ...(block.transfers !== undefined ? { transfers: block.transfers } : {}),
+    ...(newLocations.length > 0 ? { newLocations } : {}),
+    ...(newItems.length > 0 ? { newItems } : {}),
     ...(failures.length > 0
       ? { failedFields: failures.map((f) => ({ field: f.field, detail: f.detail })) }
       : {}),

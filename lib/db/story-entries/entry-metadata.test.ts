@@ -143,3 +143,77 @@ describe('stateReport', () => {
     ).toThrow()
   })
 })
+
+// data-model.md → Entry metadata shape: each create as emitted, with what became of it.
+describe('stateReport creates', () => {
+  const base = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+  const stateReport = {
+    layer: 'piggyback_tagged_block' as const,
+    currentLocation: 'loc_docks',
+    newLocations: [
+      {
+        handle: 'new:saltmere',
+        name: 'Saltmere',
+        description: 'a fishing town',
+        outcome: 'created' as const,
+        id: 'loc_salt',
+      },
+      {
+        handle: 'new:docks',
+        name: "the Smuggler's Docks",
+        description: 'a rotting pier',
+        parent: 'loc_salt',
+        outcome: 'created' as const,
+        id: 'loc_docks',
+      },
+      {
+        handle: 'new:inn',
+        name: 'The Inn',
+        description: '',
+        parent: 'new:ghost',
+        outcome: 'reused' as const,
+        id: 'loc_inn',
+        parentDropped: true as const,
+      },
+      {
+        handle: 'new:alley',
+        name: 'an alley',
+        description: 'passing through',
+        outcome: 'dropped' as const,
+      },
+    ],
+    newItems: [
+      {
+        handle: 'new:key',
+        name: 'rusted key',
+        description: 'an iron key',
+        outcome: 'created' as const,
+        id: 'item_key',
+      },
+      { handle: 'new:apple', name: 'apple', description: '', outcome: 'dropped' as const },
+    ],
+  }
+
+  it('round-trips every create outcome', () => {
+    expect(entryMetadataSchema.parse({ ...base, stateReport })).toEqual({ ...base, stateReport })
+  })
+
+  it('rejects a reused item: an item is never reused', () => {
+    const reused = {
+      layer: 'per_turn_classifier',
+      newItems: [{ handle: 'new:key', name: 'key', description: '', outcome: 'reused', id: 'i' }],
+    }
+    expect(entryMetadataSchema.safeParse({ ...base, stateReport: reused }).success).toBe(false)
+  })
+
+  // Literal true, as with currentLocationRejected: absence is the only other state.
+  it('rejects a parentDropped of false', () => {
+    const notDropped = {
+      layer: 'per_turn_classifier',
+      newLocations: [
+        { handle: 'new:a', name: 'A', description: '', outcome: 'created', parentDropped: false },
+      ],
+    }
+    expect(entryMetadataSchema.safeParse({ ...base, stateReport: notDropped }).success).toBe(false)
+  })
+})
