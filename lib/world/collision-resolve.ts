@@ -13,8 +13,8 @@ export const RENAME_ISSUE = {
 export type RenameIssue = (typeof RENAME_ISSUE)[keyof typeof RENAME_ISSUE]
 
 /**
- * Why a rename can't resolve the pair (world.md → Rename): a blank name, no name changed, or names
- * that still match by name. Keywords don't count.
+ * Why a rename can't resolve the pair (world.md → Rename): blank, unchanged, or names that still
+ * match. Keywords don't count.
  */
 export function renameIssue(
   original: readonly [string, string],
@@ -33,9 +33,8 @@ export type EntityRename = { id: string; name: string }
 export type EntityRenamePlan = { actions: PipelineAction[] } | { issue: RenameIssue }
 
 /**
- * The renamed rows' name updates, with the flag cleared on each pair row whose partner is the other
- * row or gone, and on any row the rename leaves no longer its partner's namesake; or the
- * `renameIssue` that refuses it.
+ * The renamed rows' name updates plus the flag clears they imply (pair rows, and rows the rename
+ * un-namesakes); or the `renameIssue` that refuses it.
  */
 export function entityRenameActions(input: {
   branchId: string

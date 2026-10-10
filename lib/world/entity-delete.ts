@@ -90,9 +90,8 @@ export function tailSceneActions(
 
 /**
  * world.md → Delete, collision flags naming the target included. Handlers read pre-group state:
- * order is free. Replaces the whole `state` from this snapshot, so a write landing in between is
- * lost — safe only while nothing else writes `state` alongside user edits (the periodic classifier
- * doesn't).
+ * order is free. Replaces the whole `state` from this snapshot: a write landing in between is
+ * lost — safe only while nothing else writes `state` alongside user edits (the classifier doesn't).
  */
 export function entityDeleteActions({
   branchId,

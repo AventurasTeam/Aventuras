@@ -78,10 +78,9 @@ function mergedRow(input: MergeContext): Merged {
 }
 
 /**
- * world.md → Reversibility: the canonical's flag stays when it names a live namesake of the merged
- * row other than the loser. Otherwise (its partner was the loser, is gone, or no longer matches) it
- * takes over the loser's partner and reason when that partner is a live namesake of the merged row
- * other than the canonical; else it clears.
+ * world.md → Reversibility, judged against the merged row: the canonical's flag stays on a live
+ * namesake other than the loser; else it takes the loser's partner and reason if that is a live
+ * namesake other than itself; else it clears.
  */
 function canonicalFlagPatch(
   input: MergeContext,
@@ -123,8 +122,8 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
 }
 
 /**
- * world.md → Reversibility: another row's flag on the loser re-points at the canonical, and one on
- * either clears once the row and the merged canonical aren't namesakes.
+ * world.md → Reversibility: another row's flag on the loser re-points at the canonical; on either,
+ * it clears once the row and the merged canonical aren't namesakes.
  */
 function otherFlagWrites(input: MergeContext, merged: NamesakeSide): FlagWrite[] {
   const { canonical, loser, branchEntities } = input

@@ -182,7 +182,7 @@ async function setTail(metadata: EntryMetadata): Promise<void> {
   await ctx.db.update(storyEntries).set({ metadata }).where(eq(storyEntries.id, 'entry_2'))
 }
 
-/** Flags `id` against `partnerId` (reason `distinct` unless given); null clears the flag with both. */
+/** Flags `id` against `partnerId` (reason `distinct` unless given); null clears both flags. */
 async function setFlag(
   id: string,
   partnerId: string | null,

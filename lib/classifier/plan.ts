@@ -221,9 +221,8 @@ export function buildClassifierActions(
     })
   }
 
-  // The index is keyed by row id, so a newCharacters handle misses: its row is created by
-  // this reply and already carries its keywords. newTerms keeps a term the snapshot or an
-  // earlier write in this reply holds from being resent.
+  // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
+  // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
   for (const alias of extraction.aliases) {
     const current = index.get(alias.ref)
     if (current == null) {

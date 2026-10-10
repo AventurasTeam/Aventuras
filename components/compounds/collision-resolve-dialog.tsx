@@ -162,7 +162,10 @@ type CollisionResolveDialogProps = {
   onOpenChange: (open: boolean) => void
   entityA: EntitySummary // older by createdAt; default canonical
   entityB: EntitySummary // newer
-  /** The row whose flag names the other, preferring the one the strip was opened from: the header names it first, and `reason` is its. */
+  /**
+   * The row whose flag names the other, preferring the strip's: the header names it first and
+   * `reason` is its.
+   */
   flaggedId: string
   /** That row's `name_collision_reason`, for the reason line. */
   reason: CollisionReason

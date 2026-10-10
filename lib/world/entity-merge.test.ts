@@ -109,9 +109,8 @@ const M = entity('char_m', 'character', { name: 'Mira' })
 const N = entity('char_n', 'character', { name: 'Nell' })
 
 /**
- * The pair `collisionPairOf` mints. When neither row's flag names the other, the second is
- * flagged with the first as partner: these tests merge rows whose flags they don't care about,
- * and the loser's flag goes with its delete.
+ * The pair `collisionPairOf` mints: when neither flag names the other, the second is flagged
+ * with the first as partner, since these tests don't care about the rows' own flags.
  */
 function pairOf(first: Entity, second: Entity): CollisionPair {
   const paired =

@@ -102,9 +102,8 @@ function resolvedText(resolution: CollisionResolution, sides: Sides): string {
 }
 
 /**
- * world.md → Resolve dialog. The pair is read live while open, under the resolve action's pair rule,
- * and closes for good once a row is gone or neither flag names the other, so an undo that brings it
- * back doesn't reopen the dialog.
+ * world.md → Resolve dialog. Pair read live under the resolve action's pair rule; closes for good
+ * once a row is gone or no flag names the other, so an undo can't reopen it.
  */
 export function useCollisionResolve(
   branchId: string,

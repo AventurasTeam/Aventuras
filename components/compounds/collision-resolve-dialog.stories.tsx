@@ -975,7 +975,7 @@ export const RenameValidation: Story = {
   },
 }
 
-// world.md → Rename: keywords don't count, so a pair that matches through one passes once a name changes.
+// world.md → Rename: keywords don't count, so a pair matching through one passes after a rename.
 export const RenameKeywordPair: Story = {
   render: () => (
     <ControlledDialog
@@ -1359,7 +1359,7 @@ export const KeepPartialPair: Story = {
   },
 }
 
-// The newer row is the flagged one and spelled differently; the title keeps the older row's spelling.
+// The newer row is flagged and spelled differently; the title keeps the older row's spelling.
 export const HeaderSameNameKeepsOlderSpelling: Story = {
   render: () => (
     <ControlledDialog
@@ -1429,7 +1429,7 @@ export const PhoneExplanationScrollsWithBody: Story = {
     expect(panel).toHaveAccessibleDescription(
       /Their descriptions differ, but "Kael" was in the scene/,
     )
-    // 119px is what the merge body kept before the reason and basis lines existed.
+    // Invariant: the merge body keeps at least 119px however many lines the explanation adds.
     expect(scroller!.clientHeight).toBeGreaterThanOrEqual(119)
   },
 }

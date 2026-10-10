@@ -36,9 +36,8 @@ const uniqueTags = (tags: readonly string[]) => [...new Set(cleanList(tags))]
 const trimmed = (tag: string) => tag.trim()
 
 /**
- * The name the merge doesn't keep when it joins the keyword union (world.md → Merge); null when the
- * names are the same or the merged row already answers to it by its kept name or either row's
- * keywords.
+ * The name the merge doesn't keep, as a keyword (world.md → Merge); null when the names match or
+ * the merged row already answers to it (kept name, or either row's keywords).
  */
 export function addedNameKeyword(
   rows: { canonical: TermSide; other: TermSide },
@@ -54,9 +53,8 @@ export function addedNameKeyword(
 }
 
 /**
- * collision-resolve.md → Resolution shape: the canonical's own terms in stored order minus the
- * deselected, then the other row's remaining additions, the name the merge doesn't keep among
- * them, sorted as the dialog offers them.
+ * collision-resolve.md → Resolution shape: canonical's terms minus the deselected, then the other
+ * row's additions (the unkept name among them), sorted as the dialog offers them.
  */
 export function mergedTerms(
   rows: { canonical: TermSide; other: TermSide },

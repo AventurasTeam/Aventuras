@@ -374,9 +374,8 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
 }
 
 /**
- * A create or the changed columns and state paths of an update, plus relationship writes, plus on a
- * rename a flag clear on each row the saved name and keywords leave no longer its partner's
- * namesake.
+ * A create, or an update's changed columns and state paths, plus relationship writes; on a rename,
+ * also a flag clear on each row the saved name and keywords no longer make its partner's namesake.
  */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args

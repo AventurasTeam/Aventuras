@@ -383,7 +383,7 @@ describe('reconcileNewCharacter', () => {
     expect(decision).toEqual(flagOf('char_1', 'no-signal'))
   })
 
-  // Decision: a blank candidate description scores no namesake.
+  // classifier.md → Disambiguation on new-character mentions, Signals: blank candidate = unscored.
   it('scores nothing for a blank candidate description, flagging exact and partial no-signal', async () => {
     const embed = embedder({ [KEEPER]: 0.99 })
     const exact = await reconcileNewCharacter(candidate({ description: '  ' }), {

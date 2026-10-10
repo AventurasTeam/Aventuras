@@ -58,9 +58,7 @@ export function buildClassifierContext(args: {
   const known = new Set(entities.map((e) => e.id))
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
-    // Projected to the fields templateContextMap documents, like happenings
-    // below. Narrower than generationContext's on purpose: the classifier reads
-    // prose and has no use for injectionMode, which is a retrieval-time knob.
+    // Narrower than generationContext's on purpose: no injectionMode, a retrieval-time knob.
     entities: entities.map((e) => ({
       id: e.id,
       kind: e.kind,
@@ -69,10 +67,8 @@ export function buildClassifierContext(args: {
       status: e.status,
       keywords: e.keywords,
     })),
-    // entryId/position stay out: the model addresses turns by handle only, and
-    // entry_* is not substitutable, so leaking it would put a raw id in the prompt.
-    // A saved scene can name a row deleted since; unfiltered, substituteIds would
-    // allocate it a placeholder.
+    // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
+    // Scene/location ids are filtered to known: a deleted row would get a placeholder.
     turns: window.turns.map((t) => ({
       handle: t.handle,
       content: t.content,

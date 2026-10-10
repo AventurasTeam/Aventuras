@@ -93,9 +93,8 @@ const hasText = (text: string | null): text is string => text != null && text.tr
 const scorable = (v: Float32Array): boolean => v.every(Number.isFinite) && v.some((x) => x !== 0)
 
 /**
- * Every scorable namesake is embedded alongside the candidate in ONE call and compared in
- * memory, so the decision never depends on whether their vec0 rows have been drained yet.
- * Index-aligned with `descriptions`; null where a namesake is unscored.
+ * One embed call for the candidate and every scorable namesake, compared in memory: independent of
+ * vec0 drain state. Index-aligned with `descriptions`; null where unscored.
  */
 async function similarities(
   candidate: string,
