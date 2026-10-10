@@ -339,6 +339,7 @@ describe('periodicClassifierPhase', () => {
       entryMetadata: {
         sceneEntities: [CHAR_KAEL, 'char_99999999-9999-9999-9999-999999999999'],
         currentLocationId: 'loc_99999999-9999-9999-9999-999999999999',
+        worldTime: 0,
       },
     })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
