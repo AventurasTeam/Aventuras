@@ -813,7 +813,9 @@ describe('collision flags a re-parent breaks', () => {
   })
 
   it('clears nothing on a save that keeps the parent', () => {
-    expect(save(MARKET, { condition: 'flooded' }, [MARKET, STALLS])).toStrictEqual([
+    // Already split, so judging this save would clear the flag; it keeps the parent, so none does.
+    const split: Entity = { ...STALLS, state: { parent_location_id: 'loc_quay' } }
+    expect(save(MARKET, { condition: 'flooded' }, [MARKET, split])).toStrictEqual([
       updateOf('loc_market', { state: { parent_location_id: 'loc_hollow', condition: 'flooded' } }),
     ])
   })

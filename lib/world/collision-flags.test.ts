@@ -308,6 +308,16 @@ describe('brokenFlags', () => {
       ).toStrictEqual(['loc_s'])
     })
 
+    it('breaks a flag with no reason, which never holds', () => {
+      const reasonless: Entity = { ...stalls, nameCollisionReason: null }
+      expect(
+        judged(
+          [market, reasonless],
+          [['loc_s', sideOf(reasonless, { name: 'The Market Stalls East' })]],
+        ),
+      ).toStrictEqual(['loc_s'])
+    })
+
     it('keeps a flag for another reason across a re-parent', () => {
       const distinct: Entity = { ...stalls, nameCollisionReason: 'distinct' }
       expect(
