@@ -856,6 +856,12 @@ describe('collision flag columns', () => {
       'collision flag columns take only a clear or a partner re-point',
     ],
     [
+      'a re-point that names the flag as well',
+      FLAGGED,
+      { nameCollisionFlag: 0, nameCollisionPartnerId: 'char_3', nameCollisionReason: 'alike' },
+      'collision flag columns take only a clear or a partner re-point',
+    ],
+    [
       'an empty partner',
       FLAGGED,
       { nameCollisionPartnerId: '' },
