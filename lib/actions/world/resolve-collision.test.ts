@@ -832,6 +832,35 @@ describe('resolveCollision — merge re-points and clears flags', () => {
   })
 })
 
+describe("resolveCollision — merge re-points the canonical at the loser's partner", () => {
+  it('points A at the namesake B named; CTRL-Z points it back at B, redo at the namesake', async () => {
+    await ctx.db.insert(entities).values(row('char_t', 'character', 'Brannoc', 3))
+    await setFlag('char_b', 'char_t')
+    await setFlag('char_a', 'char_b')
+    const before = await worldSnapshot()
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+    const merged = await worldSnapshot()
+    const flagOf = async (id: string) => {
+      const found = await entityRow(id)
+      return [found?.nameCollisionFlag, found?.nameCollisionPartnerId, found?.nameCollisionReason]
+    }
+
+    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'distinct'])
+    expect(await flagOf('char_t')).toEqual([0, null, null])
+
+    const group = await undoAll()
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await flagOf('char_a')).toEqual([1, 'char_b', 'distinct'])
+
+    await applyRedo(group, ctx)
+
+    expect(await worldSnapshot()).toEqual(merged)
+    expect(await flagOf('char_a')).toEqual([1, 'char_t', 'distinct'])
+  })
+})
+
 describe('resolveCollision — merge tags and keywords', () => {
   beforeEach(async () => {
     await setTerms('char_a', { tags: ['guard'], keywords: ['the guard'] })

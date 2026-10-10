@@ -400,6 +400,60 @@ describe('entityMergeActions — collision flags', () => {
     ])
   })
 
+  describe("the canonical inherits the loser's question", () => {
+    const canonical = entity('char_a', 'character', flaggedWith('char_b'))
+    const loserNaming = (partnerId: string) => entity('char_b', 'character', flaggedWith(partnerId))
+    const third = entity('char_t', 'character')
+
+    it("re-points the canonical's flag at the loser's partner while the merged row matches it", () => {
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_t'),
+          branchEntities: [canonical, loserNaming('char_t'), third],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', { nameCollisionPartnerId: 'char_t' }), deleteLoser])
+    })
+
+    it("clears it when the loser's partner is no namesake of the merged row", () => {
+      const mira = entity('char_t', 'character', { name: 'Mira' })
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_t'),
+          branchEntities: [canonical, loserNaming('char_t'), mira],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+
+    it("clears it when the loser's partner is gone from the branch", () => {
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_gone'),
+          branchEntities: [canonical, loserNaming('char_gone'), third],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+
+    it('clears it when the loser names the canonical', () => {
+      expect(
+        merge({
+          canonical,
+          loser: loserNaming('char_a'),
+          branchEntities: [canonical, loserNaming('char_a'), third],
+        }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+
+    it('clears it when the loser is unflagged', () => {
+      const loser = entity('char_b', 'character')
+      expect(
+        merge({ canonical, loser, branchEntities: [canonical, loser, third] }).actions,
+      ).toStrictEqual([updateOf('char_a', FLAG_CLEAR), deleteLoser])
+    })
+  })
+
   it("clears instead of re-pointing once the merge drops the loser's name", () => {
     const canonical = entity('char_a', 'character')
     const loser = entity('char_b', 'character', {

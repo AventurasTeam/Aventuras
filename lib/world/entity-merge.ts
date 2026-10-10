@@ -1,4 +1,4 @@
-import type { PipelineAction } from '@/lib/actions'
+import type { FlagClearPatch, FlagRepointPatch, PipelineAction } from '@/lib/actions'
 import type { Entity, EntityState, ItemState } from '@/lib/db'
 
 import { FLAG_CLEAR, withFlagWrites, type FlagWrite } from './collision-flags'
@@ -78,16 +78,27 @@ function mergedRow(input: MergeContext): Merged {
 }
 
 /**
- * world.md → Reversibility: the canonical's flag clears unless it names a live namesake of the
- * merged row.
+ * world.md → Reversibility: the canonical's flag stays while it names a live namesake of the merged
+ * row. Otherwise it takes over the loser's flag when that names one, and else clears.
  */
-function clearsCanonicalFlag(input: MergeContext, merged: NamesakeSide): boolean {
+function canonicalFlagPatch(
+  input: MergeContext,
+  merged: NamesakeSide,
+): FlagClearPatch | FlagRepointPatch | null {
   const { canonical, loser, branchEntities } = input
   const partnerId = canonical.nameCollisionPartnerId
-  if (partnerId == null) return false
-  if (partnerId === loser.id) return true
-  const partner = branchEntities.find((e) => e.id === partnerId)
-  return partner == null || namesakeBasis(merged, partner) == null
+  if (partnerId == null) return null
+  const liveNamesake = (id: string) => {
+    const row = branchEntities.find((e) => e.id === id)
+    return row != null && namesakeBasis(merged, row) != null
+  }
+  if (partnerId !== loser.id && liveNamesake(partnerId)) return null
+  // The branch's row, not the pair's copy: every flag rule here reads one source.
+  const loserRow = branchEntities.find((e) => e.id === loser.id)
+  const inherited = loserRow?.nameCollisionFlag === 1 ? loserRow.nameCollisionPartnerId : null
+  if (inherited != null && inherited !== canonical.id && liveNamesake(inherited))
+    return { nameCollisionPartnerId: inherited }
+  return FLAG_CLEAR
 }
 
 function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
@@ -106,7 +117,8 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
     ...(sameList(keywords, canonical.keywords) ? {} : { keywords }),
     ...(state == null ? {} : { state }),
   }
-  return clearsCanonicalFlag(input, merged.side) ? { ...columns, ...FLAG_CLEAR } : columns
+  const flag = canonicalFlagPatch(input, merged.side)
+  return flag == null ? columns : { ...columns, ...flag }
 }
 
 /**
