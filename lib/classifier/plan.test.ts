@@ -32,7 +32,15 @@ const entityRow = (id: string, status = 'active', name = id, keywords: string[] 
   }) as never
 
 const nonCharacterRow = (id: string, kind: string) =>
-  ({ id, branchId: 'branch_1', kind, name: id, description: 'x', status: 'active' }) as never
+  ({
+    id,
+    branchId: 'branch_1',
+    kind,
+    name: id,
+    description: 'x',
+    status: 'active',
+    keywords: [],
+  }) as never
 
 const base = {
   branchId: 'branch_1',
@@ -1011,11 +1019,16 @@ describe('alias list', () => {
     aliases,
   })
   const kael = entityRow('char_kael', 'active', 'Kael', ['the courier'])
-  const appendOf = (id: string, keywords: string[], turn: string, entryId = turn) => ({
+  const appendOf = (
+    id: string,
+    keywords: string[],
+    proseEntryId: string,
+    entryId = proseEntryId,
+  ) => ({
     action: {
       kind: 'appendEntityKeywords',
       source: 'periodic_classifier',
-      payload: { branchId: 'branch_1', id, keywords, proseEntryId: turn },
+      payload: { branchId: 'branch_1', id, keywords, proseEntryId },
     },
     entryId,
   })
@@ -1030,15 +1043,7 @@ describe('alias list', () => {
   })
 
   it('appends to a listed entity of any kind', () => {
-    const ford = {
-      id: 'loc_ford',
-      branchId: 'branch_1',
-      kind: 'location',
-      name: 'The ford',
-      description: 'x',
-      status: 'active',
-      keywords: [],
-    } as never
+    const ford = nonCharacterRow('loc_ford', 'location')
     const { planned } = buildClassifierActions(
       reply([{ ref: 'loc_ford', terms: ['the crossing'], sourceTurn: 't1' }]),
       { ...base, entities: [ford] },
@@ -1057,6 +1062,31 @@ describe('alias list', () => {
     )
     expect(planned.map((p) => p.action.kind)).toEqual(['createEntity'])
     expect(unresolvedRefs).toEqual(['new:j'])
+  })
+
+  // canon: the ref names a listed entity, so a handle reconciliation absorbed into one is no ref.
+  it('reports a handle absorbed into a listed row as unresolved, and appends nothing for it', () => {
+    const { planned, unresolvedRefs } = buildClassifierActions(
+      reply(
+        [{ ref: 'new:k', terms: ['the rider'], sourceTurn: 't2' }],
+        [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'x',
+            keywords: ['the Grey Wolf'],
+            sourceTurn: 't1',
+          },
+        ],
+      ),
+      {
+        ...base,
+        entities: [kael],
+        decisions: new Map([['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }]]),
+      },
+    )
+    expect(planned).toEqual([appendOf('char_kael', ['the Grey Wolf'], 'e1')])
+    expect(unresolvedRefs).toEqual(['new:k'])
   })
 
   it('reports an unknown ref as unresolved', () => {
@@ -1091,7 +1121,11 @@ describe('alias list', () => {
     const { planned } = buildClassifierActions(
       reply([
         { ref: 'char_kael', terms: ['the Grey Wolf'], sourceTurn: 't1' },
-        { ref: 'char_kael', terms: ['the grey wolf', 'the rider'], sourceTurn: 't3' },
+        {
+          ref: 'char_kael',
+          terms: ['the grey wolf', 'The Courier', 'the rider'],
+          sourceTurn: 't3',
+        },
       ]),
       { ...base, entities: [kael] },
     )

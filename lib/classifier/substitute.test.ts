@@ -48,7 +48,7 @@ const NON_REF_FIELDS = [
 ]
 
 describe('PLACEHOLDER_FIELDS', () => {
-  // The link plan.ts's four resolveRef call sites and this list otherwise lack:
+  // The link the planner's ref consumers and this list otherwise lack:
   // a fifth ref-bearing field in the schema fails here until it is classified,
   // instead of silently never resolving and landing in unresolvedRefs.
   it('partitions every string field the schema declares into ref-bearing or not', () => {
