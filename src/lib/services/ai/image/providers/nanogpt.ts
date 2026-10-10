@@ -1,9 +1,7 @@
 /**
  * NanoGPT Image Provider
  *
- * Direct HTTP calls to nano-gpt.com API.
- * - txt2img: POST /images/generations (JSON)
- * - img2img: Same endpoint + imageDataUrl in body
+ * Generation goes through the shared OpenAI-compatible request (openaiCompatible.ts).
  */
 
 import type {
@@ -13,17 +11,21 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { imageGetFetch } from './fetchAdapter'
+import { generateOpenAICompatible } from './openaiCompatible'
 import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '$lib/utils/image'
 
-const DEFAULT_BASE_URL = 'https://nano-gpt.com/api/v1'
+const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
+// The old default, still stored on profiles migrated from an API profile.
+const LEGACY_BASE_URL = 'https://nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
 
 // Known img2img capable models/tags
 const IMG2IMG_TAGS = new Set(['image-to-image', 'image-edit'])
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL
+  const configured = config.baseUrl?.trim().replace(/\/+$/, '')
+  const baseUrl = !configured || configured === LEGACY_BASE_URL ? DEFAULT_BASE_URL : configured
 
   return {
     id: 'nanogpt',
@@ -32,50 +34,16 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, modelInfo, referenceImages, signal } = options
 
-      const body: Record<string, unknown> = {
+      return generateOpenAICompatible({
+        baseUrl,
+        apiKey: config.apiKey,
         model,
         prompt,
-        // `size`, not `width`/`height`: neither endpoint documents a width/height pair.
         size: resolveSize(spec, modelInfo?.supportedResolutions),
-      }
-
-      // img2img: pass reference as imageDataUrl
-      if (referenceImages?.length) {
-        body.imageDataUrl = `data:image/png;base64,${referenceImages[0]}`
-      }
-
-      const response = await imageFetch({
-        url: `${baseUrl}/images/generations`,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify(body),
+        referenceImages,
         signal,
         serviceId: 'nanogpt-image',
       })
-
-      const data = await response.json()
-      const imageData = data?.data?.[0]
-
-      if (imageData?.b64_json) {
-        return { base64: imageData.b64_json, revisedPrompt: imageData.revised_prompt }
-      }
-      if (imageData?.url) {
-        // Fetch the image URL and convert to base64
-        const imgResponse = await fetch(imageData.url)
-        const blob = await imgResponse.blob()
-        const buffer = await blob.arrayBuffer()
-        const bytes = new Uint8Array(buffer)
-        let binary = ''
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i])
-        }
-        const base64 = btoa(binary)
-        return { base64, revisedPrompt: imageData.revised_prompt }
-      }
-
-      throw new Error('No image data in NanoGPT response')
     },
 
     async listModels(): Promise<ImageModelInfo[]> {

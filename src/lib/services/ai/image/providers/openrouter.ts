@@ -10,7 +10,12 @@
  * - Model discovery: GET /models, filter by output_modalities includes "image"
  */
 
-import { specToAspectRatio, type ImageSpec, type ImageSizeTier } from '$lib/utils/image'
+import {
+  specToAspectRatio,
+  base64ImageMime,
+  type ImageSpec,
+  type ImageSizeTier,
+} from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -85,7 +90,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
         for (const img of referenceImages) {
           contentParts.push({
             type: 'image_url',
-            image_url: { url: `data:image/png;base64,${img}` },
+            image_url: { url: `data:${base64ImageMime(img)};base64,${img}` },
           })
         }
       }

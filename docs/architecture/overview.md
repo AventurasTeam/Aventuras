@@ -449,6 +449,11 @@ OpenRouter, the model's own published resolution list for NanoGPT, real dimensio
 ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
 it does not offer answers with the nearest thing it does, which is not the same picture.
 
+OpenAI, NanoGPT and Pollinations share one OpenAI-compatible request (`openaiCompatible.ts`):
+`/images/generations`, or `/images/edits` as multipart when there are references. Each keeps its own
+model discovery and size handling. `http(s)` references are fetched to base64 in the registry, so
+every adapter receives raw base64.
+
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see
 [persistence.md](persistence.md).

@@ -1,12 +1,11 @@
 /**
  * Pollinations Image Provider
  *
- * GET-based API at image.pollinations.ai.
- * - txt2img: GET image.pollinations.ai/prompt/{prompt}?params
- * - img2img: ?image= param for kontext model
+ * Generation goes through the shared OpenAI-compatible request (openaiCompatible.ts)
+ * against gen.pollinations.ai/v1. Model discovery uses Pollinations' own catalogue.
  */
 
-import { specToPixels } from '$lib/utils/image'
+import { specToPixels, formatImageSize } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -15,10 +14,12 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { generateOpenAICompatible } from './openaiCompatible'
 
 import { POLLINATIONS_DEFAULT_MODEL_ID, POLLINATIONS_REFERENCE_MODEL_ID } from '../constants'
 const DEFAULT_MODEL = POLLINATIONS_DEFAULT_MODEL_ID
 const REFERENCE_MODEL = POLLINATIONS_REFERENCE_MODEL_ID
+const GENERATION_BASE_URL = 'https://gen.pollinations.ai/v1'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
 
 interface PollinationsImageModelResponse {
@@ -46,48 +47,22 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, referenceImages, signal } = options
-      const { width, height } = specToPixels(spec)
 
       if (!config.apiKey) {
         throw new Error('Pollinations API key is required to bypass Turnstile protection.')
       }
 
-      const params = new URLSearchParams({
+      return generateOpenAICompatible({
+        baseUrl: GENERATION_BASE_URL,
+        apiKey: config.apiKey,
         model: model || DEFAULT_MODEL,
-        width: String(width),
-        height: String(height),
-        nologo: 'true',
-        safe: 'false',
-      })
-
-      // img2img via ?image= param for kontext model
-      if (referenceImages?.length) {
-        params.set('image', `data:image/png;base64,${referenceImages[0]}`)
-      }
-
-      const encodedPrompt = encodeURIComponent(prompt)
-      const url = `https://gen.pollinations.ai/image/${encodedPrompt}?${params}`
-
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${config.apiKey}`,
-      }
-
-      const response = await imageGetFetch(url, headers, {
+        prompt,
+        size: formatImageSize(specToPixels(spec)),
+        referenceImages,
+        extraFields: { safe: false },
         signal,
         serviceId: 'pollinations-image',
       })
-
-      // Response is the image directly
-      const blob = await response.blob()
-      const buffer = await blob.arrayBuffer()
-      const bytes = new Uint8Array(buffer)
-      let binary = ''
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i])
-      }
-      const base64 = btoa(binary)
-
-      return { base64 }
     },
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {

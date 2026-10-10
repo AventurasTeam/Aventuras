@@ -1,9 +1,7 @@
 /**
  * OpenAI Image Provider
  *
- * Direct HTTP calls to OpenAI-compatible image APIs.
- * - txt2img: POST /images/generations (JSON)
- * - img2img: POST /images/edits (FormData)
+ * Generation goes through the shared OpenAI-compatible request (openaiCompatible.ts).
  *
  * Models are fetched live from {baseUrl}/models and filtered by image-capable prefixes.
  * Known models are enriched with size/img2img metadata; unknown future models get defaults.
@@ -18,7 +16,8 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { imageGetFetch } from './fetchAdapter'
+import { generateOpenAICompatible } from './openaiCompatible'
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 
@@ -35,44 +34,19 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, referenceImages, signal } = options
-      const size = formatImageSize(specToPixels(spec))
 
-      if (referenceImages?.length) {
-        return generateWithEdits(
-          baseUrl,
-          config.apiKey,
-          model,
-          prompt,
-          size,
-          referenceImages,
-          signal,
-        )
-      }
-
-      const body = {
+      return generateOpenAICompatible({
+        baseUrl,
+        apiKey: config.apiKey,
         model,
         prompt,
-        size,
-        n: 1,
-        response_format: 'b64_json',
-      }
-
-      const response = await imageFetch({
-        url: `${baseUrl}/images/generations`,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
-        },
-        body: JSON.stringify(body),
+        size: formatImageSize(specToPixels(spec)),
+        referenceImages,
+        // dall-e edits take a single image.
+        maxReferences: model.startsWith('dall-e-') ? 1 : undefined,
         signal,
         serviceId: 'openai-image',
       })
-
-      const data = await response.json()
-      const imageData = data?.data?.[0]
-      if (!imageData?.b64_json) throw new Error('No image data in OpenAI response')
-
-      return { base64: imageData.b64_json, revisedPrompt: imageData.revised_prompt }
     },
 
     async listModels(apiKey: string): Promise<ImageModelInfo[]> {
@@ -133,43 +107,4 @@ async function fetchCustomModels(baseUrl: string, apiKey: string): Promise<Image
   } catch {
     return []
   }
-}
-
-async function generateWithEdits(
-  baseUrl: string,
-  apiKey: string,
-  model: string,
-  prompt: string,
-  size: string,
-  referenceImages: string[],
-  signal?: AbortSignal,
-): Promise<ImageGenerateResult> {
-  const formData = new FormData()
-  formData.append('model', model)
-  formData.append('prompt', prompt)
-  formData.append('size', size)
-  formData.append('n', '1')
-  formData.append('response_format', 'b64_json')
-
-  // Convert base64 to blob for the image field
-  const imageBytes = Uint8Array.from(atob(referenceImages[0]), (c) => c.charCodeAt(0))
-  const imageBlob = new Blob([imageBytes], { type: 'image/png' })
-  formData.append('image', imageBlob, 'reference.png')
-
-  const response = await imageFetch({
-    url: `${baseUrl}/images/edits`,
-    headers: {
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      // Don't set Content-Type - let FormData set the boundary
-    },
-    body: formData,
-    signal,
-    serviceId: 'openai-image-edit',
-  })
-
-  const data = await response.json()
-  const imageData = data?.data?.[0]
-  if (!imageData?.b64_json) throw new Error('No image data in OpenAI edits response')
-
-  return { base64: imageData.b64_json, revisedPrompt: imageData.revised_prompt }
 }

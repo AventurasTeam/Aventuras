@@ -8,7 +8,7 @@
 
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
-import { parseImageSpec, describeImageSpec, type ImageSpec } from '$lib/utils/image'
+import { parseImageSpec, describeImageSpec, bytesToBase64, type ImageSpec } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -16,6 +16,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { createLogger } from '$lib/log'
+import { imageGetFetch } from './fetchAdapter'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -102,6 +103,20 @@ export function requiresApiKey(providerType: string): boolean {
   return PROVIDER_REQUIRES_API_KEY[providerType as ImageProviderType] ?? true
 }
 
+/** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
+async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
+  if (image.startsWith('data:')) return image.replace(/^data:image\/[^;]+;base64,/, '')
+  if (/^https?:\/\//i.test(image)) {
+    // A third-party host: no Authorization header.
+    const response = await imageGetFetch(image, undefined, {
+      signal,
+      serviceId: 'image-reference',
+    })
+    return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
+  }
+  return image
+}
+
 /**
  * Generate an image using an Image Profile.
  * Drop-in replacement for the old sdk/generate.ts generateImage().
@@ -148,10 +163,8 @@ export async function generateImage(options: {
   // the settings UI fills, and absent is fine: the adapter falls back to canonical pixels.
   const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
 
-  // Strip data: prefix from reference images if present
-  const cleanRefs = referenceImages?.map((img) =>
-    img.startsWith('data:') ? img.replace(/^data:image\/[^;]+;base64,/, '') : img,
-  )
+  const cleanRefs =
+    referenceImages && (await Promise.all(referenceImages.map((img) => toRawBase64(img, signal))))
 
   return provider.generate({
     model,

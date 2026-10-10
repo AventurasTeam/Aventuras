@@ -16,6 +16,17 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   },
 }))
 
+vi.mock('./fetchAdapter', () => ({
+  imageFetch: vi.fn(),
+  imageGetFetch: vi.fn(),
+}))
+
+vi.mock('./openai', () => ({
+  createOpenAIProvider: vi.fn(),
+}))
+
+import { imageGetFetch } from './fetchAdapter'
+import { createOpenAIProvider } from './openai'
 import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
@@ -90,6 +101,39 @@ describe('Image Provider Registry', () => {
           prompt: 'A futuristic city',
         }),
       ).rejects.toThrow('Image profile not found: non-existent-id')
+    })
+
+    it('hands adapters raw base64 for data: and http(s) references', async () => {
+      const generate = vi.fn(async () => ({ base64: 'RESULT' }))
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'OpenAI',
+        generate,
+        listModels: vi.fn(async () => []),
+      })
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        providerType: 'openai',
+        apiKey: 'sk-secret',
+      } as ReturnType<typeof settings.getImageProfile>)
+      vi.mocked(imageGetFetch).mockResolvedValue({
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      } as unknown as Response)
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gpt-image-1',
+        prompt: 'x',
+        referenceImages: ['data:image/png;base64,AAAA', 'https://img.test/a.png', 'BBBB'],
+      })
+
+      const fetched = vi
+        .mocked(imageGetFetch)
+        .mock.calls.find((c) => c[0] === 'https://img.test/a.png')
+      expect(fetched).toBeDefined()
+      expect(fetched![1]).toBeUndefined()
+      expect((generate.mock.calls[0] as unknown[])[0]).toMatchObject({
+        referenceImages: ['AAAA', btoa('\x01\x02\x03'), 'BBBB'],
+      })
     })
   })
 })
