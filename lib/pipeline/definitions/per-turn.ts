@@ -19,7 +19,9 @@ import {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
+import { classifierEmbedder } from './description-embedder'
 import { buildGenerationContext } from './generation-context'
+import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 import {
   PIGGYBACK_FALLBACK_PHASE_NAME,
   PIGGYBACK_FALLBACK_RESOLVES,
@@ -214,11 +216,29 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       fields: parseFailures.map((f) => f.field),
     })
   }
+  let turnCreates: TurnCreatePlan | undefined
   let piggybackApplied: ReturnType<typeof buildPiggybackActions> | undefined
   if (piggybackShouldFire) {
+    if (parsedState.malformedCreates > 0)
+      ctx.log.warn('classifier.create_malformed', { entryId, count: parsedState.malformedCreates })
+    // A failed fold creates nothing: the fallback that fires rewrites this turn's state, and a
+    // create is the one write it can't repeat harmlessly.
+    turnCreates = piggybackParseSucceeded
+      ? await planTurnCreates({
+          block: resolvedBlock,
+          entities,
+          branchId,
+          source: 'piggyback_tagged_block',
+          embed: classifierEmbedder(),
+          now: () => Date.now(),
+          newId: (prefix) => generateId(prefix),
+        })
+      : skipTurnCreates(resolvedBlock)
+    // Matching an item can await an embed call; a cancel during it discards the reply.
+    if (ctx.abortSignal.aborted) return { status: 'aborted' }
     piggybackApplied = buildPiggybackActions({
       entryId,
-      block: resolvedBlock,
+      block: turnCreates.block,
       entities,
       previousMetadata: {
         ...inherited,
@@ -226,6 +246,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       },
       branchId,
       source: 'piggyback_tagged_block',
+      createdRows: turnCreates.createdRows,
+      reusedIds: turnCreates.reusedIds,
     })
   }
 
@@ -233,13 +255,14 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // enabled for can still emit a <state>, and a report badged with this layer would
   // name an agent that supplied nothing. The fallback writes its own report instead.
   const stateReport =
-    piggybackApplied !== undefined
+    piggybackApplied !== undefined && turnCreates !== undefined
       ? buildStateReport({
           layer: 'piggyback_tagged_block',
-          block: resolvedBlock,
+          block: turnCreates.block,
           failures: parseFailures,
           applied: piggybackApplied.applied,
           ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
+          creates: turnCreates.report,
         })
       : undefined
 
@@ -322,6 +345,11 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     },
   }
 
+  // Right behind the reply's create and ahead of every write naming them: a regenerate sweeps
+  // from that create's log position, so a row created before it would outlive the regenerate.
+  for (const action of turnCreates?.creates ?? []) {
+    yield { type: 'delta_emitted', action }
+  }
   if (piggybackApplied) {
     for (const action of piggybackApplied.actions) {
       yield { type: 'delta_emitted', action }
