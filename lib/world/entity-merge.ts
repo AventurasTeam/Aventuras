@@ -58,14 +58,10 @@ type Merged = {
   side: PairSide
 }
 
-/**
- * `row` as the flag rules read it once the merge lands (world.md → Surfacing): a place under the
- * loser moves under the canonical, and the canonical's own ref to the loser collapses to the root.
- */
+/** `row` as the flag rules read it once the merge lands: its refs rewritten as the merge writes them. */
 function postMergeSide(input: MergeContext, row: Entity): PairSide {
-  const side = pairSideOf(row)
-  if (side.parentId !== input.loser.id) return side
-  return { ...side, parentId: row.id === input.canonical.id ? null : input.canonical.id }
+  const state = stateWithRefRewritten(row, input.loser.id, refTarget(input))
+  return pairSideOf(state == null ? row : { ...row, state })
 }
 
 function mergedRow(input: MergeContext): Merged {
@@ -143,8 +139,8 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
 
 /**
  * world.md → Reversibility: another row's flag on the loser re-points at the canonical; on either,
- * it clears once that row and the merged canonical no longer pair under the row's reason, both read
- * as they stand after the merge.
+ * it clears once that row and the merged canonical no longer pair under the row's reason (a flag
+ * with no reason never holds), both read as they stand after the merge.
  */
 function otherFlagWrites(input: MergeContext, merged: PairSide): FlagWrite[] {
   const { canonical, loser, branchEntities } = input

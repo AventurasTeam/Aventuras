@@ -589,6 +589,42 @@ describe('entityMergeActions — collision flags', () => {
       ])
     })
 
+    it('lifts a canonical under the loser to the root, beside the root siblings', () => {
+      const loser = place('loc_b', 'The Market', null, flaggedWith('loc_s', 'same-parent'))
+      const canonical = place('loc_a', 'The Market', 'loc_b', flaggedWith('loc_b'))
+      const stalls = place('loc_s', 'The Market Stalls', null)
+      expect(
+        merge({ canonical, loser, branchEntities: [canonical, loser, stalls] }).actions,
+      ).toStrictEqual([
+        updateOf('loc_a', {
+          state: { parent_location_id: null },
+          nameCollisionPartnerId: 'loc_s',
+          nameCollisionReason: 'same-parent',
+        }),
+        deleteOf('loc_b'),
+      ])
+
+      const plainLoser = place('loc_b', 'The Market', null)
+      const under = place('loc_a', 'The Market', 'loc_b')
+      const rootStalls = place(
+        'loc_s',
+        'The Market Stalls',
+        null,
+        flaggedWith('loc_b', 'same-parent'),
+      )
+      expect(
+        merge({
+          canonical: under,
+          loser: plainLoser,
+          branchEntities: [under, plainLoser, rootStalls],
+        }).actions,
+      ).toStrictEqual([
+        updateOf('loc_a', { state: { parent_location_id: null } }),
+        updateOf('loc_s', { nameCollisionPartnerId: 'loc_a' }),
+        deleteOf('loc_b'),
+      ])
+    })
+
     it("takes the loser's same-parent partner only while the canonical shares its parent", () => {
       const sibling = place('loc_s', 'The Market Stalls', 'loc_p')
       const loser = place('loc_b', 'The Market', 'loc_p', flaggedWith('loc_s', 'same-parent'))
