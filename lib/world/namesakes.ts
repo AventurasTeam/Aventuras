@@ -8,8 +8,13 @@ export type NameBasis = 'same-name' | 'contained'
 
 export type NamesakeMatch =
   | { basis: NameBasis }
-  /** `holder`'s keywords hold the other row's name; `keyword` is the holder's term as stored, trimmed. */
-  | { basis: 'keyword'; holder: 'first' | 'second'; keyword: string }
+  | {
+      basis: 'keyword'
+      /** The row whose keywords hold the other row's name. */
+      holder: 'first' | 'second'
+      /** The holder's term as stored, trimmed. */
+      keyword: string
+    }
 
 function wordsOf(text: string): string[] {
   return normalizeTerm(text)

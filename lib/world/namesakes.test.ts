@@ -9,7 +9,7 @@ describe('nameBasis', () => {
     ['Kael', 'Kael'],
     ['Kael', 'KAEL'],
     [' Kael ', 'Kael'],
-    ['Zoë', 'Zoë'],
+    ['Zoe\u0308', 'Zo\u00eb'],
     ['Kael  Stormborn', 'Kael Stormborn'],
     ['王小明', '王小明'],
   ])('reads %j and %j as the same name', (first, second) => {
@@ -22,6 +22,7 @@ describe('nameBasis', () => {
     ['Innkeeper', 'the Innkeeper'],
     ['stormborn the', 'Kael Stormborn the Bold'],
     [' KAEL ', 'Kael Stormborn'],
+    ['太郎', '山田\u3000太郎'],
   ])('reads %j and %j as one name inside the other', (first, second) => {
     expect(nameBasis(first, second)).toBe('contained')
   })
