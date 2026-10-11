@@ -31,15 +31,17 @@
    * Only its ancestors are expanded — a node's own state controls its children, not whether
    * its row is visible. Done once per branch, so a node collapsed afterwards stays collapsed.
    */
-  let revealedFor: string | null | undefined = undefined
+  // Keyed on the story too: two stories both on main would otherwise read as no change.
+  let revealedFor: string | undefined = undefined
 
   $effect(() => {
     const branchId = story.currentStory?.currentBranchId ?? null
+    const key = `${story.currentStory?.id}:${branchId}`
     const branches = story.branches
-    if (branchId === revealedFor) return
+    if (key === revealedFor) return
     // Branches load after the story, so wait for the one we are asked to reveal.
     if (branchId && !branches.some((b) => b.id === branchId)) return
-    revealedFor = branchId
+    revealedFor = key
 
     untrack(() => {
       const next = new SvelteSet(expandedBranches)
