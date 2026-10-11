@@ -98,10 +98,7 @@ export function schemaToTypeScriptBlock(schema: JsonSchema, name = 'Response'): 
   return `type ${name} = ${typeBody}`
 }
 
-// The contract's lead-in and block close the system message: they are fixed per
-// call site, so they belong to the stable prefix. The closing line ends the user
-// message, where the models that need this path follow a format instruction best
-// (architecture.md → Structured output).
+// Placement and its rationale: architecture.md → Structured output.
 const SCHEMA_CONTRACT_TEMPLATE = `Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
 {schema}`

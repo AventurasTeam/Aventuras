@@ -141,6 +141,25 @@ describe('classifyRequest', () => {
 
     // Stable across calls: the UI keys a lane on it.
     expect(classifyRequest(body)).toMatchObject({ key: route.key })
+
+    // The key follows the schema, not the user text around it.
+    const other = classifyRequest(await requestAsSent(novel, 'A different turn entirely.'))
+    expect(other).toMatchObject({ key: route.key })
+  })
+
+  it('ignores a system half that quotes the opener when no contract is injected', () => {
+    const route = classifyRequest({
+      model: 'seed/narrative',
+      messages: [
+        { role: 'system', content: 'Choose from the following:\n\nthe drowned bells.' },
+        { role: 'user', content: 'Classify the turn.' },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'Response', schema: z.toJSONSchema(fallbackClassifierSchema) },
+      },
+    })
+    expect(route).toMatchObject({ lane: 'structured', key: 'per-turn-classifier' })
   })
 
   it('falls back to a no-schema key when nothing declares a shape', () => {

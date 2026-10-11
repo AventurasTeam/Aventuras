@@ -59,8 +59,8 @@ user half opens with, before the first Liquid tag, sliced out of the pack
 the app itself renders. Editing a template therefore moves its marker in the
 same edit, and `routing.test.ts` renders every wizard template through the
 real engine to prove the marker still survives. The contract sits in the
-system message, ahead of the user half, so the same test checks that no
-contract carries a marker.
+system message, ahead of the user half, so a separate test in the same
+file checks that no contract carries a marker.
 
 The marker only breaks ties. Where a block already names one call site it is
 never consulted, so a user-authored pack that rewrites wizard templates

@@ -12,6 +12,8 @@ export const NARRATIVE_LANE = 'narrative'
 // and asserts the extractor still recovers the block — a contract edit fails
 // that test rather than silently degrading every match.
 const BLOCK_OPEN = 'from the following:\n\n'
+// What schemaToTypeScriptBlock emits first; story text quoting the opener doesn't.
+const BLOCK_START = /^(interface Response |type Response = )/
 
 export type Route =
   | { lane: typeof NARRATIVE_LANE }
@@ -53,10 +55,11 @@ export function systemText(body: Record<string, unknown>): string {
  * The last opener, not the first: the system half before the contract is story
  * text, which may quote the opener.
  */
-export function extractBlockFromPrompt(systemText: string): string | null {
-  const open = systemText.lastIndexOf(BLOCK_OPEN)
+export function extractBlockFromPrompt(text: string): string | null {
+  const open = text.lastIndexOf(BLOCK_OPEN)
   if (open === -1) return null
-  return systemText.slice(open + BLOCK_OPEN.length)
+  const block = text.slice(open + BLOCK_OPEN.length)
+  return BLOCK_START.test(block) ? block : null
 }
 
 // The 'force-on' path keeps responseFormat instead of injecting the block, so
