@@ -1,7 +1,7 @@
 import type { Entity } from '@/lib/db'
 
 import { stateOf } from './entity-draft'
-import { byName } from './overview'
+import { byName, itemsAt, locationAncestors } from './overview'
 import { parentChainIds, parentOfLocations } from './parent-chain'
 
 export type LocationMapRow = { id: string; name: string; depth: number }
@@ -52,13 +52,9 @@ export function buildLocationMap(
 
 /** `# Current location`'s chain: the listed ancestors' names, nearest first. */
 export function listedAncestorNames(locationId: string, entities: readonly Entity[]): string[] {
-  const listedNames = new Map(
-    entities.filter((e) => isListed(e, locationId)).map((e) => [e.id, e.name]),
-  )
-  return parentChainIds(locationId, parentOfLocations(entities)).flatMap((id) => {
-    const name = listedNames.get(id)
-    return name === undefined ? [] : [name]
-  })
+  return locationAncestors(locationId, entities)
+    .filter((e) => isListed(e, locationId))
+    .map((e) => e.name)
 }
 
 /** `Holds:`: inventory, then equipped items. An id in both arrays shows once, as equipped. */
@@ -85,13 +81,7 @@ export function heldItemLines(character: Entity, entities: readonly Entity[]): H
 
 /** `Here:`: the unretired items lying at the location, by name. */
 export function looseItemLines(locationId: string, entities: readonly Entity[]): LooseItemLine[] {
-  return entities
-    .filter(
-      (e) =>
-        e.kind === 'item' &&
-        e.status !== 'retired' &&
-        stateOf(e, 'item').at_location_id === locationId,
-    )
-    .sort(byName)
+  return itemsAt(locationId, entities)
+    .filter((e) => e.status !== 'retired')
     .map((e) => ({ id: e.id, name: e.name }))
 }
