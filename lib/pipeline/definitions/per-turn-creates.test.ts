@@ -688,6 +688,54 @@ describe('planTurnCreates — matching', () => {
     expect(embed.mock.calls).toEqual([[['small', 'an iron key']], [['large', 'an iron key']]])
   })
 
+  // The turn is hard-gated, so the embeds overlap; the first resolving last checks order holds.
+  it('embeds the items concurrently and still writes them in emission order', async () => {
+    let inFlight = 0
+    let peak = 0
+    const embed: EmbedDescriptions = async (texts) => {
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      const alike = texts[0] === 'small'
+      await new Promise((resolve) => setTimeout(resolve, alike ? 20 : 0))
+      inFlight -= 1
+      return {
+        vectors: [new Float32Array([1, 0]), new Float32Array(alike ? [1, 0] : [0, 1])],
+        dim: 2,
+      }
+    }
+    const plan = await runPlanner(
+      {
+        newItems: [
+          { handle: 'new:a', name: 'rusted key', description: 'small' },
+          { handle: 'new:b', name: 'sea chart', description: 'salt-stained' },
+          { handle: 'new:c', name: 'rusted key', description: 'large' },
+        ],
+        transfers: {
+          items: ['new:a', 'new:b', 'new:c'].map((id) => ({
+            id,
+            to: HERO,
+            slot: 'inventory' as const,
+          })),
+          stackables: [],
+        },
+      },
+      { entities: world(oldKey()), embed },
+    )
+    expect(peak).toBe(2)
+    expect(
+      createdEntries(plan.creates).map((e) => [e.id, e.description, e.nameCollisionPartnerId]),
+    ).toEqual([
+      ['item_new_1', 'small', OLD_KEY],
+      ['item_new_2', 'salt-stained', null],
+      ['item_new_3', 'large', null],
+    ])
+    expect(plan.report.newItems.map((r) => [r.handle, r.id])).toEqual([
+      ['new:a', 'item_new_1'],
+      ['new:b', 'item_new_2'],
+      ['new:c', 'item_new_3'],
+    ])
+  })
+
   it('creates both of two new items with one name', async () => {
     const plan = await runPlanner({
       newItems: [

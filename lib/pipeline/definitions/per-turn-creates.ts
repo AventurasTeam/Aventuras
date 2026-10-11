@@ -272,12 +272,18 @@ async function planItems(args: {
   now: () => number
   newId: (prefix: 'item') => string
 }): Promise<{ ids: Map<string, string>; rows: Entity[] }> {
+  const scored = await Promise.all(
+    args.emissions
+      .filter((emission) => args.kept.has(emission.handle))
+      .map(async (emission) => {
+        const text = storedText(emission)
+        return { emission, text, flag: await itemFlag(text, args.entities, args.embed) }
+      }),
+  )
+  // Ids are drawn once every score is in, so they follow emission order, not embed timing.
   const ids = new Map<string, string>()
   const rows: Entity[] = []
-  for (const emission of args.emissions) {
-    if (!args.kept.has(emission.handle)) continue
-    const text = storedText(emission)
-    const flag = await itemFlag(text, args.entities, args.embed)
+  for (const { emission, text, flag } of scored) {
     const row = newRow({
       id: args.newId('item'),
       branchId: args.branchId,
