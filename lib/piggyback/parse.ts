@@ -360,8 +360,13 @@ function stateClosed(raw: string): boolean {
   return raw.indexOf(`</${STATE_ROOT_TAG}>`, raw.indexOf(`<${STATE_ROOT_TAG}>`)) !== -1
 }
 
-function emptyBlockDetail(stateSegment: string, malformedCreates: number): string {
+function emptyBlockDetail(
+  stateSegment: string,
+  hasCreates: boolean,
+  malformedCreates: number,
+): string {
   if (stateSegment.trim().length === 0) return 'block was empty or truncated at the open tag'
+  if (hasCreates) return 'block held only creates'
   return malformedCreates > 0
     ? 'block held only malformed creates'
     : 'block content matched no known field tag'
@@ -417,9 +422,17 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   // state, so an empty <state> means the same as a MISSING one — which already
   // fires the fallback. Left unrecorded it reads as a clean parse instead, and
   // suppresses the very recovery it needs (per-turn.ts -> piggybackOutcome).
-  // Judged after the creates: creates alone are a report, malformed ones alone are not.
-  if (Object.keys(normalized.block).length === 0 && failures.length === 0)
-    failures.push({ field: 'state', detail: emptyBlockDetail(stateSegment, malformedCreates) })
+  // Creates don't count: only another field can keep one, so creates alone change nothing.
+  const { newLocations, newItems, ...fields } = normalized.block
+  if (Object.keys(fields).length === 0 && failures.length === 0)
+    failures.push({
+      field: 'state',
+      detail: emptyBlockDetail(
+        stateSegment,
+        newLocations !== undefined || newItems !== undefined,
+        malformedCreates,
+      ),
+    })
 
   return { block: normalized.block, failures, blockFound: true, malformedCreates }
 }

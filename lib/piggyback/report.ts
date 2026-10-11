@@ -28,7 +28,7 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
   const { newLocations, newItems } = report
   // Emptiness is judged on the block as emitted, summary included: suppressing a summary-only
   // report would badge the turn as one where piggyback never ran. Creates count too: the planner
-  // strips them from the block, so a block of creates alone arrives here empty.
+  // strips them from the block.
   if (
     Object.keys(block).length === 0 &&
     failures.length === 0 &&

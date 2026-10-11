@@ -175,21 +175,23 @@ and description, and a raw `<` or `>` in a name or a raw `<` in a
 description drops the create, so the prompt asks the model to write a
 double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
 and a `<` inside a description as `&lt;`. A malformed create in a
-closed block only logs a warning, unless the block held nothing else:
-an empty block fails `state`, so the fallback fires. A `<state>` the
-stream cut off (no `</state>`) that declares any create, whole or not,
-fails the `state` field instead, because the cut may have lost the
-tags that name it (a `<current_location>`, a transfer), so the
-fallback fires and creates. A cut that falls between tags still parses
-clean in a block that declares no creates.
+closed block only logs a warning, unless the block held nothing but
+creates: that block counts as empty and fails `state`, so the fallback
+fires. A `<state>` the stream cut off (no `</state>`) that declares
+any create, whole or not, fails the `state` field instead, because the
+cut may have lost the tags that name it (a `<current_location>`, a
+transfer), so the fallback fires and creates. A cut that falls between
+tags still parses clean in a block that declares no creates.
 
 **Kept only if used.** A new location is created only as the turn's
-`<current_location>` or an ancestor of it, and a new item only when the
-last transfer in the block naming its handle gives it to a character,
-so an item taken and then put down in the same block stays prose.
-Anything else is dropped and logged, so a place the prose merely
-mentions, or an item only seen or put down, stays prose. The prompt
-adds the significance rules the model applies:
+`<current_location>` or an ancestor of it, and a new item only when
+the last transfer in the block naming its handle gives it to a
+character, so an item taken and then put down in the same block stays
+prose. Anything else is dropped and logged, so a place the prose
+merely mentions, or an item only seen or put down, stays prose. A
+block holding nothing but creates can keep none of them, so it counts
+as empty: it fails `state`, the fallback fires, and its creates report
+`dropped`. The prompt adds the significance rules the model applies:
 
 > Create a place only when the scene settles somewhere with its own
 > identity the story could come back to: a named place, a building, a
@@ -291,6 +293,12 @@ per-field best-effort, one failing tag never blocks another. The
 creates are the one exception: a failing field keeps the block's own
 creates from landing
 ([Creating a place or an item](#creating-a-place-or-an-item)).
+
+An empty `<state>` counts as a missing one, since no turn has no
+state, and so does a block holding nothing but creates, since only
+another field can keep a create
+([Creating a place or an item](#creating-a-place-or-an-item)). Both
+fail `state`.
 
 **On any parse failure** — the whole `<state>` tag missing, or any
 field inside it failing — the same synchronous per-turn classifier

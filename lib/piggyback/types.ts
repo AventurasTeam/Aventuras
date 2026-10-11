@@ -73,8 +73,8 @@ export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'Norma
  */
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 
-// `'state'` is the block-level failure: no block in a reply that owed one, an empty block, or a
-// cut-off one that declares a create.
+// `'state'` is the block-level failure: no block in a reply that owed one, an empty block (creates
+// alone count as empty), or a cut-off one that declares a create.
 export type ParseFieldFailure = { field: keyof ParsedStateBlock | 'state'; detail: string }
 
 export type ParseStateBlockResult = {

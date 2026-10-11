@@ -1904,6 +1904,25 @@ describe('narrative fold — creates', () => {
     ])
   })
 
+  it('fails a block of creates alone and leaves the turn to the fallback', async () => {
+    await seedTurn()
+    const { events, intermediates } = await foldTurn(
+      'The tide pulls Aria down to the water.\n<state>' +
+        '<new_location handle="new:docks" parent="l1" name="Smuggler Docks">a rotting pier</new_location>' +
+        '<new_item handle="new:key" name="rusted key">an iron key</new_item></state>',
+    )
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(createdEntities(events)).toEqual([])
+    const report = replyOf(events).metadata?.stateReport
+    expect(report?.failedFields).toEqual([{ field: 'state', detail: 'block held only creates' }])
+    expect(report?.newLocations).toEqual([
+      expect.objectContaining({ handle: 'new:docks', outcome: 'dropped' }),
+    ])
+    expect(report?.newItems).toEqual([
+      expect.objectContaining({ handle: 'new:key', outcome: 'dropped' }),
+    ])
+  })
+
   it('removes the new rows when the turn is undone', async () => {
     await seedTurn()
     const { events } = await foldTurn(CREATE_REPLY)

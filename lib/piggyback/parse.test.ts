@@ -619,6 +619,7 @@ describe('creation tags', () => {
 
   it('reads a self-closed create with an empty description', () => {
     const { block, failures } = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
   <new_location handle="new:yard" name="the yard" />
   <new_item handle="new:coin" name="coin"/>
 </state>`)
@@ -763,6 +764,7 @@ describe('creation tags', () => {
 
   it('reads a hyphenated attribute key whole, so it cannot overwrite handle or name', () => {
     const { block, failures } = parseStateBlock(`<state>
+  <scene_entities>c1</scene_entities>
   <new_location handle="new:a" name="A" alt-name="B" x-handle="new:z">x</new_location>
 </state>`)
     expect(failures).toEqual([])
@@ -829,7 +831,7 @@ describe('creation tags', () => {
   // A model that echoes the prompt's bracket form still declares the handle.
   it('unwraps a bracketed handle', () => {
     const { block, failures } = parseStateBlock(
-      '<state><new_item handle="[new:key]" name="key">iron</new_item></state>',
+      '<state><scene_entities>c1</scene_entities><new_item handle="[new:key]" name="key">iron</new_item></state>',
     )
     expect(failures).toEqual([])
     expect(block.newItems).toEqual([{ handle: 'new:key', name: 'key', description: 'iron' }])
@@ -891,11 +893,13 @@ describe('creation tags', () => {
     expect(result.block.newItems).toEqual([{ handle: 'new:k', name: 'key', description: 'iron' }])
   })
 
-  it('reads a block of creates alone as a report, not the empty-block failure', () => {
+  // Nothing in it can keep a create, and the turn would keep its old scene with no time or summary.
+  it('records the empty-block failure for a block of creates alone, keeping them to report', () => {
     const result = parseStateBlock(
       '<state><new_item handle="new:key" name="key">iron</new_item></state>',
     )
-    expect(result.failures).toEqual([])
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block held only creates' }])
+    expect(result.malformedCreates).toBe(0)
     expect(result.block).toEqual({
       newItems: [{ handle: 'new:key', name: 'key', description: 'iron' }],
     })
