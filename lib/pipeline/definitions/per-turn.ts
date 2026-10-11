@@ -220,7 +220,11 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   let piggybackApplied: ReturnType<typeof buildPiggybackActions> | undefined
   if (piggybackShouldFire) {
     if (parsedState.malformedCreates > 0)
-      ctx.log.warn('classifier.create_malformed', { entryId, count: parsedState.malformedCreates })
+      ctx.log.warn('classifier.create_malformed', {
+        entryId,
+        count: parsedState.malformedCreates,
+        layer: 'piggyback_tagged_block',
+      })
     // A failed fold creates nothing: the fallback that fires rewrites this turn's state, and a
     // create is the one write it can't repeat harmlessly.
     turnCreates = piggybackParseSucceeded
@@ -232,6 +236,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           embed: classifierEmbedder(),
           now: () => Date.now(),
           newId: (prefix) => generateId(prefix),
+          log: ctx.log,
         })
       : skipTurnCreates(resolvedBlock)
     // Matching an item can await an embed call; a cancel during it discards the reply.

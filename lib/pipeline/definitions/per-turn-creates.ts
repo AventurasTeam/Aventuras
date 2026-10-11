@@ -7,7 +7,7 @@ import {
   type ItemMatchFlag,
 } from '@/lib/classifier'
 import type { CollisionReason, Entity, ItemState, LocationState } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import { logger, type Logger } from '@/lib/diagnostics'
 import {
   isCreateHandle,
   type NewItemEmission,
@@ -88,15 +88,20 @@ function newRow(args: {
   }
 }
 
-function logDropped(kind: 'location' | 'item', emission: { handle: string; name: string }): void {
-  logger.debug('classifier.create_dropped', { kind, handle: emission.handle, name: emission.name })
+function logDropped(
+  log: Logger,
+  kind: 'location' | 'item',
+  emission: { handle: string; name: string },
+): void {
+  log.debug('classifier.create_dropped', { kind, handle: emission.handle, name: emission.name })
 }
 
 function logParentDropped(
+  log: Logger,
   emission: NewLocationEmission,
   cause: 'unresolved' | 'chain-broken',
 ): void {
-  logger.warn('classifier.create_parent_dropped', {
+  log.warn('classifier.create_parent_dropped', {
     handle: emission.handle,
     parent: emission.parent,
     cause,
@@ -184,6 +189,7 @@ function planLocations(args: {
   branchId: string
   now: () => number
   newId: (prefix: 'loc') => string
+  log: Logger
 }): { fates: Map<string, LocationFate>; rows: Entity[]; reusedIds: string[] } {
   const { entities, byId } = args
   const fates = new Map<string, LocationFate>()
@@ -201,14 +207,14 @@ function planLocations(args: {
       parentUnresolved || parent === undefined ? null : (fates.get(parent)?.id ?? parent)
     let parentDropped = parentUnresolved
     if (parentUnresolved) {
-      logParentDropped(emission, 'unresolved')
+      logParentDropped(args.log, emission, 'unresolved')
     } else if (
       parentId !== null &&
       // The new row has no children, so only a loop already stored above its parent fails.
       checkParentChain(emission.handle, parentId, parentOfLocations([...entities, ...rows])) !==
         'ok'
     ) {
-      logParentDropped(emission, 'chain-broken')
+      logParentDropped(args.log, emission, 'chain-broken')
       parentId = null
       parentDropped = true
     }
@@ -371,18 +377,20 @@ export async function planTurnCreates(input: {
   embed: EmbedDescriptions
   now: () => number
   newId: (prefix: 'loc' | 'item') => string
+  /** The phase's logger, so a dropped create's entry carries the action; defaults to the global one. */
+  log?: Logger
 }): Promise<TurnCreatePlan> {
-  const { block, entities, branchId, source, embed, now, newId } = input
+  const { block, entities, branchId, source, embed, now, newId, log = logger } = input
   const byId = new Map(entities.map((e) => [e.id, e]))
   const locations = block.newLocations ?? []
   const items = block.newItems ?? []
   const keptLocations = keptLocationHandles(block)
   const keptItems = keptItemHandles(block, byId)
   for (const emission of locations) {
-    if (!keptLocations.has(emission.handle)) logDropped('location', emission)
+    if (!keptLocations.has(emission.handle)) logDropped(log, 'location', emission)
   }
   for (const emission of items) {
-    if (!keptItems.has(emission.handle)) logDropped('item', emission)
+    if (!keptItems.has(emission.handle)) logDropped(log, 'item', emission)
   }
 
   const places = planLocations({
@@ -393,6 +401,7 @@ export async function planTurnCreates(input: {
     branchId,
     now,
     newId,
+    log,
   })
   const things = await planItems({
     emissions: items,

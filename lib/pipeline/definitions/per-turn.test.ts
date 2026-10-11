@@ -1752,7 +1752,7 @@ describe('narrative fold — creates', () => {
     })
   })
 
-  // Developer decision 1: the creates follow the reply's own create and lead every other write.
+  // Creates sit right after the reply's create, so a regenerate's sweep from it removes them.
   it("logs the creates right after the reply's create and before the writes naming them", async () => {
     await seedTurn()
     const { events } = await foldTurn(CREATE_REPLY)
@@ -1764,13 +1764,13 @@ describe('narrative fold — creates', () => {
       .from(deltas)
       .where(eq(deltas.actionId, TURN_ACTION))
       .orderBy(asc(deltas.logPosition))
-    expect(log.map((d) => `${d.targetTable}:${d.op}:${d.targetId}`)).toEqual([
-      `story_entries:create:${USER_ACTION_ID}`,
-      `story_entries:create:${replyOf(events).id}`,
-      `entities:create:${docks?.id}`,
-      `entities:create:${key?.id}`,
-      `entities:update:${HERO}`,
-      `entities:update:${HERO}`,
+    expect(log.map((d) => `${d.source}:${d.targetTable}:${d.op}:${d.targetId}`)).toEqual([
+      `user_edit:story_entries:create:${USER_ACTION_ID}`,
+      `ai_classifier:story_entries:create:${replyOf(events).id}`,
+      `piggyback_tagged_block:entities:create:${docks?.id}`,
+      `piggyback_tagged_block:entities:create:${key?.id}`,
+      `piggyback_tagged_block:entities:update:${HERO}`,
+      `piggyback_tagged_block:entities:update:${HERO}`,
     ])
   })
 
@@ -1796,7 +1796,44 @@ describe('narrative fold — creates', () => {
     ])
   })
 
-  // Developer decision 2: a failed fold creates nothing; the fallback that fires is the creator.
+  it('promotes a staged sibling it reuses as the ancestor of a new current location', async () => {
+    await seedTurn([
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: { ...emptyEntityState('character'), current_location_id: TOWN },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+      worldRow({
+        id: MARKET,
+        kind: 'location',
+        name: 'The Drowned Market',
+        status: 'staged',
+        state: { parent_location_id: TOWN },
+      }),
+    ])
+    const { events } = await foldTurn(
+      'Aria wanders to a stall.\n<state><scene_entities>c1</scene_entities>' +
+        '<new_location handle="new:market" parent="l1" name="The Drowned Market">awnings</new_location>' +
+        '<new_location handle="new:stall" parent="new:market" name="Fishmonger Stall">a salt-crusted counter</new_location>' +
+        '<current_location>new:stall</current_location><world_time_delta>5</world_time_delta></state>',
+    )
+    await applyEvents(events)
+
+    const [stall] = createdEntities(events)
+    if (!stall) throw new Error('expected the stall create')
+    expect(createdEntities(events)).toHaveLength(1)
+    const rows = await branchRows()
+    expect(rows.find((r) => r.id === MARKET)?.status).toBe('active')
+    expect(rows.find((r) => r.id === stall.id)).toMatchObject({
+      name: 'Fishmonger Stall',
+      state: { parent_location_id: MARKET },
+    })
+    expect(replyOf(events).metadata?.currentLocationId).toBe(stall.id)
+  })
+
+  // Only the fallback creates on a failed parse: a second create would duplicate the item.
   it('creates nothing on a failed parse and leaves the turn to the fallback', async () => {
     await seedTurn()
     const failing = CREATE_REPLY.replace(
@@ -1870,7 +1907,7 @@ describe('narrative fold — creates', () => {
     expect(await storedEntry(USER_ACTION_ID)).toBeUndefined()
   })
 
-  // The regression test for decision 1: a regenerate sweeps from the reply's create delta.
+  // A regenerate sweeps by log position from the reply's create, not by action group.
   it("removes the turn's new rows on a regenerate sweep from the reply", async () => {
     await seedTurn()
     const { events } = await foldTurn(CREATE_REPLY)
@@ -1892,19 +1929,60 @@ describe('narrative fold — creates', () => {
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
   })
 
-  it('warns about a malformed create without failing the parse', async () => {
+  const MALFORMED =
+    '<new_item handle="key" name="key">a key</new_item>' +
+    '<new_location handle="new:" name="Nowhere">nothing</new_location>'
+
+  it('warns about malformed creates without failing the parse', async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     await seedTurn()
     const { events, intermediates } = await foldTurn(
       'Aria pockets something.\n<state><scene_entities>c1</scene_entities>' +
-        '<new_item handle="key" name="key">a key</new_item><world_time_delta>5</world_time_delta></state>',
+        `${MALFORMED}<world_time_delta>5</world_time_delta></state>`,
       { log: logger },
     )
     expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
     expect(createdEntities(events)).toEqual([])
-    expect(warnSpy).toHaveBeenCalledWith(
-      'classifier.create_malformed',
-      expect.objectContaining({ count: 1 }),
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+      entryId: replyOf(events).id,
+      count: 2,
+      layer: 'piggyback_tagged_block',
+    })
+  })
+
+  it('warns about malformed creates when the parse fails too', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    await seedTurn()
+    const { events, intermediates } = await foldTurn(
+      'Aria pockets something.\n<state><scene_entities>c1</scene_entities>' +
+        `${MALFORMED}<world_time_delta>soon</world_time_delta></state>`,
+      { log: logger },
+    )
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+      entryId: replyOf(events).id,
+      count: 2,
+      layer: 'piggyback_tagged_block',
+    })
+  })
+
+  it("logs dropped creates through the phase's logger, so the entries carry the action", async () => {
+    await seedTurn()
+    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+    await foldTurn(
+      'Aria glances at the sea.\n<state><scene_entities>c1</scene_entities>' +
+        '<new_location handle="new:cove" parent="l1" name="Hidden Cove">a quiet inlet</new_location>' +
+        '<new_location handle="new:pier" parent="nowhere" name="Old Pier">rotten planks</new_location>' +
+        '<current_location>new:pier</current_location><world_time_delta>5</world_time_delta></state>',
+      { log },
+    )
+    expect(log.debug).toHaveBeenCalledWith(
+      'classifier.create_dropped',
+      expect.objectContaining({ handle: 'new:cove' }),
+    )
+    expect(log.warn).toHaveBeenCalledWith(
+      'classifier.create_parent_dropped',
+      expect.objectContaining({ handle: 'new:pier', cause: 'unresolved' }),
     )
   })
 
