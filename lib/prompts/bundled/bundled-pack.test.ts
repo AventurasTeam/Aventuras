@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { bundledPack, renderTemplate, TEMPLATE_IDS } from '../index'
+import { templateGlobals } from '../engine'
+import { bundledPack, renderTemplate, TEMPLATE_IDS, templateReads } from '../index'
 import { loadPack } from '../load-pack'
 import { validatePackIncludes } from '../validate-includes'
 
@@ -11,6 +12,22 @@ describe('bundled pack', () => {
 
   it('loads without throwing (engine builds)', () => {
     expect(() => loadPack(bundledPack)).not.toThrow()
+  })
+
+  // architecture.md → System and user halves: a wizard template's system half is empty.
+  it('leaves every wizard template system half empty', () => {
+    const wizard = Object.entries(bundledPack.templates).filter(([, t]) => t.group === 'wizard')
+    expect(wizard).toHaveLength(13)
+    expect(wizard.filter(([, t]) => t.system !== '').map(([id]) => id)).toEqual([])
+  })
+
+  // The context builder skips the query behind an unread variable, so a system-half-only read
+  // left out of templateReads would render empty.
+  it('reports the variables a template reads in its system half', () => {
+    const { engine } = loadPack(bundledPack)
+    const id = TEMPLATE_IDS.perTurnNarrative
+    expect(templateGlobals(engine, id, 'user')).not.toContain('calendarVocabulary')
+    expect(templateReads(id)).toContain('calendarVocabulary')
   })
 
   it('renders the wizard opening from definition + lead', () => {
