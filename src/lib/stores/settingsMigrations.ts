@@ -201,3 +201,20 @@ export function migrateContextWindow<T extends { recentEntriesForSuggestions: nu
   }
   return merged
 }
+
+/**
+ * Unassign every task whose preset id names no existing preset, so it shows under Unassigned
+ * and fails as "not assigned" rather than vanishing from the settings view.
+ */
+export function clearDanglingAssignments(
+  assignments: Record<string, string>,
+  presetIds: Iterable<string>,
+): Record<string, string> {
+  const known = new Set(presetIds)
+  return Object.fromEntries(
+    Object.entries(assignments).map(([serviceId, presetId]) => [
+      serviceId,
+      presetId && !known.has(presetId) ? '' : presetId,
+    ]),
+  )
+}

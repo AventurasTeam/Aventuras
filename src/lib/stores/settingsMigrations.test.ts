@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  clearDanglingAssignments,
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
@@ -314,5 +315,31 @@ describe('migrateContextWindow', () => {
       merged({ recentEntriesForRetrieval: 'twelve' as unknown as number }),
     )
     expect(after.recentEntriesForSuggestions).toBe(5)
+  })
+})
+
+describe('clearDanglingAssignments', () => {
+  const presetIds = ['classification', 'memory', 'preset-1']
+
+  it('unassigns a task whose preset no longer exists', () => {
+    expect(clearDanglingAssignments({ suggestions: 'preset-gone' }, presetIds)).toEqual({
+      suggestions: '',
+    })
+  })
+
+  it('keeps tasks on existing presets and tasks already unassigned', () => {
+    const assignments = { classifier: 'classification', memory: 'preset-1', tts: '' }
+    expect(clearDanglingAssignments(assignments, presetIds)).toEqual(assignments)
+  })
+
+  it('is idempotent', () => {
+    const once = clearDanglingAssignments({ a: 'preset-gone', b: 'memory' }, presetIds)
+    expect(clearDanglingAssignments(once, presetIds)).toEqual(once)
+  })
+
+  it('does not mutate its input', () => {
+    const assignments = { suggestions: 'preset-gone' }
+    clearDanglingAssignments(assignments, presetIds)
+    expect(assignments).toEqual({ suggestions: 'preset-gone' })
   })
 })

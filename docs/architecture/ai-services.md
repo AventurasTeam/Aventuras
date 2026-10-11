@@ -25,7 +25,8 @@ ServiceId ──(servicePresetAssignments)──▶ presetId ──(generationPr
 A `GenerationPreset` is what the UI calls an **Agent Profile**: it carries the model, the API
 profile, temperature and reasoning effort. Several services share one by default — everything
 classification-shaped points at the `classification` preset, the memory pipeline at `memory`, and
-so on — so retargeting one profile moves every service assigned to it.
+so on — so retargeting one profile moves every service assigned to it. An assignment to a
+preset that no longer exists shows as Unassigned, and is cleared to Unassigned at load.
 
 Most services extend `BaseAIService`, which does nothing but hold the `ServiceId` and expose
 `presetId`; the model is never hardcoded. **`narrative` is a preset id, not a `ServiceId`** —

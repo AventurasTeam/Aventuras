@@ -27,6 +27,7 @@ import {
 } from '$lib/services/ai/core/defaults'
 import { isReasoningOn } from '$lib/services/ai/core/reasoning'
 import {
+  clearDanglingAssignments,
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
@@ -1732,6 +1733,11 @@ class SettingsStore {
           // Keep defaults
         }
       }
+      // In memory only: the next assignment save persists it.
+      this.servicePresetAssignments = clearDanglingAssignments(
+        this.servicePresetAssignments,
+        this.generationPresets.map((p) => p.id),
+      )
 
       // Load service-specific settings
       const serviceSpecificJson = await database.getSetting('service_specific_settings')
@@ -2829,11 +2835,18 @@ class SettingsStore {
     await database.setSetting('generation_presets', JSON.stringify(this.generationPresets))
   }
 
-  async saveServicePresetAssignments() {
-    await database.setSetting(
-      'service_preset_assignments',
-      JSON.stringify(this.servicePresetAssignments),
+  private assignmentsSave: Promise<void> = Promise.resolve()
+
+  /** Saves run one after another, so an older map can never commit after a newer one. */
+  saveServicePresetAssignments(): Promise<void> {
+    const save = this.assignmentsSave.then(() =>
+      database.setSetting(
+        'service_preset_assignments',
+        JSON.stringify(this.servicePresetAssignments),
+      ),
     )
+    this.assignmentsSave = save.catch(() => {})
+    return save
   }
 
   async resetGenerationPresets() {
@@ -3423,10 +3436,7 @@ class SettingsStore {
    */
   async setServicePresetId(serviceId: ServiceId, presetId: string) {
     this.servicePresetAssignments[serviceId] = presetId
-    await database.setSetting(
-      'service_preset_assignments',
-      JSON.stringify(this.servicePresetAssignments),
-    )
+    await this.saveServicePresetAssignments()
   }
 
   /**
@@ -3494,11 +3504,17 @@ class SettingsStore {
     if (this.generationPresetsMatchDefaults()) {
       console.log('[Settings] Generation presets match defaults, auto-applying new defaults')
       const defaultProfileId = this.getDefaultProfileIdForProvider()
+      const defaults = getDefaultGenerationPresetsForProvider(provider)
+      const builtInIds = new Set(defaults.map((p) => p.id))
       // Populate profileIds with the default profile ID (presets come with null by default)
-      this.generationPresets = getDefaultGenerationPresetsForProvider(provider).map((preset) => ({
-        ...preset,
-        profileId: preset.profileId || defaultProfileId,
-      }))
+      this.generationPresets = [
+        ...defaults.map((preset) => ({
+          ...preset,
+          profileId: preset.profileId || defaultProfileId,
+        })),
+        // Custom profiles never block the match above, so they must survive it.
+        ...this.generationPresets.filter((p) => !builtInIds.has(p.id)),
+      ]
       await this.saveGenerationPresets()
       needsSave = true
     }
