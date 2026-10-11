@@ -1001,7 +1001,7 @@ describe('buildPiggybackActions', () => {
   })
 })
 
-// piggyback.md → New locations and items: the planner's rows join the lookup before they exist.
+// piggyback.md → New locations and items.
 describe("buildPiggybackActions with this turn's creates", () => {
   const previousMetadata = { sceneEntities: ['char_1'], currentLocationId: 'loc_1', worldTime: 100 }
   const hero = mockEntity({ id: 'char_1' })

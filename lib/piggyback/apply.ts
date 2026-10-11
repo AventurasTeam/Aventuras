@@ -108,7 +108,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       source,
       entities,
       sceneEntities,
-      // The block naming a staged place introduces it; a location the turn only inherited names nothing.
+      // Naming a staged place introduces it; an inherited location names nothing.
       alsoIds: [...(namedIsLocation ? [named] : []), ...reusedIds],
     }),
   )

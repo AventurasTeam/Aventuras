@@ -67,8 +67,7 @@ export const fallbackClassifierSchema = z.object({
     .describe(
       'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered. An item you create appears here only by the exact handle it declares in newItems.',
     ),
-  // Before the fields that reference a handle, so a model filling the object in order picks it
-  // before it uses it.
+  // Before the fields that reference a handle, so an in-order model declares before it uses.
   newLocations: z
     .array(
       z.object({
@@ -315,8 +314,7 @@ export async function* piggybackFallbackClassifierPhase(
     return { status: 'completed' }
   }
 
-  // The tagged parser's rule: a create with no usable handle or name is dropped and counted,
-  // never a failed field.
+  // Tagged-parser rule: a create with no usable handle or name is dropped and counted, not failed.
   const normalized = normalizeCreates(result.value)
   if (normalized.malformed > 0) {
     ctx.log.warn('classifier.create_malformed', {
@@ -390,8 +388,8 @@ export async function* piggybackFallbackClassifierPhase(
       ? { transfers: priorReport.transfers }
       : {}),
   }
-  // A failed fold reports its creates `dropped`; a kind this phase emits none of keeps that
-  // list, by the same no-blanking rule. An emitted-but-dropped list is its own report and stays.
+  // A failed fold reports its creates `dropped`: keep that list for a kind this phase emitted
+  // none of (no-blanking rule). Emitted-but-dropped entries count as emitted and stay.
   const reportedCreates: TurnCreatesReport = {
     newLocations:
       plan.report.newLocations.length > 0
@@ -440,8 +438,7 @@ export async function* piggybackFallbackClassifierPhase(
     })
   }
 
-  // Ahead of the metadata and every write naming them, and behind the reply's own create, so
-  // every reversal window that removes the turn removes them.
+  // After the reply's create, before writes naming them: a reversal of the turn removes them.
   for (const action of plan.creates) {
     yield { type: 'delta_emitted', action }
   }

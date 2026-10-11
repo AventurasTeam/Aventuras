@@ -20,8 +20,7 @@ function resolveRef(ref: string, idMap: IdBiMap): string {
   return uuid
 }
 
-// A `new:` ref stays a handle for the create planner, but only one this block's creates declare;
-// any other fails its field like an unknown placeholder.
+// A `new:` ref stays a handle only if this block's creates declare it; else it fails its field.
 function resolveRefOrHandle(ref: string, idMap: IdBiMap, handles: ReadonlySet<string>): string {
   const bare = unwrapBracket(ref)
   if (!isCreateHandle(bare)) return resolveRef(ref, idMap)
@@ -88,11 +87,8 @@ function resolveField<K extends keyof ParsedStateBlock>(
   }
 }
 
-// Only the actual ID-bearing sub-fields are resolved (id/to/from, never
-// type/text/slot/key/amount, nor a create's name or description) — granularity
-// matches parseStateBlock's: an unresolvable reference fails only the field it
-// lives in, never a sibling field (docs/memory/piggyback.md → Parse strategy and
-// failure recovery).
+// Resolves only ID-bearing sub-fields (id/to/from, never a create's name or description): a bad
+// ref fails only its own field (docs/memory/piggyback.md → Parse strategy and failure recovery).
 export function substitutePiggybackIds(block: ParsedStateBlock, idMap: IdBiMap): SubstituteResult {
   const result: ParsedStateBlock = { ...block }
   const failures: ParseFieldFailure[] = []

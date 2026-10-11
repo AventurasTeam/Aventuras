@@ -20,11 +20,8 @@ export type NarrativeValue = {
   suggestions?: SuggestionRef[]
 }
 
-// Attribute values are ids, enum members and keys — none legitimately contain
-// these. A quote ends the value early (parseAttributes reads `key="[^"]*"`) and an
-// angle bracket ends the whole tag (the surrounding entry regexes scan `[^>]*`), so
-// both are dropped rather than escaped: the parser decodes entities only in a
-// create's name and description, never in these attributes.
+// Dropped, not escaped (ids/enums/keys never hold them; attributes aren't entity-decoded): `"`
+// ends a value early in parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
 function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
 }

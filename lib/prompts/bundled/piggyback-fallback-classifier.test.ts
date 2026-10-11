@@ -172,8 +172,7 @@ describe('bundled piggyback fallback classifier template', () => {
     )
   })
 
-  // piggyback.md → Fallback classifier context: it gets the map's tree and the held-item
-  // lines, bracketed, since the roster is its only ID source and piggybackFires is false here.
+  // piggyback.md → Fallback classifier context: bracketed IDs, the roster being its only source.
   describe('the location map and item lines', () => {
     it('renders the map nested, with IDs', () => {
       expect(render(context())).toContain('# Places\n[l2] The Marsh\n  [l1] The Drowned Keep\n')
@@ -281,8 +280,7 @@ describe('bundled piggyback fallback classifier template', () => {
       expect(prompt.indexOf('in newLocations')).toBeGreaterThan(prompt.indexOf('\n# This turn\n'))
     })
 
-    // The two paths are one contract (piggyback.md → Fallback classifier context), so the
-    // model reads the same rules whichever writer runs.
+    // One contract across both writers (piggyback.md → Fallback classifier context): same rules.
     it.each([
       ['the fallback prompt', () => render(context())],
       ['the tagged-block macro', () => STATE_EMISSION],

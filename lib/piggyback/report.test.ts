@@ -220,8 +220,7 @@ describe("buildStateReport with this turn's creates", () => {
     })
   })
 
-  // The planner hands on the block without its create lists, so a creates-only block
-  // arrives here empty and still reported.
+  // The planner strips create lists from the block: a creates-only turn arrives empty, must report.
   it('reports a block that carried only creates', () => {
     const report = buildStateReport({
       layer: 'per_turn_classifier',

@@ -41,7 +41,6 @@ function row(over: Pick<Entity, 'id' | 'kind' | 'name'> & Partial<Entity>): Enti
   }
 }
 
-// Eldra at the root, Port Vellis inside it.
 function world(...extra: Entity[]): Entity[] {
   return [
     row({ id: HERO, kind: 'character', name: 'Aria' }),
@@ -402,7 +401,7 @@ describe('planTurnCreates — parents', () => {
     expect(plan.block.currentLocation).toBe('loc_new_1')
   })
 
-  // piggyback.md → Parent: the child of a new location hangs under whatever row it resolved to.
+  // piggyback.md → Parent.
   it('hangs a child under a new place whose own parent was dropped', async () => {
     const plan = await runPlanner({
       newLocations: [

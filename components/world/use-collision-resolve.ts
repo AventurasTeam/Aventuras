@@ -32,7 +32,7 @@ export type CollisionDialogPair = {
   /** The row whose flag names the other: the requested flagged row when it still does. */
   flaggedId: string
   reason: CollisionReason
-  /** The shared parent's name for a `same-parent` pair; absent at the root or when it names no row. */
+  /** The shared parent's name for a `same-parent` pair; absent at the root or a missing row. */
   parentName?: string
 }
 
@@ -58,10 +58,7 @@ function inBranch<Row extends { branchId: string }>(
   return [...rows.values()].filter((row) => row.branchId === branchId)
 }
 
-/**
- * The `same-parent` reason line's parent: the flagged row's, which the pair rule makes the other's
- * too. Absent at the root, for an id the branch has no row for, and for every other reason.
- */
+/** The flagged row's parent, which the pair rule makes the other's too (`same-parent` only). */
 function sharedParentName(flagged: FlaggedEntity, entities: readonly Entity[]): string | undefined {
   if (flagged.nameCollisionReason !== 'same-parent') return undefined
   const { parentId } = pairSideOf(flagged)

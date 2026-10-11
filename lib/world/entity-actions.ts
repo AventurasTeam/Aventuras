@@ -376,8 +376,7 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
 
 /**
  * A create, or an update's changed columns and state paths, plus relationship writes; on a rename
- * or a re-parent, also a flag clear on each row the saved name, keywords and parent leave unpaired
- * from its partner (world.md → Surfacing).
+ * or re-parent, also a flag clear on each row the save leaves unpaired (world.md → Surfacing).
  */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args

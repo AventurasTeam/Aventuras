@@ -108,7 +108,7 @@ function logParentDropped(
   })
 }
 
-/** piggyback.md → Kept only if used: the current location and every place it is part of. */
+/** piggyback.md → Kept only if used. */
 function keptLocationHandles(block: ParsedStateBlock): Set<string> {
   const parentOf = new Map((block.newLocations ?? []).map((l) => [l.handle, l.parent]))
   const kept = new Set<string>()
@@ -147,11 +147,8 @@ function inHandleCycle(
   return false
 }
 
-/**
- * Top-down passes over emission order, so a child listed before its parent settles on a later
- * pass. A parent that never resolves (an undeclared handle, an id naming no location, a handle
- * cycle) sends its create to the root; a child of that create still hangs under it.
- */
+// Top-down passes: a child listed before its parent settles on a later pass. A parent that never
+// resolves (undeclared handle, non-location id, handle cycle) roots its create; children follow it.
 function settlingOrder(
   creates: readonly NewLocationEmission[],
   isLocationId: (id: string) => boolean,

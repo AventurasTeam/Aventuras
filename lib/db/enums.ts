@@ -5,7 +5,10 @@ export type InjectionMode = (typeof INJECTION_MODES)[number]
 export const THREAD_STATUSES = ['pending', 'active', 'resolved', 'failed'] as const
 export type ThreadStatus = (typeof THREAD_STATUSES)[number]
 
-/** Why a writer flagged a create: `name_collision_reason` (classifier.md → Disambiguation, piggyback.md → Matching before creating). */
+/**
+ * Why a writer flagged a create: `name_collision_reason` (classifier.md → Disambiguation,
+ * piggyback.md → Matching before creating).
+ */
 export const COLLISION_REASONS = [
   'alike',
   'ambiguous',

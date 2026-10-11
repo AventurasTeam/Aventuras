@@ -31,8 +31,7 @@ export function dedupeSceneEntities(ids: readonly string[]): string[] {
 }
 
 /**
- * Auto-promote on scene membership, or on another id named alongside it (`alsoIds`: a
- * named current location, reused siblings): naming a staged entity is a strong
+ * Auto-promote on scene membership or an `alsoIds` entry: naming a staged entity is a strong
  * signal of intentional introduction (docs/memory/piggyback.md → Auto-promote on
  * staged-ID emission). Shared by the generation fold and the scene editor so a user
  * adding a staged character promotes them exactly as the classifier would.
@@ -45,7 +44,7 @@ export function scenePromotionActions(args: {
   source: DeltaSource
   entities: readonly Entity[]
   sceneEntities: readonly string[]
-  /** More ids to promote when staged (a staged current location, reused siblings); de-duplicated. */
+  /** More ids to promote when staged (a current location, reused siblings); de-duplicated. */
   alsoIds?: readonly string[]
 }): PipelineAction[] {
   const { branchId, source, entities, sceneEntities, alsoIds = [] } = args

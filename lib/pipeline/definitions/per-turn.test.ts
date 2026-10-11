@@ -1252,11 +1252,8 @@ describe('narrative fold — retrieval handoff', () => {
     expect(context.structuralActiveThreads).toEqual([])
   })
 
-  // The whole round trip for a scene that MOVES: the place has to reach the prompt
-  // as a nameable ID, and what the model names has to land on the entry. Omitting
-  // <current_location> means "inherit" (lib/piggyback/apply.ts), so a prompt that
-  // offers no place freezes the location forever. The map lists every place, so
-  // the move doesn't wait on retrieval ranking it.
+  // Round trip for a scene that MOVES: omitting <current_location> means "inherit"
+  // (lib/piggyback/apply.ts), so a prompt that offers no place freezes the location forever.
   it('lets the model move the scene to a place on the map that retrieval never ranked', async () => {
     const { prompt, metadata } = await runNarrativeWith({
       narrative:
@@ -1267,8 +1264,6 @@ describe('narrative fold — retrieval handoff', () => {
     expect(metadata.currentLocationId).toBe(RETRIEVED_LOCATION_ID)
   })
 
-  // locationIds stays in the context for custom packs; the bundled template offers
-  // places through the map.
   it('builds locationIds for custom packs while the bundled template offers places through the map', async () => {
     const { prompt, context } = await runNarrativeWith({
       narrative: 'prose',

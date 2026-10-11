@@ -75,7 +75,7 @@ export type ParseStateBlockResult = {
   malformedCreates: number
 }
 
-/** A `<new_location>` and what became of it; `parent` is the resolved id, or as emitted when dropped. */
+/** A `<new_location>` and its outcome; `parent` is the resolved id, or as emitted when dropped. */
 export type NewLocationReport = NewLocationEmission & {
   outcome: 'created' | 'reused' | 'dropped'
   /** The row it created or reused; absent when dropped. */

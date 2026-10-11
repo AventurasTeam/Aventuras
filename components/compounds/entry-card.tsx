@@ -512,8 +512,7 @@ function turnCreateLines(
     }
     lines.push({ key: id ?? `create${lines.length}`, text })
   }
-  // Named as the row stands, not as the writer spelled it; the report's name covers a row
-  // deleted since.
+  // Live name, not the writer's spelling; the report's name covers a row deleted since.
   const liveName = (id: string | undefined, reported: string) =>
     pool.find((e) => e.id === id)?.name ?? reported
   for (const location of report?.newLocations ?? []) {

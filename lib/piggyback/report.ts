@@ -42,10 +42,9 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
   const { layer, block, failures, raw, applied, creates } = args
   const newLocations = creates?.newLocations ?? []
   const newItems = creates?.newItems ?? []
-  // Emptiness is judged on the block as emitted, summary included: a block carrying only
-  // a summary reported state, and suppressing its report would badge the turn as one
-  // where piggyback never ran. The create lists count too: the planner hands on the block
-  // without them, so a block of creates alone arrives here empty.
+  // Emptiness is judged on the block as emitted, summary included: suppressing a summary-only
+  // report would badge the turn as one where piggyback never ran. Creates count too: the planner
+  // strips them from the block, so a block of creates alone arrives here empty.
   if (
     Object.keys(block).length === 0 &&
     failures.length === 0 &&

@@ -142,11 +142,8 @@ describe('bundled per-turn template — empty-guard contract', () => {
     ).toMatchSnapshot()
   })
 
-  // The ID instructions say "any off-scene character above" and "an ID from
-  // Places" — words that point at blocks rendered earlier. Move either block
-  // below its instruction and the prompt asks the model to look at something it
-  // has not been shown yet; scene-entity promotion and location selection
-  // degrade with no parse error, and the snapshot diff is a pure hunk move.
+  // The ID instructions refer back ("off-scene character above", "an ID from Places"); a block
+  // moved below them silently breaks promotion and location choice; the snapshot shows a hunk move.
   it('renders the memory blocks and the map before the instructions that refer back to them', () => {
     const withMemory = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
@@ -285,10 +282,8 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(rendered).not.toContain('[loc_2] Old Mill:')
   })
 
-  // structuralLocation is null when the scene names a location that is staged,
-  // retired, or gone — guarding on it rather than on currentLocationId is what
-  // keeps a dangling header out (templateContextMap → structuralLocation). The
-  // map doesn't hang off the floor, so the scene can still move.
+  // structuralLocation is null for a staged, retired or gone location; guarding on it, not on
+  // currentLocationId, avoids a dangling header; the map must not hang off it (templateContextMap).
   it('omits the location block when the floor seats none, but still offers the map', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
@@ -302,9 +297,8 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(rendered).toContain('## Aria [char_1]')
   })
 
-  // The map, not retrieval, is what makes a move expressible: a place retrieval
-  // never ranked still carries an ID the model can name (piggyback.md → What the
-  // writer sees).
+  // The map, not retrieval, makes a move expressible: a place retrieval never ranked still carries
+  // an ID the model can name (piggyback.md → What the writer sees).
   it('offers every listed place as a <current_location> target, retrieved or not', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
@@ -344,8 +338,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(rendered).toContain('enters the scene, include their ID')
   })
 
-  // locationIds stays a pinned variable for custom packs; the bundled template
-  // offers places through the map instead.
+  // locationIds stays a pinned variable for custom packs; the bundled template uses the map.
   it('does not render locationIds', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
@@ -428,8 +421,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(rendered).toContain('## Aria [char_1]\n\n## Bex [char_2]\nA quiet smith.')
   })
 
-  // The map carries names only: an off-scene place's description still has to win
-  // retrieval budget like any other entity's.
+  // Names only on the map: an off-scene place's description still competes for retrieval budget.
   it('lists an off-scene location on the map by name, without its description', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
@@ -636,8 +628,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
     expect(rendered).toContain('## Aria [char_1]\nHolds: [item_1] Silver Key')
   })
 
-  // piggyback.md → What the writer sees: an item in a holder's line isn't
-  // repeated in the scene list.
+  // piggyback.md → What the writer sees.
   it('does not repeat a held item in the scene list', () => {
     const rendered = render({
       sceneEntities: ['char_1', 'item_1', 'item_9', 'char_2'],
@@ -672,8 +663,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
     })
     expect(rendered).not.toContain('## Silver Key')
     expect(rendered).not.toContain('Cold to the touch.')
-    // Positive controls: an unheld in-scene item still gets its entry, and a
-    // character holding nothing gets no Holds line.
+    // Positive controls: an unheld item keeps its entry; a non-holder gets no Holds line.
     expect(rendered).toContain('## A lantern [item_9]\nStill lit.\n')
     expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\n\n')
     expect(rendered.split('Holds:')).toHaveLength(2)
@@ -746,10 +736,8 @@ describe('bundled per-turn template — create instructions', () => {
     expect(rendered).toContain('Apart from those handles, use only the IDs shown to you above')
   })
 
-  // The parser decodes the five XML entities in a create's name and description
-  // but drops a create whose attribute text isn't well-formed (a raw < or > in
-  // the name included), or whose description holds a raw <, so the model is told
-  // how to write those.
+  // The parser decodes five XML entities but drops a create with malformed attributes (raw " < or >
+  // in the name) or a raw < in the description, so the model must be told how to write them.
   it("tells the model to escape a double quote, < or > in a create's name and a < in its description", () => {
     expect(rendered).toContain(
       "Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.",

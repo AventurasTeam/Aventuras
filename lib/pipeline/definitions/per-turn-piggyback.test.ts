@@ -2400,7 +2400,7 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // Every reversal window that removes the turn must take the creates, so they precede the metadata update and the writes naming them.
+    // Every reversal window that removes the turn must take the creates, so they come first.
     it('emits the creates first, then the metadata, then the writes that name them', async () => {
       seedFallbackTurn()
       const { events } = await runFallback(docksAndKey())
@@ -2484,8 +2484,7 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
-    // The reused sibling is only an ancestor of where the scene settles, so just the planner's
-    // reusedIds can promote it.
+    // The reused sibling only parents the current location, so only reusedIds can promote it.
     it('promotes a reused staged place that only parents the new current location', async () => {
       seedFallbackTurn([...fallbackWorld(), market('staged')])
       const { events } = await runFallback(
@@ -2549,8 +2548,7 @@ describe('per-turn-piggyback', () => {
       expect(report?.newItems).toEqual(FOLD_REPORT.newItems)
     })
 
-    // A kind the fallback emitted is its own report even when every entry was dropped: the
-    // fold's list is kept only for a kind the fallback emitted none of.
+    // Emission, not outcome, decides: a kind the fallback emitted never keeps the fold's list.
     it("reports the fallback's own dropped creates rather than the fold's", async () => {
       seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
       const { events } = await runFallback(
@@ -2615,8 +2613,7 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // A create the model gave no description is still a create, as on the tagged path: it must
-    // not fail the call and drop the turn's other fields.
+    // As on the tagged path, a description-less create must not fail the call and drop the rest.
     it('creates a row with no description and still applies the rest of the reply', async () => {
       seedFallbackTurn()
       const { events } = await runFallback(
@@ -2663,8 +2660,7 @@ describe('per-turn-piggyback', () => {
       expect(warnSpy).not.toHaveBeenCalledWith('classifier.create_malformed', expect.anything())
     })
 
-    // A reply that pads its handles still names them the same way elsewhere; substituting before
-    // trimming would fail currentLocation as an undeclared handle.
+    // Substituting before trimming would fail currentLocation as undeclared for a padded handle.
     it('normalizes a create before substituting the handles that name it', async () => {
       seedFallbackTurn()
       const { events } = await runFallback(

@@ -14,10 +14,8 @@ import {
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// The per-turn writer creates the place a scene moves to and the item someone receives, in the
-// turn's own action group (docs/memory/piggyback.md → New locations and items). What only a
-// running app shows: the creates land in the delta log after the reply's own create, so a
-// regenerate, which reverses from that create onward, takes them with it.
+// docs/memory/piggyback.md → New locations and items. Creates land in the delta log after the
+// reply's own create, so a regenerate (reversing from that create onward) takes them with it.
 
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
@@ -27,14 +25,11 @@ const STALLS = 'The Drowned Market Stalls'
 const COMPASS = 'E2E brass compass'
 const LANTERN = 'E2E tin lantern'
 
-// Placeholders are allocated in the order the context's `entities` walk meets rows, and an
-// update never reorders the store (lib/stores/factory/working-set-store.ts), so one read off a
-// turn's prompt names the same row in the next turn's prompt while no entity is added between.
+// Placeholders follow the `entities` walk and updates never reorder the store
+// (lib/stores/factory/working-set-store.ts): a read holds next turn unless an entity is added.
 const HOLLOW_REF = /\[(l\d+)\] Veil’s Hollow/
-// A memory block or the fallback roster brackets the id before the name; the narrative's scene
-// list brackets it after.
-// The negative lookbehind skips the state-emission example ("[c1] Kael"), which JSON.stringify
-// leaves preceded by a quote.
+// Id bracketed before the name in a memory block or fallback roster, after it in the narrative's
+// scene list. Lookbehind skips the state-emission example ("[c1] Kael"), preceded by a quote.
 const KAEL_REF = /(?<!")\[(c\d+)\] Kael\b|## Kael \[(c\d+)\]/
 
 type Placeholders = { kael: string; hollow: string }

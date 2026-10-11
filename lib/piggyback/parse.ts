@@ -93,8 +93,8 @@ function parseNumeric(segment: string): number {
 // key="value" pairs from a tag's attribute region (no surrounding < / >).
 function parseAttributes(attrText: string): Record<string, string> {
   const attrs: Record<string, string> = {}
-  // The closing quote stays unconsumed so any non-word char (space, quote, comma) can precede the
-  // next key (`from="c3"to="c1"`); a hyphen cannot, so a key is never read as the tail of a hyphenated one.
+  // Closing quote stays unconsumed so `from="c3"to="c1"` splits; a hyphen can't precede a key,
+  // so a hyphenated key's tail is never read as its own key.
   const re = /(?:^|[^\w-])([\w-]+)="([^"]*)(?=")/g
   for (const match of attrText.matchAll(re)) {
     const [, key, value] = match
@@ -205,8 +205,7 @@ const FIELD_PARSERS: readonly FieldParser[] = [
   { field: 'retrievalQueries', tag: STATE_TAGS.retrievalQueries, parse: parseRetrievalQueries },
 ]
 
-// Neither the attributes nor the content cross a `<`, so a create the stream cut off can't swallow
-// the tags after it.
+// No `<` in attributes or content, so a create the stream cut off can't swallow later tags.
 function createTagPattern(tag: string): RegExp {
   return new RegExp(`<${tag}(\\s[^<>]*?)?(?:/>|>([^<]*)</${tag}>)`, 'g')
 }
@@ -402,9 +401,8 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   const normalized = normalizeCreates({ ...block, ...creates.found })
   const malformedCreates = creates.unclosed + creates.badAttributes + normalized.malformed
 
-  // A stream cut off after a create may have lost the tags that name it (current_location,
-  // transfers), whether or not a create tag itself is open, so the fallback must fire; creates
-  // in a closed block are only counted.
+  // A cut-off stream may have lost the tags that name a create (current_location, transfers), even
+  // if every create tag is whole, so the fallback fires; a closed block's creates are only counted.
   if (creates.declared > 0 && !stateClosed(raw))
     failures.push({ field: 'state', detail: 'block with creates cut off' })
 

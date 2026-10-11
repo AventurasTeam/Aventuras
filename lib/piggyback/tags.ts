@@ -12,16 +12,14 @@ export const STATE_TAGS = {
 /** The `<query>` children `<retrieval_queries>` nests. */
 export const RETRIEVAL_QUERY_ITEM_TAG = 'query'
 
-/** Repeated, attribute-bearing tags inside `<state>`; the block's other tags name them by handle. */
+/** Repeated, attribute-bearing tags inside `<state>`; the block's other tags use their handles. */
 export const STATE_CREATE_TAGS = { newLocation: 'new_location', newItem: 'new_item' } as const
 
 /** A create's handle namespace, so it can't be mistaken for a listed placeholder. */
 export const CREATE_HANDLE_PREFIX = 'new:'
 
-// The prompt displays each entity's placeholder in brackets ("[c1] Kael")
-// for readability, but the emission grammar wants the bare placeholder back
-// (docs/memory/piggyback.md → Trailing block format) — unwrap an optional
-// bracket pair so a model that echoes the display form still resolves.
+// The prompt brackets placeholders ("[c1] Kael") but the emission grammar wants them bare
+// (docs/memory/piggyback.md → Trailing block format): unwrap so an echoed display form resolves.
 export function unwrapBracket(ref: string): string {
   const match = /^\[(.+)\]$/.exec(ref)
   return match ? match[1] : ref

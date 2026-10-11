@@ -107,8 +107,7 @@ describe('buildLocationMap', () => {
     expect(outline(buildLocationMap(entities, null))).toEqual(['Orphan Quay'])
   })
 
-  // Ashgate and Bellmoor are each other's parent; Cinderfall hangs off the loop. None has a
-  // root to hang from, so each is listed flat at the root, after the tree that does.
+  // Ashgate and Bellmoor parent each other, Cinderfall hangs off them: none reaches a root.
   it('lists a chain looping through listed rows at the root, after the reachable tree', () => {
     const map = buildLocationMap(
       [

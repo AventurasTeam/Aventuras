@@ -1322,8 +1322,7 @@ const createsProps = {
   },
 } satisfies Partial<EntryCardProps>
 
-// entry-card.md → Panel anatomy: one line per create that landed on a row, after the
-// stackables; a dropped create stays in the report for the per-turn inspector.
+// entry-card.md → Panel anatomy: one line per create that landed on a row, none for a dropped one.
 export const WorldStateTurnCreates: StoryT = {
   ...wrap,
   args: { ...baseProps, ...aiEntry, ...createsProps },
@@ -1339,8 +1338,7 @@ export const WorldStateTurnCreates: StoryT = {
     // Created rows are named as they stand, not as the writer first spelled them.
     expect(screen.queryByText('New place: the Smuggler’s Docks')).not.toBeInTheDocument()
     expect(screen.queryByText('New item: rusted key')).not.toBeInTheDocument()
-    // The alias landed on the row already listed as new (live name Smuggler’s Wharf), so it
-    // adds no line of its own: two reused places, and no third.
+    // The alias landed on the row already listed as new, so adds no line: two matches, not three.
     expect(screen.queryByText('Matched place: Smuggler’s Wharf')).not.toBeInTheDocument()
     expect(screen.getAllByText(/^Matched place:/)).toHaveLength(2)
     // A reused row is named live, not in the spelling the writer emitted.
@@ -1423,8 +1421,7 @@ export const WorldStateCreatedRowsGone: StoryT = {
   },
 }
 
-// Every create dropped: nothing this turn changed, so the group stays out rather than
-// rendering a label with no lines under it.
+// Every create dropped: nothing changed, so the group stays out rather than render an empty label.
 export const WorldStateDroppedCreatesOnly: StoryT = {
   ...wrap,
   args: {

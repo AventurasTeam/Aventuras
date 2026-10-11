@@ -4,8 +4,7 @@ import { namesakeBasis, type NamesakeSide } from './namesakes'
 
 /**
  * Two distinct rows of one branch and kind, one of whose flags names the other and holds, in the
- * order asked for. Minted only by `collisionPairOf`, so the planners that take one need no checks
- * of their own.
+ * order asked for. Minted only by `collisionPairOf`, so planners taking one skip their own checks.
  */
 export type CollisionPair = readonly [Entity, Entity] & { readonly __brand: 'CollisionPair' }
 
@@ -29,7 +28,7 @@ export type FlaggedEntity = Entity & {
   nameCollisionReason: CollisionReason
 }
 
-/** A row as the pair rule reads it: its name and keywords, and a place's parent (null otherwise). */
+/** A row as the pair rule reads it: its name, keywords, and a place's parent (null otherwise). */
 export type PairSide = NamesakeSide & { parentId: string | null }
 
 export function pairSideOf(row: Entity): PairSide {
