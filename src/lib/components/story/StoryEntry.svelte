@@ -515,6 +515,8 @@
     return at ? entryNumber(at) : null
   }
 
+  const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
+
   function anchorText(label: AnchorLabel): string {
     if (label.kind === 'live') return 'the last entry world state'
     const at = story.entries.find((e) => e.position === label.position)
@@ -2438,10 +2440,33 @@
           if (e.key === 'Enter') handleCreateCheckpoint()
         }}
       />
+      <div class="text-muted-foreground space-y-1 text-xs">
+        <p>Checkpoints save the story state and allow branching.</p>
+        <button
+          type="button"
+          class="hover:text-foreground flex items-center gap-1 font-medium"
+          onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
+          aria-expanded={!ui.checkpointHelpFolded}
+          aria-controls="past-checkpoint-help"
+        >
+          {#if ui.checkpointHelpFolded}
+            <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+          {:else}
+            <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+          {/if}
+          How past checkpoints work
+        </button>
+        {#if !ui.checkpointHelpFolded}
+          <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
+            Historical checkpoints rely on the state diffs that are recorded alongside the tracked
+            entries, and calculate past state through the rollback from the nearest full-state
+            landmark: an automated snapshot, another checkpoint, or current state.
+          </p>
+        {/if}
+      </div>
+
       {#if isLatestEntry}
-        <p class="text-muted-foreground text-xs">
-          Checkpoints save the story state and allow branching.
-        </p>
+        <!-- The latest entry is checkpointed from the current state: nothing to check. -->
       {:else if pastCheckpoint === null}
         <p class="text-muted-foreground text-xs italic">
           Checking the recorded world state changes…
@@ -2577,31 +2602,16 @@
           </div>
         {/if}
       {:else}
-        <div class="text-muted-foreground space-y-3 text-xs">
-          <p>Checkpoints save the story state and allow branching.</p>
-          <div>
-            <button
-              type="button"
-              class="hover:text-foreground flex items-center gap-1 font-medium"
-              onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
-              aria-expanded={!ui.checkpointHelpFolded}
-              aria-controls="past-checkpoint-help"
-            >
-              {#if ui.checkpointHelpFolded}
-                <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-              {:else}
-                <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-              {/if}
-              How past checkpoints work
-            </button>
-            {#if !ui.checkpointHelpFolded}
-              <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
-                Historical checkpoints rely on the state diffs that are recorded alongside the
-                tracked entries, and calculate past state through the rollback from the nearest
-                full-state landmark: an automated snapshot, another checkpoint, or current state.
-              </p>
-            {/if}
-          </div>
+        <div class="text-muted-foreground space-y-1 text-xs">
+          {#if pastCheckpoint.source}
+            <p>The world state at this entry is known:</p>
+            <p class="flex items-start gap-1.5">
+              <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+              {pastCheckpoint.source.position === entry.position
+                ? `${capitalize(anchorText(pastCheckpoint.source))} exists, so no rollback is needed.`
+                : `Built by a rollback from ${anchorText(pastCheckpoint.source)}.`}
+            </p>
+          {/if}
         </div>
       {/if}
       {#if pastCheckpoint && showUndoneInCheckpoint}

@@ -211,6 +211,8 @@ export interface PastCheckpointPreview {
   unkeepable: WorldStateChangeRecord[]
   /** How many chapters' lore management the rebuild undoes. */
   chapters: number
+  /** Without a refusal, the full state the rebuild starts from. */
+  source: AnchorLabel | null
   /** On a refusal, the full states the reader may build it from anyway. */
   overrides: { next: AnchorLabel | null; previous: AnchorLabel | null } | null
 }
@@ -4470,7 +4472,7 @@ class StoryStore {
    */
   async previewCheckpointAt(entryId: string): Promise<PastCheckpointPreview> {
     try {
-      const { plan } = await this.rebuildPastState(entryId, KEEP_ALL)
+      const { plan, anchor } = await this.rebuildPastState(entryId, KEEP_ALL)
       return {
         refusal: null,
         reason: null,
@@ -4479,6 +4481,7 @@ class StoryStore {
         tidy: plan.tidy,
         unkeepable: plan.unkeepable,
         chapters: plan.chapters,
+        source: this.anchorLabel(anchor),
         overrides: null,
       }
     } catch (error) {
@@ -4506,6 +4509,7 @@ class StoryStore {
           tidy: [],
           unkeepable: [],
           chapters: 0,
+          source: null,
           overrides: null,
         }
       }
@@ -4517,6 +4521,7 @@ class StoryStore {
         tidy: undo?.plan.tidy ?? [],
         unkeepable: undo?.plan.unkeepable ?? [],
         chapters: undo?.plan.chapters ?? 0,
+        source: null,
         overrides: {
           next: next ? this.anchorLabel(next.anchor) : null,
           previous: previous ? this.anchorLabel(previous.anchor) : null,
