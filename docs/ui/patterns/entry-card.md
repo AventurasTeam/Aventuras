@@ -220,7 +220,9 @@ change as name, category and its full-replace text; an item transfer
 as item, recipient and prior holder when tracked; a stackable as key,
 amount and the same holders; a new place or item as `New place:` or
 `New item:` and its name, or `Matched place:` and the reused row's name.
-A dropped create isn't listed; the per-turn inspector shows it. These
+A created or reused row is named from the live entity, as every other
+line is, and from the report's name only once the row is gone. A
+dropped create isn't listed; the per-turn inspector shows it. These
 exist nowhere else once the block is stripped from `content` — deltas carry the applied effect, not the
 narration of it.
 
@@ -267,8 +269,8 @@ id.** `stateReport` is immutable while entities are deletable and
 rollback-able, so a dangling id is a permanent state, not a transient
 one. Never a crash, and never a bare UUID in the reader per
 [data-model.md → ID shape](../../data-model.md#id-shape--kind-prefixed-uuids-throughout).
-The one exception is a reused place whose row is gone since: its line
-names it from the report. Create lines are one per distinct id.
+The one exception is a created or reused row that is gone since: its
+line names it from the report. Create lines are one per distinct id.
 
 ### Scene editor
 

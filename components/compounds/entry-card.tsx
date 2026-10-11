@@ -512,19 +512,21 @@ function turnCreateLines(
     }
     lines.push({ key: id ?? `create${lines.length}`, text })
   }
+  // Named as the row stands, not as the writer spelled it; the report's name covers a row
+  // deleted since.
+  const liveName = (id: string | undefined, reported: string) =>
+    pool.find((e) => e.id === id)?.name ?? reported
   for (const location of report?.newLocations ?? []) {
+    const name = liveName(location.id, location.name)
     if (location.outcome === 'created') {
-      push(location.id, t('reader:entryCard.stateNewPlace', { name: location.name }))
+      push(location.id, t('reader:entryCard.stateNewPlace', { name }))
     } else if (location.outcome === 'reused') {
-      // Named as the row stands, not as the writer spelled it; the report's name
-      // covers a row deleted since.
-      const live = pool.find((e) => e.id === location.id)?.name
-      push(location.id, t('reader:entryCard.stateMatchedPlace', { name: live ?? location.name }))
+      push(location.id, t('reader:entryCard.stateMatchedPlace', { name }))
     }
   }
   for (const item of report?.newItems ?? []) {
     if (item.outcome === 'created') {
-      push(item.id, t('reader:entryCard.stateNewItem', { name: item.name }))
+      push(item.id, t('reader:entryCard.stateNewItem', { name: liveName(item.id, item.name) }))
     }
   }
   return lines

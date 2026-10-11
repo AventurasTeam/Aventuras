@@ -1244,7 +1244,7 @@ const LOC_NEW = 'loc_00000000-0000-4000-8000-0000000000a7'
 const ITEM_NEW = 'item_00000000-0000-4000-8000-0000000000b8'
 const LOC_GONE = 'loc_00000000-0000-4000-8000-0000000000f7'
 
-// The created rows were renamed live since the turn; the card names them from the report.
+// The created rows were renamed live since the turn; the card names them as they stand.
 const createsEntityNames = [
   ...entityNames,
   { id: LOC_NEW, name: 'Smuggler’s Wharf' },
@@ -1329,16 +1329,16 @@ export const WorldStateTurnCreates: StoryT = {
   args: { ...baseProps, ...aiEntry, ...createsProps },
   play: async () => {
     await openPanel()
-    const newPlace = screen.getByText('New place: the Smuggler’s Docks')
+    const newPlace = screen.getByText('New place: Smuggler’s Wharf')
     const matched = screen.getByText('Matched place: Eldrin Keep')
-    const newItem = screen.getByText('New item: rusted key')
+    const newItem = screen.getByText('New item: iron key')
     expect(newPlace).toBeVisible()
     expect(matched).toBeVisible()
     expect(newItem).toBeVisible()
     expect(screen.getByText('Matched place: the old watchtower')).toBeVisible()
-    // Created rows keep the names they were created under, not their live names.
-    expect(screen.queryByText('New place: Smuggler’s Wharf')).not.toBeInTheDocument()
-    expect(screen.queryByText('New item: iron key')).not.toBeInTheDocument()
+    // Created rows are named as they stand, not as the writer first spelled them.
+    expect(screen.queryByText('New place: the Smuggler’s Docks')).not.toBeInTheDocument()
+    expect(screen.queryByText('New item: rusted key')).not.toBeInTheDocument()
     // The alias landed on the row already listed as new (live name Smuggler’s Wharf), so it
     // adds no line of its own: two reused places, and no third.
     expect(screen.queryByText('Matched place: Smuggler’s Wharf')).not.toBeInTheDocument()
@@ -1381,7 +1381,45 @@ export const WorldStateCreatesOnly: StoryT = {
   play: async () => {
     await openPanel()
     expect(screen.getByText('Changes this turn')).toBeVisible()
+    expect(screen.getByText('New place: Smuggler’s Wharf')).toBeVisible()
+  },
+}
+
+// A created row deleted since the turn names itself from the report, like a reused one.
+export const WorldStateCreatedRowsGone: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      newLocations: [
+        {
+          handle: 'new:docks',
+          name: 'the Smuggler’s Docks',
+          description: 'a rotting pier below the cliffs',
+          outcome: 'created',
+          id: LOC_GONE,
+        },
+      ],
+      newItems: [
+        {
+          handle: 'new:key',
+          name: 'rusted key',
+          description: 'an iron key, flaked with rust',
+          outcome: 'created',
+          id: ITEM_NEW,
+        },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
     expect(screen.getByText('New place: the Smuggler’s Docks')).toBeVisible()
+    expect(screen.getByText('New item: rusted key')).toBeVisible()
   },
 }
 
