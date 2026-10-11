@@ -6,7 +6,8 @@ fn main() {
     // Only applied when an NVIDIA GPU is detected, so AMD/Intel users get full GPU acceleration.
     #[cfg(target_os = "linux")]
     if is_nvidia_wayland() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        // SAFETY: nothing else has started a thread yet.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
     }
 
     aventura_lib::run()
