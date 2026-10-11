@@ -27,4 +27,5 @@ pre-push:
       glob:
         - "src-tauri/**/*.rs"
         - "src-tauri/Cargo.toml"
+        - "src-tauri/Cargo.lock"
       run: node scripts/pm.js run lint:rust
