@@ -303,3 +303,29 @@ slice-planning gate forces its resolution before that slice is planned.
   and typed mocks would remove both, but the first has no home yet and
   the second touches older mock declarations. Raised 2026-10-11 by the
   system and user halves PR's slice review (simplifier pass).
+
+- **The real-provider smoke gives up on the watermark when one
+  classifier call times out.** `e2e/tests/classifier-real-provider.smoke.spec.ts`
+  polls for the periodic classifier's watermark to move for at most
+  300 s (`expect.poll`, `timeout: 300_000`). The classifier's model call
+  is allowed the same 300 s (`CALL_TIMEOUT_MS` in
+  `lib/pipeline/definitions/periodic-classifier.ts`), and its first retry
+  waits a further 30 s (`BACKOFF_MS` in `lib/classifier/status.ts`). So
+  one slow call fails the smoke where the app would recover: the timeout
+  leaves the classifier `retrying`, not `failed-persistent`, and the
+  scheduler runs the pass again after the backoff. Seen by the developer
+  at `9a490a48` with Gemma4-26B-A4B on a local OpenAI-compatible server:
+  three runs gave 1 pass, 1 fail and 1 flaky, and every failed attempt
+  stopped with the watermark at its parked value. The failed run's database shows
+  the classifier call timing out (`lastError` "timeout after
+  300000ms"); the passing retry's classifier call took 255 s. The same
+  smoke passed 3 of 3 at the system and user halves PR's head. Fix,
+  decided by the developer: increase the smoke's timeouts. The
+  watermark poll's `timeout: 300_000` must outlast one call timeout, the
+  backoff and a second call, and the test's `test.setTimeout(600_000)`
+  must still leave room for that after the turn loop, whose own waits
+  (`toBeEditable` up to 120 s and the run-settle poll up to 240 s, per
+  attempt) draw on the same budget. The numbers aren't chosen. This is
+  the only `*.smoke.spec.ts` under `e2e/tests/` today. Raised
+  2026-10-11 by the developer's smoke runs for that PR, recorded in its
+  description under "Developer checks before merge".
