@@ -311,10 +311,7 @@ function recordingModel() {
   }
 }
 
-/**
- * Runs `sent`'s middleware over a system + user prompt and returns the cache
- * control the system message carried when it reached the provider model.
- */
+/** The cache control `sent`'s middleware leaves on the system message reaching `inner`. */
 async function systemCacheControl(
   sent: unknown,
   inner: ReturnType<typeof recordingModel>,
@@ -332,8 +329,7 @@ async function systemCacheControl(
     ?.cacheControl
 }
 
-// architecture.md → System and user halves: the marker goes on `anthropic` providers only,
-// and only on calls that ask for it.
+// architecture.md → System and user halves: marker on `anthropic` only, and only when asked.
 describe('cache marker', () => {
   const config = (type: string) => ({
     // ProviderInstance['type'] has no 'stub': a stub row reaches config.providers only at

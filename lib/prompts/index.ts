@@ -35,10 +35,8 @@ export function renderTemplate(
 }
 
 /**
- * The context variables `templateId` reads, over both halves. Lets a context
- * builder skip the work behind a variable this template never mentions — without
- * narrowing what the group *could* offer, which stays the same for every story
- * template.
+ * The context variables `templateId` reads, over both halves. Lets a context builder skip
+ * work behind a variable the template never mentions, without narrowing what the group offers.
  */
 export function templateReads(templateId: TemplateId): ReadonlySet<string> {
   return templateGlobals(bundled().engine, templateId)

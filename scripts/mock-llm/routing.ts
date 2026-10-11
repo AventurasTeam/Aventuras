@@ -6,11 +6,8 @@ import { STRUCTURED_SHAPES, type StructuredShape } from './shapes'
 
 export const NARRATIVE_LANE = 'narrative'
 
-// The opener of SCHEMA_CONTRACT_TEMPLATE (lib/ai/prompt-schema.ts), which the
-// app appends last to the system message, so the block runs to its end. Not
-// exported by the app, so routing.test.ts drives the real promptSchemaMiddleware
-// and asserts the extractor still recovers the block — a contract edit fails
-// that test rather than silently degrading every match.
+// Opener of SCHEMA_CONTRACT_TEMPLATE (lib/ai/prompt-schema.ts), appended last so the block runs
+// to its end. Unexported: routing.test.ts drives the real middleware, so an edit fails there.
 const BLOCK_OPEN = 'from the following:\n\n'
 // What schemaToTypeScriptBlock emits first; story text quoting the opener doesn't.
 const BLOCK_START = /^(interface Response |type Response = )/
@@ -100,13 +97,9 @@ function candidatesFor(
 }
 
 /**
- * Earliest occurrence wins, not registry order. A marker is the literal its
- * template's user half OPENS with, so the real one sits at the top of the user
- * message — only the system half and the contract precede it, and no contract
- * carries a marker (asserted in routing.test.ts) — while a sibling's marker can
- * only appear deeper, quoted back inside the `current` preview a refine embeds.
- * Taking the first candidate that matches anywhere would let that quotation
- * outrank the directive the call actually carries.
+ * Earliest occurrence wins, not registry order: the real marker opens the user half (only the
+ * system half and the contract precede it; no contract carries one, asserted in routing.test.ts),
+ * while a sibling's, quoted in a refine's `current` preview, sits deeper and must not outrank it.
  */
 function pickByMarker(
   candidates: readonly StructuredShape[],

@@ -41,11 +41,7 @@ async function waitForEntry(): Promise<{ outcome: string }> {
   throw new Error('no log entry arrived')
 }
 
-/**
- * The request the app sends for `schema` on the default (auto) path with a blank
- * system half: the contract alone forms the system message, and the closing line
- * ends the user message.
- */
+/** The app's auto-path request for `schema`; a blank system half leaves the contract as system. */
 function structuredRequest(
   schema: z.ZodType,
   text = 'Classify the turn.',

@@ -26,12 +26,10 @@ import {
 // schema, produced by the app's own renderer over the app's own zod schema — so
 // a match can never drift from what the app actually sends.
 //
-// One entry per CALL SITE. Where several call sites answer with the same schema
-// — and therefore the same block — `marker` separates them: the literal text a
-// template's user half opens with, before its first Liquid tag, sliced out of
-// the pack the app itself renders. Derived rather than hand-written, so editing
-// a template moves its marker in the same edit. Story shapes are one call site
-// each and carry no marker.
+// One entry per CALL SITE. Where call sites share a schema (hence a block), `marker`
+// separates them: the text a template's user half opens with before its first Liquid
+// tag, sliced from the app's own pack so editing a template moves its marker with it.
+// Story shapes are one call site each and carry none.
 //
 // Default replies are NOT shared. E2E wants inert no-ops for determinism, the
 // dev mock wants defaults lively enough that a manual turn visibly does

@@ -839,8 +839,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   })
 })
 
-// architecture.md → System and user halves: the story's definition, its calendar and
-// the output-format line are the system half; everything a call changes is the user half.
+// architecture.md → System and user halves.
 describe('bundled per-turn template — system and user halves', () => {
   const OUTPUT_FORMAT =
     'Write the next beat of the story as prose. Do not break character or address the reader.'

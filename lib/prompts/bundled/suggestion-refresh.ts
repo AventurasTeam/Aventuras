@@ -20,9 +20,8 @@ export const SUGGESTION_REFRESH: TemplateSources = {
 {% endif -%}
 {%- endcapture -%}
 {{ definitionBlocks | rstrip }}`,
-  // Structured-output call: the emission section asks for a JSON field, NOT the
-  // tagged <suggestions> block macro_suggestion_emission instructs (that macro
-  // belongs to the narrative fold, which appends the block to prose).
+  // Structured-output call: the emission section asks for a JSON field, NOT the tagged
+  // <suggestions> block (macro_suggestion_emission is the narrative fold's, appended to prose).
   user: `{%- assign hasScene = false -%}
 {%- for e in entities | active -%}
 {%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}

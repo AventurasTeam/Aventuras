@@ -231,8 +231,7 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(perCallReads(templateId, 'system')).toEqual([])
   })
 
-  // Positive control: the half-scoped read reports what a system half reads, so an empty
-  // list above isn't the read seeing nothing.
+  // Positive control: the empty list above isn't the half-scoped read seeing nothing.
   it("reports a system half's reads", () => {
     const reads = [...templateGlobals(engine, TEMPLATE_IDS.perTurnNarrative, 'system')]
     expect(reads).toContain('definition')
@@ -241,9 +240,8 @@ describe('bundled system halves read only what the story fixes', () => {
 })
 
 describe('bundled system halves render byte-identically across calls', () => {
-  // A variable equal in both contexts, or missing from one, can't show a per-call read. A
-  // template that starts reading a new variable fails here until both contexts set it. The
-  // check compares values (JSON), not rendered output.
+  // A variable equal in both contexts, or missing from one, can't show a per-call read; a
+  // template reading a new variable fails here until both set it. Compares JSON values, not output.
   it.each(RENDER_CASES)(
     '$templateId: the two contexts differ in every per-call variable it reads',
     ({ templateId, first, second }) => {

@@ -476,8 +476,7 @@ describe('suggestion-refresh emission phase', () => {
       expect.anything(),
     )
     const { system, user } = generateStructuredMock.mock.calls[0]?.[1] as PromptHalves
-    // architecture.md → System and user halves: the definition is the refresh's system
-    // half (the fixture's tone is empty, so it ends on Genre).
+    // architecture.md → System and user halves: the fixture's tone is empty, so it ends on Genre.
     expect(system).toBe('# Setting\nA keep on a hill.\n\n# Genre\nHigh fantasy.')
     expect(user).not.toContain('A keep on a hill.')
     expect(user).toContain('The gate groans open.')

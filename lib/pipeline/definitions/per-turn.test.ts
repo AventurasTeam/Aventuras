@@ -1237,8 +1237,7 @@ async function runNarrativeWith(opts: {
 }
 
 describe('narrative call prompt', () => {
-  // architecture.md → System and user halves: the narrative call always asks; the
-  // call layer honours it on anthropic providers only.
+  // architecture.md → System and user halves: always asked; only anthropic providers honour it.
   it('asks the narrative call to mark its system prefix for caching', async () => {
     await runNarrativeWith({ narrative: 'prose' })
 
@@ -2163,8 +2162,8 @@ describe('narrative fold — creates', () => {
   })
 })
 
-// architecture.md → System and user halves. The fixture's definition fills Setting, Genre
-// and Tone, and a story's calendar always resolves, so all four lead the system half.
+// architecture.md → System and user halves. Fixture fills Setting/Genre/Tone and the calendar
+// always resolves, so all four lead the system half.
 describe('narrative fold — prompt halves', () => {
   it('sends the definition and calendar as the system half, and the scene and story as the user half', async () => {
     const { system, prompt: user } = await runNarrativeWith({ narrative: 'prose' })

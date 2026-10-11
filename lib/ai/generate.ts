@@ -95,8 +95,7 @@ function marksSystemPrefix(
   return cacheSystemPrefix === true && providerType === 'anthropic'
 }
 
-// getModel only ever returns provider instances, never the gateway-model-id
-// string arm of LanguageModel.
+// The cast is safe: getModel returns provider instances, never LanguageModel's string arm.
 function withMiddleware(
   model: LanguageModel,
   middleware: LanguageModelMiddleware[],
@@ -203,9 +202,8 @@ export async function generateStructured<T>(
   } catch (err) {
     return { status: 'failed', detail: err instanceof Error ? err.message : String(err) }
   }
-  // 'auto' takes the prompt-injection path: there is no provider capability
-  // signal yet, so native responseFormat stays opt-in via 'force-on'. The cache
-  // marker goes last, so the system block it marks carries the contract.
+  // 'auto' injects the schema via the prompt (no capability signal yet); native responseFormat
+  // is opt-in via 'force-on'. Cache marker goes last so the block it marks holds the contract.
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),

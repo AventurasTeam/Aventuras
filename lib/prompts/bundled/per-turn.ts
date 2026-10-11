@@ -24,9 +24,8 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 
 {% endif -%}
 {% include 'macro_output_format_narrative' %}`,
-  // The scene loop is injectionMode-agnostic on purpose (the structural-floor invariant:
-  // active + in-scene always inject). It reads `entities`, not the floor, so the invariant
-  // holds for a context built with no retrieval outcome.
+  // The scene loop ignores injectionMode on purpose (structural-floor invariant: active +
+  // in-scene always inject), reading `entities`, not the floor, so it holds without retrieval.
   user: `{%- comment -%}
 The second half of the condition de-dupes the row the classifier named as both
 in-scene and the location; it is nil-safe, since a null structuralLocation

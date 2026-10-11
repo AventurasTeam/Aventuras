@@ -327,8 +327,7 @@ describe('periodicClassifierPhase', () => {
     expect(user).toContain('Kael sees')
     expect(user).toContain('as: ally')
     expect(user).not.toContain('rival')
-    // classifier.md → What the classifier reads: the role line and the rules lead, and
-    // the branch's lists stay out of the system half.
+    // classifier.md → What the classifier reads: role line and rules lead; branch lists stay out.
     expect(system).toMatch(
       /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules:\n\n- Provenance\. /,
     )
@@ -368,7 +367,7 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
   })
 
-  // architecture.md → System and user halves: the periodic classifier carries no cache marker.
+  // architecture.md → System and user halves.
   it('sends no cache marker: the call takes no sixth argument', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)

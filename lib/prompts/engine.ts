@@ -7,23 +7,21 @@ export type TemplateHalf = 'system' | 'user'
 
 const HALVES: readonly TemplateHalf[] = ['system', 'user']
 
-// One map entry per half. Includes resolve macros by their bare ids, so a half
-// key must never equal a macro id; createEngine checks it.
+// Halves and macros share the engine's one template map, so a macro id equal to a half key
+// would overwrite that half; createEngine rejects it.
 function halfKey(templateId: string, half: TemplateHalf): string {
   return `${templateId}#${half}`
 }
 
-// Build a liquidjs engine whose in-memory `templates` map carries every
-// template half and macro source, so `{% include 'id' %}` resolves from the pack.
+// In-memory `templates` (halves and macros) so `{% include 'id' %}` resolves from the pack.
 export function createEngine(pack: Pack): Liquid {
   const templates: Record<string, string> = {}
   for (const [id, entry] of Object.entries(pack.templates)) {
     for (const half of HALVES) templates[halfKey(id, half)] = entry[half]
   }
   for (const [id, entry] of Object.entries(pack.macros)) {
-    // Templates and macros share one id namespace; an id naming both would leave
-    // an include ambiguous to its author, so fail loud instead. The map check
-    // also catches a macro id that equals a template's half key.
+    // Templates and macros share one id namespace; an id naming both would leave an include
+    // ambiguous to its author, so fail loud. The map check also covers half keys (see halfKey).
     if (Object.hasOwn(pack.templates, id) || Object.hasOwn(templates, id)) {
       throw new Error(`pack id collision: '${id}' is already registered as a template or half`)
     }
@@ -35,8 +33,7 @@ export function createEngine(pack: Pack): Liquid {
   return engine
 }
 
-// Memoized per engine: a pack's sources are fixed once loaded, and the parse is
-// not free. The union is keyed by the bare id, a half by its map key.
+// Memoized per engine: a pack's sources are fixed once loaded, and the parse is not free.
 const globalsByEngine = new WeakMap<Liquid, Map<string, ReadonlySet<string>>>()
 
 /**

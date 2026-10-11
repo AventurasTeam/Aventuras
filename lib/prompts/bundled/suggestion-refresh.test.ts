@@ -35,8 +35,7 @@ const render = ({ setting, genre, tone }: Definition) =>
     refreshGuidance: 'Sneak around the back.',
   })
 
-// architecture.md → System and user halves: the refresh's system half is Setting, Genre
-// and Tone; the scene, the story, the options and the reader's draft are its user half.
+// architecture.md → System and user halves.
 describe('bundled suggestion-refresh template — system and user halves', () => {
   it('holds Setting, Genre and Tone in the system half, in that order, and nothing after them', () => {
     expect(render(FULL).system).toBe(
@@ -44,8 +43,7 @@ describe('bundled suggestion-refresh template — system and user halves', () =>
     )
   })
 
-  // Each block carries its own trailing blank line; whichever block is last, the half
-  // must not end on it.
+  // Each block carries its own trailing blank line; whichever is last, the half must not end on it.
   it.each([
     {
       name: 'no genre',

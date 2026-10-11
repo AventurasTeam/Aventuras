@@ -168,8 +168,7 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(prompt).not.toContain('Use an ID from Places')
   })
 
-  // piggyback.md → Fallback classifier context: the calendar vocabulary is the system
-  // half, and everything else, the report directives included, is the user half.
+  // piggyback.md → Fallback classifier context.
   describe('system and user halves', () => {
     it('is the calendar block alone in the system half', () => {
       expect(renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context()).system).toBe(

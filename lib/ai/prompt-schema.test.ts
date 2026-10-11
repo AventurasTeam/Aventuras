@@ -121,8 +121,7 @@ describe('structured-output schema net', () => {
   )
 })
 
-// architecture.md → Structured output: the lead-in and the block end the system
-// message, the closing line ends the user message.
+// architecture.md → Structured output (contract and closing-line placement).
 describe('promptSchemaMiddleware', () => {
   const CONTRACT = `Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${schemaToTypeScriptBlock(jsonSchema)}`
   const CLOSING = 'Output ONLY the JSON object, no other text or markdown.'

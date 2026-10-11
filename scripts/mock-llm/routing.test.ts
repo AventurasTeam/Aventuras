@@ -27,10 +27,8 @@ type MiddlewareParams = {
 }
 
 /**
- * Runs the app's own middleware over a `[system?, user]` prompt, the way the
- * call layer builds one, and flattens it into the body the openai-compatible
- * adapter sends — so a change to the contract's text or placement fails here
- * instead of silently degrading every match at runtime.
+ * The app's real middleware over a `[system?, user]` prompt, flattened into the openai-compatible
+ * body: a change to the contract's text or placement fails here, not silently at runtime.
  */
 async function requestAsSent(
   schema: z.ZodType,
@@ -279,9 +277,8 @@ describe('STRUCTURED_SHAPES', () => {
     }
   })
 
-  // The contract precedes the template on the wire, and pickByMarker takes the
-  // earliest occurrence, so a marker inside any contract would outrank the real one.
-  // Empty markers are skipped as pickByMarker skips them: '' is in every string.
+  // The contract precedes the template on the wire and pickByMarker takes the earliest hit, so a
+  // marker inside any contract would outrank the real one. Empty markers skipped: '' is everywhere.
   it('has no marker inside the contract the app sends for any shape', async () => {
     const markers = STRUCTURED_SHAPES.filter((s) => s.marker !== '')
     expect(markers.length).toBeGreaterThan(0)

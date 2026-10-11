@@ -47,7 +47,7 @@ describe('validatePackIncludes', () => {
     ])
   })
 
-  // architecture.md → System and user halves: the include validator checks both.
+  // architecture.md → System and user halves.
   it('rejects a missing macro included only from the system half', () => {
     const pack: Pack = {
       templates: { t: { group: 'wizard', system: `{% include 'ghost' %}`, user: 'Go.' } },

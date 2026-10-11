@@ -285,8 +285,8 @@ export async function* piggybackFallbackClassifierPhase(
     assignments: appSettings.assignments,
     storyModels: open.settings.models,
   }
-  // Only the turn's regular classifier recurs at a turn's pace; a recovery from a
-  // failed piggyback parse carries no marker (piggyback.md → Fallback classifier context).
+  // Only the turn's regular classifier recurs per turn, so only it caches the system prefix;
+  // a failed-piggyback recovery doesn't (piggyback.md → Fallback classifier context).
   const callOptions: StructuredCallOptions = { cacheSystemPrefix: !outcome?.attempted }
   const result = askForSuggestions
     ? await generateClassifierState(

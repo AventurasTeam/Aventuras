@@ -1139,8 +1139,7 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // architecture.md → System and user halves: the fallback marks its system prefix only
-    // as the turn's regular classifier (piggyback.md → Fallback classifier context).
+    // architecture.md → System and user halves; piggyback.md → Fallback classifier context.
     describe('cache marker', () => {
       const REPORT = {
         sceneEntities: [],
@@ -1149,7 +1148,6 @@ describe('per-turn-piggyback', () => {
         transfers: { items: [], stackables: [] },
       }
 
-      /** Runs the phase after `outcome` and returns each classifier call's options. */
       async function callOptionsAfter(
         outcome: PiggybackOutcome | undefined,
         { worldTimeDeltas = [15], withChips = false } = {},

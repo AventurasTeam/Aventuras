@@ -51,8 +51,7 @@ describe('engine', () => {
   })
 })
 
-// architecture.md → System and user halves: both halves render against one
-// context, a blank system half is legal, a blank user half is a template error.
+// architecture.md → System and user halves.
 describe('template halves', () => {
   const halves: Pack = {
     templates: {

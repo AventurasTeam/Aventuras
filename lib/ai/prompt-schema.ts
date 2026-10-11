@@ -143,10 +143,8 @@ export function jsonResponseFormatMiddleware(schema: JsonSchema): LanguageModelM
 }
 
 /**
- * For providers/models without native structured output: converts a declared
- * `responseFormat: json` into the schema rendered as TypeScript types at the end
- * of the system message (created when the prompt has none) and a closing line
- * at the end of the last user message, and strips the responseFormat.
+ * For providers without native structured output: swaps `responseFormat: json` for TS types ending
+ * the system message (created if absent) and a closing line ending the last user message.
  */
 export function promptSchemaMiddleware(): LanguageModelMiddleware {
   return {
