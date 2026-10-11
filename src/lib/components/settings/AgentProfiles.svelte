@@ -3,6 +3,8 @@
   import { onDestroy } from 'svelte'
   import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
+  import { errMessage } from '$lib/utils/error'
   import type { GenerationPreset } from '$lib/types'
   import type { ServiceId } from '$lib/stores/settings.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
@@ -287,8 +289,10 @@
   // Memoized: compute service-to-profile mapping once per reactive update
   let servicesByProfile = $derived.by(() => {
     const map = new SvelteMap<string, (typeof systemServices)[number][]>()
+    const presetIds = new Set(settings.generationPresets.map((p) => p.id))
     for (const service of systemServices) {
-      const key = settings.servicePresetAssignments[service.id] || 'custom'
+      const assigned = settings.servicePresetAssignments[service.id]
+      const key = assigned && presetIds.has(assigned) ? assigned : 'custom'
       let arr = map.get(key)
       if (!arr) {
         arr = []
@@ -397,8 +401,13 @@
   }
 
   async function handleResetProfiles() {
-    await settings.resetGenerationPresets()
-    await settings.resetServicePresetAssignments()
+    try {
+      await settings.resetGenerationPresets()
+      await settings.resetServicePresetAssignments()
+    } catch (error) {
+      console.error('[AgentProfiles] Failed to reset profiles:', error)
+      ui.showToast(`Failed to reset profiles: ${errMessage(error)}`, 'error')
+    }
   }
 
   function handleTaskClick(e: MouseEvent, serviceId: string) {
