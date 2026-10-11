@@ -44,6 +44,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { StreamingHtmlRenderer } from '$lib/utils/htmlStreaming'
 import { countTokens } from '$lib/services/tokenizer'
 import { branchScopeKey } from '$lib/utils/branchScope'
+import type { LandmarkFilterGroup } from '$lib/utils/storyNavigation'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -115,6 +116,12 @@ interface PersistedActivationData {
 }
 
 // UI State using Svelte 5 runes
+export const NAV_FILTER_SETTING: Record<LandmarkFilterGroup, string> = {
+  firstLast: 'nav_show_first_last',
+  chapters: 'nav_show_chapters',
+  checkpoints: 'nav_show_checkpoints',
+}
+
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
@@ -149,6 +156,12 @@ class UIStore {
   private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
 
   galleryNewestFirst = $state(false)
+  /** Which groups of rows the landmark list shows. */
+  navFilter = $state<Record<LandmarkFilterGroup, boolean>>({
+    firstLast: true,
+    chapters: true,
+    checkpoints: true,
+  })
 
   // Streaming state
   streamingContent = $state('')
@@ -414,6 +427,13 @@ class UIStore {
     return database
       .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
+  }
+
+  setNavFilter(group: LandmarkFilterGroup, show: boolean): Promise<void> {
+    this.navFilter[group] = show
+    return database
+      .setSetting(NAV_FILTER_SETTING[group], show.toString())
+      .catch((err) => console.warn('[UI] Failed to persist landmark filter:', err))
   }
 
   /**

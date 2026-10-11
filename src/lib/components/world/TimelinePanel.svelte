@@ -10,9 +10,9 @@
     CornerDownLeft,
     ChevronRight,
     ChevronDown,
-    Filter,
   } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
+  import FilterButton from '$lib/components/ui/filter-button.svelte'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { entryNumber, jumpToEntry } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
@@ -203,16 +203,7 @@
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
-            <Button
-              variant="outline"
-              size="icon"
-              class="h-7 w-7 {filtered ? 'text-amber-500' : ''}"
-              aria-label="Filter reference points"
-              title="Filter reference points"
-              {...props}
-            >
-              <Filter class="h-3.5 w-3.5" />
-            </Button>
+            <FilterButton active={filtered} label="Filter reference points" {...props} />
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
