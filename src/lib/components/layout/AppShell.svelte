@@ -134,6 +134,8 @@
 
   function handleWindowResize() {
     clampDebugButtonToViewport()
+    // Narrowing past the breakpoint turns two docked panels into overlapping overlays.
+    if (ui.sidebarOpen && ui.navPanelOpen) ui.closeNavPanelOnMobile()
   }
 
   // Resizing logic — two panels, one drag at a time

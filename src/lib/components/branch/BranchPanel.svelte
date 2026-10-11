@@ -86,6 +86,9 @@
     const name = scroller?.querySelector<HTMLElement>('[data-current-name]')
     const row = name?.parentElement
     if (!scroller?.clientWidth || !name || !row) return
+    // The observer reports a frame late, and a stretched name would be measured past the view.
+    treeOverflows = scroller.scrollWidth > scroller.clientWidth
+    await tick()
 
     const view = scroller.getBoundingClientRect()
     const rowBox = row.getBoundingClientRect()
