@@ -288,3 +288,15 @@ slice-planning gate forces its resolution before that slice is planned.
   `marksSystemPrefix`'s comment notes it. Predates the system and user
   halves PR, whose `marksSystemPrefix` copies the existing type. Raised
   2026-10-11 by its task reviews.
+
+- **Every pack must rebuild the held-item id set in Liquid.** The
+  narrative (`lib/prompts/bundled/per-turn.ts`) and the fallback
+  classifier (`piggyback-fallback-classifier.ts`) each assign `heldIds`
+  from `heldItems` in the same loop to keep a held item out of the scene
+  list, because the context builder exposes no held-id set; a custom
+  pack (the M7 template editor) has to repeat that loop or list held
+  items twice. Candidate fix: a `heldItemIds` variable in the generation
+  context, read by both templates. Carried from the retired "Implement
+  system and user prompt halves" followup, which named the split as the
+  moment to share it; the split didn't. Raised 2026-10-11 by that PR's
+  final review.
