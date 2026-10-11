@@ -467,6 +467,7 @@ class UIStore {
   }
 
   toggleNavPanel() {
+    if (!this.navPanelOpen) this.closeSidebarOnMobile()
     this.setNavPanelOpen(!this.navPanelOpen)
   }
 

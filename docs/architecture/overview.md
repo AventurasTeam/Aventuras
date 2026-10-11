@@ -62,9 +62,9 @@ the panel forgetting what you were doing.
 
 The edge swipes that open the two side panels live in `AppShell.svelte`, and each listens only
 while _neither_ panel is open: a swipe inside an open panel belongs to that panel's tab strip, and
-one panel must never open over the other. For the same reason opening the sidebar closes the
-navigation panel first wherever the panels overlay the story, and so does narrowing the window
-past that width with both open.
+one panel must never open over the other. For the same reason opening either panel closes the
+other first wherever the panels overlay the story, and narrowing the window past that width with
+both open closes the navigation panel.
 
 They are read off the shell itself, counting only gestures that _start_ within 30px of an edge (20px
 above the mobile breakpoint), not from invisible strips over the page. A strip takes every tap that
