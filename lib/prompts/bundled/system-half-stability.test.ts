@@ -62,7 +62,6 @@ const TURN_A: Record<string, unknown> = {
     name: 'The Drowned Keep',
     description: 'Half sunk into the marsh.',
   },
-  locationIds: ['l1'],
   locationMap: [
     { id: 'l2', name: 'The Marsh', depth: 0 },
     { id: 'l1', name: 'The Drowned Keep', depth: 1 },
@@ -105,6 +104,10 @@ const TURN_B: Record<string, unknown> = {
     entity('c1', 'character', 'Kael', 'A courier, now hunted.'),
     entity('c2', 'character', 'Mora', 'A smuggler.'),
     entity('l3', 'location', 'The Ford', 'Shallow and cold.'),
+    {
+      ...entity('c4', 'character', 'Vennick', 'A ferryman who keeps his own counsel.'),
+      status: 'staged',
+    },
   ],
   sceneEntities: ['c1', 'c2', 'l3'],
   structuralLocation: {
@@ -114,7 +117,6 @@ const TURN_B: Record<string, unknown> = {
     name: 'The Ford',
     description: 'Shallow and cold.',
   },
-  locationIds: ['l3', 'l1'],
   locationMap: [
     { id: 'l3', name: 'The Ford', depth: 0 },
     { id: 'l2', name: 'The Marsh', depth: 0 },
@@ -124,6 +126,7 @@ const TURN_B: Record<string, unknown> = {
   looseItems: [],
   entries: [{ position: 7, content: 'Mora waited at the ford with a lantern.' }],
   lastTurns: [
+    { position: 5, content: 'The reeds closed behind Kael.' },
     { position: 6, content: 'I wade across.' },
     { position: 7, content: 'Mora waited at the ford with a lantern.' },
   ],
@@ -146,7 +149,6 @@ const TURN_B: Record<string, unknown> = {
   worldTimeDeltaBasis: 'sinceUserAction',
 }
 
-// Two periodic passes over the same story.
 const PASS_A: Record<string, unknown> = {
   turns: [{ handle: 't1', content: 'Kael falls at the ford.', scene: ['c1'], location: 'l1' }],
   entities: [
@@ -240,11 +242,14 @@ describe('bundled system halves read only what the story fixes', () => {
 
 describe('bundled system halves render byte-identically across calls', () => {
   // A variable equal in both contexts, or missing from one, can't show a per-call read. A
-  // template that starts reading a new variable fails here until both contexts set it.
+  // template that starts reading a new variable fails here until both contexts set it. The
+  // check compares values (JSON), not rendered output.
   it.each(RENDER_CASES)(
     '$templateId: the two contexts differ in every per-call variable it reads',
     ({ templateId, first, second }) => {
-      const unvaried = perCallReads(templateId).filter(
+      const reads = perCallReads(templateId)
+      expect(reads.length).toBeGreaterThan(0)
+      const unvaried = reads.filter(
         (name) =>
           !(name in first) ||
           !(name in second) ||
@@ -256,8 +261,8 @@ describe('bundled system halves render byte-identically across calls', () => {
 
   describe.each([true, false])('piggybackFires: %s', (piggybackFires) => {
     it.each(RENDER_CASES)('$templateId', ({ templateId, first, second, systemShows }) => {
-      const a = renderTemplate(templateId, { ...STORY, piggybackFires, ...first })
-      const b = renderTemplate(templateId, { ...STORY, piggybackFires, ...second })
+      const a = renderTemplate(templateId, { ...first, ...STORY, piggybackFires })
+      const b = renderTemplate(templateId, { ...second, ...STORY, piggybackFires })
 
       expect(a.system).toBe(b.system)
       for (const text of systemShows) expect(a.system).toContain(text)
