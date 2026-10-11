@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
+import type { PromptHalves } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   emptyEntityState,
@@ -343,10 +344,14 @@ describe('per-turn-piggyback', () => {
       expect(next.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.stringContaining('The hero enters the dark forest.'),
+        {
+          system: expect.any(String),
+          user: expect.stringContaining('The hero enters the dark forest.'),
+        },
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
 
       // With the narrative fold having written no report, this phase is the only writer:
@@ -527,7 +532,7 @@ describe('per-turn-piggyback', () => {
 
       await piggybackFallbackClassifierPhase(ctx).next()
 
-      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
       expect(prompt).toContain('I put the sword away.')
       expect(prompt).toContain('The blade slides home.')
     })
@@ -589,7 +594,7 @@ describe('per-turn-piggyback', () => {
       const gen = piggybackFallbackClassifierPhase(ctx)
       const first = await gen.next()
 
-      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
       expect(prompt).toContain('The blade slides home.')
       expect(first.value).toEqual({
         type: 'delta_emitted',
@@ -823,10 +828,11 @@ describe('per-turn-piggyback', () => {
 
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.stringContaining(`[c1] Hero (character)`),
+        { system: expect.any(String), user: expect.stringContaining(`[c1] Hero (character)`) },
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
       expect(events[0]).toEqual({
         type: 'delta_emitted',
@@ -1133,6 +1139,102 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // architecture.md → System and user halves; piggyback.md → Fallback classifier context.
+    describe('cache marker', () => {
+      const REPORT = {
+        sceneEntities: [],
+        currentLocation: undefined,
+        visualChanges: [],
+        transfers: { items: [], stackables: [] },
+      }
+
+      async function callOptionsAfter(
+        outcome: PiggybackOutcome | undefined,
+        { worldTimeDeltas = [15], withChips = false } = {},
+      ): Promise<unknown[]> {
+        currentStoryStore.set({
+          storyId: 's1',
+          branchId: 'b1',
+          definition,
+          settings: baseSettings({
+            models: {},
+            ...(withChips
+              ? {
+                  suggestionsEnabled: true,
+                  suggestionCount: 2,
+                  suggestionCategories: SUGGESTION_CATEGORIES,
+                }
+              : {}),
+          }),
+        })
+        hydrateEntries(phaseDb, 'b1', [
+          {
+            id: 'entry-1',
+            branchId: 'b1',
+            position: 1,
+            content: 'Hero steps into the clearing',
+            metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+          } as never,
+        ])
+        entitiesStore.hydrate('b1', [])
+        for (const worldTimeDelta of worldTimeDeltas)
+          generateStructuredMock.mockResolvedValueOnce({
+            status: 'ok',
+            value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
+          })
+
+        const gen = piggybackFallbackClassifierPhase({
+          actionId: 'act_1',
+          abortSignal: new AbortController().signal,
+          intermediates: {
+            idMap: new IdBiMap(),
+            ...(outcome ? { piggybackOutcome: outcome } : {}),
+          },
+          log: makeLogger('act_1'),
+          db: phaseDb.db,
+          runInTransaction: async () => undefined,
+          storyId: 's1',
+          branchId: 'b1',
+        })
+        let result = await gen.next()
+        while (!result.done) result = await gen.next()
+        return generateStructuredMock.mock.calls.map((call) => call[5])
+      }
+
+      // Both schema branches: a recovery that also asks for chips stays unmarked.
+      describe.each([
+        ['the base schema', false],
+        ['the schema with chips', true],
+      ])('on %s', (_schema, withChips) => {
+        it.each([
+          ['no piggyback outcome', undefined],
+          ['a piggyback that never fired', { attempted: false, succeeded: false }],
+        ])('marks the regular classifier call after %s', async (_label, outcome) => {
+          expect(await callOptionsAfter(outcome, { withChips })).toEqual([
+            { cacheSystemPrefix: true },
+          ])
+        })
+
+        it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
+          expect(
+            await callOptionsAfter({ attempted: true, succeeded: false }, { withChips }),
+          ).toEqual([{ cacheSystemPrefix: false }])
+        })
+
+        it.each([
+          ['the regular classifier', undefined, true],
+          ['a recovery', { attempted: true, succeeded: false }, false],
+        ])(
+          "re-rolls a negative delta from %s with the first call's options",
+          async (_label, outcome, cacheSystemPrefix) => {
+            expect(
+              await callOptionsAfter(outcome, { worldTimeDeltas: [-10, 15], withChips }),
+            ).toEqual([{ cacheSystemPrefix }, { cacheSystemPrefix }])
+          },
+        )
+      })
+    })
+
     // Here, not the template's own test file: buildGenerationContext gates the read on a
     // variable the template never names — mistyped, it silently empties instead of erroring.
     describe('fallback classifier context (piggyback.md → Fallback classifier context)', () => {
@@ -1175,7 +1277,7 @@ describe('per-turn-piggyback', () => {
           kinds?: StoryEntry['kind'][]
           worldTimes?: number[]
         } = {},
-      ): Promise<string> {
+      ): Promise<PromptHalves> {
         currentStoryStore.set({
           storyId: 's1',
           branchId: 'b1',
@@ -1229,11 +1331,11 @@ describe('per-turn-piggyback', () => {
         // A phase that grew a yield before the render would otherwise surface as a
         // TypeError inside toContain rather than as a failed expectation.
         expect(generateStructuredMock).toHaveBeenCalledOnce()
-        return generateStructuredMock.mock.calls[0]![1] as string
+        return generateStructuredMock.mock.calls[0]![1] as PromptHalves
       }
 
       it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
-        const prompt = await renderFallbackPrompt({
+        const { system, user } = await renderFallbackPrompt({
           entities: [entity(KAEL, 'Kael', 'A courier with a stolen sigil.')],
           sceneEntities: [KAEL],
           retrieval: retrievalSuccess({
@@ -1244,14 +1346,19 @@ describe('per-turn-piggyback', () => {
           }),
         })
 
-        expect(prompt).toContain('# In scene')
-        expect(prompt).toContain('A courier with a stolen sigil.')
-        expect(prompt).toContain('# Current location')
-        expect(prompt).toContain('The Drowned Keep')
-        expect(prompt).toContain('Half sunk.')
-        expect(prompt).toContain('# Relevant lore')
-        expect(prompt).toContain('An exiled line.')
-        expect(prompt).toContain('Calendar')
+        expect(user).toContain('# In scene')
+        expect(user).toContain('A courier with a stolen sigil.')
+        expect(user).toContain('# Current location')
+        expect(user).toContain('The Drowned Keep')
+        expect(user).toContain('Half sunk.')
+        expect(user).toContain('# Relevant lore')
+        expect(user).toContain('An exiled line.')
+        expect(user).toContain('# This turn')
+        // piggyback.md → Fallback classifier context: the calendar is the whole system half.
+        expect(system).toMatch(
+          /^# Calendar\nThis story tracks time in seconds .+ into a seconds delta using these units\.$/,
+        )
+        expect(user).not.toContain('# Calendar')
       })
 
       // Unreachable in production (narrative always fills the tail with ai_reply first) —
@@ -1262,8 +1369,8 @@ describe('per-turn-piggyback', () => {
           worldTimes: [100, 200],
         })
 
-        expect(prompt).toContain("since the end of the user's action")
-        expect(prompt).toContain('never negative')
+        expect(prompt.user).toContain("since the end of the user's action")
+        expect(prompt.user).toContain('never negative')
       })
     })
   })
@@ -1333,10 +1440,11 @@ describe('per-turn-piggyback', () => {
       expect(result.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.any(String),
+        { system: expect.any(String), user: expect.any(String) },
         fallbackClassifierWithSuggestionsSchema,
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
       // One delta carries both scene state and chips — a second
       // updateStoryEntryMetadata delta here would mean the fold is patching
@@ -1412,10 +1520,11 @@ describe('per-turn-piggyback', () => {
       expect(result.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.any(String),
+        { system: expect.any(String), user: expect.any(String) },
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: false },
       )
       const created = events[0]
       if (
@@ -1820,12 +1929,13 @@ describe('per-turn-piggyback', () => {
 
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.any(String),
+        { system: expect.any(String), user: expect.any(String) },
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
-      const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
       expect(prompt).not.toContain('Action')
       const created = events[0]
       if (
@@ -1889,7 +1999,7 @@ describe('per-turn-piggyback', () => {
         result = await gen.next()
       }
 
-      const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
       expect(prompt).toContain('exactly 2 distinct entries')
       expect(prompt).toContain('id "cat1" = Action — use it for: act')
       expect(prompt).toContain('id "cat2" = Dialogue — use it for: say')

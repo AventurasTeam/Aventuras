@@ -236,3 +236,158 @@ slice-planning gate forces its resolution before that slice is planned.
   Candidate fix: the same per-entry drop for both lists under
   `'drop'`, with a warning. Raised 2026-10-11 by the developer's Q7 on
   the locations-and-items-from-prose PR.
+
+- **The registry describes `piggybackFires` as per-turn.**
+  `lib/prompts/templateContextMap.ts` says "True when this turn
+  expects…", but the value is settings-derived (`piggybackMode` and the
+  narrative model's `taggedBlockReliable`, `resolvePiggybackFires` in
+  `lib/pipeline/definitions/per-turn-piggyback.ts`), which is why the
+  narrative's system half may read it. The bundled stability test
+  (`lib/prompts/bundled/system-half-stability.test.ts`) treats it as
+  story-fixed. Canon's "unless the user edits the story"
+  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves))
+  is also narrower than the truth: the value follows whichever narrative
+  model resolves, so reassigning the narrative model in App Settings
+  changes the system half without a story edit, as a capability override
+  will once one exists. And
+  [`→ Structured output`](../architecture.md#structured-output--the-json-contract-is-not-pack-content)
+  calls the contract "fixed per call site", but the fallback classifier
+  switches between its plain and with-chips schemas with
+  `askForSuggestions`, inside its marked system block, so a turn that
+  flips it misses the cache. Reword all three. Raised 2026-10-11 by the
+  system and user halves PR's Task 9 review and its slice review.
+
+- **`promptSchemaMiddleware` joins the contract onto the halves as
+  rendered.** In `lib/ai/prompt-schema.ts`, `appendToLastSystem` adds
+  `\n\n` and the contract to the system message untrimmed, as the system
+  and user halves PR designed it. No bundled system half ends on a blank
+  line (the suggestion refresh `rstrip`s its capture for exactly this),
+  but a user-authored one, once M7.2's pack tab edits live packs
+  ([`roadmap.md → M7`](./roadmap.md#m7--app-settings--diagnostics--onboarding)),
+  would put three blank lines before the contract. `appendToLastUser`,
+  carried over unchanged from before that PR, does the same to a user
+  half that ends in a newline, and it folds every text part into one,
+  which drops each part's `providerOptions` and moves file parts after
+  the text: a later cache marker on a user part would vanish silently.
+  The contract itself is built with `String.replace`, which reads `$&`,
+  `$$` and the other `$` patterns in the schema block as replacement
+  patterns, so a `.describe()` text holding one would reach the model
+  mangled; none does today. Candidate fix: `trimEnd` the half before
+  each append, keep the parts, and pass the block through a replacer
+  function. Raised 2026-10-11 by that PR's task reviews and its slice
+  review.
+
+- **`generateStructured` doesn't pass the action id to
+  `prepareGeneration`.** In `lib/ai/generate.ts`, `streamText` passes
+  `actionId`, so the narrative's fetch capture links to its action, but
+  the fallback and periodic classifiers and the suggestion refresh, all
+  run phases, go out unattributed, against
+  [`observability.md → actionId threading`](../observability.md#actionid-threading)
+  ("contract-critical"); the wizard runs outside a run and is
+  unattributed by design. Related: `ResolveModelResult.providerType`,
+  `buildCallSettings` and `marksSystemPrefix` type the provider
+  as `ProviderInstance['type']`, which has no `'stub'`, though a runtime
+  row can be one (`ProviderInstanceWithStub` in `lib/ai/types.ts`); only
+  `marksSystemPrefix`'s comment notes it. Predates the system and user
+  halves PR, whose `marksSystemPrefix` copies the existing type. Raised
+  2026-10-11 by its task reviews.
+
+- **The prompt-halves tests repeat a few test-side pieces.** The JSON
+  contract's closing line is spelled out in `lib/ai/prompt-schema.test.ts`,
+  `lib/ai/request-shape.test.ts` and `scripts/mock-llm/server.test.ts`,
+  and the pipeline tests read a mocked call's prompt through 11
+  `as PromptHalves` casts (`per-turn-piggyback.test.ts`,
+  `per-turn.test.ts`, `suggestion-refresh.test.ts`) because each declares
+  its `generateStructuredMock` as a bare `vi.fn()`. A shared test-helpers
+  module (test-side, so no test derives its expectation from the code)
+  and typed mocks would remove both, but the first has no home yet and
+  the second touches older mock declarations. Raised 2026-10-11 by the
+  system and user halves PR's slice review (simplifier pass).
+
+- **The real-provider smoke gives up on the watermark when one
+  classifier call times out.** `e2e/tests/classifier-real-provider.smoke.spec.ts`
+  polls for the periodic classifier's watermark to move for at most
+  300 s (`expect.poll`, `timeout: 300_000`). The classifier's model call
+  is allowed the same 300 s (`CALL_TIMEOUT_MS` in
+  `lib/pipeline/definitions/periodic-classifier.ts`), and its first retry
+  waits a further 30 s (`BACKOFF_MS` in `lib/classifier/status.ts`). So
+  one slow call fails the smoke where the app would recover: the timeout
+  leaves the classifier `retrying`, not `failed-persistent`, and the
+  scheduler runs the pass again after the backoff. Seen by the developer
+  at `9a490a48` with Gemma4-26B-A4B on a local OpenAI-compatible server:
+  three runs gave 1 pass, 1 fail and 1 flaky, and every failed attempt
+  stopped with the watermark at its parked value. The failed run's database shows
+  the classifier call timing out (`lastError` "timeout after
+  300000ms"); the passing retry's classifier call took 255 s. The same
+  smoke passed 3 of 3 at the system and user halves PR's head. Fix,
+  decided by the developer: increase the smoke's timeouts. The
+  watermark poll's `timeout: 300_000` must outlast one call timeout, the
+  backoff and a second call, and the test's `test.setTimeout(600_000)`
+  must still leave room for that after the turn loop, whose own waits
+  (`toBeEditable` up to 120 s and the run-settle poll up to 240 s, per
+  attempt) draw on the same budget. The numbers aren't chosen. This is
+  the only `*.smoke.spec.ts` under `e2e/tests/` today. Raised
+  2026-10-11 by the developer's smoke runs for that PR, recorded in its
+  description under "Developer checks before merge".
+
+- **The `anthropic` provider can't reach Anthropic from the desktop
+  app.** The renderer calls `api.anthropic.com` directly, and
+  Anthropic's CORS preflight refuses the call: `@ai-sdk/anthropic`
+  3.0.81 never sends the `anthropic-dangerous-direct-browser-access`
+  header, and `createProviderModel` in `lib/ai/providers.ts` passes no
+  `headers`. Seen on 2026-10-11 at `d1f2210d` in the dev app, with an
+  `anthropic` provider written straight into a dev slot's database and
+  a dummy key; the browser stops the request before the key is sent.
+  The console logs "Access to fetch at
+  'https://api.anthropic.com/v1/messages' from origin
+  'http://localhost:8083' has been blocked by CORS policy: Response to
+  preflight request doesn't pass access control check: No
+  'Access-Control-Allow-Origin' header is present on the requested
+  resource." The turn ends in the system entry "LLM call failed." with
+  "network: TypeError: Failed to fetch", and its `pipeline_runs` row is
+  a `per-turn` run with outcome `failed`; the log names the narrative
+  phase and error kind `provider`. A keyless preflight to
+  `/v1/messages` gets HTTP 400 and no `Access-Control-Allow-Origin`;
+  with that header among the requested headers it gets 200 and `*`.
+  The packaged app's `app://bundle` origin gets the same two answers.
+  Android's native fetch doesn't enforce CORS, so the bug should be
+  desktop's alone; that wasn't checked on a device.
+
+  Nothing caught it because the app can't create an `anthropic`
+  provider: the Providers form
+  (`components/compounds/provider-setup-form.tsx`) only creates
+  `openai-compatible` ones, and the Profiles tab is "coming soon". E2E
+  sends every call to an `openai-compatible` mock. The fix looks like
+  one header, passed through `createAnthropic`'s `headers`. The
+  header's "dangerous" name guards against exposing a key to the
+  visitors of a public page; here the key is the user's own and stays
+  on their machine. Whether that reasoning holds is for triage to
+  judge. Until it is fixed, the system and user halves PR's cache
+  marker can't be used on desktop; that PR's cache check ran through a
+  local CORS proxy.
+
+  The developer: "I noticed the anthropic connector has an update, a
+  major version, so might be worth investigating, triage it." Read on
+  2026-10-11 from the npm registry, the published packages' files and
+  the AI SDK's provider docs, without installing anything:
+  - `pnpm view @ai-sdk/anthropic version` gives 4.0.78 (2026-10-08).
+    The repo uses 3.0.81. The 3.x line still gets releases: its newest
+    is 3.0.129 (2026-10-09), under the `ai-v6` dist-tag.
+  - 4.0.0 (2026-06-25) belongs to the AI SDK's v7 line: its changelog
+    starts the "v7 pre-release", and it moves to `@ai-sdk/provider` 4.
+    The `ai-v6` dist-tags point at `@ai-sdk/anthropic` 3.x and
+    `@ai-sdk/openai-compatible` 2.x, so the major means moving the
+    repo's `ai` (6.0.193) and `@ai-sdk/openai-compatible` (2.0.49) to
+    their v7 releases too: an AI SDK migration, not a one-package
+    bump. 4.0.0 is also ESM-only, and it drops
+    `cacheCreationInputTokens` from `providerMetadata`, which the repo
+    doesn't read.
+  - The 4.0.78 package's `CHANGELOG.md` and `README.md` say nothing
+    about browser access, CORS or the header, and the AI SDK's
+    Anthropic provider page describes `headers` only as "Custom headers
+    to include in the requests". Neither the published 4.0.78 build nor
+    3.0.129 sends the header: both send `anthropic-version`, the key,
+    then `headers`. Upgrading doesn't fix this bug.
+
+  Raised 2026-10-11 by the system and user halves PR's cache check
+  (developer checks before merge, step 3).

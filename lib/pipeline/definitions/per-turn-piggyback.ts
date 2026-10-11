@@ -1,7 +1,13 @@
 import { z } from 'zod'
 
 import { generateStructured, resolveModel, resolveModelCapabilities } from '@/lib/ai'
-import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
+import type {
+  GenerateStructuredResult,
+  ModelCapabilities,
+  PromptHalves,
+  ResolveModelConfig,
+  StructuredCallOptions,
+} from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import {
@@ -209,14 +215,17 @@ function hasSuggestions(
 // classifier call, unlike the narrative path where the delta rides the same
 // call as the prose and can't be re-rolled alone).
 async function generateClassifierState<T extends { worldTimeDelta: number }>(
-  prompt: string,
+  prompt: PromptHalves,
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   abortSignal: AbortSignal,
+  options: StructuredCallOptions,
 ): Promise<GenerateStructuredResult<T>> {
-  const first = await generateStructured('classifier', prompt, schema, config, abortSignal)
+  const classify = () =>
+    generateStructured('classifier', prompt, schema, config, abortSignal, options)
+  const first = await classify()
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
-  const reroll = await generateStructured('classifier', prompt, schema, config, abortSignal)
+  const reroll = await classify()
   return reroll.status === 'ok' ? reroll : first
 }
 
@@ -271,18 +280,23 @@ export async function* piggybackFallbackClassifierPhase(
     assignments: appSettings.assignments,
     storyModels: open.settings.models,
   }
+  // Only the turn's regular classifier recurs per turn, so only it caches the system prefix;
+  // a failed-piggyback recovery doesn't (piggyback.md → Fallback classifier context).
+  const callOptions: StructuredCallOptions = { cacheSystemPrefix: !outcome?.attempted }
   const result = askForSuggestions
     ? await generateClassifierState(
         prompt,
         fallbackClassifierWithSuggestionsSchema,
         classifierConfig,
         ctx.abortSignal,
+        callOptions,
       )
     : await generateClassifierState(
         prompt,
         fallbackClassifierSchema,
         classifierConfig,
         ctx.abortSignal,
+        callOptions,
       )
 
   // A cancelled run discards its writes rather than recording them as a classifier

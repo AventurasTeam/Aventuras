@@ -1,7 +1,10 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`bundled piggyback fallback classifier template > matches the recorded snapshot 1`] = `
-"Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+{
+  "system": "# Calendar
+This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.",
+  "user": "Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 - [c1] Kael (character)
 - [l1] The Drowned Keep (location)
 
@@ -48,9 +51,6 @@ Still open.
 
 Chapter One: the marsh road.
 
-# Calendar
-This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
-
 # Earlier turns — how the scene got here, not the turn you report on
 
 The marsh road ended at a wall of black water.
@@ -72,5 +72,6 @@ Report a place the scene settled in that has no ID yet in newLocations, and an i
 Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
 
 Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
-"
+",
+}
 `;

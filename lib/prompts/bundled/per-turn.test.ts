@@ -49,12 +49,13 @@ const m2Context = {
 }
 
 describe('bundled per-turn template — empty-guard contract', () => {
-  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
 
   it('emits no dangling section headers for empty genre/tone/setting', () => {
-    expect(out).not.toContain('# Setting')
-    expect(out).not.toContain('# Genre')
-    expect(out).not.toContain('# Tone')
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    expect(system).not.toContain('# Setting')
+    expect(system).not.toContain('# Genre')
+    expect(system).not.toContain('# Tone')
   })
 
   it('still renders the in-scene character and the entry buffer', () => {
@@ -65,7 +66,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   })
 
   it('matches the recorded snapshot', () => {
-    expect(out).toMatchSnapshot()
+    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)).toMatchSnapshot()
   })
 
   // Both branches asserted directly: the snapshot pins whichever one the fixture
@@ -76,7 +77,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceLastAiReply',
-    })
+    }).user
     expect(rendered).toContain("including any time the user's action itself took")
   })
 
@@ -85,7 +86,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceUserAction',
-    })
+    }).user
     expect(rendered).toContain("seconds elapsed since the end of the user's action")
     expect(rendered).not.toContain("including any time the user's action itself took")
   })
@@ -151,7 +152,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       retrievedEntities: [
         { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
       ],
-    })
+    }).user
 
     const blocks = withMemory.indexOf('# Elsewhere in the world')
     const places = withMemory.indexOf('# Places')
@@ -169,7 +170,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       userSettings: { partialChapterBuffer: 1 },
       entries: [{ content: 'alpha-line' }, { content: 'beta-line' }, { content: 'gamma-line' }],
-    })
+    }).user
     expect(rendered).toContain('alpha-line')
     expect(rendered).toContain('beta-line')
     expect(rendered).toContain('gamma-line')
@@ -185,7 +186,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           renderedText: 'Lord Eldrin (available to introduce): An exiled noble.',
         },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Elsewhere in the world')
     expect(rendered).toContain('[char_2] Lord Eldrin (available to introduce): An exiled noble.')
     expect(rendered).toContain(
@@ -209,7 +210,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           injectionMode: 'auto',
         },
       ],
-    })
+    }).user
     expect(rendered).not.toContain('# Elsewhere in the world')
     expect(rendered).not.toContain('Lord Eldrin')
     // The instruction has no referent without the block, so it must go too.
@@ -230,7 +231,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           description: 'A ferryman long dead.',
         },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Elsewhere in the world')
     expect(rendered).toContain('[char_3] Old Sesk: A ferryman long dead.')
     // The bracketed id is meaningless without the instruction that explains it,
@@ -247,15 +248,16 @@ describe('bundled per-turn template — empty-guard contract', () => {
         tiers: [{ name: 'month', labels: ['January', 'February'] }],
       },
     }
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar)
-    expect(rendered).toContain('# Calendar')
-    expect(rendered).toContain('This story tracks time in seconds (1 seconds per second).')
-    expect(rendered).toContain('month (January and February)')
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar)
+    expect(system).toContain('# Calendar')
+    expect(system).toContain('This story tracks time in seconds (1 seconds per second).')
+    expect(system).toContain('month (January and February)')
+    expect(user).not.toContain('# Calendar')
   })
 
   it('omits the calendar section when calendarVocabulary is absent', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
-    expect(rendered).not.toContain('# Calendar')
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    expect(system).not.toContain('# Calendar')
   })
 
   it('renders the current location from the structural floor, with its ID', () => {
@@ -268,7 +270,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
   })
@@ -277,7 +279,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       structuralLocation: { id: 'loc_2', kind: 'location', status: 'active', name: 'Old Mill' },
-    })
+    }).user
     expect(rendered).toContain('[loc_2] Old Mill')
     expect(rendered).not.toContain('[loc_2] Old Mill:')
   })
@@ -290,7 +292,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       currentLocationId: 'loc_1',
       structuralLocation: null,
       locationMap: [{ id: 'loc_2', name: 'Old Mill', depth: 0 }],
-    })
+    }).user
     expect(rendered).not.toContain('# Current location')
     expect(rendered).toContain('# Places\n[loc_2] Old Mill\n')
     expect(rendered).toContain(PLACES_INSTRUCTION)
@@ -313,7 +315,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         { id: 'loc_1', name: 'The Keep', depth: 0 },
         { id: 'loc_9', name: 'The Market', depth: 0 },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Places\n[loc_1] The Keep\n[loc_9] The Market\n')
     expect(rendered).toContain(PLACES_INSTRUCTION)
   })
@@ -329,7 +331,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           renderedText: 'Mira (currently elsewhere): A courier.',
         },
       ],
-    })
+    }).user
     expect(rendered).not.toContain('# Places')
     expect(rendered).not.toContain('Use an ID from Places')
     // Positive control: the ranked row and its own instruction still render, so
@@ -343,7 +345,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       locationIds: ['loc_1'],
-    })
+    }).user
     expect(rendered).not.toContain('loc_1')
     expect(rendered).toContain('## Aria [char_1]')
   })
@@ -373,7 +375,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered.split('The Keep')).toHaveLength(2)
     expect(rendered).not.toContain('## The Keep')
     // Positive control: the other in-scene row is untouched by the de-dupe.
@@ -401,7 +403,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered).not.toContain('# In scene')
     // Positive control: the row itself still reaches the prompt, via the floor.
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
@@ -417,7 +419,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         { ...m2Context.entities[0], description: null },
         { ...m2Context.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
       ],
-    })
+    }).user
     expect(rendered).toContain('## Aria [char_1]\n\n## Bex [char_2]\nA quiet smith.')
   })
 
@@ -437,7 +439,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         },
       ],
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
-    })
+    }).user
     expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
     expect(rendered).not.toContain('A weathered hilltop fortress.')
     expect(rendered).toContain('## Aria [char_1]')
@@ -476,42 +478,44 @@ describe('bundled per-turn template — piggybackFires gating', () => {
   }
 
   it('keeps the memory/location/calendar info sections but drops ID brackets, ID-usage instructions, and the state-emission macro when the fallback classifier will fire anyway', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything)
-    expect(rendered).toContain('## Aria')
-    expect(rendered).not.toContain('## Aria [char_1]')
-    expect(rendered).toContain('# Elsewhere in the world')
-    expect(rendered).toContain('Lord Eldrin (available to introduce): An exiled noble.')
-    expect(rendered).not.toContain('[char_2]')
-    expect(rendered).not.toContain(
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything)
+    expect(user).toContain('## Aria')
+    expect(user).not.toContain('## Aria [char_1]')
+    expect(user).toContain('# Elsewhere in the world')
+    expect(user).toContain('Lord Eldrin (available to introduce): An exiled noble.')
+    expect(user).not.toContain('[char_2]')
+    expect(user).not.toContain(
       'include their ID (without brackets) in the trailing <scene_entities> block',
     )
-    expect(rendered).toContain('# Current location')
-    expect(rendered).toContain('The Keep: A weathered hilltop fortress.')
-    expect(rendered).not.toContain('[loc_1]')
-    expect(rendered).not.toContain('Use an ID from Places')
-    expect(rendered).toContain('# Places\nThe Keep\n')
-    expect(rendered).toContain('Holds: Silver Key\n')
-    expect(rendered).toContain('Here: the iron chest\n')
-    expect(rendered).not.toContain('[item_')
-    expect(rendered).toContain('# Calendar')
-    expect(rendered).not.toContain('<world_time_delta>')
-    expect(rendered).not.toContain('<state>')
+    expect(user).toContain('# Current location')
+    expect(user).toContain('The Keep: A weathered hilltop fortress.')
+    expect(user).not.toContain('[loc_1]')
+    expect(user).not.toContain('Use an ID from Places')
+    expect(user).toContain('# Places\nThe Keep\n')
+    expect(user).toContain('Holds: Silver Key\n')
+    expect(user).toContain('Here: the iron chest\n')
+    expect(user).not.toContain('[item_')
+    expect(system).toContain('# Calendar')
+    expect(system).not.toContain('<world_time_delta>')
+    expect(user).not.toContain('<world_time_delta>')
+    expect(user).not.toContain('<state>')
   })
 
   it('renders all of it when piggybackFires is true', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...contextWithEverything,
       piggybackFires: true,
     })
-    expect(rendered).toContain('## Aria [char_1]')
-    expect(rendered).toContain('[char_2] Lord Eldrin')
-    expect(rendered).toContain('[loc_1] The Keep')
-    expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
-    expect(rendered).toContain('Holds: [item_1] Silver Key\n')
-    expect(rendered).toContain('Here: [item_7] the iron chest\n')
-    expect(rendered).toContain(PLACES_INSTRUCTION)
-    expect(rendered).toContain('# Calendar')
-    expect(rendered).toContain('<state>')
+    expect(user).toContain('## Aria [char_1]')
+    expect(user).toContain('[char_2] Lord Eldrin')
+    expect(user).toContain('[loc_1] The Keep')
+    expect(user).toContain('# Places\n[loc_1] The Keep\n')
+    expect(user).toContain('Holds: [item_1] Silver Key\n')
+    expect(user).toContain('Here: [item_7] the iron chest\n')
+    expect(user).toContain(PLACES_INSTRUCTION)
+    expect(system).toContain('# Calendar')
+    expect(system).toContain('into a seconds delta on <world_time_delta> using these units.')
+    expect(user).toContain('<state>')
   })
 })
 
@@ -539,7 +543,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
     },
   ]
   const render = (over: Record<string, unknown>) =>
-    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over })
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over }).user
 
   it('nests the map two spaces per level, with IDs when piggyback fires', () => {
     expect(render({ locationMap: MAP })).toContain(
@@ -709,7 +713,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
 })
 
 describe('bundled per-turn template — create instructions', () => {
-  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
 
   // A model copies the skeleton's order, and canon's example declares before it uses; the parser
   // doesn't care. <scene_entities>, which may name a new item, still leads.
@@ -731,7 +735,7 @@ describe('bundled per-turn template — create instructions', () => {
     const withPlaces = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
-    })
+    }).user
     expect(withPlaces).toContain(
       '<current_location>the ID from Places, or the handle of a new_location above</current_location>',
     )
@@ -765,7 +769,7 @@ describe('bundled per-turn template — create instructions', () => {
     const off = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       piggybackFires: false,
-    })
+    }).user
     expect(off).not.toContain('<new_location')
     expect(off).not.toContain('Create a place only when')
     expect(off).not.toContain('&quot;')
@@ -784,7 +788,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   }
 
   it('includes the suggestion-emission macro when suggestionsFire is true', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(rendered).toContain('<suggestions>')
     // The id is its own labelled field, not bracketed beside the name: a model
     // that reads "[cat1] Action" as one label emits an unresolvable ref.
@@ -799,13 +803,13 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   // doesn't forbid mid-prose emission risks the model burying <suggestions>
   // inside the narrative and silently truncating everything after it.
   it('forbids mid-prose emission regardless of whether the state block is present', () => {
-    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(withState).toContain('never inside the prose itself')
 
     const withoutState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       piggybackFires: false,
-    })
+    }).user
     expect(withoutState).toContain('never inside the prose itself')
   })
 
@@ -813,23 +817,159 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       suggestionsFire: false,
-    })
+    }).user
     expect(rendered).not.toContain('<suggestions>')
   })
 
   it('joins the state block and the suggestions block with a single newline, no blank line, when both fire', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(rendered).toContain('off-scene).\nAppend exactly one <suggestions> block')
   })
 
-  it('places the suggestions block directly after the narrative instruction when piggybackFires is false', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+  it('places the suggestions block one blank line below the story when piggybackFires is false', () => {
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       piggybackFires: false,
     })
-    expect(rendered).not.toContain('<state>')
-    expect(rendered).toContain(
-      'Do not break character or address the reader.\nAppend exactly one <suggestions> block',
+    expect(user).not.toContain('<state>')
+    expect(user).toContain('Aria stepped through.\n\nAppend exactly one <suggestions> block')
+    expect(system).toBe(
+      'Write the next beat of the story as prose. Do not break character or address the reader.',
+    )
+  })
+})
+
+// architecture.md → System and user halves.
+describe('bundled per-turn template — system and user halves', () => {
+  const OUTPUT_FORMAT =
+    'Write the next beat of the story as prose. Do not break character or address the reader.'
+  const everything = {
+    ...m2Context,
+    definition: {
+      mode: 'adventure',
+      setting: 'A keep on a hill.',
+      genre: { promptBody: 'High fantasy.' },
+      tone: { promptBody: 'Dry humor.' },
+    },
+    calendarVocabulary: {
+      baseUnitName: 'second',
+      secondsPerBaseUnit: 1,
+      tiers: [{ name: 'month', labels: ['January', 'February'] }],
+    },
+    structuralLocation: {
+      id: 'loc_1',
+      kind: 'location',
+      status: 'active',
+      name: 'The Keep',
+      description: 'A weathered hilltop fortress.',
+    },
+    locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    retrievedEntities: [
+      { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
+    ],
+    suggestionsFire: true,
+    suggestionCount: 2,
+    suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A decisive move.' }],
+  }
+  const render = (over: Record<string, unknown> = {}) =>
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...everything, ...over })
+  const headings = (half: string) => half.split('\n').filter((line) => line.startsWith('# '))
+
+  it('holds Setting, Genre, Tone and Calendar in that order, then the output-format line', () => {
+    const { system } = render()
+    expect(headings(system)).toEqual(['# Setting', '# Genre', '# Tone', '# Calendar'])
+    expect(system).toContain('# Setting\nA keep on a hill.\n\n# Genre\nHigh fantasy.')
+    expect(system.split('\n').at(-1)).toBe(OUTPUT_FORMAT)
+  })
+
+  it('keeps every per-call block in the user half, and the system blocks out of it', () => {
+    const { system, user } = render()
+    expect(headings(user)).toEqual([
+      '# In scene',
+      '# Current location',
+      '# Places',
+      '# Elsewhere in the world',
+      '# Story so far',
+    ])
+    for (const perCall of [
+      'off-scene character above',
+      PLACES_INSTRUCTION,
+      '<state>',
+      '<suggestions>',
+    ]) {
+      expect(user).toContain(perCall)
+      expect(system).not.toContain(perCall)
+    }
+    for (const heading of ['# Setting', '# Genre', '# Tone', '# Calendar']) {
+      expect(user).not.toContain(heading)
+    }
+    expect(user).not.toContain(OUTPUT_FORMAT)
+  })
+
+  it('drops the <world_time_delta> sentence from the system half when piggyback does not fire', () => {
+    const { system } = render({ piggybackFires: false })
+    expect(system).toContain('Tiers: month (January and February).\n\n')
+    expect(system).not.toContain('<world_time_delta>')
+    expect(render().system).toContain(
+      'into a seconds delta on <world_time_delta> using these units.',
+    )
+  })
+
+  it('matches the recorded snapshot with every block filled', () => {
+    expect(render()).toMatchSnapshot()
+  })
+
+  it('is the output-format line alone for a story with no setting, genre, tone or calendar', () => {
+    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).system).toBe(OUTPUT_FORMAT)
+  })
+
+  // Neither half starts or ends on a blank line; whatever follows a half supplies its own separator.
+  const flagCombinations = [
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ]
+  it.each(flagCombinations)(
+    'starts and ends neither half on a blank line (piggybackFires %s, suggestionsFire %s)',
+    (piggybackFires, suggestionsFire) => {
+      const { system, user } = render({ piggybackFires, suggestionsFire })
+      for (const half of [system, user]) {
+        expect(half).not.toMatch(/^[ \t]*\n/)
+        expect(half).not.toMatch(/\n[ \t]*\n[ \t]*$/)
+      }
+    },
+  )
+
+  it.each(flagCombinations)(
+    'starts and ends neither half on a blank line with a calendar-only system half (piggybackFires %s, suggestionsFire %s)',
+    (piggybackFires, suggestionsFire) => {
+      const { system, user } = render({
+        definition: {
+          mode: 'adventure',
+          setting: '',
+          genre: { promptBody: '' },
+          tone: { promptBody: '' },
+        },
+        piggybackFires,
+        suggestionsFire,
+      })
+      expect(system).toMatch(/^# Calendar\n[^\n]+\n\n/)
+      expect(headings(system)).toEqual(['# Calendar'])
+      for (const half of [system, user]) {
+        expect(half).not.toMatch(/^[ \t]*\n/)
+        expect(half).not.toMatch(/\n[ \t]*\n[ \t]*$/)
+      }
+    },
+  )
+
+  // Each emission block opens with its own newline, which keeps one blank line below the story.
+  it('keeps one blank line between the story and the state block, and ends on the story when nothing follows', () => {
+    expect(render({ suggestionsFire: false }).user).toContain(
+      'Aria stepped through.\n\nAfter your narrative prose, append exactly one <state> block',
+    )
+    expect(render({ piggybackFires: false, suggestionsFire: false }).user).toMatch(
+      /\nAria stepped through\.\n$/,
     )
   })
 })

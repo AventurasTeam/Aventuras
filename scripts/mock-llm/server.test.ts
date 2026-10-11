@@ -41,16 +41,24 @@ async function waitForEntry(): Promise<{ outcome: string }> {
   throw new Error('no log entry arrived')
 }
 
-/** The prompt the app would send for `schema` on the default (auto) path. */
-function structuredPrompt(schema: z.ZodType, text = 'Classify the turn.'): string {
+/** The app's auto-path request for `schema`; a blank system half leaves the contract as system. */
+function structuredRequest(
+  schema: z.ZodType,
+  text = 'Classify the turn.',
+): Record<string, unknown> {
   const block = schemaToTypeScriptBlock(z.toJSONSchema(schema) as JsonSchema)
-  return `${text}\n\nRespond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${block}\n\nOutput ONLY the JSON object, no other text or markdown.`
-}
-
-function structuredRequest(schema: z.ZodType): Record<string, unknown> {
   return {
     model: 'seed/narrative',
-    messages: [{ role: 'user', content: structuredPrompt(schema) }],
+    messages: [
+      {
+        role: 'system',
+        content: `Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${block}`,
+      },
+      {
+        role: 'user',
+        content: `${text}\n\nOutput ONLY the JSON object, no other text or markdown.`,
+      },
+    ],
   }
 }
 
@@ -74,11 +82,8 @@ describe('structured calls', () => {
     const prompt = renderTemplate(TEMPLATE_IDS.wizardTone, {
       definition: { setting: 'A city that flooded and stayed.', genre: {}, tone: {} },
       guidance: '',
-    })
-    const response = await post({
-      model: 'seed/narrative',
-      messages: [{ role: 'user', content: structuredPrompt(labeledPromptOutputSchema, prompt) }],
-    })
+    }).user
+    const response = await post(structuredRequest(labeledPromptOutputSchema, prompt))
 
     const body = (await response.json()) as { choices: { message: { content: string } }[] }
     const value = labeledPromptOutputSchema.parse(
@@ -290,7 +295,7 @@ describe('catalog and control surface', () => {
         { id: 'c2', name: 'Verity Sould', kind: 'character', status: 'staged', description: '' },
       ],
       guidance: '',
-    })
+    }).user
     await post({ model: 'seed/narrative', messages: [{ role: 'user', content: prompt }] })
 
     const entries = (await (await fetch(`${base()}/api/log`)).json()) as {

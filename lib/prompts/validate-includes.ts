@@ -10,11 +10,16 @@ export function extractIncludes(source: string): string[] {
   return [...ids]
 }
 
-// A template in group G may include only G-tagged or `staticContent` macros.
+// A template in group G may include only G-tagged or `staticContent` macros,
+// from either half. A macro both halves include is one violation, not two.
 export function validatePackIncludes(pack: Pack): IncludeViolation[] {
   const violations: IncludeViolation[] = []
   for (const [templateId, template] of Object.entries(pack.templates)) {
-    for (const macroId of extractIncludes(template.source)) {
+    const macroIds = new Set([
+      ...extractIncludes(template.system),
+      ...extractIncludes(template.user),
+    ])
+    for (const macroId of macroIds) {
       const macro = pack.macros[macroId]
       if (!macro) {
         violations.push({

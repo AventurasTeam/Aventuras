@@ -4,8 +4,9 @@ import { renderTemplate, TEMPLATE_IDS } from '../index'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
 
-const render = (context: Record<string, unknown>) =>
+const renderHalves = (context: Record<string, unknown>) =>
   renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+const render = (context: Record<string, unknown>) => renderHalves(context).user
 
 // Anchored on the fixed opening/closing tokens so the mid-section — the two branches'
 // inner phrasing — is whatever the source under test actually says, not assumed.
@@ -126,13 +127,13 @@ describe('bundled piggyback fallback classifier template', () => {
    * (`turn.# In scene` still contains `# In scene`). Only the snapshot below sees it.
    */
   it('matches the recorded snapshot', () => {
-    expect(render(context())).toMatchSnapshot()
+    expect(renderHalves(context())).toMatchSnapshot()
   })
 
   // piggyback.md → Fallback classifier context: Setting/Genre/Tone bias extraction toward
   // narrating, so neither renders here — this call carries its own structured-output schema.
   it('never renders Setting, Genre, Tone or an output-format macro', () => {
-    const prompt = render(
+    const { system, user } = renderHalves(
       context({
         definition: {
           mode: 'adventure',
@@ -143,14 +144,16 @@ describe('bundled piggyback fallback classifier template', () => {
       }),
     )
 
-    expect(prompt).not.toContain('SETTING-MARKER')
-    expect(prompt).not.toContain('GENRE-MARKER')
-    expect(prompt).not.toContain('TONE-MARKER')
-    expect(prompt).not.toContain('# Setting')
-    expect(prompt).not.toContain('# Genre')
-    expect(prompt).not.toContain('# Tone')
-    expect(prompt).not.toContain('Write the next beat of the story as prose')
-    expect(prompt).not.toContain('<state>')
+    for (const half of [system, user]) {
+      expect(half).not.toContain('SETTING-MARKER')
+      expect(half).not.toContain('GENRE-MARKER')
+      expect(half).not.toContain('TONE-MARKER')
+      expect(half).not.toContain('# Setting')
+      expect(half).not.toContain('# Genre')
+      expect(half).not.toContain('# Tone')
+      expect(half).not.toContain('Write the next beat of the story as prose')
+      expect(half).not.toContain('<state>')
+    }
   })
 
   // piggybackFires false → macro_memory_blocks brackets no ids (roster is the sole ID source);
@@ -165,7 +168,44 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(prompt).not.toContain('Use an ID from Places')
   })
 
-  // The mock LLM's shape registry and anything keyed on the opening line read it as is.
+  // piggyback.md → Fallback classifier context.
+  describe('system and user halves', () => {
+    it('is the calendar block alone in the system half', () => {
+      expect(renderHalves(context()).system).toBe(
+        '# Calendar\nThis story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.',
+      )
+    })
+
+    it('renders a blank system half when the story has no calendar', () => {
+      const { system, user } = renderHalves(context({ calendarVocabulary: null }))
+      expect(system).toBe('')
+      expect(user).toContain('\n# This turn\n')
+    })
+
+    it('keeps the calendar out of the user half', () => {
+      const user = render(context())
+      expect(user).not.toContain('# Calendar')
+      expect(user).not.toContain('This story tracks time')
+    })
+
+    it("keeps the user half's headings in the order the template had them", () => {
+      const user = render(context())
+      expect(user.split('\n').filter((line) => line.startsWith('# '))).toEqual([
+        '# In scene',
+        '# Current location',
+        '# Places',
+        '# Elsewhere in the world',
+        '# Relevant lore',
+        '# What has happened',
+        '# Active threads',
+        '# Earlier chapters',
+        '# Earlier turns — how the scene got here, not the turn you report on',
+        '# This turn',
+      ])
+    })
+  })
+
+  // The roster opens the user half, ahead of every memory block.
   it('keeps its first line', () => {
     expect(render(context()).split('\n')[0]).toBe(
       'Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:',
@@ -305,7 +345,7 @@ describe('bundled piggyback fallback classifier template', () => {
 
     // Hand-verified against state-emission.ts across three reviews; enforce it instead.
     it('matches state-emission.ts word for word on the world-time-delta clause', () => {
-      expect(worldTimeDeltaClause(PIGGYBACK_FALLBACK_CLASSIFIER)).toBe(
+      expect(worldTimeDeltaClause(PIGGYBACK_FALLBACK_CLASSIFIER.user)).toBe(
         worldTimeDeltaClause(STATE_EMISSION),
       )
     })

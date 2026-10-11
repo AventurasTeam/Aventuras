@@ -267,7 +267,7 @@ describe('periodicClassifierPhase', () => {
     const { result } = await drain(h.ctx)
 
     expect(result).toEqual({ status: 'completed' })
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('turn 11')
     expect(prompt).not.toContain('turn 151')
     // maxEntries defaults to 20, so one pass claims 11..30 and the backlog drains.
@@ -323,10 +323,16 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
-    expect(prompt).toContain('Kael sees')
-    expect(prompt).toContain('as: ally')
-    expect(prompt).not.toContain('rival')
+    const { system, user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('Kael sees')
+    expect(user).toContain('as: ally')
+    expect(user).not.toContain('rival')
+    // classifier.md → What the classifier reads: role line and rules lead; branch lists stay out.
+    expect(system).toMatch(
+      /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules:\n\n- Provenance\. /,
+    )
+    expect(system).not.toContain('Kael sees')
+    expect(system).not.toContain('as: ally')
   })
 
   // Fails if the phase stops filtering a saved scene to the branch's live entities:
@@ -356,9 +362,19 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('[t1] scene: [c1]\nturn 1')
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
+  })
+
+  // architecture.md → System and user halves.
+  it('sends no cache marker: the call takes no sixth argument', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    expect(vi.mocked(generateStructured).mock.calls[0]![5]).toBeUndefined()
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { bundledPack, renderTemplate, TEMPLATE_IDS } from '../index'
+import { templateGlobals } from '../engine'
+import { bundledPack, renderTemplate, TEMPLATE_IDS, templateReads } from '../index'
 import { loadPack } from '../load-pack'
 import { validatePackIncludes } from '../validate-includes'
 
@@ -13,6 +14,22 @@ describe('bundled pack', () => {
     expect(() => loadPack(bundledPack)).not.toThrow()
   })
 
+  // architecture.md → System and user halves: a wizard template's system half is empty.
+  it('leaves every wizard template system half empty', () => {
+    const wizard = Object.entries(bundledPack.templates).filter(([, t]) => t.group === 'wizard')
+    expect(wizard).toHaveLength(13)
+    expect(wizard.filter(([, t]) => t.system !== '').map(([id]) => id)).toEqual([])
+  })
+
+  // The context builder skips the query behind an unread variable, so a system-half-only read
+  // left out of templateReads would render empty.
+  it('reports the variables a template reads in its system half', () => {
+    const { engine } = loadPack(bundledPack)
+    const id = TEMPLATE_IDS.perTurnNarrative
+    expect(templateGlobals(engine, id, 'user')).not.toContain('calendarVocabulary')
+    expect(templateReads(id)).toContain('calendarVocabulary')
+  })
+
   it('renders the wizard opening from definition + lead', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
       definition: {
@@ -23,7 +40,7 @@ describe('bundled pack', () => {
       },
       leadEntityId: 'c1',
       cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
-    })
+    }).user
     expect(out).toContain('adventure')
     expect(out).toContain('A frozen coast.')
     expect(out).toContain('Aria')
@@ -50,7 +67,7 @@ describe('bundled pack', () => {
       return prompt.slice(start, end)
     }
 
-    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
     // suggestionsFire: false is what the refresh phase actually produces — it
     // never sets the flag, so buildGenerationContext defaults it. Rendering
     // this half with `true` would let a suggestionsFire guard be added to the
@@ -59,7 +76,7 @@ describe('bundled pack', () => {
     const refresh = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
       ...context,
       suggestionsFire: false,
-    })
+    }).user
 
     expect(instruction(classifier)).toBe(instruction(refresh))
     expect(instruction(refresh)).toContain('exactly 2 distinct entries')
@@ -73,14 +90,14 @@ describe('bundled pack', () => {
       entities: [],
       lastTurns: [{ content: 'The gate groaned open.' }],
     }
-    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
 
     expect(classifier).toMatch(/one[- ]sentence summary/i)
   })
 
   it('asks the fallback classifier for the retrieval queries Q4 needs', () => {
     const context = { entities: [], lastTurns: [{ content: 'The gate groaned open.' }] }
-    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
 
     expect(classifier).toMatch(/up to three/i)
     expect(classifier).toMatch(/next turn/i)

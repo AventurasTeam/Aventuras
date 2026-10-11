@@ -5,6 +5,7 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { reverseAndPruneDeltaRows } from '@/lib/actions/delta/reverse-replay'
 import { resolveSweep } from '@/lib/actions/story-entries/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
+import type { PromptHalves } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
@@ -18,7 +19,7 @@ import {
 } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
-import type { TemplateId } from '@/lib/prompts'
+import type { RenderedPrompt, TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
@@ -51,7 +52,10 @@ vi.mock('@/lib/ai', async (importOriginal) => {
 // the bundled pack renders one.
 vi.mock('@/lib/prompts', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  const render = actual.renderTemplate as (id: TemplateId, ctx: Record<string, unknown>) => string
+  const render = actual.renderTemplate as (
+    id: TemplateId,
+    ctx: Record<string, unknown>,
+  ) => RenderedPrompt
   return {
     ...actual,
     renderTemplate: (templateId: TemplateId, context: Record<string, unknown>) => {
@@ -1221,14 +1225,25 @@ async function runNarrativeWith(opts: {
     throw new Error('expected a createStoryEntry delta')
   const { metadata } = created.action.payload.entry
   if (!metadata) throw new Error('expected entry metadata')
+  const halves = streamTextMock.mock.calls.at(-1)?.[1]?.prompt as PromptHalves
   return {
     events,
     metadata,
     intermediates,
-    prompt: streamTextMock.mock.calls.at(-1)?.[1]?.prompt as string,
+    prompt: halves.user,
+    system: halves.system,
     context: renderTemplateMock.mock.calls.at(-1)?.[1] as Record<string, unknown>,
   }
 }
+
+describe('narrative call prompt', () => {
+  // architecture.md → System and user halves: always asked; only anthropic providers honour it.
+  it('asks the narrative call to mark its system prefix for caching', async () => {
+    await runNarrativeWith({ narrative: 'prose' })
+
+    expect(streamTextMock.mock.calls.at(-1)?.[1]?.cacheSystemPrefix).toBe(true)
+  })
+})
 
 describe('narrative fold — retrieval handoff', () => {
   const namesOf = (bucket: unknown) =>
@@ -2144,5 +2159,22 @@ describe('narrative fold — creates', () => {
     const { events, result } = await foldTurn(CREATE_REPLY, { signal: controller.signal })
     expect(result).toEqual({ status: 'aborted' })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+  })
+})
+
+// architecture.md → System and user halves. Fixture fills Setting/Genre/Tone and the calendar
+// always resolves, so all four lead the system half.
+describe('narrative fold — prompt halves', () => {
+  it('sends the definition and calendar as the system half, and the scene and story as the user half', async () => {
+    const { system, prompt: user } = await runNarrativeWith({ narrative: 'prose' })
+    expect(system).toMatch(
+      /^# Setting\nA keep on a hill\.\n\n# Genre\nHigh fantasy\.\n\n# Tone\nDry humor\.\n\n# Calendar\nThis story tracks time in /,
+    )
+    expect(system).toMatch(
+      /[^\n]\n\nWrite the next beat of the story as prose\. Do not break character or address the reader\.$/,
+    )
+    expect(user).toContain('# Story so far')
+    expect(user).not.toContain('# Setting')
+    expect(user).not.toContain('# Calendar')
   })
 })

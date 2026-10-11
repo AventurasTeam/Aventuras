@@ -1,7 +1,10 @@
-// Structured-output call: the emission section asks for a JSON field, NOT the
-// tagged <suggestions> block macro_suggestion_emission instructs (that macro
-// belongs to the narrative fold, which appends the block to prose).
-export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
+import type { TemplateSources } from '../types'
+
+export const SUGGESTION_REFRESH: TemplateSources = {
+  // rstrip: a JSON contract may be appended after this half with its own blank line, which the
+  // last block's separator would double.
+  system: `{%- capture definitionBlocks -%}
+{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
 
@@ -16,7 +19,11 @@ export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
 {{ definition.tone.promptBody }}
 
 {% endif -%}
-{%- assign hasScene = false -%}
+{%- endcapture -%}
+{{ definitionBlocks | rstrip }}`,
+  // Structured-output call: the emission section asks for a JSON field, NOT the tagged
+  // <suggestions> block (macro_suggestion_emission is the narrative fold's, appended to prose).
+  user: `{%- assign hasScene = false -%}
 {%- for e in entities | active -%}
 {%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}
 {%- endfor -%}
@@ -53,4 +60,5 @@ The reader has already started writing their next turn:
 {{ refreshGuidance }}
 
 Build on that direction — take it further or offer variations of it — without repeating it back verbatim.
-{%- endif -%}`
+{%- endif -%}`,
+}

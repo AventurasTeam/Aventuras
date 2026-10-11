@@ -14,8 +14,10 @@ export {
   parseStructured,
   streamText,
   type GenerateStructuredResult,
+  type PromptHalves,
   type StreamTextOptions,
   type StreamTextResult,
+  type StructuredCallOptions,
 } from './generate'
 // getModel + the retry/timeout trio are public for cross-module tests
 // (pipeline fault injection) and lib/pipeline's CallRetryError mapping —

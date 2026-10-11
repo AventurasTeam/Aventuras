@@ -25,7 +25,7 @@ const leadlessCtx = {
 
 describe('WIZARD_OPENING template', () => {
   it('carries creative content only — no output-format directives (middleware-injected)', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx)
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx).user
     expect(out).toContain('opening passage')
     // The JSON contract (field list + format directive) is injected at call
     // time by lib/ai's prompt-schema middleware, never baked into the pack.
@@ -33,7 +33,7 @@ describe('WIZARD_OPENING template', () => {
   })
 
   it('names the lead and its cast id when present', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx)
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx).user
     expect(out).toContain('Aria')
     // The placeholder id must reach the prompt so a real model can echo it back
     // in sceneEntities — otherwise the idMap round-trip has nothing to resolve.
@@ -41,18 +41,18 @@ describe('WIZARD_OPENING template', () => {
   })
 
   it('does NOT reference a lead or cast id on the lead-less path and has no "undefined"', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx)
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx).user
     expect(out).not.toContain('undefined')
     expect(out).not.toMatch(/lead character is/i)
     expect(out).not.toContain('cast id:')
   })
 
   it('renders per-invocation guidance only when present', () => {
-    expect(renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx)).not.toContain('guidance')
+    expect(renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx).user).not.toContain('guidance')
     const withGuidance = renderTemplate(TEMPLATE_IDS.wizardOpening, {
       ...leadlessCtx,
       guidance: 'darker tone',
-    })
+    }).user
     expect(withGuidance).toContain('Additional guidance: darker tone')
   })
 
@@ -64,7 +64,7 @@ describe('WIZARD_OPENING template', () => {
         genre: { promptBody: 'Write it as hard sci-fi, terse and technical.' },
         tone: { promptBody: 'Keep it clinical and understated.' },
       },
-    })
+    }).user
     expect(out).toContain('Write it as hard sci-fi, terse and technical.')
     expect(out).toContain('Keep it clinical and understated.')
   })
@@ -74,7 +74,7 @@ describe('WIZARD_DESCRIPTION template', () => {
   it('asks for a synopsis/description, not next-beat narrative', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardDescription, {
       opening: { content: 'Once upon a time.' },
-    })
+    }).user
     expect(out).toContain('Once upon a time.')
     expect(out.toLowerCase()).toMatch(/description|synopsis|log line|log-line/)
     // must NOT include the narrative next-beat macro text:
@@ -93,7 +93,7 @@ describe('WIZARD_OPENING lore block', () => {
       lore: rows,
       leadEntityId: '',
       guidance: '',
-    })
+    }).user
     expect(out).toContain('World reference:')
     expect(out).toContain('- Row 0: Body 0')
     expect(out).toContain('- Row 11: Body 11')
@@ -105,7 +105,7 @@ describe('WIZARD_OPENING lore block', () => {
       lore: [],
       leadEntityId: '',
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('World reference:')
   })
 
@@ -114,7 +114,7 @@ describe('WIZARD_OPENING lore block', () => {
       definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
       leadEntityId: '',
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('World reference:')
   })
 })
@@ -125,7 +125,7 @@ describe('WIZARD_LORE', () => {
       definition: { setting: 'A drowned coast', genre: {} },
       lore: [{ title: 'The Old Empire', body: 'ignored here' }],
       guidance: '',
-    })
+    }).user
     expect(out).toContain('Already written (do not repeat these):')
     expect(out).toContain('- The Old Empire')
     expect(out, 'bodies stay out of the dedupe list').not.toContain('ignored here')
@@ -137,19 +137,19 @@ describe('WIZARD_GENRE', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardGenre, {
       definition: { setting: 'A drowned coast', tone: { promptBody: 'Write it grim.' } },
       guidance: '',
-    })
+    }).user
     expect(out).toContain('Setting: A drowned coast')
     expect(out).toContain('Tone: Write it grim.')
   })
 
   it('omits setting and tone blocks when absent', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, { definition: {}, guidance: '' })
+    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, { definition: {}, guidance: '' }).user
     expect(out).not.toContain('Setting:')
     expect(out).not.toContain('Tone:')
   })
 
   it('asks for both a short label and a substantial body', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, { definition: {}, guidance: '' })
+    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, { definition: {}, guidance: '' }).user
     expect(out.toLowerCase()).toContain('label')
     expect(out.toLowerCase()).toContain('promptbody')
   })
@@ -159,7 +159,7 @@ describe('WIZARD_GENRE', () => {
       definition: {},
       lore: [{ title: 'The Old Empire', body: 'Fell.' }],
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('The Old Empire')
     expect(out).not.toContain('World reference')
   })
@@ -170,19 +170,19 @@ describe('WIZARD_TONE', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardTone, {
       definition: { setting: 'A drowned coast', genre: { promptBody: 'Hard sci-fi rules.' } },
       guidance: '',
-    })
+    }).user
     expect(out).toContain('Setting: A drowned coast')
     expect(out).toContain('Genre: Hard sci-fi rules.')
   })
 
   it('omits setting and genre blocks when absent', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardTone, { definition: {}, guidance: '' })
+    const out = renderTemplate(TEMPLATE_IDS.wizardTone, { definition: {}, guidance: '' }).user
     expect(out).not.toContain('Setting:')
     expect(out).not.toContain('Genre:')
   })
 
   it('asks for both a short label and a substantial body', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardTone, { definition: {}, guidance: '' })
+    const out = renderTemplate(TEMPLATE_IDS.wizardTone, { definition: {}, guidance: '' }).user
     expect(out.toLowerCase()).toContain('label')
     expect(out.toLowerCase()).toContain('promptbody')
   })
@@ -192,7 +192,7 @@ describe('WIZARD_TONE', () => {
       definition: {},
       lore: [{ title: 'The Old Empire', body: 'Fell.' }],
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('The Old Empire')
     expect(out).not.toContain('World reference')
   })
@@ -206,13 +206,13 @@ describe('WIZARD_SETTING', () => {
         tone: { promptBody: 'Write it grim.' },
       },
       guidance: '',
-    })
+    }).user
     expect(out).toContain('Genre: Hard sci-fi rules.')
     expect(out).toContain('Tone: Write it grim.')
   })
 
   it('omits genre and tone blocks when absent', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardSetting, { definition: {}, guidance: '' })
+    const out = renderTemplate(TEMPLATE_IDS.wizardSetting, { definition: {}, guidance: '' }).user
     expect(out).not.toContain('Genre:')
     expect(out).not.toContain('Tone:')
   })
@@ -222,7 +222,7 @@ describe('WIZARD_SETTING', () => {
       definition: {},
       lore: [{ title: 'The Old Empire', body: 'Fell.' }],
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('The Old Empire')
     expect(out).not.toContain('World reference')
   })
@@ -263,7 +263,7 @@ describe('WIZARD_OPENING cast block', () => {
       ],
       leadEntityId: 'c1',
       guidance: '',
-    })
+    }).user
     expect(out).toContain('Aria (character, cast id: c1): A blacksmith.')
     expect(out).toContain('Mornstone Keep (location, cast id: l1)')
     expect(out).not.toContain('Gandalf')
@@ -279,7 +279,7 @@ describe('WIZARD_OPENING cast block', () => {
       ],
       leadEntityId: '',
       guidance: '',
-    })
+    }).user
     // data-model.md → Scene presence is kind-aware. Every active row is listed
     // (a faction grounds the prose) but openingOutputSchema.sceneEntities is a
     // bare string array, so the header is the model's only signal about which
@@ -304,7 +304,7 @@ describe('WIZARD_OPENING cast block', () => {
       ],
       leadEntityId: '',
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('Cast —')
   })
 
@@ -321,7 +321,7 @@ describe('WIZARD_OPENING cast block', () => {
       // must not name a lead the cast block simultaneously excludes.
       leadEntityId: 'c1',
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('lead character')
     expect(out).not.toContain('Aria')
   })
@@ -336,7 +336,7 @@ describe('WIZARD_OPENING cast block', () => {
       // active characters, but a hydrated pointer can outlive the row it named.
       leadEntityId: 'l1',
       guidance: '',
-    })
+    }).user
     expect(out).toContain('Mornstone Keep (location, cast id: l1)')
     expect(out).not.toContain('lead character')
   })
@@ -355,7 +355,7 @@ describe('WIZARD_CAST', () => {
       ],
       suggested: ['Old Jorin'],
       guidance: 'more factions',
-    })
+    }).user
     expect(out).toContain('Suggest five cast entries')
     expect(out).toContain('- Aria (character)')
     expect(out).toContain('- Bo (character)')
@@ -370,7 +370,7 @@ describe('WIZARD_CAST', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardCast, {
       definition: { genre: {}, tone: {}, setting: '' },
       guidance: '',
-    })
+    }).user
     expect(out).not.toContain('below')
     expect(out).not.toContain('existing cast')
     expect(out).toContain(
@@ -444,9 +444,9 @@ describe.each(REFINE_PAIRS)('$field refine template', (pair) => {
   }
 
   it('shares its contract with the generate template through the macro', () => {
-    expect(renderTemplate(pair.generate, ctx)).toContain(pair.contract)
+    expect(renderTemplate(pair.generate, ctx).user).toContain(pair.contract)
     expect(
-      renderTemplate(pair.refine, { ...ctx, current: pair.current, instruction: 'darker' }),
+      renderTemplate(pair.refine, { ...ctx, current: pair.current, instruction: 'darker' }).user,
     ).toContain(pair.contract)
   })
 
@@ -455,7 +455,7 @@ describe.each(REFINE_PAIRS)('$field refine template', (pair) => {
       ...ctx,
       current: pair.current,
       instruction: 'make it darker',
-    })
+    }).user
     expect(out.startsWith(pair.directive)).toBe(true)
     for (const fragment of pair.rendered) expect(out).toContain(fragment)
     expect(out).toContain('Revision instruction: make it darker')
@@ -468,7 +468,7 @@ describe.each(REFINE_PAIRS)('$field refine template', (pair) => {
       current: pair.current,
       instruction: 'darker',
       guidance: 'GUIDANCE-MARKER',
-    })
+    }).user
     expect(out).not.toContain('GUIDANCE-MARKER')
     expect(out).not.toContain('Additional guidance')
   })

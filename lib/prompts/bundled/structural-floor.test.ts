@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEngine } from '../engine'
+import { createEngine, renderWith } from '../engine'
 import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
 import { MEMORY_BLOCKS } from './memory-blocks'
@@ -19,12 +19,6 @@ const sceneEntity = {
 }
 
 const context = {
-  definition: {
-    mode: 'adventure',
-    genre: { promptBody: '' },
-    tone: { promptBody: '' },
-    setting: '',
-  },
   entities: [sceneEntity],
   sceneEntities: ['char_1'],
   entries: [{ content: 'The gate groaned open.' }],
@@ -57,12 +51,11 @@ const BROKEN_PER_TURN = `# Characters in scene
 
 function render(source: string, extra: Record<string, unknown> = {}): string {
   const pack: Pack = {
-    templates: { t: { group: 'generationContext', source } },
+    templates: { t: { group: 'generationContext', system: '', user: source } },
     macros: {
       // Real source, not a stub: the negative case below turns on this macro
       // being the ONLY route a staged entity has into the prompt.
       [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
-      [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
       [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
       // suggestion-refresh includes this unconditionally (its whole purpose is
       // emitting chips), so an absent stub fails the lookup rather than
@@ -73,7 +66,7 @@ function render(source: string, extra: Record<string, unknown> = {}): string {
       },
     },
   }
-  return createEngine(pack).renderFileSync('t', { ...context, ...extra }) as string
+  return renderWith(createEngine(pack), 't', { ...context, ...extra }).user
 }
 
 // The invariant check, factored so both fixtures run the identical assertion.
@@ -83,13 +76,13 @@ function injectsSceneEntity(source: string): boolean {
 
 describe('structural-floor invariant — active + in-scene always inject', () => {
   it('bundled per-turn template injects a disabled-but-active-in-scene entity', () => {
-    expect(injectsSceneEntity(PER_TURN_NARRATIVE)).toBe(true)
-    expect(render(PER_TURN_NARRATIVE)).toContain('A wary scout.')
+    expect(injectsSceneEntity(PER_TURN_NARRATIVE.user)).toBe(true)
+    expect(render(PER_TURN_NARRATIVE.user)).toContain('A wary scout.')
   })
 
   it('bundled suggestion-refresh template injects a disabled-but-active-in-scene entity', () => {
-    expect(injectsSceneEntity(SUGGESTION_REFRESH)).toBe(true)
-    expect(render(SUGGESTION_REFRESH)).toContain('A wary scout.')
+    expect(injectsSceneEntity(SUGGESTION_REFRESH.user)).toBe(true)
+    expect(render(SUGGESTION_REFRESH.user)).toContain('A wary scout.')
   })
 
   it('permanent negative fixture: an injectionMode-respecting variant DROPS it', () => {
@@ -110,7 +103,7 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
   }
 
   it('does not dump a staged entity that only the branch roster knows about', () => {
-    const out = render(PER_TURN_NARRATIVE, { entities: [sceneEntity, stagedEntity] })
+    const out = render(PER_TURN_NARRATIVE.user, { entities: [sceneEntity, stagedEntity] })
     expect(out).not.toContain('Mira')
     // Positive control: an empty render would satisfy the line above just as
     // well, so pin something the same render must still carry.
@@ -118,7 +111,7 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
   })
 
   it('renders a staged entity that WON budget, with its sub-pool framing', () => {
-    const out = render(PER_TURN_NARRATIVE, {
+    const out = render(PER_TURN_NARRATIVE.user, {
       entities: [sceneEntity, stagedEntity],
       retrievedEntities: [
         {

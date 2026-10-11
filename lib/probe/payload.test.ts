@@ -4,7 +4,7 @@ import { type ProbeCapturePayload } from '@/lib/db'
 import { MEMORY_BLOCKS } from '@/lib/prompts/bundled/memory-blocks'
 import { PER_TURN_NARRATIVE } from '@/lib/prompts/bundled/per-turn'
 import { STATE_EMISSION } from '@/lib/prompts/bundled/state-emission'
-import { createEngine } from '@/lib/prompts/engine'
+import { createEngine, renderWith } from '@/lib/prompts/engine'
 import { MACRO_IDS } from '@/lib/prompts/ids'
 import type { Pack } from '@/lib/prompts/types'
 import {
@@ -751,14 +751,14 @@ describe('buildCapturePayload', () => {
 function renderFloor(piggybackFires: boolean): string {
   const floor = floorFixture()
   const pack: Pack = {
-    templates: { t: { group: 'generationContext', source: PER_TURN_NARRATIVE } },
+    templates: { t: { group: 'generationContext', ...PER_TURN_NARRATIVE } },
     macros: {
       [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
       [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
       [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
     },
   }
-  return createEngine(pack).renderFileSync('t', {
+  return renderWith(createEngine(pack), 't', {
     definition: { mode: 'adventure', genre: { promptBody: '' }, tone: { promptBody: '' } },
     entries: [],
     entities: FLOOR_ENTITIES,
@@ -775,7 +775,7 @@ function renderFloor(piggybackFires: boolean): string {
     retrievedChapters: [],
     locationIds: [],
     piggybackFires,
-  }) as string
+  }).user
 }
 
 describe('structural-floor formulas match the templates that render them', () => {

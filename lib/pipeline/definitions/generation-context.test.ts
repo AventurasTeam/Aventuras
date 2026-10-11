@@ -285,7 +285,7 @@ describe('buildGenerationContext', () => {
     })
     expect(ctx.sceneEntities).toEqual([(ctx.entities as { id: string }[])[0]!.id])
 
-    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx).user
     expect(prompt).toContain('# In scene')
     expect(prompt).toContain('A knight.')
   })
@@ -313,15 +313,16 @@ describe('buildGenerationContext', () => {
       'The gate creaks open.',
     ])
 
-    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
-    expect(prompt).toContain('# Setting')
-    expect(prompt).toContain('# Genre')
-    expect(prompt).not.toContain('# Tone') // whitespace-only tone.promptBody guarded out
-    expect(prompt).toContain('The gate creaks open.')
-    expect(prompt).toContain('third-line')
-    expect(prompt).toContain('fourth-line')
-    expect(prompt).not.toContain('first-line') // composed out, three entries back
-    expect(prompt).not.toContain('second-line')
+    const { system, user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    expect(system).toContain('# Setting')
+    expect(system).toContain('# Genre')
+    expect(system).not.toContain('# Tone') // whitespace-only tone.promptBody guarded out
+    expect(user).not.toContain('# Setting')
+    expect(user).toContain('The gate creaks open.')
+    expect(user).toContain('third-line')
+    expect(user).toContain('fourth-line')
+    expect(user).not.toContain('first-line') // composed out, three entries back
+    expect(user).not.toContain('second-line')
   })
 
   // story_entries.content persists the reply verbatim; the reader renders
@@ -340,7 +341,7 @@ describe('buildGenerationContext', () => {
       'I step through.',
     ])
 
-    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx).user
     expect(prompt).toContain('The gate creaks open.')
     expect(prompt).not.toContain('<state>')
     expect(prompt).not.toContain('At the gate')
@@ -582,7 +583,7 @@ describe('buildGenerationContext — composed window reaches the bundled templat
     'renders every composed entry in %s',
     async (templateId) => {
       const ctx = await context()
-      const prompt = renderTemplate(templateId, ctx)
+      const prompt = renderTemplate(templateId, ctx).user
       const composed = contentsOf(ctx)
       expect(composed).toHaveLength(12)
       for (const content of composed) expect(prompt).toContain(content)

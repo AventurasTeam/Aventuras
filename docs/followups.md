@@ -13,32 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement system and user prompt halves.** Designed 2026-10-11
-  ([exploration record](./explorations/2026-10-11-system-and-user-prompt-halves.md));
-  the spec is canon:
-  [`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)
-  for the template shape, the placement rule, the bundled split and the
-  cache marker, with
-  [`→ Structured output`](./architecture.md#structured-output--the-json-contract-is-not-pack-content)
-  for where the JSON contract goes, and the per-template notes in
-  [`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)
-  and
-  [`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads).
-  It splits the per-turn and fallback templates the locations-and-items
-  work edits, so it lands after that PR. The periodic classifier now
-  reads its rules before its data: run the real-provider classifier
-  smoke spec before and after. The narrator's output-format line leaves
-  the end of the prompt, also unmeasured. The mock LLM's schema
-  extraction (`scripts/mock-llm/routing.ts`) brackets the block with the
-  closing line, which moves to the user message, so its end delimiter
-  becomes the end of the system message. Confirm on an Anthropic story,
-  through Diagnostics' HTTP capture, that the narrative call reads its
-  cache; whether a streamed capture keeps the usage events is
-  unchecked. Both templates collect the held item ids in the same
-  Liquid loop to keep a held item out of the scene list, and a custom
-  pack must repeat it, since the context builder exposes no held-id
-  set; the split is the moment to share it.
-
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
   extraction, reconciled by Layer B
@@ -78,9 +52,29 @@ for the placement rule.
   shared context macro mixes the output contract with grounding that
   changes as the user fills the wizard in, so each splits into a
   contract macro and a grounding macro; and the blocks the split left in
-  a user half only because they point at its content by position. v1
+  a user half only because they point at its content by position. The
+  narrator's output-format line also left the end of the prompt for the
+  system half, unmeasured; the pass checks where it reads best. v1
   work, since the shipped prompts have to be good, once the halves land.
   Raised 2026-10-11.
+
+  The pass also takes the whitespace and wording nits the halves PR's
+  reviews found in the bundled prompts, all older than the split
+  (routed from triage 2026-10-11):
+  - the In-scene loop leaves two blank lines before the next heading in
+    the narrative (`per-turn.ts`), the fallback classifier
+    (`piggyback-fallback-classifier.ts`) and the suggestion refresh
+    (`suggestion-refresh.ts`);
+  - a Setting, Genre or Tone the user starts with a newline renders a
+    blank line under its heading;
+  - the Gregorian calendar line reads "time in seconds (1 seconds per
+    second)", now inside the cached system half;
+  - the periodic classifier's Known entities line ends on a dangling
+    dash for an entity whose description is the empty string;
+  - the fallback classifier's roster leaves a blank line between its
+    active and staged entries;
+  - the suggestion refresh's In scene list prints an empty line under
+    an entity with no description.
 
 - **Revisit leaving places off the `# Places` map.** The map leaves
   out retired places and `injection_mode = 'disabled'` ones (unless

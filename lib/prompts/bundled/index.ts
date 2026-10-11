@@ -1,5 +1,5 @@
 import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
-import type { Pack } from '../types'
+import type { Pack, TemplateEntry } from '../types'
 import { MEMORY_BLOCKS } from './memory-blocks'
 import { OUTPUT_FORMAT_NARRATIVE } from './output-format'
 import { PER_TURN_NARRATIVE } from './per-turn'
@@ -30,37 +30,33 @@ import {
   WIZARD_TONE_REFINE,
 } from './wizard'
 
+// A wizard template's system half is empty (architecture.md → System and user halves).
+function wizardTemplate(user: string): TemplateEntry {
+  return { group: 'wizard', system: '', user }
+}
+
 export const bundledPack: Pack = {
   templates: {
-    [TEMPLATE_IDS.perTurnNarrative]: { group: 'generationContext', source: PER_TURN_NARRATIVE },
+    [TEMPLATE_IDS.perTurnNarrative]: { group: 'generationContext', ...PER_TURN_NARRATIVE },
     [TEMPLATE_IDS.piggybackFallbackClassifier]: {
       group: 'generationContext',
-      source: PIGGYBACK_FALLBACK_CLASSIFIER,
+      ...PIGGYBACK_FALLBACK_CLASSIFIER,
     },
-    [TEMPLATE_IDS.periodicClassifier]: {
-      group: 'classifierContext',
-      source: PERIODIC_CLASSIFIER,
-    },
-    [TEMPLATE_IDS.suggestionRefresh]: {
-      group: 'generationContext',
-      source: SUGGESTION_REFRESH,
-    },
-    [TEMPLATE_IDS.wizardOpening]: { group: 'wizard', source: WIZARD_OPENING },
-    [TEMPLATE_IDS.wizardOpeningRefine]: { group: 'wizard', source: WIZARD_OPENING_REFINE },
-    [TEMPLATE_IDS.wizardTitleChips]: { group: 'wizard', source: WIZARD_TITLE_CHIPS },
-    [TEMPLATE_IDS.wizardDescription]: { group: 'wizard', source: WIZARD_DESCRIPTION },
-    [TEMPLATE_IDS.wizardDescriptionRefine]: {
-      group: 'wizard',
-      source: WIZARD_DESCRIPTION_REFINE,
-    },
-    [TEMPLATE_IDS.wizardLore]: { group: 'wizard', source: WIZARD_LORE },
-    [TEMPLATE_IDS.wizardCast]: { group: 'wizard', source: WIZARD_CAST },
-    [TEMPLATE_IDS.wizardGenre]: { group: 'wizard', source: WIZARD_GENRE },
-    [TEMPLATE_IDS.wizardGenreRefine]: { group: 'wizard', source: WIZARD_GENRE_REFINE },
-    [TEMPLATE_IDS.wizardTone]: { group: 'wizard', source: WIZARD_TONE },
-    [TEMPLATE_IDS.wizardToneRefine]: { group: 'wizard', source: WIZARD_TONE_REFINE },
-    [TEMPLATE_IDS.wizardSetting]: { group: 'wizard', source: WIZARD_SETTING },
-    [TEMPLATE_IDS.wizardSettingRefine]: { group: 'wizard', source: WIZARD_SETTING_REFINE },
+    [TEMPLATE_IDS.periodicClassifier]: { group: 'classifierContext', ...PERIODIC_CLASSIFIER },
+    [TEMPLATE_IDS.suggestionRefresh]: { group: 'generationContext', ...SUGGESTION_REFRESH },
+    [TEMPLATE_IDS.wizardOpening]: wizardTemplate(WIZARD_OPENING),
+    [TEMPLATE_IDS.wizardOpeningRefine]: wizardTemplate(WIZARD_OPENING_REFINE),
+    [TEMPLATE_IDS.wizardTitleChips]: wizardTemplate(WIZARD_TITLE_CHIPS),
+    [TEMPLATE_IDS.wizardDescription]: wizardTemplate(WIZARD_DESCRIPTION),
+    [TEMPLATE_IDS.wizardDescriptionRefine]: wizardTemplate(WIZARD_DESCRIPTION_REFINE),
+    [TEMPLATE_IDS.wizardLore]: wizardTemplate(WIZARD_LORE),
+    [TEMPLATE_IDS.wizardCast]: wizardTemplate(WIZARD_CAST),
+    [TEMPLATE_IDS.wizardGenre]: wizardTemplate(WIZARD_GENRE),
+    [TEMPLATE_IDS.wizardGenreRefine]: wizardTemplate(WIZARD_GENRE_REFINE),
+    [TEMPLATE_IDS.wizardTone]: wizardTemplate(WIZARD_TONE),
+    [TEMPLATE_IDS.wizardToneRefine]: wizardTemplate(WIZARD_TONE_REFINE),
+    [TEMPLATE_IDS.wizardSetting]: wizardTemplate(WIZARD_SETTING),
+    [TEMPLATE_IDS.wizardSettingRefine]: wizardTemplate(WIZARD_SETTING_REFINE),
   },
   macros: {
     // Wizard-grouped, not staticContent: these read wizard working-state

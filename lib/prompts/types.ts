@@ -9,15 +9,26 @@ export const CONTEXT_GROUPS = [
 ] as const
 export type ContextGroup = (typeof CONTEXT_GROUPS)[number]
 
-export type PackEntry = {
-  group: ContextGroup
-  source: string
+/**
+ * A template's two Liquid sources: a stable system half and a per-call user half
+ * (architecture.md → System and user halves).
+ */
+export type TemplateSources = { readonly system: string; readonly user: string }
+
+export type TemplateEntry = TemplateSources & { readonly group: ContextGroup }
+
+export type MacroEntry = {
+  readonly group: ContextGroup
+  readonly source: string
 }
 
 export type Pack = {
-  templates: Record<string, PackEntry>
-  macros: Record<string, PackEntry>
+  templates: Readonly<Record<string, TemplateEntry>>
+  macros: Readonly<Record<string, MacroEntry>>
 }
+
+/** Both halves as rendered, untrimmed. `system` may be blank; `user` never is. */
+export type RenderedPrompt = { readonly system: string; readonly user: string }
 
 export type IncludeViolation = {
   templateId: string
