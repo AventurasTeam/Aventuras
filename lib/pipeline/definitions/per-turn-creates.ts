@@ -257,7 +257,7 @@ async function itemFlag(
     namesakes.map((n) => n.description),
     embed,
   )
-  return decideNewItem(namesakes.map((entity, i) => ({ entity, similarity: scores[i] ?? null })))
+  return decideNewItem(namesakes.map((entity, i) => ({ entity, similarity: scores[i] })))
 }
 
 async function planItems(args: {
