@@ -245,7 +245,10 @@ hiding it:
   does not resolve to a `kind='location'` entity and inherits the
   previous location instead. The panel renders the rejected value
   struck through beside the location that was actually applied, keyed
-  on `stateReport.currentLocationRejected`.
+  on `stateReport.currentLocationRejected`. A fallback that named a new
+  item's handle there keeps the handle when the item isn't created, so
+  the panel names it from the report's own create with that handle,
+  dropped or not, and reads "Unknown entity" only when none matches.
 - **Delta clamped.** A negative or non-finite `worldTimeDelta` clamps
   to zero, and one that would push `worldTime` past the renderable
   ceiling clamps to the remaining headroom. The panel renders the

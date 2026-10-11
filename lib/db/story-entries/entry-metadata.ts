@@ -81,7 +81,7 @@ export const entryMetadataSchema = z.object({
         })
         .optional(),
       // Each create as emitted, with what became of it; the fields above carry its resolved
-      // id, never the handle (memory/piggyback.md → New locations and items).
+      // id, never the handle, bar a rejected currentLocation (data-model.md → Entry metadata shape).
       newLocations: z.array(newLocationReportSchema).optional(),
       newItems: z.array(newItemReportSchema).optional(),
       failedFields: z.array(z.object({ field: z.string(), detail: z.string() })).optional(),

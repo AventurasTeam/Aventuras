@@ -50,7 +50,7 @@ import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
-import { stripTrailingBlocks } from '@/lib/piggyback'
+import { isCreateHandle, stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -491,6 +491,17 @@ function resolveName(id: string, pool: readonly ResolvedEntity[]): string {
   return pool.find((e) => e.id === id)?.name ?? t('reader:entryCard.stateUnknownEntity')
 }
 
+// A fallback keeps an uncreated item's handle as the rejected location; the turn's create names it.
+function rejectedLocationName(
+  ref: string,
+  stateReport: EntryMetadata['stateReport'],
+  pool: readonly ResolvedEntity[],
+): string {
+  if (!isCreateHandle(ref)) return resolveName(ref, pool)
+  const creates = [...(stateReport?.newItems ?? []), ...(stateReport?.newLocations ?? [])]
+  return creates.find((c) => c.handle === ref)?.name ?? t('reader:entryCard.stateUnknownEntity')
+}
+
 function resolveCounterparty(id: string | undefined, pool: readonly ResolvedEntity[]): string {
   return id != null ? resolveName(id, pool) : t('reader:entryCard.stateNone')
 }
@@ -625,7 +636,7 @@ function WorldStatePanel({
         <StateLine>
           {rejectedLocation != null ? (
             <Text size="xs" className="text-fg-muted line-through">
-              {`${resolveName(rejectedLocation, entityNames)} `}
+              {`${rejectedLocationName(rejectedLocation, stateReport, entityNames)} `}
             </Text>
           ) : null}
           {currentLocationId != null

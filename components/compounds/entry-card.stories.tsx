@@ -1157,6 +1157,57 @@ export const WorldStateRejectedLocation: StoryT = {
   },
 }
 
+// A fallback keeps a new item's handle as the rejected location when the item isn't created:
+// no row names it, but the turn's own create does.
+export const WorldStateRejectedCreateHandle: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: 'new:docks',
+      currentLocationRejected: true,
+      newItems: [
+        { handle: 'new:docks', name: 'the Docks', description: 'a pier', outcome: 'dropped' },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('the Docks')).toBeVisible()
+    expect(screen.queryByText('Unknown entity')).not.toBeInTheDocument()
+    expect(screen.getByText(/emitted id was not a location/)).toBeVisible()
+  },
+}
+
+export const WorldStateRejectedUnmatchedHandle: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: 'new:ghost',
+      currentLocationRejected: true,
+      newItems: [
+        { handle: 'new:docks', name: 'the Docks', description: 'a pier', outcome: 'dropped' },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Unknown entity')).toBeVisible()
+    expect(screen.queryByText('the Docks')).not.toBeInTheDocument()
+  },
+}
+
 // The report is immutable provenance while currentLocationId is user-editable, so an
 // emitted id unequal to the applied one is the ordinary post-edit state. Labelling it a
 // rejection accuses the model of an error the user made deliberately.
