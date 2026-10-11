@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { renderTemplate, TEMPLATE_IDS } from '../index'
 
 const PLACES_INSTRUCTION =
-  'Use an ID from Places for <current_location>, or create the place below when the scene settles somewhere new.'
+  'Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.'
 
 // M2-shaped context: opening + a couple of entries, one entity, empty genre /
 // tone / setting (M2 stories carry these empty until M3.6).
@@ -678,6 +678,44 @@ describe('bundled per-turn template — the location map and item lines', () => 
     expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\n\n')
     expect(rendered.split('Holds:')).toHaveLength(2)
   })
+
+  it('does not repeat an item held by any in-scene character, not only the last holder', () => {
+    const rendered = render({
+      sceneEntities: ['char_1', 'char_2', 'item_1'],
+      entities: [
+        ...m2Context.entities,
+        { ...m2Context.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
+        {
+          id: 'item_1',
+          kind: 'item',
+          name: 'Silver Key',
+          description: 'Cold to the touch.',
+          status: 'active',
+          injectionMode: 'auto',
+        },
+      ],
+      heldItems: [
+        { holderId: 'char_1', items: [{ id: 'item_1', name: 'Silver Key', equipped: false }] },
+        { holderId: 'char_2', items: [{ id: 'item_2', name: 'hammer', equipped: false }] },
+      ],
+    })
+    expect(rendered).not.toContain('## Silver Key')
+    expect(rendered).toContain('## Aria [char_1]\nA wary scout.\nHolds: [item_1] Silver Key\n')
+    expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\nHolds: [item_2] hammer\n')
+  })
+
+  it('gives a Holds line only to the character that holds the items', () => {
+    const rendered = render({
+      sceneEntities: ['char_1', 'char_2'],
+      entities: [
+        ...m2Context.entities,
+        { ...m2Context.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
+      ],
+      heldItems: HELD,
+    })
+    expect(rendered.split('Holds:')).toHaveLength(2)
+    expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\n\n')
+  })
 })
 
 describe('bundled per-turn template — create instructions', () => {
@@ -700,23 +738,25 @@ describe('bundled per-turn template — create instructions', () => {
 
   it('explains handles and carries the significance rules', () => {
     expect(rendered).toContain('a handle that starts with new:')
+    expect(rendered).toContain(
+      "use that handle like an ID only as a new place's <current_location> or another new place's parent, or as a new item's transfer item id.",
+    )
     expect(rendered).toContain('Create a place only when the scene settles somewhere')
     expect(rendered).toContain('Create an item only when a character takes, receives or is given')
     expect(rendered).toContain('Apart from those handles, use only the IDs shown to you above')
   })
 
-  // The parser decodes the five XML entities in a create's name, parent and
-  // description but drops a create whose attribute text isn't well-formed, or whose
+  // The parser decodes the five XML entities in a create's name and description
+  // but drops a create whose attribute text isn't well-formed, or whose
   // description holds a raw <, so the model is told how to write those two.
-  it('tells the model to escape a double quote in an attribute value and a < in a description', () => {
+  it("tells the model to escape a double quote in a create's name and a < in its description", () => {
     expect(rendered).toContain(
       "Write a double quote inside a create's name as &quot; and a < inside its description as &lt;.",
     )
   })
 
-  // The sentence this replaces kept new places and items out of the block, which
-  // would starve the create path.
-  it('no longer tells the model to leave new places and items out of the block', () => {
+  // A prompt that keeps new places and items out of the block starves the create path.
+  it('does not tell the model to leave new places and items out of the block', () => {
     expect(rendered).not.toContain('Only reference items and locations that already have an ID')
     expect(rendered).not.toContain('describe it in prose only')
   })

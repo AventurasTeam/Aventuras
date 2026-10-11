@@ -63,7 +63,7 @@ If any off-scene character above enters the scene, include their ID (without bra
 
 {% endif -%}
 {% if locationMap.size > 0 -%}
-Use an ID from Places for <current_location>, or create the place below when the scene settles somewhere new.
+Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.
 
 {% endif -%}
 {% endif -%}

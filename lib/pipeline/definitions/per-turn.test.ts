@@ -1268,8 +1268,8 @@ describe('narrative fold — retrieval handoff', () => {
   })
 
   // locationIds stays in the context for custom packs; the bundled template offers
-  // places through the map instead of its line.
-  it('still builds locationIds, which the bundled template no longer renders', async () => {
+  // places through the map.
+  it('builds locationIds for custom packs while the bundled template offers places through the map', async () => {
     const { prompt, context } = await runNarrativeWith({
       narrative: 'prose',
       intermediates: {

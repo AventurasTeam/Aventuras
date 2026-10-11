@@ -210,6 +210,51 @@ describe('bundled piggyback fallback classifier template', () => {
       expect(prompt).not.toContain('Black wax, cracked.')
     })
 
+    const bex = {
+      id: 'c2',
+      kind: 'character',
+      name: 'Bex',
+      description: 'A quiet smith.',
+      status: 'active',
+      injectionMode: 'auto',
+    }
+    const seal = {
+      id: 'i3',
+      kind: 'item',
+      name: 'Courier’s seal',
+      description: 'Black wax, cracked.',
+      status: 'active',
+      injectionMode: 'auto',
+    }
+
+    it('does not repeat an item held by any in-scene character, not only the last holder', () => {
+      const prompt = render(
+        context({
+          sceneEntities: ['c1', 'c2', 'i3'],
+          entities: [...context().entities, bex, seal],
+          heldItems: [
+            { holderId: 'c1', items: [{ id: 'i3', name: 'Courier’s seal', equipped: false }] },
+            { holderId: 'c2', items: [{ id: 'i6', name: 'hammer', equipped: false }] },
+          ],
+        }),
+      )
+
+      expect(prompt).not.toContain('## Courier’s seal')
+      expect(prompt).toContain(
+        '## Kael\nA courier with a stolen sigil.\nHolds: [i3] Courier’s seal\n',
+      )
+      expect(prompt).toContain('## Bex\nA quiet smith.\nHolds: [i6] hammer\n')
+    })
+
+    it('gives a Holds line only to the character that holds the items', () => {
+      const prompt = render(
+        context({ sceneEntities: ['c1', 'c2'], entities: [...context().entities, bex] }),
+      )
+
+      expect(prompt.split('Holds:')).toHaveLength(2)
+      expect(prompt).toContain('## Bex\nA quiet smith.\n\n')
+    })
+
     it('omits the map, the chain and the item lines when there are none', () => {
       const prompt = render(
         context({ locationMap: [], currentLocationChain: [], heldItems: [], looseItems: [] }),
