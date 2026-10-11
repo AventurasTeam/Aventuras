@@ -86,8 +86,8 @@ export function prepareGeneration(
   }
 }
 
-// Anthropic caches only at an explicit breakpoint; other providers reuse a
-// matching prefix on their own, and a `stub` row is not an anthropic one.
+// Anthropic caches only at an explicit breakpoint; OpenAI-compatible servers generally reuse
+// the longest matching token prefix on their own. `stub` gets none, as it gets no thinking.
 function marksSystemPrefix(
   cacheSystemPrefix: boolean | undefined,
   providerType: ProviderInstance['type'] | undefined,
@@ -106,10 +106,13 @@ function withMiddleware(
   })
 }
 
-/** A rendered template's two halves; a blank system half sends no system message. */
+/**
+ * A rendered template's two halves. A blank system half is left out of the request; a structured
+ * call's JSON contract may still create a system message.
+ */
 export type PromptHalves = { readonly system: string; readonly user: string }
 
-// Anthropic rejects an empty system text block; promptSchemaMiddleware may still add one.
+// Providers reject an empty system message.
 function promptParams(prompt: PromptHalves): { system?: string; prompt: string } {
   return {
     ...(prompt.system.trim() !== '' ? { system: prompt.system } : {}),
@@ -203,7 +206,8 @@ export async function generateStructured<T>(
     return { status: 'failed', detail: err instanceof Error ? err.message : String(err) }
   }
   // 'auto' injects the schema via the prompt (no capability signal yet); native responseFormat
-  // is opt-in via 'force-on'. Cache marker goes last so the block it marks holds the contract.
+  // is opt-in via 'force-on'. The marker goes last: on a blank system half, the contract's
+  // system message exists only once promptSchemaMiddleware has run.
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
