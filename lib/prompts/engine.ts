@@ -7,8 +7,8 @@ export type TemplateHalf = 'system' | 'user'
 
 const HALVES: readonly TemplateHalf[] = ['system', 'user']
 
-// One map entry per half. `#` keeps the key a single path segment, which
-// liquidjs's in-memory fs resolves as is, so includes work from either half.
+// One map entry per half. Includes resolve macros by their bare ids, so a half
+// key must never equal a macro id; createEngine checks it.
 function halfKey(templateId: string, half: TemplateHalf): string {
   return `${templateId}#${half}`
 }
@@ -22,9 +22,10 @@ export function createEngine(pack: Pack): Liquid {
   }
   for (const [id, entry] of Object.entries(pack.macros)) {
     // Templates and macros share one id namespace; an id naming both would leave
-    // an include ambiguous to its author, so fail loud instead.
-    if (Object.hasOwn(pack.templates, id)) {
-      throw new Error(`pack id collision: '${id}' is registered as both a template and a macro`)
+    // an include ambiguous to its author, so fail loud instead. The map check
+    // also catches a macro id that equals a template's half key.
+    if (Object.hasOwn(pack.templates, id) || Object.hasOwn(templates, id)) {
+      throw new Error(`pack id collision: '${id}' is already registered as a template or half`)
     }
     templates[id] = entry.source
   }

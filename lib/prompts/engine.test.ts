@@ -40,6 +40,15 @@ describe('engine', () => {
       }),
     ).toThrow(/id collision: 'dup'/)
   })
+
+  it('throws when a macro id would replace a template half', () => {
+    expect(() =>
+      createEngine({
+        templates: { t: { group: 'generationContext', system: '', user: 'T' } },
+        macros: { 't#user': { group: 'staticContent', source: 'M' } },
+      }),
+    ).toThrow(/id collision: 't#user'/)
+  })
 })
 
 // architecture.md → System and user halves: both halves render against one
