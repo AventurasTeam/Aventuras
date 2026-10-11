@@ -453,7 +453,10 @@ OpenAI, NanoGPT and Pollinations share one OpenAI-compatible request (`openaiCom
 `/images/generations`, or `/images/edits` as multipart when there are references. Each keeps its own
 model discovery and size handling. The registry hands references only to the providers that send
 them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
-adapter receives raw base64. Google takes them on `gemini-*` image models only; the SDK sends any
+adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
+from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
+merely resolves to a private address is not caught. A reference that cannot be fetched is dropped
+and the image is generated without it. Google takes them on `gemini-*` image models only; the SDK sends any
 other id down the Imagen path, which rejects input images.
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is

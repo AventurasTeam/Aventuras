@@ -16,7 +16,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { createLogger } from '$lib/log'
-import { fetchImageBase64 } from './fetchAdapter'
+import { fetchPublicImageBase64 } from './fetchAdapter'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -119,7 +119,7 @@ export function requiresApiKey(providerType: string): boolean {
 /** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
 async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
   if (/^https?:\/\//i.test(image)) {
-    return fetchImageBase64(image, { signal, serviceId: 'image-reference' })
+    return fetchPublicImageBase64(image, { signal, serviceId: 'image-reference' })
   }
   return image.replace(/^data:[^,]*;base64,/, '')
 }
@@ -170,13 +170,20 @@ export async function generateImage(options: {
   // the settings UI fills, and absent is fine: the adapter falls back to canonical pixels.
   const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
 
+  // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
   const cleanRefs =
     referenceImages && PROVIDER_READS_REFERENCES[profile.providerType]
-      ? await Promise.all(
-          referenceImages
-            .slice(0, modelInfo?.maxReferenceImages)
-            .map((img) => toRawBase64(img, signal)),
-        )
+      ? (
+          await Promise.allSettled(
+            referenceImages
+              .slice(0, modelInfo?.maxReferenceImages)
+              .map((img) => toRawBase64(img, signal)),
+          )
+        ).flatMap((result) => {
+          if (result.status === 'fulfilled') return [result.value]
+          log('Dropped a reference image', { error: result.reason })
+          return []
+        })
       : undefined
 
   return provider.generate({

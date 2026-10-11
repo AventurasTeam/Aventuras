@@ -19,7 +19,7 @@ vi.mock('$lib/stores/debug.svelte', () => ({
 vi.mock('./fetchAdapter', () => ({
   imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
-  fetchImageBase64: vi.fn(),
+  fetchPublicImageBase64: vi.fn(),
 }))
 
 vi.mock('./openai', () => ({
@@ -34,7 +34,7 @@ vi.mock('./google', () => ({
   createGoogleProvider: vi.fn(),
 }))
 
-import { fetchImageBase64 } from './fetchAdapter'
+import { fetchPublicImageBase64 } from './fetchAdapter'
 import { createOpenAIProvider } from './openai'
 import { createComfyProvider } from './comfy'
 import { createGoogleProvider } from './google'
@@ -132,7 +132,7 @@ describe('Image Provider Registry', () => {
         providerType,
         apiKey: `sk-key-${keyCounter++}`,
       } as ReturnType<typeof settings.getImageProfile>)
-      vi.mocked(fetchImageBase64).mockResolvedValue('DOWNLOADED')
+      vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
       return generate
     }
 
@@ -151,7 +151,10 @@ describe('Image Provider Registry', () => {
         ],
       })
 
-      expect(fetchImageBase64).toHaveBeenCalledWith('https://img.test/a.png', expect.anything())
+      expect(fetchPublicImageBase64).toHaveBeenCalledWith(
+        'https://img.test/a.png',
+        expect.anything(),
+      )
       expect(generate).toHaveBeenCalledWith(
         expect.objectContaining({ referenceImages: ['AAAA', 'DOWNLOADED', 'CCCC', 'BBBB'] }),
       )
@@ -169,10 +172,47 @@ describe('Image Provider Registry', () => {
         referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
       })
 
-      expect(fetchImageBase64).toHaveBeenCalledTimes(1)
+      expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
       expect(generate).toHaveBeenCalledWith(
         expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
       )
+    })
+
+    it('drops a reference that fails to download and keeps the rest', async () => {
+      const generate = setup('openai')
+      vi.mocked(fetchPublicImageBase64).mockImplementation(async (url) => {
+        if (url.includes('bad')) throw new Error('Image URL does not point at a public host')
+        return 'DOWNLOADED'
+      })
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gpt-image-1',
+        prompt: 'x',
+        referenceImages: [
+          'https://img.test/a.png',
+          'http://bad.test/b.png',
+          'data:image/png;base64,AAAA',
+        ],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED', 'AAAA'] }),
+      )
+    })
+
+    it('generates without references when every one fails to download', async () => {
+      const generate = setup('openai')
+      vi.mocked(fetchPublicImageBase64).mockRejectedValue(new Error('refused'))
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gpt-image-1',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
     })
 
     it('hands Google raw base64 references', async () => {
@@ -207,7 +247,7 @@ describe('Image Provider Registry', () => {
         referenceImages: ['https://img.test/a.png'],
       })
 
-      expect(fetchImageBase64).not.toHaveBeenCalled()
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
     })
 
@@ -221,7 +261,7 @@ describe('Image Provider Registry', () => {
         referenceImages: ['https://img.test/a.png'],
       })
 
-      expect(fetchImageBase64).not.toHaveBeenCalled()
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
     })
 
