@@ -678,31 +678,45 @@ describe('creation tags', () => {
     expect(result.block.newItems).toBeUndefined()
   })
 
-  // A stream cut off inside a create may have lost the tags after it
+  // A stream cut off in a block that declares a create may have lost the tags after it
   // (the refs that name it), so the fallback fires; the fields before it are kept.
   it('fails the state block when the stream was cut off inside a create', () => {
     const result = parseStateBlock(`<state>
   <scene_entities>c1</scene_entities>
   <new_location handle="new:a" name="A">a pier below`)
-    expect(result.failures).toEqual([{ field: 'state', detail: 'block cut off inside a create' }])
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
     expect(result.block).toEqual({ sceneEntities: ['c1'] })
     expect(result.malformedCreates).toBe(1)
   })
 
-  it('leaves a cut-off block with only whole creates as a clean parse', () => {
+  it('fails the state block when the stream was cut off inside current_location after a create', () => {
     const result = parseStateBlock(
-      '<state><new_item handle="new:k" name="key">iron</new_item><scene_entities>c1',
+      '<state><new_location handle="new:a" name="A">a pier</new_location><current_location>new:',
     )
-    expect(result.failures).toEqual([])
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
     expect(result.malformedCreates).toBe(0)
   })
 
-  it('leaves a whole create with bad attributes warn-only even in a cut-off block', () => {
+  it('fails the state block when the cut falls between tags after whole creates', () => {
+    const result = parseStateBlock(
+      '<state><new_location handle="new:a" name="A">a pier</new_location><current_location>new:a</current_location>',
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.block.currentLocation).toBe('new:a')
+  })
+
+  it('fails the state block when a cut-off block holds a whole create with bad attributes', () => {
     const result = parseStateBlock(
       `<state><new_item handle="new:k" name='key'>iron</new_item><scene_entities>c1`,
     )
-    expect(result.failures).toEqual([])
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
     expect(result.malformedCreates).toBe(1)
+  })
+
+  it('leaves a cut-off block that declares no creates as a clean parse', () => {
+    const result = parseStateBlock('<state><scene_entities>c1</scene_entities><current_location>l')
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(0)
   })
 
   it('keeps a closed block with an unclosed create warn-only', () => {

@@ -175,10 +175,12 @@ and description, and a raw `<` or `>` in a name or a raw `<` in a
 description drops the create, so the prompt asks the model to write a
 double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
 and a `<` inside a description as `&lt;`. A malformed create
-in a closed block only logs a warning. A stream cut off inside a
-create (a `<state>` with no `</state>` and a create opened but never
-closed) fails the `state` field instead, because the cut may have lost
-the tags that name it, so the fallback fires and creates.
+in a closed block only logs a warning. A `<state>` the stream cut off
+(no `</state>`) that declares any create, whole or not, fails the
+`state` field instead, because the cut may have lost the tags that
+name it (a `<current_location>`, a transfer), so the fallback fires and
+creates. A cut that falls between tags still parses clean in a block
+that declares no creates.
 
 **Kept only if used.** A new location is created only as the turn's
 `<current_location>` or an ancestor of it, and a new item only when the

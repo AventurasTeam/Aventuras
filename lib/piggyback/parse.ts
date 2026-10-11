@@ -217,6 +217,8 @@ function openedTagCount(segment: string, tag: string): number {
 
 type ParsedCreates = {
   found: Pick<ParsedStateBlock, 'newLocations' | 'newItems'>
+  /** Create tags opened at all, whole or not. */
+  declared: number
   /** Create tags opened but never formed whole: cut off, or content holding a `<`. */
   unclosed: number
   /** Whole create tags dropped for attribute text that isn't entirely `key="value"` pairs. */
@@ -276,15 +278,16 @@ function parseCreates(segment: string): ParsedCreates {
   )
   const wholeTags =
     newLocations.length + locations.badAttributes + newItems.length + items.badAttributes
+  const declared =
+    openedTagCount(segment, STATE_CREATE_TAGS.newLocation) +
+    openedTagCount(segment, STATE_CREATE_TAGS.newItem)
   return {
     found: {
       ...(newLocations.length > 0 ? { newLocations } : {}),
       ...(newItems.length > 0 ? { newItems } : {}),
     },
-    unclosed:
-      openedTagCount(segment, STATE_CREATE_TAGS.newLocation) +
-      openedTagCount(segment, STATE_CREATE_TAGS.newItem) -
-      wholeTags,
+    declared,
+    unclosed: declared - wholeTags,
     badAttributes: locations.badAttributes + items.badAttributes,
   }
 }
@@ -399,10 +402,11 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   const normalized = normalizeCreates({ ...block, ...creates.found })
   const malformedCreates = creates.unclosed + creates.badAttributes + normalized.malformed
 
-  // A stream cut off inside a create may have lost the tags after it (the refs that name it), so
-  // the fallback must fire; the same create in a closed block is only counted.
-  if (creates.unclosed > 0 && !stateClosed(raw))
-    failures.push({ field: 'state', detail: 'block cut off inside a create' })
+  // A stream cut off after a create may have lost the tags that name it (current_location,
+  // transfers), whether or not a create tag itself is open, so the fallback must fire; creates
+  // in a closed block are only counted.
+  if (creates.declared > 0 && !stateClosed(raw))
+    failures.push({ field: 'state', detail: 'block with creates cut off' })
 
   // Deliberately stricter than assertNotTruncated's field-level rule: an empty
   // <visual_changes> reports "none", but there is no such thing as a turn with no

@@ -154,9 +154,9 @@ slice-planning gate forces its resolution before that slice is planned.
 - **The `<entity …>` pattern in the state parser scans to the end of
   the segment per unclosed opener.** `lib/piggyback/parse.ts` (~line 116) takes about 840 ms on 20,000 unclosed `<entity ` openers; the
   create pattern was fixed the same way (`[^<>]`). Also, an
-  unterminated `<state>` isn't a failure on its own: a cut between
-  top-level tags parses clean and keeps the old location, and only a
-  cut inside a create tag fails now. Raised 2026-10-11 in the
+  unterminated `<state>` isn't a failure on its own: a cut-off block
+  that declares a create fails now; a between-tags cut in a block with
+  no creates still parses clean and keeps the old location. Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
 - **The narrative person never reaches a prompt.**
