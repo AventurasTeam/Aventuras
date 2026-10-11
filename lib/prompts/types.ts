@@ -25,7 +25,7 @@ export type Pack = {
 }
 
 /** Both halves as rendered, untrimmed. `system` may be blank; `user` never is. */
-export type RenderedPrompt = { system: string; user: string }
+export type RenderedPrompt = { readonly system: string; readonly user: string }
 
 export type IncludeViolation = {
   templateId: string

@@ -84,10 +84,9 @@ export function prepareGeneration(
 }
 
 /** A rendered template's two halves; a blank system half sends no system message. */
-export type PromptHalves = { system: string; user: string }
+export type PromptHalves = { readonly system: string; readonly user: string }
 
-// Providers reject an empty system message, so a blank half sends none; the
-// structured-output middleware may still create one for its contract.
+// Anthropic rejects an empty system text block; promptSchemaMiddleware may still add one.
 function promptParams(prompt: PromptHalves): { system?: string; prompt: string } {
   return {
     ...(prompt.system.trim() !== '' ? { system: prompt.system } : {}),
