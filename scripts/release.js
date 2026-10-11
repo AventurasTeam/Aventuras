@@ -254,7 +254,7 @@ try {
   // npm owns package-lock.json and has just rewritten it; aube must not install or re-resolve.
   const runArgs = pm === 'aube' ? ['run', '--no-install', '--frozen-lockfile'] : ['run']
   run(...commandFor(pm, [...runArgs, 'format']), { stdio: 'inherit' })
-  run(...commandFor(pm, [...runArgs, 'lint:fix']), { stdio: 'inherit' })
+  run(...commandFor(pm, [...runArgs, 'lint:ts:fix']), { stdio: 'inherit' })
 
   const expected = new Set([
     'package.json',

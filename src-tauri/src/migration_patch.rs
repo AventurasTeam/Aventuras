@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::path::Path;
 
-pub async fn apply_checksum_patch(db_path: &PathBuf) {
+pub async fn apply_checksum_patch(db_path: &Path) {
     // Tuple structure
     // * 1st field - Migration version
     // * 2nd field - Bad CRLF Checksum

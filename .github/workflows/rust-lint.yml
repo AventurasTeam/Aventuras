@@ -34,3 +34,34 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      # Pinned so a new stable's lints cannot fail an unrelated PR; keep in step with lint:rust in package.json.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: clippy
+
+      - name: Run clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings

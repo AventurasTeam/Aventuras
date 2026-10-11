@@ -9,13 +9,13 @@ pre-commit:
 # Each glob only gates the command; the command still runs over the whole project.
 pre-push:
   commands:
-    lint:
+    lint-ts:
       glob:
         - "**/*.{js,mjs,cjs,ts,svelte}"
         - ".prettierrc"
         - "package.json"
         - "package-lock.json"
-      run: NODE_OPTIONS="--max-old-space-size=8192" node scripts/pm.js run lint
+      run: NODE_OPTIONS="--max-old-space-size=8192" node scripts/pm.js run lint:ts
     check:
       glob:
         - "**/*.{js,ts,svelte}"
@@ -23,8 +23,9 @@ pre-push:
         - "package.json"
         - "package-lock.json"
       run: node scripts/pm.js run check
-    rust-fmt:
+    lint-rust:
       glob:
         - "src-tauri/**/*.rs"
         - "src-tauri/Cargo.toml"
-      run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        - "src-tauri/Cargo.lock"
+      run: node scripts/pm.js run lint:rust
