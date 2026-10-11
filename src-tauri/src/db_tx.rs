@@ -12,7 +12,7 @@ use sqlx::{AssertSqlSafe, SqlitePool};
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
-use crate::db::{open_rw_pool, INTERACTIVE_BUSY_TIMEOUT};
+use crate::db::{INTERACTIVE_BUSY_TIMEOUT, open_rw_pool};
 
 /// One batch at a time, whoever asks.
 ///
@@ -95,7 +95,7 @@ async fn run_statements(pool: &SqlitePool, statements: &[TxStatement]) -> Result
                 other => {
                     return Err(format!(
                         "unsupported parameter type in transaction: {other}"
-                    ))
+                    ));
                 }
             };
         }
@@ -106,7 +106,9 @@ async fn run_statements(pool: &SqlitePool, statements: &[TxStatement]) -> Result
                 // Explicit rather than by drop, so a rollback that itself fails is reported
                 // instead of disappearing.
                 if let Err(rollback) = tx.rollback().await {
-                    return Err(format!("statement failed ({e}); rollback also failed: {rollback}"));
+                    return Err(format!(
+                        "statement failed ({e}); rollback also failed: {rollback}"
+                    ));
                 }
                 return Err(format!("statement failed, transaction rolled back: {e}"));
             }
