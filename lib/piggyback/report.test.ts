@@ -4,6 +4,7 @@ import { buildStateReport } from './report'
 import type {
   NewItemReport,
   NewLocationReport,
+  ParsedStateBlock,
   PlannedStateBlock,
   PlannedTurn,
   TurnCreatesReport,
@@ -11,11 +12,12 @@ import type {
 
 const NO_CREATES: TurnCreatesReport = { newLocations: [], newItems: [] }
 
+// Cast, not planned: these blocks are built holding ids and no creates, as the planner hands one on.
 function planned(
-  block: PlannedStateBlock,
+  block: Omit<ParsedStateBlock, 'newLocations' | 'newItems'>,
   report: TurnCreatesReport = NO_CREATES,
 ): Pick<PlannedTurn, 'block' | 'report'> {
-  return { block, report }
+  return { block: block as PlannedStateBlock, report }
 }
 
 describe('buildStateReport', () => {
@@ -253,18 +255,21 @@ describe("buildStateReport with this turn's creates", () => {
     ).toBeUndefined()
   })
 
-  // The planner resolves or removes every create, so the lists come only from the report.
-  it('takes no create lists in the block', () => {
+  // The planner mints the block and resolves or removes every create, so the lists come only
+  // from the report.
+  it('takes only a planned block, which carries no create lists', () => {
+    const { block } = planned({ sceneEntities: ['char_a'] })
+    // @ts-expect-error a hand-built block was never planned
+    const handBuilt: PlannedStateBlock = { sceneEntities: ['char_a'] }
+    // @ts-expect-error a planned block carries no create lists
+    const relisted: PlannedStateBlock = { ...block, newItems: [] }
     const report = () =>
       buildStateReport({
         layer: 'piggyback_tagged_block',
-        turn: planned({
-          sceneEntities: ['char_a'],
-          // @ts-expect-error a planned block carries no create lists
-          newLocations: [{ handle: 'new:x', name: 'X', description: '' }],
-        }),
+        // @ts-expect-error nor does the report take one
+        turn: { block: { sceneEntities: ['char_a'] }, report: NO_CREATES },
         failures: [],
       })
-    expect(report).toBeTypeOf('function')
+    expect([handBuilt, relisted, report]).toHaveLength(3)
   })
 })

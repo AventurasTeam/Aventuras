@@ -9,7 +9,12 @@ import {
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
-import { VISUAL_TEXT_MAX, type ParsedStateBlock, type PlannedTurn } from './types'
+import {
+  VISUAL_TEXT_MAX,
+  type ParsedStateBlock,
+  type PlannedStateBlock,
+  type PlannedTurn,
+} from './types'
 
 function mockEntity(overrides: Partial<Entity>): Entity {
   return {
@@ -38,7 +43,7 @@ function mockEntity(overrides: Partial<Entity>): Entity {
   } as Entity
 }
 
-// The planner's hand-off for a block that declared no creates: it passes through unchanged.
+// Cast, not planned: the planner hands on a block that declared no creates unchanged.
 function planned(
   block: ParsedStateBlock,
   rows: { createdRows?: readonly Entity[]; reusedIds?: readonly string[] } = {},
@@ -47,7 +52,7 @@ function planned(
   if (newLocations !== undefined || newItems !== undefined)
     throw new Error('a planned block declares no creates')
   return {
-    block: rest,
+    block: rest as PlannedStateBlock,
     createdRows: rows.createdRows ?? [],
     reusedIds: rows.reusedIds ?? [],
     report: { newLocations: [], newItems: [] },
@@ -1169,5 +1174,22 @@ describe("buildPiggybackActions with this turn's creates", () => {
     })
     expect(result.metadata.currentLocationId).toBe('loc_mill')
     expect(promotes(result)).toEqual([])
+  })
+})
+
+describe('buildPiggybackActions input', () => {
+  it('takes only a block the planner handed on', () => {
+    const turn = { ...planned({}), block: { sceneEntities: ['char_1'] } }
+    const build = () =>
+      buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        // @ts-expect-error a hand-built block was never planned
+        turn,
+        entities: [],
+        previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
+        branchId: 'main',
+      })
+    expect(build).toBeTypeOf('function')
   })
 })

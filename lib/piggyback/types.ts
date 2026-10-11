@@ -91,8 +91,15 @@ export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
 export type NewItemReport = NonNullable<StateReport['newItems']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
 
-/** A block the per-turn planner handed on: every create handle resolved or removed. */
-export type PlannedStateBlock = ParsedStateBlock & { newLocations?: never; newItems?: never }
+/**
+ * A substituted block with every create handle resolved or removed, so no create lists. Minted only
+ * by the per-turn planner (`planTurnCreates`, `skipTurnCreates`).
+ */
+export type PlannedStateBlock = ParsedStateBlock & {
+  newLocations?: never
+  newItems?: never
+  readonly __brand: 'PlannedStateBlock'
+}
 
 /** One turn's planned block and creates, which apply and report read together. */
 export type PlannedTurn = {

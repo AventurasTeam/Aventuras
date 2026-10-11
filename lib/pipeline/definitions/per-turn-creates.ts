@@ -302,7 +302,8 @@ function rewriteHandles(
 ): PlannedStateBlock {
   const resolve = (ref: string, from: ReadonlyMap<string, string>): string | undefined =>
     isCreateHandle(ref) ? from.get(ref) : ref
-  const { newLocations, newItems, ...out } = block
+  const { newLocations, newItems, ...rest } = block
+  const out: ParsedStateBlock = rest
   if (block.sceneEntities !== undefined) {
     out.sceneEntities = block.sceneEntities.flatMap((ref) => {
       const id = resolve(ref, ids)
@@ -324,7 +325,7 @@ function rewriteHandles(
       }),
     }
   }
-  return out
+  return out as PlannedStateBlock
 }
 
 function locationReport(
