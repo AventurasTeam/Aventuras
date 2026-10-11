@@ -229,3 +229,12 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/classifier/substitute.ts`. Either the step names those, or the
   export goes. Predates this PR. Raised 2026-10-11 by the
   locations-and-items-from-prose slice review.
+
+- **The oldest-first tie-break is written out by hand in about seven
+  places.** `createdAt`, then `compareId`: `byAge` in
+  `lib/world/new-entity-match.ts` and its copy in
+  `lib/classifier/reconcile.ts`, `partnerOrder` there, and the list
+  modules (`overview.ts`, `entity-list.ts`, `lore-list.ts`,
+  `thread-list.ts`, `entity-picker.tsx`). Its home is beside `compareId`
+  in `lib/list-modules/collate.ts`. Raised 2026-10-11 by the
+  locations-and-items-from-prose slice review.

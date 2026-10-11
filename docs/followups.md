@@ -34,7 +34,10 @@ for the placement rule.
   becomes the end of the system message. Confirm on an Anthropic story,
   through Diagnostics' HTTP capture, that the narrative call reads its
   cache; whether a streamed capture keeps the usage events is
-  unchecked.
+  unchecked. Both templates collect the held item ids in the same
+  Liquid loop to keep a held item out of the scene list, and a custom
+  pack must repeat it, since the context builder exposes no held-id
+  set; the split is the moment to share it.
 
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
