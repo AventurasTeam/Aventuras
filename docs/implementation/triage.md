@@ -237,20 +237,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `'drop'`, with a warning. Raised 2026-10-11 by the developer's Q7 on
   the locations-and-items-from-prose PR.
 
-- **Whitespace and wording nits in the bundled story prompts.** Found
-  while splitting them, all predating the split and all prompt content,
-  so likely the Prompt content pass's
-  ([`followups.md → Data-model`](../followups.md#data-model)):
-  - the In-scene loop leaves two blank lines before the next heading in
-    the narrative (`per-turn.ts`) and the suggestion refresh
-    (`suggestion-refresh.ts`);
-  - a Setting, Genre or Tone the user starts with whitespace renders a
-    blank line under its heading;
-  - the Gregorian calendar line reads "time in seconds (1 seconds per
-    second)", now inside the cached system half.
-
-  Raised 2026-10-11 by the system and user halves PR's task reviews.
-
 - **The registry describes `piggybackFires` as per-turn.**
   `lib/prompts/templateContextMap.ts` says "True when this turn
   expects…", but the value is settings-derived (`piggybackMode` and the
@@ -260,23 +246,36 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/prompts/bundled/system-half-stability.test.ts`) treats it as
   story-fixed. Canon's "unless the user edits the story"
   ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves))
-  is also narrower than the truth: toggling the capability override
-  changes the system half without a story edit. Reword both. Raised
-  2026-10-11 by the system and user halves PR's Task 9 review.
+  is also narrower than the truth: the value follows whichever narrative
+  model resolves, so reassigning the narrative model in App Settings
+  changes the system half without a story edit, as a capability override
+  will once one exists. And
+  [`→ Structured output`](../architecture.md#structured-output--the-json-contract-is-not-pack-content)
+  calls the contract "fixed per call site", but the fallback classifier
+  switches between its plain and with-chips schemas with
+  `askForSuggestions`, inside its marked system block, so a turn that
+  flips it misses the cache. Reword all three. Raised 2026-10-11 by the
+  system and user halves PR's Task 9 review and its slice review.
 
 - **`promptSchemaMiddleware` joins the contract onto the halves as
   rendered.** In `lib/ai/prompt-schema.ts`, `appendToLastSystem` adds
   `\n\n` and the contract to the system message untrimmed, as the system
   and user halves PR designed it. No bundled system half ends on a blank
   line (the suggestion refresh `rstrip`s its capture for exactly this),
-  but a user-authored one, once the M7 template editor exists, would put
-  three blank lines before the contract. `appendToLastUser`, carried
-  over unchanged from before that PR, does the same to a user half that
-  ends in a newline, and it folds every text part into one, which drops
-  each part's `providerOptions` and moves file parts after the text: a
-  later cache marker on a user part would vanish silently. Candidate
-  fix: `trimEnd` the half before each append, and keep the parts.
-  Raised 2026-10-11 by that PR's task reviews.
+  but a user-authored one, once M7.2's pack tab edits live packs
+  ([`roadmap.md → M7`](./roadmap.md#m7--app-settings--diagnostics--onboarding)),
+  would put three blank lines before the contract. `appendToLastUser`,
+  carried over unchanged from before that PR, does the same to a user
+  half that ends in a newline, and it folds every text part into one,
+  which drops each part's `providerOptions` and moves file parts after
+  the text: a later cache marker on a user part would vanish silently.
+  The contract itself is built with `String.replace`, which reads `$&`,
+  `$$` and the other `$` patterns in the schema block as replacement
+  patterns, so a `.describe()` text holding one would reach the model
+  mangled; none does today. Candidate fix: `trimEnd` the half before
+  each append, keep the parts, and pass the block through a replacer
+  function. Raised 2026-10-11 by that PR's task reviews and its slice
+  review.
 
 - **`generateStructured` doesn't pass the action id to
   `prepareGeneration`.** In `lib/ai/generate.ts`, `streamText` passes
@@ -288,15 +287,3 @@ slice-planning gate forces its resolution before that slice is planned.
   `marksSystemPrefix`'s comment notes it. Predates the system and user
   halves PR, whose `marksSystemPrefix` copies the existing type. Raised
   2026-10-11 by its task reviews.
-
-- **Every pack must rebuild the held-item id set in Liquid.** The
-  narrative (`lib/prompts/bundled/per-turn.ts`) and the fallback
-  classifier (`piggyback-fallback-classifier.ts`) each assign `heldIds`
-  from `heldItems` in the same loop to keep a held item out of the scene
-  list, because the context builder exposes no held-id set; a custom
-  pack (the M7 template editor) has to repeat that loop or list held
-  items twice. Candidate fix: a `heldItemIds` variable in the generation
-  context, read by both templates. Carried from the retired "Implement
-  system and user prompt halves" followup, which named the split as the
-  moment to share it; the split didn't. Raised 2026-10-11 by that PR's
-  final review.

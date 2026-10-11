@@ -58,6 +58,24 @@ for the placement rule.
   work, since the shipped prompts have to be good, once the halves land.
   Raised 2026-10-11.
 
+  The pass also takes the whitespace and wording nits the halves PR's
+  reviews found in the bundled prompts, all older than the split
+  (routed from triage 2026-10-11):
+  - the In-scene loop leaves two blank lines before the next heading in
+    the narrative (`per-turn.ts`), the fallback classifier
+    (`piggyback-fallback-classifier.ts`) and the suggestion refresh
+    (`suggestion-refresh.ts`);
+  - a Setting, Genre or Tone the user starts with a newline renders a
+    blank line under its heading;
+  - the Gregorian calendar line reads "time in seconds (1 seconds per
+    second)", now inside the cached system half;
+  - the periodic classifier's Known entities line ends on a dangling
+    dash for an entity whose description is the empty string;
+  - the fallback classifier's roster leaves a blank line between its
+    active and staged entries;
+  - the suggestion refresh's In scene list prints an empty line under
+    an entity with no description.
+
 - **Revisit leaving places off the `# Places` map.** The map leaves
   out retired places and `injection_mode = 'disabled'` ones (unless
   current), and hangs a left-out place's children under its nearest
