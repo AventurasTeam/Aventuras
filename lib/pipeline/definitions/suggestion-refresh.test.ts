@@ -488,6 +488,18 @@ describe('suggestion-refresh emission phase', () => {
     expect(user).not.toContain('<suggestions>')
   })
 
+  // architecture.md → System and user halves.
+  it('sends no cache marker: the call takes no sixth argument', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    await runEmission()
+
+    expect(generateStructuredMock.mock.calls[0]![5]).toBeUndefined()
+  })
+
   it('threads composer text into the prompt as refresh guidance and persists it', async () => {
     openStory()
     hydrate()
