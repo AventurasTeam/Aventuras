@@ -1,7 +1,8 @@
 import type { TemplateSources } from '../types'
 
 export const SUGGESTION_REFRESH: TemplateSources = {
-  // Whichever block renders last, its blank-line separator must not end the half.
+  // rstrip: a JSON contract may be appended after this half with its own blank line, which the
+  // last block's separator would double.
   system: `{%- capture definitionBlocks -%}
 {% if definition.setting != blank -%}
 # Setting

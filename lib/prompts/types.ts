@@ -9,7 +9,10 @@ export const CONTEXT_GROUPS = [
 ] as const
 export type ContextGroup = (typeof CONTEXT_GROUPS)[number]
 
-/** A template's two Liquid sources; a call sends them as a system then a user message. */
+/**
+ * A template's two Liquid sources: a stable system half and a per-call user half
+ * (architecture.md → System and user halves).
+ */
 export type TemplateSources = { system: string; user: string }
 
 export type TemplateEntry = TemplateSources & { group: ContextGroup }
