@@ -219,3 +219,13 @@ slice-planning gate forces its resolution before that slice is planned.
   the [roadmap](./roadmap.md#m7--app-settings--diagnostics--onboarding)
   plans converting these fields to nullable for the native path. Raised
   2026-10-11 by the locations-and-items-from-prose slice review.
+
+- **`generation-pipeline.md`'s lifecycle names a reverse swap nothing
+  calls.** Step 5 of the substitution lifecycle is
+  `parseAndSubstitute(rawOutput, idMap)`, but `parseAndSubstitute`
+  (`lib/ids/parse.ts`) has no production caller: the per-turn writers
+  resolve placeholders field by field in `substitutePiggybackIds`
+  (`lib/piggyback/substitute.ts`) and the periodic classifier in
+  `lib/classifier/substitute.ts`. Either the step names those, or the
+  export goes. Predates this PR. Raised 2026-10-11 by the
+  locations-and-items-from-prose slice review.
