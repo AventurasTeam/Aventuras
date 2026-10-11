@@ -924,14 +924,14 @@ describe('bundled per-turn template — system and user halves', () => {
     expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).system).toBe(OUTPUT_FORMAT)
   })
 
-  // A blank line at either end is a seam the split left behind; whatever joins a half
-  // to the next text (the JSON contract, the provider) brings its own separator.
-  it.each([
+  // Neither half starts or ends on a blank line; whatever follows a half supplies its own separator.
+  const flagCombinations = [
     [true, true],
     [true, false],
     [false, true],
     [false, false],
-  ])(
+  ]
+  it.each(flagCombinations)(
     'starts and ends neither half on a blank line (piggybackFires %s, suggestionsFire %s)',
     (piggybackFires, suggestionsFire) => {
       const { system, user } = render({ piggybackFires, suggestionsFire })
@@ -942,8 +942,29 @@ describe('bundled per-turn template — system and user halves', () => {
     },
   )
 
-  // The output-format line used to sit between the story and the emission blocks; each
-  // block now opens with the newline that keeps one blank line below the story.
+  it.each(flagCombinations)(
+    'starts and ends neither half on a blank line with a calendar-only system half (piggybackFires %s, suggestionsFire %s)',
+    (piggybackFires, suggestionsFire) => {
+      const { system, user } = render({
+        definition: {
+          mode: 'adventure',
+          setting: '',
+          genre: { promptBody: '' },
+          tone: { promptBody: '' },
+        },
+        piggybackFires,
+        suggestionsFire,
+      })
+      expect(system).toMatch(/^# Calendar\n[^\n]+\n\n/)
+      expect(headings(system)).toEqual(['# Calendar'])
+      for (const half of [system, user]) {
+        expect(half).not.toMatch(/^[ \t]*\n/)
+        expect(half).not.toMatch(/\n[ \t]*\n[ \t]*$/)
+      }
+    },
+  )
+
+  // Each emission block opens with its own newline, which keeps one blank line below the story.
   it('keeps one blank line between the story and the state block, and ends on the story when nothing follows', () => {
     expect(render({ suggestionsFire: false }).user).toContain(
       'Aria stepped through.\n\nAfter your narrative prose, append exactly one <state> block',

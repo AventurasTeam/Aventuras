@@ -2184,7 +2184,7 @@ describe('narrative fold — prompt halves', () => {
       /^# Setting\nA keep on a hill\.\n\n# Genre\nHigh fantasy\.\n\n# Tone\nDry humor\.\n\n# Calendar\nThis story tracks time in /,
     )
     expect(system).toMatch(
-      /\n\nWrite the next beat of the story as prose\. Do not break character or address the reader\.$/,
+      /[^\n]\n\nWrite the next beat of the story as prose\. Do not break character or address the reader\.$/,
     )
     expect(user).toContain('# Story so far')
     expect(user).not.toContain('# Setting')

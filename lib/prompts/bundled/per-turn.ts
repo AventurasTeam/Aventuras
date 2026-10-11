@@ -1,14 +1,8 @@
 import type { TemplateSources } from '../types'
 
-// `entities` use the drizzle row shape (camelCase: id/kind/name/description/
-// status/injectionMode). `sceneEntities` is the id array from entry metadata.
-// The scene loop is intentionally injectionMode-agnostic — that IS the
-// structural-floor invariant (active + in-scene always inject). It derives the
-// set from `entities` rather than from the floor so the invariant survives a
-// context built with no retrieval outcome, where every floor bundle is empty.
-// The system half must render the same bytes on every call until the user edits
-// the story (architecture.md → System and user halves): nothing per call goes in it.
 export const PER_TURN_NARRATIVE: TemplateSources = {
+  // The system half must render the same bytes on every call until the user edits
+  // the story (architecture.md → System and user halves): nothing per call goes in it.
   system: `{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
@@ -30,6 +24,9 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 
 {% endif -%}
 {% include 'macro_output_format_narrative' %}`,
+  // The scene loop is injectionMode-agnostic on purpose (the structural-floor invariant:
+  // active + in-scene always inject). It reads `entities`, not the floor, so the invariant
+  // holds for a context built with no retrieval outcome.
   user: `{%- comment -%}
 The second half of the condition de-dupes the row the classifier named as both
 in-scene and the location; it is nil-safe, since a null structuralLocation
