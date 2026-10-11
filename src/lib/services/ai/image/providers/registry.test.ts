@@ -16,6 +16,29 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   },
 }))
 
+vi.mock('./fetchAdapter', () => ({
+  imageFetch: vi.fn(),
+  imageGetFetch: vi.fn(),
+  fetchPublicImageBase64: vi.fn(),
+}))
+
+vi.mock('./openai', () => ({
+  createOpenAIProvider: vi.fn(),
+}))
+
+vi.mock('./comfy', () => ({
+  createComfyProvider: vi.fn(),
+}))
+
+vi.mock('./google', () => ({
+  createGoogleProvider: vi.fn(),
+}))
+
+import { fetchPublicImageBase64 } from './fetchAdapter'
+import { createOpenAIProvider } from './openai'
+import { createComfyProvider } from './comfy'
+import { createGoogleProvider } from './google'
+import type { ImageModelInfo } from './types'
 import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
@@ -90,6 +113,164 @@ describe('Image Provider Registry', () => {
           prompt: 'A futuristic city',
         }),
       ).rejects.toThrow('Image profile not found: non-existent-id')
+    })
+
+    // The model list is cached per key, so each case gets its own.
+    let keyCounter = 0
+    function setup(providerType: 'openai' | 'google' | 'comfyui', models: ImageModelInfo[] = []) {
+      const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+      const provider = {
+        id: providerType,
+        name: providerType,
+        generate,
+        listModels: vi.fn(async () => models),
+      }
+      vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createGoogleProvider).mockReturnValue(provider)
+      vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        providerType,
+        apiKey: `sk-key-${keyCounter++}`,
+      } as ReturnType<typeof settings.getImageProfile>)
+      vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
+      return generate
+    }
+
+    it('hands adapters raw base64 for data: and http(s) references', async () => {
+      const generate = setup('openai')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gpt-image-1',
+        prompt: 'x',
+        referenceImages: [
+          'data:image/png;base64,AAAA',
+          'https://img.test/a.png',
+          'data:application/octet-stream;base64,CCCC',
+          'BBBB',
+        ],
+      })
+
+      expect(fetchPublicImageBase64).toHaveBeenCalledWith(
+        'https://img.test/a.png',
+        expect.anything(),
+      )
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['AAAA', 'DOWNLOADED', 'CCCC', 'BBBB'] }),
+      )
+    })
+
+    it('trims references to the model limit before downloading any', async () => {
+      const generate = setup('openai', [
+        { id: 'dall-e-2', name: 'dall-e-2', supportsImg2Img: true, maxReferenceImages: 1 },
+      ])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'dall-e-2',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
+      })
+
+      expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
+    it('drops a reference that fails to download and keeps the rest', async () => {
+      const generate = setup('openai')
+      vi.mocked(fetchPublicImageBase64).mockImplementation(async (url) => {
+        if (url.includes('bad')) throw new Error('Image URL does not point at a public host')
+        return 'DOWNLOADED'
+      })
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gpt-image-1',
+        prompt: 'x',
+        referenceImages: [
+          'https://img.test/a.png',
+          'http://bad.test/b.png',
+          'data:image/png;base64,AAAA',
+        ],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED', 'AAAA'] }),
+      )
+    })
+
+    it('generates without references when every one fails to download', async () => {
+      const generate = setup('openai')
+      vi.mocked(fetchPublicImageBase64).mockRejectedValue(new Error('refused'))
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gpt-image-1',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+    })
+
+    it('hands Google raw base64 references', async () => {
+      const generate = setup('google')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'gemini-2.5-flash-image',
+        prompt: 'x',
+        referenceImages: ['data:image/png;base64,AAAA', 'https://img.test/a.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['AAAA', 'DOWNLOADED'] }),
+      )
+    })
+
+    it('downloads no reference for a model that takes none', async () => {
+      const generate = setup('google', [
+        {
+          id: 'imagen-4.0-generate-001',
+          name: 'Imagen 4',
+          supportsImg2Img: false,
+          maxReferenceImages: 0,
+        },
+      ])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'imagen-4.0-generate-001',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+    })
+
+    it('sends no references, and downloads none, to a provider that ignores them', async () => {
+      const generate = setup('comfyui')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
+    })
+
+    it('passes no references when none were given', async () => {
+      const generate = setup('openai')
+
+      await generateImage({ profileId: 'p', model: 'gpt-image-1', prompt: 'x' })
+
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
     })
   })
 })

@@ -118,7 +118,60 @@ export function jumpToEntry(request: EntryJumpRequest): boolean {
   return willLand
 }
 
-export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail'
+/** Most of the viewport the entry above a landing may take when lifted into view. */
+const CONTEXT_LIFT_MAX_RATIO = 0.3
+
+/** Share of the gap between cards left above the lifted one; at or over 1 the card before shows. */
+const CONTEXT_LIFT_GAP_SHARE = 0.8
+
+export interface ContextLiftInput {
+  /** From the top edge of the entry above the landing to the landing's. */
+  distance: number
+  /** The entry above's own height, so `distance - aboveHeight` is the gap between them. */
+  aboveHeight: number
+  /** How far below the viewport's top the landing already sits, where it could not reach it. */
+  offset: number
+  viewportHeight: number
+}
+
+/**
+ * How far to pull a landing up so the entry above it shows, with its top border clear of the
+ * viewport's edge. The entry takes at most 30% of the viewport and is clipped beyond it, whatever
+ * its kind; the gap between the two is lifted with it.
+ */
+export function contextLift(input: ContextLiftInput): number {
+  const { distance, aboveHeight, offset, viewportHeight } = input
+  const margin = Math.floor(Math.max(0, distance - aboveHeight) * CONTEXT_LIFT_GAP_SHARE)
+  const wanted = Math.min(distance, CONTEXT_LIFT_MAX_RATIO * viewportHeight) + margin
+  return Math.max(0, wanted - Math.max(0, offset))
+}
+
+export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last'
+
+/** The filter option each kind of row belongs to. */
+export type LandmarkFilterGroup = 'firstLast' | 'chapters' | 'checkpoints'
+
+export const LANDMARK_FILTER_GROUPS: LandmarkFilterGroup[] = [
+  'firstLast',
+  'chapters',
+  'checkpoints',
+]
+
+const FILTER_GROUP_OF: Record<LandmarkKind, LandmarkFilterGroup> = {
+  origin: 'checkpoints',
+  checkpoint: 'checkpoints',
+  chapter: 'chapters',
+  tail: 'chapters',
+  first: 'firstLast',
+  last: 'firstLast',
+}
+
+export function filterLandmarks(
+  landmarks: Landmark[],
+  shown: Record<LandmarkFilterGroup, boolean>,
+): Landmark[] {
+  return landmarks.filter((landmark) => shown[FILTER_GROUP_OF[landmark.kind]])
+}
 
 export interface Landmark {
   entryId: string
@@ -174,7 +227,10 @@ export interface Landmarks {
  * checkpoint along the lineage that produced its current state, and where each chapter starts.
  *
  * A chapter or tail row sorts ahead of any other row on the same entry, matching the story view, where
- * its banner sits above that entry.
+ * its banner sits above that entry. The first-entry row leads the list and the last-entry row ends it, whatever
+ * else shares their entries.
+ *
+ * They mark the first and last entry of the branch as read. A single entry gets the first-entry row only.
  *
  * A checkpoint missing from `entries` is two different things, and they are not shown alike: one
  * anchored elsewhere belongs to another branch and is left out, while one with no anchoring entry
@@ -251,23 +307,38 @@ export function buildLandmarks(
     })
   }
 
-  for (const [entryId, banner] of chapterBanners ?? []) {
-    const entry = byId.get(entryId)
-    if (!entry) continue
-    landmarks.push({
+  /** A row that sits on an entry and belongs to no checkpoint. */
+  function entryRow(entry: StoryEntry, kind: LandmarkKind, label: string): Landmark {
+    return {
       entryId: entry.id,
       checkpointId: null,
       branchId: entry.branchId,
       switchesBranch: false,
       number: entryNumber(entry),
-      kind: banner.number === null ? 'tail' : 'chapter',
-      label: chapterBannerLabel(banner),
+      kind,
+      label,
       branchName: getBranchName(entry.branchId),
-    })
+    }
   }
 
-  const rank = (landmark: Landmark) =>
-    landmark.kind === 'chapter' || landmark.kind === 'tail' ? 0 : 1
+  for (const [entryId, banner] of chapterBanners ?? []) {
+    const entry = byId.get(entryId)
+    if (!entry) continue
+    landmarks.push(
+      entryRow(entry, banner.number === null ? 'tail' : 'chapter', chapterBannerLabel(banner)),
+    )
+  }
+
+  const first = entries[0]
+  const last = entries[entries.length - 1]
+  if (first) landmarks.push(entryRow(first, 'first', 'First entry'))
+  if (last !== first) landmarks.push(entryRow(last, 'last', 'Last entry'))
+
+  const rank = (landmark: Landmark) => {
+    if (landmark.kind === 'first') return -1
+    if (landmark.kind === 'last') return 2
+    return landmark.kind === 'chapter' || landmark.kind === 'tail' ? 0 : 1
+  }
 
   return {
     landmarks: landmarks.sort((a, b) => a.number - b.number || rank(a) - rank(b)),

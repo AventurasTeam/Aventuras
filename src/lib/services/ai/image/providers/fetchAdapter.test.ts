@@ -1,0 +1,104 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
+
+// The real store is a rune module, which this suite cannot import.
+vi.mock('$lib/stores/debug.svelte', () => ({
+  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
+}))
+
+import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
+import { fetchPublicImageBase64 } from './fetchAdapter'
+
+const mockFetch = vi.mocked(tauriHttpFetch)
+
+function redirect(location?: string, status = 302): Response {
+  return new Response(null, { status, headers: location ? { location } : {} })
+}
+
+function image(bytes: number[]): Response {
+  return new Response(new Uint8Array(bytes), { status: 200 })
+}
+
+describe('fetchPublicImageBase64', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+  })
+
+  it('returns the body of a public URL as base64, following no redirect', async () => {
+    mockFetch.mockResolvedValueOnce(image([0x68, 0x69]))
+
+    await expect(fetchPublicImageBase64('https://img.test/a.png')).resolves.toBe('aGk=')
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://img.test/a.png',
+      expect.objectContaining({ maxRedirections: 0 }),
+    )
+  })
+
+  it('follows a redirect from one public host to another', async () => {
+    mockFetch
+      .mockResolvedValueOnce(redirect('https://cdn.test/a.png'))
+      .mockResolvedValueOnce(image([0x68, 0x69]))
+
+    await expect(fetchPublicImageBase64('https://img.test/a.png')).resolves.toBe('aGk=')
+    expect(mockFetch).toHaveBeenLastCalledWith('https://cdn.test/a.png', expect.anything())
+  })
+
+  it('resolves a relative Location against the URL it came from', async () => {
+    mockFetch
+      .mockResolvedValueOnce(redirect('/moved/a.png', 301))
+      .mockResolvedValueOnce(image([0x68, 0x69]))
+
+    await fetchPublicImageBase64('https://img.test/a.png')
+    expect(mockFetch).toHaveBeenLastCalledWith('https://img.test/moved/a.png', expect.anything())
+  })
+
+  it('refuses a redirect to a private address without requesting it', async () => {
+    mockFetch.mockResolvedValueOnce(redirect('http://127.0.0.1:8188/'))
+
+    await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
+      'does not point at a public host',
+    )
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a private starting URL without requesting it', async () => {
+    await expect(fetchPublicImageBase64('http://169.254.169.254/latest/')).rejects.toThrow(
+      'does not point at a public host',
+    )
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('throws on a redirect with no Location', async () => {
+    mockFetch.mockResolvedValueOnce(redirect(undefined, 302))
+
+    await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
+      'without a Location',
+    )
+  })
+
+  it('throws once the redirect limit is passed', async () => {
+    mockFetch.mockImplementation(async () => redirect('https://img.test/again.png'))
+
+    await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow('too many times')
+    expect(mockFetch).toHaveBeenCalledTimes(4)
+  })
+
+  it('cancels the body of a redirect it follows', async () => {
+    const hop = new Response('moved', { status: 302, headers: { location: 'https://cdn.test/a' } })
+    const cancel = vi.spyOn(hop.body!, 'cancel')
+    mockFetch.mockResolvedValueOnce(hop).mockResolvedValueOnce(image([0x68, 0x69]))
+
+    await fetchPublicImageBase64('https://img.test/a.png')
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('reports an error status instead of reading it as an image', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('nope', { status: 404 }))
+
+    await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
+      'Image API error 404',
+    )
+  })
+})

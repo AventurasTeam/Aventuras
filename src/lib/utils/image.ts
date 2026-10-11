@@ -84,6 +84,30 @@ export function formatImageSize(res: ImageResolution): string {
   return `${res.width}x${res.height}`
 }
 
+/** MIME type of raw base64 image data, from its magic bytes. Unrecognised data is treated as PNG. */
+export function base64ImageMime(b64: string): 'image/png' | 'image/jpeg' | 'image/webp' {
+  if (b64.startsWith('/9j/')) return 'image/jpeg'
+  if (b64.startsWith('UklGR')) return 'image/webp'
+  return 'image/png'
+}
+
+const BASE64_CHUNK = 0x8000
+
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK))
+  }
+  return btoa(binary)
+}
+
+export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
 /**
  * Dimensions to record against a pending image, before there is an image.
  *

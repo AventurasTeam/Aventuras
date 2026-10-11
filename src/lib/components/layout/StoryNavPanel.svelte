@@ -5,21 +5,29 @@
     buildLandmarks,
     checkpointDeletionBlocker,
     entryNumber,
+    filterLandmarks,
+    LANDMARK_FILTER_GROUPS,
     jumpToEntry,
     resolveEntryByNumber,
     type Landmark,
+    type LandmarkFilterGroup,
   } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '$lib/components/ui/button'
+  import FilterButton from '$lib/components/ui/filter-button.svelte'
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import * as Tabs from '$lib/components/ui/tabs'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import * as Popover from '$lib/components/ui/popover'
   import TimelinePanel from '$lib/components/world/TimelinePanel.svelte'
   import { swipe } from '$lib/utils/swipe'
   import {
+    ArrowDownToLine,
+    ArrowUpToLine,
     BookOpen,
     Bookmark,
     Check,
@@ -29,12 +37,19 @@
     CornerDownLeft,
     Edit2,
     GitBranch,
+    Info,
     Milestone,
     Navigation,
     PenLine,
     Trash2,
     X,
   } from '@lucide/svelte'
+
+  const FILTER_OPTIONS: { group: LandmarkFilterGroup; label: string }[] = [
+    { group: 'firstLast', label: 'Show first and last entry' },
+    { group: 'chapters', label: 'Show chapter borders' },
+    { group: 'checkpoints', label: 'Show checkpoints' },
+  ]
 
   /**
    * Anchors and reconciliation live beside navigation rather than in the world sidebar: both
@@ -85,8 +100,11 @@
       story.chapterBanners,
     ),
   )
-  const landmarks = $derived(landmarkList.landmarks)
   const orphaned = $derived(landmarkList.orphaned)
+
+  const filtered = $derived(LANDMARK_FILTER_GROUPS.some((group) => !ui.navFilter[group]))
+
+  const landmarks = $derived(filterLandmarks(landmarkList.landmarks, ui.navFilter))
 
   // Not persisted with the panel's own state: a reader who opens this to clear one checkpoint out
   // does not want it open on every story afterwards. Closing the panel unmounts this component,
@@ -285,16 +303,38 @@
           </Button>
         </div>
 
-        <h4 class="text-muted-foreground mt-5 mb-2 text-xs font-medium tracking-wider uppercase">
-          Landmarks
-        </h4>
+        <div class="mt-5 mb-2 flex items-center justify-between">
+          <h4 class="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+            Landmarks
+          </h4>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <FilterButton active={filtered} label="Filter landmarks" {...props} />
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {#each FILTER_OPTIONS as option (option.group)}
+                <DropdownMenu.CheckboxItem
+                  checked={ui.navFilter[option.group]}
+                  onCheckedChange={(checked) => void ui.setNavFilter(option.group, checked)}
+                  closeOnSelect={false}
+                >
+                  {option.label}
+                </DropdownMenu.CheckboxItem>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
 
         {#if landmarks.length === 0}
           <EmptyState
             icon={Milestone}
             size="sm"
             title="No landmarks"
-            description="This branch has no starting point, chapters or checkpoints to jump to. Checkpoints are saved at chapter boundaries."
+            description={landmarkList.landmarks.length > 0
+              ? 'The landmark filter is hiding every landmark on this branch.'
+              : 'This branch has no starting point, chapters or checkpoints to jump to. Checkpoints are saved at chapter boundaries.'}
             class="py-6"
           />
         {:else}
@@ -353,6 +393,10 @@
                       <BookOpen class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else if landmark.kind === 'tail'}
                       <PenLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'first'}
+                      <ArrowUpToLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                    {:else if landmark.kind === 'last'}
+                      <ArrowDownToLine class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {:else}
                       <Bookmark class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     {/if}
@@ -371,6 +415,35 @@
                       >
                     </span>
                   </button>
+                  {#if landmark.kind === 'tail'}
+                    <div
+                      class="can-hover:opacity-0 absolute top-1 right-1 flex transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                    >
+                      <!-- Opens on hover after a delay like a native tooltip, and on a tap where
+                           there is no hover. -->
+                      <Popover.Root>
+                        <Popover.Trigger openOnHover openDelay={500}>
+                          {#snippet child({ props })}
+                            <button
+                              {...props}
+                              class="text-surface-500 hover:text-surface-200 tap-target"
+                              aria-label="About this landmark"
+                            >
+                              <Info class="can-hover:size-3 size-4" />
+                            </button>
+                          {/snippet}
+                        </Popover.Trigger>
+                        <!-- Dark on light, as the native tooltips beside it are. -->
+                        <Popover.Content
+                          class="w-60 rounded-sm border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 shadow-md"
+                          align="end"
+                        >
+                          Points at the first entry after the last chapter: the part of the story
+                          not in a chapter yet. When the next chapter is written, it moves past it.
+                        </Popover.Content>
+                      </Popover.Root>
+                    </div>
+                  {/if}
                   {#if landmark.checkpointId}
                     {@const deleteBlockedReason = checkpointDeletionBlocker(
                       landmark.checkpointId,

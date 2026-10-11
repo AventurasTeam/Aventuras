@@ -8,6 +8,8 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '$lib/stores/debug.svelte'
+import { bytesToBase64 } from '$lib/utils/image'
+import { isPublicHttpUrl } from '$lib/utils/url'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
@@ -149,15 +151,61 @@ export async function imageFetch(options: {
   }
 }
 
+/** Downloads an image from a third-party host as raw base64. Never sends an API key. */
+export async function fetchImageBase64(
+  url: string,
+  options?: { signal?: AbortSignal; serviceId?: string },
+): Promise<string> {
+  const response = await imageGetFetch(url, undefined, options)
+  return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
+}
+
+/** Redirects followed before giving up; each hop is checked against `isPublicHttpUrl`. */
+const MAX_REDIRECTS = 3
+
+/** Like `fetchImageBase64`, for a URL that came from outside: the URL and every redirect must be public. */
+export async function fetchPublicImageBase64(
+  url: string,
+  options?: { signal?: AbortSignal; serviceId?: string },
+): Promise<string> {
+  let target = url
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!isPublicHttpUrl(target)) {
+      throw new Error('Image URL does not point at a public host')
+    }
+    const response = await imageGetFetch(target, undefined, { ...options, followRedirects: false })
+    if (response.status < 300 || response.status >= 400) {
+      return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
+    }
+    // The plugin keeps an unread body open on the Rust side.
+    await response.body?.cancel()
+    const location = response.headers.get('location')
+    if (!location) throw new Error(`Image URL redirected (${response.status}) without a Location`)
+    target = new URL(location, target).href
+  }
+  throw new Error('Image URL redirected too many times')
+}
+
 /**
  * GET-based image fetch (for providers like Pollinations that use URL params).
+ * With `followRedirects: false` a 3xx is returned to the caller instead of followed or thrown.
  */
 export async function imageGetFetch(
   url: string,
   headers?: Record<string, string>,
-  options?: { signal?: AbortSignal; timeoutMs?: number; serviceId?: string },
+  options?: {
+    signal?: AbortSignal
+    timeoutMs?: number
+    serviceId?: string
+    followRedirects?: boolean
+  },
 ): Promise<Response> {
-  const { signal, timeoutMs = DEFAULT_IMAGE_TIMEOUT, serviceId = 'image-gen' } = options ?? {}
+  const {
+    signal,
+    timeoutMs = DEFAULT_IMAGE_TIMEOUT,
+    serviceId = 'image-gen',
+    followRedirects = true,
+  } = options ?? {}
 
   const controller = new AbortController()
   let timedOut = false
@@ -175,9 +223,11 @@ export async function imageGetFetch(
       method: 'GET',
       headers: normalizeHeaders(headers),
       signal: controller.signal,
+      ...(followRedirects ? {} : { maxRedirections: 0 }),
     })
 
-    if (!response.ok) {
+    const isRedirect = response.status >= 300 && response.status < 400
+    if (!response.ok && !(isRedirect && !followRedirects)) {
       const errorText = await response.text()
       debug.addDebugResponse(
         debugId,

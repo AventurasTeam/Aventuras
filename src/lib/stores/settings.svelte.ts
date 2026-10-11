@@ -35,7 +35,8 @@ import {
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
-import { ui } from '$lib/stores/ui.svelte'
+import { ui, NAV_FILTER_SETTING } from '$lib/stores/ui.svelte'
+import { LANDMARK_FILTER_GROUPS } from '$lib/utils/storyNavigation'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '$lib/constants/layout'
@@ -1644,6 +1645,11 @@ class SettingsStore {
       const navPanelOpen = await database.getSetting('nav_panel_open')
       if (navPanelOpen !== null) ui.navPanelOpen = navPanelOpen === 'true'
 
+      for (const group of LANDMARK_FILTER_GROUPS) {
+        const shown = await database.getSetting(NAV_FILTER_SETTING[group])
+        if (shown !== null) ui.navFilter[group] = shown === 'true'
+      }
+
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
 
@@ -3161,6 +3167,7 @@ class SettingsStore {
     await this.setActivityReporting(this.uiSettings.activityReporting)
     await ui.setNavPanelOpen(false)
     await ui.setGalleryNewestFirst(false)
+    for (const group of LANDMARK_FILTER_GROUPS) await ui.setNavFilter(group, true)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')

@@ -203,6 +203,21 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   never switches branch in "Switch to checkpoint branch" mode: its start can lie in an ancestor's
   history while the chapter is in the current branch's view all the same.
 
+  A jump lifts the view so the entry above the landing shows, whole when it is within 30% of the
+  viewport and clipped at that height when it is taller, whatever its kind. Part of the gap between
+  cards stays above it so its top border is not flush with the edge; that part is kept under the
+  whole gap, or the card before it would show (`contextLift`). Where the view cannot scroll that
+  far, because the landing is near the end, the lift is reduced by what the landing already gained.
+  A jump to the last entry is not a scroll break, so a narration being streamed is still followed.
+
+  The list also carries a **First entry** row on the branch's first entry and a **Last entry** row
+  on its last (one row, First entry, when there is a single entry). Both stay on the current
+  branch in every navigation mode. The list's filter has three remembered options, one per group
+  of rows (`filterLandmarks`): the first and last entry (`nav_show_first_last`), the chapter rows
+  and the tail row together (`nav_show_chapters`), and the checkpoint rows together with the origin
+  row of a branch, which is named after its fork checkpoint (`nav_show_checkpoints`). The orphaned
+  checkpoints section is not filtered: it is where they are cleared out.
+
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
   every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
   per entry type, but every creation path initialised them blank and nothing ever wrote one
@@ -453,6 +468,16 @@ steps — and each adapter turns it into what its backend accepts: an aspect rat
 OpenRouter, the model's own published resolution list for NanoGPT, real dimensions for
 ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
 it does not offer answers with the nearest thing it does, which is not the same picture.
+
+OpenAI, NanoGPT and Pollinations share one OpenAI-compatible request (`openaiCompatible.ts`):
+`/images/generations`, or `/images/edits` as multipart when there are references. Each keeps its own
+model discovery and size handling. The registry hands references only to the providers that send
+them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
+adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
+from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
+merely resolves to a private address is not caught. A reference that cannot be fetched is dropped
+and the image is generated without it. Google takes them on `gemini-*` image models only; the SDK sends any
+other id down the Imagen path, which rejects input images.
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see

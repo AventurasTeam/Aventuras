@@ -16,6 +16,7 @@
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import { eventBus, type BranchSwitchedEvent } from '$lib/services/events'
   import { repinDecision, type PinSnapshot } from '$lib/utils/storyPin'
+  import { contextLift } from '$lib/utils/storyNavigation'
 
   const storyMaxWidthStyle = $derived.by(() => {
     const maxWidth =
@@ -225,10 +226,6 @@
   // from the fork point doesn't immediately hit the "earlier entries hidden" divider.
   const FORK_CONTEXT_BEFORE = 5
 
-  // Most of the viewport the preceding entry may take when lifted into view. A tall entry
-  // shows a slice; a short one shows in full, and the fork entry stays near the top either way.
-  const CONTEXT_LIFT_MAX_RATIO = 0.3
-
   // A branch switch happened while the story panel was hidden; consumed when it returns
   let pendingBranchLanding = false
 
@@ -245,12 +242,16 @@
         if (liftForContext && storyContainer) {
           const prevEl = el.previousElementSibling
           if (prevEl) {
-            // Cap the lift so a long preceding entry can't push the fork entry off the bottom
-            const lift = Math.min(
-              prevEl.getBoundingClientRect().height,
-              CONTEXT_LIFT_MAX_RATIO * storyContainer.clientHeight,
-            )
-            storyContainer.scrollTop -= lift
+            const prevRect = prevEl.getBoundingClientRect()
+            const elTop = el.getBoundingClientRect().top
+            storyContainer.scrollTop -= contextLift({
+              distance: elTop - prevRect.top,
+              aboveHeight: prevRect.height,
+              // Near the end the container cannot scroll the landing to its top, and the
+              // entry above is already in view by that much.
+              offset: elTop - storyContainer.getBoundingClientRect().top,
+              viewportHeight: storyContainer.clientHeight,
+            })
           }
         }
       } else {
@@ -294,8 +295,9 @@
     const total = entries.length
     prevEntryCount = total
     // Landing away from the end is a scroll break: the next narration must not yank
-    // the view back to the bottom while the user reads where they asked to be.
-    ui.setScrollBreak(true)
+    // the view back to the bottom while the user reads where they asked to be. Landing on the
+    // last entry is not away from it, so a streaming narration is followed as usual.
+    ui.setScrollBreak(idx !== total - 1)
     windowStart = Math.max(0, idx - FORK_CONTEXT_BEFORE)
     windowEnd = Math.min(total, idx + DEFAULT_VISIBLE_ENTRIES)
     await tick()
