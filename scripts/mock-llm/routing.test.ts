@@ -8,30 +8,54 @@ import { promptSchemaMiddleware } from '@/lib/ai/prompt-schema'
 import { fallbackClassifierSchema } from '@/lib/pipeline'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 
-import { classifyRequest, extractBlockFromPrompt, matchShape, unknownKey } from './routing'
+import {
+  classifyRequest,
+  extractBlockFromPrompt,
+  matchShape,
+  systemText,
+  unknownKey,
+} from './routing'
 import { findShapeByName, STRUCTURED_SHAPES, type StructuredShape } from './shapes'
 
+type MiddlewareMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: { type: 'text'; text: string }[] }
+
 type MiddlewareParams = {
-  prompt: { role: string; content: { type: string; text: string }[] }[]
+  prompt: MiddlewareMessage[]
   responseFormat?: { type: 'json'; schema?: JsonSchema }
 }
 
 /**
- * Runs the app's own middleware to produce the prompt it would actually send,
- * so a change to SCHEMA_INSTRUCTION_TEMPLATE fails here instead of silently
- * degrading every match at runtime.
+ * Runs the app's own middleware over a `[system?, user]` prompt, the way the
+ * call layer builds one, and flattens it into the body the openai-compatible
+ * adapter sends — so a change to the contract's text or placement fails here
+ * instead of silently degrading every match at runtime.
  */
-async function promptAsSent(schema: z.ZodType, text = 'Classify the turn.'): Promise<string> {
+async function requestAsSent(
+  schema: z.ZodType,
+  user = 'Classify the turn.',
+  system = '',
+): Promise<Record<string, unknown>> {
   const transform = promptSchemaMiddleware().transformParams
   if (transform === undefined) throw new Error('promptSchemaMiddleware lost transformParams')
   const params: MiddlewareParams = {
-    prompt: [{ role: 'user', content: [{ type: 'text', text }] }],
+    prompt: [
+      ...(system.trim() === '' ? [] : [{ role: 'system' as const, content: system }]),
+      { role: 'user', content: [{ type: 'text', text: user }] },
+    ],
     responseFormat: { type: 'json', schema: z.toJSONSchema(schema) as JsonSchema },
   }
   const out = (await transform({
     params,
   } as unknown as Parameters<typeof transform>[0])) as unknown as MiddlewareParams
-  return out.prompt[0]?.content.map((p) => p.text).join('\n') ?? ''
+  return {
+    model: 'seed/narrative',
+    messages: out.prompt.map((m) => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.map((p) => p.text).join('\n'),
+    })),
+  }
 }
 
 function requestFrom(text: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -46,15 +70,41 @@ describe('classifyRequest', () => {
   })
 
   it('recovers the block the app injects and names the shape', async () => {
-    const text = await promptAsSent(fallbackClassifierSchema)
+    const body = await requestAsSent(fallbackClassifierSchema)
 
-    expect(extractBlockFromPrompt(text)).toBe(
+    expect(extractBlockFromPrompt(systemText(body))).toBe(
       schemaToTypeScriptBlock(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
     )
 
-    const route = classifyRequest(requestFrom(text))
+    const route = classifyRequest(body)
     expect(route).toMatchObject({ lane: 'structured', key: 'per-turn-classifier' })
   })
+
+  it('recovers the block from behind a system half that quotes the opener', async () => {
+    const body = await requestAsSent(
+      fallbackClassifierSchema,
+      'Classify the turn.',
+      '# Setting\nChoose from the following:\n\nthe drowned bells.',
+    )
+
+    expect(extractBlockFromPrompt(systemText(body))).toBe(
+      schemaToTypeScriptBlock(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
+    )
+  })
+
+  // Story call sites carry no marker, so the extracted block alone has to name them.
+  for (const shape of STRUCTURED_SHAPES.filter((s) => s.group === 'story')) {
+    it(`routes ${shape.name} from a request with a system half`, async () => {
+      const body = await requestAsSent(
+        shape.schema,
+        'Classify the turn.',
+        '# Calendar\nThe year turns on the thaw.',
+      )
+
+      expect(extractBlockFromPrompt(systemText(body))).toBe(shape.block)
+      expect(classifyRequest(body)).toMatchObject({ lane: 'structured', key: shape.name })
+    })
+  }
 
   it('distinguishes the classifier shape that also asks for suggestions', async () => {
     const withSuggestions = STRUCTURED_SHAPES.find(
@@ -62,7 +112,7 @@ describe('classifyRequest', () => {
     )
     if (withSuggestions === undefined) throw new Error('registry lost the suggestions shape')
 
-    const route = classifyRequest(requestFrom(await promptAsSent(withSuggestions.schema)))
+    const route = classifyRequest(await requestAsSent(withSuggestions.schema))
     expect(route).toMatchObject({ lane: 'structured', key: 'per-turn-classifier-suggestions' })
   })
 
@@ -80,9 +130,9 @@ describe('classifyRequest', () => {
 
   it('gives an unregistered schema a stable lane key instead of failing', async () => {
     const novel = z.object({ mood: z.string(), intensity: z.number() })
-    const text = await promptAsSent(novel)
+    const body = await requestAsSent(novel)
 
-    const route = classifyRequest(requestFrom(text))
+    const route = classifyRequest(body)
     expect(route.lane).toBe('structured')
     if (route.lane !== 'structured') throw new Error('unreachable')
     expect(route.shape).toBeNull()
@@ -90,7 +140,7 @@ describe('classifyRequest', () => {
     expect(route.block).toContain('mood: string;')
 
     // Stable across calls: the UI keys a lane on it.
-    expect(classifyRequest(requestFrom(text))).toMatchObject({ key: route.key })
+    expect(classifyRequest(body)).toMatchObject({ key: route.key })
   })
 
   it('falls back to a no-schema key when nothing declares a shape', () => {
@@ -171,8 +221,8 @@ describe('wizard call sites', () => {
       const shape = findShapeByName(name)
       if (shape === undefined) throw new Error(`registry lost ${name}`)
 
-      const rendered = renderTemplate(templateId, WIZARD_CONTEXT).user
-      const route = classifyRequest(requestFrom(await promptAsSent(shape.schema, rendered)))
+      const { system, user } = renderTemplate(templateId, WIZARD_CONTEXT)
+      const route = classifyRequest(await requestAsSent(shape.schema, user, system))
 
       expect(route).toMatchObject({ lane: 'structured', key: name })
     })
@@ -206,6 +256,24 @@ describe('STRUCTURED_SHAPES', () => {
       for (const b of STRUCTURED_SHAPES) {
         if (a.name === b.name || a.block !== b.block) continue
         expect(b.marker.includes(a.marker), `${a.name}'s marker is inside ${b.name}'s`).toBe(false)
+      }
+    }
+  })
+
+  // The contract precedes the template on the wire, and pickByMarker takes the
+  // earliest occurrence, so a marker inside any contract would outrank the real one.
+  // Empty markers are skipped as pickByMarker skips them: '' is in every string.
+  it('has no marker inside the contract the app sends for any shape', async () => {
+    const markers = STRUCTURED_SHAPES.filter((s) => s.marker !== '')
+    expect(markers.length).toBeGreaterThan(0)
+    for (const shape of STRUCTURED_SHAPES) {
+      const contract = systemText(await requestAsSent(shape.schema))
+      expect(contract).toContain(shape.block)
+      for (const other of markers) {
+        expect(
+          contract.includes(other.marker),
+          `${other.name}'s marker in ${shape.name}'s contract`,
+        ).toBe(false)
       }
     }
   })

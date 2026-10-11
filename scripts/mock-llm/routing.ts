@@ -6,12 +6,12 @@ import { STRUCTURED_SHAPES, type StructuredShape } from './shapes'
 
 export const NARRATIVE_LANE = 'narrative'
 
-// The bracketing text of SCHEMA_INSTRUCTION_TEMPLATE (lib/ai/prompt-schema.ts).
-// Not exported by the app, so routing.test.ts drives the real
-// promptSchemaMiddleware and asserts the extractor still recovers the block —
-// a template edit fails that test rather than silently degrading every match.
+// The opener of SCHEMA_CONTRACT_TEMPLATE (lib/ai/prompt-schema.ts), which the
+// app appends last to the system message, so the block runs to its end. Not
+// exported by the app, so routing.test.ts drives the real promptSchemaMiddleware
+// and asserts the extractor still recovers the block — a contract edit fails
+// that test rather than silently degrading every match.
 const BLOCK_OPEN = 'from the following:\n\n'
-const BLOCK_CLOSE = '\n\nOutput ONLY the JSON object'
 
 export type Route =
   | { lane: typeof NARRATIVE_LANE }
@@ -24,27 +24,39 @@ export type Route =
       block: string | null
     }
 
+function messagesOf(body: Record<string, unknown>): unknown[] {
+  return Array.isArray(body.messages) ? body.messages : []
+}
+
+function contentText(message: unknown): string {
+  const content = (message as { content?: unknown }).content
+  if (typeof content === 'string') return content
+  if (Array.isArray(content))
+    return content.map((p) => (p as { text?: string }).text ?? '').join('\n')
+  return ''
+}
+
 export function promptText(body: Record<string, unknown>): string {
-  const messages = Array.isArray(body.messages) ? body.messages : []
-  return messages
-    .map((m) => {
-      const content = (m as { content?: unknown }).content
-      if (typeof content === 'string') return content
-      if (Array.isArray(content))
-        return content.map((p) => (p as { text?: string }).text ?? '').join('\n')
-      return ''
-    })
+  return messagesOf(body).map(contentText).join('\n')
+}
+
+/** The text of the request's system messages, where the contract's block sits. */
+export function systemText(body: Record<string, unknown>): string {
+  return messagesOf(body)
+    .filter((m) => (m as { role?: unknown }).role === 'system')
+    .map(contentText)
     .join('\n')
 }
 
-/** The TS block the prompt-injection path writes into the last user message. */
-export function extractBlockFromPrompt(text: string): string | null {
-  const open = text.indexOf(BLOCK_OPEN)
+/**
+ * The TS block the prompt-injection path writes at the end of the system message.
+ * The last opener, not the first: the system half before the contract is story
+ * text, which may quote the opener.
+ */
+export function extractBlockFromPrompt(systemText: string): string | null {
+  const open = systemText.lastIndexOf(BLOCK_OPEN)
   if (open === -1) return null
-  const start = open + BLOCK_OPEN.length
-  const close = text.indexOf(BLOCK_CLOSE, start)
-  if (close === -1) return null
-  return text.slice(start, close)
+  return systemText.slice(open + BLOCK_OPEN.length)
 }
 
 // The 'force-on' path keeps responseFormat instead of injecting the block, so
@@ -86,10 +98,12 @@ function candidatesFor(
 
 /**
  * Earliest occurrence wins, not registry order. A marker is the literal its
- * template OPENS with, so the real one sits at the top of the prompt, while a
- * sibling's marker can only appear deeper — quoted back inside the `current`
- * preview a refine embeds. Taking the first candidate that matches anywhere
- * would let that quotation outrank the directive the call actually carries.
+ * template's user half OPENS with, so the real one sits at the top of the user
+ * message — only the system half and the contract precede it, and no contract
+ * carries a marker (asserted in routing.test.ts) — while a sibling's marker can
+ * only appear deeper, quoted back inside the `current` preview a refine embeds.
+ * Taking the first candidate that matches anywhere would let that quotation
+ * outrank the directive the call actually carries.
  */
 function pickByMarker(
   candidates: readonly StructuredShape[],
@@ -139,7 +153,7 @@ export function classifyRequest(body: Record<string, unknown>): Route {
   if (body.stream === true) return { lane: NARRATIVE_LANE }
 
   const text = promptText(body)
-  const block = extractBlockFromPrompt(text) ?? blockFromResponseFormat(body)
+  const block = extractBlockFromPrompt(systemText(body)) ?? blockFromResponseFormat(body)
   const shape = matchShape(block, text)
 
   return {

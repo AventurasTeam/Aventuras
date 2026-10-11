@@ -348,9 +348,9 @@ on the request:
 
 - **`stream: true`** → an SSE prose stream (the narrative call).
 - **otherwise (structured)** → a JSON chat completion whose body is
-  chosen by matching the exact TypeScript block the app injects into
-  the prompt — `schemaToTypeScriptBlock` over each agent's Zod schema
-  (`lib/ai/prompt-schema.ts`). Each structured **call site** is one
+  chosen by matching the exact TypeScript block the app writes at the
+  end of the system message — `schemaToTypeScriptBlock` over each
+  agent's Zod schema (`lib/ai/prompt-schema.ts`). Each structured **call site** is one
   `STRUCTURED_SHAPES` entry (`scripts/mock-llm/shapes.ts`, shared with
   the dev mock server) with an `EXAMPLES` reply beside it here; the
   match can't drift because it reuses the app's own renderer, and
@@ -359,9 +359,10 @@ on the request:
 Call sites that answer with the same schema render the same block, so
 the block alone cannot separate them — the wizard's thirteen assist
 calls share seven schemas. Those entries carry a `marker` as well: the
-literal text their template opens with, sliced out of the prompt pack
-the app itself renders, so a template edit moves the marker in the same
-edit. The marker is consulted only when the block is ambiguous.
+literal text their template's user half opens with, sliced out of the
+prompt pack the app itself renders, so a template edit moves the marker
+in the same edit. The marker is consulted only when the block is
+ambiguous.
 
 Two one-shot narrative controls model the boundary states a running turn
 can hit: `failNextNarrative()` makes the next streaming call return HTTP

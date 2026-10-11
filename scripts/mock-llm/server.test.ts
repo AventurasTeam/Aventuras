@@ -41,16 +41,28 @@ async function waitForEntry(): Promise<{ outcome: string }> {
   throw new Error('no log entry arrived')
 }
 
-/** The prompt the app would send for `schema` on the default (auto) path. */
-function structuredPrompt(schema: z.ZodType, text = 'Classify the turn.'): string {
+/**
+ * The request the app sends for `schema` on the default (auto) path with a blank
+ * system half: the contract alone forms the system message, and the closing line
+ * ends the user message.
+ */
+function structuredRequest(
+  schema: z.ZodType,
+  text = 'Classify the turn.',
+): Record<string, unknown> {
   const block = schemaToTypeScriptBlock(z.toJSONSchema(schema) as JsonSchema)
-  return `${text}\n\nRespond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${block}\n\nOutput ONLY the JSON object, no other text or markdown.`
-}
-
-function structuredRequest(schema: z.ZodType): Record<string, unknown> {
   return {
     model: 'seed/narrative',
-    messages: [{ role: 'user', content: structuredPrompt(schema) }],
+    messages: [
+      {
+        role: 'system',
+        content: `Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${block}`,
+      },
+      {
+        role: 'user',
+        content: `${text}\n\nOutput ONLY the JSON object, no other text or markdown.`,
+      },
+    ],
   }
 }
 
@@ -75,10 +87,7 @@ describe('structured calls', () => {
       definition: { setting: 'A city that flooded and stayed.', genre: {}, tone: {} },
       guidance: '',
     }).user
-    const response = await post({
-      model: 'seed/narrative',
-      messages: [{ role: 'user', content: structuredPrompt(labeledPromptOutputSchema, prompt) }],
-    })
+    const response = await post(structuredRequest(labeledPromptOutputSchema, prompt))
 
     const body = (await response.json()) as { choices: { message: { content: string } }[] }
     const value = labeledPromptOutputSchema.parse(

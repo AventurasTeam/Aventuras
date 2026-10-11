@@ -36,8 +36,8 @@ separates them by inspecting the request:
 
 - `stream: true` → the **narrative** lane.
 - anything else → a **structured** lane, identified by the TypeScript block
-  the app injects into the prompt (or, on the `force-on` path, by the JSON
-  Schema in `response_format`).
+  the app writes at the end of the system message (or, on the `force-on`
+  path, by the JSON Schema in `response_format`).
 
 Entries in [`shapes.ts`](./shapes.ts) get a named lane with live schema
 validation; the panel files them under **Story** or **Wizard**. A shape that
@@ -54,11 +54,13 @@ mock/passthrough switch, response delay and jitter, failure injection, and
 A block identifies a _schema_, and several call sites can answer with the
 same one — the wizard's thirteen assist calls share seven schemas, so genre,
 tone and both their refines are indistinguishable on the wire. Where that
-happens, the entry also carries a `marker`: the literal text its template
-opens with, before the first Liquid tag, sliced out of the pack the app
-itself renders. Editing a template therefore moves its marker in the same
-edit, and `routing.test.ts` renders every wizard template through the real
-engine to prove the marker still survives.
+happens, the entry also carries a `marker`: the literal text its template's
+user half opens with, before the first Liquid tag, sliced out of the pack
+the app itself renders. Editing a template therefore moves its marker in the
+same edit, and `routing.test.ts` renders every wizard template through the
+real engine to prove the marker still survives. The contract sits in the
+system message, ahead of the user half, so the same test checks that no
+contract carries a marker.
 
 The marker only breaks ties. Where a block already names one call site it is
 never consulted, so a user-authored pack that rewrites wizard templates
