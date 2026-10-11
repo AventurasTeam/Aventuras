@@ -3,7 +3,7 @@ name = "aventura"
 version = "0.7.12"
 description = "AI-powered adventure and creative writing frontend"
 authors = ["Contributors"]
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "aventura_lib"
