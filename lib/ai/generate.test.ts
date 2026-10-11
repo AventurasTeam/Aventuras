@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import type { ProviderInstance } from '../db'
-import { buildCallSettings, generateStructured, parseStructured, streamText } from './generate'
+import {
+  buildCallSettings,
+  generateStructured,
+  parseStructured,
+  streamText,
+  type PromptHalves,
+} from './generate'
 import { getModel } from './model'
 import { resolveModel } from './resolve-model'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
@@ -106,8 +112,7 @@ describe('streamText', () => {
     vi.mocked(resolveModel).mockImplementation(actualResolveModel)
   })
 
-  it('resolves the target; streams both halves verbatim with the mapped options', async () => {
-    const { streamProviderCall } = await import('./transport/provider-call')
+  it('resolves the target; streams both halves verbatim with the mapped options', () => {
     const onError = () => {}
     const signal = new AbortController().signal
 
@@ -135,8 +140,7 @@ describe('streamText', () => {
   })
 
   // architecture.md → System and user halves: providers reject an empty system message.
-  it.each(['', ' \n '])('sends no system message for a blank system half (%j)', async (system) => {
-    const { streamProviderCall } = await import('./transport/provider-call')
+  it.each(['', ' \n '])('sends no system message for a blank system half (%j)', (system) => {
     vi.mocked(streamProviderCall).mockClear()
 
     streamText('narrative', { prompt: { system, user: 'P' }, config: STREAM_CFG })
@@ -147,8 +151,7 @@ describe('streamText', () => {
     expect(call).toHaveProperty('prompt', 'P')
   })
 
-  it('returns the resolve failure without calling the provider', async () => {
-    const { streamProviderCall } = await import('./transport/provider-call')
+  it('returns the resolve failure without calling the provider', () => {
     vi.mocked(streamProviderCall).mockClear()
 
     const result = streamText('narrative', {
@@ -180,7 +183,7 @@ describe('parseStructured', () => {
 })
 
 describe('generateStructured', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.mocked(resolveModel).mockImplementation(() => ({
       ok: true,
       providerId: structuredProvider.id,
@@ -188,7 +191,6 @@ describe('generateStructured', () => {
       modelId: 'm',
       params: {},
     }))
-    const { runProviderCall } = await import('./transport/provider-call')
     vi.mocked(runProviderCall).mockImplementation(() =>
       Promise.resolve({ text: '{"description":"A tale."}' } as never),
     )
@@ -205,40 +207,32 @@ describe('generateStructured', () => {
     expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' } })
   })
 
-  it('passes both halves verbatim: system as the system option, user as the prompt', async () => {
-    const { runProviderCall } = await import('./transport/provider-call')
+  async function sentProviderCall(prompt: PromptHalves) {
     vi.mocked(runProviderCall).mockClear()
     await generateStructured(
       'wizard-assist',
-      { system: ' S\n', user: ' P\n' },
+      prompt,
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
     )
     expect(runProviderCall).toHaveBeenCalledOnce()
-    const call = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
+    return vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
+  }
+
+  it('passes both halves verbatim: system as the system option, user as the prompt', async () => {
+    const call = await sentProviderCall({ system: ' S\n', user: ' P\n' })
     expect(call).toHaveProperty('system', ' S\n')
     expect(call).toHaveProperty('prompt', ' P\n')
   })
 
   it.each(['', ' \n '])('sends no system option for a blank system half (%j)', async (system) => {
-    const { runProviderCall } = await import('./transport/provider-call')
-    vi.mocked(runProviderCall).mockClear()
-    await generateStructured(
-      'wizard-assist',
-      { system, user: 'P' },
-      schema,
-      STRUCTURED_CFG,
-      new AbortController().signal,
-    )
-    expect(runProviderCall).toHaveBeenCalledOnce()
-    const call = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
+    const call = await sentProviderCall({ system, user: 'P' })
     expect(call).not.toHaveProperty('system')
     expect(call).toHaveProperty('prompt', 'P')
   })
 
   it('applies resolved profile params to the provider call', async () => {
-    const { runProviderCall } = await import('./transport/provider-call')
     vi.mocked(resolveModel).mockReturnValueOnce({
       ok: true,
       providerId: structuredProvider.id,
@@ -274,7 +268,6 @@ describe('generateStructured', () => {
     expect(res.status).toBe('not-configured')
   })
   it('returns failed when the call/parse ultimately fails', async () => {
-    const { runProviderCall } = await import('./transport/provider-call')
     vi.mocked(runProviderCall).mockResolvedValue({ text: 'not json <<<' } as never)
     const res = await generateStructured(
       'wizard-assist',

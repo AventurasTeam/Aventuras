@@ -221,16 +221,11 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
   abortSignal: AbortSignal,
   options: StructuredCallOptions,
 ): Promise<GenerateStructuredResult<T>> {
-  const first = await generateStructured('classifier', prompt, schema, config, abortSignal, options)
+  const classify = () =>
+    generateStructured('classifier', prompt, schema, config, abortSignal, options)
+  const first = await classify()
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
-  const reroll = await generateStructured(
-    'classifier',
-    prompt,
-    schema,
-    config,
-    abortSignal,
-    options,
-  )
+  const reroll = await classify()
   return reroll.status === 'ok' ? reroll : first
 }
 
