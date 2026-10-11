@@ -13,18 +13,18 @@ export type ContextGroup = (typeof CONTEXT_GROUPS)[number]
  * A template's two Liquid sources: a stable system half and a per-call user half
  * (architecture.md → System and user halves).
  */
-export type TemplateSources = { system: string; user: string }
+export type TemplateSources = { readonly system: string; readonly user: string }
 
-export type TemplateEntry = TemplateSources & { group: ContextGroup }
+export type TemplateEntry = TemplateSources & { readonly group: ContextGroup }
 
 export type MacroEntry = {
-  group: ContextGroup
-  source: string
+  readonly group: ContextGroup
+  readonly source: string
 }
 
 export type Pack = {
-  templates: Record<string, TemplateEntry>
-  macros: Record<string, MacroEntry>
+  templates: Readonly<Record<string, TemplateEntry>>
+  macros: Readonly<Record<string, MacroEntry>>
 }
 
 /** Both halves as rendered, untrimmed. `system` may be blank; `user` never is. */
