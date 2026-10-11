@@ -236,3 +236,30 @@ slice-planning gate forces its resolution before that slice is planned.
   Candidate fix: the same per-entry drop for both lists under
   `'drop'`, with a warning. Raised 2026-10-11 by the developer's Q7 on
   the locations-and-items-from-prose PR.
+
+- **Whitespace and wording nits in the bundled story prompts.** Found
+  while splitting them, all predating the split and all prompt content,
+  so likely the Prompt content pass's
+  ([`followups.md → Data-model`](../followups.md#data-model)):
+  - the In-scene loop leaves two blank lines before the next heading in
+    the narrative (`per-turn.ts`) and the suggestion refresh
+    (`suggestion-refresh.ts`);
+  - a Setting, Genre or Tone the user starts with whitespace renders a
+    blank line under its heading;
+  - the Gregorian calendar line reads "time in seconds (1 seconds per
+    second)", now inside the cached system half.
+
+  Raised 2026-10-11 by the system and user halves PR's task reviews.
+
+- **The registry describes `piggybackFires` as per-turn.**
+  `lib/prompts/templateContextMap.ts` says "True when this turn
+  expects…", but the value is settings-derived (`piggybackMode` and the
+  narrative model's `taggedBlockReliable`, `resolvePiggybackFires` in
+  `lib/pipeline/definitions/per-turn-piggyback.ts`), which is why the
+  narrative's system half may read it. The bundled stability test
+  (`lib/prompts/bundled/system-half-stability.test.ts`) treats it as
+  story-fixed. Canon's "unless the user edits the story"
+  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves))
+  is also narrower than the truth: toggling the capability override
+  changes the system half without a story edit. Reword both. Raised
+  2026-10-11 by the system and user halves PR's Task 9 review.
