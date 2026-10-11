@@ -710,7 +710,7 @@ describe('bundled per-turn template — create instructions', () => {
   // description holds a raw <, so the model is told how to write those two.
   it('tells the model to escape a double quote in an attribute value and a < in a description', () => {
     expect(rendered).toContain(
-      "Write a double quote inside a create's name or parent as &quot; and a < inside its description as &lt;.",
+      "Write a double quote inside a create's name as &quot; and a < inside its description as &lt;.",
     )
   })
 
