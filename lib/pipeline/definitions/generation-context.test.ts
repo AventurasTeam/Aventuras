@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
 import {
   STORY_SETTINGS_DEFAULTS,
+  emptyEntityState,
   storyEntries,
   type EntryMetadata,
   type StoryEntry,
@@ -1372,5 +1373,215 @@ describe('buildGenerationContext — worldTimeDeltaBasis', () => {
       templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     })
     expect(context.worldTimeDeltaBasis).toBe('sinceUserAction')
+  })
+})
+
+describe('buildGenerationContext — location map and held items', () => {
+  const ELDRA = 'loc_00000000-0000-4000-8000-000000000a01'
+  const PORT = 'loc_00000000-0000-4000-8000-000000000a02'
+  const INN = 'loc_00000000-0000-4000-8000-000000000a03'
+  const VAULT = 'loc_00000000-0000-4000-8000-000000000a04'
+  const KEY = 'item_00000000-0000-4000-8000-000000000b01'
+  const SWORD = 'item_00000000-0000-4000-8000-000000000b02'
+  const CHEST = 'item_00000000-0000-4000-8000-000000000b03'
+  const CHAR_ID_3 = 'char_00000000-0000-4000-8000-0000000000c3'
+
+  // No global restoreMocks: the templateReads stub below must not leak.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const base = { description: null, status: 'active', injectionMode: 'auto', createdAt: 1 }
+  const place = (id: string, name: string, parent: string | null, over: object = {}) => ({
+    ...base,
+    id,
+    kind: 'location',
+    name,
+    state: { parent_location_id: parent },
+    ...over,
+  })
+  const thing = (id: string, name: string, at: string | null) => ({
+    ...base,
+    id,
+    kind: 'item',
+    name,
+    state: { at_location_id: at },
+  })
+  const person = (
+    id: string,
+    name: string,
+    held: { inventory?: string[]; equipped_items?: string[] },
+    over: object = {},
+  ) => ({
+    ...base,
+    id,
+    kind: 'character',
+    name,
+    state: { ...emptyEntityState('character'), ...held },
+    ...over,
+  })
+  const floorPlace = (id: string, name: string): EntityRow => ({
+    ...entityRow(id, name),
+    kind: 'location',
+  })
+  const sceneAt = (currentLocationId: string | null, sceneEntities: string[] = []) =>
+    [
+      { ...entry('e1', 1, 'one'), metadata: sceneMetadata(currentLocationId, sceneEntities) },
+    ] as never[]
+
+  it('lists every active and staged place on the branch, nested, with no retrieval', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(ELDRA, PORT),
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA, { status: 'staged' }),
+      ],
+      retrieval: undefined,
+    })
+    expect(ctx.locationMap).toEqual([
+      { id: 'l1', name: 'Eldra', depth: 0 },
+      { id: 'l2', name: 'Port Vellis', depth: 1 },
+    ])
+  })
+
+  it('keeps a disabled place on the map while the scene is there', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT),
+      entities: [place(VAULT, 'The Vault', null, { injectionMode: 'disabled' })],
+      entries: sceneAt(VAULT),
+    })
+    expect(ctx.locationMap).toEqual([{ id: 'l1', name: 'The Vault', depth: 0 }])
+  })
+
+  // Positive control for the case above: the same place leaves the map once the scene moves.
+  it('leaves a disabled place off the map when the scene is elsewhere', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities: [
+        place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+        place(ELDRA, 'Eldra', null),
+      ],
+      entries: sceneAt(ELDRA),
+    })
+    expect(ctx.locationMap).toEqual([{ id: 'l2', name: 'Eldra', depth: 0 }])
+  })
+
+  it("names the structural location's listed ancestors, nearest first", async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA),
+        place(INN, 'The Rusty Anchor', PORT),
+      ],
+      entries: sceneAt(INN),
+      retrieval: retrievalSuccess({
+        floor: { currentLocation: floorPlace(INN, 'The Rusty Anchor') },
+      }),
+    })
+    expect(ctx.currentLocationChain).toEqual(['Port Vellis', 'Eldra'])
+  })
+
+  it('lists the items lying at the structural location', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHEST),
+      entities: [place(INN, 'The Rusty Anchor', null), thing(CHEST, 'the iron chest', INN)],
+      entries: sceneAt(INN),
+      retrieval: retrievalSuccess({
+        floor: { currentLocation: floorPlace(INN, 'The Rusty Anchor') },
+      }),
+    })
+    expect(ctx.looseItems).toEqual([{ id: 'i1', name: 'the iron chest' }])
+  })
+
+  it('leaves the chain and the loose items empty without a structural location', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(INN, 'The Rusty Anchor', ELDRA),
+        thing(CHEST, 'the iron chest', INN),
+      ],
+      entries: sceneAt(INN),
+      retrieval: undefined,
+    })
+    expect(ctx.currentLocationChain).toEqual([])
+    expect(ctx.looseItems).toEqual([])
+  })
+
+  it('gives each active in-scene holder its held items, substituted', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, CHAR_ID_2, KEY, SWORD),
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY], equipped_items: [SWORD] }),
+        person(CHAR_ID_2, 'Corvin', {}),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: sceneAt(null, [CHAR_ID, CHAR_ID_2]),
+    })
+    expect(ctx.heldItems).toEqual([
+      {
+        holderId: 'c1',
+        items: [
+          { id: 'i1', name: 'Silver Key', equipped: false },
+          { id: 'i2', name: 'worn sword', equipped: true },
+        ],
+      },
+    ])
+  })
+
+  it('gives no entry to a staged, stateless or off-scene holder', async () => {
+    const ctx = await buildContext({
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY] }, { status: 'staged' }),
+        { ...base, id: CHAR_ID_2, kind: 'character', name: 'Corvin', state: null },
+        person(CHAR_ID_3, 'Ilse', { inventory: [SWORD] }),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: sceneAt(null, [CHAR_ID, CHAR_ID_2]),
+    })
+    expect(ctx.heldItems).toEqual([])
+  })
+
+  it('gives no entry to an in-scene row that is not a character, whatever its state holds', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(INN, 'The Rusty Anchor', null, {
+          state: { parent_location_id: null, inventory: [KEY] },
+        }),
+        thing(KEY, 'Silver Key', null),
+      ],
+      entries: sceneAt(INN, [INN]),
+    })
+    expect(ctx.heldItems).toEqual([])
+  })
+
+  it('gives a holder named twice in the scene one entry', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, KEY),
+      entities: [person(CHAR_ID, 'Mara', { inventory: [KEY] }), thing(KEY, 'Silver Key', null)],
+      entries: sceneAt(null, [CHAR_ID, CHAR_ID]),
+    })
+    expect(ctx.heldItems).toEqual([
+      { holderId: 'c1', items: [{ id: 'i1', name: 'Silver Key', equipped: false }] },
+    ])
+  })
+
+  it('reads the scene for a template that names only heldItems', async () => {
+    const entryReads = await import('./entry-reads')
+    const readSceneSourceSpy = vi.spyOn(entryReads, 'readSceneSource')
+    const prompts = await import('@/lib/prompts')
+    vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['heldItems']))
+
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, KEY),
+      entities: [person(CHAR_ID, 'Mara', { inventory: [KEY] }), thing(KEY, 'Silver Key', null)],
+      entries: sceneAt(null, [CHAR_ID]),
+    })
+
+    expect(readSceneSourceSpy).toHaveBeenCalled()
+    expect(ctx.heldItems).toEqual([
+      { holderId: 'c1', items: [{ id: 'i1', name: 'Silver Key', equipped: false }] },
+    ])
   })
 })

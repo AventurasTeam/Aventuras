@@ -12,6 +12,13 @@ import {
   type ThreadRow,
 } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
+import {
+  buildLocationMap,
+  heldItemLines,
+  listedAncestorNames,
+  looseItemLines,
+  type HeldItemLine,
+} from '@/lib/world'
 
 import { readLastTurns, readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -123,8 +130,30 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
     description: t.description,
   }))
 
-// One read serves all three, so any of them keeps it.
-const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
+// One read serves every variable built from the scene, so any of them keeps it.
+const SCENE_VARIABLES = [
+  'sceneMetadata',
+  'sceneEntities',
+  'currentLocationId',
+  'locationMap',
+  'heldItems',
+]
+
+/** One entry per active in-scene character that holds anything, in scene order. */
+function heldItemsInScene(
+  sceneEntities: readonly string[],
+  entities: readonly Entity[],
+): { holderId: string; items: HeldItemLine[] }[] {
+  const byId = new Map(entities.map((e) => [e.id, e]))
+  return [...new Set(sceneEntities)].flatMap((id) => {
+    const holder = byId.get(id)
+    // The state column is nullable; a holder without one holds nothing.
+    if (holder?.kind !== 'character' || holder.status !== 'active' || holder.state == null)
+      return []
+    const items = heldItemLines(holder, entities)
+    return items.length > 0 ? [{ holderId: holder.id, items }] : []
+  })
+}
 
 /**
  * Which end the model should measure `<world_time_delta>` from. Resolved here rather
@@ -287,6 +316,7 @@ export async function buildGenerationContext(
     ...(floor?.alwaysEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
     ...(retrieval?.selectedLocationIds ?? []),
   ]
+  const structuralLocationId = floor?.currentLocation?.id ?? null
 
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
@@ -322,6 +352,16 @@ export async function buildGenerationContext(
     structuralPinnedLore: floorLore(floor?.alwaysLore),
     structuralPinnedThreads: floorThreads(floor?.alwaysThreads),
     locationIds: [...new Set(locationIds)],
+    // piggyback.md → What the writer sees: the whole branch, never filtered through retrieval or
+    // Layer A, so a move can name any known place.
+    locationMap: buildLocationMap(branchEntities, scene.currentLocationId),
+    currentLocationChain:
+      structuralLocationId === null
+        ? []
+        : listedAncestorNames(structuralLocationId, branchEntities, scene.currentLocationId),
+    heldItems: heldItemsInScene(scene.sceneEntities, branchEntities),
+    looseItems:
+      structuralLocationId === null ? [] : looseItemLines(structuralLocationId, branchEntities),
     intermediates: {},
     piggybackFires,
     // Re-gated on the derived slots, not just the caller's flag: a caller
