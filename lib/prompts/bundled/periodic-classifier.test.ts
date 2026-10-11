@@ -181,6 +181,15 @@ describe('periodic classifier template — system and user halves', () => {
     expect(system).not.toMatch(/\babove\b/)
   })
 
+  // The turns arrive after the rules, so "these turns" has nothing to point at.
+  it('names the turns to classify instead of pointing at them', () => {
+    const { system } = render()
+    expect(system).toContain(
+      'only when the turns to classify establish a view or change a listed one',
+    )
+    expect(system).not.toMatch(/these turns/i)
+  })
+
   it('carries the Known lists and the turns in the user half, and none of the rules', () => {
     const { user } = render()
     const lines = user.split('\n')
