@@ -270,10 +270,10 @@ pub async fn export_images_zip(
         .map_err(|e| format!("failed to read images: {e}"))?
     {
         let id: String = row.get("id");
-        if let Some(sel) = &selection {
-            if !sel.contains(&id) {
-                continue;
-            }
+        if let Some(sel) = &selection
+            && !sel.contains(&id)
+        {
+            continue;
         }
         let data: String = row.get("image_data");
         if data.is_empty() {
@@ -378,27 +378,26 @@ pub async fn export_story_avt(
     // One query for the whole story instead of one per image, STREAMED: each row's base64 is moved
     // straight into its JSON slot, so peak memory stays one row + the output (never all rows at
     // once, which would double the heap and risk OOM on large galleries).
-    if let Some(sid) = &story_id {
-        if !index_by_id.is_empty() {
-            let mut rows =
-                sqlx::query("SELECT id, image_data FROM embedded_images WHERE story_id = ?")
-                    .bind(sid)
-                    .fetch(&pool);
-            while let Some(row) = rows
-                .try_next()
-                .await
-                .map_err(|e| format!("failed to read images: {e}"))?
-            {
-                let id: String = row.get("id");
-                if let Some(&i) = index_by_id.get(&id) {
-                    let data: String = row.get("image_data");
-                    if let Some(obj) = root
-                        .get_mut("embeddedImages")
-                        .and_then(|v| v.get_mut(i))
-                        .and_then(|v| v.as_object_mut())
-                    {
-                        obj.insert("imageData".to_string(), serde_json::Value::String(data));
-                    }
+    if let Some(sid) = &story_id
+        && !index_by_id.is_empty()
+    {
+        let mut rows = sqlx::query("SELECT id, image_data FROM embedded_images WHERE story_id = ?")
+            .bind(sid)
+            .fetch(&pool);
+        while let Some(row) = rows
+            .try_next()
+            .await
+            .map_err(|e| format!("failed to read images: {e}"))?
+        {
+            let id: String = row.get("id");
+            if let Some(&i) = index_by_id.get(&id) {
+                let data: String = row.get("image_data");
+                if let Some(obj) = root
+                    .get_mut("embeddedImages")
+                    .and_then(|v| v.get_mut(i))
+                    .and_then(|v| v.as_object_mut())
+                {
+                    obj.insert("imageData".to_string(), serde_json::Value::String(data));
                 }
             }
         }

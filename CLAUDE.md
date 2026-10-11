@@ -8,12 +8,12 @@ runes, SQLite, and a Rust layer for anything that would otherwise blow up the We
 ```bash
 npm run check      # svelte-check — the type check that counts (plain tsc is not configured for .svelte)
 npm test           # vitest, once
-npm run lint       # eslint + prettier
+npm run lint       # eslint + prettier, then rustfmt + clippy (lint:ts / lint:rust run one side)
 npx tauri dev      # run the app
 ```
 
-Run `check`, `test` and `lint` before calling a change done. `pre-push` runs `lint` and
-`check` anyway.
+Run `check`, `test` and `lint` before calling a change done. `pre-push` runs `lint:ts`,
+`lint:rust` and `check` anyway, each only when the push touches its files.
 
 ## Comments
 

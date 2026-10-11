@@ -61,16 +61,16 @@ npm install
 npx tauri dev
 ```
 
-| Script            | Does                            |
-| ----------------- | ------------------------------- |
-| `npm run dev`     | Vite dev server (frontend only) |
-| `npx tauri dev`   | full app, with hot reload       |
-| `npm run build`   | production build                |
-| `npm run check`   | type checking (`svelte-check`)  |
-| `npm test`        | test suite (Vitest)             |
-| `npm run lint`    | ESLint — `lint:fix` to fix      |
-| `npm run format`  | Prettier                        |
-| `npm run release` | version bump, tag and push      |
+| Script            | Does                                                               |
+| ----------------- | ------------------------------------------------------------------ |
+| `npm run dev`     | Vite dev server (frontend only)                                    |
+| `npx tauri dev`   | full app, with hot reload                                          |
+| `npm run build`   | production build                                                   |
+| `npm run check`   | type checking (`svelte-check`)                                     |
+| `npm test`        | test suite (Vitest)                                                |
+| `npm run lint`    | `lint:ts` (ESLint) and `lint:rust` (rustfmt, Clippy); `:fix` fixes |
+| `npm run format`  | Prettier                                                           |
+| `npm run release` | version bump, tag and push                                         |
 
 Desktop builds are `npx tauri build`; Android and iOS are documented in
 [docs/development/release.md](docs/development/release.md). iOS produces an **unsigned**

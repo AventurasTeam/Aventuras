@@ -32,7 +32,7 @@ jobs:
         run: npx svelte-kit sync
 
       - name: Run Lint
-        run: npm run lint
+        run: npm run lint:ts
 
       - name: Run Type-check
         run: npm run check
