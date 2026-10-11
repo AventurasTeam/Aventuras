@@ -352,7 +352,7 @@ export async function buildGenerationContext(
     locationIds: [...new Set(locationIds)],
     // piggyback.md → What the writer sees: the whole branch, never filtered through retrieval or
     // Layer A, so a move can name any known place.
-    locationMap: buildLocationMap(branchEntities, scene.currentLocationId),
+    locationMap: buildLocationMap(branchEntities, structuralLocationId ?? scene.currentLocationId),
     currentLocationChain:
       structuralLocationId === null
         ? []

@@ -1466,6 +1466,24 @@ describe('buildGenerationContext — location map and held items', () => {
     expect(ctx.locationMap).toEqual([{ id: 'l2', name: 'Eldra', depth: 0 }])
   })
 
+  // The fallback's reply row can already hold the failed fold's move while the floor, built
+  // before the reply, still seats the place `# Current location` shows.
+  it('keeps the disabled place the floor seats on the map when the scene row names another', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities: [
+        place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+        place(ELDRA, 'Eldra', null),
+      ],
+      entries: sceneAt(ELDRA),
+      retrieval: retrievalSuccess({ floor: { currentLocation: floorPlace(VAULT, 'The Vault') } }),
+    })
+    expect(ctx.locationMap).toEqual([
+      { id: 'l2', name: 'Eldra', depth: 0 },
+      { id: 'l1', name: 'The Vault', depth: 0 },
+    ])
+  })
+
   it("names the structural location's listed ancestors, nearest first", async () => {
     const ctx = await buildContext({
       entities: [

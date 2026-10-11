@@ -74,7 +74,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'LocationMapRow[]',
       category: 'Entities',
       description:
-        "Every active and staged place on the branch as { id, name, depth }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. Retired places are left out, and so is a disabled one unless the scene is there; a left-out place's children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no listed place.",
+        "Every active and staged place on the branch as { id, name, depth }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. Retired places are left out, and so is a disabled one unless it is structuralLocation (currentLocationId when that is null); a left-out place's children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no listed place.",
       required: true,
     },
     {
