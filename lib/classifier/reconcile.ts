@@ -7,9 +7,12 @@ import { namesakeBasis } from '@/lib/world'
 export const TAU_HIGH = 0.75
 export const TAU_LOW = 0.5
 
+/** classifier.md → Partner and reason; `same-parent` is the per-turn writer's alone. */
+type ClassifierFlagReason = Exclude<CollisionReason, 'same-parent'>
+
 export type ReconcileDecision =
   | { kind: 'create'; flag: null }
-  | { kind: 'create'; flag: { partnerId: string; reason: CollisionReason } }
+  | { kind: 'create'; flag: { partnerId: string; reason: ClassifierFlagReason } }
   | { kind: 'promote'; entityId: string; similarity: number }
   | { kind: 'known'; entityId: string; similarity: number }
 
@@ -66,7 +69,7 @@ function qualifiesToFlag(n: ScoredNamesake): boolean {
   return n.match === 'exact' || n.inScene || n.similarity == null || n.similarity >= TAU_LOW
 }
 
-function reasonOf(partner: ScoredNamesake): CollisionReason {
+function reasonOf(partner: ScoredNamesake): ClassifierFlagReason {
   if (partner.similarity == null) return 'no-signal'
   if (partner.similarity >= TAU_HIGH) return 'alike'
   if (partner.similarity >= TAU_LOW) return 'ambiguous'
