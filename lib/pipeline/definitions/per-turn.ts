@@ -225,8 +225,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         count: parsedState.malformedCreates,
         layer: 'piggyback_tagged_block',
       })
-    // A failed fold creates nothing: the fallback that fires rewrites this turn's state, and a
-    // create is the one write it can't repeat harmlessly.
+    // A failed fold creates nothing: creates aren't idempotent, and the fallback that fires
+    // rewrites this turn's state, so a create made by both would leave a duplicate row.
     turnCreates = piggybackParseSucceeded
       ? await planTurnCreates({
           block: resolvedBlock,

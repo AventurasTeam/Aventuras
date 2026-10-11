@@ -72,7 +72,8 @@ export const fallbackClassifierSchema = z.object({
     .describe(
       'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered. An item you create appears here only by the exact handle it declares in newItems.',
     ),
-  // Before the fields that reference a handle, so an in-order model declares before it uses.
+  // newLocations before currentLocation and newItems before transfers, so an in-order model
+  // declares those handles before it uses them.
   newLocations: z
     .array(
       z.object({
@@ -402,8 +403,8 @@ export async function* piggybackFallbackClassifierPhase(
       ? { transfers: priorReport.transfers }
       : {}),
   }
-  // A failed fold reports its creates `dropped`: keep that list for a kind this phase emitted
-  // none of (no-blanking rule). Emitted-but-dropped entries count as emitted and stay.
+  // A failed fold reports its creates `dropped`: keep that list for a kind this phase's report
+  // has none of (no-blanking rule), as when its only creates of that kind were malformed.
   const reportedCreates: TurnCreatesReport = {
     newLocations:
       plan.report.newLocations.length > 0

@@ -2548,7 +2548,8 @@ describe('per-turn-piggyback', () => {
       expect(report?.newItems).toEqual(FOLD_REPORT.newItems)
     })
 
-    // Emission, not outcome, decides: a kind the fallback emitted never keeps the fold's list.
+    // The report decides, not the outcome: a kind the fallback reports, even dropped, never keeps
+    // the fold's list; malformed creates never reach that report.
     it("reports the fallback's own dropped creates rather than the fold's", async () => {
       seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
       const { events } = await runFallback(
@@ -2570,6 +2571,19 @@ describe('per-turn-piggyback', () => {
         },
       ])
       expect(report?.newLocations).toEqual(FOLD_REPORT.newLocations)
+    })
+
+    it("keeps a failed fold's dropped items when the fallback's only item is malformed", async () => {
+      seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'key', name: 'rusted key', description: 'an iron key' }],
+        }),
+        { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+      )
+      expect(metadataPatch(events).stateReport?.newItems).toEqual(FOLD_REPORT.newItems)
     })
 
     it('warns about malformed creates and creates nothing from them', async () => {
@@ -2819,7 +2833,7 @@ describe('per-turn-piggyback', () => {
       return typeof description === 'string' ? description : undefined
     }
 
-    it('lists each create array before the fields that name its handles', () => {
+    it('lists newLocations before currentLocation and newItems before transfers', () => {
       const order = Object.keys(z.toJSONSchema(fallbackClassifierSchema).properties ?? {})
       expect(order.indexOf('newLocations')).toBeLessThan(order.indexOf('currentLocation'))
       expect(order.indexOf('newItems')).toBeLessThan(order.indexOf('transfers'))
