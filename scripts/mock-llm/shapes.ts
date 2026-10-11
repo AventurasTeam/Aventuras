@@ -28,10 +28,10 @@ import {
 //
 // One entry per CALL SITE. Where several call sites answer with the same schema
 // — and therefore the same block — `marker` separates them: the literal text a
-// template opens with, before its first Liquid tag, sliced out of the pack the
-// app itself renders. Derived rather than hand-written, so editing a template
-// moves its marker in the same edit. Story shapes are one call site each and
-// carry no marker.
+// template's user half opens with, before its first Liquid tag, sliced out of
+// the pack the app itself renders. Derived rather than hand-written, so editing
+// a template moves its marker in the same edit. Story shapes are one call site
+// each and carry no marker.
 //
 // Default replies are NOT shared. E2E wants inert no-ops for determinism, the
 // dev mock wants defaults lively enough that a manual turn visibly does
@@ -55,7 +55,7 @@ function blockOf(schema: z.ZodType): string {
 const LIQUID_TAG = /\{[{%]/
 
 function markerOf(templateId: TemplateId): string {
-  const source = bundledPack.templates[templateId]?.source ?? ''
+  const source = bundledPack.templates[templateId]?.user ?? ''
   const tag = source.search(LIQUID_TAG)
   return (tag === -1 ? source : source.slice(0, tag)).trim()
 }

@@ -49,7 +49,7 @@ const m2Context = {
 }
 
 describe('bundled per-turn template — empty-guard contract', () => {
-  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
 
   it('emits no dangling section headers for empty genre/tone/setting', () => {
     expect(out).not.toContain('# Setting')
@@ -76,7 +76,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceLastAiReply',
-    })
+    }).user
     expect(rendered).toContain("including any time the user's action itself took")
   })
 
@@ -85,7 +85,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceUserAction',
-    })
+    }).user
     expect(rendered).toContain("seconds elapsed since the end of the user's action")
     expect(rendered).not.toContain("including any time the user's action itself took")
   })
@@ -138,7 +138,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
             renderedText: 'Veilstone\nA shard of the old moon.',
           },
         ],
-      }),
+      }).user,
     ).toMatchSnapshot()
   })
 
@@ -151,7 +151,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       retrievedEntities: [
         { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
       ],
-    })
+    }).user
 
     const blocks = withMemory.indexOf('# Elsewhere in the world')
     const places = withMemory.indexOf('# Places')
@@ -169,7 +169,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       ...m2Context,
       userSettings: { partialChapterBuffer: 1 },
       entries: [{ content: 'alpha-line' }, { content: 'beta-line' }, { content: 'gamma-line' }],
-    })
+    }).user
     expect(rendered).toContain('alpha-line')
     expect(rendered).toContain('beta-line')
     expect(rendered).toContain('gamma-line')
@@ -185,7 +185,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           renderedText: 'Lord Eldrin (available to introduce): An exiled noble.',
         },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Elsewhere in the world')
     expect(rendered).toContain('[char_2] Lord Eldrin (available to introduce): An exiled noble.')
     expect(rendered).toContain(
@@ -209,7 +209,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           injectionMode: 'auto',
         },
       ],
-    })
+    }).user
     expect(rendered).not.toContain('# Elsewhere in the world')
     expect(rendered).not.toContain('Lord Eldrin')
     // The instruction has no referent without the block, so it must go too.
@@ -230,7 +230,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           description: 'A ferryman long dead.',
         },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Elsewhere in the world')
     expect(rendered).toContain('[char_3] Old Sesk: A ferryman long dead.')
     // The bracketed id is meaningless without the instruction that explains it,
@@ -247,14 +247,14 @@ describe('bundled per-turn template — empty-guard contract', () => {
         tiers: [{ name: 'month', labels: ['January', 'February'] }],
       },
     }
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithCalendar).user
     expect(rendered).toContain('# Calendar')
     expect(rendered).toContain('This story tracks time in seconds (1 seconds per second).')
     expect(rendered).toContain('month (January and February)')
   })
 
   it('omits the calendar section when calendarVocabulary is absent', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
     expect(rendered).not.toContain('# Calendar')
   })
 
@@ -268,7 +268,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
   })
@@ -277,7 +277,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       structuralLocation: { id: 'loc_2', kind: 'location', status: 'active', name: 'Old Mill' },
-    })
+    }).user
     expect(rendered).toContain('[loc_2] Old Mill')
     expect(rendered).not.toContain('[loc_2] Old Mill:')
   })
@@ -290,7 +290,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
       currentLocationId: 'loc_1',
       structuralLocation: null,
       locationMap: [{ id: 'loc_2', name: 'Old Mill', depth: 0 }],
-    })
+    }).user
     expect(rendered).not.toContain('# Current location')
     expect(rendered).toContain('# Places\n[loc_2] Old Mill\n')
     expect(rendered).toContain(PLACES_INSTRUCTION)
@@ -313,7 +313,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         { id: 'loc_1', name: 'The Keep', depth: 0 },
         { id: 'loc_9', name: 'The Market', depth: 0 },
       ],
-    })
+    }).user
     expect(rendered).toContain('# Places\n[loc_1] The Keep\n[loc_9] The Market\n')
     expect(rendered).toContain(PLACES_INSTRUCTION)
   })
@@ -329,7 +329,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           renderedText: 'Mira (currently elsewhere): A courier.',
         },
       ],
-    })
+    }).user
     expect(rendered).not.toContain('# Places')
     expect(rendered).not.toContain('Use an ID from Places')
     // Positive control: the ranked row and its own instruction still render, so
@@ -343,7 +343,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       locationIds: ['loc_1'],
-    })
+    }).user
     expect(rendered).not.toContain('loc_1')
     expect(rendered).toContain('## Aria [char_1]')
   })
@@ -373,7 +373,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered.split('The Keep')).toHaveLength(2)
     expect(rendered).not.toContain('## The Keep')
     // Positive control: the other in-scene row is untouched by the de-dupe.
@@ -401,7 +401,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-    })
+    }).user
     expect(rendered).not.toContain('# In scene')
     // Positive control: the row itself still reaches the prompt, via the floor.
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
@@ -417,7 +417,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         { ...m2Context.entities[0], description: null },
         { ...m2Context.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
       ],
-    })
+    }).user
     expect(rendered).toContain('## Aria [char_1]\n\n## Bex [char_2]\nA quiet smith.')
   })
 
@@ -437,7 +437,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
         },
       ],
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
-    })
+    }).user
     expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
     expect(rendered).not.toContain('A weathered hilltop fortress.')
     expect(rendered).toContain('## Aria [char_1]')
@@ -476,7 +476,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
   }
 
   it('keeps the memory/location/calendar info sections but drops ID brackets, ID-usage instructions, and the state-emission macro when the fallback classifier will fire anyway', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, contextWithEverything).user
     expect(rendered).toContain('## Aria')
     expect(rendered).not.toContain('## Aria [char_1]')
     expect(rendered).toContain('# Elsewhere in the world')
@@ -502,7 +502,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...contextWithEverything,
       piggybackFires: true,
-    })
+    }).user
     expect(rendered).toContain('## Aria [char_1]')
     expect(rendered).toContain('[char_2] Lord Eldrin')
     expect(rendered).toContain('[loc_1] The Keep')
@@ -539,7 +539,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
     },
   ]
   const render = (over: Record<string, unknown>) =>
-    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over })
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over }).user
 
   it('nests the map two spaces per level, with IDs when piggyback fires', () => {
     expect(render({ locationMap: MAP })).toContain(
@@ -709,7 +709,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
 })
 
 describe('bundled per-turn template — create instructions', () => {
-  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
 
   // A model copies the skeleton's order, and canon's example declares before it uses; the parser
   // doesn't care. <scene_entities>, which may name a new item, still leads.
@@ -731,7 +731,7 @@ describe('bundled per-turn template — create instructions', () => {
     const withPlaces = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
-    })
+    }).user
     expect(withPlaces).toContain(
       '<current_location>the ID from Places, or the handle of a new_location above</current_location>',
     )
@@ -765,7 +765,7 @@ describe('bundled per-turn template — create instructions', () => {
     const off = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       piggybackFires: false,
-    })
+    }).user
     expect(off).not.toContain('<new_location')
     expect(off).not.toContain('Create a place only when')
     expect(off).not.toContain('&quot;')
@@ -784,7 +784,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   }
 
   it('includes the suggestion-emission macro when suggestionsFire is true', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(rendered).toContain('<suggestions>')
     // The id is its own labelled field, not bracketed beside the name: a model
     // that reads "[cat1] Action" as one label emits an unresolvable ref.
@@ -799,13 +799,13 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   // doesn't forbid mid-prose emission risks the model burying <suggestions>
   // inside the narrative and silently truncating everything after it.
   it('forbids mid-prose emission regardless of whether the state block is present', () => {
-    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(withState).toContain('never inside the prose itself')
 
     const withoutState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       piggybackFires: false,
-    })
+    }).user
     expect(withoutState).toContain('never inside the prose itself')
   })
 
@@ -813,12 +813,12 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       suggestionsFire: false,
-    })
+    }).user
     expect(rendered).not.toContain('<suggestions>')
   })
 
   it('joins the state block and the suggestions block with a single newline, no blank line, when both fire', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext).user
     expect(rendered).toContain('off-scene).\nAppend exactly one <suggestions> block')
   })
 
@@ -826,7 +826,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,
       piggybackFires: false,
-    })
+    }).user
     expect(rendered).not.toContain('<state>')
     expect(rendered).toContain(
       'Do not break character or address the reader.\nAppend exactly one <suggestions> block',

@@ -262,7 +262,7 @@ export async function* piggybackFallbackClassifierPhase(
   // Run-scoped, so placeholder ids stay consistent with the narrative fold's
   // prompt instead of being renumbered from scratch.
   const { idMap } = load
-  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context)
+  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context).user
 
   const appSettings = appSettingsStore.getAppSettings()
   const classifierConfig: ResolveModelConfig = {

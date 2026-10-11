@@ -5,7 +5,7 @@ import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
 
 const render = (context: Record<string, unknown>) =>
-  renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+  renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
 
 // Anchored on the fixed opening/closing tokens so the mid-section — the two branches'
 // inner phrasing — is whatever the source under test actually says, not assumed.

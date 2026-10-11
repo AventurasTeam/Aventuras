@@ -9,15 +9,23 @@ export const CONTEXT_GROUPS = [
 ] as const
 export type ContextGroup = (typeof CONTEXT_GROUPS)[number]
 
-export type PackEntry = {
+/** A template's two Liquid sources; a call sends them as a system then a user message. */
+export type TemplateSources = { system: string; user: string }
+
+export type TemplateEntry = TemplateSources & { group: ContextGroup }
+
+export type MacroEntry = {
   group: ContextGroup
   source: string
 }
 
 export type Pack = {
-  templates: Record<string, PackEntry>
-  macros: Record<string, PackEntry>
+  templates: Record<string, TemplateEntry>
+  macros: Record<string, MacroEntry>
 }
+
+/** Both halves as rendered, untrimmed. `system` may be blank; `user` never is. */
+export type RenderedPrompt = { system: string; user: string }
 
 export type IncludeViolation = {
   templateId: string

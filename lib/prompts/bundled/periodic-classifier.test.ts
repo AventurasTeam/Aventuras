@@ -46,14 +46,14 @@ const context = {
 
 describe('periodic classifier template', () => {
   it('carries the hard-finality retirement directive', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatchSnapshot()
     expect(rendered).toMatch(/only on unambiguous/i)
     expect(rendered).toMatch(/wandered off/i)
   })
 
   it('labels every window turn with its provenance handle', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toContain('[t1]')
     expect(rendered).toContain('[t2]')
   })
@@ -62,12 +62,12 @@ describe('periodic classifier template', () => {
   // the schema carries one sourceTurn per fact, so nothing downstream can
   // enforce "latest contributing turn". This assertion is its only guard.
   it('instructs latest-contributing-turn attribution for cross-turn synthesis', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatch(/latest contributing turn/i)
   })
 
   it('instructs one-perspective-only relationship emission', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatch(/do not infer the inverse/i)
   })
 
@@ -75,20 +75,20 @@ describe('periodic classifier template', () => {
   // placeholder space; substituteClassifierIds defends the case anyway, but an
   // unprefixed instruction invites the collision on every reply.
   it('reserves the new: namespace for newCharacters handles', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toContain(NEW_HANDLE_PREFIX)
     expect(rendered).toMatch(/MUST start with/i)
   })
 
   // A schema field the prompt never asks for is a field the model never fills.
   it('asks for the epithets a new character is named by', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatch(/keywords/i)
     expect(rendered).toMatch(/epithets/i)
   })
 
   it('exposes the placeholder universe including happenings', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toContain('[c1]')
     expect(rendered).toContain('[hp1]')
   })
@@ -99,18 +99,18 @@ describe('periodic classifier template', () => {
       entities: [],
       happenings: [],
       relationships: [],
-    })
+    }).user
     expect(rendered).toContain('(none)')
   })
 
   it('renders a stored relationship view as a subject-sees-object line', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toContain('- [c1] Kael sees [c2] Aria as: sister')
   })
 
   // classifier.md → What the classifier reads: the saved scene rides each turn.
   it("shows a turn's saved scene and location after its handle, prose on the next line", () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toContain(
       '[t1] scene: [c1]; location: [l1]\nKael falls at the ford, lifeless.',
     )
@@ -125,13 +125,13 @@ describe('periodic classifier template', () => {
         { handle: 't1', content: 'Both are here.', scene: ['c1', 'c2'], location: null },
         { handle: 't2', content: 'At the ford.', scene: [], location: 'l1' },
       ],
-    })
+    }).user
     expect(rendered).toContain('[t1] scene: [c1], [c2]\nBoth are here.')
     expect(rendered).toContain('[t2] location: [l1]\nAt the ford.')
   })
 
   it("lists an entity's stored keywords on its line, and nothing when it has none", () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toContain(
       '- [c1] Kael (character) — A courier. (also called: the Grey Wolf, the courier)\n',
     )
@@ -139,7 +139,7 @@ describe('periodic classifier template', () => {
   })
 
   it('tells the model that prose naming an entity in its turn scene or location refers to it', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatch(
       /Prose naming an entity in its turn's scene, or its location, refers to that entity/,
     )
@@ -147,7 +147,7 @@ describe('periodic classifier template', () => {
 
   // classifier.md → What the classifier reads: a name form of a listed character takes its ID.
   it('steers a name form of a listed character to its ID and the alias list', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatch(
       /A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else/,
     )
@@ -156,7 +156,7 @@ describe('periodic classifier template', () => {
 
   // A schema field the prompt never asks for is a field the model never fills.
   it('asks for an aliases entry for a listed entity of any kind', () => {
-    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context).user
     expect(rendered).toMatch(/- Aliases\. When the prose calls a listed entity of any kind/)
     expect(rendered).toMatch(/Leave out forms its line already shows/)
   })

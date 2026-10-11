@@ -162,7 +162,7 @@ export async function* periodicClassifierPhase(
       relationships,
       idMap,
     }),
-  )
+  ).user
 
   // Makes shouldCadenceFire's running guard live for the duration of the call.
   await writeStatus(ctx, nextStatusOnStart(status))

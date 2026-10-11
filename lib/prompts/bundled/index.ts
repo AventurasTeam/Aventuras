@@ -32,35 +32,52 @@ import {
 
 export const bundledPack: Pack = {
   templates: {
-    [TEMPLATE_IDS.perTurnNarrative]: { group: 'generationContext', source: PER_TURN_NARRATIVE },
+    [TEMPLATE_IDS.perTurnNarrative]: {
+      group: 'generationContext',
+      system: '',
+      user: PER_TURN_NARRATIVE,
+    },
     [TEMPLATE_IDS.piggybackFallbackClassifier]: {
       group: 'generationContext',
-      source: PIGGYBACK_FALLBACK_CLASSIFIER,
+      system: '',
+      user: PIGGYBACK_FALLBACK_CLASSIFIER,
     },
     [TEMPLATE_IDS.periodicClassifier]: {
       group: 'classifierContext',
-      source: PERIODIC_CLASSIFIER,
+      system: '',
+      user: PERIODIC_CLASSIFIER,
     },
     [TEMPLATE_IDS.suggestionRefresh]: {
       group: 'generationContext',
-      source: SUGGESTION_REFRESH,
+      system: '',
+      user: SUGGESTION_REFRESH,
     },
-    [TEMPLATE_IDS.wizardOpening]: { group: 'wizard', source: WIZARD_OPENING },
-    [TEMPLATE_IDS.wizardOpeningRefine]: { group: 'wizard', source: WIZARD_OPENING_REFINE },
-    [TEMPLATE_IDS.wizardTitleChips]: { group: 'wizard', source: WIZARD_TITLE_CHIPS },
-    [TEMPLATE_IDS.wizardDescription]: { group: 'wizard', source: WIZARD_DESCRIPTION },
+    // A wizard template's system half is empty (architecture.md → System and user halves).
+    [TEMPLATE_IDS.wizardOpening]: { group: 'wizard', system: '', user: WIZARD_OPENING },
+    [TEMPLATE_IDS.wizardOpeningRefine]: {
+      group: 'wizard',
+      system: '',
+      user: WIZARD_OPENING_REFINE,
+    },
+    [TEMPLATE_IDS.wizardTitleChips]: { group: 'wizard', system: '', user: WIZARD_TITLE_CHIPS },
+    [TEMPLATE_IDS.wizardDescription]: { group: 'wizard', system: '', user: WIZARD_DESCRIPTION },
     [TEMPLATE_IDS.wizardDescriptionRefine]: {
       group: 'wizard',
-      source: WIZARD_DESCRIPTION_REFINE,
+      system: '',
+      user: WIZARD_DESCRIPTION_REFINE,
     },
-    [TEMPLATE_IDS.wizardLore]: { group: 'wizard', source: WIZARD_LORE },
-    [TEMPLATE_IDS.wizardCast]: { group: 'wizard', source: WIZARD_CAST },
-    [TEMPLATE_IDS.wizardGenre]: { group: 'wizard', source: WIZARD_GENRE },
-    [TEMPLATE_IDS.wizardGenreRefine]: { group: 'wizard', source: WIZARD_GENRE_REFINE },
-    [TEMPLATE_IDS.wizardTone]: { group: 'wizard', source: WIZARD_TONE },
-    [TEMPLATE_IDS.wizardToneRefine]: { group: 'wizard', source: WIZARD_TONE_REFINE },
-    [TEMPLATE_IDS.wizardSetting]: { group: 'wizard', source: WIZARD_SETTING },
-    [TEMPLATE_IDS.wizardSettingRefine]: { group: 'wizard', source: WIZARD_SETTING_REFINE },
+    [TEMPLATE_IDS.wizardLore]: { group: 'wizard', system: '', user: WIZARD_LORE },
+    [TEMPLATE_IDS.wizardCast]: { group: 'wizard', system: '', user: WIZARD_CAST },
+    [TEMPLATE_IDS.wizardGenre]: { group: 'wizard', system: '', user: WIZARD_GENRE },
+    [TEMPLATE_IDS.wizardGenreRefine]: { group: 'wizard', system: '', user: WIZARD_GENRE_REFINE },
+    [TEMPLATE_IDS.wizardTone]: { group: 'wizard', system: '', user: WIZARD_TONE },
+    [TEMPLATE_IDS.wizardToneRefine]: { group: 'wizard', system: '', user: WIZARD_TONE_REFINE },
+    [TEMPLATE_IDS.wizardSetting]: { group: 'wizard', system: '', user: WIZARD_SETTING },
+    [TEMPLATE_IDS.wizardSettingRefine]: {
+      group: 'wizard',
+      system: '',
+      user: WIZARD_SETTING_REFINE,
+    },
   },
   macros: {
     // Wizard-grouped, not staticContent: these read wizard working-state

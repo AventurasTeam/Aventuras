@@ -171,7 +171,7 @@ describe('wizard call sites', () => {
       const shape = findShapeByName(name)
       if (shape === undefined) throw new Error(`registry lost ${name}`)
 
-      const rendered = renderTemplate(templateId, WIZARD_CONTEXT)
+      const rendered = renderTemplate(templateId, WIZARD_CONTEXT).user
       const route = classifyRequest(requestFrom(await promptAsSent(shape.schema, rendered)))
 
       expect(route).toMatchObject({ lane: 'structured', key: name })

@@ -23,7 +23,7 @@ describe('bundled pack', () => {
       },
       leadEntityId: 'c1',
       cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
-    })
+    }).user
     expect(out).toContain('adventure')
     expect(out).toContain('A frozen coast.')
     expect(out).toContain('Aria')
@@ -50,7 +50,7 @@ describe('bundled pack', () => {
       return prompt.slice(start, end)
     }
 
-    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
     // suggestionsFire: false is what the refresh phase actually produces — it
     // never sets the flag, so buildGenerationContext defaults it. Rendering
     // this half with `true` would let a suggestionsFire guard be added to the
@@ -59,7 +59,7 @@ describe('bundled pack', () => {
     const refresh = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
       ...context,
       suggestionsFire: false,
-    })
+    }).user
 
     expect(instruction(classifier)).toBe(instruction(refresh))
     expect(instruction(refresh)).toContain('exactly 2 distinct entries')
@@ -73,14 +73,14 @@ describe('bundled pack', () => {
       entities: [],
       lastTurns: [{ content: 'The gate groaned open.' }],
     }
-    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
 
     expect(classifier).toMatch(/one[- ]sentence summary/i)
   })
 
   it('asks the fallback classifier for the retrieval queries Q4 needs', () => {
     const context = { entities: [], lastTurns: [{ content: 'The gate groaned open.' }] }
-    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context).user
 
     expect(classifier).toMatch(/up to three/i)
     expect(classifier).toMatch(/next turn/i)

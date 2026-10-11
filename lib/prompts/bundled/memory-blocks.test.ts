@@ -7,14 +7,14 @@ import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
 import { MEMORY_BLOCKS } from './memory-blocks'
 
+// Rendered by its own id, not through a template: an all-empty context renders
+// the macro blank, which renderWith refuses as a template's user half.
 function renderMacro(context: Record<string, unknown>): string {
   const pack: Pack = {
-    templates: {
-      t: { group: 'generationContext', source: `{% include '${MACRO_IDS.memoryBlocks}' %}` },
-    },
+    templates: {},
     macros: { [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS } },
   }
-  return createEngine(pack).renderFileSync('t', context) as string
+  return createEngine(pack).renderFileSync(MACRO_IDS.memoryBlocks, context) as string
 }
 
 // Every bucket the macro reads, all empty. Spread-and-override so each test

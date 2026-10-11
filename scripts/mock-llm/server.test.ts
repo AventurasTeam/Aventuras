@@ -74,7 +74,7 @@ describe('structured calls', () => {
     const prompt = renderTemplate(TEMPLATE_IDS.wizardTone, {
       definition: { setting: 'A city that flooded and stayed.', genre: {}, tone: {} },
       guidance: '',
-    })
+    }).user
     const response = await post({
       model: 'seed/narrative',
       messages: [{ role: 'user', content: structuredPrompt(labeledPromptOutputSchema, prompt) }],
@@ -290,7 +290,7 @@ describe('catalog and control surface', () => {
         { id: 'c2', name: 'Verity Sould', kind: 'character', status: 'staged', description: '' },
       ],
       guidance: '',
-    })
+    }).user
     await post({ model: 'seed/narrative', messages: [{ role: 'user', content: prompt }] })
 
     const entries = (await (await fetch(`${base()}/api/log`)).json()) as {

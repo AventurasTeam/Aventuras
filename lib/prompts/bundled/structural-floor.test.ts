@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEngine } from '../engine'
+import { createEngine, renderWith } from '../engine'
 import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
 import { MEMORY_BLOCKS } from './memory-blocks'
@@ -57,7 +57,7 @@ const BROKEN_PER_TURN = `# Characters in scene
 
 function render(source: string, extra: Record<string, unknown> = {}): string {
   const pack: Pack = {
-    templates: { t: { group: 'generationContext', source } },
+    templates: { t: { group: 'generationContext', system: '', user: source } },
     macros: {
       // Real source, not a stub: the negative case below turns on this macro
       // being the ONLY route a staged entity has into the prompt.
@@ -73,7 +73,7 @@ function render(source: string, extra: Record<string, unknown> = {}): string {
       },
     },
   }
-  return createEngine(pack).renderFileSync('t', { ...context, ...extra }) as string
+  return renderWith(createEngine(pack), 't', { ...context, ...extra }).user
 }
 
 // The invariant check, factored so both fixtures run the identical assertion.
