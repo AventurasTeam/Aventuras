@@ -263,3 +263,28 @@ slice-planning gate forces its resolution before that slice is planned.
   is also narrower than the truth: toggling the capability override
   changes the system half without a story edit. Reword both. Raised
   2026-10-11 by the system and user halves PR's Task 9 review.
+
+- **`promptSchemaMiddleware` joins the contract onto the halves as
+  rendered.** In `lib/ai/prompt-schema.ts`, `appendToSystem` adds
+  `\n\n` and the contract to the system message untrimmed, as the system
+  and user halves PR designed it. No bundled system half ends on a blank
+  line (the suggestion refresh `rstrip`s its capture for exactly this),
+  but a user-authored one, once the M7 template editor exists, would put
+  three blank lines before the contract. `appendToLastUser`, carried
+  over unchanged from before that PR, does the same to a user half that
+  ends in a newline, and it folds every text part into one, which drops
+  each part's `providerOptions` and moves file parts after the text: a
+  later cache marker on a user part would vanish silently. Candidate
+  fix: `trimEnd` the half before each append, and keep the parts.
+  Raised 2026-10-11 by that PR's task reviews.
+
+- **`generateStructured` doesn't pass the action id to
+  `prepareGeneration`.** In `lib/ai/generate.ts`, `streamText` passes
+  `actionId`, so the narrative's fetch capture links to its action, but
+  the classifier, suggestion refresh and wizard calls go out unlinked.
+  Related: `buildCallSettings` and `marksSystemPrefix` type the provider
+  as `ProviderInstance['type']`, which has no `'stub'`, though a runtime
+  row can be one (`ProviderInstanceWithStub` in `lib/ai/types.ts`); only
+  `marksSystemPrefix`'s comment notes it. Predates the system and user
+  halves PR, whose `marksSystemPrefix` copies the existing type. Raised
+  2026-10-11 by its task reviews.
