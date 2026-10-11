@@ -25,11 +25,13 @@ import {
   parentOfLocations,
 } from '@/lib/world'
 
+type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
+
 export type TurnCreatePlan = {
   /** The block with every declared handle resolved or removed; no newLocations / newItems. */
   block: ParsedStateBlock
-  /** createEntity actions: parents before children, locations before items. */
-  creates: PipelineAction[]
+  /** Parents before children, locations before items. */
+  creates: CreateEntityAction[]
   /** The rows `creates` insert, for buildPiggybackActions' lookups. */
   createdRows: Entity[]
   /** Staged siblings a location create reused, to promote. */
@@ -422,7 +424,7 @@ export async function planTurnCreates(input: {
   return {
     block: rewriteHandles(block, ids, things.ids),
     creates: createdRows.map(
-      (entry): PipelineAction => ({ kind: 'createEntity', source, payload: { entry } }),
+      (entry): CreateEntityAction => ({ kind: 'createEntity', source, payload: { entry } }),
     ),
     createdRows,
     reusedIds: places.reusedIds,

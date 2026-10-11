@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { PipelineAction } from '@/lib/actions'
 import type { EmbedDescriptions } from '@/lib/classifier'
 import { emptyEntityState, type Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { NewLocationReport, ParsedStateBlock } from '@/lib/piggyback'
 
-import { planTurnCreates, skipTurnCreates } from './per-turn-creates'
+import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 
 const BRANCH = 'b1'
 const HERO = 'char_00000000-0000-4000-8000-000000000001'
@@ -88,15 +87,8 @@ function runPlanner(
   })
 }
 
-function createActions(actions: readonly PipelineAction[]) {
-  return actions.map((action) => {
-    if (action.kind !== 'createEntity') throw new Error(`expected createEntity, got ${action.kind}`)
-    return action
-  })
-}
-
-const createdEntries = (actions: readonly PipelineAction[]) =>
-  createActions(actions).map((action) => action.payload.entry)
+const createdEntries = (creates: TurnCreatePlan['creates']) =>
+  creates.map((action) => action.payload.entry)
 
 beforeEach(() => {
   vi.restoreAllMocks()
@@ -804,7 +796,7 @@ describe('planTurnCreates — rows and order', () => {
       },
       { source: 'per_turn_classifier' },
     )
-    expect(createActions(plan.creates).map((a) => a.source)).toEqual(['per_turn_classifier'])
+    expect(plan.creates.map((a) => a.source)).toEqual(['per_turn_classifier'])
     expect(createdEntries(plan.creates)).toEqual([
       {
         id: 'loc_new_1',
