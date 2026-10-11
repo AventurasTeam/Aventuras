@@ -2531,12 +2531,12 @@ describe('per-turn-piggyback', () => {
       expect(report?.newLocations).toEqual([
         expect.objectContaining({ handle: 'new:docks', outcome: 'created' }),
       ])
-      // This phase created no item, so the fold's dropped item stays on the record.
+      // This phase emitted no item, so the fold's dropped item stays on the record.
       expect(report?.newItems).toEqual(FOLD_REPORT.newItems)
       expect(report?.failedFields).toEqual(FOLD_REPORT.failedFields)
     })
 
-    it("keeps a failed fold's dropped creates when the fallback creates nothing", async () => {
+    it("keeps a failed fold's dropped creates when the fallback emits none", async () => {
       seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
@@ -2547,6 +2547,31 @@ describe('per-turn-piggyback', () => {
       expect(report?.layer).toBe('per_turn_classifier')
       expect(report?.newLocations).toEqual(FOLD_REPORT.newLocations)
       expect(report?.newItems).toEqual(FOLD_REPORT.newItems)
+    })
+
+    // A kind the fallback emitted is its own report even when every entry was dropped: the
+    // fold's list is kept only for a kind the fallback emitted none of.
+    it("reports the fallback's own dropped creates rather than the fold's", async () => {
+      seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        }),
+        { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+      )
+      expect(createdEntries(events)).toEqual([])
+      const report = metadataPatch(events).stateReport
+      expect(report?.newItems).toEqual([
+        {
+          handle: 'new:key',
+          name: 'rusted key',
+          description: 'an iron key',
+          outcome: 'dropped',
+        },
+      ])
+      expect(report?.newLocations).toEqual(FOLD_REPORT.newLocations)
     })
 
     it('warns about malformed creates and creates nothing from them', async () => {
@@ -2616,7 +2641,7 @@ describe('per-turn-piggyback', () => {
       expect(report?.currentLocation).toBe(docks?.id)
     })
 
-    it('keeps a failed fold’s dropped locations when the fallback creates only an item', async () => {
+    it("keeps a failed fold's dropped locations when the fallback creates only an item", async () => {
       seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
@@ -2672,8 +2697,21 @@ describe('per-turn-piggyback', () => {
 
     // A field with no describe is one the model never fills well; parity means the
     // fallback states it too (state-emission.ts; piggyback.md → Fallback classifier context).
+    it('lists each create array before the fields that name its handles', () => {
+      const order = Object.keys(z.toJSONSchema(fallbackClassifierSchema).properties ?? {})
+      expect(order.indexOf('newLocations')).toBeLessThan(order.indexOf('currentLocation'))
+      expect(order.indexOf('newItems')).toBeLessThan(order.indexOf('transfers'))
+    })
+
     it.each([
       ['sceneEntities', ['sceneEntities'], 'present in this scene'],
+      ['sceneEntities handles', ['sceneEntities'], 'exact handle it declares'],
+      [
+        'newLocations[].handle scope',
+        ['newLocations', '[]', 'handle'],
+        "another new place's parent",
+      ],
+      ['newItems[].handle scope', ['newItems', '[]', 'handle'], 'only in transfers.items[].id'],
       ['currentLocation', ['currentLocation'], 'place this scene happens at'],
       [
         'visualChanges[].text',

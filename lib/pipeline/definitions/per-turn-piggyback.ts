@@ -56,40 +56,42 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
 const TRANSFER_PARTY_DESCRIPTION =
   'Omit rather than inventing a roster ID — there is no other party when something is found loose or spent on someone off-scene.'
 
-const NEW_HANDLE_DESCRIPTION =
-  'A handle you choose, starting with "new:" (e.g. new:docks), so it is never mistaken for a listed ID. Reference it elsewhere in this reply exactly like an ID.'
+const NEW_HANDLE_PREFIX_DESCRIPTION =
+  'A handle you choose, starting with "new:" (e.g. new:docks), so it is never mistaken for a listed ID.'
+const NEW_LOCATION_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in currentLocation, another new place's parent and sceneEntities.`
+const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in transfers.items[].id and sceneEntities.`
 
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
     .array(z.string())
     .describe(
-      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered.',
+      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered. A place or item you create appears here only by the exact handle it declares in newLocations / newItems.',
     ),
   // Before the fields that reference a handle, so a model filling the object in order picks it
   // before it uses it.
   newLocations: z
     .array(
       z.object({
-        handle: z.string().describe(NEW_HANDLE_DESCRIPTION),
+        handle: z.string().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
         name: z.string(),
         description: z.string().describe('One short sentence describing the place.'),
         parent: z
           .string()
           .optional()
           .describe(
-            'The place it is part of: an ID from the place list, or the handle of another location in newLocations. Omit it for a top-level place.',
+            'The place it is part of: an ID from Places, or the handle of another location in newLocations. Omit it for a top-level place.',
           ),
       }),
     )
     .optional()
     .describe(
-      'Places this turn creates, when the scene settles somewhere not in the place list. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
+      'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
     ),
   currentLocation: z
     .string()
     .optional()
     .describe(
-      'The ID of the place this scene happens at: an ID from the place list, or the handle of a location in newLocations.',
+      'The ID of the place this scene happens at: an ID from Places, or the handle of a location in newLocations.',
     ),
   worldTimeDelta: z.number(),
   visualChanges: z
@@ -108,7 +110,7 @@ export const fallbackClassifierSchema = z.object({
   newItems: z
     .array(
       z.object({
-        handle: z.string().describe(NEW_HANDLE_DESCRIPTION),
+        handle: z.string().describe(NEW_ITEM_HANDLE_DESCRIPTION),
         name: z.string(),
         description: z.string().describe('One short sentence describing the item.'),
       }),
@@ -388,8 +390,8 @@ export async function* piggybackFallbackClassifierPhase(
       ? { transfers: priorReport.transfers }
       : {}),
   }
-  // A failed fold reports its creates `dropped`; a kind this phase creates none of keeps that
-  // list, by the same no-blanking rule.
+  // A failed fold reports its creates `dropped`; a kind this phase emits none of keeps that
+  // list, by the same no-blanking rule. An emitted-but-dropped list is its own report and stays.
   const reportedCreates: TurnCreatesReport = {
     newLocations:
       plan.report.newLocations.length > 0

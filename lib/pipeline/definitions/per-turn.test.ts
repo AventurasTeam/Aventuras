@@ -1887,7 +1887,7 @@ describe('narrative fold — creates', () => {
     const final = (await storedEntry(replyOf(events).id))?.metadata?.stateReport
     expect(final?.layer).toBe('per_turn_classifier')
     expect(final?.failedFields?.map((f) => f.field)).toContain('worldTimeDelta')
-    // A fallback that creates nothing keeps the fold's dropped creates on the record.
+    // A fallback that emits no create keeps the fold's dropped creates on the record.
     expect(final?.newLocations).toEqual(foldReport?.newLocations)
     expect(final?.newItems).toEqual(foldReport?.newItems)
   })
@@ -1928,6 +1928,67 @@ describe('narrative fold — creates', () => {
       current_location_id: TOWN,
       inventory: [],
     })
+    expect(await storedEntry(replyId)).toBeUndefined()
+    expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
+  })
+
+  // The fold failed, so the fallback is the only creator; its rows must leave with the turn.
+  async function failedFoldThenFallbackCreates() {
+    await seedTurn()
+    const failing = CREATE_REPLY.replace(
+      '<world_time_delta>60</world_time_delta>',
+      '<world_time_delta>soon</world_time_delta>',
+    )
+    const fold = await foldTurn(failing)
+    await applyEvents(fold.events)
+    generateStructuredMock.mockResolvedValueOnce({
+      status: 'ok',
+      value: fallbackClassifierSchema.parse({
+        sceneEntities: ['c1'],
+        newLocations: [
+          {
+            handle: 'new:docks',
+            name: 'Smuggler Docks',
+            description: 'a rotting pier',
+            parent: 'l1',
+          },
+        ],
+        currentLocation: 'new:docks',
+        worldTimeDelta: 30,
+        newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+      }),
+    })
+    const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
+    await applyEvents(fallback.events)
+    const created = createdEntities(fallback.events).map((e) => e.id)
+    expect(created).toHaveLength(2)
+    expect((await branchRows()).filter((r) => created.includes(r.id))).toHaveLength(2)
+    return { created, replyId: replyOf(fold.events).id }
+  }
+
+  const HERO_BEFORE = { current_location_id: TOWN, inventory: [] }
+
+  it("removes the fallback's new rows when the turn is undone", async () => {
+    const { created } = await failedFoldThenFallbackCreates()
+
+    expect(await undoLastAction('b1', turnCtx())).toEqual({ status: 'ok' })
+
+    const rows = await branchRows()
+    expect(rows.filter((r) => created.includes(r.id))).toEqual([])
+    expect(rows.find((r) => r.id === HERO)?.state).toMatchObject(HERO_BEFORE)
+  })
+
+  it("removes the fallback's new rows on a regenerate sweep from the reply", async () => {
+    const { created, replyId } = await failedFoldThenFallbackCreates()
+
+    const swept = await resolveSweep('b1', replyId, turnCtx())
+    if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
+    await reverseAndPruneDeltaRows(swept.set, turnCtx(), { keepRedoExact: false }, swept.clampOps)
+
+    const rows = await branchRows()
+    expect(rows.filter((r) => created.includes(r.id))).toEqual([])
+    expect(rows.find((r) => r.id === HERO)?.state).toMatchObject(HERO_BEFORE)
     expect(await storedEntry(replyId)).toBeUndefined()
     expect(await storedEntry(USER_ACTION_ID)).toBeDefined()
   })
