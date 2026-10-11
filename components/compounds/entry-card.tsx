@@ -495,6 +495,41 @@ function resolveCounterparty(id: string | undefined, pool: readonly ResolvedEnti
   return id != null ? resolveName(id, pool) : t('reader:entryCard.stateNone')
 }
 
+type CreateLine = { key: string; text: string }
+
+// entry-card.md → Panel anatomy: a dropped create isn't listed. A second new location
+// aliased to the first reports the same id again, so each row gets one line.
+function turnCreateLines(
+  report: EntryMetadata['stateReport'],
+  pool: readonly ResolvedEntity[],
+): CreateLine[] {
+  const lines: CreateLine[] = []
+  const seen = new Set<string>()
+  const push = (id: string | undefined, text: string) => {
+    if (id != null) {
+      if (seen.has(id)) return
+      seen.add(id)
+    }
+    lines.push({ key: id ?? `create${lines.length}`, text })
+  }
+  for (const location of report?.newLocations ?? []) {
+    if (location.outcome === 'created') {
+      push(location.id, t('reader:entryCard.stateNewPlace', { name: location.name }))
+    } else if (location.outcome === 'reused') {
+      // Named as the row stands, not as the writer spelled it; the report's name
+      // covers a row deleted since.
+      const live = pool.find((e) => e.id === location.id)?.name
+      push(location.id, t('reader:entryCard.stateMatchedPlace', { name: live ?? location.name }))
+    }
+  }
+  for (const item of report?.newItems ?? []) {
+    if (item.outcome === 'created') {
+      push(item.id, t('reader:entryCard.stateNewItem', { name: item.name }))
+    }
+  }
+  return lines
+}
+
 function StateLine({ children }: { children: ReactNode }) {
   return <Text size="xs">{children}</Text>
 }
@@ -523,7 +558,9 @@ function WorldStatePanel({
   const visualChanges = stateReport?.visualChanges ?? []
   const items = stateReport?.transfers?.items ?? []
   const stackables = stateReport?.transfers?.stackables ?? []
-  const hasChanges = visualChanges.length + items.length + stackables.length > 0
+  const createLines = turnCreateLines(stateReport, entityNames)
+  const hasChanges =
+    visualChanges.length + items.length + stackables.length + createLines.length > 0
 
   const emittedLocation = stateReport?.currentLocation
   // Read as a recorded fact, not inferred from `emitted !== current`: that inequality
@@ -644,6 +681,9 @@ function WorldStatePanel({
                     to: resolveCounterparty(st.to, entityNames),
                   })}
             </StateLine>
+          ))}
+          {createLines.map((line) => (
+            <StateLine key={line.key}>{line.text}</StateLine>
           ))}
         </StateGroup>
       ) : null}

@@ -5,6 +5,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
@@ -1237,6 +1238,198 @@ export const WorldStateUnknownEntity: StoryT = {
     await openPanel()
     expect(screen.getByText('Unknown entity')).toBeVisible()
     expect(screen.queryByText(GONE)).not.toBeInTheDocument()
+  },
+}
+
+const LOC_NEW = 'loc_00000000-0000-4000-8000-0000000000a7'
+const ITEM_NEW = 'item_00000000-0000-4000-8000-0000000000b8'
+const LOC_GONE = 'loc_00000000-0000-4000-8000-0000000000f7'
+
+// The created rows exist live as well; the card names them from the report regardless.
+const createsEntityNames = [
+  ...entityNames,
+  { id: LOC_NEW, name: 'the Smuggler’s Docks' },
+  { id: ITEM_NEW, name: 'rusted key' },
+]
+
+const createsProps = {
+  sceneEntities: [CHAR_A],
+  currentLocationId: LOC_NEW,
+  entityNames: createsEntityNames,
+  stateReport: {
+    layer: 'piggyback_tagged_block' as const,
+    sceneEntities: [CHAR_A],
+    currentLocation: LOC_NEW,
+    transfers: {
+      items: [{ id: ITEM_NEW, slot: 'inventory' as const, to: CHAR_A }],
+      stackables: [{ key: 'gold', amount: 5, to: CHAR_A }],
+    },
+    newLocations: [
+      {
+        handle: 'new:docks',
+        name: 'the Smuggler’s Docks',
+        description: 'a rotting pier below the cliffs',
+        parent: LOC_A,
+        outcome: 'created' as const,
+        id: LOC_NEW,
+      },
+      // A second create of the same name under the same parent aliases to the first.
+      {
+        handle: 'new:docks-again',
+        name: 'The Smuggler’s Docks',
+        description: 'the pier again',
+        parent: LOC_A,
+        outcome: 'reused' as const,
+        id: LOC_NEW,
+      },
+      // An exact sibling, emitted in the writer's own spelling.
+      {
+        handle: 'new:keep',
+        name: 'eldrin keep',
+        description: 'the old keep',
+        outcome: 'reused' as const,
+        id: LOC_B,
+      },
+      // A reused row deleted since the turn: the report's name is all there is.
+      {
+        handle: 'new:tower',
+        name: 'the old watchtower',
+        description: 'a ruin on the ridge',
+        outcome: 'reused' as const,
+        id: LOC_GONE,
+      },
+      {
+        handle: 'new:alley',
+        name: 'a side alley',
+        description: 'passing through',
+        outcome: 'dropped' as const,
+      },
+    ],
+    newItems: [
+      {
+        handle: 'new:key',
+        name: 'rusted key',
+        description: 'an iron key, flaked with rust',
+        outcome: 'created' as const,
+        id: ITEM_NEW,
+      },
+      {
+        handle: 'new:bread',
+        name: 'stale bread',
+        description: 'eaten on the spot',
+        outcome: 'dropped' as const,
+      },
+    ],
+  },
+} satisfies Partial<EntryCardProps>
+
+// entry-card.md → Panel anatomy: one line per create that landed on a row, after the
+// stackables; a dropped create stays in the report for the per-turn inspector.
+export const WorldStateTurnCreates: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, ...createsProps },
+  play: async () => {
+    await openPanel()
+    const newPlace = screen.getByText(
+      t('reader:entryCard.stateNewPlace', { name: 'the Smuggler’s Docks' }),
+    )
+    const matched = screen.getByText(
+      t('reader:entryCard.stateMatchedPlace', { name: 'Eldrin Keep' }),
+    )
+    const newItem = screen.getByText(t('reader:entryCard.stateNewItem', { name: 'rusted key' }))
+    expect(newPlace).toBeVisible()
+    expect(matched).toBeVisible()
+    expect(newItem).toBeVisible()
+    expect(
+      screen.getByText(t('reader:entryCard.stateMatchedPlace', { name: 'the old watchtower' })),
+    ).toBeVisible()
+    // The alias landed on the row already listed as new, so it adds no line of its own.
+    expect(
+      screen.queryByText(t('reader:entryCard.stateMatchedPlace', { name: 'the Smuggler’s Docks' })),
+    ).not.toBeInTheDocument()
+    // A reused row is named live, not in the spelling the writer emitted.
+    expect(
+      screen.queryByText(t('reader:entryCard.stateMatchedPlace', { name: 'eldrin keep' })),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/a side alley/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/stale bread/)).not.toBeInTheDocument()
+    // Canon's order: stackables, then places, then items.
+    const stackable = screen.getByText(
+      t('reader:entryCard.stateStackable', { key: 'gold', amount: 5, to: 'Aria' }),
+    )
+    expect(stackable.compareDocumentPosition(newPlace)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(newPlace.compareDocumentPosition(matched)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(matched.compareDocumentPosition(newItem)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  },
+}
+
+// A create alone is a change this turn: the group needs no visual change or transfer beside it.
+export const WorldStateCreatesOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_NEW,
+    entityNames: createsEntityNames,
+    stateReport: {
+      layer: 'per_turn_classifier',
+      currentLocation: LOC_NEW,
+      newLocations: [
+        {
+          handle: 'new:docks',
+          name: 'the Smuggler’s Docks',
+          description: 'a rotting pier below the cliffs',
+          outcome: 'created',
+          id: LOC_NEW,
+        },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText(t('reader:entryCard.stateChanges'))).toBeVisible()
+    expect(
+      screen.getByText(t('reader:entryCard.stateNewPlace', { name: 'the Smuggler’s Docks' })),
+    ).toBeVisible()
+  },
+}
+
+// Every create dropped: nothing this turn changed, so the group stays out rather than
+// rendering a label with no lines under it.
+export const WorldStateDroppedCreatesOnly: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      newLocations: [
+        {
+          handle: 'new:alley',
+          name: 'a side alley',
+          description: 'passing through',
+          outcome: 'dropped',
+        },
+      ],
+      newItems: [
+        {
+          handle: 'new:bread',
+          name: 'stale bread',
+          description: 'eaten on the spot',
+          outcome: 'dropped',
+        },
+      ],
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.queryByText(t('reader:entryCard.stateChanges'))).not.toBeInTheDocument()
+    // Positive control: the panel rendered, so the absence above is not an empty render.
+    expect(screen.getByText('Ashfen Marshes')).toBeVisible()
   },
 }
 
