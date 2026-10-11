@@ -373,11 +373,12 @@ template-rendering code.
 #### New-entity emission
 
 A brand-new entity is emitted as a full object with **no `id`
-field**, carrying instead a `new:` handle of the model's choosing that
-the same reply's other references use. Handles never enter the
+field**, carrying instead a temporary handle of the model's choosing
+that the same reply's other references use. Handles never enter the
 `IdBiMap`: substitution leaves a handle as it is, and the writer's
 planner maps it to the row it creates or matches. The per-turn writers
-create only places and items, and accept a handle only where
+create only places and items, with handles that start with `new:`,
+and accept a handle only where
 [`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item)
 allows; characters are the periodic classifier's
 ([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)).
