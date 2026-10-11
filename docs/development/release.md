@@ -33,7 +33,8 @@ GitHub Actions workflows in `.github/workflows/`:
 - **`lint-and-typecheck.yml`** - runs `lint:ts`, `check`, `test`, and `build` on every pull request
   targeting `master`, except one that touches only `src-tauri/`, `docs/` or Markdown.
 - **`rust-lint.yml`** ("Rust Lint") - runs `cargo fmt --check` and `cargo clippy -D warnings` on
-  pull requests targeting `master` that touch Rust sources or the Cargo manifest or lockfile.
+  pull requests targeting `master`, and pushes to `master`, that touch Rust sources or the Cargo
+  manifest or lockfile.
   Clippy runs on a pinned toolchain, so a new stable's lints cannot fail an unrelated PR. The
   version appears in both `rust-lint.yml` and the `lint:rust`/`lint:rust:fix` scripts in
   `package.json`; bump them together and fix whatever the new lints report. Builds and rustfmt use latest stable.
@@ -137,7 +138,9 @@ already ignores the app's own version, so that push can only rebuild for nothing
 
 - **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
   build workflows, so only `ci.yml` (or a run of `release.yml`/`pre-release.yml` if one is ever
-  dispatched from `master` directly) writes it.
+  dispatched from `master` directly) writes it. `rust-lint.yml`'s Clippy job does the same: its
+  `master` push run saves the cache and PRs only restore it, so a PR's ~600 MiB `target/` never
+  lands in a scope no other run can read.
 - **Gradle**, in `build-android.yml`, uses `gradle/actions/setup-gradle` with
   `cache-provider: basic` — the MIT-licensed provider, not the default proprietary one — which
   already defaults to read-only off the default branch. It also caches the Gradle wrapper
