@@ -147,9 +147,7 @@ function heldItemsInScene(
   const byId = new Map(entities.map((e) => [e.id, e]))
   return [...new Set(sceneEntities)].flatMap((id) => {
     const holder = byId.get(id)
-    // The state column is nullable; a holder without one holds nothing.
-    if (holder?.kind !== 'character' || holder.status !== 'active' || holder.state == null)
-      return []
+    if (holder?.kind !== 'character' || holder.status !== 'active') return []
     const items = heldItemLines(holder, entities)
     return items.length > 0 ? [{ holderId: holder.id, items }] : []
   })

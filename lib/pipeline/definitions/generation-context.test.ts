@@ -1567,6 +1567,31 @@ describe('buildGenerationContext — location map and held items', () => {
     ])
   })
 
+  it('lists holders in scene order, not entity order', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(CHAR_ID, CHAR_ID_2, KEY, SWORD),
+      entities: [
+        person(CHAR_ID, 'Mara', { inventory: [KEY] }),
+        person(CHAR_ID_2, 'Corvin', { inventory: [SWORD] }),
+        thing(KEY, 'Silver Key', null),
+        thing(SWORD, 'worn sword', null),
+      ],
+      entries: sceneAt(null, [CHAR_ID_2, CHAR_ID]),
+    })
+    expect((ctx.heldItems as { holderId: string }[]).map((h) => h.holderId)).toEqual(['c2', 'c1'])
+  })
+
+  it('reads the scene for a template that names only locationMap', async () => {
+    const prompts = await import('@/lib/prompts')
+    vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['locationMap']))
+    const ctx = await buildContext({
+      idMap: seededIdMap(VAULT),
+      entities: [place(VAULT, 'The Vault', null, { injectionMode: 'disabled' })],
+      entries: sceneAt(VAULT),
+    })
+    expect(ctx.locationMap).toEqual([{ id: 'l1', name: 'The Vault', depth: 0 }])
+  })
+
   it('reads the scene for a template that names only heldItems', async () => {
     const entryReads = await import('./entry-reads')
     const readSceneSourceSpy = vi.spyOn(entryReads, 'readSceneSource')

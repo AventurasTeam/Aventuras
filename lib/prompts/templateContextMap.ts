@@ -74,7 +74,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'LocationMapRow[]',
       category: 'Entities',
       description:
-        "Every active and staged place on the branch as { id, name, depth }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. Retired places are left out, and so is a disabled one unless the scene is there; a left-out place's children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no place.",
+        "Every active and staged place on the branch as { id, name, depth }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. Retired places are left out, and so is a disabled one unless the scene is there; a left-out place's children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no listed place.",
       required: true,
     },
     {
@@ -82,7 +82,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Entities',
       description:
-        "Names of structuralLocation's listed ancestors (the locationMap places it is part of), nearest first, for a line like `The Rusty Anchor — in Port Vellis › Eldra`. Empty for a top-level place, and when structuralLocation is null.",
+        "Names of structuralLocation's listed ancestors (the locationMap places it is part of), nearest first, for a line like `The Rusty Anchor — in Port Vellis › Eldra`. Empty when no ancestor is listed (a top-level place, or one whose ancestors are all left out of locationMap), and when structuralLocation is null.",
       required: true,
     },
     {
@@ -90,7 +90,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ holderId: string; items: HeldItemLine[] }[]',
       category: 'Entities',
       description:
-        'What each active in-scene character holds: one entry per holder that holds anything, `items` as { id, name, equipped } with the inventory before the equipped items. Retired items are left out. Match holderId against the in-scene entity ids; an item a holder lists is not repeated in the scene list.',
+        'What each active in-scene character holds: one entry per holder that holds anything, in scene order, `items` as { id, name, equipped } with the inventory before the equipped items. An id in both inventory and equipped shows once, as equipped. Retired items are left out. Match holderId against the in-scene entity ids. sceneEntities may also name a held item; the bundled template skips it in the scene list.',
       required: true,
     },
     {
@@ -177,7 +177,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Retrieval',
       description:
-        'Every id above that belongs to a place: the places shown in the memory blocks; locationMap lists every place. Union of the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use this rather than "the IDs above": ranked entity rows arrive as RetrievedRow with no kind, so the bracketed IDs in the memory blocks can be entirely characters. Empty when the prompt shows no place, or no retrieval ran.',
+        'Every id above that belongs to a place: the places shown in the memory blocks; locationMap lists every listed place. Union of the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use this rather than "the IDs above": ranked entity rows arrive as RetrievedRow with no kind, so the bracketed IDs in the memory blocks can be entirely characters. Empty when the prompt shows no place, or no retrieval ran.',
       required: true,
     },
     {
