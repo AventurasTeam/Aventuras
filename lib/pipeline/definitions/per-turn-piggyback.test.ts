@@ -2837,6 +2837,7 @@ describe('per-turn-piggyback', () => {
       ],
       ['newItems[].handle scope', ['newItems', '[]', 'handle'], 'only in transfers.items[].id'],
       ['currentLocation', ['currentLocation'], 'place this scene happens at'],
+      ['currentLocation with no Places block', ['currentLocation'], 'when Places lists it'],
       [
         'visualChanges[].text',
         ['visualChanges', '[]', 'text'],
@@ -2859,7 +2860,16 @@ describe('per-turn-piggyback', () => {
         ['newLocations', '[]', 'parent'],
         'handle of another location in newLocations',
       ],
-      ['newItems', ['newItems'], 'gives it to a character'],
+      [
+        'newLocations[].parent with no Places block',
+        ['newLocations', '[]', 'parent'],
+        'when Places lists it',
+      ],
+      [
+        'newItems',
+        ['newItems'],
+        'the last transfers.items entry naming it gives it to a character',
+      ],
       ['newItems[].handle', ['newItems', '[]', 'handle'], 'starting with "new:"'],
       [
         'currentLocation for a new place',

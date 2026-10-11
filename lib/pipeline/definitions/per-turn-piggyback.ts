@@ -88,7 +88,7 @@ export const fallbackClassifierSchema = z.object({
           .optional()
           .catch(undefined)
           .describe(
-            'The place it is part of: an ID from Places, or the handle of another location in newLocations. Omit it for a top-level place.',
+            'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations. Omit it for a top-level place.',
           ),
       }),
     )
@@ -100,7 +100,7 @@ export const fallbackClassifierSchema = z.object({
     .string()
     .optional()
     .describe(
-      'The ID of the place this scene happens at: an ID from Places, or the handle of a location in newLocations.',
+      'The ID of the place this scene happens at: its ID from Places when Places lists it, or the handle of a location in newLocations.',
     ),
   worldTimeDelta: z.number(),
   visualChanges: z
@@ -130,7 +130,7 @@ export const fallbackClassifierSchema = z.object({
     )
     .optional()
     .describe(
-      'Items this turn creates, when a character takes or receives something new. A new item is kept only when transfers.items gives it to a character; any other is dropped.',
+      'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
     ),
   transfers: z
     .object({
