@@ -14,8 +14,8 @@ import {
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
-  type ParsedStateBlock,
   type PlannedStateBlock,
+  type SubstitutedStateBlock,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
@@ -342,7 +342,7 @@ export async function* piggybackFallbackClassifierPhase(
   const { block: substituted, failures } = substitutePiggybackIds(normalized.block, idMap)
   // The schema can't reject one bad stackable without failing the whole call, so the
   // transfers parseTransfers would drop are dropped here, before the actions and report.
-  const resolvedBlock: ParsedStateBlock =
+  const resolvedBlock: SubstitutedStateBlock =
     substituted.transfers === undefined
       ? substituted
       : {

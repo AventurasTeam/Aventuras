@@ -3,12 +3,14 @@ import { MalformedPlaceholderError, type IdBiMap } from '@/lib/ids'
 import { isCreateHandle, unwrapBracket } from './tags'
 import type {
   NewLocationEmission,
+  NormalizedStateBlock,
   ParsedTransfers,
   ParseFieldFailure,
   ParsedStateBlock,
+  SubstitutedStateBlock,
 } from './types'
 
-type SubstituteResult = { block: ParsedStateBlock; failures: ParseFieldFailure[] }
+type SubstituteResult = { block: SubstitutedStateBlock; failures: ParseFieldFailure[] }
 
 // Strict by design: the classifier's contract is that it only ever
 // references entities it was actually shown, so anything that doesn't
@@ -41,8 +43,7 @@ function withResolvedParent(create: NewLocationEmission, idMap: IdBiMap): NewLoc
     : { ...create, parent: resolveParent(create.parent, idMap) }
 }
 
-/** Expects normalized creates (trimmed handles): the fallback runs `normalizeCreates` first. */
-function declaredHandles(block: ParsedStateBlock): ReadonlySet<string> {
+function declaredHandles(block: NormalizedStateBlock): ReadonlySet<string> {
   return new Set([...(block.newLocations ?? []), ...(block.newItems ?? [])].map((c) => c.handle))
 }
 
@@ -90,7 +91,10 @@ function resolveField<K extends keyof ParsedStateBlock>(
 // Resolves only ID-bearing sub-fields, never a create's name or description: a bad id, to or from
 // fails only its own field, and a bad create parent fails nothing, since `resolveParent` is lenient
 // (docs/memory/piggyback.md → Parse strategy and failure recovery).
-export function substitutePiggybackIds(block: ParsedStateBlock, idMap: IdBiMap): SubstituteResult {
+export function substitutePiggybackIds(
+  block: NormalizedStateBlock,
+  idMap: IdBiMap,
+): SubstituteResult {
   const result: ParsedStateBlock = { ...block }
   const failures: ParseFieldFailure[] = []
   const handles = declaredHandles(block)
@@ -126,5 +130,5 @@ export function substitutePiggybackIds(block: ParsedStateBlock, idMap: IdBiMap):
   if (result.newLocations !== undefined)
     result.newLocations = result.newLocations.map((create) => withResolvedParent(create, idMap))
 
-  return { block: result, failures }
+  return { block: result as SubstitutedStateBlock, failures }
 }

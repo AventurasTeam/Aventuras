@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EmbedDescriptions } from '@/lib/classifier'
 import { emptyEntityState, type Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { NewLocationReport, ParsedStateBlock } from '@/lib/piggyback'
+import {
+  normalizeCreates,
+  type NewLocationReport,
+  type ParsedStateBlock,
+  type SubstitutedStateBlock,
+} from '@/lib/piggyback'
 
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 
@@ -63,6 +68,9 @@ const oldKey = (): Entity =>
 
 const noEmbed: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
 
+// Cast, not substituted: these blocks are built already holding ids and normalized creates.
+const assumeSubstituted = (block: ParsedStateBlock) => block as SubstitutedStateBlock
+
 const dropFlag = (r: NewLocationReport) => ('parentDropped' in r ? r.parentDropped : undefined)
 
 function runPlanner(
@@ -76,7 +84,7 @@ function runPlanner(
   // Deterministic per-prefix ids, so a case can name the rows it expects.
   const counts = { loc: 0, item: 0 }
   return planTurnCreates({
-    block,
+    block: assumeSubstituted(block),
     entities: opts.entities ?? world(),
     branchId: BRANCH,
     source: opts.source ?? 'piggyback_tagged_block',
@@ -871,27 +879,29 @@ describe('planTurnCreates — handles', () => {
 
 describe('skipTurnCreates', () => {
   it('creates nothing, reports every create dropped, and drops each handle where it stands', () => {
-    const plan = skipTurnCreates({
-      sceneEntities: [HERO, 'new:key'],
-      newLocations: [
-        {
-          handle: 'new:docks',
-          name: 'Smuggler Docks',
-          description: 'a rotting pier',
-          parent: PORT,
-        },
-      ],
-      currentLocation: 'new:docks',
-      newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
-      transfers: {
-        items: [
-          { id: 'new:key', to: HERO, slot: 'inventory' },
-          { id: OLD_KEY, to: HERO, slot: 'equipped_items' },
+    const plan = skipTurnCreates(
+      assumeSubstituted({
+        sceneEntities: [HERO, 'new:key'],
+        newLocations: [
+          {
+            handle: 'new:docks',
+            name: 'Smuggler Docks',
+            description: 'a rotting pier',
+            parent: PORT,
+          },
         ],
-        stackables: [],
-      },
-      worldTimeDelta: 5,
-    })
+        currentLocation: 'new:docks',
+        newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        transfers: {
+          items: [
+            { id: 'new:key', to: HERO, slot: 'inventory' },
+            { id: OLD_KEY, to: HERO, slot: 'equipped_items' },
+          ],
+          stackables: [],
+        },
+        worldTimeDelta: 5,
+      }),
+    )
     expect(plan.block).toEqual({
       sceneEntities: [HERO],
       transfers: { items: [{ id: OLD_KEY, to: HERO, slot: 'equipped_items' }], stackables: [] },
@@ -914,5 +924,26 @@ describe('skipTurnCreates', () => {
         { handle: 'new:key', name: 'rusted key', description: 'an iron key', outcome: 'dropped' },
       ],
     })
+  })
+})
+
+describe('planner input', () => {
+  it('takes only a substituted block', () => {
+    const normalized = normalizeCreates({ sceneEntities: [HERO] }).block
+    // @ts-expect-error a normalized block still holds placeholders
+    const skip = () => skipTurnCreates(normalized)
+    const plan = () =>
+      planTurnCreates({
+        // @ts-expect-error nor may it reach the planner
+        block: normalized,
+        entities: world(),
+        branchId: BRANCH,
+        source: 'per_turn_classifier',
+        embed: noEmbed,
+        now: () => 1000,
+        newId: (prefix) => prefix,
+        log: logger,
+      })
+    expect([skip, plan].map((call) => typeof call)).toEqual(['function', 'function'])
   })
 })

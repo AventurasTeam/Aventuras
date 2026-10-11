@@ -64,12 +64,21 @@ export type ParsedStateBlock = {
   newItems?: NewItemEmission[]
 }
 
+/** Creates kept only with a bare, unique `new:` handle and a name. Minted only by `normalizeCreates`. */
+export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'NormalizedStateBlock' }
+
+/**
+ * A normalized block whose placeholders are entity ids and whose refs name only ids or declared
+ * handles. Minted only by `substitutePiggybackIds`.
+ */
+export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
+
 // `'state'` is the block-level failure: no block in a reply that owed one, an empty block, or a
 // cut-off one that declares a create.
 export type ParseFieldFailure = { field: keyof ParsedStateBlock | 'state'; detail: string }
 
 export type ParseStateBlockResult = {
-  block: ParsedStateBlock
+  block: NormalizedStateBlock
   failures: ParseFieldFailure[]
   blockFound: boolean
   /** Creates dropped as malformed, or opened and never closed; 0 when the block was not found. */

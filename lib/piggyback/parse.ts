@@ -19,6 +19,7 @@ import type {
   ItemTransfer,
   NewItemEmission,
   NewLocationEmission,
+  NormalizedStateBlock,
   SuggestionRef,
   ParseFieldFailure,
   ParsedStateBlock,
@@ -310,11 +311,12 @@ type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
  * the fallback.
  */
 export function normalizeCreates(block: CreateBlockInput): {
-  block: ParsedStateBlock
+  block: NormalizedStateBlock
   malformed: number
 } {
   const { newLocations, newItems, ...rest } = block
-  if (newLocations === undefined && newItems === undefined) return { block: rest, malformed: 0 }
+  if (newLocations === undefined && newItems === undefined)
+    return { block: rest as NormalizedStateBlock, malformed: 0 }
 
   const declared = new Set<string>()
   let malformed = 0
@@ -347,14 +349,12 @@ export function normalizeCreates(block: CreateBlockInput): {
       ? [{ handle, name, description: create.description?.trim() ?? '' }]
       : []
   })
-  return {
-    block: {
-      ...rest,
-      ...(locations.length > 0 ? { newLocations: locations } : {}),
-      ...(items.length > 0 ? { newItems: items } : {}),
-    },
-    malformed,
+  const normalized = {
+    ...rest,
+    ...(locations.length > 0 ? { newLocations: locations } : {}),
+    ...(items.length > 0 ? { newItems: items } : {}),
   }
+  return { block: normalized as NormalizedStateBlock, malformed }
 }
 
 function stateClosed(raw: string): boolean {
@@ -374,7 +374,12 @@ function emptyBlockDetail(stateSegment: string, malformedCreates: number): strin
 export function parseStateBlock(raw: string): ParseStateBlockResult {
   const stateSegment = extractSegment(raw, STATE_ROOT_TAG, STATE_ROOT_TAG)
   if (stateSegment === undefined)
-    return { block: {}, failures: [], blockFound: false, malformedCreates: 0 }
+    return {
+      block: normalizeCreates({}).block,
+      failures: [],
+      blockFound: false,
+      malformedCreates: 0,
+    }
 
   const block: ParsedStateBlock = {}
   const failures: ParseFieldFailure[] = []

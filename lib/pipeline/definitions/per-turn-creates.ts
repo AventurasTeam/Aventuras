@@ -17,6 +17,7 @@ import {
   type ParsedStateBlock,
   type PlannedStateBlock,
   type PlannedTurn,
+  type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import {
   checkParentChain,
@@ -295,7 +296,7 @@ async function planItems(args: {
 }
 
 function rewriteHandles(
-  block: ParsedStateBlock,
+  block: SubstitutedStateBlock,
   ids: ReadonlyMap<string, string>,
   itemIds: ReadonlyMap<string, string>,
 ): PlannedStateBlock {
@@ -362,11 +363,10 @@ function itemReport(emission: NewItemEmission, id: string | undefined): NewItemR
 
 /**
  * piggyback.md → New locations and items: keeps, nests, matches and writes the block's creates,
- * and resolves every handle the block's other fields name. Expects a block whose ids are already
- * substituted and whose creates passed `normalizeCreates`.
+ * and resolves every handle the block's other fields name.
  */
 export async function planTurnCreates(input: {
-  block: ParsedStateBlock
+  block: SubstitutedStateBlock
   /** The branch's entities (entitiesStore, whole branch). */
   entities: readonly Entity[]
   branchId: string
@@ -431,7 +431,7 @@ export async function planTurnCreates(input: {
  * A failed fold: nothing is created; every create reports `dropped`, every declared handle is
  * dropped where it stands.
  */
-export function skipTurnCreates(block: ParsedStateBlock): TurnCreatePlan {
+export function skipTurnCreates(block: SubstitutedStateBlock): TurnCreatePlan {
   const none = new Map<string, string>()
   return {
     block: rewriteHandles(block, none, none),
