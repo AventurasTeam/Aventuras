@@ -158,3 +158,10 @@ slice-planning gate forces its resolution before that slice is planned.
   top-level tags parses clean and keeps the old location, and only a
   cut inside a create tag fails now. Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
+
+- **The narrative person never reaches a prompt.**
+  `definition.narration` (first, second or third person) is in the
+  generation context, but no bundled template renders it, the per-turn
+  narrative and the wizard opening included, so the narrator is never
+  told which person to write in. Raised 2026-10-11 by the system and
+  user prompt halves design.

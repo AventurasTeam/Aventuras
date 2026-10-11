@@ -11,9 +11,12 @@ declaration values.
 
 ## What the classifier reads
 
-The prompt carries the branch's world as lists the classifier
-addresses by placeholder id
-([ID handling](#id-handling-in-classifier-output)):
+The prompt opens with its system half
+([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)):
+the role line and the extraction rules, which name the lists they
+refer to rather than pointing above. Its user half carries the
+branch's world as lists the classifier addresses by placeholder id
+([ID handling](#id-handling-in-classifier-output)), then the turns:
 
 - **Known entities** — every entity on the branch, of any kind and
   status, with its description and keywords. The classifier sees the
