@@ -67,19 +67,15 @@ const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it onl
 const createText = () =>
   z.preprocess((value) => (typeof value === 'string' ? value : ''), z.string())
 
-// Likewise a create that isn't an object reads as an empty one, and a list that isn't one as none.
+const isRecord = (value: unknown): value is object =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+// A create that isn't an object reads as an empty one, dropped and counted the same way; a lone
+// create reads as a list of one, and any other list that isn't one as none.
 const createList = <T extends z.ZodType>(create: T) =>
   z.preprocess(
-    (value) => (Array.isArray(value) ? value : undefined),
-    z
-      .array(
-        z.preprocess(
-          (value) =>
-            typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {},
-          create,
-        ),
-      )
-      .optional(),
+    (value) => (Array.isArray(value) ? value : isRecord(value) ? [value] : undefined),
+    z.array(z.preprocess((value) => (isRecord(value) ? value : {}), create)).optional(),
   )
 
 export const fallbackClassifierSchema = z.object({

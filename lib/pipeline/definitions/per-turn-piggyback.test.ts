@@ -2758,8 +2758,8 @@ describe('per-turn-piggyback', () => {
       ['newItems', null],
       ['newLocations', 'none'],
       ['newItems', 0],
-      ['newItems', { handle: 'new:key', name: 'rusted key' }],
     ] as const)('reads a %s of %j as none, applying the rest', async (field, list) => {
+      const warnSpy = vi.spyOn(logger, 'warn')
       seedFallbackTurn()
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
@@ -2769,7 +2769,10 @@ describe('per-turn-piggyback', () => {
           worldTimeDelta: 30,
           summary: 'Aria waited at the tide line.',
         }),
+        { log: logger },
       )
+      // None, not a create dropped as malformed.
+      expect(warnSpy).not.toHaveBeenCalledWith('classifier.create_malformed', expect.anything())
       expect(createdEntries(events)).toEqual([])
       const patch = metadataPatch(events)
       expect(patch).toMatchObject({
@@ -2779,6 +2782,39 @@ describe('per-turn-piggyback', () => {
         summary: 'Aria waited at the tide line.',
       })
       expect(patch.stateReport).not.toHaveProperty(field)
+    })
+
+    // A create sent bare rather than in a list goes through the per-create rules all the same.
+    it('reads a lone create object as a list of one, keeping it when valid', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: { handle: null, name: 'Gull Isle' },
+          worldTimeDelta: 30,
+          newItems: { handle: 'new:key', name: 'rusted key', description: 'an iron key' },
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+        }),
+        { log: logger },
+      )
+      expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+        entryId: 'entry-2',
+        count: 1,
+        layer: 'per_turn_classifier',
+      })
+      const [key, ...others] = createdEntries(events)
+      expect(key).toMatchObject({ kind: 'item', name: 'rusted key', description: 'an iron key' })
+      expect(others).toEqual([])
+      expect(metadataPatch(events).stateReport?.newItems).toEqual([
+        {
+          handle: 'new:key',
+          name: 'rusted key',
+          description: 'an iron key',
+          outcome: 'created',
+          id: key?.id,
+        },
+      ])
     })
 
     it('drops and counts a create that is not an object, creating the rest', async () => {
