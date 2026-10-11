@@ -82,6 +82,26 @@ for the placement rule.
   work, since the shipped prompts have to be good, once the halves land.
   Raised 2026-10-11.
 
+- **Revisit leaving places off the `# Places` map.** The map leaves
+  out retired places and `injection_mode = 'disabled'` ones (unless
+  current), and hangs a left-out place's children under its nearest
+  listed ancestor (`lib/world/location-map.ts`,
+  [`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)).
+  The per-turn writer compares a re-created place with the siblings
+  under its real `parent_location_id` (`planLocations`,
+  `matchNewLocation`), so a place whose parent is hidden, re-created by
+  exact name under the parent the map shows, is an unflagged duplicate
+  ([`→ Matching before creating`](./memory/piggyback.md#matching-before-creating)).
+  Retired parents cause it as well as disabled ones, and both leave
+  active children behind: retiring a place, by the periodic classifier
+  or a World Save, changes only its own status, and a mode change only
+  its own column, so neither moves nor retires its children. Candidate
+  directions, none chosen: always list disabled places and keep only
+  retired ones off; show a hidden parent as a bare name line; match a
+  re-created place against the parent the map shows. Raised 2026-10-11
+  by the locations-and-items-from-prose slice review, reopened by the
+  developer from its dismissals.
+
 ## UX
 
 - **Per-turn token usage breakdown.** Every turn records the tokens
