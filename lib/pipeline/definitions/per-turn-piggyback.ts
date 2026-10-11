@@ -74,7 +74,7 @@ export const fallbackClassifierSchema = z.object({
       z.object({
         handle: z.string().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
         name: z.string(),
-        description: z.string().describe('One short sentence describing the place.'),
+        description: z.string().optional().describe('One short sentence describing the place.'),
         parent: z
           .string()
           .optional()
@@ -112,7 +112,7 @@ export const fallbackClassifierSchema = z.object({
       z.object({
         handle: z.string().describe(NEW_ITEM_HANDLE_DESCRIPTION),
         name: z.string(),
-        description: z.string().describe('One short sentence describing the item.'),
+        description: z.string().optional().describe('One short sentence describing the item.'),
       }),
     )
     .optional()

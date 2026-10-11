@@ -899,6 +899,18 @@ describe('normalizeCreates', () => {
     })
   })
 
+  it('reads a create with no description as an empty one', () => {
+    const { block, malformed } = normalizeCreates({
+      newLocations: [{ handle: 'new:a', name: 'A' }],
+      newItems: [{ handle: 'new:k', name: 'key' }],
+    })
+    expect(malformed).toBe(0)
+    expect(block).toEqual({
+      newLocations: [{ handle: 'new:a', name: 'A', description: '' }],
+      newItems: [{ handle: 'new:k', name: 'key', description: '' }],
+    })
+  })
+
   it('unwraps brackets on a handle before judging it', () => {
     const { block, malformed } = normalizeCreates({
       newLocations: [

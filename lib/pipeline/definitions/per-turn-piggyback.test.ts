@@ -2615,6 +2615,47 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // A create the model gave no description is still a create, as on the tagged path: it must
+    // not fail the call and drop the turn's other fields.
+    it('creates a row with no description and still applies the rest of the reply', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [{ handle: 'new:docks', name: 'Smuggler Docks', parent: 'l1' }],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: 'rusted key' }],
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+          summary: 'Aria reached the docks.',
+        }),
+      )
+      const [docks, key] = createdEntries(events)
+      if (!docks || !key) throw new Error('expected a location create and an item create')
+      expect(docks).toMatchObject({ name: 'Smuggler Docks', description: null })
+      expect(key).toMatchObject({ name: 'rusted key', description: null })
+      const patch = metadataPatch(events)
+      expect(patch).toMatchObject({
+        sceneEntities: [HERO],
+        currentLocationId: docks.id,
+        worldTime: 130,
+        summary: 'Aria reached the docks.',
+      })
+      expect(patch.stateReport?.newLocations).toEqual([
+        {
+          handle: 'new:docks',
+          name: 'Smuggler Docks',
+          description: '',
+          parent: TOWN,
+          outcome: 'created',
+          id: docks.id,
+        },
+      ])
+      expect(patch.stateReport?.newItems).toEqual([
+        { handle: 'new:key', name: 'rusted key', description: '', outcome: 'created', id: key.id },
+      ])
+    })
+
     it('does not warn when every create is well formed', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
       seedFallbackTurn()

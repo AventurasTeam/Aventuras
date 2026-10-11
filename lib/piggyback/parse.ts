@@ -293,17 +293,23 @@ function bareHandle(handle: string): string {
   return unwrapBracket(handle.trim()).trim()
 }
 
+/** A block whose creates may omit `description`, as the fallback's structured reply can. */
+export type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
+  newLocations?: (Omit<NewLocationEmission, 'description'> & { description?: string })[]
+  newItems?: (Omit<NewItemEmission, 'description'> & { description?: string })[]
+}
+
 /**
  * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
  * declared (locations before items); unwraps a bracketed handle, trims what it keeps, and drops a
- * blank parent. Never a field failure: one bad create must not hand the whole turn to the fallback.
+ * blank parent; a missing description reads as ''. Never a field failure: one bad create must not hand the whole turn to the fallback.
  */
-export function normalizeCreates(block: ParsedStateBlock): {
+export function normalizeCreates(block: CreateBlockInput): {
   block: ParsedStateBlock
   malformed: number
 } {
   const { newLocations, newItems, ...rest } = block
-  if (newLocations === undefined && newItems === undefined) return { block, malformed: 0 }
+  if (newLocations === undefined && newItems === undefined) return { block: rest, malformed: 0 }
 
   const declared = new Set<string>()
   let malformed = 0
@@ -324,7 +330,7 @@ export function normalizeCreates(block: ParsedStateBlock): {
       {
         handle,
         name,
-        description: create.description.trim(),
+        description: create.description?.trim() ?? '',
         ...(parent !== '' ? { parent } : {}),
       },
     ]
@@ -332,7 +338,9 @@ export function normalizeCreates(block: ParsedStateBlock): {
   const items = (newItems ?? []).flatMap((create): NewItemEmission[] => {
     const handle = bareHandle(create.handle)
     const name = create.name.trim()
-    return accepts(handle, name) ? [{ handle, name, description: create.description.trim() }] : []
+    return accepts(handle, name)
+      ? [{ handle, name, description: create.description?.trim() ?? '' }]
+      : []
   })
   return {
     block: {
