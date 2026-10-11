@@ -19,12 +19,6 @@ const sceneEntity = {
 }
 
 const context = {
-  definition: {
-    mode: 'adventure',
-    genre: { promptBody: '' },
-    tone: { promptBody: '' },
-    setting: '',
-  },
   entities: [sceneEntity],
   sceneEntities: ['char_1'],
   entries: [{ content: 'The gate groaned open.' }],
@@ -62,7 +56,6 @@ function render(source: string, extra: Record<string, unknown> = {}): string {
       // Real source, not a stub: the negative case below turns on this macro
       // being the ONLY route a staged entity has into the prompt.
       [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
-      [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
       [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
       // suggestion-refresh includes this unconditionally (its whole purpose is
       // emitting chips), so an absent stub fails the lookup rather than
