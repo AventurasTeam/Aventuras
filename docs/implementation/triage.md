@@ -111,7 +111,11 @@ slice-planning gate forces its resolution before that slice is planned.
   places
   ([followup](../followups.md#data-model)). The same state already
   renders two ways: Overview's "Part of" drops it silently, the entity
-  picker shows "Missing entity". Raised 2026-10-11 in the
+  picker shows "Missing entity"; and the World resolve dialog's
+  `same-parent` line reads "Both are top-level places." for a flagged
+  row whose parent names no row (`sharedParentName` in
+  `components/world/use-collision-resolve.ts` returns undefined for
+  root and missing alike). Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
 - **The classifier's partner tiebreak counts a split `same-parent`
