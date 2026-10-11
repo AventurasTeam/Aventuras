@@ -719,6 +719,13 @@ describe('creation tags', () => {
     expect(result.malformedCreates).toBe(1)
   })
 
+  it('fails a cut-off block with creates even when prose before it quotes </state>', () => {
+    const result = parseStateBlock(
+      'The sign read </state> in chalk.\n<state><new_location handle="new:a" name="A">a pier</new_location><current_location>new:',
+    )
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+  })
+
   it('leaves a cut-off block that declares no creates as a clean parse', () => {
     const result = parseStateBlock('<state><scene_entities>c1</scene_entities><current_location>l')
     expect(result.failures).toEqual([])
@@ -742,6 +749,7 @@ describe('creation tags', () => {
     ['spaces around =', 'name="Anchor" parent = "l1"'],
     ['a bare word', 'name="Anchor" hidden'],
     ['a stray slash', 'name="Anchor" /x'],
+    ['pairs run together', 'name="Anchor"parent="l1"'],
   ])('drops and counts a create with %s in its attributes', (_label, attrs) => {
     const result = parseStateBlock(`<state>
   <scene_entities>c1</scene_entities>
@@ -856,6 +864,19 @@ describe('creation tags', () => {
     expect(result.failures).toEqual([])
     expect(result.malformedCreates).toBe(2)
     expect(result.block).toEqual({ sceneEntities: ['c1'], currentLocation: 'new:a' })
+  })
+
+  it('keeps a create with an unclosed name quote from swallowing the whole create after it', () => {
+    const result = parseStateBlock(`<state>
+<scene_entities>c1</scene_entities>
+<new_location handle="new:a" name="Saltmere
+<new_location handle="new:b" name="the Docks">a pier</new_location>
+</state>`)
+    expect(result.failures).toEqual([])
+    expect(result.malformedCreates).toBe(1)
+    expect(result.block.newLocations).toEqual([
+      { handle: 'new:b', name: 'the Docks', description: 'a pier' },
+    ])
   })
 
   it('does not count a longer tag that starts like a create as a cut-off create', () => {
