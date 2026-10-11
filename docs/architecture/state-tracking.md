@@ -69,8 +69,10 @@ no longer exists (an automatic change in the range created it) is reported as un
 dropped silently.
 
 Revert on delete runs that plan over the live state and executes it in one transaction, so it lands
-whole or not at all. When it would undo the reader's or Tidy's changes, the delete confirmation
-lists them, each group under its own heading, and the reader keeps them or not. Every revert the
+whole or not at all. The delete is confirmed in a modal, like a checkpoint or a branch. When it
+would undo the reader's or Tidy's changes, it lists each group under its own heading with its own
+choice to keep them, ticked by default. Its description names the range a delete removes, and a
+switch deletes only that entry without a rollback, as with the feature off. Every revert the
 reader did not answer — dismissing an error entry, regenerating a narration, a retry restore —
 keeps them.
 
@@ -89,18 +91,18 @@ break to every branch whose run this device cannot vouch for since its last reco
 ## Checkpoints at past entries
 
 The state at entry P is the state just before the next entry was created. `resolveRun` finds it from
-the nearest full state after P on the branch — an automatic or closing snapshot, an existing
-checkpoint, or the live state — and the records between undone over it. A change may have gone
-unrecorded wherever tracking could have been off: before a non-continuous header back to the last
-thing written while tracking was on (any record or snapshot proves that), after a break, and after
-the last record if tracking is off now or was turned on again since. A rebuild is refused when such
-a stretch falls between P and its anchor, when a narration in between has no header, or when the
-history in between is classifier-only. It is also refused when P itself has no header, or only an
-old classifier-only one: its own state was never fully recorded. What the entries show is checked
-before what is inferred from times, and old records prove nothing about tracking: they were written
-whatever the reader did by hand, so a story played before full recording began reports its old
-records, not a pause. Neither do snapshots on entries without a full header: the old build took
-them too.
+the nearest full state after P on the branch — an automatic or closing snapshot, a checkpoint
+anywhere on the branch line (the fork's included), or the live state — and the records between
+undone over it. A change may have gone unrecorded wherever tracking could have been off: before a
+non-continuous header back to the last thing written while tracking was on (any record or snapshot
+proves that), after a break, and after the last record if tracking is off now or was turned on
+again since. A rebuild is refused when such a stretch falls between P and its anchor, when a
+narration in between has no header, or when the history in between is classifier-only. It is also
+refused when P itself has no header, or only an old classifier-only one: its own state was never
+fully recorded. What the entries show is checked before what is inferred from times, and old records
+prove nothing about tracking: they were written whatever the reader did by hand, so a story played
+before full recording began reports its old records, not a pause. Neither do snapshots on entries
+without a full header: the old build took them too.
 
 A saved state can predate changes that belong to it. Lore management and Tidy run in the background
 and can finish after the snapshot of an entry they attach to at or before it, and the reader can

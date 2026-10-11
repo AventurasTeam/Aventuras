@@ -1276,10 +1276,13 @@ class StoryStore {
   }
 
   /**
-   * Undoes the world state recorded for entries at or after `position` on this branch. With
-   * `keepManual`, the reader's changes and Tidy's are applied again.
+   * Undoes the world state recorded for entries at or after `position` on this branch, applying
+   * the kept origins' changes again.
    */
-  private async rollbackFrom(position: number, keepManual: boolean): Promise<RollbackSummary> {
+  private async rollbackFrom(
+    position: number,
+    keep: { manual: boolean; tidy: boolean },
+  ): Promise<RollbackSummary> {
     if (!this.currentStory) throw new Error('No story loaded')
     return rollbackService.rollbackFromPosition({
       storyId: this.currentStory.id,
@@ -1288,7 +1291,7 @@ class StoryStore {
       entries: this.entries,
       state: this.trackedState(),
       records: await this.lineRecords(),
-      keep: { manual: keepManual, tidy: keepManual },
+      keep,
     })
   }
 
@@ -1321,15 +1324,18 @@ class StoryStore {
   async deleteEntry(
     entryId: string,
     holder?: GenerationLease,
-    opts?: { keepManual?: boolean },
+    opts?: { keep?: { manual: boolean; tidy: boolean }; rollback?: boolean },
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existingEntry = this.assertEntryDeletable(entryId, holder)
 
-    // Phase 2: Rollback on delete — cascade delete from this position with world state undo
+    // Phase 2: Rollback on delete — cascade delete from this position with world state undo.
+    // `rollback: false` deletes only this entry, as with the feature off.
     const rollbackEnabled =
-      settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
+      settings.experimentalFeatures.stateTracking &&
+      settings.experimentalFeatures.rollbackOnDelete &&
+      (opts?.rollback ?? true)
 
     if (rollbackEnabled) {
       log('Rollback-on-delete: cascading from position', existingEntry.position)
@@ -1337,10 +1343,10 @@ class StoryStore {
       this.assertNoBranchForkAtOrAfter(existingEntry.position)
 
       // Run rollback to undo world state changes for this entry and all after it
-      // Manual changes are undone only when the reader chose so.
+      // The reader's and Tidy's changes are undone only when the reader chose so.
       const rollbackSummary = await this.rollbackFrom(
         existingEntry.position,
-        opts?.keepManual ?? true,
+        opts?.keep ?? KEEP_ALL,
       )
 
       log('Rollback summary:', rollbackSummary)
@@ -1462,7 +1468,7 @@ class StoryStore {
 
     try {
       // The reader asked to redo the narration, not to lose their own edits since.
-      const summary = await this.rollbackFrom(entry.position, true)
+      const summary = await this.rollbackFrom(entry.position, KEEP_ALL)
       log('Regenerate rollback summary:', summary)
       entitiesUndone = summary.entriesWithRecords > 0
       timeUndone = summary.restoredTimeTracker
@@ -1957,7 +1963,7 @@ class StoryStore {
 
     if (rollbackEnabled) {
       try {
-        const rollbackSummary = await this.rollbackFrom(position, true)
+        const rollbackSummary = await this.rollbackFrom(position, KEEP_ALL)
         log('Rollback before deleteEntriesFromPosition:', rollbackSummary)
       } catch (error) {
         console.error('[StoryStore] Rollback failed, proceeding with entry deletion:', error)
@@ -4374,6 +4380,7 @@ class StoryStore {
     ]
     const positions = new Map(this.entries.map((e) => [e.id, e.position]))
     const snapshots = await database.getWorldStateSnapshotTimes(this.currentStory.id, branchId)
+    const lineBranches = new Set(this.lineBranchIds())
     const last = this.entries[this.entries.length - 1]
     const candidates: AnchorCandidate[] = [
       ...snapshots.map((s) => ({
@@ -4382,9 +4389,14 @@ class StoryStore {
         position: s.entryPosition,
         takenAt: s.createdAt,
       })),
-      // A checkpoint made after its entry had a successor was itself rebuilt; it cannot vouch.
+      // Any checkpoint on the branch line counts, the fork's included: an ancestor's checkpoint
+      // at an entry this branch inherits holds the state this branch had there. One made after
+      // its entry had a successor was itself rebuilt, so it cannot vouch.
       ...this.checkpoints
-        .filter((cp) => cp.anchored && cp.branchId === branchId && positions.has(cp.lastEntryId))
+        .filter(
+          (cp) =>
+            cp.anchored && lineBranches.has(cp.branchId ?? null) && positions.has(cp.lastEntryId),
+        )
         .filter((cp) => {
           const at = positions.get(cp.lastEntryId)!
           const next = this.entries.find((e) => e.position > at)

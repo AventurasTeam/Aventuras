@@ -97,6 +97,7 @@
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
@@ -350,14 +351,36 @@
     !!revertPreview && revertPreview.manual.length + revertPreview.tidy.length > 0,
   )
 
+  let deletingEntry = $state(false)
+  // Kept unless the reader unticks them: undoing their own work is the choice to make, not avoid.
+  let keepManualOnDelete = $state(true)
+  let keepTidyOnDelete = $state(true)
+  let deleteOnlyThisEntry = $state(false)
+  const revertsOnDelete = $derived(
+    settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete,
+  )
+  const deleteRollsBack = $derived(revertsOnDelete && !deleteOnlyThisEntry)
+  const lastEntryNumber = $derived(
+    story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
+  )
+
   async function startDelete() {
     isDeleting = true
     revertPreview = null
+    keepManualOnDelete = true
+    keepTidyOnDelete = true
+    deleteOnlyThisEntry = false
     try {
       revertPreview = await story.previewRevert(entry.id)
     } catch (error) {
       console.error('[StoryEntry] Could not preview the revert:', error)
+      revertPreview = { manual: [], tidy: [], unkeepable: [] }
     }
+  }
+
+  function cancelDelete() {
+    if (deletingEntry) return
+    isDeleting = false
   }
 
   // Embedded images state
@@ -414,7 +437,7 @@
   // The activity report is rendered only while the entry shows its text: editing, deleting,
   // branching and checkpointing take the content area, and the report gives way as the text does.
   const showReport = $derived(
-    showActivityRecord && !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint,
+    showActivityRecord && !isEditing && !isBranching && !isCreatingCheckpoint,
   )
 
   let adjustmentsOpen = $state(false)
@@ -1479,13 +1502,19 @@
     editContent = ''
   }
 
-  async function confirmDelete(keepManual = true) {
+  async function confirmDelete() {
+    if (deletingEntry) return
+    deletingEntry = true
     try {
-      await story.deleteEntry(entry.id, undefined, { keepManual })
-      isDeleting = false
+      await story.deleteEntry(entry.id, undefined, {
+        keep: { manual: keepManualOnDelete, tidy: keepTidyOnDelete },
+        rollback: !deleteOnlyThisEntry,
+      })
     } catch (error) {
       console.error('[StoryEntry] Failed to delete entry:', error)
       alert(error instanceof Error ? error.message : 'Failed to delete entry')
+    } finally {
+      deletingEntry = false
       isDeleting = false
     }
   }
@@ -1622,7 +1651,7 @@
     {/if}
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
-    {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
+    {#if !isEditing && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
       <!-- -ml-2 cancels the row's gap, so the leftmost icon keeps the same rhythm as its neighbours. -->
       <div class="-ml-2 flex shrink-0 items-center gap-0.5">
         {#snippet copyIcon()}
@@ -1959,7 +1988,7 @@
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       </div>
-    {:else if !isEditing && !isDeleting && entry.type === 'system' && !isErrorEntry}
+    {:else if !isEditing && entry.type === 'system' && !isErrorEntry}
       <!-- Any other system entry: regenerate (as the last entry, answering the action before it),
            edit and delete. -->
       <div class="-ml-2 flex shrink-0 items-center gap-0.5">
@@ -2067,65 +2096,6 @@
             <RotateCcw class="h-3 w-3" />
           </p>
         {/if}
-      </div>
-    {:else if isDeleting}
-      <div class="space-y-2">
-        {#if revertPreview && revertUndoesKept}
-          <p class="text-muted-foreground text-sm">
-            Delete this entry? The revert would also undo these changes.
-          </p>
-          {#if revertPreview.manual.length > 0}
-            <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-            {@render changeList(revertPreview.manual, revertPreview.unkeepable)}
-          {/if}
-          {#if revertPreview.tidy.length > 0}
-            <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-            {@render changeList(revertPreview.tidy, revertPreview.unkeepable)}
-          {/if}
-        {:else}
-          <p class="text-muted-foreground text-sm">Delete this entry?</p>
-        {/if}
-        <div class="flex flex-wrap gap-2">
-          {#if revertUndoesKept}
-            <Button
-              variant="destructive"
-              size="sm"
-              onclick={() => confirmDelete(true)}
-              class="h-9 px-3"
-            >
-              <Trash2 class="mr-1.5 h-4 w-4" />
-              Delete, keep them
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onclick={() => confirmDelete(false)}
-              class="h-9 px-3"
-            >
-              <Trash2 class="mr-1.5 h-4 w-4" />
-              Delete, undo them too
-            </Button>
-          {:else}
-            <Button
-              variant="destructive"
-              size="sm"
-              onclick={() => confirmDelete()}
-              class="h-9 px-3"
-            >
-              <Trash2 class="mr-1.5 h-4 w-4" />
-              Delete
-            </Button>
-          {/if}
-          <Button
-            variant="secondary"
-            size="sm"
-            onclick={() => (isDeleting = false)}
-            class="h-9 px-3"
-          >
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-        </div>
       </div>
     {:else}
       <!-- Reasoning content panel (between header and story text) -->
@@ -2322,16 +2292,9 @@
 {/snippet}
 
 <!-- View/Edit Image Modal -->
-<!-- `capped` scrolls a long list on its own, for a container that does not scroll itself. -->
-{#snippet changeList(
-  changes: WorldStateChangeRecord[],
-  unkeepable: WorldStateChangeRecord[],
-  capped = true,
-)}
+{#snippet changeList(changes: WorldStateChangeRecord[], unkeepable: WorldStateChangeRecord[])}
   {@const lost = new Set(unkeepable.map((r) => r.id))}
-  <ul
-    class={cn('text-muted-foreground list-disc pl-5 text-xs', capped && 'max-h-40 overflow-y-auto')}
-  >
+  <ul class="text-muted-foreground list-disc pl-5 text-xs">
     {#each changes as change (change.id)}
       <li>
         {describeChange(change, (type, id) => story.trackedName(type, id))}
@@ -2342,6 +2305,103 @@
     {/each}
   </ul>
 {/snippet}
+
+<!-- Modal for the same reason as the checkpoint form: nothing may change while the revert it
+     describes is being decided and run. -->
+<ResponsiveModal.Root
+  bind:open={
+    () => isDeleting,
+    (open) => {
+      if (!open) cancelDelete()
+    }
+  }
+  dismissible={!deletingEntry}
+>
+  <ResponsiveModal.Content
+    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
+    interactOutsideBehavior="ignore"
+    escapeKeydownBehavior={deletingEntry ? 'ignore' : 'close'}
+  >
+    <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
+      <ResponsiveModal.Title>Delete entry {entryNumber(entry)}</ResponsiveModal.Title>
+      <ResponsiveModal.Description>
+        {#if revertsOnDelete}
+          Revert on Delete is on: deleting an entry also deletes every entry after it and undoes the
+          world state changes recorded for them.
+        {:else}
+          Revert on Delete is off.
+        {/if}
+      </ResponsiveModal.Description>
+      <!-- Below the description, so what it overrules is read before it is switched. -->
+      {#if revertsOnDelete}
+        <label class="mt-2 flex items-center gap-2 text-sm">
+          <Switch bind:checked={deleteOnlyThisEntry} disabled={deletingEntry} />
+          Delete only this entry, without a rollback
+        </label>
+      {/if}
+    </ResponsiveModal.Header>
+    <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
+      <p class="text-muted-foreground text-sm">
+        {#if !deleteRollsBack}
+          Only entry {entryNumber(entry)} is deleted. The world state stays as it is.
+        {:else if entryNumber(entry) === lastEntryNumber}
+          Entry {entryNumber(entry)} is deleted.
+        {:else}
+          Entries {entryNumber(entry)} to {lastEntryNumber} are deleted.
+        {/if}
+      </p>
+      {#if deleteRollsBack && revertPreview === null}
+        <p class="text-muted-foreground text-xs italic">
+          Checking the recorded world state changes…
+        </p>
+      {:else if deleteRollsBack && revertPreview && revertUndoesKept}
+        <p class="text-muted-foreground text-sm">The revert would also undo these changes:</p>
+        {#if revertPreview.manual.length > 0}
+          <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
+          {@render changeList(revertPreview.manual, revertPreview.unkeepable)}
+          <label class="flex items-center gap-2 text-xs">
+            <Checkbox bind:checked={keepManualOnDelete} disabled={deletingEntry} />
+            Keep them
+          </label>
+        {/if}
+        {#if revertPreview.tidy.length > 0}
+          <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
+          {@render changeList(revertPreview.tidy, revertPreview.unkeepable)}
+          <label class="flex items-center gap-2 text-xs">
+            <Checkbox bind:checked={keepTidyOnDelete} disabled={deletingEntry} />
+            Keep them
+          </label>
+        {/if}
+      {/if}
+    </div>
+    <ResponsiveModal.Footer class="border-t px-6 py-4">
+      <Button
+        variant="secondary"
+        size="sm"
+        onclick={cancelDelete}
+        disabled={deletingEntry}
+        class="h-9 px-3"
+      >
+        <X class="mr-1.5 h-4 w-4" />
+        Cancel
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        onclick={confirmDelete}
+        disabled={(deleteRollsBack && revertPreview === null) || deletingEntry}
+        class="h-9 px-3"
+      >
+        {#if deletingEntry}
+          <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+        {:else}
+          <Trash2 class="mr-1.5 h-4 w-4" />
+        {/if}
+        Delete
+      </Button>
+    </ResponsiveModal.Footer>
+  </ResponsiveModal.Content>
+</ResponsiveModal.Root>
 
 <CreateBranchModal bind:open={isBranching} checkpoint={entryCheckpoint ?? null} />
 
@@ -2549,7 +2609,7 @@
           <p class="text-muted-foreground text-xs">
             Some changes were made by a user after this entry:
           </p>
-          {@render changeList(pastCheckpoint.manual, pastCheckpoint.unkeepable, false)}
+          {@render changeList(pastCheckpoint.manual, pastCheckpoint.unkeepable)}
           <label class="flex items-center gap-2 text-xs">
             <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
             Include them in the checkpoint
@@ -2559,7 +2619,7 @@
           <p class="text-muted-foreground text-xs">
             Lore management you ran after this entry made these changes:
           </p>
-          {@render changeList(pastCheckpoint.tidy, pastCheckpoint.unkeepable, false)}
+          {@render changeList(pastCheckpoint.tidy, pastCheckpoint.unkeepable)}
           <label class="flex items-center gap-2 text-xs">
             <Checkbox bind:checked={keepTidyInCheckpoint} disabled={savingCheckpoint} />
             Include them in the checkpoint

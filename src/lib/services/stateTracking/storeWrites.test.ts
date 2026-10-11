@@ -96,6 +96,12 @@ describe('closing snapshots', () => {
 })
 
 describe('past checkpoints', () => {
+  it('counts checkpoints on the whole branch line, the fork checkpoint included', () => {
+    const body = bodyOf('rebuildPastState')
+    expect(body).toContain('new Set(this.lineBranchIds())')
+    expect(body).toContain('lineBranches.has(cp.branchId ?? null)')
+  })
+
   it.each(['rebuildPastState', 'anchorState', 'createCheckpointAt'])(
     '%s leaves the story and its world state untouched',
     (method) => {
