@@ -5,7 +5,7 @@ import type { EmbedDescriptions } from '@/lib/classifier'
 const NO_EMBEDDER: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
 
 // Injected so tests drive the similarity bands deterministically and so the embedder
-// composition (config and provider resolution) stays in the action layer.
+// composition (config and provider resolution) stays in lib/embedder-swap, wired at boot.
 let embedDescriptions: EmbedDescriptions = NO_EMBEDDER
 
 export function configureClassifierEmbedder(fn: EmbedDescriptions): void {

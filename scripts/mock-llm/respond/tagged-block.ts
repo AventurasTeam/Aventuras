@@ -20,8 +20,8 @@ export type NarrativeValue = {
   suggestions?: SuggestionRef[]
 }
 
-// Dropped, not escaped (ids/enums/keys never hold them; attributes aren't entity-decoded): `"`
-// ends a value early in parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
+// Dropped, not escaped (ids/enums/keys never hold them; only a create's name is entity-decoded):
+// `"` ends a value early in parseAttributes, `<`/`>` end the tag in the entry regexes' `[^>]*`.
 function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
 }
