@@ -1,6 +1,13 @@
+import type { TemplateSources } from '../types'
+
 // piggyback.md → Fallback classifier context: most of what the narrative call gets, minus
 // Setting / Genre / Tone and either output-format macro, plus the flat bracketed ID roster.
-export const PIGGYBACK_FALLBACK_CLASSIFIER = `Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+export const PIGGYBACK_FALLBACK_CLASSIFIER: TemplateSources = {
+  system: `{% if calendarVocabulary -%}
+# Calendar
+This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}). Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
+{%- endif %}`,
+  user: `Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 {%- assign referenceable = entities | active -%}
 {%- assign stagedEntities = entities | staged -%}
 {% for e in referenceable %}
@@ -53,11 +60,6 @@ Here: {% for i in looseItems %}[{{ i.id }}] {{ i.name }}{% unless forloop.last %
 {% endfor %}
 {% endif -%}
 {% include 'macro_memory_blocks' -%}
-{% if calendarVocabulary -%}
-# Calendar
-This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}). Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
-
-{% endif -%}
 {%- comment -%}
 lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs). Clamped because a
 negative offset slices from the END in Liquid — coinciding with the intended rows, not meaning them.
@@ -85,4 +87,5 @@ Create a place only when the scene settles somewhere with its own identity the s
 Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
 {% if suggestionsFire -%}
 {% include 'macro_suggestion_emission_json' %}
-{%- endif -%}`
+{%- endif -%}`,
+}

@@ -35,8 +35,7 @@ export const bundledPack: Pack = {
     [TEMPLATE_IDS.perTurnNarrative]: { group: 'generationContext', ...PER_TURN_NARRATIVE },
     [TEMPLATE_IDS.piggybackFallbackClassifier]: {
       group: 'generationContext',
-      system: '',
-      user: PIGGYBACK_FALLBACK_CLASSIFIER,
+      ...PIGGYBACK_FALLBACK_CLASSIFIER,
     },
     [TEMPLATE_IDS.periodicClassifier]: {
       group: 'classifierContext',
