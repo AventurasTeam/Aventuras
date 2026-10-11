@@ -107,7 +107,7 @@ const SCHEMA_CLOSING = 'Output ONLY the JSON object, no other text or markdown.'
 const SIMPLE_JSON_CONTRACT = 'Respond strictly with valid JSON.'
 const SIMPLE_JSON_CLOSING = 'Output ONLY the JSON, no other text.'
 
-function appendToSystem(prompt: ModelPrompt, contract: string): ModelPrompt {
+function appendToLastSystem(prompt: ModelPrompt, contract: string): ModelPrompt {
   const lastSystemIdx = prompt.findLastIndex((msg) => msg.role === 'system')
   if (lastSystemIdx === -1) return [{ role: 'system', content: contract }, ...prompt]
   return prompt.map((msg, i) =>
@@ -170,7 +170,7 @@ export function promptSchemaMiddleware(): LanguageModelMiddleware {
 
       return {
         ...params,
-        prompt: appendToLastUser(appendToSystem(params.prompt, contract), closing),
+        prompt: appendToLastUser(appendToLastSystem(params.prompt, contract), closing),
         responseFormat: undefined,
       }
     },

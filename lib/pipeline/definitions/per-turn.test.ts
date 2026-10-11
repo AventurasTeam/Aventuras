@@ -1236,15 +1236,7 @@ async function runNarrativeWith(opts: {
   }
 }
 
-// architecture.md → System and user halves: the narrative call is exactly the pair.
 describe('narrative call prompt', () => {
-  it('hands the narrative call both rendered halves', async () => {
-    const { prompt, system } = await runNarrativeWith({ narrative: 'prose' })
-
-    expect(system).toMatch(/^# Setting\nA keep on a hill\.\n\n# Genre\n/)
-    expect(prompt).toContain('# Story so far')
-  })
-
   // architecture.md → System and user halves: the narrative call always asks; the
   // call layer honours it on anthropic providers only.
   it('asks the narrative call to mark its system prefix for caching', async () => {
@@ -2175,11 +2167,7 @@ describe('narrative fold — creates', () => {
 // and Tone, and a story's calendar always resolves, so all four lead the system half.
 describe('narrative fold — prompt halves', () => {
   it('sends the definition and calendar as the system half, and the scene and story as the user half', async () => {
-    await runNarrativeWith({ narrative: 'prose' })
-    const { system, user } = streamTextMock.mock.calls.at(-1)?.[1]?.prompt as {
-      system: string
-      user: string
-    }
+    const { system, prompt: user } = await runNarrativeWith({ narrative: 'prose' })
     expect(system).toMatch(
       /^# Setting\nA keep on a hill\.\n\n# Genre\nHigh fantasy\.\n\n# Tone\nDry humor\.\n\n# Calendar\nThis story tracks time in /,
     )

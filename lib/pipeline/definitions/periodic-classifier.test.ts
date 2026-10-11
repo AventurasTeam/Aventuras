@@ -368,18 +368,14 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
   })
 
-  // architecture.md → System and user halves: the call carries both rendered halves.
-  it('hands the classifier call both rendered halves', async () => {
+  // architecture.md → System and user halves: the periodic classifier carries no cache marker.
+  it('sends no cache marker: the call takes no sixth argument', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
 
     await drain(h.ctx)
 
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1]
-    expect(prompt.system).toMatch(
-      /^You are extracting structured world state from recent story prose\. /,
-    )
-    expect(prompt.user).toContain('turn 1')
+    expect(vi.mocked(generateStructured).mock.calls[0]![5]).toBeUndefined()
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {

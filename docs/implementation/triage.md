@@ -265,7 +265,7 @@ slice-planning gate forces its resolution before that slice is planned.
   2026-10-11 by the system and user halves PR's Task 9 review.
 
 - **`promptSchemaMiddleware` joins the contract onto the halves as
-  rendered.** In `lib/ai/prompt-schema.ts`, `appendToSystem` adds
+  rendered.** In `lib/ai/prompt-schema.ts`, `appendToLastSystem` adds
   `\n\n` and the contract to the system message untrimmed, as the system
   and user halves PR designed it. No bundled system half ends on a blank
   line (the suggestion refresh `rstrip`s its capture for exactly this),

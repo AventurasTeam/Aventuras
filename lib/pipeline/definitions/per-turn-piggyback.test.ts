@@ -1355,19 +1355,12 @@ describe('per-turn-piggyback', () => {
         expect(user).toContain('Half sunk.')
         expect(user).toContain('# Relevant lore')
         expect(user).toContain('An exiled line.')
+        expect(user).toContain('# This turn')
         // piggyback.md → Fallback classifier context: the calendar is the whole system half.
         expect(system).toMatch(
           /^# Calendar\nThis story tracks time in seconds .+ into a seconds delta using these units\.$/,
         )
         expect(user).not.toContain('# Calendar')
-      })
-
-      // architecture.md → System and user halves: the call carries both rendered halves.
-      it('hands the classifier call both rendered halves', async () => {
-        const prompt = await renderFallbackPrompt()
-
-        expect(prompt.system).toMatch(/^# Calendar\nThis story tracks time in /)
-        expect(prompt.user).toContain('# This turn')
       })
 
       // Unreachable in production (narrative always fills the tail with ai_reply first) —

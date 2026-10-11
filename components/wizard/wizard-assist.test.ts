@@ -376,6 +376,20 @@ describe('runGenreAssist', () => {
     expect(captured?.system).toBe('')
     expect(captured?.user).toContain('Suggest a genre for this story')
   })
+
+  // architecture.md → System and user halves: the wizard carries no cache marker.
+  it('sends no cache marker: the generate call takes no sixth argument', async () => {
+    let args: unknown[] = []
+    const generate: WizardAssistDeps['generate'] = (async (...received: unknown[]) => {
+      args = received
+      return { status: 'ok', value: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' } }
+    }) as WizardAssistDeps['generate']
+
+    await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+
+    expect(args).toHaveLength(5)
+    expect(args[5]).toBeUndefined()
+  })
 })
 
 describe('runToneAssist', () => {

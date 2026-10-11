@@ -97,7 +97,10 @@ function marksSystemPrefix(
 
 // getModel only ever returns provider instances, never the gateway-model-id
 // string arm of LanguageModel.
-function wrap(model: LanguageModel, middleware: LanguageModelMiddleware[]): LanguageModel {
+function withMiddleware(
+  model: LanguageModel,
+  middleware: LanguageModelMiddleware[],
+): LanguageModel {
   return wrapLanguageModel({
     model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
     middleware,
@@ -139,7 +142,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
   if (!resolved.ok) return resolved
   const stream = streamProviderCall({
     model: marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
-      ? wrap(resolved.model, [anthropicCacheMarkerMiddleware()])
+      ? withMiddleware(resolved.model, [anthropicCacheMarkerMiddleware()])
       : resolved.model,
     ...promptParams(opts.prompt),
     ...(opts.abortSignal !== undefined ? { abortSignal: opts.abortSignal } : {}),
@@ -203,7 +206,7 @@ export async function generateStructured<T>(
   // 'auto' takes the prompt-injection path: there is no provider capability
   // signal yet, so native responseFormat stays opt-in via 'force-on'. The cache
   // marker goes last, so the system block it marks carries the contract.
-  const model = wrap(resolved.model, [
+  const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
     ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
     ...(marksSystemPrefix(options?.cacheSystemPrefix, resolved.providerType)
