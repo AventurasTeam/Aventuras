@@ -311,9 +311,12 @@ function rewriteHandles(
     })
   }
   if (block.currentLocation !== undefined) {
-    const id = resolve(block.currentLocation, ids)
-    if (id === undefined) delete out.currentLocation
-    else out.currentLocation = id
+    const ref = block.currentLocation
+    const id = resolve(ref, ids)
+    // An item's handle stays for apply.ts to reject, as an item's id is: piggyback.md → Where a
+    // handle is used.
+    if (id !== undefined) out.currentLocation = id
+    else if (!(newItems ?? []).some((item) => item.handle === ref)) delete out.currentLocation
   }
   if (block.transfers !== undefined) {
     out.transfers = {
@@ -364,7 +367,7 @@ function itemReport(emission: NewItemEmission, id: string | undefined): NewItemR
 
 /**
  * piggyback.md → New locations and items: keeps, nests, matches and writes the block's creates,
- * and resolves every handle the block's other fields name.
+ * and resolves every handle the block's other fields name, bar an uncreated item's as the location.
  */
 export async function planTurnCreates(input: {
   block: SubstitutedStateBlock
@@ -430,7 +433,7 @@ export async function planTurnCreates(input: {
 
 /**
  * A failed fold: nothing is created; every create reports `dropped`, every declared handle is
- * dropped where it stands.
+ * dropped where it stands, bar an item's as the location.
  */
 export function skipTurnCreates(block: SubstitutedStateBlock): TurnCreatePlan {
   const none = new Map<string, string>()

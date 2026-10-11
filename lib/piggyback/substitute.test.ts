@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
 
 import { substitutePiggybackIds } from './substitute'
@@ -13,6 +14,17 @@ function mapWith(uuids: string[]): IdBiMap {
   for (const uuid of uuids) idMap.allocate(uuid)
   return idMap
 }
+
+// Every entity id the cases allocate, so the kind check reads them as stored rows.
+const ROWS: Pick<Entity, 'id' | 'kind'>[] = [
+  { id: 'char_00000000-0000-4000-8000-000000000001', kind: 'character' },
+  { id: 'char_00000000-0000-4000-8000-000000000002', kind: 'character' },
+  { id: 'item_00000000-0000-4000-8000-000000000003', kind: 'item' },
+  { id: 'item_00000000-0000-4000-8000-000000000004', kind: 'item' },
+  { id: 'loc_00000000-0000-4000-8000-000000000001', kind: 'location' },
+  { id: 'loc_00000000-0000-4000-8000-000000000003', kind: 'location' },
+]
+const FAIL = { entities: ROWS, wrongKind: 'fail' } as const
 
 describe('substitutePiggybackIds', () => {
   it('resolves placeholders back to real ids across every id-bearing field', () => {
@@ -34,6 +46,7 @@ describe('substitutePiggybackIds', () => {
         },
       }),
       idMap,
+      FAIL,
     )
 
     expect(result.failures).toEqual([])
@@ -69,6 +82,7 @@ describe('substitutePiggybackIds', () => {
     const result = substitutePiggybackIds(
       assumeNormalized({ worldTimeDelta: 30, summary: 'A quiet turn.' }),
       idMap,
+      FAIL,
     )
     expect(result.failures).toEqual([])
     expect(result.block).toEqual({ worldTimeDelta: 30, summary: 'A quiet turn.' })
@@ -76,7 +90,11 @@ describe('substitutePiggybackIds', () => {
 
   it('drops sceneEntities and records a failure when it contains an unresolvable but placeholder-shaped id', () => {
     const idMap = mapWith(['char_00000000-0000-4000-8000-000000000001'])
-    const result = substitutePiggybackIds(assumeNormalized({ sceneEntities: ['c1', 'c99'] }), idMap)
+    const result = substitutePiggybackIds(
+      assumeNormalized({ sceneEntities: ['c1', 'c99'] }),
+      idMap,
+      FAIL,
+    )
     expect(result.block.sceneEntities).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'sceneEntities', detail: expect.any(String) }])
   })
@@ -86,6 +104,7 @@ describe('substitutePiggybackIds', () => {
     const result = substitutePiggybackIds(
       assumeNormalized({ sceneEntities: ['c99'], currentLocation: 'l1' }),
       idMap,
+      FAIL,
     )
     expect(result.block.sceneEntities).toBeUndefined()
     expect(result.block.currentLocation).toBe('loc_00000000-0000-4000-8000-000000000001')
@@ -97,6 +116,7 @@ describe('substitutePiggybackIds', () => {
     const result = substitutePiggybackIds(
       assumeNormalized({ sceneEntities: ['not-a-placeholder-!!'] }),
       idMap,
+      FAIL,
     )
     expect(result.block.sceneEntities).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'sceneEntities', detail: expect.any(String) }])
@@ -104,14 +124,22 @@ describe('substitutePiggybackIds', () => {
 
   it('resolves a bracket-wrapped placeholder the same as the bare form', () => {
     const idMap = mapWith(['char_00000000-0000-4000-8000-000000000001'])
-    const result = substitutePiggybackIds(assumeNormalized({ sceneEntities: ['[c1]'] }), idMap)
+    const result = substitutePiggybackIds(
+      assumeNormalized({ sceneEntities: ['[c1]'] }),
+      idMap,
+      FAIL,
+    )
     expect(result.failures).toEqual([])
     expect(result.block.sceneEntities).toEqual(['char_00000000-0000-4000-8000-000000000001'])
   })
 
   it('drops currentLocation and records a failure when the bracketed form has no match', () => {
     const idMap = new IdBiMap()
-    const result = substitutePiggybackIds(assumeNormalized({ currentLocation: '[l9]' }), idMap)
+    const result = substitutePiggybackIds(
+      assumeNormalized({ currentLocation: '[l9]' }),
+      idMap,
+      FAIL,
+    )
     expect(result.block.currentLocation).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'currentLocation', detail: expect.any(String) }])
   })
@@ -123,6 +151,7 @@ describe('substitutePiggybackIds', () => {
         transfers: { items: [{ id: 'i9', slot: 'inventory', to: 'c1' }], stackables: [] },
       }),
       idMap,
+      FAIL,
     )
     expect(result.block.transfers).toBeUndefined()
     expect(result.failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
@@ -148,6 +177,7 @@ describe('substitutePiggybackIds with creates', () => {
         transfers: { items: [{ id: 'new:key', slot: 'inventory', to: 'c1' }], stackables: [] },
       }),
       idMap(),
+      FAIL,
     )
     expect(result.failures).toEqual([])
     expect(result.block.sceneEntities).toEqual([CHAR, 'new:key'])
@@ -159,6 +189,7 @@ describe('substitutePiggybackIds with creates', () => {
     const result = substitutePiggybackIds(
       assumeNormalized({ newLocations: [docks], currentLocation: '[new:docks]' }),
       idMap(),
+      FAIL,
     )
     expect(result.failures).toEqual([])
     expect(result.block.currentLocation).toBe('new:docks')
@@ -173,7 +204,11 @@ describe('substitutePiggybackIds with creates', () => {
     ],
   ]
   it.each(undeclared)('fails %s on a handle no create declares', (field, refs) => {
-    const result = substitutePiggybackIds(assumeNormalized({ newItems: [key], ...refs }), idMap())
+    const result = substitutePiggybackIds(
+      assumeNormalized({ newItems: [key], ...refs }),
+      idMap(),
+      FAIL,
+    )
     expect(result.block[field]).toBeUndefined()
     expect(result.failures).toEqual([{ field, detail: expect.any(String) }])
   })
@@ -186,6 +221,7 @@ describe('substitutePiggybackIds with creates', () => {
         transfers: { items: [{ id: 'i1', slot: 'inventory', to: 'new:key' }], stackables: [] },
       }),
       idMap(),
+      FAIL,
     )
     expect(result.block.visualChanges).toBeUndefined()
     expect(result.block.transfers).toBeUndefined()
@@ -203,6 +239,7 @@ describe('substitutePiggybackIds with creates', () => {
     const result = substitutePiggybackIds(
       assumeNormalized({ newItems: [key], transfers: { items: [], stackables: [], ...partial } }),
       idMap(),
+      FAIL,
     )
     expect(result.block.transfers).toBeUndefined()
     expect(result.failures.map((f) => f.field)).toEqual(['transfers'])
@@ -228,6 +265,7 @@ describe('substitutePiggybackIds with creates', () => {
         ],
       }),
       idMap(),
+      FAIL,
     )
     expect(result.failures).toEqual([])
     expect(result.block.newLocations?.map((c) => c.parent)).toEqual([
@@ -245,21 +283,122 @@ describe('substitutePiggybackIds with creates', () => {
     // A name or description that reads like a placeholder is text, never a ref.
     const placeholderish = { handle: 'new:c', name: 'c1', description: 'l1', parent: 'l1' }
     const block: ParsedStateBlock = { newLocations: [placeholderish], newItems: [key] }
-    const result = substitutePiggybackIds(assumeNormalized(block), idMap())
+    const result = substitutePiggybackIds(assumeNormalized(block), idMap(), FAIL)
     expect(result.block.newLocations).toEqual([{ ...placeholderish, parent: LOC }])
     expect(result.block.newItems).toEqual([key])
     expect(block.newLocations?.[0]?.parent).toBe('l1')
   })
 })
 
+describe('substitutePiggybackIds — kinds', () => {
+  const LOC = 'loc_00000000-0000-4000-8000-000000000001'
+  const CHAR = 'char_00000000-0000-4000-8000-000000000002'
+  const ITEM = 'item_00000000-0000-4000-8000-000000000003'
+  const LORE = 'lore_00000000-0000-4000-8000-000000000004'
+  // Allocation order pins l1 / c1 / i1 / lo1; the lore entry has no entity row.
+  const idMap = () => mapWith([LOC, CHAR, ITEM, LORE])
+  const opts = (wrongKind: 'fail' | 'drop') => ({ entities: ROWS, wrongKind })
+  const docks = { handle: 'new:docks', name: 'the Docks', description: 'a pier', parent: 'l1' }
+  const key = { handle: 'new:key', name: 'rusted key', description: 'an iron key' }
+  const toHero = (id: string) => ({ id, slot: 'inventory' as const, to: 'c1' })
+
+  const notItems: [string, string, string, Entity['kind'] | null][] = [
+    ["a new place's handle", 'new:docks', 'new:docks', 'location'],
+    ["an existing place's id", 'l1', LOC, 'location'],
+    ["a character's id", 'c1', CHAR, 'character'],
+    ["a lore entry's id", 'lo1', LORE, null],
+  ]
+  const transferring = (ref: string) =>
+    assumeNormalized({
+      newLocations: [docks],
+      newItems: [key],
+      currentLocation: 'new:docks',
+      transfers: {
+        items: [toHero('new:key'), toHero(ref), toHero('i1')],
+        stackables: [{ key: 'gold', amount: 5, to: 'c1' }],
+      },
+    })
+
+  it.each(notItems)('fails transfers on %s as the item, like an unknown id', (_label, ref) => {
+    const result = substitutePiggybackIds(transferring(ref), idMap(), opts('fail'))
+    expect(result.block.transfers).toBeUndefined()
+    expect(result.failures).toEqual([
+      { field: 'transfers', detail: expect.stringContaining('not an item') },
+    ])
+    expect(result.droppedTransfers).toEqual([])
+  })
+
+  it.each(notItems)(
+    'drops only the transfer naming %s, keeping the rest of the field',
+    (_label, ref, id, kind) => {
+      const result = substitutePiggybackIds(transferring(ref), idMap(), opts('drop'))
+      expect(result.failures).toEqual([])
+      expect(result.block.transfers).toEqual({
+        items: [
+          { id: 'new:key', slot: 'inventory', to: CHAR },
+          { id: ITEM, slot: 'inventory', to: CHAR },
+        ],
+        stackables: [{ key: 'gold', amount: 5, to: CHAR }],
+      })
+      expect(result.droppedTransfers).toEqual([{ id, kind }])
+    },
+  )
+
+  it('still fails the whole field on an unknown id beside a dropped one', () => {
+    const block = transferring('l1')
+    block.transfers?.items.push(toHero('i9'))
+    const result = substitutePiggybackIds(block, idMap(), opts('drop'))
+    expect(result.block.transfers).toBeUndefined()
+    expect(result.failures.map((f) => f.field)).toEqual(['transfers'])
+    expect(result.droppedTransfers).toEqual([])
+  })
+
+  it("fails currentLocation on a new item's handle", () => {
+    const result = substitutePiggybackIds(
+      assumeNormalized({ newItems: [key], currentLocation: 'new:key', sceneEntities: ['c1'] }),
+      idMap(),
+      opts('fail'),
+    )
+    expect(result.block.currentLocation).toBeUndefined()
+    expect(result.block.sceneEntities).toEqual([CHAR])
+    expect(result.failures).toEqual([
+      { field: 'currentLocation', detail: expect.stringContaining('not a location') },
+    ])
+  })
+
+  // The planner and apply.ts reject it as they reject an item's id there.
+  it("passes a new item's handle through as currentLocation when wrong kinds drop", () => {
+    const result = substitutePiggybackIds(
+      assumeNormalized({ newItems: [key], currentLocation: 'new:key' }),
+      idMap(),
+      opts('drop'),
+    )
+    expect(result.failures).toEqual([])
+    expect(result.block.currentLocation).toBe('new:key')
+  })
+
+  it.each(['fail', 'drop'] as const)(
+    "leaves an existing item's id as currentLocation for apply.ts to reject (%s)",
+    (wrongKind) => {
+      const result = substitutePiggybackIds(
+        assumeNormalized({ currentLocation: 'i1' }),
+        idMap(),
+        opts(wrongKind),
+      )
+      expect(result.failures).toEqual([])
+      expect(result.block.currentLocation).toBe(ITEM)
+    },
+  )
+})
+
 describe('substitutePiggybackIds input', () => {
   it('takes only a normalized block, never a hand-built or an already substituted one', () => {
     const idMap = new IdBiMap()
-    const substituted = substitutePiggybackIds(assumeNormalized({}), idMap).block
+    const substituted = substitutePiggybackIds(assumeNormalized({}), idMap, FAIL).block
     // @ts-expect-error a hand-built block has not passed normalizeCreates
-    const raw = () => substitutePiggybackIds({ sceneEntities: ['c1'] }, idMap)
+    const raw = () => substitutePiggybackIds({ sceneEntities: ['c1'] }, idMap, FAIL)
     // @ts-expect-error its placeholders are already ids
-    const twice = () => substitutePiggybackIds(substituted, idMap)
+    const twice = () => substitutePiggybackIds(substituted, idMap, FAIL)
     expect([raw, twice].map((call) => typeof call)).toEqual(['function', 'function'])
   })
 })

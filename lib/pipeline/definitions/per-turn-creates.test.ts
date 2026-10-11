@@ -875,6 +875,16 @@ describe('planTurnCreates — handles', () => {
       transfers: { items: [{ id: 'item_new_1', to: HERO, slot: 'inventory' }], stackables: [] },
     })
   })
+
+  // apply.ts then rejects it as it rejects an item's id there: flag, warning, previous location.
+  it("leaves an unkept new item's handle as the current location, for apply.ts to reject", async () => {
+    const plan = await runPlanner({
+      newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+      currentLocation: 'new:key',
+    })
+    expect(plan.creates).toEqual([])
+    expect(plan.block).toEqual({ currentLocation: 'new:key' })
+  })
 })
 
 describe('skipTurnCreates', () => {

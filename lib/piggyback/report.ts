@@ -6,8 +6,9 @@ type StateReport = NonNullable<EntryMetadata['stateReport']>
 
 type BuildReportArgs = {
   layer: StateReport['layer']
-  /** Real entity ids in the block, never placeholders or create handles; what became of each
-   *  create in the report, whose lists are written only when they hold an entry. */
+  /** Real entity ids in the block, never placeholders, nor create handles bar a rejected
+   *  `currentLocation`; what became of each create in the report, whose lists are written only
+   *  when they hold an entry. */
   turn: Pick<PlannedTurn, 'block' | 'report'>
   /** Widened to plain strings: a report read back from the column has already lost
    *  the `keyof ParsedStateBlock` narrowing, and the fallback re-supplies its own. */

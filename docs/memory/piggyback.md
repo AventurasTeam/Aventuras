@@ -163,9 +163,14 @@ is in the scene, in `<scene_entities>`; the parser also tolerates a
 new place's handle in `<scene_entities>`. A handle in any other field, a
 visual change's id or a transfer's holder, or one the block's creates
 don't declare, fails the field it sits in, like an unknown id. A
-`parent` that names nothing resolvable doesn't fail: the location goes
-to the root, as under Parent below. A bracketed handle (`[new:a]`)
-reads as the bare handle.
+handle of the wrong kind, a new place's as a transfer's item or a new
+item's as the `<current_location>`, fails its field in the tagged block
+and drops in the fallback
+([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery));
+a place and an item declaring one handle leave it the place's, the
+item dropped as malformed. A `parent` that names nothing resolvable
+doesn't fail: the location goes to the root, as under Parent below. A
+bracketed handle (`[new:a]`) reads as the bare handle.
 
 **Create tag format.** A create's attribute text must be entirely
 `key="value"` pairs; any other text drops the create and counts it
@@ -313,6 +318,26 @@ piggyback's fields (disjoint write-set, see
 never have recovered them — a parse failure needs the per-turn
 classifier, not the periodic one, exactly like a `piggybackMode='off'`
 turn does.
+
+**A ref of the wrong kind.** A transfer's item must name an item: an
+existing item's id, or the handle of a `<new_item>` the block
+declares. Any other id or handle there (a place's, a character's, a
+lore entry's) is of the wrong kind, and so is a new item's handle as
+the `<current_location>`. The two writers treat it differently:
+
+- **The tagged block** fails the field it sits in, like an unknown id,
+  so the fallback fires and is the turn's only creator.
+- **The fallback**, whose reply nothing rereads, drops a wrong-kind
+  transfer where it stands, logging `classifier.transfer_dropped`, and
+  applies the rest of the field. A new item's handle as the
+  `currentLocation` is rejected the way an item's id is: the previous
+  location stays, the report records `currentLocationRejected`, and
+  its `currentLocation` holds the new item's id, or the emitted handle
+  when the item isn't created.
+
+An existing item's id as the location is rejected that way on both
+paths
+([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
 
 **Two fields are exempt from that recovery trigger.** `<summary>` and
 `<retrieval_queries>` must never put the turn into the fallback path on
@@ -513,10 +538,12 @@ cannot narrow below the fixed pair.
 It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, under the same rules as the tags
-([New locations and items](#new-locations-and-items)). A create there
-may omit its description or parent, or give either as `null`, which
-reads as omitted; one with no description is created without one, as
-a self-closed tag is.
+([New locations and items](#new-locations-and-items)), apart from a
+ref of the wrong kind, which it drops rather than fails
+([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
+A create there may omit its description or parent, or give either as
+`null`, which reads as omitted; one with no description is created
+without one, as a self-closed tag is.
 
 ## Mode-mixing across a story
 

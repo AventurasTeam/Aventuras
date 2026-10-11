@@ -1904,6 +1904,54 @@ describe('narrative fold — creates', () => {
     ])
   })
 
+  // c1 is HERO and l1 is TOWN: neither is an item, nor is the new place.
+  it.each([
+    ["a new place's handle", 'id="new:docks"'],
+    ["an existing place's id", 'id="l1"'],
+    ["a character's id", 'id="c1"'],
+  ])("fails transfers on %s as a transfer's item, creating nothing", async (_label, id) => {
+    await seedTurn()
+    const reply = CREATE_REPLY.replace('<item id="new:key"', `<item ${id}`)
+    expect(reply).not.toBe(CREATE_REPLY)
+    const { events, intermediates } = await foldTurn(reply)
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(createdEntities(events)).toEqual([])
+    const report = replyOf(events).metadata?.stateReport
+    expect(report?.failedFields).toEqual([
+      { field: 'transfers', detail: expect.stringContaining('not an item') },
+    ])
+  })
+
+  it("fails currentLocation on a new item's handle, creating nothing", async () => {
+    await seedTurn()
+    const reply = CREATE_REPLY.replace(
+      '<current_location>new:docks</current_location>',
+      '<current_location>new:key</current_location>',
+    )
+    expect(reply).not.toBe(CREATE_REPLY)
+    const { events, intermediates } = await foldTurn(reply)
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(createdEntities(events)).toEqual([])
+    expect(replyOf(events).metadata?.stateReport?.failedFields).toEqual([
+      { field: 'currentLocation', detail: expect.stringContaining('not a location') },
+    ])
+  })
+
+  // The item repeating the place's handle is dropped as malformed, so the transfer names the place.
+  it('fails transfers when a place and an item declare the handle it names', async () => {
+    await seedTurn()
+    const reply = CREATE_REPLY.replace('handle="new:key"', 'handle="new:docks"').replace(
+      '<item id="new:key"',
+      '<item id="new:docks"',
+    )
+    const { events, intermediates } = await foldTurn(reply)
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(createdEntities(events)).toEqual([])
+    expect(replyOf(events).metadata?.stateReport?.failedFields?.map((f) => f.field)).toEqual([
+      'transfers',
+    ])
+  })
+
   it('fails a block of creates alone and leaves the turn to the fallback', async () => {
     await seedTurn()
     const { events, intermediates } = await foldTurn(

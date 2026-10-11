@@ -148,20 +148,6 @@ slice-planning gate forces its resolution before that slice is planned.
   told which person to write in. Raised 2026-10-11 by the system and
   user prompt halves design.
 
-- **A transfer's item id is never checked to name an item.**
-  `lib/piggyback/apply.ts` (~line 173) builds the recipient's inventory
-  patch from whatever id the transfer carries, and the inventory
-  handler checks only that the holder is a character
-  (`refuseNonCharacter` in `lib/actions/entities/state-patch-actions.ts`).
-  So `<item id="l1" to="c1" slot="inventory" />` writes
-  `updateEntityInventory` with the location's id in `c1`'s inventory,
-  and any other non-item id lands the same way. Predates this PR, since
-  the bundled prompt already listed location ids, but the `# Places`
-  map now shows every location id on every turn. Candidate fix:
-  `apply.ts` skips a transfer whose id isn't an item (its created rows
-  included), as it skips a holder that isn't a character. Raised
-  2026-10-11 by the locations-and-items-from-prose slice review.
-
 - **The per-turn writers plan against the entity snapshot taken before
   their model call.** Both read `working.set.entities` ahead of the
   call (`lib/pipeline/definitions/per-turn.ts:52`,

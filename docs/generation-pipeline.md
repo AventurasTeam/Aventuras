@@ -389,8 +389,11 @@ An unrecognized or malformed placeholder fails only what it sits in,
 never the call. In the per-turn writers it fails its field, and a
 failed field in the narrative fold fires the fallback
 ([`piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery));
-the periodic classifier drops the reference and logs it. Bare UUID
-emission from the LLM is a prompt bug, not a runtime case to handle.
+the periodic classifier drops the reference and logs it. A per-turn
+ref of the wrong kind, such as a place as a transfer's item, fails its
+field the same way in the narrative fold and drops where it stands in
+the fallback. Bare UUID emission from the LLM is a prompt bug, not a
+runtime case to handle.
 
 ### Writes
 

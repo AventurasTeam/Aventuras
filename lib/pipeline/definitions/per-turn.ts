@@ -183,10 +183,12 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const parsedState = parseStateBlock(content)
   // Fields inside parsedState.block still carry the model's bracketed-ID
   // placeholders (c1, l1, i1...); swap them back to real entity ids using the
-  // same idMap the prompt was built with before anything looks them up.
+  // same idMap the prompt was built with before anything looks them up. A ref of the wrong kind
+  // fails its field like an unknown one, so the fallback rereads the prose.
   const { block: resolvedBlock, failures: substitutionFailures } = substitutePiggybackIds(
     parsedState.block,
     idMap,
+    { entities, wrongKind: 'fail' },
   )
   // An omitted block is a failed attempt, not silence. parseStateBlock cannot tell the
   // difference on its own (piggyback-off turns legitimately carry no block), so the

@@ -69,7 +69,7 @@ export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'Norma
 
 /**
  * A normalized block whose placeholders are entity ids and whose refs name only ids or declared
- * handles. Minted only by `substitutePiggybackIds`.
+ * handles, a transfer's item only an item. Minted only by `substitutePiggybackIds`.
  */
 export type SubstitutedStateBlock = ParsedStateBlock & { readonly __brand: 'SubstitutedStateBlock' }
 
@@ -92,8 +92,9 @@ export type NewItemReport = NonNullable<StateReport['newItems']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
 
 /**
- * A substituted block with every create handle resolved or removed, so no create lists. Minted only
- * by the per-turn planner (`planTurnCreates`, `skipTurnCreates`).
+ * A substituted block with every create handle resolved or removed, bar an uncreated item's as
+ * `currentLocation`, which apply.ts rejects; so no create lists. Minted only by the per-turn planner
+ * (`planTurnCreates`, `skipTurnCreates`).
  */
 export type PlannedStateBlock = ParsedStateBlock & {
   newLocations?: never
