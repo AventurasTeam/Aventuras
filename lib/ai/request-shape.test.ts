@@ -45,7 +45,13 @@ const MODELS = {
 
 function useProvider(type: ProviderType, params: ResolvedParams = {}): ResolveModelConfig {
   vi.mocked(getModel).mockReturnValue(MODELS[type]())
-  vi.mocked(resolveModel).mockReturnValue({ ok: true, providerId: 'prov', modelId: 'm', params })
+  vi.mocked(resolveModel).mockReturnValue({
+    ok: true,
+    providerId: 'prov',
+    providerType: type,
+    modelId: 'm',
+    params,
+  })
   return {
     providers: [{ id: 'prov', type, displayName: 'P', apiKey: 'test-key', favoriteModelIds: [] }],
     profiles: [],

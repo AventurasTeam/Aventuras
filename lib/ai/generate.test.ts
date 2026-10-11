@@ -32,8 +32,16 @@ const schema = z.object({ description: z.string() })
 
 const PROMPT = { system: '', user: 'build prompt text' }
 
+const structuredProvider = {
+  id: 'p',
+  type: 'openai-compatible' as const,
+  displayName: 'Local',
+  apiKey: 'key',
+  favoriteModelIds: [],
+}
+
 const STRUCTURED_CFG = {
-  providers: [],
+  providers: [structuredProvider],
   profiles: [],
   assignments: { 'wizard-assist': 'prof' },
 }
@@ -175,7 +183,8 @@ describe('generateStructured', () => {
   beforeEach(async () => {
     vi.mocked(resolveModel).mockImplementation(() => ({
       ok: true,
-      providerId: 'p',
+      providerId: structuredProvider.id,
+      providerType: structuredProvider.type,
       modelId: 'm',
       params: {},
     }))
@@ -232,7 +241,8 @@ describe('generateStructured', () => {
     const { runProviderCall } = await import('./transport/provider-call')
     vi.mocked(resolveModel).mockReturnValueOnce({
       ok: true,
-      providerId: 'p',
+      providerId: structuredProvider.id,
+      providerType: structuredProvider.type,
       modelId: 'm',
       params: { temperature: 0.5, maxOutput: 100 },
     })

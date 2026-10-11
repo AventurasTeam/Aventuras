@@ -62,7 +62,7 @@ export type PreparedGeneration =
       providerId: string
       modelId: string
       params: ResolvedParams
-      providerType: ProviderInstance['type'] | undefined
+      providerType: ProviderInstance['type']
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -74,15 +74,14 @@ export function prepareGeneration(
 ): PreparedGeneration {
   const resolved = resolveModel(target, config)
   if (!resolved.ok) return resolved
-  const providerType = config.providers.find((p) => p.id === resolved.providerId)?.type
   return {
     ok: true,
     model: getModel(resolved.providerId, resolved.modelId, actionId),
-    callSettings: buildCallSettings(resolved.params, providerType),
+    callSettings: buildCallSettings(resolved.params, resolved.providerType),
     providerId: resolved.providerId,
     modelId: resolved.modelId,
     params: resolved.params,
-    providerType,
+    providerType: resolved.providerType,
   }
 }
 
@@ -90,7 +89,7 @@ export function prepareGeneration(
 // the longest matching token prefix on their own. `stub` gets none, as it gets no thinking.
 function marksSystemPrefix(
   cacheSystemPrefix: boolean | undefined,
-  providerType: ProviderInstance['type'] | undefined,
+  providerType: ProviderInstance['type'],
 ): boolean {
   return cacheSystemPrefix === true && providerType === 'anthropic'
 }

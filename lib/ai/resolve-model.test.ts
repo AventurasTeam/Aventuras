@@ -38,6 +38,7 @@ describe('resolveModel', () => {
     expect(resolveModel('narrative', base)).toEqual({
       ok: true,
       providerId: 'prov-1',
+      providerType: 'openai-compatible',
       modelId: 'm-narr',
       params: { temperature: 0.8 },
       profileId: 'prof-narr',
@@ -48,6 +49,7 @@ describe('resolveModel', () => {
     expect(resolveModel('wizard-assist', base)).toEqual({
       ok: true,
       providerId: 'prov-1',
+      providerType: 'openai-compatible',
       modelId: 'm-agent',
       params: { structuredOutput: 'auto' },
       profileId: 'prof-agent',
@@ -80,7 +82,12 @@ describe('resolveModel', () => {
   })
 
   it("story override resolves on the override's own provider, skipping the walk", () => {
-    const other: ProviderInstance = { ...provider, id: 'prov-2', displayName: 'Other' }
+    const other: ProviderInstance = {
+      ...provider,
+      id: 'prov-2',
+      type: 'anthropic',
+      displayName: 'Other',
+    }
     const cfg: ResolveModelConfig = {
       ...base,
       providers: [provider, other],
@@ -89,6 +96,7 @@ describe('resolveModel', () => {
     expect(resolveModel('classifier', cfg)).toEqual({
       ok: true,
       providerId: 'prov-2',
+      providerType: 'anthropic',
       modelId: 'override-model',
       params: {},
     })
@@ -111,6 +119,7 @@ describe('resolveModel', () => {
     expect(resolveModel('wizard-assist', cfg)).toEqual({
       ok: true,
       providerId: 'prov-1',
+      providerType: 'openai-compatible',
       modelId: 'm-agent',
       params: { structuredOutput: 'auto' },
       profileId: 'prof-agent',
