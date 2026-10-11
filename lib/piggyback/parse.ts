@@ -93,9 +93,9 @@ function parseNumeric(segment: string): number {
 // key="value" pairs from a tag's attribute region (no surrounding < / >).
 function parseAttributes(attrText: string): Record<string, string> {
   const attrs: Record<string, string> = {}
-  // The closing quote stays unconsumed so it can separate the next key (`from="c3"to="c1"`), and
-  // a key is read whole, never as the tail of a hyphenated one.
-  const re = /(?:^|[\s"])([\w-]+)="([^"]*)(?=")/g
+  // The closing quote stays unconsumed so any non-word char (space, quote, comma) can precede the
+  // next key (`from="c3"to="c1"`); a hyphen cannot, so a key is never read as the tail of a hyphenated one.
+  const re = /(?:^|[^\w-])([\w-]+)="([^"]*)(?=")/g
   for (const match of attrText.matchAll(re)) {
     const [, key, value] = match
     if (key !== undefined && value !== undefined) attrs[key] = value

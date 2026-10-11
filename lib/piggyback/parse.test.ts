@@ -167,6 +167,17 @@ describe('parseStateBlock', () => {
     })
   })
 
+  it('reads attributes separated by a comma', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><transfers><item id="i1",to="c1" slot="inventory" /></transfers></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [{ id: 'i1', slot: 'inventory', to: 'c1' }],
+      stackables: [],
+    })
+  })
+
   it('an empty <transfers></transfers> tag is a legitimate no-op, not a failure', () => {
     const raw = `<state>
   <scene_entities>c1</scene_entities>
