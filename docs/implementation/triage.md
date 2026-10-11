@@ -147,3 +147,72 @@ slice-planning gate forces its resolution before that slice is planned.
   narrative and the wizard opening included, so the narrator is never
   told which person to write in. Raised 2026-10-11 by the system and
   user prompt halves design.
+
+- **A transfer's item id is never checked to name an item.**
+  `lib/piggyback/apply.ts` (~line 173) builds the recipient's inventory
+  patch from whatever id the transfer carries, and the inventory
+  handler checks only that the holder is a character
+  (`refuseNonCharacter` in `lib/actions/entities/state-patch-actions.ts`).
+  So `<item id="l1" to="c1" slot="inventory" />` writes
+  `updateEntityInventory` with the location's id in `c1`'s inventory,
+  and any other non-item id lands the same way. Predates this PR, since
+  the bundled prompt already listed location ids, but the `# Places`
+  map now shows every location id on every turn. Candidate fix:
+  `apply.ts` skips a transfer whose id isn't an item (its created rows
+  included), as it skips a holder that isn't a character. Raised
+  2026-10-11 by the locations-and-items-from-prose slice review.
+
+- **The per-turn writers plan against the entity snapshot taken before
+  their model call.** Both read `working.set.entities` ahead of the
+  call (`lib/pipeline/definitions/per-turn.ts:52`,
+  `per-turn-piggyback.ts:213`), while the periodic classifier runs
+  no-gate and can retire an entity mid-stream
+  ([`cadence.md → Single-writer-per-write-set in v1`](../memory/cadence.md#single-writer-per-write-set-in-v1)).
+  A retire of the scene's place during the stream leaves the scene at
+  a retired row, so the next prompt seats no `# Current location`
+  (`lib/retrieval/pools.ts`). It does so by the place's listed id
+  already on main, since `apply.ts` takes any `kind === 'location'` row
+  as `<current_location>` with no status check, and now also through
+  the create planner, which reuses a sibling retired mid-stream because
+  `lib/world/new-entity-match.ts` filters retired rows out of a list
+  that predates the retire. Candidate fixes: re-read the branch's entities after the call
+  for apply and the planner; or a status gate in apply. Raised
+  2026-10-11 by the locations-and-items-from-prose slice review.
+
+- **The scene editor doesn't promote a staged current location it
+  sets.** `updateEntrySceneFields`
+  (`lib/actions/story-entries/scene-fields.ts`, ~line 108) passes only
+  `sceneEntities` to `scenePromotionActions`, while the generation fold
+  now promotes a staged `<current_location>` too
+  ([`piggyback.md → Auto-promote on staged-ID emission`](../memory/piggyback.md#auto-promote-on-staged-id-emission)).
+  The editor offers staged locations
+  (`components/reader/scene-editing.ts`, ~line 59), and the structural
+  floor seats only an active current location (`lib/retrieval/pools.ts`,
+  ~line 91), so the next prompt has no `# Current location`. The
+  editor's copy promises promotion with no such limit
+  (`sceneEdit.applyNote` in `locales/en/reader.json`: "Saving
+  re-applies scene presence to world state: per-character location,
+  last-seen, and staged promotion."). Canon question: whether
+  [`entry-card.md → Scene editor`](../ui/patterns/entry-card.md#scene-editor)'s
+  "a staged entity the edit names in the scene is promoted exactly as
+  the classifier would promote it" includes the location. Fixes:
+  promote a staged location the edit sets, in `updateEntrySceneFields`;
+  or narrow the copy. Predates this PR: the fold lacked the location
+  promotion at the merge base too. Raised 2026-10-11 by the
+  locations-and-items-from-prose slice review.
+
+- **The fallback schema's optional fields reject `null`.** In
+  `fallbackClassifierSchema`
+  (`lib/pipeline/definitions/per-turn-piggyback.ts`), the `.optional()`
+  fields with no `.catch` (`currentLocation`, `visualChanges`,
+  `transfers` and its `to` and `from`, `summary`) fail the whole
+  structured parse when a model answers `null` for one; after the parse
+  retry the call fails, and the turn loses the fallback's scene, time
+  and summary. `generateStructured` defaults to the prompt-injection
+  path (`lib/ai/generate.ts`, around line 161), where `null` is a
+  natural JSON answer, and the fallback runs every turn today, since no
+  model carries the tagged-block capability flag. Predates this PR; the
+  create fields get the fix in it. Related: the M7.1 force-on entry in
+  the [roadmap](./roadmap.md#m7--app-settings--diagnostics--onboarding)
+  plans converting these fields to nullable for the native path. Raised
+  2026-10-11 by the locations-and-items-from-prose slice review.
