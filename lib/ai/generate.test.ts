@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
+import type { ProviderInstance } from '../db'
 import { buildCallSettings, generateStructured, parseStructured, streamText } from './generate'
+import { getModel } from './model'
 import { resolveModel } from './resolve-model'
+import { runProviderCall, streamProviderCall } from './transport/provider-call'
 
 // Model resolution defaults to the REAL resolver (streamText's tests assert the
 // full resolve → call-settings mapping); the generateStructured describe swaps
@@ -283,5 +286,133 @@ describe('generateStructured', () => {
       new AbortController().signal,
     )
     expect(res.status).toBe('failed')
+  })
+})
+
+type SentMessage = { role: string; providerOptions?: { anthropic?: { cacheControl?: unknown } } }
+
+/** A provider model that records the params its wrappers hand it, then fails the call. */
+function recordingModel() {
+  const seen: { prompt: SentMessage[] }[] = []
+  const record = async (params: { prompt: SentMessage[] }) => {
+    seen.push(params)
+    throw new Error('recorded')
+  }
+  return {
+    seen,
+    model: {
+      specificationVersion: 'v3',
+      provider: 'test',
+      modelId: 'm',
+      supportedUrls: {},
+      doGenerate: record,
+      doStream: record,
+    },
+  }
+}
+
+/**
+ * Runs `sent`'s middleware over a system + user prompt and returns the cache
+ * control the system message carried when it reached the provider model.
+ */
+async function systemCacheControl(
+  sent: unknown,
+  inner: ReturnType<typeof recordingModel>,
+  method: 'doGenerate' | 'doStream',
+): Promise<unknown> {
+  const model = sent as Record<typeof method, (params: unknown) => Promise<unknown>>
+  await model[method]({
+    prompt: [
+      { role: 'system', content: 'S' },
+      { role: 'user', content: [{ type: 'text', text: 'P' }] },
+    ],
+  }).catch(() => undefined)
+  return inner.seen.at(-1)?.prompt.find((m) => m.role === 'system')?.providerOptions?.anthropic
+    ?.cacheControl
+}
+
+// architecture.md → System and user halves: the marker goes on `anthropic` providers only,
+// and only on calls that ask for it.
+describe('cache marker', () => {
+  const config = (type: string) => ({
+    // ProviderInstance['type'] has no 'stub': a stub row reaches config.providers only at
+    // runtime, through app settings, and the resolver's lookup ignores type.
+    providers: [
+      { id: 'prov-1', type, displayName: 'P', apiKey: 'k', favoriteModelIds: [] },
+    ] as unknown as ProviderInstance[],
+    profiles: [
+      {
+        id: 'prof-n',
+        kind: 'narrative' as const,
+        name: 'N',
+        modelRef: { providerId: 'prov-1', modelId: 'm' },
+      },
+      {
+        id: 'prof-c',
+        kind: 'agent' as const,
+        name: 'C',
+        modelRef: { providerId: 'prov-1', modelId: 'm' },
+      },
+    ],
+    assignments: { classifier: 'prof-c' },
+  })
+
+  beforeEach(() => {
+    vi.mocked(resolveModel).mockImplementation(actualResolveModel)
+    vi.mocked(runProviderCall).mockResolvedValue({ text: '{"description":"A tale."}' } as never)
+  })
+
+  async function streamMark(type: string, cacheSystemPrefix: boolean | undefined) {
+    const inner = recordingModel()
+    vi.mocked(getModel).mockReturnValueOnce(inner.model as never)
+    streamText('narrative', {
+      prompt: { system: 'S', user: 'P' },
+      config: config(type),
+      ...(cacheSystemPrefix === undefined ? {} : { cacheSystemPrefix }),
+    })
+    const sent = vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0].model
+    return systemCacheControl(sent, inner, 'doStream')
+  }
+
+  async function structuredMark(type: string, cacheSystemPrefix: boolean | undefined) {
+    const inner = recordingModel()
+    vi.mocked(getModel).mockReturnValueOnce(inner.model as never)
+    await generateStructured(
+      'classifier',
+      { system: 'S', user: 'P' },
+      schema,
+      config(type),
+      new AbortController().signal,
+      cacheSystemPrefix === undefined ? undefined : { cacheSystemPrefix },
+    )
+    const sent = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0].model
+    return systemCacheControl(sent, inner, 'doGenerate')
+  }
+
+  it('marks the system message on an anthropic provider that asks, in both calls', async () => {
+    expect(await streamMark('anthropic', true)).toEqual({ type: 'ephemeral' })
+    expect(await structuredMark('anthropic', true)).toEqual({ type: 'ephemeral' })
+  })
+
+  it.each([
+    ['an openai-compatible provider that asks', 'openai-compatible', true],
+    ['an anthropic provider that does not ask', 'anthropic', undefined],
+    ['a stub provider row that asks', 'stub', true],
+  ])('leaves both calls unmarked on %s', async (_label, type, cacheSystemPrefix) => {
+    expect(await streamMark(type, cacheSystemPrefix)).toBeUndefined()
+    expect(await structuredMark(type, cacheSystemPrefix)).toBeUndefined()
+  })
+
+  it('hands the stream call the unwrapped model when it marks nothing', () => {
+    const inner = recordingModel()
+    vi.mocked(getModel).mockReturnValueOnce(inner.model as never)
+
+    streamText('narrative', {
+      prompt: { system: 'S', user: 'P' },
+      config: config('openai-compatible'),
+      cacheSystemPrefix: true,
+    })
+
+    expect(vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0].model).toBe(inner.model)
   })
 })

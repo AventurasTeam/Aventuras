@@ -351,6 +351,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
 
       // With the narrative fold having written no report, this phase is the only writer:
@@ -831,6 +832,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
       expect(events[0]).toEqual({
         type: 'delta_emitted',
@@ -1137,6 +1139,88 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // architecture.md → System and user halves: the fallback marks its system prefix only
+    // as the turn's regular classifier (piggyback.md → Fallback classifier context).
+    describe('cache marker', () => {
+      const REPORT = {
+        sceneEntities: [],
+        currentLocation: undefined,
+        visualChanges: [],
+        transfers: { items: [], stackables: [] },
+      }
+
+      /** Runs the phase after `outcome` and returns each classifier call's options. */
+      async function callOptionsAfter(
+        outcome: PiggybackOutcome | undefined,
+        worldTimeDeltas: number[] = [15],
+      ): Promise<unknown[]> {
+        currentStoryStore.set({
+          storyId: 's1',
+          branchId: 'b1',
+          definition,
+          settings: baseSettings({ models: {} }),
+        })
+        hydrateEntries(phaseDb, 'b1', [
+          {
+            id: 'entry-1',
+            branchId: 'b1',
+            position: 1,
+            content: 'Hero steps into the clearing',
+            metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+          } as never,
+        ])
+        entitiesStore.hydrate('b1', [])
+        for (const worldTimeDelta of worldTimeDeltas)
+          generateStructuredMock.mockResolvedValueOnce({
+            status: 'ok',
+            value: { ...REPORT, worldTimeDelta },
+          })
+
+        const gen = piggybackFallbackClassifierPhase({
+          actionId: 'act_1',
+          abortSignal: new AbortController().signal,
+          intermediates: {
+            idMap: new IdBiMap(),
+            ...(outcome ? { piggybackOutcome: outcome } : {}),
+          },
+          log: makeLogger('act_1'),
+          db: phaseDb.db,
+          runInTransaction: async () => undefined,
+          storyId: 's1',
+          branchId: 'b1',
+        })
+        let result = await gen.next()
+        while (!result.done) result = await gen.next()
+        return generateStructuredMock.mock.calls.map((call) => call[5])
+      }
+
+      it.each([
+        ['no piggyback outcome', undefined],
+        ['a piggyback that never fired', { attempted: false, succeeded: false }],
+      ])('marks the regular classifier call after %s', async (_label, outcome) => {
+        expect(await callOptionsAfter(outcome)).toEqual([{ cacheSystemPrefix: true }])
+      })
+
+      it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
+        expect(await callOptionsAfter({ attempted: true, succeeded: false })).toEqual([
+          { cacheSystemPrefix: false },
+        ])
+      })
+
+      it.each([
+        ['the regular classifier', undefined, true],
+        ['a recovery', { attempted: true, succeeded: false }, false],
+      ])(
+        "re-rolls a negative delta from %s with the first call's options",
+        async (_label, outcome, cacheSystemPrefix) => {
+          expect(await callOptionsAfter(outcome, [-10, 15])).toEqual([
+            { cacheSystemPrefix },
+            { cacheSystemPrefix },
+          ])
+        },
+      )
+    })
+
     // Here, not the template's own test file: buildGenerationContext gates the read on a
     // variable the template never names — mistyped, it silently empties instead of erroring.
     describe('fallback classifier context (piggyback.md → Fallback classifier context)', () => {
@@ -1349,6 +1433,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierWithSuggestionsSchema,
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
       // One delta carries both scene state and chips — a second
       // updateStoryEntryMetadata delta here would mean the fold is patching
@@ -1428,6 +1513,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: false },
       )
       const created = events[0]
       if (
@@ -1836,6 +1922,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
+        { cacheSystemPrefix: true },
       )
       const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
       expect(prompt).not.toContain('Action')

@@ -112,6 +112,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     onError: ({ error }) => {
       streamError = error
     },
+    cacheSystemPrefix: true,
   })
   // Preflight halts before this phase on a broken resolver, so a failure here only
   // covers a resolver-time race the preflight snapshot missed — surface it, don't fabricate.

@@ -1244,6 +1244,14 @@ describe('narrative call prompt', () => {
     expect(system).toBe('')
     expect(prompt).toContain('# Story so far')
   })
+
+  // architecture.md → System and user halves: the narrative call always asks; the
+  // call layer honours it on anthropic providers only.
+  it('asks the narrative call to mark its system prefix for caching', async () => {
+    await runNarrativeWith({ narrative: 'prose' })
+
+    expect(streamTextMock.mock.calls.at(-1)?.[1]?.cacheSystemPrefix).toBe(true)
+  })
 })
 
 describe('narrative fold — retrieval handoff', () => {

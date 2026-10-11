@@ -1,9 +1,10 @@
-import { wrapLanguageModel, type LanguageModel } from 'ai'
+import { wrapLanguageModel, type LanguageModel, type LanguageModelMiddleware } from 'ai'
 import { jsonrepair } from 'jsonrepair'
 import { z } from 'zod'
 
 import type { ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
+import { anthropicCacheMarkerMiddleware } from './cache-marker'
 import { getModel } from './model'
 import {
   jsonResponseFormatMiddleware,
@@ -61,6 +62,7 @@ export type PreparedGeneration =
       providerId: string
       modelId: string
       params: ResolvedParams
+      providerType: ProviderInstance['type'] | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -80,7 +82,26 @@ export function prepareGeneration(
     providerId: resolved.providerId,
     modelId: resolved.modelId,
     params: resolved.params,
+    providerType,
   }
+}
+
+// Anthropic caches only at an explicit breakpoint; other providers reuse a
+// matching prefix on their own, and a `stub` row is not an anthropic one.
+function marksSystemPrefix(
+  cacheSystemPrefix: boolean | undefined,
+  providerType: ProviderInstance['type'] | undefined,
+): boolean {
+  return cacheSystemPrefix === true && providerType === 'anthropic'
+}
+
+// getModel only ever returns provider instances, never the gateway-model-id
+// string arm of LanguageModel.
+function wrap(model: LanguageModel, middleware: LanguageModelMiddleware[]): LanguageModel {
+  return wrapLanguageModel({
+    model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
+    middleware,
+  })
 }
 
 /** A rendered template's two halves; a blank system half sends no system message. */
@@ -100,6 +121,8 @@ export type StreamTextOptions = {
   abortSignal?: AbortSignal
   actionId?: string
   onError?: (event: { error: unknown }) => void
+  /** Mark the system prefix for caching; honoured on `anthropic` providers only. */
+  cacheSystemPrefix?: boolean
 }
 
 export type StreamTextResult =
@@ -115,7 +138,9 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
   const resolved = prepareGeneration(target, opts.config, opts.actionId)
   if (!resolved.ok) return resolved
   const stream = streamProviderCall({
-    model: resolved.model,
+    model: marksSystemPrefix(opts.cacheSystemPrefix, resolved.providerType)
+      ? wrap(resolved.model, [anthropicCacheMarkerMiddleware()])
+      : resolved.model,
     ...promptParams(opts.prompt),
     ...(opts.abortSignal !== undefined ? { abortSignal: opts.abortSignal } : {}),
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
@@ -133,6 +158,11 @@ export function parseStructured<T>(raw: string, schema: z.ZodType<T>): T {
     obj = JSON.parse(jsonrepair(raw))
   }
   return schema.parse(obj)
+}
+
+export type StructuredCallOptions = {
+  /** Mark the system prefix for caching; honoured on `anthropic` providers only. */
+  cacheSystemPrefix?: boolean
 }
 
 export type GenerateStructuredResult<T> =
@@ -156,6 +186,7 @@ export async function generateStructured<T>(
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   signal: AbortSignal,
+  options?: StructuredCallOptions,
 ): Promise<GenerateStructuredResult<T>> {
   const resolved = prepareGeneration(target, config)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
@@ -170,16 +201,15 @@ export async function generateStructured<T>(
     return { status: 'failed', detail: err instanceof Error ? err.message : String(err) }
   }
   // 'auto' takes the prompt-injection path: there is no provider capability
-  // signal yet, so native responseFormat stays opt-in via 'force-on'.
-  const model = wrapLanguageModel({
-    // getModel only ever returns provider instances, never the
-    // gateway-model-id string arm of LanguageModel.
-    model: resolved.model as Parameters<typeof wrapLanguageModel>[0]['model'],
-    middleware:
-      resolved.params.structuredOutput === 'force-on'
-        ? [jsonResponseFormatMiddleware(jsonSchema)]
-        : [jsonResponseFormatMiddleware(jsonSchema), promptSchemaMiddleware()],
-  })
+  // signal yet, so native responseFormat stays opt-in via 'force-on'. The cache
+  // marker goes last, so the system block it marks carries the contract.
+  const model = wrap(resolved.model, [
+    jsonResponseFormatMiddleware(jsonSchema),
+    ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
+    ...(marksSystemPrefix(options?.cacheSystemPrefix, resolved.providerType)
+      ? [anthropicCacheMarkerMiddleware()]
+      : []),
+  ])
 
   const result = await callWithRetry<T>(
     async (sig) =>
