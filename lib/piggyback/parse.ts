@@ -307,8 +307,7 @@ type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
  * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
  * declared (locations before items); unwraps a bracketed handle, trims what it keeps, and drops a
  * blank parent; a missing description reads as ''. Never a field failure itself: a ref to a
- * dropped create's handle fails in `substitutePiggybackIds`, so using a dropped create still fires
- * the fallback.
+ * dropped handle fails in `substitutePiggybackIds`, so using one still fires the fallback.
  */
 export function normalizeCreates(block: CreateBlockInput): {
   block: NormalizedStateBlock
@@ -408,9 +407,8 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   const normalized = normalizeCreates({ ...block, ...creates.found })
   const malformedCreates = creates.unclosed + creates.badAttributes + normalized.malformed
 
-  // A cut-off stream may have lost the tags that name a create (current_location, transfers),
-  // even if every create tag is whole, so the fallback fires; a closed block's malformed creates
-  // are only counted.
+  // A cut-off stream may have lost the tags that name a create (current_location, transfers), even
+  // if every create tag is whole, so the fallback fires; a closed block only counts malformed ones.
   if (creates.declared > 0 && !stateClosed(raw))
     failures.push({ field: 'state', detail: 'block with creates cut off' })
 

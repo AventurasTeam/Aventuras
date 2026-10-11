@@ -64,7 +64,7 @@ export type ParsedStateBlock = {
   newItems?: NewItemEmission[]
 }
 
-/** Creates kept only with a bare, unique `new:` handle and a name. Minted only by `normalizeCreates`. */
+/** Every create has a bare, unique `new:` handle and a name. Minted only by `normalizeCreates`. */
 export type NormalizedStateBlock = ParsedStateBlock & { readonly __brand: 'NormalizedStateBlock' }
 
 /**

@@ -2751,8 +2751,7 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // A schema that rejected a list that isn't one would fail the whole reply, scene and summary
-    // included.
+    // A schema rejecting a non-list would fail the whole reply, scene and summary included.
     it.each([
       ['newLocations', null],
       ['newItems', null],
@@ -3018,8 +3017,7 @@ describe('per-turn-piggyback', () => {
       expect(fieldDescription(jsonSchema, path)).toContain(marker)
     })
 
-    // A null handle or name parses as '' to be dropped, but the model is still asked for both,
-    // with no default offering it the empty string.
+    // Null handle/name parses as '' to be dropped; the model is still asked for both, no default.
     it.each(['newLocations', 'newItems'] as const)(
       'asks for a %s handle and name as required strings',
       (field) => {

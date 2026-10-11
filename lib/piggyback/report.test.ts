@@ -12,7 +12,7 @@ import type {
 
 const NO_CREATES: TurnCreatesReport = { newLocations: [], newItems: [] }
 
-// Cast, not planned: these blocks are built holding ids and no creates, as the planner hands one on.
+// Cast, not planned: these blocks are built with ids and no creates, as the planner hands one on.
 function planned(
   block: Omit<ParsedStateBlock, 'newLocations' | 'newItems'>,
   report: TurnCreatesReport = NO_CREATES,
