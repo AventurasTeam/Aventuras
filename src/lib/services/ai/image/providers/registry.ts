@@ -16,6 +16,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { createLogger } from '$lib/log'
+import { fetchPublicImageBase64 } from './fetchAdapter'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -68,6 +69,19 @@ const PROVIDER_REQUIRES_API_KEY: Record<ImageProviderType, boolean> = {
   a1111: false,
 }
 
+/** Whether the adapter sends reference images; the rest would only waste the download. */
+const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
+  nanogpt: true,
+  openai: true,
+  openrouter: true,
+  pollinations: true,
+  google: true,
+  chutes: false,
+  zhipu: false,
+  comfyui: false,
+  a1111: false,
+}
+
 // ============================================================================
 // Model Cache
 // ============================================================================
@@ -100,6 +114,14 @@ export function supportsImageGeneration(providerType: string): boolean {
 /** Whether a profile of this provider needs an API key to be usable. */
 export function requiresApiKey(providerType: string): boolean {
   return PROVIDER_REQUIRES_API_KEY[providerType as ImageProviderType] ?? true
+}
+
+/** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
+async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
+  if (/^https?:\/\//i.test(image)) {
+    return fetchPublicImageBase64(image, { signal, serviceId: 'image-reference' })
+  }
+  return image.replace(/^data:[^,]*;base64,/, '')
 }
 
 /**
@@ -148,10 +170,21 @@ export async function generateImage(options: {
   // the settings UI fills, and absent is fine: the adapter falls back to canonical pixels.
   const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
 
-  // Strip data: prefix from reference images if present
-  const cleanRefs = referenceImages?.map((img) =>
-    img.startsWith('data:') ? img.replace(/^data:image\/[^;]+;base64,/, '') : img,
-  )
+  // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
+  const cleanRefs =
+    referenceImages && PROVIDER_READS_REFERENCES[profile.providerType]
+      ? (
+          await Promise.allSettled(
+            referenceImages
+              .slice(0, modelInfo?.maxReferenceImages)
+              .map((img) => toRawBase64(img, signal)),
+          )
+        ).flatMap((result) => {
+          if (result.status === 'fulfilled') return [result.value]
+          log('Dropped a reference image', { error: result.reason })
+          return []
+        })
+      : undefined
 
   return provider.generate({
     model,
