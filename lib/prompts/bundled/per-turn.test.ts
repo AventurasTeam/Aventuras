@@ -711,9 +711,9 @@ describe('bundled per-turn template — the location map and item lines', () => 
 describe('bundled per-turn template — create instructions', () => {
   const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
 
-  // Each create sits above the tag that references its handle, as canon's
-  // examples do. The parser doesn't care; a model copying the skeleton does.
-  it('shows the creation tags in the state block, each above the tag that names it', () => {
+  // A model copies the skeleton's order, and canon's example declares before it uses; the parser
+  // doesn't care. <scene_entities>, which may name a new item, still leads.
+  it('shows the creation tags in the state block, <new_location> above <current_location> and <new_item> above <transfers>', () => {
     const newLocation = rendered.indexOf('<new_location handle="new:')
     const newItem = rendered.indexOf('<new_item handle="new:')
     expect(newLocation).toBeGreaterThan(-1)
