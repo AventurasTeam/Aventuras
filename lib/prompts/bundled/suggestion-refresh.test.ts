@@ -62,6 +62,11 @@ describe('bundled suggestion-refresh template — system and user halves', () =>
       definition: { setting: '', genre: 'High fantasy.', tone: '' },
       system: '# Genre\nHigh fantasy.',
     },
+    {
+      name: 'setting only',
+      definition: { setting: 'A keep on a hill.', genre: '', tone: '' },
+      system: '# Setting\nA keep on a hill.',
+    },
   ])('joins the blocks that are set with one blank line ($name)', ({ definition, system }) => {
     expect(render(definition).system).toBe(system)
   })

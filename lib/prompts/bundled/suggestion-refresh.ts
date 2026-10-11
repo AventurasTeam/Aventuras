@@ -1,11 +1,7 @@
 import type { TemplateSources } from '../types'
 
-// Structured-output call: the emission section asks for a JSON field, NOT the
-// tagged <suggestions> block macro_suggestion_emission instructs (that macro
-// belongs to the narrative fold, which appends the block to prose).
-// The capture is rstripped so the system half doesn't end on the last block's
-// blank-line separator, whichever of the three blocks is last.
 export const SUGGESTION_REFRESH: TemplateSources = {
+  // Whichever block renders last, its blank-line separator must not end the half.
   system: `{%- capture definitionBlocks -%}
 {% if definition.setting != blank -%}
 # Setting
@@ -24,6 +20,9 @@ export const SUGGESTION_REFRESH: TemplateSources = {
 {% endif -%}
 {%- endcapture -%}
 {{ definitionBlocks | rstrip }}`,
+  // Structured-output call: the emission section asks for a JSON field, NOT the
+  // tagged <suggestions> block macro_suggestion_emission instructs (that macro
+  // belongs to the narrative fold, which appends the block to prose).
   user: `{%- assign hasScene = false -%}
 {%- for e in entities | active -%}
 {%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}
