@@ -202,6 +202,20 @@ describe('heldItemLines', () => {
   it('is empty for a character holding nothing', () => {
     expect(heldItemLines(holder({}), [KEY])).toEqual([])
   })
+
+  it('reads a stored state whose arrays are null or missing as holding nothing', () => {
+    const nulled = { inventory: null, equipped_items: null } as unknown as Partial<CharacterState>
+    expect(heldItemLines(holder(nulled), [KEY])).toEqual([])
+    const sparse = makeEntity({
+      id: 'char_kael',
+      kind: 'character',
+      name: 'Kael',
+      state: { inventory: ['item_key'] } as unknown as Entity['state'],
+    })
+    expect(heldItemLines(sparse, [KEY])).toEqual([
+      { id: 'item_key', name: 'Silver Key', equipped: false },
+    ])
+  })
 })
 
 describe('looseItemLines', () => {

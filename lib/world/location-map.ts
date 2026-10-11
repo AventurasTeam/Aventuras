@@ -67,8 +67,10 @@ export function listedAncestorNames(
 
 /** `Holds:`: inventory, then equipped items. An id in both arrays shows once, as equipped. */
 export function heldItemLines(character: Entity, entities: readonly Entity[]): HeldItemLine[] {
-  const { inventory, equipped_items } = stateOf(character, 'character')
-  const equipped = new Set(equipped_items)
+  const state = stateOf(character, 'character')
+  const inventory = state.inventory ?? []
+  const equippedItems = state.equipped_items ?? []
+  const equipped = new Set(equippedItems)
   const items = new Map(
     entities.filter((e) => e.kind === 'item' && e.status !== 'retired').map((e) => [e.id, e]),
   )
@@ -81,7 +83,7 @@ export function heldItemLines(character: Entity, entities: readonly Entity[]): H
     lines.push({ id, name: row.name, equipped: isEquipped })
   }
   for (const id of inventory) if (!equipped.has(id)) add(id, false)
-  for (const id of equipped_items) add(id, true)
+  for (const id of equippedItems) add(id, true)
   return lines
 }
 
