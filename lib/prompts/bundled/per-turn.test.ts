@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { renderTemplate, TEMPLATE_IDS } from '../index'
 
+const PLACES_INSTRUCTION =
+  'Use an ID from Places for <current_location>, or create the place below when the scene settles somewhere new.'
+
 // M2-shaped context: opening + a couple of entries, one entity, empty genre /
 // tone / setting (M2 stories carry these empty until M3.6).
 const m2Context = {
@@ -30,6 +33,10 @@ const m2Context = {
   // comparison that is false for the wrong reason and lets a broken guard pass.
   structuralLocation: null,
   locationIds: [],
+  locationMap: [],
+  currentLocationChain: [],
+  heldItems: [],
+  looseItems: [],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
   structuralPinnedLore: [],
@@ -97,6 +104,23 @@ describe('bundled per-turn template — empty-guard contract', () => {
           description: 'A weathered hilltop fortress.',
         },
         locationIds: ['loc_1'],
+        locationMap: [
+          { id: 'loc_0', name: 'Highmoor', depth: 0 },
+          { id: 'loc_1', name: 'The Keep', depth: 1 },
+          { id: 'loc_2', name: 'The Gatehouse', depth: 2 },
+          { id: 'loc_3', name: 'Lowmarsh', depth: 0 },
+        ],
+        currentLocationChain: ['Highmoor'],
+        heldItems: [
+          {
+            holderId: 'char_1',
+            items: [
+              { id: 'item_1', name: 'Silver Key', equipped: false },
+              { id: 'item_2', name: 'worn sword', equipped: true },
+            ],
+          },
+        ],
+        looseItems: [{ id: 'item_3', name: 'the iron chest' }],
         structuralActiveThreads: [
           { id: 'thr_1', status: 'active', title: 'The siege', description: 'Three weeks in.' },
         ],
@@ -118,24 +142,26 @@ describe('bundled per-turn template — empty-guard contract', () => {
     ).toMatchSnapshot()
   })
 
-  // The ID instructions say "any off-scene character above" and "somewhere not
-  // listed above" — words that point at the memory blocks. Move the include
-  // below them and the prompt asks the model to look at something it has not
-  // been shown yet; scene-entity promotion and location selection degrade with
-  // no parse error, and the snapshot diff is a pure hunk move.
-  it('renders the memory blocks before the instructions that refer back to them', () => {
+  // The ID instructions say "any off-scene character above" and "an ID from
+  // Places" — words that point at blocks rendered earlier. Move either block
+  // below its instruction and the prompt asks the model to look at something it
+  // has not been shown yet; scene-entity promotion and location selection
+  // degrade with no parse error, and the snapshot diff is a pure hunk move.
+  it('renders the memory blocks and the map before the instructions that refer back to them', () => {
     const withMemory = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
-      locationIds: ['loc_1'],
+      locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
       retrievedEntities: [
         { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
       ],
     })
 
     const blocks = withMemory.indexOf('# Elsewhere in the world')
+    const places = withMemory.indexOf('# Places')
     expect(blocks).toBeGreaterThan(-1)
+    expect(places).toBeGreaterThan(-1)
     expect(blocks).toBeLessThan(withMemory.indexOf('off-scene character above'))
-    expect(blocks).toBeLessThan(withMemory.indexOf('not listed above'))
+    expect(places).toBeLessThan(withMemory.indexOf(PLACES_INSTRUCTION))
   })
 
   // The builder hands over an already-composed window (cadence.md → Composition
@@ -245,11 +271,9 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-      locationIds: ['loc_1'],
     })
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
-    expect(rendered).toContain('for <current_location> when the scene is at that place: loc_1.')
   })
 
   it('drops the colon on a current location with no description', () => {
@@ -263,22 +287,25 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   // structuralLocation is null when the scene names a location that is staged,
   // retired, or gone — guarding on it rather than on currentLocationId is what
-  // keeps a dangling header out (templateContextMap → structuralLocation).
-  it('omits the location block and its ID instruction when the floor seats none', () => {
+  // keeps a dangling header out (templateContextMap → structuralLocation). The
+  // map doesn't hang off the floor, so the scene can still move.
+  it('omits the location block when the floor seats none, but still offers the map', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       currentLocationId: 'loc_1',
       structuralLocation: null,
+      locationMap: [{ id: 'loc_2', name: 'Old Mill', depth: 0 }],
     })
     expect(rendered).not.toContain('# Current location')
-    expect(rendered).not.toContain('<current_location> when the scene is at that place')
+    expect(rendered).toContain('# Places\n[loc_2] Old Mill\n')
+    expect(rendered).toContain(PLACES_INSTRUCTION)
     expect(rendered).toContain('## Aria [char_1]')
   })
 
-  // The regression this pins: a ranked location renders with a bracketed ID, so
-  // the scene moving there has to be expressible. locationIds is what tells the
-  // template which of those IDs are places.
-  it('offers a ranked location as a <current_location> target', () => {
+  // The map, not retrieval, is what makes a move expressible: a place retrieval
+  // never ranked still carries an ID the model can name (piggyback.md → What the
+  // writer sees).
+  it('offers every listed place as a <current_location> target, retrieved or not', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       structuralLocation: {
@@ -288,29 +315,19 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
-      retrievedEntities: [
-        {
-          id: 'loc_9',
-          displayName: 'The Market',
-          renderedText: 'The Market (currently elsewhere): Stalls under sailcloth.',
-        },
+      locationMap: [
+        { id: 'loc_1', name: 'The Keep', depth: 0 },
+        { id: 'loc_9', name: 'The Market', depth: 0 },
       ],
-      locationIds: ['loc_1', 'loc_9'],
     })
-    expect(rendered).toContain('[loc_9] The Market (currently elsewhere): Stalls under sailcloth.')
-    expect(rendered).toContain(
-      'for <current_location> when the scene is at that place: loc_1, loc_9.',
-    )
+    expect(rendered).toContain('# Places\n[loc_1] The Keep\n[loc_9] The Market\n')
+    expect(rendered).toContain(PLACES_INSTRUCTION)
   })
 
-  // RetrievedRow is { id, displayName, renderedText } — no EntityKind — so an
-  // instruction naming "the IDs above" would point <current_location> at an ID
-  // set that can be entirely characters, and nothing downstream kind-checks what
-  // comes back (lib/piggyback/apply.ts writes it through unvalidated).
-  it('drops the <current_location> instruction when no ranked entity is a place', () => {
+  // An instruction naming "an ID from Places" has no referent without the block.
+  it('drops the map and its instruction when the branch has no listed place', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
-      structuralLocation: null,
       retrievedEntities: [
         {
           id: 'char_9',
@@ -318,14 +335,24 @@ describe('bundled per-turn template — empty-guard contract', () => {
           renderedText: 'Mira (currently elsewhere): A courier.',
         },
       ],
-      locationIds: [],
     })
-    expect(rendered).not.toContain('# Current location')
-    expect(rendered).not.toContain('for <current_location> when the scene is at that place')
+    expect(rendered).not.toContain('# Places')
+    expect(rendered).not.toContain('Use an ID from Places')
     // Positive control: the ranked row and its own instruction still render, so
     // the exclusion above is not passing on an empty block.
     expect(rendered).toContain('[char_9] Mira (currently elsewhere): A courier.')
     expect(rendered).toContain('enters the scene, include their ID')
+  })
+
+  // locationIds stays a pinned variable for custom packs; the bundled template
+  // offers places through the map instead.
+  it('does not render locationIds', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      locationIds: ['loc_1'],
+    })
+    expect(rendered).not.toContain('loc_1')
+    expect(rendered).toContain('## Aria [char_1]')
   })
 
   // The classifier can name one entity as both in-scene and the location; the
@@ -401,7 +428,9 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(rendered).toContain('## Aria [char_1]\n\n## Bex [char_2]\nA quiet smith.')
   })
 
-  it('does not dump every active location — locations rank like any other entity', () => {
+  // The map carries names only: an off-scene place's description still has to win
+  // retrieval budget like any other entity's.
+  it('lists an off-scene location on the map by name, without its description', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       entities: [
@@ -415,8 +444,10 @@ describe('bundled per-turn template — empty-guard contract', () => {
           injectionMode: 'auto',
         },
       ],
+      locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     })
-    expect(rendered).not.toContain('The Keep')
+    expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
+    expect(rendered).not.toContain('A weathered hilltop fortress.')
     expect(rendered).toContain('## Aria [char_1]')
   })
 })
@@ -440,6 +471,11 @@ describe('bundled per-turn template — piggybackFires gating', () => {
       description: 'A weathered hilltop fortress.',
     },
     locationIds: ['loc_1'],
+    locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    heldItems: [
+      { holderId: 'char_1', items: [{ id: 'item_1', name: 'Silver Key', equipped: false }] },
+    ],
+    looseItems: [{ id: 'item_7', name: 'the iron chest' }],
     calendarVocabulary: {
       baseUnitName: 'second',
       secondsPerBaseUnit: 1,
@@ -460,7 +496,11 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('The Keep: A weathered hilltop fortress.')
     expect(rendered).not.toContain('[loc_1]')
-    expect(rendered).not.toContain('for <current_location> when the scene is at that place')
+    expect(rendered).not.toContain('Use an ID from Places')
+    expect(rendered).toContain('# Places\nThe Keep\n')
+    expect(rendered).toContain('Holds: Silver Key\n')
+    expect(rendered).toContain('Here: the iron chest\n')
+    expect(rendered).not.toContain('[item_')
     expect(rendered).toContain('# Calendar')
     expect(rendered).not.toContain('<world_time_delta>')
     expect(rendered).not.toContain('<state>')
@@ -474,8 +514,221 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     expect(rendered).toContain('## Aria [char_1]')
     expect(rendered).toContain('[char_2] Lord Eldrin')
     expect(rendered).toContain('[loc_1] The Keep')
+    expect(rendered).toContain('# Places\n[loc_1] The Keep\n')
+    expect(rendered).toContain('Holds: [item_1] Silver Key\n')
+    expect(rendered).toContain('Here: [item_7] the iron chest\n')
+    expect(rendered).toContain(PLACES_INSTRUCTION)
     expect(rendered).toContain('# Calendar')
     expect(rendered).toContain('<state>')
+  })
+})
+
+describe('bundled per-turn template — the location map and item lines', () => {
+  const KEEP = {
+    id: 'loc_1',
+    kind: 'location',
+    status: 'active',
+    name: 'The Keep',
+    description: 'A weathered hilltop fortress.',
+  }
+  const MAP = [
+    { id: 'loc_0', name: 'Highmoor', depth: 0 },
+    { id: 'loc_1', name: 'The Keep', depth: 1 },
+    { id: 'loc_2', name: 'The Gatehouse', depth: 2 },
+    { id: 'loc_3', name: 'Lowmarsh', depth: 0 },
+  ]
+  const HELD = [
+    {
+      holderId: 'char_1',
+      items: [
+        { id: 'item_1', name: 'Silver Key', equipped: false },
+        { id: 'item_2', name: 'worn sword', equipped: true },
+      ],
+    },
+  ]
+  const render = (over: Record<string, unknown>) =>
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over })
+
+  it('nests the map two spaces per level, with IDs when piggyback fires', () => {
+    expect(render({ locationMap: MAP })).toContain(
+      '# Places\n[loc_0] Highmoor\n  [loc_1] The Keep\n    [loc_2] The Gatehouse\n[loc_3] Lowmarsh\n',
+    )
+  })
+
+  it('renders the map by name alone when piggyback does not fire', () => {
+    expect(render({ piggybackFires: false, locationMap: MAP })).toContain(
+      '# Places\nHighmoor\n  The Keep\n    The Gatehouse\nLowmarsh\n',
+    )
+  })
+
+  it('puts the map after the current location and before the memory blocks', () => {
+    const rendered = render({
+      structuralLocation: KEEP,
+      locationMap: MAP,
+      retrievedEntities: [
+        { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
+      ],
+    })
+    const location = rendered.indexOf('# Current location')
+    const places = rendered.indexOf('# Places')
+    expect(location).toBeGreaterThan(-1)
+    expect(location).toBeLessThan(places)
+    expect(places).toBeLessThan(rendered.indexOf('# Elsewhere in the world'))
+  })
+
+  it('renders the current location with its chain of listed ancestors, nearest first', () => {
+    const rendered = render({
+      structuralLocation: {
+        ...KEEP,
+        id: 'loc_2',
+        name: 'The Gatehouse',
+        description: 'Two towers and a rusted portcullis.',
+      },
+      currentLocationChain: ['The Keep', 'Highmoor'],
+    })
+    expect(rendered).toContain(
+      '[loc_2] The Gatehouse — in The Keep › Highmoor: Two towers and a rusted portcullis.\n',
+    )
+  })
+
+  it('renders no chain for a top-level place', () => {
+    const rendered = render({ structuralLocation: KEEP })
+    expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.\n')
+    expect(rendered).not.toContain(' — in ')
+  })
+
+  it('lists the items lying at the current location', () => {
+    const rendered = render({
+      structuralLocation: KEEP,
+      looseItems: [
+        { id: 'item_7', name: 'the iron chest' },
+        { id: 'item_8', name: 'a coil of rope' },
+      ],
+    })
+    expect(rendered).toContain(
+      '[loc_1] The Keep: A weathered hilltop fortress.\nHere: [item_7] the iron chest, [item_8] a coil of rope\n',
+    )
+  })
+
+  it('omits the Here line when nothing lies at the current location', () => {
+    const rendered = render({ structuralLocation: KEEP })
+    expect(rendered).not.toContain('Here:')
+    expect(rendered).toContain('# Current location')
+  })
+
+  it('lists what an in-scene character holds under its own entry, equipped marked', () => {
+    expect(render({ heldItems: HELD })).toContain(
+      '## Aria [char_1]\nA wary scout.\nHolds: [item_1] Silver Key, [item_2] worn sword (equipped)\n',
+    )
+  })
+
+  it('drops the held-item IDs when piggyback does not fire', () => {
+    expect(render({ piggybackFires: false, heldItems: HELD })).toContain(
+      '## Aria\nA wary scout.\nHolds: Silver Key, worn sword (equipped)\n',
+    )
+  })
+
+  it('puts the Holds line straight under a holder with no description', () => {
+    const rendered = render({
+      entities: [{ ...m2Context.entities[0], description: null }],
+      heldItems: HELD,
+    })
+    expect(rendered).toContain('## Aria [char_1]\nHolds: [item_1] Silver Key')
+  })
+
+  // piggyback.md → What the writer sees: an item in a holder's line isn't
+  // repeated in the scene list.
+  it('does not repeat a held item in the scene list', () => {
+    const rendered = render({
+      sceneEntities: ['char_1', 'item_1', 'item_9', 'char_2'],
+      entities: [
+        ...m2Context.entities,
+        {
+          id: 'item_1',
+          kind: 'item',
+          name: 'Silver Key',
+          description: 'Cold to the touch.',
+          status: 'active',
+          injectionMode: 'auto',
+        },
+        {
+          id: 'item_9',
+          kind: 'item',
+          name: 'A lantern',
+          description: 'Still lit.',
+          status: 'active',
+          injectionMode: 'auto',
+        },
+        {
+          id: 'char_2',
+          kind: 'character',
+          name: 'Bex',
+          description: 'A quiet smith.',
+          status: 'active',
+          injectionMode: 'auto',
+        },
+      ],
+      heldItems: HELD,
+    })
+    expect(rendered).not.toContain('## Silver Key')
+    expect(rendered).not.toContain('Cold to the touch.')
+    // Positive controls: an unheld in-scene item still gets its entry, and a
+    // character holding nothing gets no Holds line.
+    expect(rendered).toContain('## A lantern [item_9]\nStill lit.\n')
+    expect(rendered).toContain('## Bex [char_2]\nA quiet smith.\n\n')
+    expect(rendered.split('Holds:')).toHaveLength(2)
+  })
+})
+
+describe('bundled per-turn template — create instructions', () => {
+  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+
+  // Each create sits above the tag that references its handle, as canon's
+  // examples do. The parser doesn't care; a model copying the skeleton does.
+  it('shows the creation tags in the state block, each above the tag that names it', () => {
+    const newLocation = rendered.indexOf('<new_location handle="new:')
+    const newItem = rendered.indexOf('<new_item handle="new:')
+    expect(newLocation).toBeGreaterThan(-1)
+    expect(newItem).toBeGreaterThan(-1)
+    expect(newLocation).toBeLessThan(rendered.indexOf('<current_location>'))
+    expect(newItem).toBeLessThan(rendered.indexOf('<transfers>'))
+    expect(rendered).toContain(
+      '<current_location>the ID from Places, or the handle of a new_location above</current_location>',
+    )
+    expect(rendered).toContain('<item id="item ID, or the handle of a new_item above"')
+  })
+
+  it('explains handles and carries the significance rules', () => {
+    expect(rendered).toContain('a handle that starts with new:')
+    expect(rendered).toContain('Create a place only when the scene settles somewhere')
+    expect(rendered).toContain('Create an item only when a character takes, receives or is given')
+    expect(rendered).toContain('Apart from those handles, use only the IDs shown to you above')
+  })
+
+  // The parser decodes the five XML entities in a create's name, parent and
+  // description but drops a create whose attribute text isn't well-formed, or whose
+  // description holds a raw <, so the model is told how to write those two.
+  it('tells the model to escape a double quote in an attribute value and a < in a description', () => {
+    expect(rendered).toContain(
+      "Write a double quote inside a create's name or parent as &quot; and a < inside its description as &lt;.",
+    )
+  })
+
+  // The sentence this replaces kept new places and items out of the block, which
+  // would starve the create path.
+  it('no longer tells the model to leave new places and items out of the block', () => {
+    expect(rendered).not.toContain('Only reference items and locations that already have an ID')
+    expect(rendered).not.toContain('describe it in prose only')
+  })
+
+  it('leaves the create instructions out when piggyback does not fire', () => {
+    const off = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      piggybackFires: false,
+    })
+    expect(off).not.toContain('<new_location')
+    expect(off).not.toContain('Create a place only when')
+    expect(off).not.toContain('&quot;')
   })
 })
 

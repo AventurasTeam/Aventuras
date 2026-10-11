@@ -1252,14 +1252,26 @@ describe('narrative fold — retrieval handoff', () => {
     expect(context.structuralActiveThreads).toEqual([])
   })
 
-  // The whole round trip for a scene that MOVES: the ranked place has to reach
-  // the prompt as a nameable ID, and what the model names has to land on the
-  // entry. Omitting <current_location> means "inherit" (lib/piggyback/apply.ts),
-  // so a prompt that offers no place freezes the location forever.
-  it('lets the model move the scene to a ranked location', async () => {
+  // The whole round trip for a scene that MOVES: the place has to reach the prompt
+  // as a nameable ID, and what the model names has to land on the entry. Omitting
+  // <current_location> means "inherit" (lib/piggyback/apply.ts), so a prompt that
+  // offers no place freezes the location forever. The map lists every place, so
+  // the move doesn't wait on retrieval ranking it.
+  it('lets the model move the scene to a place on the map that retrieval never ranked', async () => {
     const { prompt, metadata } = await runNarrativeWith({
       narrative:
         'They cross to the stalls.\n<state><current_location>l1</current_location></state>',
+    })
+    expect(prompt).toContain('# Places\n[l1] The Market\n')
+    expect(prompt).toContain('Use an ID from Places for <current_location>')
+    expect(metadata.currentLocationId).toBe(RETRIEVED_LOCATION_ID)
+  })
+
+  // locationIds stays in the context for custom packs; the bundled template offers
+  // places through the map instead of its line.
+  it('still builds locationIds, which the bundled template no longer renders', async () => {
+    const { prompt, context } = await runNarrativeWith({
+      narrative: 'prose',
       intermediates: {
         [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate({
           entities: [
@@ -1273,19 +1285,9 @@ describe('narrative fold — retrieval handoff', () => {
         }),
       },
     })
-    expect(prompt).toContain('for <current_location> when the scene is at that place: l1.')
-    expect(metadata.currentLocationId).toBe(RETRIEVED_LOCATION_ID)
-  })
-
-  // Negative control for the case above: the same fold with a ranked CHARACTER
-  // offers no place, so the instruction stays out of the prompt entirely.
-  it('offers no <current_location> target when the ranked entity is not a place', async () => {
-    const { prompt } = await runNarrativeWith({
-      narrative: 'prose',
-      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate() },
-    })
-    expect(prompt).toContain('Corvin (currently elsewhere): a smuggler.')
-    expect(prompt).not.toContain('for <current_location> when the scene is at that place')
+    expect(context.locationIds).toEqual(['l1'])
+    expect(prompt).toContain('# Places\n[l1] The Market\n')
+    expect(prompt).not.toContain('Use one of these place IDs')
   })
 
   // ctx.intermediates is Record<string, unknown>: a non-outcome value must not

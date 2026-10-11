@@ -14,11 +14,17 @@ Take the changes from the turn below; nothing above it happened this turn.
 
 ## Kael
 A courier with a stolen sigil.
+Holds: [i3] Courier’s seal, [i4] short sword (equipped)
 
 
 # Current location
 
-The Drowned Keep: Half sunk into the marsh.
+The Drowned Keep — in The Marsh: Half sunk into the marsh.
+Here: [i5] a rusted lantern
+
+# Places
+[l2] The Marsh
+  [l1] The Drowned Keep
 
 # Elsewhere in the world
 
@@ -60,5 +66,11 @@ The keep answered with a single lantern, swinging.
 Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
 For the time delta, give seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative).
+
+Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
 "
 `;

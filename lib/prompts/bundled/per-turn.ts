@@ -22,8 +22,11 @@ export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 {%- comment -%}
 The second half of the condition de-dupes the row the classifier named as both
 in-scene and the location; it is nil-safe, since a null structuralLocation
-makes the comparison "e.id != nil", which is true.
+makes the comparison "e.id != nil", which is true. An item a holder's Holds
+line names is not listed again (piggyback.md → What the writer sees).
 {%- endcomment -%}
+{%- assign heldIds = '' | split: ',' -%}
+{%- for h in heldItems -%}{%- assign ids = h.items | map: 'id' -%}{%- assign heldIds = heldIds | concat: ids -%}{%- endfor -%}
 {%- assign hasScene = false -%}
 {%- for e in entities | active -%}
 {%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}{%- assign hasScene = true -%}{%- endif -%}
@@ -31,18 +34,27 @@ makes the comparison "e.id != nil", which is true.
 {% if hasScene -%}
 # In scene
 {% for e in entities | active -%}
-{%- if sceneEntities contains e.id and e.id != structuralLocation.id %}
+{%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}
+{%- unless heldIds contains e.id %}
 ## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}{% if e.description != blank %}
-{{ e.description }}{% endif %}
-{% endif -%}
+{{ e.description }}{% endif %}{% for h in heldItems %}{% if h.holderId == e.id %}
+Holds: {% for i in h.items %}{% if piggybackFires %}[{{ i.id }}] {% endif %}{{ i.name }}{% if i.equipped %} (equipped){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}{% endfor %}
+{% endunless -%}
+{%- endif -%}
 {%- endfor %}
 
 {% endif -%}
 {% if structuralLocation -%}
 # Current location
 
-{% if piggybackFires %}[{{ structuralLocation.id }}] {% endif %}{{ structuralLocation.name }}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}
+{% if piggybackFires %}[{{ structuralLocation.id }}] {% endif %}{{ structuralLocation.name }}{% if currentLocationChain.size > 0 %} — in {{ currentLocationChain | join: ' › ' }}{% endif %}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}{% if looseItems.size > 0 %}
+Here: {% for i in looseItems %}{% if piggybackFires %}[{{ i.id }}] {% endif %}{{ i.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}
 
+{% endif -%}
+{% if locationMap.size > 0 -%}
+# Places
+{% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}
+{% endfor %}
 {% endif -%}
 {% include 'macro_memory_blocks' -%}
 {% if piggybackFires -%}
@@ -50,15 +62,8 @@ makes the comparison "e.id != nil", which is true.
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
 {% endif -%}
-{%- comment -%}
-The ids are enumerated rather than referred to as "the IDs above": the memory
-blocks are kind-blind (RetrievedRow has no EntityKind), so pointing
-<current_location> at them would offer a set that can be all characters, and
-nothing downstream kind-checks what comes back. locationIds is the kind-filtered
-union the builder assembles for exactly this line.
-{%- endcomment -%}
-{% if locationIds.size > 0 -%}
-Use one of these place IDs (without brackets) for <current_location> when the scene is at that place: {{ locationIds | join: ', ' }}. Leave it out if the scene moves somewhere not listed above.
+{% if locationMap.size > 0 -%}
+Use an ID from Places for <current_location>, or create the place below when the scene settles somewhere new.
 
 {% endif -%}
 {% endif -%}
