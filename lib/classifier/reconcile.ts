@@ -1,4 +1,5 @@
 import type { CollisionReason, Entity } from '@/lib/db'
+import { compareId } from '@/lib/list-modules'
 import { namesakeBasis } from '@/lib/world'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
@@ -108,7 +109,7 @@ export function decideNewItem(
       (a, b) =>
         b.similarity - a.similarity ||
         a.entity.createdAt - b.entity.createdAt ||
-        (a.entity.id < b.entity.id ? -1 : a.entity.id > b.entity.id ? 1 : 0),
+        compareId(a.entity.id, b.entity.id),
     )
   if (best === undefined) return null
   return { partnerId: best.entity.id, reason: best.similarity >= TAU_HIGH ? 'alike' : 'ambiguous' }
