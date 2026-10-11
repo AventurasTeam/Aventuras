@@ -166,9 +166,10 @@ reads as the bare handle.
 `key="value"` pairs; any other text drops the create and counts it
 malformed, so a reference to its handle then fails its field and the
 fallback fires. The five XML entities are decoded in a create's name
-and description, and a raw `<` in a description drops the create, so
-the prompt asks the model to write a double quote inside a name as
-`&quot;` and a `<` inside a description as `&lt;`. A malformed create
+and description, and a raw `<` or `>` in a name or a raw `<` in a
+description drops the create, so the prompt asks the model to write a
+double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
+and a `<` inside a description as `&lt;`. A malformed create
 in a closed block only logs a warning. A stream cut off inside a
 create (a `<state>` with no `</state>` and a create opened but never
 closed) fails the `state` field instead, because the cut may have lost

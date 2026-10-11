@@ -747,11 +747,12 @@ describe('bundled per-turn template — create instructions', () => {
   })
 
   // The parser decodes the five XML entities in a create's name and description
-  // but drops a create whose attribute text isn't well-formed, or whose
-  // description holds a raw <, so the model is told how to write those two.
-  it("tells the model to escape a double quote in a create's name and a < in its description", () => {
+  // but drops a create whose attribute text isn't well-formed (a raw < or > in
+  // the name included), or whose description holds a raw <, so the model is told
+  // how to write those.
+  it("tells the model to escape a double quote, < or > in a create's name and a < in its description", () => {
     expect(rendered).toContain(
-      "Write a double quote inside a create's name as &quot; and a < inside its description as &lt;.",
+      "Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.",
     )
   })
 
