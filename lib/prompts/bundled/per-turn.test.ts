@@ -739,7 +739,7 @@ describe('bundled per-turn template — create instructions', () => {
   it('explains handles and carries the significance rules', () => {
     expect(rendered).toContain('a handle that starts with new:')
     expect(rendered).toContain(
-      "use that handle like an ID only as a new place's <current_location> or another new place's parent, or as a new item's transfer item id.",
+      "use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or in <scene_entities> (it is present).",
     )
     expect(rendered).toContain('Create a place only when the scene settles somewhere')
     expect(rendered).toContain('Create an item only when a character takes, receives or is given')

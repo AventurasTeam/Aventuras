@@ -151,10 +151,11 @@ classifier character create uses, and for a location an optional
 `parent`: an id from the map or another new location's handle. Nothing
 else is written; later upkeep of places and items isn't this writer's.
 
-**Where a handle is used.** The prompt asks for a handle only as the
-`<current_location>` or another new place's `parent` (a new place), or
-as a transfer's item `id` (a new item); the parser also tolerates a
-declared handle in `<scene_entities>`. A handle in any other field, a
+**Where a handle is used.** The prompt asks for a new place's handle
+only as the `<current_location>` or another new place's `parent`, and
+for a new item's handle only as a transfer's item `id` or in
+`<scene_entities>` (the item is present); the parser also tolerates a
+new place's handle in `<scene_entities>`. A handle in any other field, a
 visual change's id or a transfer's holder, or one the block's creates
 don't declare, fails the field it sits in, like an unknown id. A
 `parent` that names nothing resolvable doesn't fail: the location goes
