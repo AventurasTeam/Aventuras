@@ -13,32 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement system and user prompt halves.** Designed 2026-10-11
-  ([exploration record](./explorations/2026-10-11-system-and-user-prompt-halves.md));
-  the spec is canon:
-  [`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)
-  for the template shape, the placement rule, the bundled split and the
-  cache marker, with
-  [`→ Structured output`](./architecture.md#structured-output--the-json-contract-is-not-pack-content)
-  for where the JSON contract goes, and the per-template notes in
-  [`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)
-  and
-  [`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads).
-  It splits the per-turn and fallback templates the locations-and-items
-  work edits, so it lands after that PR. The periodic classifier now
-  reads its rules before its data: run the real-provider classifier
-  smoke spec before and after. The narrator's output-format line leaves
-  the end of the prompt, also unmeasured. The mock LLM's schema
-  extraction (`scripts/mock-llm/routing.ts`) brackets the block with the
-  closing line, which moves to the user message, so its end delimiter
-  becomes the end of the system message. Confirm on an Anthropic story,
-  through Diagnostics' HTTP capture, that the narrative call reads its
-  cache; whether a streamed capture keeps the usage events is
-  unchecked. Both templates collect the held item ids in the same
-  Liquid loop to keep a held item out of the scene list, and a custom
-  pack must repeat it, since the context builder exposes no held-id
-  set; the split is the moment to share it.
-
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
   extraction, reconciled by Layer B
@@ -78,7 +52,9 @@ for the placement rule.
   shared context macro mixes the output contract with grounding that
   changes as the user fills the wizard in, so each splits into a
   contract macro and a grounding macro; and the blocks the split left in
-  a user half only because they point at its content by position. v1
+  a user half only because they point at its content by position. The
+  narrator's output-format line also left the end of the prompt for the
+  system half, unmeasured; the pass checks where it reads best. v1
   work, since the shipped prompts have to be good, once the halves land.
   Raised 2026-10-11.
 
