@@ -1818,11 +1818,11 @@ story_entries.metadata: {
     currentLocation?: string         // as emitted; NOT nullable — the model cannot emit null, and a leaf may not stack optional over nullable, see [Entry mutability & rollback](#entry-mutability--rollback)
     worldTimeDelta?: number          // seconds, as emitted before clamping
     worldTimeDeltaApplied?: number   // what apply.ts actually added to worldTime; absent when nothing was applied
-    currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
+    currentLocationRejected?: true   // apply.ts refused the emitted id (or a fallback's new-item handle); absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
     transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
-    newLocations?: { handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused' | 'dropped'; id?: string; parentDropped?: true }[]  // as emitted, post-substitution, with what apply.ts made of it; see memory/piggyback.md → New locations and items
-    newItems?: { handle: string; name: string; description: string; outcome: 'created' | 'dropped'; id?: string }[]
+    newLocations?: ({ handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused'; id: string; parentDropped?: true } | { handle: string; name: string; description: string; parent?: string; outcome: 'dropped' })[]  // as emitted, post-substitution, with what the per-turn create planner made of it; see memory/piggyback.md → New locations and items
+    newItems?: ({ handle: string; name: string; description: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }
@@ -1883,20 +1883,27 @@ exist specifically to say what happened. Divergence between report and
 absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
-**The report records what was emitted and what `apply.ts` did with
-it.** Three things can differ from the absolute state beside them:
+**The report records what was emitted and what `apply.ts` and the
+create planner did with it.** Three things can differ from the
+absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
   `kind='location'` entity, and the previous location is inherited
-  instead. `currentLocationRejected` records that decision.
+  instead. `currentLocationRejected` records that decision. The
+  fallback rejects a new item's handle there the same way, and keeps
+  the handle in `currentLocation` when the item isn't created
+  ([`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
 - `worldTimeDelta` is clamped to `0` when negative or non-finite, and
   to the remaining headroom when it would push `worldTime` past the
   ceiling. `worldTimeDeltaApplied` records what landed.
 - A create in `newLocations` or `newItems` is created, reused (a
-  location's exact sibling) or dropped (unused), and a location's
-  parent can be dropped to the root. Its `outcome`, `id` and
+  location's exact sibling, or an earlier new location of the same
+  name and parent in the block) or dropped (unused, or the narrative
+  block it sits in has a failing field), and a location's parent can
+  be dropped to the root. Its `outcome`, `id` and
   `parentDropped` record that, and the report's other fields carry the
-  resolved id in place of the `new:` handle.
+  resolved id in place of the `new:` handle, apart from the rejected
+  handle above.
 
 The decision is recorded rather than re-derived, because the
 difference alone does not identify its cause. An emitted location

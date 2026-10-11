@@ -13,20 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement locations and items from prose.** Designed 2026-10-10
-  ([exploration record](./explorations/2026-10-10-locations-and-items-from-prose.md));
-  the spec is canon:
-  [`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items)
-  for the location map, held items, the creation tags and matching,
-  with that file's What piggyback writes, auto-promote and fallback
-  classifier changes;
-  [`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)
-  and the entry `stateReport`; and
-  [`world.md → Surfacing`](./ui/screens/world/world.md#surfacing) for
-  the `same-parent` reason and the re-parent clear. It reuses the
-  matcher, flag, partner and reason columns, so it lands after the
-  partial-name collision PR.
-
 - **Implement system and user prompt halves.** Designed 2026-10-11
   ([exploration record](./explorations/2026-10-11-system-and-user-prompt-halves.md));
   the spec is canon:
@@ -48,7 +34,10 @@ for the placement rule.
   becomes the end of the system message. Confirm on an Anthropic story,
   through Diagnostics' HTTP capture, that the narrative call reads its
   cache; whether a streamed capture keeps the usage events is
-  unchecked.
+  unchecked. Both templates collect the held item ids in the same
+  Liquid loop to keep a held item out of the scene list, and a custom
+  pack must repeat it, since the context builder exposes no held-id
+  set; the split is the moment to share it.
 
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
@@ -92,6 +81,26 @@ for the placement rule.
   a user half only because they point at its content by position. v1
   work, since the shipped prompts have to be good, once the halves land.
   Raised 2026-10-11.
+
+- **Revisit leaving places off the `# Places` map.** The map leaves
+  out retired places and `injection_mode = 'disabled'` ones (unless
+  current), and hangs a left-out place's children under its nearest
+  listed ancestor (`lib/world/location-map.ts`,
+  [`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)).
+  The per-turn writer compares a re-created place with the siblings
+  under its real `parent_location_id` (`planLocations`,
+  `matchNewLocation`), so a place whose parent is hidden, re-created by
+  exact name under the parent the map shows, is an unflagged duplicate
+  ([`→ Matching before creating`](./memory/piggyback.md#matching-before-creating)).
+  Retired parents cause it as well as disabled ones, and both leave
+  active children behind: retiring a place, by the periodic classifier
+  or a World Save, changes only its own status, and a mode change only
+  its own column, so neither moves nor retires its children. Candidate
+  directions, none chosen: always list disabled places and keep only
+  retired ones off; show a hidden parent as a bare name line; match a
+  re-created place against the parent the map shows. Raised 2026-10-11
+  by the locations-and-items-from-prose slice review, reopened by the
+  developer from its dismissals.
 
 ## UX
 

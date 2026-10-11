@@ -1,4 +1,5 @@
 import type { CollisionReason, Entity } from '@/lib/db'
+import { compareId } from '@/lib/list-modules'
 import { namesakeBasis } from '@/lib/world'
 
 // Canon's starting ranges (classifier.md -> Disambiguation). Hardcoded: the
@@ -6,9 +7,12 @@ import { namesakeBasis } from '@/lib/world'
 export const TAU_HIGH = 0.75
 export const TAU_LOW = 0.5
 
+/** classifier.md → Partner and reason; `same-parent` is the per-turn writer's alone. */
+type ClassifierFlagReason = Exclude<CollisionReason, 'same-parent'>
+
 export type ReconcileDecision =
   | { kind: 'create'; flag: null }
-  | { kind: 'create'; flag: { partnerId: string; reason: CollisionReason } }
+  | { kind: 'create'; flag: { partnerId: string; reason: ClassifierFlagReason } }
   | { kind: 'promote'; entityId: string; similarity: number }
   | { kind: 'known'; entityId: string; similarity: number }
 
@@ -65,7 +69,7 @@ function qualifiesToFlag(n: ScoredNamesake): boolean {
   return n.match === 'exact' || n.inScene || n.similarity == null || n.similarity >= TAU_LOW
 }
 
-function reasonOf(partner: ScoredNamesake): CollisionReason {
+function reasonOf(partner: ScoredNamesake): ClassifierFlagReason {
   if (partner.similarity == null) return 'no-signal'
   if (partner.similarity >= TAU_HIGH) return 'alike'
   if (partner.similarity >= TAU_LOW) return 'ambiguous'
@@ -87,6 +91,33 @@ export function decideReconcile(namesakes: readonly ScoredNamesake[]): Reconcile
   return { kind: 'create', flag: { partnerId: partner.entity.id, reason: reasonOf(partner) } }
 }
 
+export type ItemMatchFlag = {
+  partnerId: string
+  reason: Extract<CollisionReason, 'alike' | 'ambiguous'>
+}
+
+/**
+ * piggyback.md → Matching before creating: an item is never reused. The most similar exact
+ * namesake at or above τ_low flags it, older then id on a tie; an unscored one never does.
+ */
+export function decideNewItem(
+  scored: readonly { entity: Entity; similarity: number | null }[],
+): ItemMatchFlag | null {
+  const [best] = scored
+    .filter(
+      (s): s is { entity: Entity; similarity: number } =>
+        s.similarity !== null && s.similarity >= TAU_LOW,
+    )
+    .sort(
+      (a, b) =>
+        b.similarity - a.similarity ||
+        a.entity.createdAt - b.entity.createdAt ||
+        compareId(a.entity.id, b.entity.id),
+    )
+  if (best === undefined) return null
+  return { partnerId: best.entity.id, reason: best.similarity >= TAU_HIGH ? 'alike' : 'ambiguous' }
+}
+
 const hasText = (text: string | null): text is string => text != null && text.trim() !== ''
 
 // cosine reads a zero vector as 0 and a NaN as NaN: a fabricated score either way.
@@ -96,7 +127,7 @@ const scorable = (v: Float32Array): boolean => v.every(Number.isFinite) && v.som
  * One embed call for the candidate and every scorable namesake, compared in memory: independent of
  * vec0 drain state. Index-aligned with `descriptions`; null where unscored.
  */
-async function similarities(
+export async function scoreDescriptions(
   candidate: string,
   descriptions: readonly (string | null)[],
   embed: EmbedDescriptions,
@@ -144,7 +175,7 @@ export async function reconcileNewCharacter(
   }
   if (matched.length === 0) return { kind: 'create', flag: null }
 
-  const scores = await similarities(
+  const scores = await scoreDescriptions(
     candidate.description,
     matched.map((m) => m.entity.description),
     deps.embedDescriptions,

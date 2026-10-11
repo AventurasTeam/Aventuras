@@ -146,10 +146,10 @@ in the prompt's structured entity/lore/happening/relationship lists.
 When the classifier creates a brand-new entity, it emits the
 entity as a **full object with no `id` field** — name, description,
 state fields, etc. Parse allocates a fresh `char_<uuid>` (or other
-kind-appropriate prefix) and registers it in the idMap if subsequent
-output references it. Any subsequent reference in the same response
-uses a temporary handle the LLM picks; parse maps the temporary
-handle to the newly-allocated UUID.
+kind-appropriate prefix). Any subsequent reference in the same
+response uses a temporary handle the LLM picks; the planner maps the
+temporary handle to the newly-allocated UUID for the rest of that
+reply, outside the idMap.
 
 This separation keeps the LLM's surface area small (no UUID
 copying) while preserving the existing disambiguation flow below

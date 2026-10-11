@@ -38,9 +38,8 @@ import {
   resetAllStores,
 } from '@/lib/stores'
 
+import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
 import {
-  __resetClassifierEmbedder,
-  configureClassifierEmbedder,
   ensurePeriodicClassifierPipelineRegistered,
   PERIODIC_CLASSIFIER_KIND,
   PERIODIC_CLASSIFIER_RESOLVES,

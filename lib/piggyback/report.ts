@@ -1,13 +1,15 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { ParsedStateBlock } from './types'
+import type { PlannedTurn } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 
 type BuildReportArgs = {
   layer: StateReport['layer']
-  /** Post-substitution: real entity ids, not the prompt's placeholders. */
-  block: ParsedStateBlock
+  /** Real entity ids in the block, never placeholders, nor create handles bar a rejected
+   *  `currentLocation`; what became of each create in the report, whose lists are written only
+   *  when they hold an entry. */
+  turn: Pick<PlannedTurn, 'block' | 'report'>
   /** Widened to plain strings: a report read back from the column has already lost
    *  the `keyof ParsedStateBlock` narrowing, and the fallback re-supplies its own. */
   failures: { field: string; detail: string }[]
@@ -22,11 +24,19 @@ type BuildReportArgs = {
  * `summary`/`retrievalQueries` omitted: they already live top-level on EntryMetadata.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
-  const { layer, block, failures, raw, applied } = args
-  // Emptiness is judged on the block as emitted, summary included: a block carrying only
-  // a summary reported state, and suppressing its report would badge the turn as one
-  // where piggyback never ran.
-  if (Object.keys(block).length === 0 && failures.length === 0) return undefined
+  const { layer, failures, raw, applied } = args
+  const { block, report } = args.turn
+  const { newLocations, newItems } = report
+  // Emptiness is judged on the block as emitted, summary included: suppressing a summary-only
+  // report would badge the turn as one where piggyback never ran. Creates count too: the planner
+  // strips them from the block.
+  if (
+    Object.keys(block).length === 0 &&
+    failures.length === 0 &&
+    newLocations.length === 0 &&
+    newItems.length === 0
+  )
+    return undefined
 
   return {
     layer,
@@ -41,6 +51,8 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       : {}),
     ...(block.visualChanges !== undefined ? { visualChanges: block.visualChanges } : {}),
     ...(block.transfers !== undefined ? { transfers: block.transfers } : {}),
+    ...(newLocations.length > 0 ? { newLocations } : {}),
+    ...(newItems.length > 0 ? { newItems } : {}),
     ...(failures.length > 0
       ? { failedFields: failures.map((f) => ({ field: f.field, detail: f.detail })) }
       : {}),

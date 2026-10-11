@@ -41,7 +41,7 @@ export {
   renameIssue,
 } from './collision-resolve'
 export type { EntityRename, EntityRenamePlan, RenameIssue } from './collision-resolve'
-export { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf } from './collision-pair'
+export { COLLISION_PAIR_MISS, collisionPairOf, flaggedSideOf, pairSideOf } from './collision-pair'
 export type {
   CollisionPair,
   CollisionPairLookup,
@@ -78,3 +78,11 @@ export {
   visualParts,
 } from './overview'
 export type { CarryingSummary, ChipPreview } from './overview'
+export {
+  buildLocationMap,
+  heldItemLines,
+  listedAncestorNames,
+  looseItemLines,
+} from './location-map'
+export type { HeldItemLine, LocationMapRow, LooseItemLine } from './location-map'
+export { itemNamesakes, matchNewLocation } from './new-entity-match'

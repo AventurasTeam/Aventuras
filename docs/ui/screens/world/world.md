@@ -1263,11 +1263,14 @@ Merge writes, in order:
   position of its own (no holder, no placement), so the merged item
   keeps whichever position either side had, and the canonical's flag
   when the merge changes it. The flag stays when it names a live
-  namesake of the merged row other than the non-canonical. Otherwise
-  (its partner is the non-canonical, is gone, or isn't the merged
-  row's namesake) the canonical takes over the non-canonical's own
-  partner and reason when that row is live, isn't the canonical and
-  is a namesake of the merged row; else the flag clears.
+  namesake of the merged row other than the non-canonical, and for a
+  `same-parent` flag one that still shares the merged row's parent.
+  Otherwise (its partner is the non-canonical, is gone, or no longer
+  pairs with the merged row) the canonical takes over the
+  non-canonical's own partner and reason when that row is live, isn't
+  the canonical and pairs with the merged row under that reason; else
+  the flag clears. Names and parents are read as they stand after the
+  merge.
 - `entities` op=`update` on every other entity that held a ref to
   the non-canonical: its `state` paths rewritten to the canonical,
   one patch per entity, a character's `lastSeenAt` location among
@@ -1283,8 +1286,10 @@ Merge writes, in order:
   the non-canonical or the canonical: a partner naming the
   non-canonical becomes the canonical, and the flag clears (with its
   partner and reason) when the row and the merged canonical aren't
-  namesakes; no write when neither applies. Folded into that row's
-  `state` patch above when it has one.
+  namesakes, or for a `same-parent` flag no longer share a parent,
+  both read as they stand after the merge; no write when neither
+  applies. Folded into that row's `state` patch above when it has
+  one.
 - `happening_awareness` op=`create` per moved row, on the
   canonical, carrying the row's `retrieval_count`. A row for a
   happening the canonical already knows, or one gone from the branch,
@@ -1382,7 +1387,8 @@ of the pair that names a live third row stays, since it is a separate
 question, and a merge that deletes a flagged row's partner re-points
 the flag at the surviving row. A surviving row whose own partner was
 the deleted row takes the deleted row's live partner and reason
-instead, when that row is a namesake of the merged row.
+instead, when that row pairs with the merged row under that reason (a
+namesake, and for `same-parent` one sharing its parent).
 So a dormant flag clears the next time its row is in a resolved
 pair. N-way merge UI is not v1.
 

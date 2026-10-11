@@ -1,8 +1,8 @@
 import type { FlagClearPatch, PipelineAction } from '@/lib/actions'
 import type { Entity, EntityKind } from '@/lib/db'
 
-import type { CollisionPair } from './collision-pair'
-import { nameBasis, namesakeBasis, type NamesakeSide } from './namesakes'
+import { pairSideOf, stillPaired, type CollisionPair, type PairSide } from './collision-pair'
+import { nameBasis } from './namesakes'
 
 type EntityUpdate = Extract<PipelineAction, { kind: 'updateEntity' }>
 type EntityPatch = EntityUpdate['payload']['patch']
@@ -46,23 +46,25 @@ export function flagsNaming(entities: readonly Entity[], removed: ReadonlySet<st
 }
 
 /**
- * Flagged rows a rename leaves no longer a namesake of their live partner (world.md → Surfacing).
- * Only pairs with a side in `after` are judged; a dormant flag stays.
+ * Flagged rows a write leaves no longer paired with their live partner: not namesakes any more, or
+ * a `same-parent` pair split across parents (world.md → Surfacing). Only pairs with a side in
+ * `after` are judged; a dormant flag stays, and a flag with no reason never holds.
  */
 export function brokenFlags(input: {
   entities: readonly Entity[]
-  /** id → that row's name and keywords after the write. */
-  after: ReadonlyMap<string, NamesakeSide>
+  /** id → that row's name, keywords and parent after the write. */
+  after: ReadonlyMap<string, PairSide>
 }): string[] {
   const { entities, after } = input
   const byId = new Map(entities.map((e) => [e.id, e]))
-  const side = (e: Entity): NamesakeSide => after.get(e.id) ?? e
+  const side = (e: Entity): PairSide => after.get(e.id) ?? pairSideOf(e)
   return entities
     .filter((row) => {
       if (row.nameCollisionPartnerId == null) return false
       const partner = byId.get(row.nameCollisionPartnerId)
       if (partner == null || (!after.has(row.id) && !after.has(partner.id))) return false
-      return namesakeBasis(side(row), side(partner)) == null
+      const reason = row.nameCollisionReason
+      return reason == null || !stillPaired(reason, side(row), side(partner))
     })
     .map((row) => row.id)
 }

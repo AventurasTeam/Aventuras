@@ -4,8 +4,10 @@ import type { Entity } from '@/lib/db'
 
 import {
   cosine,
+  decideNewItem,
   decideReconcile,
   reconcileNewCharacter,
+  scoreDescriptions,
   TAU_HIGH,
   TAU_LOW,
   type EmbedDescriptions,
@@ -504,5 +506,82 @@ describe('cosine', () => {
 describe('thresholds', () => {
   it('pins the canon starting ranges', () => {
     expect([TAU_LOW, TAU_HIGH]).toEqual([0.5, 0.75])
+  })
+})
+
+// The exported form of the scorer reconcileNewCharacter uses; the cases above cover its guards.
+describe('scoreDescriptions', () => {
+  it('scores each description index-aligned, leaving a blank one unscored and out of the call', async () => {
+    const embed = embedder({ [KEEPER]: 0.8 })
+    expect(await scoreDescriptions('The keeper.', [null, KEEPER, '  '], embed)).toEqual([
+      null,
+      0.8,
+      null,
+    ])
+    expect(embed).toHaveBeenCalledWith(['The keeper.', KEEPER])
+  })
+
+  it('makes no call for a blank candidate', async () => {
+    const embed = embedder({ [KEEPER]: 0.8 })
+    expect(await scoreDescriptions('  ', [KEEPER], embed)).toEqual([null])
+    expect(embed).not.toHaveBeenCalled()
+  })
+})
+
+// piggyback.md → Matching before creating: an item is never reused, only flagged.
+describe('decideNewItem', () => {
+  const scored = (id: string, similarity: number | null, over: Partial<Entity> = {}) => ({
+    entity: row({ id, kind: 'item', name: 'rusted key', ...over }),
+    similarity,
+  })
+
+  it('flags alike from 0.75, and ambiguous from 0.5 up to it', () => {
+    expect(decideNewItem([scored('item_a', 0.75)])).toEqual({
+      partnerId: 'item_a',
+      reason: 'alike',
+    })
+    expect(decideNewItem([scored('item_a', 0.74)])).toEqual({
+      partnerId: 'item_a',
+      reason: 'ambiguous',
+    })
+    expect(decideNewItem([scored('item_a', 0.5)])).toEqual({
+      partnerId: 'item_a',
+      reason: 'ambiguous',
+    })
+  })
+
+  it('creates plain below 0.5, and with no namesake', () => {
+    expect(decideNewItem([scored('item_a', 0.49)])).toBeNull()
+    expect(decideNewItem([])).toBeNull()
+  })
+
+  it('never flags on an unscored namesake', () => {
+    expect(decideNewItem([scored('item_a', null)])).toBeNull()
+    expect(
+      decideNewItem([
+        scored('item_old', null, { createdAt: 0 }),
+        scored('item_b', 0.6, { createdAt: 9 }),
+      ]),
+    ).toEqual({ partnerId: 'item_b', reason: 'ambiguous' })
+  })
+
+  it('pairs with the most similar namesake, not the first', () => {
+    expect(decideNewItem([scored('item_a', 0.6), scored('item_b', 0.9)])).toEqual({
+      partnerId: 'item_b',
+      reason: 'alike',
+    })
+  })
+
+  it('breaks a similarity tie by the older row, then the id', () => {
+    expect(
+      decideNewItem([
+        scored('item_new', 0.6, { createdAt: 9 }),
+        scored('item_old', 0.6, { createdAt: 2 }),
+      ]),
+    ).toEqual({ partnerId: 'item_old', reason: 'ambiguous' })
+    expect(decideNewItem([scored('item_b', 0.6), scored('item_a', 0.6)])).toEqual({
+      partnerId: 'item_a',
+      reason: 'ambiguous',
+    })
   })
 })

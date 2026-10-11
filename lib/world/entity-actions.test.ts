@@ -10,6 +10,7 @@ import {
   itemDraftFrom,
   locationDraftFrom,
   type CharacterDraft,
+  type LocationDraft,
   type RelationshipDraft,
   type RelationshipLink,
 } from './entity-draft'
@@ -729,6 +730,100 @@ describe('collision flags a rename breaks', () => {
   it('clears nothing on a save that keeps the name, whatever its keywords', () => {
     expect(save(MARTA, { keywords: [] }, [MARTA, KEEPER])).toStrictEqual([
       updateOf('char_marta', { keywords: [] }),
+    ])
+  })
+})
+
+describe('collision flags a re-parent breaks', () => {
+  const place = (
+    id: string,
+    name: string,
+    parentId: string | null,
+    overrides: Partial<Entity> = {},
+  ): Entity => ({
+    id,
+    branchId: 'br_1',
+    kind: 'location',
+    name,
+    description: null,
+    status: 'active',
+    retiredReason: null,
+    injectionMode: 'auto',
+    nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
+    state: { parent_location_id: parentId },
+    tags: [],
+    keywords: [],
+    priority: 0,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  })
+  const MARKET = place('loc_market', 'The Market', 'loc_hollow')
+  const STALLS = place('loc_stalls', 'The Market Stalls', 'loc_hollow', {
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: 'loc_market',
+    nameCollisionReason: 'same-parent',
+  })
+
+  function save(row: Entity, changes: Partial<LocationDraft>, branchEntities: readonly Entity[]) {
+    return entityActions({
+      branchEntities,
+      kind: 'location',
+      row,
+      keywordsBase: row.keywords,
+      draft: { ...locationDraftFrom(row), ...changes },
+      branchId: 'br_1',
+      id: row.id,
+      now: 42,
+    })
+  }
+
+  const updateOf = (id: string, patch: Record<string, unknown>) => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id, patch },
+  })
+
+  it('clears the flag naming a place the save moves under another parent, in the same group', () => {
+    expect(save(MARKET, { parentLocationId: 'loc_quay' }, [MARKET, STALLS])).toStrictEqual([
+      updateOf('loc_market', { state: { parent_location_id: 'loc_quay' } }),
+      updateOf('loc_stalls', FLAG_CLEAR),
+    ])
+  })
+
+  it('folds the clear into the update of the flagged place it moves', () => {
+    expect(save(STALLS, { parentLocationId: null }, [MARKET, STALLS])).toStrictEqual([
+      updateOf('loc_stalls', { state: { parent_location_id: null }, ...FLAG_CLEAR }),
+    ])
+  })
+
+  it('judges a save that renames and moves by the parent it saves', () => {
+    expect(
+      save(STALLS, { name: 'The Market Arcade', parentLocationId: 'loc_quay' }, [MARKET, STALLS]),
+    ).toStrictEqual([
+      updateOf('loc_stalls', {
+        name: 'The Market Arcade',
+        state: { parent_location_id: 'loc_quay' },
+        ...FLAG_CLEAR,
+      }),
+    ])
+  })
+
+  it('clears nothing on a save that keeps the parent', () => {
+    // Already split, so judging this save would clear the flag; it keeps the parent, so none does.
+    const split: Entity = { ...STALLS, state: { parent_location_id: 'loc_quay' } }
+    expect(save(MARKET, { condition: 'flooded' }, [MARKET, split])).toStrictEqual([
+      updateOf('loc_market', { state: { parent_location_id: 'loc_hollow', condition: 'flooded' } }),
+    ])
+  })
+
+  it('keeps a flag for another reason when the place moves', () => {
+    const distinct: Entity = { ...STALLS, nameCollisionReason: 'distinct' }
+    expect(save(MARKET, { parentLocationId: 'loc_quay' }, [MARKET, distinct])).toStrictEqual([
+      updateOf('loc_market', { state: { parent_location_id: 'loc_quay' } }),
     ])
   })
 })

@@ -191,7 +191,7 @@ external override prop, same as reasoning expansion.
 | Group                 | Source                                                                     | Rendered when                    | Editable  |
 | --------------------- | -------------------------------------------------------------------------- | -------------------------------- | --------- |
 | **Scene**             | absolute triple, ids resolved to names                                     | always                           | tail only |
-| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any is non-empty                 | never     |
+| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any renders a line               | never     |
 | **Reported delta**    | `stateReport.worldTimeDelta`                                               | present                          | never     |
 | **Summary**           | `metadata.summary`                                                         | present                          | never     |
 | **Retrieval asks**    | `metadata.retrievalQueries`                                                | non-empty                        | never     |
@@ -220,7 +220,9 @@ change as name, category and its full-replace text; an item transfer
 as item, recipient and prior holder when tracked; a stackable as key,
 amount and the same holders; a new place or item as `New place:` or
 `New item:` and its name, or `Matched place:` and the reused row's name.
-A dropped create isn't listed; the per-turn inspector shows it. These
+A created or reused row is named from the live entity, as every other
+line is, and from the report's name only once the row is gone. A
+dropped create isn't listed; the per-turn inspector shows it. These
 exist nowhere else once the block is stripped from `content` — deltas carry the applied effect, not the
 narration of it.
 
@@ -235,14 +237,18 @@ field, since it is the number the model actually emitted.
 ### Emitted vs. applied
 
 `stateReport` records what the model emitted **and** what `apply.ts`
-did with it. Two fields can disagree with the absolute triple, and the
-panel shows the disagreement rather than hiding it:
+and the create planner did with it. Two fields can disagree with the
+absolute triple, and the panel shows the disagreement rather than
+hiding it:
 
 - **Location rejected.** `apply.ts` refuses a `currentLocation` that
   does not resolve to a `kind='location'` entity and inherits the
   previous location instead. The panel renders the rejected value
   struck through beside the location that was actually applied, keyed
-  on `stateReport.currentLocationRejected`.
+  on `stateReport.currentLocationRejected`. A fallback that named a new
+  item's handle there keeps the handle when the item isn't created, so
+  the panel names it from the report's own create with that handle,
+  dropped or not, and reads "Unknown entity" only when none matches.
 - **Delta clamped.** A negative or non-finite `worldTimeDelta` clamps
   to zero, and one that would push `worldTime` past the renderable
   ceiling clamps to the remaining headroom. The panel renders the
@@ -267,6 +273,8 @@ id.** `stateReport` is immutable while entities are deletable and
 rollback-able, so a dangling id is a permanent state, not a transient
 one. Never a crash, and never a bare UUID in the reader per
 [data-model.md → ID shape](../../data-model.md#id-shape--kind-prefixed-uuids-throughout).
+The one exception is a created or reused row that is gone since: its
+line names it from the report. Create lines are one per distinct id.
 
 ### Scene editor
 

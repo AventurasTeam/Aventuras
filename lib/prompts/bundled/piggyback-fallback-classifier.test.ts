@@ -18,6 +18,12 @@ function worldTimeDeltaClause(source: string): string {
   return match[0]
 }
 
+// piggyback.md → Creating a place or an item, verbatim: the significance rules both writers apply.
+const PLACE_RULE =
+  "Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of."
+const ITEM_RULE =
+  'Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.'
+
 /**
  * Every bucket buildGenerationContext emits, kept non-empty — an omitted one would make a
  * `nil.size > 0` assertion pass for the wrong reason.
@@ -75,6 +81,21 @@ const context = (over: Record<string, unknown> = {}) => ({
     tiers: [{ name: 'month', labels: ['Frostmoon', 'Thawmoon'] }],
   },
   locationIds: [],
+  locationMap: [
+    { id: 'l2', name: 'The Marsh', depth: 0 },
+    { id: 'l1', name: 'The Drowned Keep', depth: 1 },
+  ],
+  currentLocationChain: ['The Marsh'],
+  heldItems: [
+    {
+      holderId: 'c1',
+      items: [
+        { id: 'i3', name: 'Courier’s seal', equipped: false },
+        { id: 'i4', name: 'short sword', equipped: true },
+      ],
+    },
+  ],
+  looseItems: [{ id: 'i5', name: 'a rusted lantern' }],
   structuralActiveThreads: [
     { id: 't1', status: 'active', title: 'Find the heir', description: 'Still open.' },
   ],
@@ -141,7 +162,132 @@ describe('bundled piggyback fallback classifier template', () => {
     // The whole line, not a substring: a bracketed id would prefix it.
     expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe('Mora — last seen at the ford.')
     expect(prompt).not.toContain('include their ID (without brackets) in the trailing')
-    expect(prompt).not.toContain('Use one of these place IDs')
+    expect(prompt).not.toContain('Use an ID from Places')
+  })
+
+  // The mock LLM's shape registry and anything keyed on the opening line read it as is.
+  it('keeps its first line', () => {
+    expect(render(context()).split('\n')[0]).toBe(
+      'Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:',
+    )
+  })
+
+  // piggyback.md → Fallback classifier context: bracketed IDs, the roster being its only source.
+  describe('the location map and item lines', () => {
+    it('renders the map nested, with IDs', () => {
+      expect(render(context())).toContain('# Places\n[l2] The Marsh\n  [l1] The Drowned Keep\n')
+    })
+
+    it('renders the current location with its chain and the items lying there, with IDs', () => {
+      expect(render(context())).toContain(
+        'The Drowned Keep — in The Marsh: Half sunk into the marsh.\nHere: [i5] a rusted lantern\n',
+      )
+    })
+
+    it('lists what an in-scene character holds, and does not repeat a held item in the scene list', () => {
+      const prompt = render(
+        context({
+          sceneEntities: ['c1', 'i3'],
+          entities: [
+            ...context().entities,
+            {
+              id: 'i3',
+              kind: 'item',
+              name: 'Courier’s seal',
+              description: 'Black wax, cracked.',
+              status: 'active',
+              injectionMode: 'auto',
+            },
+          ],
+        }),
+      )
+
+      expect(prompt).toContain(
+        '## Kael\nA courier with a stolen sigil.\nHolds: [i3] Courier’s seal, [i4] short sword (equipped)\n',
+      )
+      expect(prompt).not.toContain('## Courier’s seal')
+      expect(prompt).not.toContain('Black wax, cracked.')
+    })
+
+    const bex = {
+      id: 'c2',
+      kind: 'character',
+      name: 'Bex',
+      description: 'A quiet smith.',
+      status: 'active',
+      injectionMode: 'auto',
+    }
+    const seal = {
+      id: 'i3',
+      kind: 'item',
+      name: 'Courier’s seal',
+      description: 'Black wax, cracked.',
+      status: 'active',
+      injectionMode: 'auto',
+    }
+
+    it('does not repeat an item held by any in-scene character, not only the last holder', () => {
+      const prompt = render(
+        context({
+          sceneEntities: ['c1', 'c2', 'i3'],
+          entities: [...context().entities, bex, seal],
+          heldItems: [
+            { holderId: 'c1', items: [{ id: 'i3', name: 'Courier’s seal', equipped: false }] },
+            { holderId: 'c2', items: [{ id: 'i6', name: 'hammer', equipped: false }] },
+          ],
+        }),
+      )
+
+      expect(prompt).not.toContain('## Courier’s seal')
+      expect(prompt).toContain(
+        '## Kael\nA courier with a stolen sigil.\nHolds: [i3] Courier’s seal\n',
+      )
+      expect(prompt).toContain('## Bex\nA quiet smith.\nHolds: [i6] hammer\n')
+    })
+
+    it('gives a Holds line only to the character that holds the items', () => {
+      const prompt = render(
+        context({ sceneEntities: ['c1', 'c2'], entities: [...context().entities, bex] }),
+      )
+
+      expect(prompt.split('Holds:')).toHaveLength(2)
+      expect(prompt).toContain('## Bex\nA quiet smith.\n\n')
+    })
+
+    it('omits the map, the chain and the item lines when there are none', () => {
+      const prompt = render(
+        context({ locationMap: [], currentLocationChain: [], heldItems: [], looseItems: [] }),
+      )
+
+      expect(prompt).not.toContain('# Places')
+      expect(prompt).not.toContain(' — in ')
+      expect(prompt).not.toContain('Holds:')
+      expect(prompt).not.toContain('Here:')
+      expect(prompt).toContain('The Drowned Keep: Half sunk into the marsh.')
+    })
+  })
+
+  describe('creates', () => {
+    it('asks for newLocations and newItems, with new: handles, after the turn it reports on', () => {
+      const prompt = render(context())
+
+      expect(prompt).toContain('in newLocations')
+      expect(prompt).toContain('in newItems')
+      expect(prompt).toContain('a handle that starts with new:')
+      expect(prompt).toContain(
+        "a new item as a transfer's item id or, when it is in the scene, in sceneEntities.",
+      )
+      expect(prompt.indexOf('in newLocations')).toBeGreaterThan(prompt.indexOf('\n# This turn\n'))
+    })
+
+    // One contract across both writers (piggyback.md → Fallback classifier context): same rules.
+    it.each([
+      ['the fallback prompt', () => render(context())],
+      ['the tagged-block macro', () => STATE_EMISSION],
+    ])('carries the significance rules verbatim in %s', (_, source) => {
+      expect(source()).toContain(PLACE_RULE)
+      expect(source()).toContain(ITEM_RULE)
+    })
   })
 
   // Builder half (a real resolveWorldTimeDeltaBasis call over a seeded turn pair) is

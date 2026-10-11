@@ -9,7 +9,7 @@ import {
   type CollisionResolveResult,
   type DbCtx,
 } from '@/lib/actions'
-import type { CollisionReason } from '@/lib/db'
+import type { CollisionReason, Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
@@ -21,7 +21,7 @@ import {
   translationsStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-import { collisionPairOf, flaggedSideOf } from '@/lib/world'
+import { collisionPairOf, flaggedSideOf, pairSideOf, type FlaggedEntity } from '@/lib/world'
 
 import { collisionRejectionText } from './collision-copy'
 import { collisionPair } from './collision-summary'
@@ -32,6 +32,8 @@ export type CollisionDialogPair = {
   /** The row whose flag names the other: the requested flagged row when it still does. */
   flaggedId: string
   reason: CollisionReason
+  /** The shared parent's name for a `same-parent` pair; absent at the root or a missing row. */
+  parentName?: string
 }
 
 type Sides = CollisionDialogPair['sides']
@@ -54,6 +56,14 @@ function inBranch<Row extends { branchId: string }>(
   branchId: string,
 ): Row[] {
   return [...rows.values()].filter((row) => row.branchId === branchId)
+}
+
+/** The flagged row's parent, which the pair rule makes the other's too (`same-parent` only). */
+function sharedParentName(flagged: FlaggedEntity, entities: readonly Entity[]): string | undefined {
+  if (flagged.nameCollisionReason !== 'same-parent') return undefined
+  const { parentId } = pairSideOf(flagged)
+  if (parentId == null) return undefined
+  return entities.find((e) => e.id === parentId)?.name
 }
 
 function toCollisionResolution(resolution: Resolution, [a, b]: Sides): CollisionResolution {
@@ -159,9 +169,14 @@ export function useCollisionResolve(
       relationships: inBranch(relationshipRows, branchId),
       translations: inBranch(translationRows, branchId),
     })
-    return sides == null
-      ? null
-      : { sides, flaggedId: flagged.id, reason: flagged.nameCollisionReason }
+    if (sides == null) return null
+    const parentName = sharedParentName(flagged, entities)
+    return {
+      sides,
+      flaggedId: flagged.id,
+      reason: flagged.nameCollisionReason,
+      ...(parentName == null ? {} : { parentName }),
+    }
   }, [
     requested,
     branchId,

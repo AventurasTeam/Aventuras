@@ -12,8 +12,8 @@ export {
 export {
   __resetClassifierEmbedder,
   configureClassifierEmbedder,
-  ensurePeriodicClassifierPipelineRegistered,
-} from './definitions/periodic-classifier'
+} from './definitions/description-embedder'
+export { ensurePeriodicClassifierPipelineRegistered } from './definitions/periodic-classifier'
 export {
   ensureSuggestionRefreshPipelineRegistered,
   SUGGESTION_EMISSION_PHASE,

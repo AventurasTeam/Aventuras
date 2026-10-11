@@ -91,12 +91,18 @@ const RENAME_ISSUE_TEXT: Record<RenameIssue, () => string> = {
 
 type PairNames = { flagged: string; other: string }
 
-const REASON_TEXT: Record<CollisionReason, (names: PairNames) => string> = {
+type ReasonInput = PairNames & { parentName?: string }
+
+const REASON_TEXT: Record<CollisionReason, (input: ReasonInput) => string> = {
   alike: () => t('collisionDialog.reason.alike'),
   ambiguous: () => t('collisionDialog.reason.ambiguous'),
   distinct: () => t('collisionDialog.reason.distinct'),
   'in-scene': ({ flagged, other }) => t('collisionDialog.reason.inScene', { flagged, other }),
   'no-signal': () => t('collisionDialog.reason.noSignal'),
+  'same-parent': ({ parentName }) =>
+    parentName == null
+      ? t('collisionDialog.reason.sameParentRoot')
+      : t('collisionDialog.reason.sameParent', { parent: parentName }),
 }
 
 type CollisionHeader = {
@@ -113,6 +119,7 @@ function collisionHeader(
   entityB: EntitySummary,
   flaggedId: string,
   reason: CollisionReason,
+  parentName: string | undefined,
 ): CollisionHeader {
   const [flagged, other]: readonly [EntitySummary, EntitySummary] =
     flaggedId === entityB.id ? [entityB, entityA] : [entityA, entityB]
@@ -124,7 +131,7 @@ function collisionHeader(
       ? t(`collisionDialog.title.${entityA.kind}`, { name: entityA.name })
       : t('collisionDialog.titleMayBe', names),
     sameName,
-    reason: REASON_TEXT[reason](names),
+    reason: REASON_TEXT[reason]({ ...names, parentName }),
     basis:
       match?.basis === 'keyword'
         ? t('collisionDialog.basis', {
@@ -169,6 +176,8 @@ type CollisionResolveDialogProps = {
   flaggedId: string
   /** That row's `name_collision_reason`, for the reason line. */
   reason: CollisionReason
+  /** The shared parent's name, for the `same-parent` reason line; absent at the root. */
+  parentName?: string
   /** Rejects with an Error whose message is user-facing text; the dialog shows it inline. */
   onResolve: (resolution: Resolution) => Promise<void>
   /** Set while a write is gated (a turn in flight): every submit disables and shows it. */
@@ -225,6 +234,7 @@ export function CollisionResolveDialog({
   entityB,
   flaggedId,
   reason,
+  parentName,
   onResolve,
   blockedReason,
   isNameTaken,
@@ -236,7 +246,7 @@ export function CollisionResolveDialog({
   const [nowMs] = useState(() => Date.now())
 
   const diff = useMemo(() => computeDivergence(entityA, entityB), [entityA, entityB])
-  const header = collisionHeader(entityA, entityB, flaggedId, reason)
+  const header = collisionHeader(entityA, entityB, flaggedId, reason, parentName)
   const phone = useTier() === 'phone'
   const explanation = <Explanation header={header} />
 

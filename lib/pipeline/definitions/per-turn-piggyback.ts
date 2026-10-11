@@ -3,16 +3,20 @@ import { z } from 'zod'
 import { generateStructured, resolveModel, resolveModelCapabilities } from '@/lib/ai'
 import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
+import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
   buildStateReport,
   MAX_RETRIEVAL_QUERIES,
+  normalizeCreates,
   normalizeStackableTransfer,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
-  type ParsedStateBlock,
+  type PlannedStateBlock,
+  type SubstitutedStateBlock,
+  type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
 import type {
@@ -25,8 +29,10 @@ import type {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
+import { classifierEmbedder } from './description-embedder'
 import { readLastTurns } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
+import { planTurnCreates } from './per-turn-creates'
 import { loadPerTurnWorkingSet } from './working-set'
 
 export const PIGGYBACK_FALLBACK_PHASE_NAME = 'piggyback-fallback-classifier'
@@ -51,17 +57,60 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
 const TRANSFER_PARTY_DESCRIPTION =
   'Omit rather than inventing a roster ID — there is no other party when something is found loose or spent on someone off-scene.'
 
+const NEW_HANDLE_PREFIX_DESCRIPTION =
+  'A handle you choose, starting with "new:" (e.g. new:docks), so it is never mistaken for a listed ID.'
+const NEW_LOCATION_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in currentLocation and another new place's parent.`
+const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in transfers.items[].id and sceneEntities.`
+
+// A create follows the tags' rules: a wrong-typed handle or name reads as '', which
+// normalizeCreates drops and counts. Not .catch(''): that emits `default: ""` to the model.
+const createText = () =>
+  z.preprocess((value) => (typeof value === 'string' ? value : ''), z.string())
+
+const isRecord = (value: unknown): value is object =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+// A create that isn't an object reads as an empty one, dropped and counted the same way; a lone
+// create reads as a list of one, and any other list that isn't one as none.
+const createList = <T extends z.ZodType>(create: T) =>
+  z.preprocess(
+    (value) => (Array.isArray(value) ? value : isRecord(value) ? [value] : undefined),
+    z.array(z.preprocess((value) => (isRecord(value) ? value : {}), create)).optional(),
+  )
+
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
     .array(z.string())
     .describe(
-      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered.',
+      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered. An item you create appears here only by the exact handle it declares in newItems.',
     ),
+  // newLocations before currentLocation and newItems before transfers, so an in-order model
+  // declares those handles before it uses them.
+  newLocations: createList(
+    z.object({
+      handle: createText().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
+      name: createText(),
+      description: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .describe('One short sentence describing the place.'),
+      parent: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .describe(
+          'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations. Omit it for a top-level place.',
+        ),
+    }),
+  ).describe(
+    'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
+  ),
   currentLocation: z
     .string()
     .optional()
     .describe(
-      'The ID of the place this scene happens at. Only an ID from the prompt list; omit it if the scene moved somewhere with no ID yet.',
+      'The ID of the place this scene happens at: its ID from Places when Places lists it, or the handle of a location in newLocations.',
     ),
   worldTimeDelta: z.number(),
   visualChanges: z
@@ -77,12 +126,27 @@ export const fallbackClassifierSchema = z.object({
       }),
     )
     .optional(),
+  newItems: createList(
+    z.object({
+      handle: createText().describe(NEW_ITEM_HANDLE_DESCRIPTION),
+      name: createText(),
+      description: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .describe('One short sentence describing the item.'),
+    }),
+  ).describe(
+    'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
+  ),
   transfers: z
     .object({
       items: z
         .array(
           z.object({
-            id: z.string(),
+            id: z
+              .string()
+              .describe("The item's ID from the list, or the handle of an item in newItems."),
             slot: z.enum(['equipped_items', 'inventory']),
             to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
             from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
@@ -271,10 +335,27 @@ export async function* piggybackFallbackClassifierPhase(
     return { status: 'completed' }
   }
 
-  const { block: substituted, failures } = substitutePiggybackIds(result.value, idMap)
+  // Tagged-parser rule: a create with no usable handle or name is dropped and counted, not failed.
+  const normalized = normalizeCreates(result.value)
+  if (normalized.malformed > 0) {
+    ctx.log.warn('classifier.create_malformed', {
+      entryId: tail.id,
+      count: normalized.malformed,
+      layer: 'per_turn_classifier',
+    })
+  }
+  // Nothing rereads this reply, so a transfer with a bad ref drops alone.
+  const {
+    block: substituted,
+    failures,
+    droppedTransfers,
+  } = substitutePiggybackIds(normalized.block, idMap, { entities, badRef: 'drop' })
+  for (const dropped of droppedTransfers) {
+    ctx.log.warn('classifier.transfer_dropped', { entryId: tail.id, ...dropped })
+  }
   // The schema can't reject one bad stackable without failing the whole call, so the
   // transfers parseTransfers would drop are dropped here, before the actions and report.
-  const resolvedBlock: ParsedStateBlock =
+  const resolvedBlock: SubstitutedStateBlock =
     substituted.transfers === undefined
       ? substituted
       : {
@@ -293,13 +374,26 @@ export async function* piggybackFallbackClassifierPhase(
     })
   }
 
+  const plan = await planTurnCreates({
+    block: resolvedBlock,
+    entities,
+    branchId: ctx.branchId,
+    source: 'per_turn_classifier',
+    embed: classifierEmbedder(),
+    now: () => Date.now(),
+    newId: (prefix) => generateId(prefix),
+    log: ctx.log,
+  })
+  // Matching an item can await an embed call; a cancel during it discards this phase's writes.
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
+
   const {
     metadata: scenePatch,
     actions,
     applied,
   } = buildPiggybackActions({
     entryId: tail.id,
-    block: resolvedBlock,
+    turn: plan,
     entities,
     previousMetadata: {
       ...inheritedEntryMetadata(previousEntry?.metadata),
@@ -312,18 +406,28 @@ export async function* piggybackFallbackClassifierPhase(
   // The narrative fold applies visual/transfer changes whenever it fires, parse failure
   // or not, so those rows are already written. A fallback that reports neither must not
   // blank them out of the record — same reason failedFields and raw survive its write.
-  const reportedBlock: ParsedStateBlock = {
-    ...resolvedBlock,
-    ...(resolvedBlock.visualChanges === undefined && priorReport?.visualChanges !== undefined
+  const reportedBlock: PlannedStateBlock = {
+    ...plan.block,
+    ...(plan.block.visualChanges === undefined && priorReport?.visualChanges !== undefined
       ? { visualChanges: priorReport.visualChanges }
       : {}),
-    ...(resolvedBlock.transfers === undefined && priorReport?.transfers !== undefined
+    ...(plan.block.transfers === undefined && priorReport?.transfers !== undefined
       ? { transfers: priorReport.transfers }
       : {}),
   }
+  // A failed fold reports its creates `dropped`: keep that list for a kind this phase's report
+  // has none of (no-blanking rule), as when its only creates of that kind were malformed.
+  const reportedCreates: TurnCreatesReport = {
+    newLocations:
+      plan.report.newLocations.length > 0
+        ? plan.report.newLocations
+        : (priorReport?.newLocations ?? []),
+    newItems:
+      plan.report.newItems.length > 0 ? plan.report.newItems : (priorReport?.newItems ?? []),
+  }
   const stateReport = buildStateReport({
     layer: 'per_turn_classifier',
-    block: reportedBlock,
+    turn: { block: reportedBlock, report: reportedCreates },
     failures: [
       ...(priorReport?.failedFields ?? []),
       ...failures.map((f) => ({ field: f.field, detail: f.detail })),
@@ -360,6 +464,10 @@ export async function* piggybackFallbackClassifierPhase(
     })
   }
 
+  // After the reply's create, before writes naming them: a reversal of the turn removes them.
+  for (const action of plan.creates) {
+    yield { type: 'delta_emitted', action }
+  }
   yield {
     type: 'delta_emitted',
     action: {

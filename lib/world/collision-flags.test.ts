@@ -29,10 +29,10 @@ import {
   withFlagClears,
   withFlagWrites,
 } from './collision-flags'
-import { collisionPairOf } from './collision-pair'
+import { collisionPairOf, pairSideOf, type PairSide } from './collision-pair'
 import { entityActions } from './entity-actions'
 import { entityDeleteActions } from './entity-delete'
-import { characterDraftFrom } from './entity-draft'
+import { characterDraftFrom, locationDraftFrom } from './entity-draft'
 import type { NamesakeSide } from './namesakes'
 
 function entity(
@@ -211,8 +211,14 @@ describe('flagsNaming', () => {
 describe('brokenFlags', () => {
   const partner = entity('char_p', 'Kael Stormborn')
   const kael = flagged('char_f', 'Kael', 'char_p')
+  // A character has no parent, so each side it writes reads as at the root.
   const broken = (rows: Entity[], after: [string, NamesakeSide][]) =>
-    brokenFlags({ entities: rows, after: new Map(after) })
+    brokenFlags({
+      entities: rows,
+      after: new Map(
+        after.map(([id, side]): [string, PairSide] => [id, { ...side, parentId: null }]),
+      ),
+    })
 
   it('returns a flagged row renamed out of its partner’s namesakes', () => {
     expect(broken([partner, kael], [['char_f', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([
@@ -251,6 +257,73 @@ describe('brokenFlags', () => {
   it('leaves a dormant flag, whose partner the branch no longer has', () => {
     const dormant = flagged('char_d', 'Kael', 'char_gone')
     expect(broken([dormant], [['char_d', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([])
+  })
+
+  describe('a same-parent pair', () => {
+    const place = (
+      id: string,
+      name: string,
+      parentId: string | null,
+      overrides: Partial<Entity> = {},
+    ) => entity(id, name, overrides, 'location', { parent_location_id: parentId })
+    const market = place('loc_m', 'The Market', 'loc_p')
+    const stalls = place('loc_s', 'The Market Stalls', 'loc_p', {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'loc_m',
+      nameCollisionReason: 'same-parent',
+    })
+    const sideOf = (row: Entity, over: Partial<PairSide> = {}): PairSide => ({
+      ...pairSideOf(row),
+      ...over,
+    })
+    const judged = (rows: Entity[], after: [string, PairSide][]) =>
+      brokenFlags({ entities: rows, after: new Map(after) })
+
+    it('breaks when a re-parent moves either row away from the other', () => {
+      expect(
+        judged([market, stalls], [['loc_s', sideOf(stalls, { parentId: 'loc_q' })]]),
+      ).toStrictEqual(['loc_s'])
+      expect(
+        judged([market, stalls], [['loc_m', sideOf(market, { parentId: null })]]),
+      ).toStrictEqual(['loc_s'])
+    })
+
+    it('holds while both rows sit under one parent, the root counting as one', () => {
+      expect(
+        judged([market, stalls], [['loc_s', sideOf(stalls, { name: 'The Market Stalls East' })]]),
+      ).toStrictEqual([])
+      const rootMarket = place('loc_m', 'The Market', null)
+      const rootStalls: Entity = { ...stalls, state: { parent_location_id: null } }
+      expect(
+        judged(
+          [rootMarket, rootStalls],
+          [['loc_s', sideOf(rootStalls, { name: 'The Market Hall' })]],
+        ),
+      ).toStrictEqual([])
+    })
+
+    it('breaks on a rename that keeps the parent but ends the namesakes', () => {
+      expect(
+        judged([market, stalls], [['loc_s', sideOf(stalls, { name: 'The Quay' })]]),
+      ).toStrictEqual(['loc_s'])
+    })
+
+    it('breaks a flag with no reason, which never holds', () => {
+      const reasonless: Entity = { ...stalls, nameCollisionReason: null }
+      expect(
+        judged(
+          [market, reasonless],
+          [['loc_s', sideOf(reasonless, { name: 'The Market Stalls East' })]],
+        ),
+      ).toStrictEqual(['loc_s'])
+    })
+
+    it('keeps a flag for another reason across a re-parent', () => {
+      const distinct: Entity = { ...stalls, nameCollisionReason: 'distinct' }
+      expect(
+        judged([market, distinct], [['loc_s', sideOf(distinct, { parentId: 'loc_q' })]]),
+      ).toStrictEqual([])
+    })
   })
 })
 
@@ -500,5 +573,42 @@ describe('flag clears through the entity arm', () => {
     await undoEverything(ctx)
     expect(await flagOf(ctx, 'char_p')).toStrictEqual(flagColumns(partner))
     expect(await flagOf(ctx, 'char_x')).toStrictEqual([0, null, null])
+  })
+
+  it('a save moving one of a same-parent pair clears the flag in its group, and undo re-flags it', async () => {
+    const hollow = entity('loc_p', 'Veil’s Hollow', {}, 'location')
+    const quay = entity('loc_q', 'The Quay', {}, 'location')
+    const market = entity('loc_m', 'The Market', {}, 'location', { parent_location_id: 'loc_p' })
+    const stalls = entity(
+      'loc_s',
+      'The Market Stalls',
+      { nameCollisionFlag: 1, nameCollisionPartnerId: 'loc_m', nameCollisionReason: 'same-parent' },
+      'location',
+      { parent_location_id: 'loc_p' },
+    )
+    const rows = [hollow, quay, market, stalls]
+    const ctx = await setup(rows)
+    const actions = entityActions({
+      kind: 'location',
+      draft: { ...locationDraftFrom(market), parentLocationId: 'loc_q' },
+      keywordsBase: market.keywords,
+      branchId: 'b1',
+      row: market,
+      branchEntities: rows,
+      id: market.id,
+      now: 2,
+    })
+
+    expect(
+      await applyDeltaActionGroup(actions, { actionId: 'act_1', branchId: 'b1' }, ctx),
+    ).toStrictEqual({ status: 'ok' })
+    expect(await flagOf(ctx, 'loc_s')).toStrictEqual([0, null, null])
+    expect((await deltaRows(ctx)).map((d) => [d.actionId, d.targetId])).toStrictEqual([
+      ['act_1', 'loc_s'],
+      ['act_1', 'loc_m'],
+    ])
+
+    await undoEverything(ctx)
+    expect(await flagOf(ctx, 'loc_s')).toStrictEqual([1, 'loc_m', 'same-parent'])
   })
 })

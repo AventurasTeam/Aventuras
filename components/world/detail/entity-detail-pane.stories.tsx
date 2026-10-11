@@ -488,6 +488,33 @@ export const RetiredReasonConditional: Story = {
   },
 }
 
+/** world.md → Settings: a place's injection hint adds what each mode does to the location map. */
+export const LocationSettingsNamesTheMap: Story = {
+  args: { kind: 'location', row: MARKET },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(
+      await screen.findByText(
+        `${t('world:fields.injectionOverride')} ${t('world:fields.injectionPlaceMap')}`,
+        {},
+        WAIT,
+      ),
+    ).toBeVisible()
+  },
+}
+
+export const CharacterSettingsLeavesOutTheMap: Story = {
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(
+      await screen.findByText(t('world:fields.injectionOverride'), {}, WAIT),
+    ).toBeVisible()
+    await expect(
+      screen.queryByText(t('world:fields.injectionPlaceMap'), { exact: false }),
+    ).toBeNull()
+  },
+}
+
 export const InjectionChipVisibility: Story = {
   play: async () => {
     await expect(await screen.findByText('Always injected', {}, WAIT)).toBeVisible()

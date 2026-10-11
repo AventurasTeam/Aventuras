@@ -2,8 +2,8 @@ import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 
 import { brokenFlags, pairFlagsToClear, withFlagClears } from './collision-flags'
-import type { CollisionPair } from './collision-pair'
-import { nameBasis, type NamesakeSide } from './namesakes'
+import { pairSideOf, type CollisionPair, type PairSide } from './collision-pair'
+import { nameBasis } from './namesakes'
 
 export const RENAME_ISSUE = {
   emptyName: 'empty-name',
@@ -49,12 +49,12 @@ export function entityRenameActions(input: {
     input.renames.find((rename) => rename.id === row.id)?.name ?? row.name
   const issue = renameIssue([pair[0].name, pair[1].name], [nameOf(pair[0]), nameOf(pair[1])])
   if (issue != null) return { issue }
-  const after = new Map<string, NamesakeSide>()
+  const after = new Map<string, PairSide>()
   const updates: PipelineAction[] = []
   for (const row of pair) {
     const name = nameOf(row).trim()
     if (name === row.name.trim()) continue
-    after.set(row.id, { name, keywords: row.keywords })
+    after.set(row.id, { ...pairSideOf(row), name })
     updates.push({
       kind: 'updateEntity',
       source: 'user_edit',

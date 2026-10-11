@@ -15,7 +15,6 @@ import {
   PERIODIC_CLASSIFIER_KIND,
   reconcileNewCharacter,
   substituteClassifierIds,
-  type EmbedDescriptions,
   type ReconcileDecision,
 } from '@/lib/classifier'
 import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
@@ -31,6 +30,7 @@ import {
 } from '@/lib/stores'
 
 import { buildClassifierContext } from './classifier-context'
+import { classifierEmbedder } from './description-embedder'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from '../types'
@@ -38,20 +38,6 @@ import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from
 export { PERIODIC_CLASSIFIER_KIND }
 
 export const PERIODIC_CLASSIFIER_RESOLVES: readonly ResolverInput[] = [{ target: 'classifier' }]
-
-// Reconciliation degrades to create-with-flag rather than failing the pass when
-// boot has not wired a real embedder.
-const NO_EMBEDDER: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
-
-// Injected so tests drive the similarity bands deterministically and so the
-// embedder composition (config + provider resolution) stays in the action layer.
-let embedDescriptions: EmbedDescriptions = NO_EMBEDDER
-export function configureClassifierEmbedder(fn: EmbedDescriptions): void {
-  embedDescriptions = fn
-}
-export function __resetClassifierEmbedder(): void {
-  embedDescriptions = NO_EMBEDDER
-}
 
 // Straight from SQLite, never from entriesStore: that store holds only the last
 // ENTRIES_WINDOW_SIZE entries, so a backlog older than the reader's window would
@@ -243,6 +229,7 @@ export async function* periodicClassifierPhase(
   const current = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === ctx.branchId,
   )
+  const embedDescriptions = classifierEmbedder()
   const decisions = new Map<string, ReconcileDecision>()
   for (const candidate of substituted.newCharacters) {
     // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded

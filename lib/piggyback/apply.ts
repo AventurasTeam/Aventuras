@@ -4,7 +4,7 @@ import { logger } from '@/lib/diagnostics'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type ParsedStateBlock } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type PlannedTurn } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
 // Two producers write this field; only the tagged-block parser filters itself (trims,
@@ -34,7 +34,9 @@ type PreviousMetadata = {
 
 type BuildArgs = {
   entryId: string
-  block: ParsedStateBlock
+  /** Its created rows count as stored: a new place can be the scene's location, and a new item
+   *  can change hands. */
+  turn: PlannedTurn
   entities: readonly Entity[]
   previousMetadata: PreviousMetadata
   branchId: string
@@ -55,7 +57,9 @@ type BuildResult = {
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
-  const { entryId, block, entities, previousMetadata, branchId, source } = args
+  const { entryId, previousMetadata, branchId, source } = args
+  const { block, createdRows, reusedIds } = args.turn
+  const entities = [...args.entities, ...createdRows]
 
   const sceneEntities = dedupeSceneEntities(block.sceneEntities ?? previousMetadata.sceneEntities)
   const rawDelta = block.worldTimeDelta ?? 0
@@ -96,7 +100,16 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // parses the merged result against the target's own kind-specific schema).
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
 
-  actions.push(...scenePromotionActions({ branchId, source, entities, sceneEntities }))
+  actions.push(
+    ...scenePromotionActions({
+      branchId,
+      source,
+      entities,
+      sceneEntities,
+      // Naming a staged place introduces it; an inherited location names nothing.
+      alsoIds: [...(namedIsLocation ? [named] : []), ...reusedIds],
+    }),
+  )
 
   // Computed bookkeeping. Shared with the scene editor, which passes a distinct
   // `before` — here this entry's scene IS the previous entry's until the block

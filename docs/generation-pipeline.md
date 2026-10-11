@@ -372,20 +372,27 @@ template-rendering code.
 
 #### New-entity emission
 
-The classifier creating a brand-new entity emits a
-full object — name, description, etc. — with **no `id` field**.
-Parse allocates the UUID. If the same response references the new
-entity again (e.g., new char appears in `<scene_entities>` AND in
-`<visual_changes>`), the LLM emits a temporary handle of its own
-choosing for the second reference; parse-time map mutates to
-register the temporary handle → UUID mapping.
+A brand-new entity is emitted as a full object with **no `id`
+field**, carrying instead a temporary handle of the model's choosing
+that the same reply's other references use. Handles never enter the
+`IdBiMap`: substitution leaves a handle as it is, and the writer's
+planner maps it to the row it creates or matches. The per-turn writers
+create only places and items, with handles that start with `new:`,
+and accept a handle only where
+[`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item)
+allows; characters are the periodic classifier's
+([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)).
 
 #### Failure modes
 
-Any unrecognized or malformed placeholder in LLM output → single
-recoverable error class. Phase yields `recoverable_error`; the
-retry tier handles it. Bare UUID emission from the LLM is a prompt
-bug, not a runtime case to handle.
+An unrecognized or malformed placeholder fails only what it sits in,
+never the call. In the per-turn writers it fails its field, as does a
+ref of the wrong kind such as a place as a transfer's item, and a
+failed field in the narrative fold fires the fallback; in the fallback
+a transfer with either drops alone
+([`piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
+The periodic classifier drops the reference and logs it. Bare UUID
+emission from the LLM is a prompt bug, not a runtime case to handle.
 
 ### Writes
 

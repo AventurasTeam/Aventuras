@@ -113,9 +113,9 @@ so the two write sets stay disjoint by kind.
   # Places
   [l1] Eldra
     [l2] Port Vellis
+      [l4] Harbor Market
       [l3] The Rusty Anchor
         [l7] the back room
-      [l4] Harbor Market
   [l5] Thornwood
   ```
 
@@ -126,8 +126,9 @@ so the two write sets stay disjoint by kind.
   retrieved
   location keeps its own where retrieval puts it.
 
-- **Held and loose items.** Each in-scene character lists what it
-  holds (`Holds: [i2] Silver Key, [i5] worn sword (equipped)`), and
+- **Held and loose items.** Each active in-scene character that holds
+  anything lists it
+  (`Holds: [i2] Silver Key, [i5] worn sword (equipped)`), and
   `# Current location` lists the items lying there
   (`Here: [i7] the iron chest`). An item in a holder's line isn't
   repeated in the scene list.
@@ -149,19 +150,54 @@ must not.
 </transfers>
 ```
 
-A handle starts with `new:`, so it can't be mistaken for a listed id,
-and the block's other tags reference it like one. A create carries a
-name, a short description clamped to the bounds a classifier character
-create uses, and for a location an optional `parent`: an id from the
-map or another new location's handle. Nothing else is written; later
-upkeep of places and items isn't this writer's.
+A handle starts with `new:`, so it can't be mistaken for a listed id.
+A create carries a name, a short description clamped to the bounds a
+classifier character create uses, and for a location an optional
+`parent`: an id from the map or another new location's handle. Nothing
+else is written; later upkeep of places and items isn't this writer's.
+
+**Where a handle is used.** The prompt asks for a new place's handle
+only as the `<current_location>` or another new place's `parent`, and
+for a new item's handle only as a transfer's item `id` or, when the item
+is in the scene, in `<scene_entities>`; the parser also tolerates a
+new place's handle in `<scene_entities>`. A handle in any other field, a
+visual change's id or a transfer's holder, or one the block's creates
+don't declare, fails the field it sits in, like an unknown id, though
+in the fallback a transfer holding one drops alone. A handle of the
+wrong kind, a new place's as a transfer's item or a new item's as the
+`<current_location>`, fails its field in the tagged block; the
+fallback drops the transfer and rejects the location
+([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery));
+a place and an item declaring one handle leave it the place's, the
+item dropped as malformed. A `parent` that names nothing resolvable
+doesn't fail: the location goes to the root, as under Parent below. A
+bracketed handle (`[new:a]`) reads as the bare handle.
+
+**Create tag format.** A create's attribute text must be entirely
+`key="value"` pairs; any other text drops the create and counts it
+malformed, so a reference to its handle then fails its field and the
+fallback fires. The five XML entities are decoded in a create's name
+and description, and a raw `<` or `>` in a name or a raw `<` in a
+description drops the create, so the prompt asks the model to write a
+double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
+and a `<` inside a description as `&lt;`. A malformed create in a
+closed block only logs a warning, unless the block held nothing but
+creates: that block counts as empty and fails `state`, so the fallback
+fires. A `<state>` the stream cut off (no `</state>`) that declares
+any create, whole or not, fails the `state` field instead, because the
+cut may have lost the tags that name it (a `<current_location>`, a
+transfer), so the fallback fires and creates. A cut that falls between
+tags still parses clean in a block that declares no creates.
 
 **Kept only if used.** A new location is created only as the turn's
-`<current_location>` or an ancestor of it, and a new item only when a
-transfer in the block gives it to a holder. Anything else is dropped
-and logged, so a place the prose merely mentions, or an item only seen
-or put down, stays prose. The prompt adds the significance rules the
-model applies:
+`<current_location>` or an ancestor of it, and a new item only when
+the last transfer in the block naming its handle gives it to a
+character, so an item taken and then put down in the same block stays
+prose. Anything else is dropped and logged, so a place the prose
+merely mentions, or an item only seen or put down, stays prose. A
+block holding nothing but creates can keep none of them, so it counts
+as empty: it fails `state`, the fallback fires, and its creates report
+`dropped`. The prompt adds the significance rules the model applies:
 
 > Create a place only when the scene settles somewhere with its own
 > identity the story could come back to: a named place, a building, a
@@ -186,15 +222,30 @@ logged, rather than failing the turn. Parents resolve top-down, so the
 child of a new location hangs under whatever row that location
 resolved to.
 
-**Writes.** The creates lead the turn's action group, ahead of the
-metadata, the bookkeeping and the transfers that name them, so undoing
-or regenerating the turn removes the new row with every write naming
-it. A new row lands `embedding_stale = 1` for the sync stage, like the
-classifier's. `stateReport` records each create as emitted with what
-became of it, `created`, `reused` or `dropped`, the id it resolved to,
-and whether its parent was dropped to the root; the report's other
-fields carry that id in place of the handle
+**Writes.** The creates follow the reply row and precede every other
+write that names them. The narrative fold writes them right after the
+reply's `createStoryEntry`, which carries the scene's metadata, and
+ahead of the promotions, the bookkeeping, the visual changes and the
+transfers; the fallback writes them ahead of its metadata update.
+Regenerate reverses the log from the reply's create onward, so a
+create logged before it would outlive a regenerate as an orphan row.
+Logged after it, undoing or regenerating the turn removes the new row
+with every write naming it. A new row lands `embedding_stale = 1` for
+the sync stage, like the classifier's. `stateReport` records each
+create as emitted with what became of it, `created`, `reused` or
+`dropped`, the id it resolved to, and whether its parent was dropped
+to the root; the report's other fields carry that id in place of the
+handle
 ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
+
+**A failed parse creates nothing itself.** Creates aren't idempotent:
+the fallback that a failed parse fires rewrites the fields the block
+got right, and a create made by both would leave a duplicate row. So a
+block with any failing field reports each of its creates `dropped`,
+and a reference to one of their handles is dropped where it stands; a
+`<current_location>` naming one keeps the previous location. The
+fallback is the turn's sole creator, under the same rules, and a turn
+whose fallback fails too creates nothing.
 
 ### Matching before creating
 
@@ -244,7 +295,18 @@ JSON.
 
 If a top-level tag parses, its fields are used. If a tag is missing
 or its content doesn't parse, that field is skipped for this turn —
-per-field best-effort, one failing tag never blocks another.
+per-field best-effort, one failing tag never blocks another. The
+creates are one exception: a failing field keeps the block's own
+creates from landing
+([Creating a place or an item](#creating-a-place-or-an-item)). The
+fallback's transfers are the other: there a transfer with a bad ref
+drops alone and the rest of the field applies, as below.
+
+An empty `<state>` counts as a missing one, since no turn has no
+state, and so does a block holding nothing but creates, since only
+another field can keep a create
+([Creating a place or an item](#creating-a-place-or-an-item)). Both
+fail `state`.
 
 **On any parse failure** — the whole `<state>` tag missing, or any
 field inside it failing — the same synchronous per-turn classifier
@@ -279,6 +341,30 @@ be total — drop what it cannot read, return what it can, never raise.
 That is a deliberate exception to the rule above, not a property the
 shape confers, and it has to survive anyone later "fixing" the
 inconsistency.
+
+**A bad ref in the two writers.** A transfer's item must name an
+item: an existing item's id, or the handle of a `<new_item>` the block
+declares. Any other id or handle there (a place's, a character's, a
+lore entry's) is of the wrong kind, and so is a new item's handle as
+the `<current_location>`. The two writers treat a bad ref differently:
+
+- **The tagged block** fails the field it sits in, whether the ref is
+  unknown, undeclared or of the wrong kind, so the fallback fires and
+  is the turn's only creator.
+- **The fallback**, whose reply nothing rereads, drops a transfer
+  where it stands when its item or a holder is unknown, undeclared or
+  of the wrong kind, item and stackable transfers alike, logging
+  `classifier.transfer_dropped`, and applies the rest of the field.
+  Its scene list and visual changes keep the per-field rule, so one
+  unknown id there still drops the whole list. A new item's handle as
+  the `currentLocation` is rejected the way an item's id is: the
+  previous location stays, the report records
+  `currentLocationRejected`, and its `currentLocation` holds the new
+  item's id, or the emitted handle when the item isn't created.
+
+An existing item's id as the location is rejected that way on both
+paths
+([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
 
 ## Persistence and stripping
 
@@ -459,7 +545,12 @@ cannot narrow below the fixed pair.
 It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, under the same rules as the tags
-([New locations and items](#new-locations-and-items)).
+([New locations and items](#new-locations-and-items)), apart from a
+transfer with a bad ref, which it drops rather than fails
+([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
+A create there may omit its description or parent, or give either as
+`null`, which reads as omitted; one with no description is created
+without one, as a self-closed tag is.
 
 ## Mode-mixing across a story
 

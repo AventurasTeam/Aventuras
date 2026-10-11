@@ -9,7 +9,12 @@ import {
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
-import { VISUAL_TEXT_MAX, type ParsedStateBlock } from './types'
+import {
+  VISUAL_TEXT_MAX,
+  type ParsedStateBlock,
+  type PlannedStateBlock,
+  type PlannedTurn,
+} from './types'
 
 function mockEntity(overrides: Partial<Entity>): Entity {
   return {
@@ -38,6 +43,22 @@ function mockEntity(overrides: Partial<Entity>): Entity {
   } as Entity
 }
 
+// Cast, not planned: the planner hands on a block that declared no creates unchanged.
+function planned(
+  block: ParsedStateBlock,
+  rows: { createdRows?: readonly Entity[]; reusedIds?: readonly string[] } = {},
+): PlannedTurn {
+  const { newLocations, newItems, ...rest } = block
+  if (newLocations !== undefined || newItems !== undefined)
+    throw new Error('a planned block declares no creates')
+  return {
+    block: rest as PlannedStateBlock,
+    createdRows: rows.createdRows ?? [],
+    reusedIds: rows.reusedIds ?? [],
+    report: { newLocations: [], newItems: [] },
+  }
+}
+
 describe('buildPiggybackActions', () => {
   const previousMetadata = {
     sceneEntities: ['char_1'],
@@ -54,7 +75,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -72,7 +93,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['marsh nobility'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['marsh nobility'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -85,7 +106,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [] },
+      turn: planned({ sceneEntities: [] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -99,7 +120,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: [] },
+      turn: planned({ sceneEntities: [], retrievalQueries: [] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -114,7 +135,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['marsh nobility', 'marsh nobility'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['marsh nobility', 'marsh nobility'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -127,7 +148,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['', '   ', 'House Eldrin sigil'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['', '   ', 'House Eldrin sigil'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -140,7 +161,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['one', 'two', 'three', 'four'] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['one', 'two', 'three', 'four'] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -153,7 +174,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: [], retrievalQueries: ['', '  '] },
+      turn: planned({ sceneEntities: [], retrievalQueries: ['', '  '] }),
       entities: [],
       previousMetadata,
       branchId: 'main',
@@ -173,7 +194,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [stagedChar, activeChar],
       previousMetadata,
       branchId: 'main',
@@ -199,7 +220,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { sceneEntities: ['char_staged', 'char_1', 'char_staged'] },
+      turn: planned({ sceneEntities: ['char_staged', 'char_1', 'char_staged'] }),
       entities: [stagedChar, mockEntity({ id: 'char_1' })],
       previousMetadata,
       branchId: 'main',
@@ -229,7 +250,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block,
+      turn: planned(block),
       entities: [char1, char2, loc2],
       previousMetadata,
       branchId: 'main',
@@ -263,7 +284,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block,
+      turn: planned(block),
       entities: [char1, char2, loc2],
       previousMetadata,
       branchId: 'main',
@@ -298,7 +319,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [mockEntity({ id: 'char_1' })],
       previousMetadata,
       branchId: 'main',
@@ -326,7 +347,7 @@ describe('buildPiggybackActions', () => {
       const [action] = buildPiggybackActions({
         source: 'per_turn_classifier',
         entryId: 'entry_1',
-        block,
+        turn: planned(block),
         entities: [mockEntity({ id: 'char_1' })],
         previousMetadata,
         branchId: 'main',
@@ -412,7 +433,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [char1, char2],
       previousMetadata,
       branchId: 'main',
@@ -458,7 +479,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: {
+      turn: planned({
         transfers: {
           items: [],
           stackables: [
@@ -466,7 +487,7 @@ describe('buildPiggybackActions', () => {
             { key: '__proto__', amount: 2, to: 'char_2' },
           ],
         },
-      },
+      }),
       entities: [
         mockEntity({ id: 'char_1', state: state({ constructor: 2 }) }),
         mockEntity({ id: 'char_2', state: state({}) }),
@@ -509,7 +530,9 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: { transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }] } },
+      turn: planned({
+        transfers: { items: [], stackables: [{ key: 'gold', amount: 1, to: 'char_1' }] },
+      }),
       entities: [holder],
       previousMetadata,
       branchId: 'main',
@@ -544,7 +567,7 @@ describe('buildPiggybackActions', () => {
       buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block,
+        turn: planned(block),
         entities,
         previousMetadata,
         branchId: 'main',
@@ -649,7 +672,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [char1, char2],
       previousMetadata,
       branchId: 'main',
@@ -693,7 +716,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: parsed.block,
+        turn: planned(parsed.block),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -716,7 +739,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: parsed.block,
+        turn: planned(parsed.block),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -738,7 +761,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: parsed.block,
+        turn: planned(parsed.block),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -765,7 +788,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block: { sceneEntities: ['char_1'], currentLocation: 'item_1' },
+      turn: planned({ sceneEntities: ['char_1'], currentLocation: 'item_1' }),
       entities: [char1, item],
       previousMetadata,
       branchId: 'main',
@@ -789,7 +812,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block: { sceneEntities: ['char_1'], currentLocation: 'loc_2' },
+      turn: planned({ sceneEntities: ['char_1'], currentLocation: 'loc_2' }),
       entities: [char1, loc2],
       previousMetadata,
       branchId: 'main',
@@ -808,7 +831,7 @@ describe('buildPiggybackActions', () => {
     const firstResult = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block: firstBlock,
+      turn: planned(firstBlock),
       entities: [stagedChar],
       previousMetadata,
       branchId: 'main',
@@ -831,7 +854,7 @@ describe('buildPiggybackActions', () => {
     const secondResult = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_2',
-      block: secondBlock,
+      turn: planned(secondBlock),
       entities: [activeChar],
       previousMetadata: firstResult.metadata,
       branchId: 'main',
@@ -857,7 +880,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [activeChar],
       previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
       branchId: 'main',
@@ -915,7 +938,7 @@ describe('buildPiggybackActions', () => {
     const result = buildPiggybackActions({
       source: 'ai_classifier',
       entryId: 'entry_1',
-      block,
+      turn: planned(block),
       entities: [activeChar, location],
       previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
       branchId: 'main',
@@ -948,7 +971,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { worldTimeDelta: -600 },
+        turn: planned({ worldTimeDelta: -600 }),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -961,7 +984,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { worldTimeDelta: 30 },
+        turn: planned({ worldTimeDelta: 30 }),
         entities: [],
         previousMetadata,
         branchId: 'main',
@@ -975,7 +998,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { currentLocation: 'item_sword' },
+        turn: planned({ currentLocation: 'item_sword' }),
         entities: [sword],
         previousMetadata,
         branchId: 'main',
@@ -990,7 +1013,7 @@ describe('buildPiggybackActions', () => {
       const result = buildPiggybackActions({
         source: 'ai_classifier',
         entryId: 'entry_1',
-        block: { currentLocation: 'loc_keep' },
+        turn: planned({ currentLocation: 'loc_keep' }),
         entities: [keep],
         previousMetadata,
         branchId: 'main',
@@ -998,5 +1021,175 @@ describe('buildPiggybackActions', () => {
       expect(result.applied.currentLocationRejected).toBe(false)
       expect(result.metadata.currentLocationId).toBe('loc_keep')
     })
+  })
+})
+
+// piggyback.md → New locations and items.
+describe("buildPiggybackActions with this turn's creates", () => {
+  const previousMetadata = { sceneEntities: ['char_1'], currentLocationId: 'loc_1', worldTime: 100 }
+  const hero = mockEntity({ id: 'char_1' })
+  const docks = mockEntity({
+    id: 'loc_docks',
+    kind: 'location',
+    name: 'the Docks',
+    state: { parent_location_id: null },
+  })
+  const mill = mockEntity({
+    id: 'loc_mill',
+    kind: 'location',
+    name: 'the Mill',
+    status: 'staged',
+    state: { parent_location_id: null },
+  })
+  const build = ({
+    block,
+    createdRows,
+    reusedIds,
+    ...args
+  }: Partial<Omit<Parameters<typeof buildPiggybackActions>[0], 'turn'>> & {
+    block: ParsedStateBlock
+    createdRows?: readonly Entity[]
+    reusedIds?: readonly string[]
+  }) =>
+    buildPiggybackActions({
+      source: 'piggyback_tagged_block',
+      entryId: 'entry_2',
+      turn: planned(block, { createdRows, reusedIds }),
+      entities: [hero],
+      previousMetadata,
+      branchId: 'main',
+      ...args,
+    })
+  const promotes = (result: ReturnType<typeof buildPiggybackActions>) =>
+    result.actions.filter((a) => a.kind === 'promoteStagedEntity')
+  const promoteOf = (id: string) => ({
+    kind: 'promoteStagedEntity',
+    source: 'piggyback_tagged_block',
+    payload: { branchId: 'main', id, proseEntryId: null },
+  })
+
+  it('accepts a location this turn creates as the scene, and moves the scene there', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_docks' },
+      createdRows: [docks],
+    })
+    expect(result.applied.currentLocationRejected).toBe(false)
+    expect(result.metadata.currentLocationId).toBe('loc_docks')
+    expect(result.actions.filter((a) => a.kind === 'updateEntityLocationTracking')).toEqual([
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'main', id: 'char_1', currentLocationId: 'loc_docks' },
+      },
+    ])
+  })
+
+  // The control for the case above: without the planner's row the id is unknown.
+  it('refuses the same id when the turn planned no such row', () => {
+    const result = build({ block: { sceneEntities: ['char_1'], currentLocation: 'loc_docks' } })
+    expect(result.applied.currentLocationRejected).toBe(true)
+    expect(result.metadata.currentLocationId).toBe('loc_1')
+  })
+
+  it('moves a new item into a holder with no position write', () => {
+    const key = mockEntity({
+      id: 'item_key',
+      kind: 'item',
+      name: 'rusted key',
+      state: { at_location_id: null },
+    })
+    const result = build({
+      block: {
+        transfers: { items: [{ id: 'item_key', slot: 'inventory', to: 'char_1' }], stackables: [] },
+      },
+      createdRows: [key],
+    })
+    expect(
+      result.actions.filter(
+        (a) => a.kind === 'updateEntityInventory' || a.kind === 'updateItemPosition',
+      ),
+    ).toEqual([
+      {
+        kind: 'updateEntityInventory',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'main', id: 'char_1', equipped_items: [], inventory: ['item_key'] },
+      },
+    ])
+  })
+
+  it('promotes a staged location the block names as the scene', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_mill' },
+      entities: [hero, mill],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_mill')])
+  })
+
+  it('promotes it once when the scene and the reused ids name it too', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1', 'loc_mill'], currentLocation: 'loc_mill' },
+      entities: [hero, mill],
+      reusedIds: ['loc_mill'],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_mill')])
+  })
+
+  it('promotes a staged row a create reused, and leaves an active one', () => {
+    const hall = mockEntity({
+      id: 'loc_hall',
+      kind: 'location',
+      status: 'staged',
+      state: { parent_location_id: null },
+    })
+    const yard = mockEntity({
+      id: 'loc_yard',
+      kind: 'location',
+      state: { parent_location_id: null },
+    })
+    const result = build({
+      block: { sceneEntities: ['char_1'] },
+      entities: [hero, hall, yard],
+      reusedIds: ['loc_hall', 'loc_yard'],
+    })
+    expect(promotes(result)).toEqual([promoteOf('loc_hall')])
+  })
+
+  // A rejected current_location names no place, so it introduces nothing.
+  it('does not promote a staged non-location the block names as the scene', () => {
+    const ghost = mockEntity({ id: 'char_ghost', status: 'staged' })
+    const result = build({
+      block: { sceneEntities: ['char_1'], currentLocation: 'char_ghost' },
+      entities: [hero, ghost],
+    })
+    expect(result.applied.currentLocationRejected).toBe(true)
+    expect(promotes(result)).toEqual([])
+  })
+
+  // Auto-promote keys on the block naming the place; an inherited location names nothing.
+  it('does not promote a staged location the turn only inherited', () => {
+    const result = build({
+      block: { sceneEntities: ['char_1'] },
+      entities: [hero, mill],
+      previousMetadata: { ...previousMetadata, currentLocationId: 'loc_mill' },
+    })
+    expect(result.metadata.currentLocationId).toBe('loc_mill')
+    expect(promotes(result)).toEqual([])
+  })
+})
+
+describe('buildPiggybackActions input', () => {
+  it('takes only a block the planner handed on', () => {
+    const turn = { ...planned({}), block: { sceneEntities: ['char_1'] } }
+    const build = () =>
+      buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        // @ts-expect-error a hand-built block was never planned
+        turn,
+        entities: [],
+        previousMetadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
+        branchId: 'main',
+      })
+    expect(build).toBeTypeOf('function')
   })
 })

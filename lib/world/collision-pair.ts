@@ -1,8 +1,10 @@
-import type { CollisionReason, Entity } from '@/lib/db'
+import type { CollisionReason, Entity, LocationState } from '@/lib/db'
+
+import { namesakeBasis, type NamesakeSide } from './namesakes'
 
 /**
- * Two distinct rows of one branch and kind, one of whose flags names the other, in the order asked
- * for. Minted only by `collisionPairOf`, so the planners that take one need no checks of their own.
+ * Two distinct rows of one branch and kind, one of whose flags names the other and holds, in the
+ * order asked for. Minted only by `collisionPairOf`, so planners taking one skip their own checks.
  */
 export type CollisionPair = readonly [Entity, Entity] & { readonly __brand: 'CollisionPair' }
 
@@ -26,15 +28,40 @@ export type FlaggedEntity = Entity & {
   nameCollisionReason: CollisionReason
 }
 
+/** A row as the pair rule reads it: its name, keywords, and a place's parent (null otherwise). */
+export type PairSide = NamesakeSide & { parentId: string | null }
+
+export function pairSideOf(row: Entity): PairSide {
+  const parentId =
+    row.kind === 'location'
+      ? ((row.state as LocationState | null)?.parent_location_id ?? null)
+      : null
+  return { name: row.name, keywords: row.keywords, parentId }
+}
+
+/** world.md → Surfacing: a `same-parent` pair needs a shared parent; every other reason passes. */
+export function sharesRequiredParent(reason: CollisionReason, a: PairSide, b: PairSide): boolean {
+  return reason !== 'same-parent' || a.parentId === b.parentId
+}
+
+/** Still namesakes, and `sharesRequiredParent`. What a write judges before keeping a flag. */
+export function stillPaired(reason: CollisionReason, a: PairSide, b: PairSide): boolean {
+  return namesakeBasis(a, b) != null && sharesRequiredParent(reason, a, b)
+}
+
 function flagNames(row: Entity, other: Entity): row is FlaggedEntity {
   return (
     row.nameCollisionFlag === 1 &&
     row.nameCollisionPartnerId === other.id &&
-    row.nameCollisionReason != null
+    row.nameCollisionReason != null &&
+    sharesRequiredParent(row.nameCollisionReason, pairSideOf(row), pairSideOf(other))
   )
 }
 
-/** The row whose flag names the other, `first` preferred; null when neither does. */
+/**
+ * The row whose flag names the other and holds (a `same-parent` flag only while the two share a
+ * parent), `first` preferred; null when neither does. Names are not re-checked here.
+ */
 export function flaggedSideOf(first: Entity, second: Entity): FlaggedEntity | null {
   if (flagNames(first, second)) return first
   if (flagNames(second, first)) return second

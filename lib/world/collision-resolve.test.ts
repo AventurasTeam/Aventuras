@@ -248,6 +248,22 @@ describe('entityRenameActions', () => {
       renamed('char_b', 'Jorin', true),
     ])
   })
+
+  it('reads a renamed place with its parent, so a same-parent flag beside it stays', () => {
+    const place = (id: string, name: string, partnerId: string | null) =>
+      character(id, name, partnerId, {
+        kind: 'location',
+        state: { parent_location_id: 'loc_p' },
+        nameCollisionReason: partnerId == null ? null : 'same-parent',
+      })
+    const market = place('loc_a', 'The Market', null)
+    const twin = place('loc_b', 'The Market', 'loc_a')
+    const stalls = place('loc_c', 'The Market Stalls', 'loc_a')
+    expect(rename([market, twin], ['The Market Stalls East', 'The Quay'], [stalls])).toStrictEqual([
+      renamed('loc_a', 'The Market Stalls East'),
+      renamed('loc_b', 'The Quay', true),
+    ])
+  })
 })
 
 describe('entityKeepActions', () => {

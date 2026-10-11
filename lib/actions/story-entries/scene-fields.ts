@@ -105,8 +105,7 @@ async function updateEntrySceneFieldsLocked(
       source: 'user_edit',
       payload: { branchId, id, metadata: after },
     },
-    // Promotion first: a staged entity the edit brings into the scene is promoted
-    // exactly as the generation fold would, which is what the editor's copy promises.
+    // Promotion first: a staged scene member is promoted as the generation fold promotes one.
     ...scenePromotionActions({
       branchId,
       source: 'user_edit',

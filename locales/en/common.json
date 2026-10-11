@@ -163,7 +163,9 @@
       "ambiguous": "Their descriptions are partly alike.",
       "distinct": "Their descriptions differ.",
       "inScene": "Their descriptions differ, but \"{{other}}\" was in the scene where \"{{flagged}}\" first appeared.",
-      "noSignal": "Their descriptions couldn't be compared."
+      "noSignal": "Their descriptions couldn't be compared.",
+      "sameParent": "Both are in \"{{parent}}\".",
+      "sameParentRoot": "Both are top-level places."
     },
     "basis": "\"{{holder}}\" also goes by \"{{keyword}}\".",
     "description": "Pick how to resolve this collision. Switching modes discards in-progress choices.",
