@@ -156,6 +156,7 @@
     if (!tab) return
     ui.lorebookDebugOpen = false
     ui.setSidebarTab(tab)
+    if (!ui.sidebarOpen) ui.closeNavPanelOnMobile()
     ui.sidebarOpen = true
   }
 

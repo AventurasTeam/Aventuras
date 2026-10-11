@@ -412,6 +412,8 @@ class UIStore {
   }
 
   toggleSidebar() {
+    // Where the panels overlay the story, the sidebar would open over the navigation panel.
+    if (!this.sidebarOpen) this.closeNavPanelOnMobile()
     this.sidebarOpen = !this.sidebarOpen
     database
       .setSetting('sidebar_open', this.sidebarOpen.toString())
@@ -465,6 +467,7 @@ class UIStore {
   }
 
   toggleNavPanel() {
+    if (!this.navPanelOpen) this.closeSidebarOnMobile()
     this.setNavPanelOpen(!this.navPanelOpen)
   }
 

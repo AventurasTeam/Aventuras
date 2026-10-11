@@ -16,7 +16,7 @@
   } from '@lucide/svelte'
   import type { Branch } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
-  import { untrack } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
   import { errMessage } from '$lib/utils/error'
   import { checkpointsOnBranch, jumpToEntry } from '$lib/utils/storyNavigation'
@@ -31,15 +31,17 @@
    * Only its ancestors are expanded — a node's own state controls its children, not whether
    * its row is visible. Done once per branch, so a node collapsed afterwards stays collapsed.
    */
-  let revealedFor: string | null | undefined = undefined
+  // Keyed on the story too: two stories both on main would otherwise read as no change.
+  let revealedFor: string | undefined = undefined
 
   $effect(() => {
     const branchId = story.currentStory?.currentBranchId ?? null
+    const key = `${story.currentStory?.id}:${branchId}`
     const branches = story.branches
-    if (branchId === revealedFor) return
+    if (key === revealedFor) return
     // Branches load after the story, so wait for the one we are asked to reveal.
     if (branchId && !branches.some((b) => b.id === branchId)) return
-    revealedFor = branchId
+    revealedFor = key
 
     untrack(() => {
       const next = new SvelteSet(expandedBranches)
@@ -54,7 +56,99 @@
       }
       expandedBranches = next
     })
+    revealed = { branchId }
   })
+
+  let revealed = $state<{ branchId: string | null } | null>(null)
+
+  // Inactive tabs stay mounted but hidden, where nothing can be measured: scroll once Branches shows.
+  $effect(() => {
+    if (!revealed || ui.sidebarTab !== 'branches') return
+    void scrollCurrentRowIntoView()
+  })
+
+  let treeScroller: HTMLDivElement | null = null
+  let treeOverflows = $state(false)
+  // Controls sit at the right edge while the tree fits; once it scrolls they follow the name, or
+  // every row would stretch to the widest one and push them out of view.
+  const nameFill = $derived(treeOverflows ? '' : 'flex-1')
+
+  /** Scroll offset that brings `[start, end]` into `[viewStart, viewEnd]`, `start` winning. */
+  function nearestDelta(start: number, end: number, viewStart: number, viewEnd: number): number {
+    if (start < viewStart) return start - viewStart
+    if (end > viewEnd) return Math.min(end - viewEnd, start - viewStart)
+    return 0
+  }
+
+  // Not `scrollIntoView`: it also scrolls the page, which on a phone shifts the whole app sideways
+  // while the sidebar is still sliding in from off-screen.
+  async function scrollCurrentRowIntoView() {
+    await tick()
+    const scroller = treeScroller
+    const name = scroller?.querySelector<HTMLElement>('[data-current-name]')
+    const row = name?.parentElement
+    if (!scroller?.clientWidth || !name || !row) return
+    // The observer reports a frame late, and a stretched name would be measured past the view.
+    treeOverflows = scroller.scrollWidth > scroller.clientWidth
+    await tick()
+
+    const view = scroller.getBoundingClientRect()
+    const rowBox = row.getBoundingClientRect()
+    const nameBox = name.getBoundingClientRect()
+    const start = nameBox.right - rowBox.left <= view.width ? rowBox.left : nameBox.left
+    scroller.scrollLeft += nearestDelta(start, nameBox.right, view.left, view.right)
+
+    let panel = scroller.parentElement
+    while (panel && !/auto|scroll/.test(getComputedStyle(panel).overflowY)) {
+      panel = panel.parentElement
+    }
+    if (!panel) return
+    const panelBox = panel.getBoundingClientRect()
+    panel.scrollTop += nearestDelta(rowBox.top, rowBox.bottom, panelBox.top, panelBox.bottom)
+  }
+
+  function tracksOverflow(node: HTMLElement) {
+    const observer = new ResizeObserver(() => {
+      treeOverflows = node.scrollWidth > node.clientWidth
+    })
+    observer.observe(node)
+    if (node.firstElementChild) observer.observe(node.firstElementChild)
+    return {
+      destroy() {
+        observer.disconnect()
+      },
+    }
+  }
+
+  /**
+   * A sideways swipe over the tree belongs to the tree while, at its start, the tree could still
+   * scroll that way; at the edge it reaches the sidebar's and shell's `swipe` as usual.
+   */
+  function keepsSidewaysSwipes(node: HTMLElement) {
+    let startX = 0
+    let canScrollBack = false
+    let canScrollForward = false
+
+    function onTouchStart(e: TouchEvent) {
+      startX = e.touches[0]?.clientX ?? 0
+      canScrollBack = node.scrollLeft > 1
+      canScrollForward = node.scrollLeft + node.clientWidth < node.scrollWidth - 1
+    }
+    // Native, not `ontouchend`: Svelte delegates that to the root, past the ancestors' listeners.
+    // Stopping the end leaves `swipe` with a start it never finishes, so it fires nothing.
+    function onTouchEnd(e: TouchEvent) {
+      const deltaX = (e.changedTouches[0]?.clientX ?? startX) - startX
+      if ((deltaX > 0 && canScrollBack) || (deltaX < 0 && canScrollForward)) e.stopPropagation()
+    }
+    node.addEventListener('touchstart', onTouchStart, { passive: true })
+    node.addEventListener('touchend', onTouchEnd, { passive: true })
+    return {
+      destroy() {
+        node.removeEventListener('touchstart', onTouchStart)
+        node.removeEventListener('touchend', onTouchEnd)
+      },
+    }
+  }
 
   // Track which branch is being renamed
   let renamingBranchId = $state<string | null>(null)
@@ -401,7 +495,10 @@
               <X class="can-hover:size-3.5 size-4" />
             </button>
           {:else}
-            <span class="text-surface-200 flex-1 truncate text-sm">{branch.name}</span>
+            <span
+              class="text-surface-200 text-sm whitespace-nowrap {nameFill}"
+              data-current-name={isCurrent(branch.id) || undefined}>{branch.name}</span
+            >
             <span class="text-surface-500 text-xs">{getBranchEntryCount(branch.id)}</span>
             {#if isCurrent(branch.id)}
               <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
@@ -443,47 +540,57 @@
       </div>
     {/snippet}
 
-    <!-- Branch Tree -->
-    <div class="space-y-1">
-      <!-- Main Branch -->
-      <div
-        class="flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
-          null,
-        )
-          ? 'bg-accent-500/20 border-accent-500 border-l-2'
-          : 'hover:bg-surface-700/50'}"
-        onclick={() => handleSwitchBranch(null)}
-        role="button"
-        tabindex="0"
-        onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(null)}
-      >
-        <button
-          class="text-surface-400 hover:text-surface-200 tap-target"
-          onclick={(e) => {
-            e.stopPropagation()
-            toggleExpand('main')
-          }}
+    <!-- Branch Tree: scrolls sideways when deep, so names are never cut. -->
+    <div
+      bind:this={treeScroller}
+      class="overflow-x-auto"
+      use:tracksOverflow
+      use:keepsSidewaysSwipes
+    >
+      <div class="w-max min-w-full space-y-1">
+        <!-- Main Branch -->
+        <div
+          class="flex cursor-pointer items-center gap-2 rounded-lg p-2 transition-colors {isCurrent(
+            null,
+          )
+            ? 'bg-accent-500/20 border-accent-500 border-l-2'
+            : 'hover:bg-surface-700/50'}"
+          onclick={() => handleSwitchBranch(null)}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => e.key === 'Enter' && handleSwitchBranch(null)}
         >
-          {#if isExpanded('main')}
-            <ChevronDown class="can-hover:size-3.5 size-4" />
-          {:else}
-            <ChevronRight class="can-hover:size-3.5 size-4" />
+          <button
+            class="text-surface-400 hover:text-surface-200 tap-target"
+            onclick={(e) => {
+              e.stopPropagation()
+              toggleExpand('main')
+            }}
+          >
+            {#if isExpanded('main')}
+              <ChevronDown class="can-hover:size-3.5 size-4" />
+            {:else}
+              <ChevronRight class="can-hover:size-3.5 size-4" />
+            {/if}
+          </button>
+          <GitBranch class="text-surface-400 h-4 w-4" />
+          <span
+            class="text-surface-200 text-sm {nameFill}"
+            data-current-name={isCurrent(null) || undefined}>Main</span
+          >
+          <span class="text-surface-500 text-xs">{getBranchEntryCount(null)}</span>
+          {#if isCurrent(null)}
+            <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
           {/if}
-        </button>
-        <GitBranch class="text-surface-400 h-4 w-4" />
-        <span class="text-surface-200 flex-1 text-sm">Main</span>
-        <span class="text-surface-500 text-xs">{getBranchEntryCount(null)}</span>
-        {#if isCurrent(null)}
-          <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
+        </div>
+
+        <!-- Child branches of main (recursive) -->
+        {#if isExpanded('main')}
+          {#each getChildBranches(null) as branch (branch.id)}
+            {@render branchItem(branch)}
+          {/each}
         {/if}
       </div>
-
-      <!-- Child branches of main (recursive) -->
-      {#if isExpanded('main')}
-        {#each getChildBranches(null) as branch (branch.id)}
-          {@render branchItem(branch)}
-        {/each}
-      {/if}
     </div>
 
     <!-- Empty state -->
