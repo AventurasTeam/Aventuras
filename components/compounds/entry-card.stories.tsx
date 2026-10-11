@@ -5,7 +5,6 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
-import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
@@ -1245,11 +1244,11 @@ const LOC_NEW = 'loc_00000000-0000-4000-8000-0000000000a7'
 const ITEM_NEW = 'item_00000000-0000-4000-8000-0000000000b8'
 const LOC_GONE = 'loc_00000000-0000-4000-8000-0000000000f7'
 
-// The created rows exist live as well; the card names them from the report regardless.
+// The created rows were renamed live since the turn; the card names them from the report.
 const createsEntityNames = [
   ...entityNames,
-  { id: LOC_NEW, name: 'the Smuggler’s Docks' },
-  { id: ITEM_NEW, name: 'rusted key' },
+  { id: LOC_NEW, name: 'Smuggler’s Wharf' },
+  { id: ITEM_NEW, name: 'iron key' },
 ]
 
 const createsProps = {
@@ -1330,33 +1329,26 @@ export const WorldStateTurnCreates: StoryT = {
   args: { ...baseProps, ...aiEntry, ...createsProps },
   play: async () => {
     await openPanel()
-    const newPlace = screen.getByText(
-      t('reader:entryCard.stateNewPlace', { name: 'the Smuggler’s Docks' }),
-    )
-    const matched = screen.getByText(
-      t('reader:entryCard.stateMatchedPlace', { name: 'Eldrin Keep' }),
-    )
-    const newItem = screen.getByText(t('reader:entryCard.stateNewItem', { name: 'rusted key' }))
+    const newPlace = screen.getByText('New place: the Smuggler’s Docks')
+    const matched = screen.getByText('Matched place: Eldrin Keep')
+    const newItem = screen.getByText('New item: rusted key')
     expect(newPlace).toBeVisible()
     expect(matched).toBeVisible()
     expect(newItem).toBeVisible()
-    expect(
-      screen.getByText(t('reader:entryCard.stateMatchedPlace', { name: 'the old watchtower' })),
-    ).toBeVisible()
-    // The alias landed on the row already listed as new, so it adds no line of its own.
-    expect(
-      screen.queryByText(t('reader:entryCard.stateMatchedPlace', { name: 'the Smuggler’s Docks' })),
-    ).not.toBeInTheDocument()
+    expect(screen.getByText('Matched place: the old watchtower')).toBeVisible()
+    // Created rows keep the names they were created under, not their live names.
+    expect(screen.queryByText('New place: Smuggler’s Wharf')).not.toBeInTheDocument()
+    expect(screen.queryByText('New item: iron key')).not.toBeInTheDocument()
+    // The alias landed on the row already listed as new (live name Smuggler’s Wharf), so it
+    // adds no line of its own: two reused places, and no third.
+    expect(screen.queryByText('Matched place: Smuggler’s Wharf')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/^Matched place:/)).toHaveLength(2)
     // A reused row is named live, not in the spelling the writer emitted.
-    expect(
-      screen.queryByText(t('reader:entryCard.stateMatchedPlace', { name: 'eldrin keep' })),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Matched place: eldrin keep')).not.toBeInTheDocument()
     expect(screen.queryByText(/a side alley/)).not.toBeInTheDocument()
     expect(screen.queryByText(/stale bread/)).not.toBeInTheDocument()
     // Canon's order: stackables, then places, then items.
-    const stackable = screen.getByText(
-      t('reader:entryCard.stateStackable', { key: 'gold', amount: 5, to: 'Aria' }),
-    )
+    const stackable = screen.getByText('gold ×5 → Aria')
     expect(stackable.compareDocumentPosition(newPlace)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(newPlace.compareDocumentPosition(matched)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(matched.compareDocumentPosition(newItem)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
@@ -1388,10 +1380,8 @@ export const WorldStateCreatesOnly: StoryT = {
   },
   play: async () => {
     await openPanel()
-    expect(screen.getByText(t('reader:entryCard.stateChanges'))).toBeVisible()
-    expect(
-      screen.getByText(t('reader:entryCard.stateNewPlace', { name: 'the Smuggler’s Docks' })),
-    ).toBeVisible()
+    expect(screen.getByText('Changes this turn')).toBeVisible()
+    expect(screen.getByText('New place: the Smuggler’s Docks')).toBeVisible()
   },
 }
 
@@ -1427,7 +1417,7 @@ export const WorldStateDroppedCreatesOnly: StoryT = {
   },
   play: async () => {
     await openPanel()
-    expect(screen.queryByText(t('reader:entryCard.stateChanges'))).not.toBeInTheDocument()
+    expect(screen.queryByText('Changes this turn')).not.toBeInTheDocument()
     // Positive control: the panel rendered, so the absence above is not an empty render.
     expect(screen.getByText('Ashfen Marshes')).toBeVisible()
   },
