@@ -131,7 +131,7 @@ function parseVisualChanges(segment: string): VisualChangeNote[] {
 
 // <item id="..." to="..." from="..." slot="..." /> and
 // <stackable key="..." amount="..." to="..." from="..." /> — self-closing,
-// attribute-only. Both reference only already-existing entities.
+// attribute-only. Holders are listed entities; an item's id may also be a create's handle.
 function parseTransfers(segment: string): ParsedTransfers {
   const items: ItemTransfer[] = []
   const itemRe = /<item\s+([^>]*)\/?>/g
@@ -218,7 +218,8 @@ type ParsedCreates = {
   found: Pick<ParsedStateBlock, 'newLocations' | 'newItems'>
   /** Create tags opened at all, whole or not. */
   declared: number
-  /** Create tags opened but never formed whole: cut off, or content holding a `<`. */
+  /** Create tags opened but never formed whole: cut off, an opener with no `>`, or a raw `<`
+   *  in the attributes or the content. */
   unclosed: number
   /** Whole create tags dropped for attribute text that isn't entirely `key="value"` pairs. */
   badAttributes: number
@@ -304,8 +305,9 @@ type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
 /**
  * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
  * declared (locations before items); unwraps a bracketed handle, trims what it keeps, and drops a
- * blank parent; a missing description reads as ''. Never a field failure: one bad create must not
- * hand the whole turn to the fallback.
+ * blank parent; a missing description reads as ''. Never a field failure itself: a ref to a
+ * dropped create's handle fails in `substitutePiggybackIds`, so using a dropped create still fires
+ * the fallback.
  */
 export function normalizeCreates(block: CreateBlockInput): {
   block: ParsedStateBlock
@@ -401,8 +403,9 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   const normalized = normalizeCreates({ ...block, ...creates.found })
   const malformedCreates = creates.unclosed + creates.badAttributes + normalized.malformed
 
-  // A cut-off stream may have lost the tags that name a create (current_location, transfers), even
-  // if every create tag is whole, so the fallback fires; a closed block's creates are only counted.
+  // A cut-off stream may have lost the tags that name a create (current_location, transfers),
+  // even if every create tag is whole, so the fallback fires; a closed block's malformed creates
+  // are only counted.
   if (creates.declared > 0 && !stateClosed(raw))
     failures.push({ field: 'state', detail: 'block with creates cut off' })
 

@@ -64,7 +64,8 @@ export type ParsedStateBlock = {
   newItems?: NewItemEmission[]
 }
 
-// `'state'` is the block-level failure: an empty block, or a cut-off one that declares a create.
+// `'state'` is the block-level failure: no block in a reply that owed one, an empty block, or a
+// cut-off one that declares a create.
 export type ParseFieldFailure = { field: keyof ParsedStateBlock | 'state'; detail: string }
 
 export type ParseStateBlockResult = {

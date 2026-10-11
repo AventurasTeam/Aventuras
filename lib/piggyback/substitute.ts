@@ -87,8 +87,9 @@ function resolveField<K extends keyof ParsedStateBlock>(
   }
 }
 
-// Resolves only ID-bearing sub-fields (id/to/from, never a create's name or description): a bad
-// ref fails only its own field (docs/memory/piggyback.md → Parse strategy and failure recovery).
+// Resolves only ID-bearing sub-fields, never a create's name or description: a bad id, to or from
+// fails only its own field, and a bad create parent fails nothing, since `resolveParent` is lenient
+// (docs/memory/piggyback.md → Parse strategy and failure recovery).
 export function substitutePiggybackIds(block: ParsedStateBlock, idMap: IdBiMap): SubstituteResult {
   const result: ParsedStateBlock = { ...block }
   const failures: ParseFieldFailure[] = []

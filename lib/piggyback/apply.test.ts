@@ -1059,7 +1059,7 @@ describe("buildPiggybackActions with this turn's creates", () => {
     expect(result.metadata.currentLocationId).toBe('loc_1')
   })
 
-  it('moves a new item into a holder like any item, without looking it up', () => {
+  it('moves a new item into a holder with no position write', () => {
     const key = mockEntity({
       id: 'item_key',
       kind: 'item',
