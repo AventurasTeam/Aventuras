@@ -1499,6 +1499,21 @@ describe('buildGenerationContext — location map and held items', () => {
     expect(ctx.currentLocationChain).toEqual(['Port Vellis', 'Eldra'])
   })
 
+  it('leaves a disabled ancestor out of the chain when only the scene row names it', async () => {
+    const ctx = await buildContext({
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA, { injectionMode: 'disabled' }),
+        place(INN, 'The Rusty Anchor', PORT),
+      ],
+      entries: sceneAt(PORT),
+      retrieval: retrievalSuccess({
+        floor: { currentLocation: floorPlace(INN, 'The Rusty Anchor') },
+      }),
+    })
+    expect(ctx.currentLocationChain).toEqual(['Eldra'])
+  })
+
   it('lists the items lying at the structural location', async () => {
     const ctx = await buildContext({
       idMap: seededIdMap(CHEST),

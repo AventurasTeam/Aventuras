@@ -51,13 +51,9 @@ export function buildLocationMap(
 }
 
 /** `# Current location`'s chain: the listed ancestors' names, nearest first. */
-export function listedAncestorNames(
-  locationId: string,
-  entities: readonly Entity[],
-  currentLocationId: string | null,
-): string[] {
+export function listedAncestorNames(locationId: string, entities: readonly Entity[]): string[] {
   const listedNames = new Map(
-    entities.filter((e) => isListed(e, currentLocationId)).map((e) => [e.id, e.name]),
+    entities.filter((e) => isListed(e, locationId)).map((e) => [e.id, e.name]),
   )
   return parentChainIds(locationId, parentOfLocations(entities)).flatMap((id) => {
     const name = listedNames.get(id)

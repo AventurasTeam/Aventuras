@@ -356,7 +356,7 @@ export async function buildGenerationContext(
     currentLocationChain:
       structuralLocationId === null
         ? []
-        : listedAncestorNames(structuralLocationId, branchEntities, scene.currentLocationId),
+        : listedAncestorNames(structuralLocationId, branchEntities),
     heldItems: heldItemsInScene(scene.sceneEntities, branchEntities),
     looseItems:
       structuralLocationId === null ? [] : looseItemLines(structuralLocationId, branchEntities),

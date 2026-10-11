@@ -128,33 +128,31 @@ describe('buildLocationMap', () => {
 
 describe('listedAncestorNames', () => {
   it('names the listed ancestors, nearest first', () => {
-    expect(listedAncestorNames('loc_back', WORLD, null)).toEqual([
+    expect(listedAncestorNames('loc_back', WORLD)).toEqual([
       'The Rusty Anchor',
       'Port Vellis',
       'Eldra',
     ])
   })
 
-  it('skips a retired ancestor, and a disabled one unless it is current', () => {
-    expect(
-      listedAncestorNames('loc_back', [ELDRA, RETIRED_VELLIS, ANCHOR, BACK_ROOM], null),
-    ).toEqual(['The Rusty Anchor', 'Eldra'])
-    const disabled = [ELDRA, DISABLED_VELLIS, ANCHOR, BACK_ROOM]
-    expect(listedAncestorNames('loc_back', disabled, null)).toEqual(['The Rusty Anchor', 'Eldra'])
-    expect(listedAncestorNames('loc_back', disabled, 'loc_vellis')).toEqual([
+  it('skips a retired or disabled ancestor', () => {
+    expect(listedAncestorNames('loc_back', [ELDRA, RETIRED_VELLIS, ANCHOR, BACK_ROOM])).toEqual([
       'The Rusty Anchor',
-      'Port Vellis',
+      'Eldra',
+    ])
+    expect(listedAncestorNames('loc_back', [ELDRA, DISABLED_VELLIS, ANCHOR, BACK_ROOM])).toEqual([
+      'The Rusty Anchor',
       'Eldra',
     ])
   })
 
   it('is empty at the root', () => {
-    expect(listedAncestorNames('loc_eldra', WORLD, null)).toEqual([])
+    expect(listedAncestorNames('loc_eldra', WORLD)).toEqual([])
   })
 
   it('stops when the chain loops', () => {
     const loop = [location('loc_la', 'Ashgate', 'loc_lb'), location('loc_lb', 'Bellmoor', 'loc_la')]
-    expect(listedAncestorNames('loc_la', loop, null)).toEqual(['Bellmoor'])
+    expect(listedAncestorNames('loc_la', loop)).toEqual(['Bellmoor'])
   })
 })
 
