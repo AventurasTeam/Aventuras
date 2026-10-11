@@ -23,6 +23,7 @@
   import { story, type AnchorLabel, type PastCheckpointPreview } from '#lib/stores/story.svelte.ts'
   import type { GapOverride } from '#lib/services/stateTracking/index.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     User,
@@ -48,6 +49,7 @@
     ChevronDown,
     ChevronRight,
     TriangleAlert,
+    CornerLeftUp,
   } from '@lucide/svelte'
   import { aiService } from '#lib/services/ai/index.ts'
   import { aiTTSService } from '#lib/services/ai/utils/TTSService.ts'
@@ -398,6 +400,23 @@
   // Main branch has no Branch record, so no divergence point
   const isForkPoint = $derived(!!activeBranch && activeBranch.forkEntryId === entry.id)
 
+  // An inherited entry belongs to an ancestor branch: it is edited, deleted, branched from and
+  // checkpointed there, so here it only carries a marker that says so.
+  const ownerBranchName = $derived(
+    entry.branchId
+      ? (story.branches.find((b) => b.id === entry.branchId)?.name ?? 'a parent branch')
+      : 'Main',
+  )
+  // Opened by hover where there is a mouse, by a tap where there is not.
+  let lineageInfoOpen = $state(false)
+  let lineageInfoTimer: ReturnType<typeof setTimeout> | undefined
+  function hoverLineageInfo(event: PointerEvent, entering: boolean) {
+    if (event.pointerType !== 'mouse') return
+    clearTimeout(lineageInfoTimer)
+    if (entering) lineageInfoTimer = setTimeout(() => (lineageInfoOpen = true), 500)
+    else lineageInfoOpen = false
+  }
+
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
 
@@ -482,10 +501,8 @@
     return at ? entryNumber(at) : null
   }
 
-  const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
-
   function anchorText(label: AnchorLabel): string {
-    if (label.kind === 'live') return 'the current state'
+    if (label.kind === 'live') return 'the last entry world state'
     const at = story.entries.find((e) => e.position === label.position)
     const number = at ? entryNumber(at) : label.position + 1
     return label.kind === 'checkpoint'
@@ -1573,19 +1590,45 @@
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
-    <!-- Fork point marker: this branch diverged from its parent here. Passive (not a
-         Button) and outside the toolbar guard below, so it survives on system entries.
-         Matches the toolbar's h-7 w-7 slot so it lines up with "Branch from here".
-         Muted rather than accent-coloured: --color-accent-500 is the exact amber of the
-         "Branch from here" button in some themes (fantasy, royal), and both can land on
-         the same entry when a branch's fork entry is still its latest entry. -->
-    {#if isForkPoint}
-      <span
-        class="flex h-7 w-7 shrink-0 items-center justify-center"
-        title="Branch &quot;{activeBranch?.name}&quot; starts here"
-      >
-        <GitBranch class="text-muted-foreground h-4 w-4" />
-      </span>
+    <!-- Lineage marker: the fork point, or any other entry inherited from an ancestor branch.
+         Outside the toolbar guard below, so it survives on system entries. Matches the toolbar's
+         h-7 w-7 slot so it lines up with "Branch from here". Muted rather than accent-coloured:
+         --color-accent-500 is the exact amber of the "Branch from here" button in some themes
+         (fantasy, royal), and both can land on the same entry when a branch's fork entry is
+         still its latest entry. A popover rather than a title, so a tap explains it on a phone. -->
+    {#if isForkPoint || !isOwnedEntry}
+      <Popover.Root bind:open={lineageInfoOpen}>
+        <Popover.Trigger>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              class="text-muted-foreground hover:text-foreground flex h-7 w-7 shrink-0 items-center justify-center"
+              aria-label={isForkPoint ? 'Where this branch starts' : 'Inherited entry'}
+              onpointerenter={(e) => hoverLineageInfo(e, true)}
+              onpointerleave={(e) => hoverLineageInfo(e, false)}
+            >
+              {#if isForkPoint}
+                <GitBranch class="h-4 w-4" />
+              {:else}
+                <CornerLeftUp class="h-4 w-4" />
+              {/if}
+            </button>
+          {/snippet}
+        </Popover.Trigger>
+        <!-- Dark on light, as the native tooltips beside it are. -->
+        <!-- No focus moves: focusing the trigger again on close scrolls the story to it. -->
+        <Popover.Content
+          class="w-60 rounded-sm border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 shadow-md"
+          align="end"
+          onOpenAutoFocus={(e: Event) => e.preventDefault()}
+          onCloseAutoFocus={(e: Event) => e.preventDefault()}
+        >
+          {#if isForkPoint}
+            Branch “{activeBranch?.name}” starts here.
+          {/if}
+          This entry is inherited from the branch “{ownerBranchName}”.
+        </Popover.Content>
+      </Popover.Root>
     {/if}
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
@@ -1741,7 +1784,13 @@
             variant="text"
             size="icon"
             onclick={openCheckpoint}
-            class="hidden h-7 w-7 text-blue-700 hover:text-blue-800 @min-[23rem]:flex dark:text-blue-500 dark:hover:text-blue-600"
+            class={cn(
+              'hidden h-7 w-7 @min-[23rem]:flex',
+              // Accent only where a checkpoint is the usual next step: at the latest entry.
+              isLatestEntry
+                ? 'text-blue-700 hover:text-blue-800 dark:text-blue-500 dark:hover:text-blue-600'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1942,26 +1991,28 @@
   </div>
 
   {#snippet editDeleteButtons()}
-    <Button
-      variant="text"
-      size="icon"
-      onclick={startEdit}
-      disabled={entriesLocked}
-      class="text-muted-foreground hover:text-foreground h-7 w-7"
-      title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
-    >
-      <Pencil class="h-4 w-4" />
-    </Button>
-    <Button
-      variant="text"
-      size="icon"
-      onclick={startDelete}
-      disabled={entriesLocked}
-      class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
-      title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
-    >
-      <Trash2 class="h-4 w-4" />
-    </Button>
+    {#if isOwnedEntry}
+      <Button
+        variant="text"
+        size="icon"
+        onclick={startEdit}
+        disabled={entriesLocked}
+        class="text-muted-foreground hover:text-foreground h-7 w-7"
+        title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
+      >
+        <Pencil class="h-4 w-4" />
+      </Button>
+      <Button
+        variant="text"
+        size="icon"
+        onclick={startDelete}
+        disabled={entriesLocked}
+        class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
+        title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
+      >
+        <Trash2 class="h-4 w-4" />
+      </Button>
+    {/if}
   {/snippet}
 
   {#snippet storyTimeChip()}
@@ -2281,9 +2332,16 @@
 {/snippet}
 
 <!-- View/Edit Image Modal -->
-{#snippet changeList(changes: WorldStateChangeRecord[], unkeepable: WorldStateChangeRecord[])}
+<!-- `capped` scrolls a long list on its own, for a container that does not scroll itself. -->
+{#snippet changeList(
+  changes: WorldStateChangeRecord[],
+  unkeepable: WorldStateChangeRecord[],
+  capped = true,
+)}
   {@const lost = new Set(unkeepable.map((r) => r.id))}
-  <ul class="text-muted-foreground max-h-40 list-disc overflow-y-auto pl-5 text-xs">
+  <ul
+    class={cn('text-muted-foreground list-disc pl-5 text-xs', capped && 'max-h-40 overflow-y-auto')}
+  >
     {#each changes as change (change.id)}
       <li>
         {describeChange(change, (type, id) => story.trackedName(type, id))}
@@ -2308,7 +2366,7 @@
   dismissible={!savingCheckpoint}
 >
   <ResponsiveModal.Content
-    class="max-w-md gap-0 p-0"
+    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
     interactOutsideBehavior="ignore"
     escapeKeydownBehavior={savingCheckpoint ? 'ignore' : 'close'}
   >
@@ -2318,7 +2376,8 @@
         >Create a new checkpoint at entry {entryNumber(entry)}</ResponsiveModal.Description
       >
     </ResponsiveModal.Header>
-    <div class="space-y-3 px-6 py-4">
+    <!-- The one scroller: the refusal report and the change lists can run long. -->
+    <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
       <Input
         type="text"
         class="h-9 text-sm"
@@ -2369,9 +2428,9 @@
               diagnosis.target === 'recorded'
                 ? `World state changes were recorded for entry ${entryNumber(entry)}.`
                 : diagnosis.target === 'classifierOnly'
-                  ? `Entry ${entryNumber(entry)} has an old record without the lorebook.`
+                  ? `Entry ${entryNumber(entry)} has an old world state record without the lorebook.`
                   : `World state changes were not recorded for entry ${entryNumber(entry)}.`,
-            )}.` : `World state changes were not recorded for entry ${entryNumber(entry)}.`, )}
+            )}
             {@render finding(
               diagnosis.anchor ? 'ok' : 'fail',
               diagnosis.anchor
@@ -2379,12 +2438,17 @@
                 : 'No full world state was saved after this entry.',
             )}
             {#if diagnosis.anchor}
-              {@render finding(
-                !diagnosis.gap ? 'ok' : diagnosis.gap.cause === 'classifierOnly' ? 'warn' : 'fail',
-                diagnosis.gap
-                  ? gapMessage(diagnosis.gap, entryNumberOf)
-                  : 'World state changes were recorded for every entry in between.',
-              )}
+              {#each diagnosis.gaps as gap, i (i)}
+                {@render finding(
+                  gap.cause === 'classifierOnly' ? 'warn' : 'fail',
+                  gapMessage(gap, entryNumberOf),
+                )}
+              {:else}
+                {@render finding(
+                  'ok',
+                  'World state changes were recorded for every entry in between.',
+                )}
+              {/each}
             {/if}
           </ul>
         {/if}
@@ -2431,9 +2495,11 @@
                     <label for={`gap-${value}-${entry.id}`} class:opacity-50={!anchor}>
                       <span class="text-foreground">{title}</span>
                       <span class="block">
-                        {anchor ? `${capitalize(anchorText(anchor))}.` : 'None was saved.'}
-                        {anchor && note ? note : ''}
+                        {anchor ? `Data origin: ${anchorText(anchor)}.` : 'None was saved.'}
                       </span>
+                      {#if anchor && note}
+                        <span class="block">{note}</span>
+                      {/if}
                     </label>
                   </div>
                 {/snippet}
@@ -2445,7 +2511,7 @@
                 >
                   {@render option(
                     'undoRecorded',
-                    'Undo the recorded changes from the next full state',
+                    'Use a partial rollback from the next full state',
                     overrides.next,
                     'Changes that were not recorded stay in.',
                   )}
@@ -2493,7 +2559,7 @@
           <p class="text-muted-foreground text-xs">
             Some changes were made by a user after this entry:
           </p>
-          {@render changeList(pastCheckpoint.manual, pastCheckpoint.unkeepable)}
+          {@render changeList(pastCheckpoint.manual, pastCheckpoint.unkeepable, false)}
           <label class="flex items-center gap-2 text-xs">
             <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
             Include them in the checkpoint
@@ -2503,7 +2569,7 @@
           <p class="text-muted-foreground text-xs">
             Lore management you ran after this entry made these changes:
           </p>
-          {@render changeList(pastCheckpoint.tidy, pastCheckpoint.unkeepable)}
+          {@render changeList(pastCheckpoint.tidy, pastCheckpoint.unkeepable, false)}
           <label class="flex items-center gap-2 text-xs">
             <Checkbox bind:checked={keepTidyInCheckpoint} disabled={savingCheckpoint} />
             Include them in the checkpoint

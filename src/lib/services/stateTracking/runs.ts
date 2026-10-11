@@ -70,10 +70,12 @@ export type RunRefusal =
 
 /** The first thing that breaks the tracked sequence between an entry and a full state. */
 export type RunGap =
-  /** A narration played without State Tracking. */
-  | { cause: 'untracked'; entryId: string }
-  /** A narration recorded before lorebook and manual changes were. */
-  | { cause: 'classifierOnly'; entryId: string }
+  /**
+   * A narration played without State Tracking, or recorded before lorebook and manual changes
+   * were. `throughEntryId` ends a run of consecutive narrations with the same problem; null for
+   * one narration alone.
+   */
+  | { cause: 'untracked' | 'classifierOnly'; entryId: string; throughEntryId: string | null }
   /**
    * A header written as not continuing the run before it. `sinceEntryId` is the entry of the
    * last thing recorded before it, if any.
@@ -105,8 +107,8 @@ export interface RunDiagnosis {
   target: 'recorded' | 'classifierOnly' | 'untracked'
   /** The nearest full state after the entry, or the one that passed. */
   anchor: AnchorCandidate | null
-  /** The first break in the tracked sequence between the entry and `anchor`. */
-  gap: RunGap | null
+  /** Everything breaking the tracked sequence between the entry and `anchor`, in story order. */
+  gaps: RunGap[]
 }
 
 export interface RunQuery {
@@ -139,11 +141,18 @@ function suspectIntervals(query: RunQuery): Interval[] {
       .map((r) => r.entryId),
   )
   const tracked = query.records.filter((r) => !legacy.has(r.entryId))
+  const fullyHeaded = new Set(
+    tracked.filter((r) => r.kind === 'header' && r.coverage === 'full').map((r) => r.entryId),
+  )
   const proofs = [
     ...tracked
       .filter((r) => r.kind !== 'break')
       .map((r) => ({ at: r.createdAt, entryId: r.entryId })),
-    ...query.snapshots.map((s) => ({ at: s.takenAt, entryId: s.entryId })),
+    // A snapshot is taken right after its entry is classified, so one on an entry without a full
+    // header was taken before full recording began.
+    ...query.snapshots
+      .filter((s) => fullyHeaded.has(s.entryId))
+      .map((s) => ({ at: s.takenAt, entryId: s.entryId })),
   ].sort((a, b) => a.at - b.at)
   const lastProofBefore = (t: number) => {
     let found: { at: number; entryId: string } | null = null
@@ -204,8 +213,8 @@ export function resolveRun(query: RunQuery): RunResult {
     .filter((c) => c.position >= query.target)
     .sort((a, b) => a.takenAt - b.takenAt)
 
-  const checked = candidates.map((anchor) => ({ anchor, gap: checkAnchor(anchor) }))
-  const passed = checked.find((c) => c.gap === null)
+  const checked = candidates.map((anchor) => ({ anchor, gaps: checkAnchor(anchor) }))
+  const passed = checked.find((c) => c.gaps.length === 0)
   const diagnosed = passed ?? checked[0]
   const diagnosis: RunDiagnosis = {
     target: !targetHeader
@@ -214,7 +223,7 @@ export function resolveRun(query: RunQuery): RunResult {
         ? 'classifierOnly'
         : 'recorded',
     anchor: diagnosed?.anchor ?? null,
-    gap: diagnosed?.gap ?? null,
+    gaps: diagnosed?.gaps ?? [],
   }
 
   if (diagnosis.target === 'untracked') return { ok: false, reason: 'targetUntracked', diagnosis }
@@ -222,23 +231,45 @@ export function resolveRun(query: RunQuery): RunResult {
     return { ok: false, reason: 'targetClassifierOnly', diagnosis }
   }
   if (!diagnosed) return { ok: false, reason: 'noAnchor', diagnosis }
-  if (!passed) return { ok: false, reason: refusalFor(diagnosed.gap!), diagnosis }
+  if (!passed) return { ok: false, reason: refusalFor(diagnosed.gaps[0]), diagnosis }
   return { ok: true, ...rebuildFrom(query, passed.anchor) }
 
-  function checkAnchor(anchor: AnchorCandidate): RunGap | null {
-    if (!next) return null
-    // What the entries show comes before what is inferred from times.
-    for (const entry of line) {
-      if (entry.position <= query.target || entry.position > anchor.position) continue
-      if (entry.type !== 'narration') continue
-      const header = headersByEntry.get(entry.id)
-      if (!header) return { cause: 'untracked', entryId: entry.id }
-      if (header.coverage === 'classifier') return { cause: 'classifierOnly', entryId: entry.id }
+  function checkAnchor(anchor: AnchorCandidate): RunGap[] {
+    if (!next) return []
+    const spanned = line.filter(
+      (e) => e.type === 'narration' && e.position > query.target && e.position <= anchor.position,
+    )
+    const problem = (e: LineEntry) => {
+      const header = headersByEntry.get(e.id)
+      if (!header) return 'untracked' as const
+      return header.coverage === 'classifier' ? ('classifierOnly' as const) : null
     }
 
+    // Consecutive narrations with the same problem are reported as one stretch.
+    const gaps: RunGap[] = []
+    type Stretch = Extract<RunGap, { cause: 'untracked' | 'classifierOnly' }>
+    let stretch = null as Stretch | null
+    for (const entry of spanned) {
+      const cause = problem(entry)
+      if (cause && stretch?.cause === cause) {
+        stretch.throughEntryId = entry.id
+        continue
+      }
+      stretch = cause ? { cause, entryId: entry.id, throughEntryId: null } : null
+      if (stretch) gaps.push(stretch)
+    }
+
+    // What the entries show already accounts for a pause that has no entry to place it at.
     const from = next.createdAt
-    const interval = intervals.find((i) => i.from < anchor.takenAt && i.to > from)
-    return interval?.cause ?? null
+    for (const interval of intervals) {
+      if (!(interval.from < anchor.takenAt && interval.to > from)) continue
+      const { cause } = interval
+      const unplaced =
+        (cause.cause === 'header' || cause.cause === 'enabledAfter') && cause.sinceEntryId === null
+      if (unplaced && gaps.length > 0) continue
+      if (!gaps.some((g) => JSON.stringify(g) === JSON.stringify(cause))) gaps.push(cause)
+    }
+    return gaps
   }
 }
 

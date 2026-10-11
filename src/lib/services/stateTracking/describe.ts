@@ -44,19 +44,19 @@ export function refusalMessage(reason: RunRefusal): string {
     case 'targetUntracked':
       return 'World state changes were not recorded for this entry.'
     case 'targetClassifierOnly':
-      return 'This entry has an old record without the lorebook.'
+      return 'This entry has an old world state record without the lorebook.'
     case 'untracked':
       return 'World state changes were not recorded for some later entries.'
     case 'interrupted':
       return 'State Tracking was off for a time after this entry.'
     case 'classifierOnly':
-      return 'Some later entries have old records without the lorebook.'
+      return 'Some later entries have old world state records without the lorebook.'
     case 'noAnchor':
       return 'No full world state was saved after this entry.'
   }
 }
 
-/** What breaks the tracked sequence, for the reader. */
+/** One thing breaking the tracked sequence, for the reader. */
 export function gapMessage(gap: RunGap, entryNumberOf: (entryId: string) => number | null): string {
   const entry = (entryId: string) => {
     const n = entryNumberOf(entryId)
@@ -64,9 +64,18 @@ export function gapMessage(gap: RunGap, entryNumberOf: (entryId: string) => numb
   }
   switch (gap.cause) {
     case 'untracked':
-      return `World state changes were not recorded for ${entry(gap.entryId)}.`
-    case 'classifierOnly':
-      return `${capitalize(entry(gap.entryId))} has an old record without the lorebook.`
+    case 'classifierOnly': {
+      const from = entryNumberOf(gap.entryId)
+      const through = gap.throughEntryId && entryNumberOf(gap.throughEntryId)
+      if (from !== null && through) {
+        return gap.cause === 'untracked'
+          ? `World state changes were not recorded for entries ${from} to ${through}.`
+          : `Entries ${from} to ${through} have old world state records without the lorebook.`
+      }
+      return gap.cause === 'untracked'
+        ? `World state changes were not recorded for ${entry(gap.entryId)}.`
+        : `${capitalize(entry(gap.entryId))} has an old world state record without the lorebook.`
+    }
     case 'header':
       return gap.sinceEntryId === null
         ? `World state changes before ${entry(gap.entryId)} were not fully recorded.`
@@ -78,7 +87,7 @@ export function gapMessage(gap: RunGap, entryNumberOf: (entryId: string) => numb
     case 'enabledAfter':
       if (gap.enabledSince === null) return 'State Tracking has no start time.'
       return gap.sinceEntryId === null
-        ? 'This branch only has old records without the lorebook.'
+        ? 'This branch only has old world state records without the lorebook.'
         : `State Tracking was off after ${entry(gap.sinceEntryId)}.`
   }
 }

@@ -164,6 +164,8 @@ class UIStore {
     chapters: true,
     checkpoints: true,
   })
+  /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
+  navShowSnapshots = $state(false)
   /** Whether the checkpoint form's explanation of past checkpoints is folded. */
   checkpointHelpFolded = $state(false)
 

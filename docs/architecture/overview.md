@@ -220,6 +220,10 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   — the edit that would have had the same effect, from the branch that cares about it. That is
   known, and left alone until we decide what editing shared history should mean.
 
+  An inherited entry carries a lineage marker in the slot the fork marker uses, and shows no Edit
+  or Delete: both are refused on it, as are a past checkpoint and a branch from it. Its popover
+  names the branch the entry belongs to, where those actions are.
+
 - **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
   so the last entry's number equals the branch's entry count. Numbering is per branch view — a
   branch continues its parent's positions from the fork, so shared history keeps its numbers and

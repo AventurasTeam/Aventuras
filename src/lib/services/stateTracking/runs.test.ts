@@ -107,7 +107,7 @@ describe('isContinuous', () => {
 /** The refusal reason and the gap it names, for the live anchor at entry 6. */
 function refusal(q: RunQuery) {
   const result = resolveRun(q)
-  return result.ok ? null : { reason: result.reason, gap: result.diagnosis?.gap ?? null }
+  return result.ok ? null : { reason: result.reason, gaps: result.diagnosis?.gaps ?? [] }
 }
 
 describe('resolveRun', () => {
@@ -124,15 +124,37 @@ describe('resolveRun', () => {
     const records = [1, 2, 3, 5, 6].map((n) => header(n, n > 1))
     expect(refusal(query({ records }))).toEqual({
       reason: 'untracked',
-      gap: { cause: 'untracked', entryId: 'e4' },
+      gaps: [{ cause: 'untracked', entryId: 'e4', throughEntryId: null }],
     })
+  })
+
+  it('names the whole stretch when no entry after the target was recorded', () => {
+    const records = [1, 2, 3].map((n) => header(n, n > 1))
+    expect(refusal(query({ records }))).toEqual({
+      reason: 'untracked',
+      gaps: [{ cause: 'untracked', entryId: 'e4', throughEntryId: 'e6' }],
+    })
+  })
+
+  it('reports every problem in the span, not only the first', () => {
+    // e4 unrecorded, e5 old-format, e6 recorded after a pause that began after e5.
+    const records = [
+      ...[1, 2, 3].map((n) => header(n, n > 1)),
+      header(5, false, 'classifier'),
+      header(6, false),
+    ]
+    expect(refusal(query({ records }))?.gaps).toEqual([
+      { cause: 'untracked', entryId: 'e4', throughEntryId: null },
+      { cause: 'classifierOnly', entryId: 'e5', throughEntryId: null },
+      { cause: 'header', entryId: 'e6', sinceEntryId: 'e3' },
+    ])
   })
 
   it('refuses classifier-only history', () => {
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1, n === 5 ? 'classifier' : 'full'))
     expect(refusal(query({ records }))).toEqual({
       reason: 'classifierOnly',
-      gap: { cause: 'classifierOnly', entryId: 'e5' },
+      gaps: [{ cause: 'classifierOnly', entryId: 'e5', throughEntryId: null }],
     })
   })
 
@@ -140,7 +162,7 @@ describe('resolveRun', () => {
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 5))
     expect(refusal(query({ records }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'header', entryId: 'e5', sinceEntryId: 'e4' },
+      gaps: [{ cause: 'header', entryId: 'e5', sinceEntryId: 'e4' }],
     })
   })
 
@@ -150,7 +172,7 @@ describe('resolveRun', () => {
     expect(result).toEqual({
       ok: false,
       reason: 'targetUntracked',
-      diagnosis: { target: 'untracked', anchor: live, gap: null },
+      diagnosis: { target: 'untracked', anchor: live, gaps: [] },
     })
   })
 
@@ -163,7 +185,7 @@ describe('resolveRun', () => {
     expect(!result.ok && result.diagnosis).toEqual({
       target: 'recorded',
       anchor: snap,
-      gap: { cause: 'header', entryId: 'e4', sinceEntryId: 'e3' },
+      gaps: [{ cause: 'header', entryId: 'e4', sinceEntryId: 'e3' }],
     })
   })
 
@@ -177,9 +199,23 @@ describe('resolveRun', () => {
       diagnosis: {
         target: 'classifierOnly',
         anchor: live,
-        gap: { cause: 'classifierOnly', entryId: 'e4' },
+        gaps: [{ cause: 'classifierOnly', entryId: 'e4', throughEntryId: 'e6' }],
       },
     })
+  })
+
+  it('takes no pause from a snapshot saved before full recording began', () => {
+    const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, false, 'classifier'))
+    const result = resolveRun(
+      query({
+        records,
+        snapshots: [{ entryId: 'e2', takenAt: 25 }],
+        tracking: { on: true, enabledSince: 500 },
+      }),
+    )
+    expect(!result.ok && result.diagnosis?.gaps).toEqual([
+      { cause: 'classifierOnly', entryId: 'e4', throughEntryId: 'e6' },
+    ])
   })
 
   it('accepts an interruption before the entry after the target was created', () => {
@@ -191,21 +227,21 @@ describe('resolveRun', () => {
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), brk(4, 45)]
     expect(refusal(query({ records }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'break', entryId: 'e4' },
+      gaps: [{ cause: 'break', entryId: 'e4' }],
     })
   })
 
   it('refuses from the live state while tracking is off', () => {
     expect(refusal(query({ tracking: { on: false, enabledSince: 0 } }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'trackingOff' },
+      gaps: [{ cause: 'trackingOff' }],
     })
   })
 
   it('names a re-enable after the last record', () => {
     expect(refusal(query({ tracking: { on: true, enabledSince: 500 } }))).toEqual({
       reason: 'interrupted',
-      gap: { cause: 'enabledAfter', sinceEntryId: 'e6', enabledSince: 500 },
+      gaps: [{ cause: 'enabledAfter', sinceEntryId: 'e6', enabledSince: 500 }],
     })
   })
 

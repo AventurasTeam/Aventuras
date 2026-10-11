@@ -202,7 +202,7 @@ export interface PastCheckpointPreview {
   diagnosis: {
     target: RunDiagnosis['target']
     anchor: AnchorLabel | null
-    gap: RunGap | null
+    gaps: RunGap[]
   } | null
   /** Manual changes the rebuild would undo; on a refusal, those of the `undoRecorded` override. */
   manual: WorldStateChangeRecord[]
@@ -4476,7 +4476,7 @@ class StoryStore {
       const diagnosis = found && {
         target: found.target,
         anchor: found.anchor && this.anchorLabel(found.anchor),
-        gap: found.gap,
+        gaps: found.gaps,
       }
       const attempt = (override: GapOverride) =>
         this.rebuildPastState(entryId, KEEP_ALL, override).catch(() => null)

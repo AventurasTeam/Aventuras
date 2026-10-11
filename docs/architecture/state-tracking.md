@@ -99,7 +99,8 @@ history in between is classifier-only. It is also refused when P itself has no h
 old classifier-only one: its own state was never fully recorded. What the entries show is checked
 before what is inferred from times, and old records prove nothing about tracking: they were written
 whatever the reader did by hand, so a story played before full recording began reports its old
-records, not a pause.
+records, not a pause. Neither do snapshots on entries without a full header: the old build took
+them too.
 
 A saved state can predate changes that belong to it. Lore management and Tidy run in the background
 and can finish after the snapshot of an entry they attach to at or before it, and the reader can
@@ -109,10 +110,13 @@ snapshot therefore never stops being usable for its own entry, and nothing is sk
 for it. The classifier's changes need no `after`: a snapshot is taken after its own classification,
 and every later classification belongs to a later entry.
 
-A refusal carries a `RunDiagnosis` the form lists under the warning: whether P has a header, the
-nearest full state after P (or the one that passed), and the first thing breaking the tracked
-sequence between them — an unrecorded or classifier-only narration, a non-continuous header or a
-break and its entry, or a re-enable after the last record — located by entry numbers.
+A refusal carries a `RunDiagnosis` the form lists under the warning: whether P has a full header,
+the nearest full state after P (or the one that passed), and everything breaking the tracked
+sequence between them, in story order, so a reader about to overrule it sees the whole of it.
+Consecutive narrations that are unrecorded, or recorded only in the old classifier-only form, are
+one stretch; a non-continuous header, a break or a re-enable after the last record follows, located
+by entry numbers. A pause with no entry to place it at is left out when the entries already show
+the gap.
 
 A rebuild that goes through lists the reader's and Tidy's changes it undoes, each with its own
 choice to include them, and notes how many chapters' lorebook updates it leaves out.

@@ -107,8 +107,7 @@
   )
   const orphaned = $derived(landmarkList.orphaned)
 
-  // Not remembered: snapshots are looked up for one visit, not listed on every one.
-  let showSnapshots = $state(false)
+  const showSnapshots = $derived(ui.navShowSnapshots)
   let snapshotMarks = $state<SnapshotMark[]>([])
   const tracking = $derived(settings.experimentalFeatures.stateTracking)
 
@@ -370,7 +369,11 @@
                 </DropdownMenu.CheckboxItem>
               {/each}
               {#if tracking}
-                <DropdownMenu.CheckboxItem bind:checked={showSnapshots} closeOnSelect={false}>
+                <DropdownMenu.CheckboxItem
+                  checked={showSnapshots}
+                  onCheckedChange={(checked) => (ui.navShowSnapshots = checked)}
+                  closeOnSelect={false}
+                >
                   Show snapshots
                 </DropdownMenu.CheckboxItem>
               {/if}

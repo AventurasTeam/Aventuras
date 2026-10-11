@@ -57,8 +57,14 @@ describe('gapMessage', () => {
     ).toBe('State Tracking was off after entry 3.')
   })
 
+  it('names the whole stretch when every entry in it has an old record', () => {
+    expect(
+      gapMessage({ cause: 'classifierOnly', entryId: 'e3', throughEntryId: 'e5' }, number),
+    ).toBe('Entries 3 to 5 have old world state records without the lorebook.')
+  })
+
   it('says when the entry is on another branch', () => {
-    expect(gapMessage({ cause: 'untracked', entryId: 'x' }, number)).toBe(
+    expect(gapMessage({ cause: 'untracked', entryId: 'x', throughEntryId: null }, number)).toBe(
       'World state changes were not recorded for an entry on another branch.',
     )
   })
