@@ -76,11 +76,11 @@ function blockFromResponseFormat(body: Record<string, unknown>): string | null {
 }
 
 /**
- * Exact block equality first; the substring scan is the fallback for a prompt
- * the extractor could not bracket. That scan takes the longest block first, so
- * a schema that is a superset of another still wins — today no registered block
- * contains another (asserted in routing.test.ts), but the scan must not be the
- * thing that breaks on the day one does.
+ * Exact block equality first; the substring scan is the fallback when there is
+ * no block or it matches no shape exactly. That scan takes the longest block
+ * first, so a schema that is a superset of another still wins — today no
+ * registered block contains another (asserted in routing.test.ts), but the scan
+ * must not be the thing that breaks on the day one does.
  */
 function candidatesFor(
   block: string | null,
@@ -98,8 +98,9 @@ function candidatesFor(
 
 /**
  * Earliest occurrence wins, not registry order: the real marker opens the user half (only the
- * system half and the contract precede it; no contract carries one, asserted in routing.test.ts),
- * while a sibling's, quoted in a refine's `current` preview, sits deeper and must not outrank it.
+ * contract precedes it — wizard system halves are empty — and no contract carries one, asserted
+ * in routing.test.ts), while a sibling's, quoted in a refine's `current` preview, sits deeper and
+ * must not outrank it.
  */
 function pickByMarker(
   candidates: readonly StructuredShape[],
