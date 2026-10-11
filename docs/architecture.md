@@ -219,7 +219,8 @@ over tool calls sends the pair first and appends its steps after it.
 - **Both halves render against the same context.** Either may include
   any macro its group allows, the include validator checks both, and
   a template reads the union of what its halves read, so an unread
-  variable still costs no query.
+  variable still costs no query. Each half renders on its own, though:
+  a variable one half assigns or captures is unset in the other.
 - **A blank system half is legal.** The call then sends no system
   message, since providers reject an empty one, unless the
   [structured-output contract](#structured-output--the-json-contract-is-not-pack-content)
@@ -296,9 +297,10 @@ Template ids are a **closed static union**: the render entry
 (`renderTemplate`) accepts only a known `TemplateId`, so authors edit
 content within a fixed template set rather than defining arbitrary
 template pipelines. Macro ids carry a `macro_` prefix
-(e.g. `macro_output_format_narrative`); the engine merges template and
-macro ids into one flat lookup for include resolution, and the prefix
-keeps that merged namespace collision-free.
+(e.g. `macro_output_format_narrative`); the engine merges each
+template's two halves (keyed `<id>#system` and `<id>#user`) and every
+macro into one flat lookup for include resolution, and the prefix keeps
+that merged namespace collision-free.
 
 ### Empty retrieval buckets — author contract
 
