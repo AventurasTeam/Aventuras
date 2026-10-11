@@ -21,10 +21,10 @@ export type NarrativeValue = {
 }
 
 // Attribute values are ids, enum members and keys — none legitimately contain
-// these. A quote ends the value early (parseAttributes matches
-// /(\w+)="([^"]*)"/) and an angle bracket ends the whole tag (the surrounding
-// entry regexes scan `[^>]*`), so both are dropped rather than escaped: the
-// parser has no unescaping step to undo an entity reference.
+// these. A quote ends the value early (parseAttributes reads `key="[^"]*"`) and an
+// angle bracket ends the whole tag (the surrounding entry regexes scan `[^>]*`), so
+// both are dropped rather than escaped: the parser decodes entities only in a
+// create's name and description, never in these attributes.
 function attr(value: string | number): string {
   return String(value).replace(/["<>]/g, '')
 }

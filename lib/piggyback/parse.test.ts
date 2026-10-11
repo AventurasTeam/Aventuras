@@ -155,6 +155,18 @@ describe('parseStateBlock', () => {
     expect(result.failures).toEqual([{ field: 'transfers', detail: expect.any(String) }])
   })
 
+  it('reads attributes that follow a closing quote with no space between them', () => {
+    const { block, failures } = parseStateBlock(
+      '<state><transfers><item id="i1" from="c3"to="c1" slot="inventory" />' +
+        '<stackable key="gold" amount="50" from="c3"to="c1"/></transfers></state>',
+    )
+    expect(failures).toEqual([])
+    expect(block.transfers).toEqual({
+      items: [{ id: 'i1', slot: 'inventory', from: 'c3', to: 'c1' }],
+      stackables: [{ key: 'gold', amount: 50, from: 'c3', to: 'c1' }],
+    })
+  })
+
   it('an empty <transfers></transfers> tag is a legitimate no-op, not a failure', () => {
     const raw = `<state>
   <scene_entities>c1</scene_entities>
@@ -655,7 +667,7 @@ describe('creation tags', () => {
     expect(result.block.newItems).toBeUndefined()
   })
 
-  // Developer decision (Q2): a stream cut off inside a create may have lost the tags after it
+  // A stream cut off inside a create may have lost the tags after it
   // (the refs that name it), so the fallback fires; the fields before it are kept.
   it('fails the state block when the stream was cut off inside a create', () => {
     const result = parseStateBlock(`<state>
@@ -692,7 +704,7 @@ describe('creation tags', () => {
     expect(result.malformedCreates).toBe(1)
   })
 
-  // Developer decision (Q1): attribute text must be entirely key="value" pairs.
+  // Attribute text must be entirely key="value" pairs.
   it.each([
     ['an unescaped quote in a value', 'name="the "Rusty" Anchor"'],
     ['single quotes', `name="Anchor" parent='l1'`],
@@ -745,7 +757,7 @@ describe('creation tags', () => {
     expect(result.malformedCreates).toBe(2)
   })
 
-  // Developer decision (Q1): the five XML entities, decoded in name and description only.
+  // The five XML entities, decoded in name and description only.
   it('decodes the five XML entities in a name and a description, in one pass', () => {
     const { block } = parseStateBlock(`<state>
   <new_location handle="new:a" name="the &quot;Rusty&quot; Anchor">a &lt;b&gt; sign</new_location>
@@ -775,7 +787,7 @@ describe('creation tags', () => {
     ])
   })
 
-  // Developer decision (Q3): a model that echoes the prompt's bracket form still declares the handle.
+  // A model that echoes the prompt's bracket form still declares the handle.
   it('unwraps a bracketed handle', () => {
     const { block, failures } = parseStateBlock(
       '<state><new_item handle="[new:key]" name="key">iron</new_item></state>',

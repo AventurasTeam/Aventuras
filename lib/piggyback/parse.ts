@@ -93,7 +93,9 @@ function parseNumeric(segment: string): number {
 // key="value" pairs from a tag's attribute region (no surrounding < / >).
 function parseAttributes(attrText: string): Record<string, string> {
   const attrs: Record<string, string> = {}
-  const re = /(?:^|\s)([\w-]+)="([^"]*)"/g
+  // The closing quote stays unconsumed so it can separate the next key (`from="c3"to="c1"`), and
+  // a key is read whole, never as the tail of a hyphenated one.
+  const re = /(?:^|[\s"])([\w-]+)="([^"]*)(?=")/g
   for (const match of attrText.matchAll(re)) {
     const [, key, value] = match
     if (key !== undefined && value !== undefined) attrs[key] = value
@@ -224,21 +226,23 @@ type ParsedCreates = {
 // Linear: each pair starts at a whitespace run and ends at its closing quote.
 const WELL_FORMED_ATTRIBUTES = /^(?:\s+[\w-]+="[^"]*")*\s*$/
 
-const XML_ENTITIES: Record<string, string> = {
+const XML_ENTITIES = {
   quot: '"',
   apos: "'",
   lt: '<',
   gt: '>',
   amp: '&',
-}
+} as const
 
 // One pass, so `&amp;lt;` reads `&lt;` and not `<`. Only name and description are prose.
 function decodeEntities(text: string): string {
-  return text.replace(/&(quot|apos|lt|gt|amp);/g, (_, entity: string) => XML_ENTITIES[entity] ?? '')
+  return text.replace(
+    /&(quot|apos|lt|gt|amp);/g,
+    (_, entity: keyof typeof XML_ENTITIES) => XML_ENTITIES[entity],
+  )
 }
 
 // Unlike FIELD_PARSERS' first-occurrence segments, a create tag repeats and carries attributes.
-// Reads every whole tag of one kind; one whose attribute text isn't well-formed is only counted.
 function readCreates(
   segment: string,
   tag: string,
@@ -252,7 +256,6 @@ function readCreates(
   return { creates, badAttributes }
 }
 
-// The two kinds differ only in `parent`, which a location alone keeps.
 function parseCreates(segment: string): ParsedCreates {
   const locations = readCreates(segment, STATE_CREATE_TAGS.newLocation)
   const items = readCreates(segment, STATE_CREATE_TAGS.newItem)
