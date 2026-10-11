@@ -2611,58 +2611,90 @@ describe('per-turn-piggyback', () => {
 
     // c1 is HERO and l1 is TOWN: neither is an item, nor is the new place.
     it.each([
-      ["a new place's handle", 'new:docks', 'new:docks', 'location'],
-      ["an existing place's id", 'l1', TOWN, 'location'],
-      ["a character's id", 'c1', HERO, 'character'],
-    ])(
-      'drops only a transfer naming %s as its item, with a warning',
-      async (_label, ref, id, kind) => {
-        seedFallbackTurn()
-        const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
-        const { events } = await runFallback(
-          fallbackClassifierSchema.parse({
-            ...docksAndKey(),
-            transfers: {
-              items: [
-                { id: 'new:key', to: 'c1', slot: 'inventory' },
-                { id: ref, to: 'c1', slot: 'inventory' },
-              ],
-              stackables: [{ key: 'gold', amount: 5, to: 'c1' }],
-            },
-          }),
-          { log },
-        )
-        const [docks, key] = createdEntries(events)
-        if (!docks || !key) throw new Error('expected a location create and an item create')
-        expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
-          entryId: 'entry-2',
-          item: id,
-          kind,
-        })
-        const patch = metadataPatch(events)
-        expect(patch.stateReport?.failedFields).toBeUndefined()
-        expect(patch.stateReport?.transfers).toEqual({
-          items: [{ id: key.id, to: HERO, slot: 'inventory' }],
-          stackables: [{ key: 'gold', amount: 5, to: HERO }],
-        })
-        expect(events).toContainEqual({
-          type: 'delta_emitted',
-          action: {
-            kind: 'updateEntityInventory',
-            source: 'per_turn_classifier',
-            payload: { branchId: 'b1', id: HERO, equipped_items: [], inventory: [key.id] },
+      ["a new place's handle", 'new:docks'],
+      ["an existing place's id", 'l1'],
+      ["a character's id", 'c1'],
+    ])('drops only a transfer naming %s as its item, with a warning', async (_label, ref) => {
+      seedFallbackTurn()
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          ...docksAndKey(),
+          transfers: {
+            items: [
+              { id: 'new:key', to: 'c1', slot: 'inventory' },
+              { id: ref, to: 'c1', slot: 'inventory' },
+            ],
+            stackables: [{ key: 'gold', amount: 5, to: 'c1' }],
           },
-        })
-        expect(events).toContainEqual({
-          type: 'delta_emitted',
-          action: {
-            kind: 'updateEntityStackables',
-            source: 'per_turn_classifier',
-            payload: { branchId: 'b1', id: HERO, stackables: { gold: 5 } },
+        }),
+        { log },
+      )
+      const [docks, key] = createdEntries(events)
+      if (!docks || !key) throw new Error('expected a location create and an item create')
+      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
+        entryId: 'entry-2',
+        transfer: { id: ref, to: 'c1', slot: 'inventory' },
+        detail: expect.stringContaining('not an item'),
+      })
+      const patch = metadataPatch(events)
+      expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.transfers).toEqual({
+        items: [{ id: key.id, to: HERO, slot: 'inventory' }],
+        stackables: [{ key: 'gold', amount: 5, to: HERO }],
+      })
+      expect(events).toContainEqual({
+        type: 'delta_emitted',
+        action: {
+          kind: 'updateEntityInventory',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: HERO, equipped_items: [], inventory: [key.id] },
+        },
+      })
+      expect(events).toContainEqual({
+        type: 'delta_emitted',
+        action: {
+          kind: 'updateEntityStackables',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: HERO, stackables: { gold: 5 } },
+        },
+      })
+    })
+
+    it('drops only the transfers with an unknown ref, with a warning, applying the rest', async () => {
+      seedFallbackTurn()
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      const unknownItem = { id: 'i9', to: 'c1', slot: 'inventory' as const }
+      const unknownHolder = { key: 'silver', amount: 2, from: 'c9' }
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          ...docksAndKey(),
+          transfers: {
+            items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }, unknownItem],
+            stackables: [{ key: 'gold', amount: 5, to: 'c1' }, unknownHolder],
           },
-        })
-      },
-    )
+        }),
+        { log },
+      )
+      const [, key] = createdEntries(events)
+      if (!key) throw new Error('expected the item create')
+      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
+        entryId: 'entry-2',
+        transfer: unknownItem,
+        detail: expect.stringContaining('i9'),
+      })
+      expect(log.warn).toHaveBeenCalledWith('classifier.transfer_dropped', {
+        entryId: 'entry-2',
+        transfer: unknownHolder,
+        detail: expect.stringContaining('c9'),
+      })
+      const patch = metadataPatch(events)
+      expect(patch.stateReport?.failedFields).toBeUndefined()
+      expect(patch.stateReport?.transfers).toEqual({
+        items: [{ id: key.id, to: HERO, slot: 'inventory' }],
+        stackables: [{ key: 'gold', amount: 5, to: HERO }],
+      })
+    })
 
     it("rejects a new item's handle as the location when the item isn't kept", async () => {
       const warnSpy = vi.spyOn(logger, 'warn')

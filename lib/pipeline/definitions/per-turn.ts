@@ -188,7 +188,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const { block: resolvedBlock, failures: substitutionFailures } = substitutePiggybackIds(
     parsedState.block,
     idMap,
-    { entities, wrongKind: 'fail' },
+    { entities, badRef: 'fail' },
   )
   // An omitted block is a failed attempt, not silence. parseStateBlock cannot tell the
   // difference on its own (piggyback-off turns legitimately carry no block), so the

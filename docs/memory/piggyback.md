@@ -162,10 +162,11 @@ for a new item's handle only as a transfer's item `id` or, when the item
 is in the scene, in `<scene_entities>`; the parser also tolerates a
 new place's handle in `<scene_entities>`. A handle in any other field, a
 visual change's id or a transfer's holder, or one the block's creates
-don't declare, fails the field it sits in, like an unknown id. A
-handle of the wrong kind, a new place's as a transfer's item or a new
-item's as the `<current_location>`, fails its field in the tagged block
-and drops in the fallback
+don't declare, fails the field it sits in, like an unknown id, though
+in the fallback a transfer holding one drops alone. A handle of the
+wrong kind, a new place's as a transfer's item or a new item's as the
+`<current_location>`, fails its field in the tagged block; the
+fallback drops the transfer and rejects the location
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery));
 a place and an item declaring one handle leave it the place's, the
 item dropped as malformed. A `parent` that names nothing resolvable
@@ -295,9 +296,11 @@ JSON.
 If a top-level tag parses, its fields are used. If a tag is missing
 or its content doesn't parse, that field is skipped for this turn —
 per-field best-effort, one failing tag never blocks another. The
-creates are the one exception: a failing field keeps the block's own
+creates are one exception: a failing field keeps the block's own
 creates from landing
-([Creating a place or an item](#creating-a-place-or-an-item)).
+([Creating a place or an item](#creating-a-place-or-an-item)). The
+fallback's transfers are the other: there a transfer with a bad ref
+drops alone and the rest of the field applies, as below.
 
 An empty `<state>` counts as a missing one, since no turn has no
 state, and so does a block holding nothing but creates, since only
@@ -319,26 +322,6 @@ never have recovered them — a parse failure needs the per-turn
 classifier, not the periodic one, exactly like a `piggybackMode='off'`
 turn does.
 
-**A ref of the wrong kind.** A transfer's item must name an item: an
-existing item's id, or the handle of a `<new_item>` the block
-declares. Any other id or handle there (a place's, a character's, a
-lore entry's) is of the wrong kind, and so is a new item's handle as
-the `<current_location>`. The two writers treat it differently:
-
-- **The tagged block** fails the field it sits in, like an unknown id,
-  so the fallback fires and is the turn's only creator.
-- **The fallback**, whose reply nothing rereads, drops a wrong-kind
-  transfer where it stands, logging `classifier.transfer_dropped`, and
-  applies the rest of the field. A new item's handle as the
-  `currentLocation` is rejected the way an item's id is: the previous
-  location stays, the report records `currentLocationRejected`, and
-  its `currentLocation` holds the new item's id, or the emitted handle
-  when the item isn't created.
-
-An existing item's id as the location is rejected that way on both
-paths
-([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
-
 **Two fields are exempt from that recovery trigger.** `<summary>` and
 `<retrieval_queries>` must never put the turn into the fallback path on
 their own. Both feed retrieval, which is designed to run without them,
@@ -358,6 +341,30 @@ be total — drop what it cannot read, return what it can, never raise.
 That is a deliberate exception to the rule above, not a property the
 shape confers, and it has to survive anyone later "fixing" the
 inconsistency.
+
+**A bad ref in the two writers.** A transfer's item must name an
+item: an existing item's id, or the handle of a `<new_item>` the block
+declares. Any other id or handle there (a place's, a character's, a
+lore entry's) is of the wrong kind, and so is a new item's handle as
+the `<current_location>`. The two writers treat a bad ref differently:
+
+- **The tagged block** fails the field it sits in, whether the ref is
+  unknown, undeclared or of the wrong kind, so the fallback fires and
+  is the turn's only creator.
+- **The fallback**, whose reply nothing rereads, drops a transfer
+  where it stands when its item or a holder is unknown, undeclared or
+  of the wrong kind, item and stackable transfers alike, logging
+  `classifier.transfer_dropped`, and applies the rest of the field.
+  Its scene list and visual changes keep the per-field rule, so one
+  unknown id there still drops the whole list. A new item's handle as
+  the `currentLocation` is rejected the way an item's id is: the
+  previous location stays, the report records
+  `currentLocationRejected`, and its `currentLocation` holds the new
+  item's id, or the emitted handle when the item isn't created.
+
+An existing item's id as the location is rejected that way on both
+paths
+([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
 
 ## Persistence and stripping
 
@@ -539,7 +546,7 @@ It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, under the same rules as the tags
 ([New locations and items](#new-locations-and-items)), apart from a
-ref of the wrong kind, which it drops rather than fails
+transfer with a bad ref, which it drops rather than fails
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 A create there may omit its description or parent, or give either as
 `null`, which reads as omitted; one with no description is created

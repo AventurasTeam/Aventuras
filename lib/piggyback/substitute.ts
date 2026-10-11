@@ -3,23 +3,25 @@ import { MalformedPlaceholderError, type IdBiMap } from '@/lib/ids'
 
 import { isCreateHandle, unwrapBracket } from './tags'
 import type {
+  ItemTransfer,
   NewLocationEmission,
   NormalizedStateBlock,
   ParsedTransfers,
   ParseFieldFailure,
   ParsedStateBlock,
+  StackableTransfer,
   SubstitutedStateBlock,
 } from './types'
 
 type EntityKind = Entity['kind']
 
-/** A transfer dropped for naming no item: its id or handle, and the kind it names (null: none). */
-type DroppedTransfer = { id: string; kind: EntityKind | null }
+/** A transfer as emitted, dropped for a ref that doesn't resolve or names no item. */
+type DroppedTransfer = { transfer: ItemTransfer | StackableTransfer; detail: string }
 
 type SubstituteResult = {
   block: SubstitutedStateBlock
   failures: ParseFieldFailure[]
-  /** Empty unless `wrongKind` is `'drop'`. */
+  /** Empty unless `badRef` is `'drop'`. */
   droppedTransfers: DroppedTransfer[]
 }
 
@@ -27,10 +29,11 @@ type SubstituteOptions = {
   /** The branch's entities, so a transfer's item can be checked to name an item. */
   entities: readonly Pick<Entity, 'id' | 'kind'>[]
   /**
-   * A ref of the wrong kind fails its field (the narrative fold, whose failure fires the
-   * fallback) or is dropped where it stands (the fallback, which nothing rereads).
+   * `'fail'` (the narrative fold, whose failure fires the fallback): a bad or wrong-kind ref fails
+   * its field. `'drop'` (the fallback, which nothing rereads): a transfer with one drops alone, and
+   * a new item's handle as the location is left for apply.ts to reject.
    */
-  wrongKind: 'fail' | 'drop'
+  badRef: 'fail' | 'drop'
 }
 
 type Refs = {
@@ -93,46 +96,58 @@ function declaredHandles(block: NormalizedStateBlock): ReadonlyMap<string, 'loca
 }
 
 // A transfer's item may be one this block creates; its holders are always listed entities.
-function resolveTransfers(
-  transfers: ParsedTransfers,
-  refs: Refs,
-  wrongKind: SubstituteOptions['wrongKind'],
-  dropped: DroppedTransfer[],
-): ParsedTransfers {
-  const { idMap } = refs
-  const wrong: DroppedTransfer[] = []
-  const items = transfers.items.flatMap((item) => {
-    const resolved = {
-      ...item,
-      id: resolveRefOrHandle(item.id, refs),
-      ...(item.to !== undefined ? { to: resolveRef(item.to, idMap) } : {}),
-      ...(item.from !== undefined ? { from: resolveRef(item.from, idMap) } : {}),
-    }
-    const kind = kindOf(resolved.id, refs)
-    if (kind === 'item') return [resolved]
-    if (wrongKind === 'fail') throw new WrongKindError(item.id, kind, 'item')
-    wrong.push({ id: resolved.id, kind })
-    return []
-  })
-  const stackables = transfers.stackables.map((s) => ({
+function resolveItemTransfer(item: ItemTransfer, refs: Refs): ItemTransfer {
+  const resolved = {
+    ...item,
+    id: resolveRefOrHandle(item.id, refs),
+    ...(item.to !== undefined ? { to: resolveRef(item.to, refs.idMap) } : {}),
+    ...(item.from !== undefined ? { from: resolveRef(item.from, refs.idMap) } : {}),
+  }
+  const kind = kindOf(resolved.id, refs)
+  if (kind !== 'item') throw new WrongKindError(item.id, kind, 'item')
+  return resolved
+}
+
+function resolveStackable(s: StackableTransfer, idMap: IdBiMap): StackableTransfer {
+  return {
     ...s,
     ...(s.to !== undefined ? { to: resolveRef(s.to, idMap) } : {}),
     ...(s.from !== undefined ? { from: resolveRef(s.from, idMap) } : {}),
-  }))
-  // Only once the field resolves: a field that fails drops every transfer anyway.
-  dropped.push(...wrong)
-  return { items, stackables }
+  }
+}
+
+function resolveTransfers(
+  transfers: ParsedTransfers,
+  refs: Refs,
+  badRef: SubstituteOptions['badRef'],
+  dropped: DroppedTransfer[],
+): ParsedTransfers {
+  const settle = <T extends ItemTransfer | StackableTransfer>(
+    transfer: T,
+    resolve: (transfer: T) => T,
+  ): T[] => {
+    try {
+      return [resolve(transfer)]
+    } catch (e) {
+      const unresolved = e instanceof MalformedPlaceholderError || e instanceof WrongKindError
+      if (badRef === 'fail' || !unresolved) throw e
+      dropped.push({ transfer, detail: e.message })
+      return []
+    }
+  }
+  return {
+    items: transfers.items.flatMap((item) => settle(item, (i) => resolveItemTransfer(i, refs))),
+    stackables: transfers.stackables.flatMap((s) =>
+      settle(s, (x) => resolveStackable(x, refs.idMap)),
+    ),
+  }
 }
 
 // An item's id is left for apply.ts to reject, keeping the previous location, and so is an item's
 // handle when wrong kinds drop.
-function resolveLocation(
-  ref: string,
-  refs: Refs,
-  wrongKind: SubstituteOptions['wrongKind'],
-): string {
+function resolveLocation(ref: string, refs: Refs, badRef: SubstituteOptions['badRef']): string {
   const resolved = resolveRefOrHandle(ref, refs)
-  if (wrongKind === 'fail' && refs.handles.get(resolved) === 'item')
+  if (badRef === 'fail' && refs.handles.get(resolved) === 'item')
     throw new WrongKindError(ref, 'item', 'location')
   return resolved
 }
@@ -154,8 +169,8 @@ function resolveField<K extends keyof ParsedStateBlock>(
   }
 }
 
-// Resolves only ID-bearing sub-fields: a bad id/to/from fails its own field, a bad create parent
-// none (`resolveParent` is lenient), and a ref of the wrong kind is `options.wrongKind`'s.
+// Resolves only ID-bearing sub-fields: a bad or wrong-kind ref fails its own field, or under
+// `badRef: 'drop'` only its transfer; a bad create parent fails nothing (`resolveParent`).
 // docs/memory/piggyback.md → Where a handle is used, Parse strategy and failure recovery
 export function substitutePiggybackIds(
   block: NormalizedStateBlock,
@@ -181,7 +196,7 @@ export function substitutePiggybackIds(
   resolveField(
     result,
     'currentLocation',
-    (id) => resolveLocation(id, refs, options.wrongKind),
+    (id) => resolveLocation(id, refs, options.badRef),
     idMap,
     failures,
   )
@@ -195,7 +210,7 @@ export function substitutePiggybackIds(
   resolveField(
     result,
     'transfers',
-    (transfers) => resolveTransfers(transfers, refs, options.wrongKind, droppedTransfers),
+    (transfers) => resolveTransfers(transfers, refs, options.badRef, droppedTransfers),
     idMap,
     failures,
   )

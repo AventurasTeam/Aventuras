@@ -224,3 +224,15 @@ slice-planning gate forces its resolution before that slice is planned.
   `thread-list.ts`, `entity-picker.tsx`). Its home is beside `compareId`
   in `lib/list-modules/collate.ts`. Raised 2026-10-11 by the
   locations-and-items-from-prose slice review.
+
+- **The fallback still drops its whole scene list or visual changes
+  over one unknown id.** The fallback classifier substitutes with
+  `badRef: 'drop'` (`lib/pipeline/definitions/per-turn-piggyback.ts`),
+  so a transfer whose ref doesn't resolve drops alone, but
+  `substitutePiggybackIds` (`lib/piggyback/substitute.ts`) still fails
+  `sceneEntities` and `visualChanges` whole on one unknown or
+  undeclared id: the turn keeps the previous scene, or loses every
+  visual change, and nothing rereads the reply. Predates this PR.
+  Candidate fix: the same per-entry drop for both lists under
+  `'drop'`, with a warning. Raised 2026-10-11 by the developer's Q7 on
+  the locations-and-items-from-prose PR.

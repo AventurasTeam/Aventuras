@@ -344,18 +344,14 @@ export async function* piggybackFallbackClassifierPhase(
       layer: 'per_turn_classifier',
     })
   }
-  // Nothing rereads this reply, so a ref of the wrong kind drops where it stands.
+  // Nothing rereads this reply, so a transfer with a bad ref drops alone.
   const {
     block: substituted,
     failures,
     droppedTransfers,
-  } = substitutePiggybackIds(normalized.block, idMap, { entities, wrongKind: 'drop' })
+  } = substitutePiggybackIds(normalized.block, idMap, { entities, badRef: 'drop' })
   for (const dropped of droppedTransfers) {
-    ctx.log.warn('classifier.transfer_dropped', {
-      entryId: tail.id,
-      item: dropped.id,
-      kind: dropped.kind,
-    })
+    ctx.log.warn('classifier.transfer_dropped', { entryId: tail.id, ...dropped })
   }
   // The schema can't reject one bad stackable without failing the whole call, so the
   // transfers parseTransfers would drop are dropped here, before the actions and report.
