@@ -32,7 +32,7 @@ tauri-plugin-notification = "2"
 
 # Local network sync
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync"] }
 qrcode = "0.14"
 image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.23"
@@ -47,3 +47,6 @@ sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio"] }
 hex = "0.4.3"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 futures-util = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
