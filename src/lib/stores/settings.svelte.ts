@@ -27,6 +27,7 @@ import {
 } from '$lib/services/ai/core/defaults'
 import { isReasoningOn } from '$lib/services/ai/core/reasoning'
 import {
+  clearDanglingAssignments,
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
@@ -1732,6 +1733,11 @@ class SettingsStore {
           // Keep defaults
         }
       }
+      // In memory only: the next assignment save persists it.
+      this.servicePresetAssignments = clearDanglingAssignments(
+        this.servicePresetAssignments,
+        this.generationPresets.map((p) => p.id),
+      )
 
       // Load service-specific settings
       const serviceSpecificJson = await database.getSetting('service_specific_settings')

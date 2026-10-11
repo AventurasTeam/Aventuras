@@ -2,7 +2,7 @@
   import { SvelteMap } from 'svelte/reactivity'
   import { onDestroy } from 'svelte'
   import { createDebouncedSave } from '$lib/utils/debounce'
-  import { settings, DEFAULT_SERVICE_PRESET_ASSIGNMENTS } from '$lib/stores/settings.svelte'
+  import { settings } from '$lib/stores/settings.svelte'
   import type { GenerationPreset } from '$lib/types'
   import type { ServiceId } from '$lib/stores/settings.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
@@ -258,8 +258,6 @@
     return settings.generationPresets.find((p) => p.id === editingPresetId)
   }
 
-  const defaultAssignments = DEFAULT_SERVICE_PRESET_ASSIGNMENTS
-
   async function fetchModelsForPreset() {
     const preset = getEditingPreset()
     if (!preset?.profileId) return
@@ -400,12 +398,7 @@
 
   async function handleResetProfiles() {
     await settings.resetGenerationPresets()
-
-    // Assign tasks to their default profiles
-    for (const service of systemServices) {
-      const presetId = defaultAssignments[service.id] || ''
-      settings.setServicePresetId(service.id, presetId)
-    }
+    await settings.resetServicePresetAssignments()
   }
 
   function handleTaskClick(e: MouseEvent, serviceId: string) {
