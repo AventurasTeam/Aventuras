@@ -1,9 +1,8 @@
 import type { LanguageModelMiddleware } from 'ai'
 
 /**
- * Marks the last system message as an Anthropic cache breakpoint. Must run after
- * promptSchemaMiddleware: on a blank system half, the structured-output contract's system message
- * exists only once that has run (architecture.md → System and user halves).
+ * Marks the last system message as an Anthropic cache breakpoint (architecture.md → System and user
+ * halves). Must run after promptSchemaMiddleware, which creates a blank half's system message.
  */
 export function anthropicCacheMarkerMiddleware(): LanguageModelMiddleware {
   return {
