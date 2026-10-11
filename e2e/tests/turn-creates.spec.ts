@@ -33,7 +33,9 @@ const LANTERN = 'E2E tin lantern'
 const HOLLOW_REF = /\[(l\d+)\] Veil’s Hollow/
 // A memory block or the fallback roster brackets the id before the name; the narrative's scene
 // list brackets it after.
-const KAEL_REF = /\[(c\d+)\] Kael\b|## Kael \[(c\d+)\]/
+// The negative lookbehind skips the state-emission example ("[c1] Kael"), which JSON.stringify
+// leaves preceded by a quote.
+const KAEL_REF = /(?<!")\[(c\d+)\] Kael\b|## Kael \[(c\d+)\]/
 
 type Placeholders = { kael: string; hollow: string }
 
@@ -196,7 +198,9 @@ test.describe('turn creates — the tagged block', () => {
 
     let stallsId = ''
     let compassId = ''
+    let kaelBefore: Awaited<ReturnType<typeof characterState>> | undefined
     await test.step('the next turn creates the stalls and gives Kael the compass', async () => {
+      kaelBefore = await characterState(app.window, branchId, kaelId)
       mock.setNarrative(creatingNarrative(ids))
       await takeTurn(app.window, 'E2E-CREATES-U2 I follow the stallholder.', 'E2E-CREATES-T2')
 
@@ -252,8 +256,7 @@ test.describe('turn creates — the tagged block', () => {
       expect(await entitiesNamed(app.window, branchId, STALLS)).toEqual([])
       expect(await entitiesNamed(app.window, branchId, COMPASS)).toEqual([])
       const kael = await characterState(app.window, branchId, kaelId)
-      expect(kael.inventory).not.toContain(compassId)
-      expect(kael.locationId).not.toBe(stallsId)
+      expect(kael).toEqual(kaelBefore)
     })
   })
 })
