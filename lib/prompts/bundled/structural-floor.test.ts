@@ -83,8 +83,8 @@ function injectsSceneEntity(source: string): boolean {
 
 describe('structural-floor invariant — active + in-scene always inject', () => {
   it('bundled per-turn template injects a disabled-but-active-in-scene entity', () => {
-    expect(injectsSceneEntity(PER_TURN_NARRATIVE)).toBe(true)
-    expect(render(PER_TURN_NARRATIVE)).toContain('A wary scout.')
+    expect(injectsSceneEntity(PER_TURN_NARRATIVE.user)).toBe(true)
+    expect(render(PER_TURN_NARRATIVE.user)).toContain('A wary scout.')
   })
 
   it('bundled suggestion-refresh template injects a disabled-but-active-in-scene entity', () => {
@@ -110,7 +110,7 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
   }
 
   it('does not dump a staged entity that only the branch roster knows about', () => {
-    const out = render(PER_TURN_NARRATIVE, { entities: [sceneEntity, stagedEntity] })
+    const out = render(PER_TURN_NARRATIVE.user, { entities: [sceneEntity, stagedEntity] })
     expect(out).not.toContain('Mira')
     // Positive control: an empty render would satisfy the line above just as
     // well, so pin something the same render must still carry.
@@ -118,7 +118,7 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
   })
 
   it('renders a staged entity that WON budget, with its sub-pool framing', () => {
-    const out = render(PER_TURN_NARRATIVE, {
+    const out = render(PER_TURN_NARRATIVE.user, {
       entities: [sceneEntity, stagedEntity],
       retrievedEntities: [
         {

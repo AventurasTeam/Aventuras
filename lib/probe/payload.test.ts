@@ -751,7 +751,7 @@ describe('buildCapturePayload', () => {
 function renderFloor(piggybackFires: boolean): string {
   const floor = floorFixture()
   const pack: Pack = {
-    templates: { t: { group: 'generationContext', system: '', user: PER_TURN_NARRATIVE } },
+    templates: { t: { group: 'generationContext', ...PER_TURN_NARRATIVE } },
     macros: {
       [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
       [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },

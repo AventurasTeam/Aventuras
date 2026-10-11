@@ -32,11 +32,7 @@ import {
 
 export const bundledPack: Pack = {
   templates: {
-    [TEMPLATE_IDS.perTurnNarrative]: {
-      group: 'generationContext',
-      system: '',
-      user: PER_TURN_NARRATIVE,
-    },
+    [TEMPLATE_IDS.perTurnNarrative]: { group: 'generationContext', ...PER_TURN_NARRATIVE },
     [TEMPLATE_IDS.piggybackFallbackClassifier]: {
       group: 'generationContext',
       system: '',

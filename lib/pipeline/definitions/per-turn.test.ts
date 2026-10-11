@@ -1241,7 +1241,7 @@ describe('narrative call prompt', () => {
   it('hands the narrative call both rendered halves', async () => {
     const { prompt, system } = await runNarrativeWith({ narrative: 'prose' })
 
-    expect(system).toBe('')
+    expect(system).toMatch(/^# Setting\nA keep on a hill\.\n\n# Genre\n/)
     expect(prompt).toContain('# Story so far')
   })
 
@@ -2168,5 +2168,26 @@ describe('narrative fold — creates', () => {
     const { events, result } = await foldTurn(CREATE_REPLY, { signal: controller.signal })
     expect(result).toEqual({ status: 'aborted' })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
+  })
+})
+
+// architecture.md → System and user halves. The fixture's definition fills Setting, Genre
+// and Tone, and a story's calendar always resolves, so all four lead the system half.
+describe('narrative fold — prompt halves', () => {
+  it('sends the definition and calendar as the system half, and the scene and story as the user half', async () => {
+    await runNarrativeWith({ narrative: 'prose' })
+    const { system, user } = streamTextMock.mock.calls.at(-1)?.[1]?.prompt as {
+      system: string
+      user: string
+    }
+    expect(system).toMatch(
+      /^# Setting\nA keep on a hill\.\n\n# Genre\nHigh fantasy\.\n\n# Tone\nDry humor\.\n\n# Calendar\nThis story tracks time in /,
+    )
+    expect(system).toMatch(
+      /\n\nWrite the next beat of the story as prose\. Do not break character or address the reader\.$/,
+    )
+    expect(user).toContain('# Story so far')
+    expect(user).not.toContain('# Setting')
+    expect(user).not.toContain('# Calendar')
   })
 })
