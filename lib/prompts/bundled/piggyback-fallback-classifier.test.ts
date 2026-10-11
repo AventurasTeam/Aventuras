@@ -209,7 +209,7 @@ describe('bundled piggyback fallback classifier template', () => {
     })
   })
 
-  // The mock LLM's shape registry and anything keyed on the opening line read it as is.
+  // The roster opens the user half, ahead of every memory block.
   it('keeps its first line', () => {
     expect(render(context()).split('\n')[0]).toBe(
       'Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:',

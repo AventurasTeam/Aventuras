@@ -1337,7 +1337,7 @@ describe('per-turn-piggyback', () => {
       }
 
       it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
-        await renderFallbackPrompt({
+        const { system, user } = await renderFallbackPrompt({
           entities: [entity(KAEL, 'Kael', 'A courier with a stolen sigil.')],
           sceneEntities: [KAEL],
           retrieval: retrievalSuccess({
@@ -1347,10 +1347,6 @@ describe('per-turn-piggyback', () => {
             },
           }),
         })
-        const { system, user } = generateStructuredMock.mock.calls[0]![1] as {
-          system: string
-          user: string
-        }
 
         expect(user).toContain('# In scene')
         expect(user).toContain('A courier with a stolen sigil.')
