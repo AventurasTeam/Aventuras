@@ -303,11 +303,8 @@ export async function buildGenerationContext(
     summary: sceneSource?.metadata?.summary ?? '',
   }
 
-  // Every place the prompt brackets an id for, in the order the blocks render.
-  // A template that instead named "the ids above" would point <current_location>
-  // at a set that can be all characters: ranked rows reach a template as
-  // RetrievedRow, which carries no EntityKind, so their kinds come off the
-  // retrieval outcome, which still held the source row.
+  // The places retrieval puts in the prompt, in render order. Ranked rows reach a template as
+  // RetrievedRow, which carries no EntityKind, so their kinds come off the retrieval outcome.
   const locationIds = [
     ...(floor?.sceneEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
     ...(floor?.currentLocation?.kind === 'location' ? [floor.currentLocation.id] : []),

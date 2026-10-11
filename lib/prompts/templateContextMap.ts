@@ -177,7 +177,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Retrieval',
       description:
-        'Every id above that belongs to a place: the places shown in the memory blocks; locationMap lists every listed place. Union of the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use this rather than "the IDs above": ranked entity rows arrive as RetrievedRow with no kind, so the bracketed IDs in the memory blocks can be entirely characters. Empty when the prompt shows no place, or no retrieval ran.',
+        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places: ranked entity rows arrive as RetrievedRow with no kind, so those IDs can be entirely characters. Not the set to offer for <current_location>: a move may name any listed place on the branch, so offer locationMap's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
       required: true,
     },
     {
