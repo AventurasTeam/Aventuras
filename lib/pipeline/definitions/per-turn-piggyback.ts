@@ -67,10 +67,10 @@ const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it onl
 const createText = () =>
   z.preprocess((value) => (typeof value === 'string' ? value : ''), z.string())
 
-// Likewise a create that isn't an object reads as an empty one, and a null list as none.
+// Likewise a create that isn't an object reads as an empty one, and a list that isn't one as none.
 const createList = <T extends z.ZodType>(create: T) =>
   z.preprocess(
-    (value) => (value === null ? undefined : value),
+    (value) => (Array.isArray(value) ? value : undefined),
     z
       .array(
         z.preprocess(

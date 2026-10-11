@@ -2751,31 +2751,35 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // A schema that rejected null would fail the whole reply, scene and summary included.
-    it.each(['newLocations', 'newItems'] as const)(
-      'reads a null %s as none, applying the rest',
-      async (field) => {
-        seedFallbackTurn()
-        const { events } = await runFallback(
-          fallbackClassifierSchema.parse({
-            sceneEntities: ['c1'],
-            [field]: null,
-            currentLocation: 'l1',
-            worldTimeDelta: 30,
-            summary: 'Aria waited at the tide line.',
-          }),
-        )
-        expect(createdEntries(events)).toEqual([])
-        const patch = metadataPatch(events)
-        expect(patch).toMatchObject({
-          sceneEntities: [HERO],
-          currentLocationId: TOWN,
-          worldTime: 130,
+    // A schema that rejected a list that isn't one would fail the whole reply, scene and summary
+    // included.
+    it.each([
+      ['newLocations', null],
+      ['newItems', null],
+      ['newLocations', 'none'],
+      ['newItems', 0],
+      ['newItems', { handle: 'new:key', name: 'rusted key' }],
+    ] as const)('reads a %s of %j as none, applying the rest', async (field, list) => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          [field]: list,
+          currentLocation: 'l1',
+          worldTimeDelta: 30,
           summary: 'Aria waited at the tide line.',
-        })
-        expect(patch.stateReport).not.toHaveProperty(field)
-      },
-    )
+        }),
+      )
+      expect(createdEntries(events)).toEqual([])
+      const patch = metadataPatch(events)
+      expect(patch).toMatchObject({
+        sceneEntities: [HERO],
+        currentLocationId: TOWN,
+        worldTime: 130,
+        summary: 'Aria waited at the tide line.',
+      })
+      expect(patch.stateReport).not.toHaveProperty(field)
+    })
 
     it('drops and counts a create that is not an object, creating the rest', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
