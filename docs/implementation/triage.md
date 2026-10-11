@@ -280,8 +280,12 @@ slice-planning gate forces its resolution before that slice is planned.
 - **`generateStructured` doesn't pass the action id to
   `prepareGeneration`.** In `lib/ai/generate.ts`, `streamText` passes
   `actionId`, so the narrative's fetch capture links to its action, but
-  the classifier, suggestion refresh and wizard calls go out unlinked.
-  Related: `buildCallSettings` and `marksSystemPrefix` type the provider
+  the fallback and periodic classifiers and the suggestion refresh, all
+  run phases, go out unattributed, against
+  [`observability.md → actionId threading`](../observability.md#actionid-threading)
+  ("contract-critical"); the wizard runs outside a run and is
+  unattributed by design. Related: `ResolveModelResult.providerType`,
+  `buildCallSettings` and `marksSystemPrefix` type the provider
   as `ProviderInstance['type']`, which has no `'stub'`, though a runtime
   row can be one (`ProviderInstanceWithStub` in `lib/ai/types.ts`); only
   `marksSystemPrefix`'s comment notes it. Predates the system and user

@@ -204,8 +204,8 @@ iterate on has two templates — `tmpl_wizard_genre` and
 `tmpl_wizard_genre_refine` — differing only in the leading directive
 and the revise block. Everything else (the output contract and the
 grounding state) lives in one macro both include. Splitting them the
-other way duplicates the quality bar, which is the half most likely
-to be tuned and so the half most likely to drift. A refine template
+other way duplicates the quality bar, which is the part most likely
+to be tuned and so the part most likely to drift. A refine template
 reads `current` and `instruction`; it carries no `guidance`, which
 steers a generate.
 
