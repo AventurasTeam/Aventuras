@@ -98,13 +98,13 @@ describe('streamText', () => {
     vi.mocked(resolveModel).mockImplementation(actualResolveModel)
   })
 
-  it('resolves the target and passes both halves + mapped options to the stream call', async () => {
+  it('resolves the target; streams both halves verbatim with the mapped options', async () => {
     const { streamProviderCall } = await import('./transport/provider-call')
     const onError = () => {}
     const signal = new AbortController().signal
 
     const result = streamText('narrative', {
-      prompt: { system: ' S\n', user: 'P' },
+      prompt: { system: ' S\n', user: ' P\n' },
       config: STREAM_CFG,
       abortSignal: signal,
       actionId: 'act_1',
@@ -116,7 +116,7 @@ describe('streamText', () => {
     expect(streamProviderCall).toHaveBeenCalledWith({
       model: {},
       system: ' S\n',
-      prompt: 'P',
+      prompt: ' P\n',
       abortSignal: signal,
       onError,
       temperature: 0.7,
@@ -196,12 +196,12 @@ describe('generateStructured', () => {
     expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' } })
   })
 
-  it('passes the system half as the system option and the user half as the prompt', async () => {
+  it('passes both halves verbatim: system as the system option, user as the prompt', async () => {
     const { runProviderCall } = await import('./transport/provider-call')
     vi.mocked(runProviderCall).mockClear()
     await generateStructured(
       'wizard-assist',
-      { system: ' S\n', user: 'P' },
+      { system: ' S\n', user: ' P\n' },
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
@@ -209,7 +209,7 @@ describe('generateStructured', () => {
     expect(runProviderCall).toHaveBeenCalledOnce()
     const call = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
     expect(call).toHaveProperty('system', ' S\n')
-    expect(call).toHaveProperty('prompt', 'P')
+    expect(call).toHaveProperty('prompt', ' P\n')
   })
 
   it.each(['', ' \n '])('sends no system option for a blank system half (%j)', async (system) => {
@@ -394,6 +394,7 @@ describe('cache marker', () => {
   it.each([
     ['an openai-compatible provider that asks', 'openai-compatible', true],
     ['an anthropic provider that does not ask', 'anthropic', undefined],
+    ['an anthropic provider that declines', 'anthropic', false],
     ['a stub provider row that asks', 'stub', true],
   ])('leaves both calls unmarked on %s', async (_label, type, cacheSystemPrefix) => {
     expect(await streamMark(type, cacheSystemPrefix)).toBeUndefined()
