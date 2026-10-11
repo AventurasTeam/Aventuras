@@ -174,13 +174,14 @@ fallback fires. The five XML entities are decoded in a create's name
 and description, and a raw `<` or `>` in a name or a raw `<` in a
 description drops the create, so the prompt asks the model to write a
 double quote, `<` or `>` inside a name as `&quot;`, `&lt;` or `&gt;`,
-and a `<` inside a description as `&lt;`. A malformed create
-in a closed block only logs a warning. A `<state>` the stream cut off
-(no `</state>`) that declares any create, whole or not, fails the
-`state` field instead, because the cut may have lost the tags that
-name it (a `<current_location>`, a transfer), so the fallback fires and
-creates. A cut that falls between tags still parses clean in a block
-that declares no creates.
+and a `<` inside a description as `&lt;`. A malformed create in a
+closed block only logs a warning, unless the block held nothing else:
+an empty block fails `state`, so the fallback fires. A `<state>` the
+stream cut off (no `</state>`) that declares any create, whole or not,
+fails the `state` field instead, because the cut may have lost the
+tags that name it (a `<current_location>`, a transfer), so the
+fallback fires and creates. A cut that falls between tags still parses
+clean in a block that declares no creates.
 
 **Kept only if used.** A new location is created only as the turn's
 `<current_location>` or an ancestor of it, and a new item only when the
@@ -505,8 +506,9 @@ It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, under the same rules as the tags
 ([New locations and items](#new-locations-and-items)). A create there
-may omit its description and is then created without one, as a
-self-closed tag is.
+may omit its description or parent, or give either as `null`, which
+reads as omitted; one with no description is created without one, as
+a self-closed tag is.
 
 ## Mode-mixing across a story
 

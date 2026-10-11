@@ -1174,8 +1174,8 @@ The retrieval pool per type after the structural floor is satisfied.
 | `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                                                                                                                                                                      |
 
 Beside the floor, the per-turn prompt carries the location map, every
-listed location's name and id as a tree, and in-scene characters' held
-items
+listed location's name and id as a tree, the in-scene characters' held
+items and the items lying at the current location
 ([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)).
 They bypass the ranker and are seated unconditionally, so they count
 with the floor's tokens

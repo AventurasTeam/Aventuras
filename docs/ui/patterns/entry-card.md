@@ -237,8 +237,9 @@ field, since it is the number the model actually emitted.
 ### Emitted vs. applied
 
 `stateReport` records what the model emitted **and** what `apply.ts`
-did with it. Two fields can disagree with the absolute triple, and the
-panel shows the disagreement rather than hiding it:
+and the create planner did with it. Two fields can disagree with the
+absolute triple, and the panel shows the disagreement rather than
+hiding it:
 
 - **Location rejected.** `apply.ts` refuses a `currentLocation` that
   does not resolve to a `kind='location'` entity and inherits the

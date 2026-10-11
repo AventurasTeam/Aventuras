@@ -1894,8 +1894,10 @@ absolute state beside them:
   to the remaining headroom when it would push `worldTime` past the
   ceiling. `worldTimeDeltaApplied` records what landed.
 - A create in `newLocations` or `newItems` is created, reused (a
-  location's exact sibling) or dropped (unused), and a location's
-  parent can be dropped to the root. Its `outcome`, `id` and
+  location's exact sibling, or an earlier new location of the same
+  name and parent in the block) or dropped (unused, or the narrative
+  block it sits in has a failing field), and a location's parent can
+  be dropped to the root. Its `outcome`, `id` and
   `parentDropped` record that, and the report's other fields carry the
   resolved id in place of the `new:` handle.
 
