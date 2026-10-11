@@ -401,6 +401,38 @@ describe('planTurnCreates — parents', () => {
     expect(plan.block.currentLocation).toBe('loc_new_1')
   })
 
+  // A broken cycle check spins the synchronous settle loop forever; budgeting the parent read
+  // turns that hang into a failure.
+  it('drops a place that names itself as parent to the root', async () => {
+    let reads = 0
+    const hall = {
+      handle: 'new:hall',
+      name: 'Hall of Mirrors',
+      description: 'glass on every wall',
+      get parent() {
+        reads += 1
+        if (reads > 1000) throw new Error('settling never ended')
+        return 'new:hall'
+      },
+    }
+    const plan = await runPlanner({ newLocations: [hall], currentLocation: 'new:hall' })
+    expect(createdEntries(plan.creates).map((e) => [e.id, e.state])).toEqual([
+      ['loc_new_1', { parent_location_id: null }],
+    ])
+    expect(plan.report.newLocations).toEqual([
+      {
+        handle: 'new:hall',
+        name: 'Hall of Mirrors',
+        description: 'glass on every wall',
+        parent: 'new:hall',
+        outcome: 'created',
+        id: 'loc_new_1',
+        parentDropped: true,
+      },
+    ])
+    expect(plan.block.currentLocation).toBe('loc_new_1')
+  })
+
   // piggyback.md → Parent.
   it('hangs a child under a new place whose own parent was dropped', async () => {
     const plan = await runPlanner({

@@ -1889,6 +1889,21 @@ describe('narrative fold — creates', () => {
     expect(final?.newItems).toEqual(foldReport?.newItems)
   })
 
+  // Every field parses; the malformed item leaves its handle undeclared, failing the transfer.
+  it('creates nothing when only a ref to a malformed create fails', async () => {
+    await seedTurn()
+    const reply = CREATE_REPLY.replace('name="rusted key"', "name='rusted key'")
+    expect(reply).not.toBe(CREATE_REPLY)
+    const { events, intermediates } = await foldTurn(reply)
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(createdEntities(events)).toEqual([])
+    const report = replyOf(events).metadata?.stateReport
+    expect(report?.failedFields?.map((f) => f.field)).toEqual(['transfers'])
+    expect(report?.newLocations).toEqual([
+      expect.objectContaining({ handle: 'new:docks', outcome: 'dropped' }),
+    ])
+  })
+
   it('removes the new rows when the turn is undone', async () => {
     await seedTurn()
     const { events } = await foldTurn(CREATE_REPLY)
