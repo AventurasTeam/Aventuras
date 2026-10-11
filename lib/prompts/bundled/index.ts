@@ -37,11 +37,7 @@ export const bundledPack: Pack = {
       group: 'generationContext',
       ...PIGGYBACK_FALLBACK_CLASSIFIER,
     },
-    [TEMPLATE_IDS.periodicClassifier]: {
-      group: 'classifierContext',
-      system: '',
-      user: PERIODIC_CLASSIFIER,
-    },
+    [TEMPLATE_IDS.periodicClassifier]: { group: 'classifierContext', ...PERIODIC_CLASSIFIER },
     [TEMPLATE_IDS.suggestionRefresh]: {
       group: 'generationContext',
       system: '',

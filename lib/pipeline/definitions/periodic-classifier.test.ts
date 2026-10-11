@@ -323,10 +323,17 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
-    expect(prompt).toContain('Kael sees')
-    expect(prompt).toContain('as: ally')
-    expect(prompt).not.toContain('rival')
+    const { system, user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('Kael sees')
+    expect(user).toContain('as: ally')
+    expect(user).not.toContain('rival')
+    // classifier.md → What the classifier reads: the role line and the rules lead, and
+    // the branch's lists stay out of the system half.
+    expect(system).toMatch(
+      /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules:\n\n- Provenance\. /,
+    )
+    expect(system).not.toContain('Kael sees')
+    expect(system).not.toContain('as: ally')
   })
 
   // Fails if the phase stops filtering a saved scene to the branch's live entities:
@@ -369,7 +376,9 @@ describe('periodicClassifierPhase', () => {
     await drain(h.ctx)
 
     const prompt = vi.mocked(generateStructured).mock.calls[0][1]
-    expect(prompt.system).toBe('')
+    expect(prompt.system).toMatch(
+      /^You are extracting structured world state from recent story prose\. /,
+    )
     expect(prompt.user).toContain('turn 1')
   })
 
