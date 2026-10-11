@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use image::Luma;
 use qrcode::QrCode;
 use std::io::Cursor;
@@ -7,7 +7,7 @@ use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::server::{bind_listener, build_router, spawn_server, ServerState, StoriesData};
+use super::server::{ServerState, StoriesData, bind_listener, build_router, spawn_server};
 use super::types::{
     QrCodeData, SyncAction, SyncRequest, SyncResponse, SyncServerInfo, SyncStoryPreview,
 };

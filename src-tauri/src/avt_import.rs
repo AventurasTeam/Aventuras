@@ -22,13 +22,13 @@
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
 
-use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::Deserializer;
+use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use sqlx::SqlitePool;
 use tauri::AppHandle;
 
-use crate::db::{open_rw_pool, IMPORT_BUSY_TIMEOUT};
+use crate::db::{IMPORT_BUSY_TIMEOUT, open_rw_pool};
 
 /// The JSON key holding the base64 payload — the only thing this module works to avoid.
 const IMAGE_DATA_KEY: &str = "imageData";
@@ -461,8 +461,8 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Row;
+    use sqlx::sqlite::SqlitePoolOptions;
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::sync::atomic::{AtomicUsize, Ordering};
 

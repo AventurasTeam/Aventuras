@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tauri::{AppHandle, Manager};
 
 /// Path to the live application database (app_config_dir/aventura.db).
