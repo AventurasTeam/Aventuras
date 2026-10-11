@@ -1,13 +1,14 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { ParsedStateBlock, TurnCreatesReport } from './types'
+import type { PlannedTurn } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
 
 type BuildReportArgs = {
   layer: StateReport['layer']
-  /** Post-substitution and post-planning: real entity ids, never placeholders or create handles. */
-  block: ParsedStateBlock
+  /** Real entity ids in the block, never placeholders or create handles; what became of each
+   *  create in the report, whose lists are written only when they hold an entry. */
+  turn: Pick<PlannedTurn, 'block' | 'report'>
   /** Widened to plain strings: a report read back from the column has already lost
    *  the `keyof ParsedStateBlock` narrowing, and the fallback re-supplies its own. */
   failures: { field: string; detail: string }[]
@@ -15,8 +16,6 @@ type BuildReportArgs = {
   raw?: string
   /** What apply.ts did with the emitted values. Absent when nothing was applied. */
   applied?: { worldTimeDelta: number; currentLocationRejected: boolean }
-  /** What became of each create this turn. A list is written only when it holds an entry. */
-  creates?: TurnCreatesReport
 }
 
 /**
@@ -24,9 +23,9 @@ type BuildReportArgs = {
  * `summary`/`retrievalQueries` omitted: they already live top-level on EntryMetadata.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
-  const { layer, block, failures, raw, applied, creates } = args
-  const newLocations = creates?.newLocations ?? []
-  const newItems = creates?.newItems ?? []
+  const { layer, failures, raw, applied } = args
+  const { block, report } = args.turn
+  const { newLocations, newItems } = report
   // Emptiness is judged on the block as emitted, summary included: suppressing a summary-only
   // report would badge the turn as one where piggyback never ran. Creates count too: the planner
   // strips them from the block, so a block of creates alone arrives here empty.

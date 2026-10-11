@@ -243,7 +243,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     piggybackApplied = buildPiggybackActions({
       entryId,
-      block: turnCreates.block,
+      turn: turnCreates,
       entities,
       previousMetadata: {
         ...inherited,
@@ -251,8 +251,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       },
       branchId,
       source: 'piggyback_tagged_block',
-      createdRows: turnCreates.createdRows,
-      reusedIds: turnCreates.reusedIds,
     })
   }
 
@@ -263,11 +261,10 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     piggybackApplied !== undefined && turnCreates !== undefined
       ? buildStateReport({
           layer: 'piggyback_tagged_block',
-          block: turnCreates.block,
+          turn: turnCreates,
           failures: parseFailures,
           applied: piggybackApplied.applied,
           ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
-          creates: turnCreates.report,
         })
       : undefined
 

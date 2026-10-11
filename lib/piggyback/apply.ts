@@ -4,7 +4,7 @@ import { logger } from '@/lib/diagnostics'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
-import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type ParsedStateBlock } from './types'
+import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type PlannedTurn } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
 // Two producers write this field; only the tagged-block parser filters itself (trims,
@@ -34,13 +34,10 @@ type PreviousMetadata = {
 
 type BuildArgs = {
   entryId: string
-  block: ParsedStateBlock
+  /** Its created rows count as stored: a new place can be the scene's location, and a new item
+   *  can change hands. */
+  turn: PlannedTurn
   entities: readonly Entity[]
-  /** This turn's planned creates, looked up like stored rows: a new place can be the scene's
-   *  location, and a new item can change hands. */
-  createdRows?: readonly Entity[]
-  /** Rows a create reused; the staged ones are promoted like a staged scene member. */
-  reusedIds?: readonly string[]
   previousMetadata: PreviousMetadata
   branchId: string
   // Caller-supplied, not hardcoded: the two producers are distinct agents whose deltas'
@@ -60,8 +57,9 @@ type BuildResult = {
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
-  const { entryId, block, previousMetadata, branchId, source, reusedIds = [] } = args
-  const entities = [...args.entities, ...(args.createdRows ?? [])]
+  const { entryId, previousMetadata, branchId, source } = args
+  const { block, createdRows, reusedIds } = args.turn
+  const entities = [...args.entities, ...createdRows]
 
   const sceneEntities = dedupeSceneEntities(block.sceneEntities ?? previousMetadata.sceneEntities)
   const rawDelta = block.worldTimeDelta ?? 0

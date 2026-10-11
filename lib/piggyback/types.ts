@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { EntryMetadata, VISUAL_CATEGORIES } from '@/lib/db'
+import type { Entity, EntryMetadata, VISUAL_CATEGORIES } from '@/lib/db'
 
 // Mirrors CharacterState['visual']'s keys (lib/db/entities/entity-state-schema.ts →
 // VISUAL_CATEGORIES) — the only categories a full-replace visual change can target.
@@ -81,6 +81,19 @@ type StateReport = NonNullable<EntryMetadata['stateReport']>
 export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
 export type NewItemReport = NonNullable<StateReport['newItems']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
+
+/** A block the per-turn planner handed on: every create handle resolved or removed. */
+export type PlannedStateBlock = ParsedStateBlock & { newLocations?: never; newItems?: never }
+
+/** One turn's planned block and creates, which apply and report read together. */
+export type PlannedTurn = {
+  block: PlannedStateBlock
+  /** The rows the turn's creates insert, looked up like stored rows. */
+  createdRows: readonly Entity[]
+  /** Rows a location create reused; a staged one is promoted like a staged scene member. */
+  reusedIds: readonly string[]
+  report: TurnCreatesReport
+}
 
 // `categoryRef` is the prompt-side placeholder (cat1, cat2…), not a category
 // id — the emission map resolves it (lib/piggyback/suggestion-slots.ts).

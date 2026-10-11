@@ -15,7 +15,8 @@ import {
   type NewLocationEmission,
   type NewLocationReport,
   type ParsedStateBlock,
-  type TurnCreatesReport,
+  type PlannedStateBlock,
+  type PlannedTurn,
 } from '@/lib/piggyback'
 import {
   checkParentChain,
@@ -27,16 +28,9 @@ import {
 
 type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
 
-export type TurnCreatePlan = {
-  /** The block with every declared handle resolved or removed; no newLocations / newItems. */
-  block: ParsedStateBlock
-  /** Parents before children, locations before items. */
+export type TurnCreatePlan = PlannedTurn & {
+  /** Insert `createdRows`: parents before children, locations before items. */
   creates: CreateEntityAction[]
-  /** The rows `creates` insert, for buildPiggybackActions' lookups. */
-  createdRows: Entity[]
-  /** Staged siblings a location create reused, to promote. */
-  reusedIds: string[]
-  report: TurnCreatesReport
 }
 
 type LocationFate = {
@@ -304,12 +298,10 @@ function rewriteHandles(
   block: ParsedStateBlock,
   ids: ReadonlyMap<string, string>,
   itemIds: ReadonlyMap<string, string>,
-): ParsedStateBlock {
+): PlannedStateBlock {
   const resolve = (ref: string, from: ReadonlyMap<string, string>): string | undefined =>
     isCreateHandle(ref) ? from.get(ref) : ref
-  const out: ParsedStateBlock = { ...block }
-  delete out.newLocations
-  delete out.newItems
+  const { newLocations, newItems, ...out } = block
   if (block.sceneEntities !== undefined) {
     out.sceneEntities = block.sceneEntities.flatMap((ref) => {
       const id = resolve(ref, ids)

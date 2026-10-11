@@ -15,6 +15,7 @@ import {
   substitutePiggybackIds,
   suggestionRefSchema,
   type ParsedStateBlock,
+  type PlannedStateBlock,
   type TurnCreatesReport,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
@@ -379,7 +380,7 @@ export async function* piggybackFallbackClassifierPhase(
     applied,
   } = buildPiggybackActions({
     entryId: tail.id,
-    block: plan.block,
+    turn: plan,
     entities,
     previousMetadata: {
       ...inheritedEntryMetadata(previousEntry?.metadata),
@@ -387,14 +388,12 @@ export async function* piggybackFallbackClassifierPhase(
     },
     branchId: ctx.branchId,
     source: 'per_turn_classifier',
-    createdRows: plan.createdRows,
-    reusedIds: plan.reusedIds,
   })
 
   // The narrative fold applies visual/transfer changes whenever it fires, parse failure
   // or not, so those rows are already written. A fallback that reports neither must not
   // blank them out of the record — same reason failedFields and raw survive its write.
-  const reportedBlock: ParsedStateBlock = {
+  const reportedBlock: PlannedStateBlock = {
     ...plan.block,
     ...(plan.block.visualChanges === undefined && priorReport?.visualChanges !== undefined
       ? { visualChanges: priorReport.visualChanges }
@@ -415,14 +414,13 @@ export async function* piggybackFallbackClassifierPhase(
   }
   const stateReport = buildStateReport({
     layer: 'per_turn_classifier',
-    block: reportedBlock,
+    turn: { block: reportedBlock, report: reportedCreates },
     failures: [
       ...(priorReport?.failedFields ?? []),
       ...failures.map((f) => ({ field: f.field, detail: f.detail })),
     ],
     applied,
     ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
-    creates: reportedCreates,
   })
 
   const rawSuggestions =

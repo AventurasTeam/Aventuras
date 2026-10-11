@@ -1,13 +1,28 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildStateReport } from './report'
-import type { NewItemReport, NewLocationReport } from './types'
+import type {
+  NewItemReport,
+  NewLocationReport,
+  PlannedStateBlock,
+  PlannedTurn,
+  TurnCreatesReport,
+} from './types'
+
+const NO_CREATES: TurnCreatesReport = { newLocations: [], newItems: [] }
+
+function planned(
+  block: PlannedStateBlock,
+  report: TurnCreatesReport = NO_CREATES,
+): Pick<PlannedTurn, 'block' | 'report'> {
+  return { block, report }
+}
 
 describe('buildStateReport', () => {
   it('records the emitted values, not the applied ones', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { currentLocation: 'item_sword', worldTimeDelta: -600 },
+      turn: planned({ currentLocation: 'item_sword', worldTimeDelta: -600 }),
       failures: [],
       raw: '<state><current_location>item_sword</current_location></state>',
     })
@@ -20,7 +35,7 @@ describe('buildStateReport', () => {
   it('records the applied delta alongside the emitted one', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { worldTimeDelta: -600 },
+      turn: planned({ worldTimeDelta: -600 }),
       failures: [],
       applied: { worldTimeDelta: 0, currentLocationRejected: false },
     })
@@ -33,7 +48,7 @@ describe('buildStateReport', () => {
   it('records a headroom clamp, which the emitted value alone cannot reveal', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { worldTimeDelta: 9_000_000 },
+      turn: planned({ worldTimeDelta: 9_000_000 }),
       failures: [],
       applied: { worldTimeDelta: 120, currentLocationRejected: false },
     })
@@ -44,7 +59,7 @@ describe('buildStateReport', () => {
   it('flags a rejected location only when apply.ts rejected it', () => {
     const rejected = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { currentLocation: 'item_sword' },
+      turn: planned({ currentLocation: 'item_sword' }),
       failures: [],
       applied: { worldTimeDelta: 0, currentLocationRejected: true },
     })
@@ -54,7 +69,7 @@ describe('buildStateReport', () => {
     // off presence, and a later user edit must not be able to manufacture one.
     const accepted = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { currentLocation: 'loc_keep' },
+      turn: planned({ currentLocation: 'loc_keep' }),
       failures: [],
       applied: { worldTimeDelta: 0, currentLocationRejected: false },
     })
@@ -65,7 +80,7 @@ describe('buildStateReport', () => {
   it('omits the applied delta when no apply outcome is supplied', () => {
     const report = buildStateReport({
       layer: 'per_turn_classifier',
-      block: { worldTimeDelta: 30 },
+      turn: planned({ worldTimeDelta: 30 }),
       failures: [],
     })
     expect(report?.worldTimeDelta).toBe(30)
@@ -75,7 +90,7 @@ describe('buildStateReport', () => {
   it('omits raw and failedFields on a clean parse', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { sceneEntities: ['char_a'] },
+      turn: planned({ sceneEntities: ['char_a'] }),
       failures: [],
       raw: '<state><scene_entities>char_a</scene_entities></state>',
     })
@@ -85,7 +100,7 @@ describe('buildStateReport', () => {
   it('keeps raw and failedFields when a field failed', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { sceneEntities: ['char_a'] },
+      turn: planned({ sceneEntities: ['char_a'] }),
       failures: [{ field: 'transfers', detail: 'content present but no entries' }],
       raw: '<state><transfers><item id="i1"',
     })
@@ -98,7 +113,7 @@ describe('buildStateReport', () => {
   it('records a failure even when no raw text survived', () => {
     const report = buildStateReport({
       layer: 'per_turn_classifier',
-      block: {},
+      turn: planned({}),
       failures: [{ field: 'sceneEntities', detail: 'substitution failed' }],
     })
     expect(report?.layer).toBe('per_turn_classifier')
@@ -111,7 +126,7 @@ describe('buildStateReport', () => {
   it('keeps a layer-only report for a block that carried nothing but a summary', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { summary: 'A sentence.' },
+      turn: planned({ summary: 'A sentence.' }),
       failures: [],
       applied: { worldTimeDelta: 0, currentLocationRejected: false },
     })
@@ -120,7 +135,7 @@ describe('buildStateReport', () => {
 
   it('returns undefined when no block was found and nothing failed', () => {
     expect(
-      buildStateReport({ layer: 'piggyback_tagged_block', block: {}, failures: [] }),
+      buildStateReport({ layer: 'piggyback_tagged_block', turn: planned({}), failures: [] }),
     ).toBeUndefined()
   })
 
@@ -129,7 +144,7 @@ describe('buildStateReport', () => {
   it('does not copy summary into the report', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { summary: 'A sentence.', sceneEntities: [] },
+      turn: planned({ summary: 'A sentence.', sceneEntities: [] }),
       failures: [],
     })
     expect(report).not.toHaveProperty('summary')
@@ -140,7 +155,7 @@ describe('buildStateReport', () => {
   it('reports exactly the allowlisted keys, excluding summary and retrievalQueries', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { sceneEntities: ['char_a'], summary: 's', retrievalQueries: ['q'] },
+      turn: planned({ sceneEntities: ['char_a'], summary: 's', retrievalQueries: ['q'] }),
       failures: [],
     })
     expect(report).toEqual({ layer: 'piggyback_tagged_block', sceneEntities: ['char_a'] })
@@ -151,7 +166,7 @@ describe('buildStateReport', () => {
   it('still reports a block that carried only retrieval asks', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { retrievalQueries: ['q'] },
+      turn: planned({ retrievalQueries: ['q'] }),
       failures: [],
     })
     expect(report?.layer).toBe('piggyback_tagged_block')
@@ -160,13 +175,13 @@ describe('buildStateReport', () => {
   it('carries the full transfer and visual-change shapes through', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: {
+      turn: planned({
         visualChanges: [{ id: 'char_a', type: 'attire', text: 'muddied cloak' }],
         transfers: {
           items: [{ id: 'item_a', slot: 'inventory', to: 'char_a', from: 'char_b' }],
           stackables: [{ key: 'gold', amount: 50, to: 'char_a' }],
         },
-      },
+      }),
       failures: [],
     })
     expect(report?.visualChanges).toEqual([{ id: 'char_a', type: 'attire', text: 'muddied cloak' }])
@@ -194,9 +209,8 @@ describe("buildStateReport with this turn's creates", () => {
   it("records both lists beside the block's resolved fields", () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { currentLocation: 'loc_docks' },
+      turn: planned({ currentLocation: 'loc_docks' }, { newLocations: [docks], newItems: [apple] }),
       failures: [],
-      creates: { newLocations: [docks], newItems: [apple] },
     })
     expect(report).toEqual({
       layer: 'piggyback_tagged_block',
@@ -209,9 +223,8 @@ describe("buildStateReport with this turn's creates", () => {
   it('omits an empty list', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',
-      block: { currentLocation: 'loc_docks' },
+      turn: planned({ currentLocation: 'loc_docks' }, { newLocations: [docks], newItems: [] }),
       failures: [],
-      creates: { newLocations: [docks], newItems: [] },
     })
     expect(report).toEqual({
       layer: 'piggyback_tagged_block',
@@ -224,9 +237,8 @@ describe("buildStateReport with this turn's creates", () => {
   it('reports a block that carried only creates', () => {
     const report = buildStateReport({
       layer: 'per_turn_classifier',
-      block: {},
+      turn: planned({}, { newLocations: [], newItems: [apple] }),
       failures: [],
-      creates: { newLocations: [], newItems: [apple] },
     })
     expect(report).toEqual({ layer: 'per_turn_classifier', newItems: [apple] })
   })
@@ -235,22 +247,24 @@ describe("buildStateReport with this turn's creates", () => {
     expect(
       buildStateReport({
         layer: 'piggyback_tagged_block',
-        block: {},
+        turn: planned({}, { newLocations: [], newItems: [] }),
         failures: [],
-        creates: { newLocations: [], newItems: [] },
       }),
     ).toBeUndefined()
   })
 
-  it('takes the lists from creates, never from the block', () => {
-    const report = buildStateReport({
-      layer: 'piggyback_tagged_block',
-      block: {
-        sceneEntities: ['char_a'],
-        newLocations: [{ handle: 'new:x', name: 'X', description: '' }],
-      },
-      failures: [],
-    })
-    expect(report).toEqual({ layer: 'piggyback_tagged_block', sceneEntities: ['char_a'] })
+  // The planner resolves or removes every create, so the lists come only from the report.
+  it('takes no create lists in the block', () => {
+    const report = () =>
+      buildStateReport({
+        layer: 'piggyback_tagged_block',
+        turn: planned({
+          sceneEntities: ['char_a'],
+          // @ts-expect-error a planned block carries no create lists
+          newLocations: [{ handle: 'new:x', name: 'X', description: '' }],
+        }),
+        failures: [],
+      })
+    expect(report).toBeTypeOf('function')
   })
 })
