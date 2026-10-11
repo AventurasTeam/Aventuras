@@ -101,23 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds the branch. Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **Undo doesn't follow entity-state references.**
-  `lib/actions/delta/live-refs.ts` and `row-closure.ts` track only link
-  tables, and the entity create and update handler accepts a
-  `parent_location_id` naming no row (cycle check only,
-  `lib/actions/entities/register.ts`). Today no writer stores a parent
-  in a change a reversal spares, so no dangling parent is reachable; it
-  becomes reachable once the periodic classifier creates mentioned
-  places
-  ([followup](../followups.md#data-model)). The same state already
-  renders two ways: Overview's "Part of" drops it silently, the entity
-  picker shows "Missing entity"; and the World resolve dialog's
-  `same-parent` line reads "Both are top-level places." for a flagged
-  row whose parent names no row (`sharedParentName` in
-  `components/world/use-collision-resolve.ts` returns undefined for
-  root and missing alike). Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
-
 - **The classifier's partner tiebreak counts a split `same-parent`
   flag as flagged.** `lib/classifier/reconcile.ts` (~line 53) reads the
   raw `nameCollisionFlag`, so a flag that no longer pairs still sorts
@@ -152,11 +135,10 @@ slice-planning gate forces its resolution before that slice is planned.
   locations-and-items-from-prose PR.
 
 - **The `<entity …>` pattern in the state parser scans to the end of
-  the segment per unclosed opener.** `lib/piggyback/parse.ts` (~line 116) takes about 840 ms on 20,000 unclosed `<entity ` openers; the
-  create pattern was fixed the same way (`[^<>]`). Also, an
-  unterminated `<state>` isn't a failure on its own: a cut-off block
-  that declares a create fails now; a between-tags cut in a block with
-  no creates still parses clean and keeps the old location. Raised 2026-10-11 in the
+  the segment per unclosed opener.** `lib/piggyback/parse.ts`
+  (~line 116) takes about 840 ms on 20,000 unclosed `<entity ` openers;
+  the create pattern already bounds its spans (`[^<>]`), and the same
+  fix applies here. Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
 - **The narrative person never reaches a prompt.**

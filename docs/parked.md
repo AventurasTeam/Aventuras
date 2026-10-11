@@ -1095,10 +1095,15 @@ in the boot-recovery window after an abort's own reversal failed
 ([no-gate write phase](./generation-pipeline.md#no-gate-write-phase)),
 a later turn's piggyback or a tail scene edit can name the pass's new
 character in `sceneEntities`, and recovery then reverses the create
-with no refusal. A dangling id renders as "Entity no longer exists"
-(`components/world/overview/overview-parts.tsx`), never a crash, and
-`namesId` in `lib/actions/delta/reverse-replay.ts` already walks
-nested payloads, so the write-back refusal covers ids in `state`.
+with no refusal. A dangling id never crashes, but the same state
+renders two ways: Overview's single-reference regions show "Entity no
+longer exists" (`refTargets` in
+`components/world/overview/overview-parts.tsx`) and the entity picker
+shows "Missing entity", while Overview's "Part of" drops a dangling
+parent silently (`locationAncestors` in `lib/world/overview.ts` skips a
+missing id). `namesId` in `lib/actions/delta/reverse-replay.ts` already
+walks nested payloads, so the write-back refusal covers ids in
+`state`.
 
 The first revisit signal, a machine writer creating entities other
 than characters, fired 2026-10-10, when the per-turn writer began creating
@@ -1126,6 +1131,14 @@ that names a row the same group deletes. Planners avoid it by discipline
 (4.2c's merge rewrites every ref to the loser before deleting it, and the
 entity delete clears the tail's scene fields); nothing checks it. Folded
 in from triage 2026-10-09.
+
+Nor does the write path stop a dangling parent: the entity create and
+update handler accepts a `parent_location_id` naming no row (cycle
+check only, `lib/actions/entities/register.ts`). And the World resolve
+dialog's `same-parent` line reads "Both are top-level places." for a
+flagged row whose parent names no row (`sharedParentName` in
+`components/world/use-collision-resolve.ts` returns undefined for root
+and missing alike). Folded in from triage 2026-10-11.
 
 #### A kept create in a redo group fails redo with a raw SQLite error
 
