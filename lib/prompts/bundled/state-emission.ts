@@ -19,7 +19,7 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
   </retrieval_queries>
 </state>
 
-Give each new place or item its own <new_location> or <new_item> tag with a handle that starts with new: (e.g. new:docks), and use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or in <scene_entities> (it is present). Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.
+Give each new place or item its own <new_location> or <new_item> tag with a handle that starts with new: (e.g. new:docks), and use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or, when it is in the scene, in <scene_entities>. Write a double quote, < or > inside a create's name as &quot;, &lt; or &gt;, and a < inside its description as &lt;.
 
 Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
 

@@ -275,6 +275,9 @@ describe('bundled piggyback fallback classifier template', () => {
       expect(prompt).toContain('in newLocations')
       expect(prompt).toContain('in newItems')
       expect(prompt).toContain('a handle that starts with new:')
+      expect(prompt).toContain(
+        "a new item as a transfer's item id or, when it is in the scene, in sceneEntities.",
+      )
       expect(prompt.indexOf('in newLocations')).toBeGreaterThan(prompt.indexOf('\n# This turn\n'))
     })
 

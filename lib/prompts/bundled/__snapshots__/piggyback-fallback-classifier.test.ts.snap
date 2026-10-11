@@ -67,7 +67,7 @@ Report the scene state as of the LAST entry above, the time delta, a one-sentenc
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
 For the time delta, give seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative).
 
-Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id.
+Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id or, when it is in the scene, in sceneEntities.
 
 Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
 
