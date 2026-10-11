@@ -144,7 +144,7 @@ function resolveTransfers(
 }
 
 // An item's id is left for apply.ts to reject, keeping the previous location, and so is an item's
-// handle when wrong kinds drop.
+// handle under `badRef: 'drop'`.
 function resolveLocation(ref: string, refs: Refs, badRef: SubstituteOptions['badRef']): string {
   const resolved = resolveRefOrHandle(ref, refs)
   if (badRef === 'fail' && refs.handles.get(resolved) === 'item')
