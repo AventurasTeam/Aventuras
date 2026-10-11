@@ -1152,13 +1152,22 @@ describe('per-turn-piggyback', () => {
       /** Runs the phase after `outcome` and returns each classifier call's options. */
       async function callOptionsAfter(
         outcome: PiggybackOutcome | undefined,
-        worldTimeDeltas: number[] = [15],
+        { worldTimeDeltas = [15], withChips = false } = {},
       ): Promise<unknown[]> {
         currentStoryStore.set({
           storyId: 's1',
           branchId: 'b1',
           definition,
-          settings: baseSettings({ models: {} }),
+          settings: baseSettings({
+            models: {},
+            ...(withChips
+              ? {
+                  suggestionsEnabled: true,
+                  suggestionCount: 2,
+                  suggestionCategories: SUGGESTION_CATEGORIES,
+                }
+              : {}),
+          }),
         })
         hydrateEntries(phaseDb, 'b1', [
           {
@@ -1173,7 +1182,7 @@ describe('per-turn-piggyback', () => {
         for (const worldTimeDelta of worldTimeDeltas)
           generateStructuredMock.mockResolvedValueOnce({
             status: 'ok',
-            value: { ...REPORT, worldTimeDelta },
+            value: { ...REPORT, worldTimeDelta, ...(withChips ? { suggestions: [] } : {}) },
           })
 
         const gen = piggybackFallbackClassifierPhase({
@@ -1194,31 +1203,38 @@ describe('per-turn-piggyback', () => {
         return generateStructuredMock.mock.calls.map((call) => call[5])
       }
 
-      it.each([
-        ['no piggyback outcome', undefined],
-        ['a piggyback that never fired', { attempted: false, succeeded: false }],
-      ])('marks the regular classifier call after %s', async (_label, outcome) => {
-        expect(await callOptionsAfter(outcome)).toEqual([{ cacheSystemPrefix: true }])
-      })
-
-      it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
-        expect(await callOptionsAfter({ attempted: true, succeeded: false })).toEqual([
-          { cacheSystemPrefix: false },
-        ])
-      })
-
-      it.each([
-        ['the regular classifier', undefined, true],
-        ['a recovery', { attempted: true, succeeded: false }, false],
-      ])(
-        "re-rolls a negative delta from %s with the first call's options",
-        async (_label, outcome, cacheSystemPrefix) => {
-          expect(await callOptionsAfter(outcome, [-10, 15])).toEqual([
-            { cacheSystemPrefix },
-            { cacheSystemPrefix },
+      // Both schema branches: a recovery that also asks for chips stays unmarked.
+      describe.each([
+        ['the base schema', false],
+        ['the schema with chips', true],
+      ])('on %s', (_schema, withChips) => {
+        it.each([
+          ['no piggyback outcome', undefined],
+          ['a piggyback that never fired', { attempted: false, succeeded: false }],
+        ])('marks the regular classifier call after %s', async (_label, outcome) => {
+          expect(await callOptionsAfter(outcome, { withChips })).toEqual([
+            { cacheSystemPrefix: true },
           ])
-        },
-      )
+        })
+
+        it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
+          expect(
+            await callOptionsAfter({ attempted: true, succeeded: false }, { withChips }),
+          ).toEqual([{ cacheSystemPrefix: false }])
+        })
+
+        it.each([
+          ['the regular classifier', undefined, true],
+          ['a recovery', { attempted: true, succeeded: false }, false],
+        ])(
+          "re-rolls a negative delta from %s with the first call's options",
+          async (_label, outcome, cacheSystemPrefix) => {
+            expect(
+              await callOptionsAfter(outcome, { worldTimeDeltas: [-10, 15], withChips }),
+            ).toEqual([{ cacheSystemPrefix }, { cacheSystemPrefix }])
+          },
+        )
+      })
     })
 
     // Here, not the template's own test file: buildGenerationContext gates the read on a

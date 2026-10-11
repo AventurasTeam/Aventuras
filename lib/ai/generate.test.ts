@@ -327,6 +327,7 @@ async function systemCacheControl(
       { role: 'user', content: [{ type: 'text', text: 'P' }] },
     ],
   }).catch(() => undefined)
+  expect(inner.seen).toHaveLength(1)
   return inner.seen.at(-1)?.prompt.find((m) => m.role === 'system')?.providerOptions?.anthropic
     ?.cacheControl
 }

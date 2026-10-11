@@ -1,9 +1,9 @@
 import type { LanguageModelMiddleware } from 'ai'
 
 /**
- * Marks the last system message as an Anthropic cache breakpoint. Runs last in a
- * middleware chain, so the block it marks is the one sent, structured-output
- * contract included (architecture.md → System and user halves).
+ * Marks the last system message as an Anthropic cache breakpoint. Must run last
+ * in the chain, so the block it marks is the one sent, structured-output contract
+ * included (architecture.md → System and user halves).
  */
 export function anthropicCacheMarkerMiddleware(): LanguageModelMiddleware {
   return {

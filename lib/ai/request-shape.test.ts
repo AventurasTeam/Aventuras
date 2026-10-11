@@ -141,6 +141,8 @@ describe('request shape', () => {
     expect(JSON.stringify(await structured(HALVES, config))).not.toContain('cache_control')
   })
 
+  // Pins the wire only: this adapter never sends providerOptions.anthropic, so a broken gate
+  // is caught by generate.test.ts's openai-compatible case, not here.
   it('(e) sends openai-compatible a system message with no cache control, even when asked', async () => {
     const config = useProvider('openai-compatible')
 
