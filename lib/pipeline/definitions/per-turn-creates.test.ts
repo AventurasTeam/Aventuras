@@ -83,6 +83,7 @@ function runPlanner(
     embed: opts.embed ?? noEmbed,
     now: () => 1000,
     newId: (prefix) => `${prefix}_new_${++counts[prefix]}`,
+    log: logger,
   })
 }
 

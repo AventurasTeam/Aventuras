@@ -7,7 +7,7 @@ import {
   type ItemMatchFlag,
 } from '@/lib/classifier'
 import type { CollisionReason, Entity, ItemState, LocationState } from '@/lib/db'
-import { logger, type Logger } from '@/lib/diagnostics'
+import type { Logger } from '@/lib/diagnostics'
 import {
   isCreateHandle,
   type NewItemEmission,
@@ -377,10 +377,10 @@ export async function planTurnCreates(input: {
   embed: EmbedDescriptions
   now: () => number
   newId: (prefix: 'loc' | 'item') => string
-  /** The phase's logger, so a dropped create's entry carries the action; defaults to the global one. */
-  log?: Logger
+  /** The phase's logger, so a dropped create's entry carries the action. */
+  log: Logger
 }): Promise<TurnCreatePlan> {
-  const { block, entities, branchId, source, embed, now, newId, log = logger } = input
+  const { block, entities, branchId, source, embed, now, newId, log } = input
   const byId = new Map(entities.map((e) => [e.id, e]))
   const locations = block.newLocations ?? []
   const items = block.newItems ?? []

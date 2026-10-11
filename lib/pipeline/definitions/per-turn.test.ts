@@ -1887,6 +1887,9 @@ describe('narrative fold — creates', () => {
     const final = (await storedEntry(replyOf(events).id))?.metadata?.stateReport
     expect(final?.layer).toBe('per_turn_classifier')
     expect(final?.failedFields?.map((f) => f.field)).toContain('worldTimeDelta')
+    // A fallback that creates nothing keeps the fold's dropped creates on the record.
+    expect(final?.newLocations).toEqual(foldReport?.newLocations)
+    expect(final?.newItems).toEqual(foldReport?.newItems)
   })
 
   it('removes the new rows when the turn is undone', async () => {
@@ -1933,6 +1936,8 @@ describe('narrative fold — creates', () => {
     '<new_item handle="key" name="key">a key</new_item>' +
     '<new_location handle="new:" name="Nowhere">nothing</new_location>'
 
+  const MALFORMED_ITEM = '<new_item handle="key" name="key">a key</new_item>'
+
   it('warns about malformed creates without failing the parse', async () => {
     const warnSpy = vi.spyOn(logger, 'warn')
     await seedTurn()
@@ -1955,13 +1960,13 @@ describe('narrative fold — creates', () => {
     await seedTurn()
     const { events, intermediates } = await foldTurn(
       'Aria pockets something.\n<state><scene_entities>c1</scene_entities>' +
-        `${MALFORMED}<world_time_delta>soon</world_time_delta></state>`,
+        `${MALFORMED_ITEM}<world_time_delta>soon</world_time_delta></state>`,
       { log: logger },
     )
     expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
     expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
       entryId: replyOf(events).id,
-      count: 2,
+      count: 1,
       layer: 'piggyback_tagged_block',
     })
   })

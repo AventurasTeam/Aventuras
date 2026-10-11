@@ -3,19 +3,23 @@ import { z } from 'zod'
 
 import {
   APP_SETTINGS_DEFAULTS,
+  emptyEntityState,
   STORY_SETTINGS_DEFAULTS,
+  type Entity,
+  type EntryMetadata,
   type StoryEntry,
   type StorySettings,
 } from '@/lib/db'
-import { logger, makeLogger } from '@/lib/diagnostics'
+import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
-import type { Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
+import type { PhaseEmittedEvent, Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
 import type { EntityRow, LoreRow, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import {
   fallbackClassifierSchema,
@@ -2171,6 +2175,483 @@ describe('per-turn-piggyback', () => {
     })
   })
 
+  describe('classifier fold — creates', () => {
+    const HERO = 'char_00000000-0000-4000-8000-000000000001'
+    const TOWN = 'loc_00000000-0000-4000-8000-0000000000a1'
+    const MARKET = 'loc_00000000-0000-4000-8000-0000000000a2'
+    const OLD_KEY = 'item_00000000-0000-4000-8000-0000000000b1'
+    const SCENE: EntryMetadata = { sceneEntities: [HERO], currentLocationId: TOWN, worldTime: 100 }
+    // l1 is TOWN (seeded in runFallback).
+    const DOCKS = {
+      handle: 'new:docks',
+      name: 'Smuggler Docks',
+      description: 'a rotting pier',
+      parent: 'l1',
+    }
+    // What a failed narrative fold leaves on the reply: its creates reported dropped.
+    const FOLD_REPORT: NonNullable<EntryMetadata['stateReport']> = {
+      layer: 'piggyback_tagged_block',
+      newLocations: [
+        {
+          handle: 'new:camp',
+          name: 'Old Camp',
+          description: 'a ring of stones',
+          outcome: 'dropped',
+        },
+      ],
+      newItems: [
+        { handle: 'new:lamp', name: 'tin lamp', description: 'a dented lamp', outcome: 'dropped' },
+      ],
+      failedFields: [{ field: 'worldTimeDelta', detail: 'not a finite number: "soon"' }],
+      raw: '<state><world_time_delta>soon</world_time_delta></state>',
+    }
+
+    beforeEach(() => {
+      __resetClassifierEmbedder()
+    })
+
+    function worldRow(row: Pick<Entity, 'id' | 'kind' | 'name'> & Partial<Entity>): Entity {
+      return {
+        branchId: 'b1',
+        description: null,
+        status: 'active',
+        retiredReason: null,
+        injectionMode: 'auto',
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+        state: emptyEntityState(row.kind),
+        tags: [],
+        keywords: [],
+        priority: 0,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+        ...row,
+      }
+    }
+
+    const fallbackWorld = (): Entity[] => [
+      worldRow({
+        id: HERO,
+        kind: 'character',
+        name: 'Aria',
+        state: { ...emptyEntityState('character'), current_location_id: TOWN },
+      }),
+      worldRow({ id: TOWN, kind: 'location', name: 'Saltmere' }),
+    ]
+
+    const market = (status: Entity['status']): Entity =>
+      worldRow({
+        id: MARKET,
+        kind: 'location',
+        name: 'The Drowned Market',
+        status,
+        state: { parent_location_id: TOWN },
+      })
+
+    function seedFallbackTurn(
+      world: Entity[] = fallbackWorld(),
+      foldReport?: NonNullable<EntryMetadata['stateReport']>,
+    ): void {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {}, suggestionsEnabled: false }),
+      })
+      const rows: StoryEntry[] = [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          kind: 'ai_reply',
+          content: 'The tide is out at Saltmere.',
+          chapterId: null,
+          metadata: SCENE,
+          createdAt: 1,
+        },
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          kind: 'ai_reply',
+          content: 'Aria goes down to the water.',
+          chapterId: null,
+          metadata: { ...SCENE, ...(foldReport ? { stateReport: foldReport } : {}) },
+          createdAt: 2,
+        },
+      ]
+      hydrateEntries(phaseDb, 'b1', rows)
+      entitiesStore.hydrate('b1', world)
+    }
+
+    async function runFallback(
+      value: unknown,
+      over: { intermediates?: Record<string, unknown>; log?: Logger; signal?: AbortSignal } = {},
+    ) {
+      generateStructuredMock.mockResolvedValueOnce({ status: 'ok', value })
+      const idMap = new IdBiMap()
+      for (const id of [HERO, TOWN, MARKET]) idMap.allocate(id)
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: over.signal ?? new AbortController().signal,
+        intermediates: { idMap, ...over.intermediates },
+        log: over.log ?? makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events: PhaseEmittedEvent[] = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+      return { events, result: next.value }
+    }
+
+    const createActions = (events: readonly PhaseEmittedEvent[]) =>
+      events.flatMap((e) =>
+        e.type === 'delta_emitted' && e.action.kind === 'createEntity' ? [e.action] : [],
+      )
+
+    const createdEntries = (events: readonly PhaseEmittedEvent[]) =>
+      createActions(events).map((action) => action.payload.entry)
+
+    function metadataPatch(events: readonly PhaseEmittedEvent[]) {
+      const update = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !update ||
+        update.type !== 'delta_emitted' ||
+        update.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata update')
+      return update.action.payload.metadata
+    }
+
+    const docksAndKey = () =>
+      fallbackClassifierSchema.parse({
+        sceneEntities: ['c1'],
+        newLocations: [DOCKS],
+        currentLocation: 'new:docks',
+        worldTimeDelta: 30,
+        newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+      })
+
+    it('creates a place under an existing one and an item given to a character', async () => {
+      seedFallbackTurn()
+      const { events, result } = await runFallback(docksAndKey())
+      expect(result).toEqual({ status: 'completed' })
+
+      const [docks, key] = createdEntries(events)
+      if (!docks || !key) throw new Error('expected a location create and an item create')
+      expect(docks).toMatchObject({
+        kind: 'location',
+        name: 'Smuggler Docks',
+        state: { parent_location_id: TOWN },
+      })
+      expect(key).toMatchObject({
+        kind: 'item',
+        name: 'rusted key',
+        state: { at_location_id: null },
+      })
+      expect(createActions(events).map((a) => a.source)).toEqual([
+        'per_turn_classifier',
+        'per_turn_classifier',
+      ])
+
+      const patch = metadataPatch(events)
+      expect(patch.currentLocationId).toBe(docks.id)
+      expect(patch.stateReport).toMatchObject({
+        layer: 'per_turn_classifier',
+        currentLocation: docks.id,
+        newLocations: [
+          {
+            handle: 'new:docks',
+            name: 'Smuggler Docks',
+            description: 'a rotting pier',
+            parent: TOWN,
+            outcome: 'created',
+            id: docks.id,
+          },
+        ],
+        newItems: [
+          {
+            handle: 'new:key',
+            name: 'rusted key',
+            description: 'an iron key',
+            outcome: 'created',
+            id: key.id,
+          },
+        ],
+      })
+      expect(events).toContainEqual({
+        type: 'delta_emitted',
+        action: {
+          kind: 'updateEntityInventory',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: HERO, equipped_items: [], inventory: [key.id] },
+        },
+      })
+    })
+
+    // Every reversal window that removes the turn must take the creates, so they precede the metadata update and the writes naming them.
+    it('emits the creates first, then the metadata, then the writes that name them', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(docksAndKey())
+      expect(events.flatMap((e) => (e.type === 'delta_emitted' ? [e.action.kind] : []))).toEqual([
+        'createEntity',
+        'createEntity',
+        'updateStoryEntryMetadata',
+        'updateEntityLocationTracking',
+        'updateEntityInventory',
+      ])
+    })
+
+    it('flags a new place same-parent against a partial sibling, naming it', async () => {
+      seedFallbackTurn([...fallbackWorld(), market('active')])
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            {
+              handle: 'new:stalls',
+              name: 'The Drowned Market Stalls',
+              description: 'a row of stalls',
+              parent: 'l1',
+            },
+          ],
+          currentLocation: 'new:stalls',
+          worldTimeDelta: 30,
+        }),
+      )
+      expect(createdEntries(events)).toEqual([
+        expect.objectContaining({
+          name: 'The Drowned Market Stalls',
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: MARKET,
+          nameCollisionReason: 'same-parent',
+        }),
+      ])
+    })
+
+    it('reuses a staged exact sibling and promotes it once', async () => {
+      seedFallbackTurn([...fallbackWorld(), market('staged')])
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            {
+              handle: 'new:market',
+              name: 'the drowned market',
+              description: 'mud and awnings',
+              parent: 'l1',
+            },
+          ],
+          currentLocation: 'new:market',
+          worldTimeDelta: 30,
+        }),
+      )
+      expect(createdEntries(events)).toEqual([])
+      const patch = metadataPatch(events)
+      expect(patch.currentLocationId).toBe(MARKET)
+      expect(patch.stateReport?.newLocations).toEqual([
+        {
+          handle: 'new:market',
+          name: 'the drowned market',
+          description: 'mud and awnings',
+          parent: TOWN,
+          outcome: 'reused',
+          id: MARKET,
+        },
+      ])
+      expect(
+        events.filter((e) => e.type === 'delta_emitted' && e.action.kind === 'promoteStagedEntity'),
+      ).toEqual([
+        {
+          type: 'delta_emitted',
+          action: {
+            kind: 'promoteStagedEntity',
+            source: 'per_turn_classifier',
+            payload: { branchId: 'b1', id: MARKET, proseEntryId: null },
+          },
+        },
+      ])
+    })
+
+    // The reused sibling is only an ancestor of where the scene settles, so just the planner's
+    // reusedIds can promote it.
+    it('promotes a reused staged place that only parents the new current location', async () => {
+      seedFallbackTurn([...fallbackWorld(), market('staged')])
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            { handle: 'new:market', name: 'the drowned market', description: 'mud', parent: 'l1' },
+            {
+              handle: 'new:annex',
+              name: 'Net Loft',
+              description: 'a loft of nets',
+              parent: 'new:market',
+            },
+          ],
+          currentLocation: 'new:annex',
+          worldTimeDelta: 30,
+        }),
+      )
+      const [annex] = createdEntries(events)
+      expect(annex).toMatchObject({ name: 'Net Loft', state: { parent_location_id: MARKET } })
+      expect(
+        events.flatMap((e) =>
+          e.type === 'delta_emitted' && e.action.kind === 'promoteStagedEntity'
+            ? [e.action.payload.id]
+            : [],
+        ),
+      ).toEqual([MARKET])
+    })
+
+    it("replaces a failed fold's dropped list with its own creates, per kind", async () => {
+      seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [DOCKS],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+        }),
+        { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+      )
+      expect(createdEntries(events).map((e) => e.name)).toEqual(['Smuggler Docks'])
+      const report = metadataPatch(events).stateReport
+      expect(report?.newLocations).toEqual([
+        expect.objectContaining({ handle: 'new:docks', outcome: 'created' }),
+      ])
+      // This phase created no item, so the fold's dropped item stays on the record.
+      expect(report?.newItems).toEqual(FOLD_REPORT.newItems)
+      expect(report?.failedFields).toEqual(FOLD_REPORT.failedFields)
+    })
+
+    it("keeps a failed fold's dropped creates when the fallback creates nothing", async () => {
+      seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({ sceneEntities: ['c1'], worldTimeDelta: 30 }),
+        { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+      )
+      expect(createdEntries(events)).toEqual([])
+      const report = metadataPatch(events).stateReport
+      expect(report?.layer).toBe('per_turn_classifier')
+      expect(report?.newLocations).toEqual(FOLD_REPORT.newLocations)
+      expect(report?.newItems).toEqual(FOLD_REPORT.newItems)
+    })
+
+    it('warns about malformed creates and creates nothing from them', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          newLocations: [
+            { handle: 'new:', name: 'Nowhere', description: 'nothing' },
+            { handle: 'new:blank', name: '  ', description: 'no name' },
+          ],
+          newItems: [{ handle: 'key', name: 'rusted key', description: 'an iron key' }],
+        }),
+        { log: logger },
+      )
+      expect(createdEntries(events)).toEqual([])
+      expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+        entryId: 'entry-2',
+        count: 3,
+        layer: 'per_turn_classifier',
+      })
+    })
+
+    it("logs a dropped create through the phase's logger", async () => {
+      seedFallbackTurn()
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+      await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+        }),
+        { log },
+      )
+      expect(log.debug).toHaveBeenCalledWith('classifier.create_dropped', {
+        kind: 'item',
+        handle: 'new:key',
+        name: 'rusted key',
+      })
+    })
+
+    it('does not warn when every create is well formed', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      seedFallbackTurn()
+      await runFallback(docksAndKey(), { log: logger })
+      expect(warnSpy).not.toHaveBeenCalledWith('classifier.create_malformed', expect.anything())
+    })
+
+    // A reply that pads its handles still names them the same way elsewhere; substituting before
+    // trimming would fail currentLocation as an undeclared handle.
+    it('normalizes a create before substituting the handles that name it', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [{ ...DOCKS, handle: ' [new:docks] ', name: '  Smuggler Docks  ' }],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+        }),
+      )
+      const [docks] = createdEntries(events)
+      expect(docks).toMatchObject({ name: 'Smuggler Docks' })
+      const report = metadataPatch(events).stateReport
+      expect(report?.failedFields).toBeUndefined()
+      expect(report?.currentLocation).toBe(docks?.id)
+    })
+
+    it('keeps a failed fold’s dropped locations when the fallback creates only an item', async () => {
+      seedFallbackTurn(fallbackWorld(), FOLD_REPORT)
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+        }),
+        { intermediates: { piggybackOutcome: { attempted: true, succeeded: false } } },
+      )
+      const [key] = createdEntries(events)
+      expect(key).toMatchObject({ kind: 'item', name: 'rusted key' })
+      const report = metadataPatch(events).stateReport
+      expect(report?.newItems).toEqual([
+        expect.objectContaining({ outcome: 'created', id: key?.id }),
+      ])
+      expect(report?.newLocations).toEqual(FOLD_REPORT.newLocations)
+    })
+
+    it('discards its writes when a cancel lands during the item match', async () => {
+      seedFallbackTurn([
+        ...fallbackWorld(),
+        worldRow({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' }),
+      ])
+      const controller = new AbortController()
+      configureClassifierEmbedder(async (texts) => {
+        controller.abort()
+        return { vectors: texts.map(() => new Float32Array([1, 0])), dim: 2 }
+      })
+      const { events, result } = await runFallback(docksAndKey(), { signal: controller.signal })
+      expect(result).toEqual({ status: 'aborted' })
+      expect(events).toEqual([])
+    })
+  })
+
   describe('fallbackClassifierSchema', () => {
     // Scoped to the exact node, not `toContain` over the blob. '[]' (not 'items') steps into
     // the array-element schema, since 'items' is itself a real property name on transfers.
@@ -2209,6 +2690,21 @@ describe('per-turn-piggyback', () => {
       ['transfers.items[].from', ['transfers', 'items', '[]', 'from'], 'no other party'],
       ['transfers.stackables[].to', ['transfers', 'stackables', '[]', 'to'], 'no other party'],
       ['transfers.stackables[].from', ['transfers', 'stackables', '[]', 'from'], 'no other party'],
+      ['newLocations', ['newLocations'], 'kept only as currentLocation'],
+      ['newLocations[].handle', ['newLocations', '[]', 'handle'], 'starting with "new:"'],
+      [
+        'newLocations[].parent',
+        ['newLocations', '[]', 'parent'],
+        'handle of another location in newLocations',
+      ],
+      ['newItems', ['newItems'], 'gives it to a character'],
+      ['newItems[].handle', ['newItems', '[]', 'handle'], 'starting with "new:"'],
+      [
+        'currentLocation for a new place',
+        ['currentLocation'],
+        'handle of a location in newLocations',
+      ],
+      ['transfers.items[].id', ['transfers', 'items', '[]', 'id'], 'handle of an item in newItems'],
     ] as const)('describes %s', (_field, path, marker) => {
       const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
       expect(fieldDescription(jsonSchema, path)).toContain(marker)
