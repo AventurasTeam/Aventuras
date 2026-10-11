@@ -91,7 +91,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   })
   if (!load.ok) return load.result
   const { idMap } = load
-  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context).user
+  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context)
 
   const entryId = generateId('entry')
   const startedAt = Date.now()

@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
+import type { PromptHalves } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   emptyEntityState,
@@ -343,7 +344,10 @@ describe('per-turn-piggyback', () => {
       expect(next.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.stringContaining('The hero enters the dark forest.'),
+        {
+          system: expect.any(String),
+          user: expect.stringContaining('The hero enters the dark forest.'),
+        },
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
@@ -527,7 +531,7 @@ describe('per-turn-piggyback', () => {
 
       await piggybackFallbackClassifierPhase(ctx).next()
 
-      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
       expect(prompt).toContain('I put the sword away.')
       expect(prompt).toContain('The blade slides home.')
     })
@@ -589,7 +593,7 @@ describe('per-turn-piggyback', () => {
       const gen = piggybackFallbackClassifierPhase(ctx)
       const first = await gen.next()
 
-      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls.at(-1)?.[1] as PromptHalves).user
       expect(prompt).toContain('The blade slides home.')
       expect(first.value).toEqual({
         type: 'delta_emitted',
@@ -823,7 +827,7 @@ describe('per-turn-piggyback', () => {
 
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.stringContaining(`[c1] Hero (character)`),
+        { system: expect.any(String), user: expect.stringContaining(`[c1] Hero (character)`) },
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
@@ -1175,7 +1179,7 @@ describe('per-turn-piggyback', () => {
           kinds?: StoryEntry['kind'][]
           worldTimes?: number[]
         } = {},
-      ): Promise<string> {
+      ): Promise<PromptHalves> {
         currentStoryStore.set({
           storyId: 's1',
           branchId: 'b1',
@@ -1229,7 +1233,7 @@ describe('per-turn-piggyback', () => {
         // A phase that grew a yield before the render would otherwise surface as a
         // TypeError inside toContain rather than as a failed expectation.
         expect(generateStructuredMock).toHaveBeenCalledOnce()
-        return generateStructuredMock.mock.calls[0]![1] as string
+        return generateStructuredMock.mock.calls[0]![1] as PromptHalves
       }
 
       it('renders the memory blocks, in-scene and location sections, and the calendar', async () => {
@@ -1244,14 +1248,22 @@ describe('per-turn-piggyback', () => {
           }),
         })
 
-        expect(prompt).toContain('# In scene')
-        expect(prompt).toContain('A courier with a stolen sigil.')
-        expect(prompt).toContain('# Current location')
-        expect(prompt).toContain('The Drowned Keep')
-        expect(prompt).toContain('Half sunk.')
-        expect(prompt).toContain('# Relevant lore')
-        expect(prompt).toContain('An exiled line.')
-        expect(prompt).toContain('Calendar')
+        expect(prompt.user).toContain('# In scene')
+        expect(prompt.user).toContain('A courier with a stolen sigil.')
+        expect(prompt.user).toContain('# Current location')
+        expect(prompt.user).toContain('The Drowned Keep')
+        expect(prompt.user).toContain('Half sunk.')
+        expect(prompt.user).toContain('# Relevant lore')
+        expect(prompt.user).toContain('An exiled line.')
+        expect(prompt.user).toContain('Calendar')
+      })
+
+      // architecture.md → System and user halves: the call carries both rendered halves.
+      it('hands the classifier call both rendered halves', async () => {
+        const prompt = await renderFallbackPrompt()
+
+        expect(prompt.system).toBe('')
+        expect(prompt.user).toContain('# This turn')
       })
 
       // Unreachable in production (narrative always fills the tail with ai_reply first) —
@@ -1262,8 +1274,8 @@ describe('per-turn-piggyback', () => {
           worldTimes: [100, 200],
         })
 
-        expect(prompt).toContain("since the end of the user's action")
-        expect(prompt).toContain('never negative')
+        expect(prompt.user).toContain("since the end of the user's action")
+        expect(prompt.user).toContain('never negative')
       })
     })
   })
@@ -1333,7 +1345,7 @@ describe('per-turn-piggyback', () => {
       expect(result.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.any(String),
+        { system: expect.any(String), user: expect.any(String) },
         fallbackClassifierWithSuggestionsSchema,
         expect.anything(),
         ctx.abortSignal,
@@ -1412,7 +1424,7 @@ describe('per-turn-piggyback', () => {
       expect(result.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.any(String),
+        { system: expect.any(String), user: expect.any(String) },
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
@@ -1820,12 +1832,12 @@ describe('per-turn-piggyback', () => {
 
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
-        expect.any(String),
+        { system: expect.any(String), user: expect.any(String) },
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
       )
-      const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
       expect(prompt).not.toContain('Action')
       const created = events[0]
       if (
@@ -1889,7 +1901,7 @@ describe('per-turn-piggyback', () => {
         result = await gen.next()
       }
 
-      const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+      const prompt = (generateStructuredMock.mock.calls[0]?.[1] as PromptHalves).user
       expect(prompt).toContain('exactly 2 distinct entries')
       expect(prompt).toContain('id "cat1" = Action — use it for: act')
       expect(prompt).toContain('id "cat2" = Dialogue — use it for: say')

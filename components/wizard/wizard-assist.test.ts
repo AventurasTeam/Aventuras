@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import type { ResolveModelConfig } from '@/lib/ai'
+import type { PromptHalves, ResolveModelConfig } from '@/lib/ai'
 import { emptyCastDraft, emptyWorkingState } from '@/lib/db'
 import { VARIABLES } from '@/lib/prompts'
 import { wizardStore } from '@/lib/stores'
@@ -67,9 +67,9 @@ function echoGenerate(
   sink: { prompt: string },
   reply: (placeholders: Record<string, string>) => unknown,
 ): WizardAssistDeps['generate'] {
-  return (async (_target: unknown, prompt: string) => {
-    sink.prompt = prompt
-    const rendered = [...prompt.matchAll(/cast id: ([^)]+)\)/g)].map((m) => m[1])
+  return (async (_target: unknown, prompt: PromptHalves) => {
+    sink.prompt = prompt.user
+    const rendered = [...prompt.user.matchAll(/cast id: ([^)]+)\)/g)].map((m) => m[1])
     const active = wizardStore.getWizard().state.cast.filter((r) => r.status === 'active')
     return {
       status: 'ok',
@@ -208,7 +208,7 @@ describe('runLoreAssist', () => {
     let capturedPrompt = ''
     const lore = [{ title: 'The Old Empire', body: 'Fell.', category: 'history' }]
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { lore } }
     }) as WizardAssistDeps['generate']
 
@@ -222,7 +222,7 @@ describe('runLoreAssist', () => {
   it('excludes the names already on screen so a further page is not a re-roll', async () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { lore: [] } }
     }) as WizardAssistDeps['generate']
 
@@ -250,7 +250,7 @@ describe('runCastAssist', () => {
       _config,
       sig,
     ) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       capturedSignal = sig as AbortSignal
       return { status: 'ok', value: { entities } }
     }) as WizardAssistDeps['generate']
@@ -271,7 +271,7 @@ describe('runCastAssist', () => {
     if (row?.kind !== 'character') throw new Error('expected a character row')
     wizardStore.patchCast(row, { name: 'Rook' })
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { entities: [] } }
     }) as WizardAssistDeps['generate']
 
@@ -283,7 +283,7 @@ describe('runCastAssist', () => {
   it('excludes the names already on screen so a further page is not a re-roll', async () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { entities: [] } }
     }) as WizardAssistDeps['generate']
 
@@ -306,7 +306,7 @@ describe('refineOpeningAssist', () => {
     wizardStore.patchDefinition({ mode: 'creative', narration: 'third' })
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return {
         status: 'ok',
         value: { prose: 'Revised.', sceneEntities: [], currentLocationId: null, worldTime: 0 },
@@ -331,7 +331,7 @@ describe('refineDescriptionAssist', () => {
   it('passes a prompt containing both the current description and the instruction', async () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { description: 'A darker tale.' } }
     }) as WizardAssistDeps['generate']
 
@@ -354,13 +354,27 @@ describe('runGenreAssist', () => {
     let capturedPrompt = ''
     const value = { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' }
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value }
     }) as WizardAssistDeps['generate']
 
     const res = await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
     expect(res).toEqual({ status: 'ok', value })
     expect(capturedPrompt).toContain('Suggest a genre for this story')
+  })
+
+  // architecture.md → System and user halves: a wizard template's system half is empty.
+  it('sends the whole genre template as the user half', async () => {
+    let captured: PromptHalves | undefined
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      captured = prompt
+      return { status: 'ok', value: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' } }
+    }) as WizardAssistDeps['generate']
+
+    await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+
+    expect(captured?.system).toBe('')
+    expect(captured?.user).toContain('Suggest a genre for this story')
   })
 })
 
@@ -371,7 +385,7 @@ describe('runToneAssist', () => {
     let capturedPrompt = ''
     const value = { label: 'Grim and unsparing', promptBody: 'Consequences land and stay.' }
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value }
     }) as WizardAssistDeps['generate']
 
@@ -388,7 +402,7 @@ describe('runSettingAssist', () => {
     let capturedPrompt = ''
     const value = { setting: 'A drowned coast, centuries after the flood.' }
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value }
     }) as WizardAssistDeps['generate']
 
@@ -404,7 +418,7 @@ describe('refineGenreAssist', () => {
   it('passes a prompt containing the current label, body, and the instruction', async () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { label: 'Grimdark sci-fi', promptBody: 'Even darker.' } }
     }) as WizardAssistDeps['generate']
 
@@ -436,7 +450,7 @@ describe('refineToneAssist', () => {
   it('passes a prompt containing the current label, body, and the instruction', async () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { label: 'Bleaker', promptBody: 'No mercy at all.' } }
     }) as WizardAssistDeps['generate']
 
@@ -465,7 +479,7 @@ describe('refineSettingAssist', () => {
   it('passes a prompt containing the current setting and the instruction', async () => {
     let capturedPrompt = ''
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
-      capturedPrompt = prompt as string
+      capturedPrompt = prompt.user
       return { status: 'ok', value: { setting: 'A drowned coast, now storm-wracked.' } }
     }) as WizardAssistDeps['generate']
 

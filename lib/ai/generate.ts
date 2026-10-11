@@ -83,8 +83,20 @@ export function prepareGeneration(
   }
 }
 
+/** A rendered template's two halves; a blank system half sends no system message. */
+export type PromptHalves = { system: string; user: string }
+
+// Providers reject an empty system message, so a blank half sends none; the
+// structured-output middleware may still create one for its contract.
+function promptParams(prompt: PromptHalves): { system?: string; prompt: string } {
+  return {
+    ...(prompt.system.trim() !== '' ? { system: prompt.system } : {}),
+    prompt: prompt.user,
+  }
+}
+
 export type StreamTextOptions = {
-  prompt: string
+  prompt: PromptHalves
   config: ResolveModelConfig
   abortSignal?: AbortSignal
   actionId?: string
@@ -105,7 +117,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
   if (!resolved.ok) return resolved
   const stream = streamProviderCall({
     model: resolved.model,
-    prompt: opts.prompt,
+    ...promptParams(opts.prompt),
     ...(opts.abortSignal !== undefined ? { abortSignal: opts.abortSignal } : {}),
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
     ...resolved.callSettings,
@@ -141,7 +153,7 @@ function describeCallRetryError(error: CallRetryError): string {
  */
 export async function generateStructured<T>(
   target: ResolveTarget,
-  prompt: string,
+  prompt: PromptHalves,
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   signal: AbortSignal,
@@ -175,7 +187,7 @@ export async function generateStructured<T>(
       (
         await runProviderCall({
           model,
-          prompt,
+          ...promptParams(prompt),
           abortSignal: sig,
           ...resolved.callSettings,
         })

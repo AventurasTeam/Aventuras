@@ -116,7 +116,7 @@ async function* suggestionEmissionPhase(
     refreshGuidance: guidance,
   })
   if (!load.ok) return load.result
-  const prompt = renderTemplate(TEMPLATE_IDS.suggestionRefresh, load.context).user
+  const prompt = renderTemplate(TEMPLATE_IDS.suggestionRefresh, load.context)
 
   const result = await generateStructured(
     'suggestion',

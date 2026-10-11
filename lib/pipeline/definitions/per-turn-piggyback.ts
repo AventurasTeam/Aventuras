@@ -1,7 +1,12 @@
 import { z } from 'zod'
 
 import { generateStructured, resolveModel, resolveModelCapabilities } from '@/lib/ai'
-import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
+import type {
+  GenerateStructuredResult,
+  ModelCapabilities,
+  PromptHalves,
+  ResolveModelConfig,
+} from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import {
@@ -209,7 +214,7 @@ function hasSuggestions(
 // classifier call, unlike the narrative path where the delta rides the same
 // call as the prose and can't be re-rolled alone).
 async function generateClassifierState<T extends { worldTimeDelta: number }>(
-  prompt: string,
+  prompt: PromptHalves,
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   abortSignal: AbortSignal,
@@ -262,7 +267,7 @@ export async function* piggybackFallbackClassifierPhase(
   // Run-scoped, so placeholder ids stay consistent with the narrative fold's
   // prompt instead of being renumbered from scratch.
   const { idMap } = load
-  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context).user
+  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context)
 
   const appSettings = appSettingsStore.getAppSettings()
   const classifierConfig: ResolveModelConfig = {

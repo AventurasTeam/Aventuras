@@ -14,6 +14,7 @@ export {
   parseStructured,
   streamText,
   type GenerateStructuredResult,
+  type PromptHalves,
   type StreamTextOptions,
   type StreamTextResult,
 } from './generate'

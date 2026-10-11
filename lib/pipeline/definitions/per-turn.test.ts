@@ -5,6 +5,7 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { reverseAndPruneDeltaRows } from '@/lib/actions/delta/reverse-replay'
 import { resolveSweep } from '@/lib/actions/story-entries/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
+import type { PromptHalves } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
@@ -18,7 +19,7 @@ import {
 } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
-import type { TemplateId } from '@/lib/prompts'
+import type { RenderedPrompt, TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
@@ -51,7 +52,10 @@ vi.mock('@/lib/ai', async (importOriginal) => {
 // the bundled pack renders one.
 vi.mock('@/lib/prompts', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  const render = actual.renderTemplate as (id: TemplateId, ctx: Record<string, unknown>) => string
+  const render = actual.renderTemplate as (
+    id: TemplateId,
+    ctx: Record<string, unknown>,
+  ) => RenderedPrompt
   return {
     ...actual,
     renderTemplate: (templateId: TemplateId, context: Record<string, unknown>) => {
@@ -1221,14 +1225,26 @@ async function runNarrativeWith(opts: {
     throw new Error('expected a createStoryEntry delta')
   const { metadata } = created.action.payload.entry
   if (!metadata) throw new Error('expected entry metadata')
+  const halves = streamTextMock.mock.calls.at(-1)?.[1]?.prompt as PromptHalves
   return {
     events,
     metadata,
     intermediates,
-    prompt: streamTextMock.mock.calls.at(-1)?.[1]?.prompt as string,
+    prompt: halves.user,
+    system: halves.system,
     context: renderTemplateMock.mock.calls.at(-1)?.[1] as Record<string, unknown>,
   }
 }
+
+// architecture.md → System and user halves: the narrative call is exactly the pair.
+describe('narrative call prompt', () => {
+  it('hands the narrative call both rendered halves', async () => {
+    const { prompt, system } = await runNarrativeWith({ narrative: 'prose' })
+
+    expect(system).toBe('')
+    expect(prompt).toContain('# Story so far')
+  })
+})
 
 describe('narrative fold — retrieval handoff', () => {
   const namesOf = (bucket: unknown) =>

@@ -27,6 +27,8 @@ vi.mock('./transport/provider-call', async (orig) => ({
 
 const schema = z.object({ description: z.string() })
 
+const PROMPT = { system: '', user: 'build prompt text' }
+
 const STRUCTURED_CFG = {
   providers: [],
   profiles: [],
@@ -93,13 +95,13 @@ describe('streamText', () => {
     vi.mocked(resolveModel).mockImplementation(actualResolveModel)
   })
 
-  it('resolves the target and passes prompt + mapped options to the stream call', async () => {
+  it('resolves the target and passes both halves + mapped options to the stream call', async () => {
     const { streamProviderCall } = await import('./transport/provider-call')
     const onError = () => {}
     const signal = new AbortController().signal
 
     const result = streamText('narrative', {
-      prompt: 'P',
+      prompt: { system: 'S', user: 'P' },
       config: STREAM_CFG,
       abortSignal: signal,
       actionId: 'act_1',
@@ -110,6 +112,7 @@ describe('streamText', () => {
     if (result.ok) expect(result.modelId).toBe('model-1')
     expect(streamProviderCall).toHaveBeenCalledWith({
       model: {},
+      system: 'S',
       prompt: 'P',
       abortSignal: signal,
       onError,
@@ -120,12 +123,23 @@ describe('streamText', () => {
     })
   })
 
+  // architecture.md → System and user halves: providers reject an empty system message.
+  it.each(['', ' \n '])('sends no system message for a blank system half (%j)', async (system) => {
+    const { streamProviderCall } = await import('./transport/provider-call')
+
+    streamText('narrative', { prompt: { system, user: 'P' }, config: STREAM_CFG })
+
+    const call = vi.mocked(streamProviderCall).mock.calls.at(-1)?.[0]
+    expect(call).not.toHaveProperty('system')
+    expect(call).toHaveProperty('prompt', 'P')
+  })
+
   it('returns the resolve failure without calling the provider', async () => {
     const { streamProviderCall } = await import('./transport/provider-call')
     vi.mocked(streamProviderCall).mockClear()
 
     const result = streamText('narrative', {
-      prompt: 'P',
+      prompt: { system: 'S', user: 'P' },
       config: { ...STREAM_CFG, profiles: [] },
     })
 
@@ -169,13 +183,42 @@ describe('generateStructured', () => {
   it('resolves the target, calls the provider, and parses structured output', async () => {
     const res = await generateStructured(
       'wizard-assist',
-      'build prompt text',
+      PROMPT,
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
     )
     expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' } })
   })
+
+  it('passes the system half as the system option and the user half as the prompt', async () => {
+    const { runProviderCall } = await import('./transport/provider-call')
+    await generateStructured(
+      'wizard-assist',
+      { system: 'S', user: 'P' },
+      schema,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+    )
+    const call = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
+    expect(call).toHaveProperty('system', 'S')
+    expect(call).toHaveProperty('prompt', 'P')
+  })
+
+  it.each(['', ' \n '])('sends no system option for a blank system half (%j)', async (system) => {
+    const { runProviderCall } = await import('./transport/provider-call')
+    await generateStructured(
+      'wizard-assist',
+      { system, user: 'P' },
+      schema,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+    )
+    const call = vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
+    expect(call).not.toHaveProperty('system')
+    expect(call).toHaveProperty('prompt', 'P')
+  })
+
   it('applies resolved profile params to the provider call', async () => {
     const { runProviderCall } = await import('./transport/provider-call')
     vi.mocked(resolveModel).mockReturnValueOnce({
@@ -186,7 +229,7 @@ describe('generateStructured', () => {
     })
     await generateStructured(
       'wizard-assist',
-      'x',
+      PROMPT,
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
@@ -204,7 +247,7 @@ describe('generateStructured', () => {
     })
     const res = await generateStructured(
       'wizard-assist',
-      'x',
+      PROMPT,
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
@@ -216,7 +259,7 @@ describe('generateStructured', () => {
     vi.mocked(runProviderCall).mockResolvedValue({ text: 'not json <<<' } as never)
     const res = await generateStructured(
       'wizard-assist',
-      'x',
+      PROMPT,
       schema,
       STRUCTURED_CFG,
       new AbortController().signal,
@@ -228,7 +271,7 @@ describe('generateStructured', () => {
     const unrepresentable = z.object({ description: z.string() }).transform((v) => v.description)
     const res = await generateStructured(
       'wizard-assist',
-      'x',
+      PROMPT,
       unrepresentable as never,
       STRUCTURED_CFG,
       new AbortController().signal,

@@ -267,7 +267,7 @@ describe('periodicClassifierPhase', () => {
     const { result } = await drain(h.ctx)
 
     expect(result).toEqual({ status: 'completed' })
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('turn 11')
     expect(prompt).not.toContain('turn 151')
     // maxEntries defaults to 20, so one pass claims 11..30 and the backlog drains.
@@ -323,7 +323,7 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('Kael sees')
     expect(prompt).toContain('as: ally')
     expect(prompt).not.toContain('rival')
@@ -356,9 +356,21 @@ describe('periodicClassifierPhase', () => {
 
     await drain(h.ctx)
 
-    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     expect(prompt).toContain('[t1] scene: [c1]\nturn 1')
     expect(prompt).not.toMatch(/(char|loc|item|fact)_[0-9a-f]{8}-/)
+  })
+
+  // architecture.md → System and user halves: the call carries both rendered halves.
+  it('hands the classifier call both rendered halves', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(prompt.system).toBe('')
+    expect(prompt.user).toContain('turn 1')
   })
 
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {

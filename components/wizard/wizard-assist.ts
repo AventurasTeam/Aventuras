@@ -130,7 +130,7 @@ function generateFromState<T>(
     wizardTemplateContext(wizardStore.getWizard().state, guidance, extra),
     idMap,
   )
-  const prompt = renderTemplate(templateId, context).user
+  const prompt = renderTemplate(templateId, context)
   const call = deps?.generate ?? generateStructured
   return call(ASSIST_TARGET, prompt, schema, config(deps), signal)
 }
