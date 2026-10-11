@@ -191,7 +191,7 @@ external override prop, same as reasoning expansion.
 | Group                 | Source                                                                     | Rendered when                    | Editable  |
 | --------------------- | -------------------------------------------------------------------------- | -------------------------------- | --------- |
 | **Scene**             | absolute triple, ids resolved to names                                     | always                           | tail only |
-| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any is non-empty                 | never     |
+| **Changes this turn** | `stateReport.visualChanges` / `.transfers` / `.newLocations` / `.newItems` | any renders a line               | never     |
 | **Reported delta**    | `stateReport.worldTimeDelta`                                               | present                          | never     |
 | **Summary**           | `metadata.summary`                                                         | present                          | never     |
 | **Retrieval asks**    | `metadata.retrievalQueries`                                                | non-empty                        | never     |
@@ -267,6 +267,8 @@ id.** `stateReport` is immutable while entities are deletable and
 rollback-able, so a dangling id is a permanent state, not a transient
 one. Never a crash, and never a bare UUID in the reader per
 [data-model.md → ID shape](../../data-model.md#id-shape--kind-prefixed-uuids-throughout).
+The one exception is a reused place whose row is gone since: its line
+names it from the report. Create lines are one per distinct id.
 
 ### Scene editor
 

@@ -13,20 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement locations and items from prose.** Designed 2026-10-10
-  ([exploration record](./explorations/2026-10-10-locations-and-items-from-prose.md));
-  the spec is canon:
-  [`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items)
-  for the location map, held items, the creation tags and matching,
-  with that file's What piggyback writes, auto-promote and fallback
-  classifier changes;
-  [`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)
-  and the entry `stateReport`; and
-  [`world.md → Surfacing`](./ui/screens/world/world.md#surfacing) for
-  the `same-parent` reason and the re-parent clear. It reuses the
-  matcher, flag, partner and reason columns, so it lands after the
-  partial-name collision PR.
-
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
   extraction, reconciled by Layer B

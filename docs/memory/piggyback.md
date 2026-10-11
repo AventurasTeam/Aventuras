@@ -113,9 +113,9 @@ so the two write sets stay disjoint by kind.
   # Places
   [l1] Eldra
     [l2] Port Vellis
+      [l4] Harbor Market
       [l3] The Rusty Anchor
         [l7] the back room
-      [l4] Harbor Market
   [l5] Thornwood
   ```
 
@@ -126,8 +126,9 @@ so the two write sets stay disjoint by kind.
   retrieved
   location keeps its own where retrieval puts it.
 
-- **Held and loose items.** Each in-scene character lists what it
-  holds (`Holds: [i2] Silver Key, [i5] worn sword (equipped)`), and
+- **Held and loose items.** Each active in-scene character that holds
+  anything lists it
+  (`Holds: [i2] Silver Key, [i5] worn sword (equipped)`), and
   `# Current location` lists the items lying there
   (`Here: [i7] the iron chest`). An item in a holder's line isn't
   repeated in the scene list.
@@ -144,19 +145,41 @@ so the two write sets stay disjoint by kind.
 </transfers>
 ```
 
-A handle starts with `new:`, so it can't be mistaken for a listed id,
-and the block's other tags reference it like one. A create carries a
-name, a short description clamped to the bounds a classifier character
-create uses, and for a location an optional `parent`: an id from the
-map or another new location's handle. Nothing else is written; later
-upkeep of places and items isn't this writer's.
+A handle starts with `new:`, so it can't be mistaken for a listed id.
+A create carries a name, a short description clamped to the bounds a
+classifier character create uses, and for a location an optional
+`parent`: an id from the map or another new location's handle. Nothing
+else is written; later upkeep of places and items isn't this writer's.
+
+**Where a handle is used.** The prompt asks for a handle only as the
+`<current_location>` or another new place's `parent` (a new place), or
+as a transfer's item `id` (a new item); the parser also tolerates a
+declared handle in `<scene_entities>`. A handle in any other field, a
+visual change's id or a transfer's holder, or one the block's creates
+don't declare, fails the field it sits in, like an unknown id. A
+`parent` that names nothing resolvable doesn't fail: the location goes
+to the root, as under Parent below. A bracketed handle (`[new:a]`)
+reads as the bare handle.
+
+**Create tag format.** A create's attribute text must be entirely
+`key="value"` pairs; any other text drops the create and counts it
+malformed, so a reference to its handle then fails its field and the
+fallback fires. The five XML entities are decoded in a create's name
+and description, and a raw `<` in a description drops the create, so
+the prompt asks the model to write a double quote inside a name as
+`&quot;` and a `<` inside a description as `&lt;`. A malformed create
+in a closed block only logs a warning. A stream cut off inside a
+create (a `<state>` with no `</state>` and a create opened but never
+closed) fails the `state` field instead, because the cut may have lost
+the tags that name it, so the fallback fires and creates.
 
 **Kept only if used.** A new location is created only as the turn's
-`<current_location>` or an ancestor of it, and a new item only when a
-transfer in the block gives it to a holder. Anything else is dropped
-and logged, so a place the prose merely mentions, or an item only seen
-or put down, stays prose. The prompt adds the significance rules the
-model applies:
+`<current_location>` or an ancestor of it, and a new item only when the
+last transfer in the block naming its handle gives it to a character,
+so an item taken and then put down in the same block stays prose.
+Anything else is dropped and logged, so a place the prose merely
+mentions, or an item only seen or put down, stays prose. The prompt
+adds the significance rules the model applies:
 
 > Create a place only when the scene settles somewhere with its own
 > identity the story could come back to: a named place, a building, a
@@ -181,15 +204,30 @@ logged, rather than failing the turn. Parents resolve top-down, so the
 child of a new location hangs under whatever row that location
 resolved to.
 
-**Writes.** The creates lead the turn's action group, ahead of the
-metadata, the bookkeeping and the transfers that name them, so undoing
-or regenerating the turn removes the new row with every write naming
-it. A new row lands `embedding_stale = 1` for the sync stage, like the
-classifier's. `stateReport` records each create as emitted with what
-became of it, `created`, `reused` or `dropped`, the id it resolved to,
-and whether its parent was dropped to the root; the report's other
-fields carry that id in place of the handle
+**Writes.** The creates follow the reply row and precede every other
+write that names them. The narrative fold writes them right after the
+reply's `createStoryEntry`, which carries the scene's metadata, and
+ahead of the promotions, the bookkeeping, the visual changes and the
+transfers; the fallback writes them ahead of its metadata update.
+Regenerate reverses the log from the reply's create onward, so a
+create logged before it would outlive a regenerate as an orphan row.
+Logged after it, undoing or regenerating the turn removes the new row
+with every write naming it. A new row lands `embedding_stale = 1` for
+the sync stage, like the classifier's. `stateReport` records each
+create as emitted with what became of it, `created`, `reused` or
+`dropped`, the id it resolved to, and whether its parent was dropped
+to the root; the report's other fields carry that id in place of the
+handle
 ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
+
+**A failed parse creates nothing itself.** Creates aren't idempotent:
+the fallback that a failed parse fires rewrites the fields the block
+got right, and a create made by both would leave a duplicate row. So a
+block with any failing field reports each of its creates `dropped`,
+and a reference to one of their handles is dropped where it stands; a
+`<current_location>` naming one keeps the previous location. The
+fallback is the turn's sole creator, under the same rules, and a turn
+whose fallback fails too creates nothing.
 
 ### Matching before creating
 
@@ -239,7 +277,10 @@ JSON.
 
 If a top-level tag parses, its fields are used. If a tag is missing
 or its content doesn't parse, that field is skipped for this turn —
-per-field best-effort, one failing tag never blocks another.
+per-field best-effort, one failing tag never blocks another. The
+creates are the one exception: a failing field keeps the block's own
+creates from landing
+([Creating a place or an item](#creating-a-place-or-an-item)).
 
 **On any parse failure** — the whole `<state>` tag missing, or any
 field inside it failing — the same synchronous per-turn classifier
@@ -448,7 +489,9 @@ cannot narrow below the fixed pair.
 It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
 `newItems[]`, under the same rules as the tags
-([New locations and items](#new-locations-and-items)).
+([New locations and items](#new-locations-and-items)). A create there
+may omit its description and is then created without one, as a
+self-closed tag is.
 
 ## Mode-mixing across a story
 

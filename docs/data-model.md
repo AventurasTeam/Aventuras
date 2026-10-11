@@ -1821,7 +1821,7 @@ story_entries.metadata: {
     currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
     transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
-    newLocations?: { handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused' | 'dropped'; id?: string; parentDropped?: true }[]  // as emitted, post-substitution, with what apply.ts made of it; see memory/piggyback.md → New locations and items
+    newLocations?: { handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused' | 'dropped'; id?: string; parentDropped?: true }[]  // as emitted, post-substitution, with what the per-turn create planner made of it; see memory/piggyback.md → New locations and items
     newItems?: { handle: string; name: string; description: string; outcome: 'created' | 'dropped'; id?: string }[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     raw?: string                     // the unparseable block text; present only alongside failedFields
@@ -1883,8 +1883,9 @@ exist specifically to say what happened. Divergence between report and
 absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
-**The report records what was emitted and what `apply.ts` did with
-it.** Three things can differ from the absolute state beside them:
+**The report records what was emitted and what `apply.ts` and the
+create planner did with it.** Three things can differ from the
+absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
   `kind='location'` entity, and the previous location is inherited
