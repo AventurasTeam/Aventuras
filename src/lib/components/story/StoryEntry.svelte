@@ -407,15 +407,6 @@
       ? (story.branches.find((b) => b.id === entry.branchId)?.name ?? 'a parent branch')
       : 'Main',
   )
-  // Opened by hover where there is a mouse, by a tap where there is not.
-  let lineageInfoOpen = $state(false)
-  let lineageInfoTimer: ReturnType<typeof setTimeout> | undefined
-  function hoverLineageInfo(event: PointerEvent, entering: boolean) {
-    if (event.pointerType !== 'mouse') return
-    clearTimeout(lineageInfoTimer)
-    if (entering) lineageInfoTimer = setTimeout(() => (lineageInfoOpen = true), 500)
-    else lineageInfoOpen = false
-  }
 
   // Checkpoint creation state
   let isCreatingCheckpoint = $state(false)
@@ -1597,15 +1588,14 @@
          (fantasy, royal), and both can land on the same entry when a branch's fork entry is
          still its latest entry. A popover rather than a title, so a tap explains it on a phone. -->
     {#if isForkPoint || !isOwnedEntry}
-      <Popover.Root bind:open={lineageInfoOpen}>
-        <Popover.Trigger>
+      <!-- Opens on hover after a delay like a native tooltip, and on a tap where there is no hover. -->
+      <Popover.Root>
+        <Popover.Trigger openOnHover openDelay={500}>
           {#snippet child({ props })}
             <button
               {...props}
               class="text-muted-foreground hover:text-foreground flex h-7 w-7 shrink-0 items-center justify-center"
               aria-label={isForkPoint ? 'Where this branch starts' : 'Inherited entry'}
-              onpointerenter={(e) => hoverLineageInfo(e, true)}
-              onpointerleave={(e) => hoverLineageInfo(e, false)}
             >
               {#if isForkPoint}
                 <GitBranch class="h-4 w-4" />
