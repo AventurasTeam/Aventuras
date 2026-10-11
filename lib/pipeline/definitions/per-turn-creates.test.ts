@@ -4,7 +4,7 @@ import type { PipelineAction } from '@/lib/actions'
 import type { EmbedDescriptions } from '@/lib/classifier'
 import { emptyEntityState, type Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { ParsedStateBlock } from '@/lib/piggyback'
+import type { NewLocationReport, ParsedStateBlock } from '@/lib/piggyback'
 
 import { planTurnCreates, skipTurnCreates } from './per-turn-creates'
 
@@ -63,6 +63,8 @@ const oldKey = (): Entity =>
   row({ id: OLD_KEY, kind: 'item', name: 'rusted key', description: 'an iron key' })
 
 const noEmbed: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
+
+const dropFlag = (r: NewLocationReport) => ('parentDropped' in r ? r.parentDropped : undefined)
 
 function runPlanner(
   block: ParsedStateBlock,
@@ -345,7 +347,9 @@ describe('planTurnCreates — parents', () => {
       ['loc_new_1', { parent_location_id: ELDRA }],
       ['loc_new_2', { parent_location_id: 'loc_new_1' }],
     ])
-    expect(plan.report.newLocations.map((r) => [r.handle, r.parent, r.id])).toEqual([
+    expect(
+      plan.report.newLocations.map((r) => [r.handle, r.parent, 'id' in r ? r.id : undefined]),
+    ).toEqual([
       ['new:docks', 'loc_new_1', 'loc_new_2'],
       ['new:town', ELDRA, 'loc_new_1'],
     ])
@@ -394,7 +398,7 @@ describe('planTurnCreates — parents', () => {
       ['loc_new_1', { parent_location_id: null }],
       ['loc_new_2', { parent_location_id: null }],
     ])
-    expect(plan.report.newLocations.map((r) => [r.parent, r.parentDropped])).toEqual([
+    expect(plan.report.newLocations.map((r) => [r.parent, dropFlag(r)])).toEqual([
       ['new:lower', true],
       ['new:upper', true],
     ])
@@ -451,7 +455,7 @@ describe('planTurnCreates — parents', () => {
       ['Saltmere', { parent_location_id: null }],
       ['Smuggler Docks', { parent_location_id: 'loc_new_1' }],
     ])
-    expect(plan.report.newLocations.map((r) => [r.handle, r.parent, r.parentDropped])).toEqual([
+    expect(plan.report.newLocations.map((r) => [r.handle, r.parent, dropFlag(r)])).toEqual([
       ['new:docks', 'loc_new_1', undefined],
       ['new:town', 'l99', true],
     ])
@@ -471,7 +475,7 @@ describe('planTurnCreates — parents', () => {
       ['loc_new_2', 'Lower Hall', { parent_location_id: null }],
       ['loc_new_3', 'Cellar', { parent_location_id: 'loc_new_1' }],
     ])
-    expect(plan.report.newLocations.map((r) => r.parentDropped)).toEqual([undefined, true, true])
+    expect(plan.report.newLocations.map(dropFlag)).toEqual([undefined, true, true])
   })
 
   it("creates at the root when the parent's stored chain loops", async () => {
@@ -761,7 +765,7 @@ describe('planTurnCreates — matching', () => {
       ['item_new_2', 'salt-stained', null],
       ['item_new_3', 'large', null],
     ])
-    expect(plan.report.newItems.map((r) => [r.handle, r.id])).toEqual([
+    expect(plan.report.newItems.map((r) => [r.handle, 'id' in r ? r.id : undefined])).toEqual([
       ['new:a', 'item_new_1'],
       ['new:b', 'item_new_2'],
       ['new:c', 'item_new_3'],

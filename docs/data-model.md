@@ -1821,8 +1821,8 @@ story_entries.metadata: {
     currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
     transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
-    newLocations?: { handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused' | 'dropped'; id?: string; parentDropped?: true }[]  // as emitted, post-substitution, with what the per-turn create planner made of it; see memory/piggyback.md → New locations and items
-    newItems?: { handle: string; name: string; description: string; outcome: 'created' | 'dropped'; id?: string }[]
+    newLocations?: ({ handle: string; name: string; description: string; parent?: string; outcome: 'created' | 'reused'; id: string; parentDropped?: true } | { handle: string; name: string; description: string; parent?: string; outcome: 'dropped' })[]  // as emitted, post-substitution, with what the per-turn create planner made of it; see memory/piggyback.md → New locations and items
+    newItems?: ({ handle: string; name: string; description: string; outcome: 'created'; id: string } | { handle: string; name: string; description: string; outcome: 'dropped' })[]
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
     raw?: string                     // the unparseable block text; present only alongside failedFields
   }

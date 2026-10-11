@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { VISUAL_CATEGORIES } from '@/lib/db'
+import type { EntryMetadata, VISUAL_CATEGORIES } from '@/lib/db'
 
 // Mirrors CharacterState['visual']'s keys (lib/db/entities/entity-state-schema.ts →
 // VISUAL_CATEGORIES) — the only categories a full-replace visual change can target.
@@ -76,16 +76,10 @@ export type ParseStateBlockResult = {
   malformedCreates: number
 }
 
+type StateReport = NonNullable<EntryMetadata['stateReport']>
 /** A `<new_location>` and its outcome; `parent` is the resolved id, or as emitted when dropped. */
-export type NewLocationReport = NewLocationEmission & {
-  outcome: 'created' | 'reused' | 'dropped'
-  /** The row it created or reused; absent when dropped. */
-  id?: string
-  /** Its parent couldn't be used, so it went to the root. */
-  parentDropped?: true
-}
-/** An item is never reused. */
-export type NewItemReport = NewItemEmission & { outcome: 'created' | 'dropped'; id?: string }
+export type NewLocationReport = NonNullable<StateReport['newLocations']>[number]
+export type NewItemReport = NonNullable<StateReport['newItems']>[number]
 export type TurnCreatesReport = { newLocations: NewLocationReport[]; newItems: NewItemReport[] }
 
 // `categoryRef` is the prompt-side placeholder (cat1, cat2…), not a category

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { applyUndoPayload, computeUndoPayload } from '@/lib/actions/delta/delta-encoding'
 import { MAX_RETRIEVAL_QUERIES } from '@/lib/piggyback'
 
 import { entryMetadataSchema } from './entry-metadata'
@@ -211,9 +212,41 @@ describe('stateReport creates', () => {
     const notDropped = {
       layer: 'per_turn_classifier',
       newLocations: [
-        { handle: 'new:a', name: 'A', description: '', outcome: 'created', parentDropped: false },
+        {
+          handle: 'new:a',
+          name: 'A',
+          description: '',
+          outcome: 'created',
+          id: 'loc_a',
+          parentDropped: false,
+        },
       ],
     }
     expect(entryMetadataSchema.safeParse({ ...base, stateReport: notDropped }).success).toBe(false)
+  })
+
+  it.each([
+    ['newLocations', 'created'],
+    ['newLocations', 'reused'],
+    ['newItems', 'created'],
+  ] as const)('rejects a %s create %s without the id of its row', (field, outcome) => {
+    const report = {
+      layer: 'per_turn_classifier',
+      [field]: [{ handle: 'new:a', name: 'A', description: '', outcome }],
+    }
+    expect(entryMetadataSchema.safeParse({ ...base, stateReport: report }).success).toBe(false)
+  })
+
+  // A fallback rewrites a failed fold's dropped creates as created; undo restores them whole.
+  it("undoes a report's creates to the lists before the write", () => {
+    const dropped = {
+      layer: 'piggyback_tagged_block' as const,
+      newLocations: [stateReport.newLocations[3]],
+      newItems: [stateReport.newItems[1]],
+    }
+    const current = { ...base, stateReport: dropped }
+    const next = { ...base, stateReport: { ...stateReport, layer: 'per_turn_classifier' as const } }
+    const undo = computeUndoPayload(entryMetadataSchema, current, next)
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(current)
   })
 })

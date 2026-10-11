@@ -505,23 +505,22 @@ function turnCreateLines(
 ): CreateLine[] {
   const lines: CreateLine[] = []
   const seen = new Set<string>()
-  const push = (id: string | undefined, text: string) => {
-    if (id != null) {
-      if (seen.has(id)) return
-      seen.add(id)
-    }
-    lines.push({ key: id ?? `create${lines.length}`, text })
+  const push = (id: string, text: string) => {
+    if (seen.has(id)) return
+    seen.add(id)
+    lines.push({ key: id, text })
   }
   // Live name, not the writer's spelling; the report's name covers a row deleted since.
-  const liveName = (id: string | undefined, reported: string) =>
-    pool.find((e) => e.id === id)?.name ?? reported
+  const liveName = (id: string, reported: string) => pool.find((e) => e.id === id)?.name ?? reported
   for (const location of report?.newLocations ?? []) {
+    if (location.outcome === 'dropped') continue
     const name = liveName(location.id, location.name)
-    if (location.outcome === 'created') {
-      push(location.id, t('reader:entryCard.stateNewPlace', { name }))
-    } else if (location.outcome === 'reused') {
-      push(location.id, t('reader:entryCard.stateMatchedPlace', { name }))
-    }
+    push(
+      location.id,
+      location.outcome === 'created'
+        ? t('reader:entryCard.stateNewPlace', { name })
+        : t('reader:entryCard.stateMatchedPlace', { name }),
+    )
   }
   for (const item of report?.newItems ?? []) {
     if (item.outcome === 'created') {

@@ -1,23 +1,8 @@
 import type { EntryMetadata } from '@/lib/db'
 
-import type { NewItemReport, NewLocationReport, ParsedStateBlock, TurnCreatesReport } from './types'
+import type { ParsedStateBlock, TurnCreatesReport } from './types'
 
 type StateReport = NonNullable<EntryMetadata['stateReport']>
-type ReportedLocation = NonNullable<StateReport['newLocations']>[number]
-type ReportedItem = NonNullable<StateReport['newItems']>[number]
-
-// Both ways, with the same keys: the fallback reads a prior report's create lists back in as
-// a TurnCreatesReport. Assignability alone passes an extra optional key on either side.
-type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never]
-  ? true
-  : never
-type Matches<A, B> = [A] extends [B] ? ([B] extends [A] ? SameKeys<A, B> : never) : never
-type _CreatesMatch = [
-  Matches<NewLocationReport, ReportedLocation>,
-  Matches<NewItemReport, ReportedItem>,
-]
-const _createsChecks: _CreatesMatch = [true, true]
-void _createsChecks
 
 type BuildReportArgs = {
   layer: StateReport['layer']

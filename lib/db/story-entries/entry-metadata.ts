@@ -2,6 +2,27 @@ import { z } from 'zod'
 
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
 
+const createEmission = { handle: z.string(), name: z.string(), description: z.string() }
+const locationEmission = { ...createEmission, parent: z.string().optional() }
+
+// A create that made or reused a row carries that row's id; a dropped one has none.
+const newLocationReportSchema = z.discriminatedUnion('outcome', [
+  z.object({
+    ...locationEmission,
+    outcome: z.enum(['created', 'reused']),
+    id: z.string(),
+    // Literal true: its parent couldn't be used, so it went to the root.
+    parentDropped: z.literal(true).optional(),
+  }),
+  z.object({ ...locationEmission, outcome: z.literal('dropped') }),
+])
+
+// An item is never reused, so it has no `reused` outcome.
+const newItemReportSchema = z.discriminatedUnion('outcome', [
+  z.object({ ...createEmission, outcome: z.literal('created'), id: z.string() }),
+  z.object({ ...createEmission, outcome: z.literal('dropped') }),
+])
+
 export const entryMetadataSchema = z.object({
   tokens: z
     .object({ prompt: z.number(), completion: z.number(), reasoning: z.number().optional() })
@@ -61,31 +82,8 @@ export const entryMetadataSchema = z.object({
         .optional(),
       // Each create as emitted, with what became of it; the fields above carry its resolved
       // id, never the handle (memory/piggyback.md → New locations and items).
-      newLocations: z
-        .array(
-          z.object({
-            handle: z.string(),
-            name: z.string(),
-            description: z.string(),
-            parent: z.string().optional(),
-            outcome: z.enum(['created', 'reused', 'dropped']),
-            id: z.string().optional(),
-            parentDropped: z.literal(true).optional(),
-          }),
-        )
-        .optional(),
-      // An item is never reused, so it has no `reused` outcome.
-      newItems: z
-        .array(
-          z.object({
-            handle: z.string(),
-            name: z.string(),
-            description: z.string(),
-            outcome: z.enum(['created', 'dropped']),
-            id: z.string().optional(),
-          }),
-        )
-        .optional(),
+      newLocations: z.array(newLocationReportSchema).optional(),
+      newItems: z.array(newItemReportSchema).optional(),
       failedFields: z.array(z.object({ field: z.string(), detail: z.string() })).optional(),
       // Redundant on the happy path; the only inspectable remnant when a parse failed.
       raw: z.string().optional(),
