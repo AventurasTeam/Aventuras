@@ -2751,6 +2751,88 @@ describe('per-turn-piggyback', () => {
       })
     })
 
+    // A schema that rejected null would fail the whole reply, scene and summary included.
+    it.each(['newLocations', 'newItems'] as const)(
+      'reads a null %s as none, applying the rest',
+      async (field) => {
+        seedFallbackTurn()
+        const { events } = await runFallback(
+          fallbackClassifierSchema.parse({
+            sceneEntities: ['c1'],
+            [field]: null,
+            currentLocation: 'l1',
+            worldTimeDelta: 30,
+            summary: 'Aria waited at the tide line.',
+          }),
+        )
+        expect(createdEntries(events)).toEqual([])
+        const patch = metadataPatch(events)
+        expect(patch).toMatchObject({
+          sceneEntities: [HERO],
+          currentLocationId: TOWN,
+          worldTime: 130,
+          summary: 'Aria waited at the tide line.',
+        })
+        expect(patch.stateReport).not.toHaveProperty(field)
+      },
+    )
+
+    it('drops and counts a create that is not an object, creating the rest', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: ['the docks', DOCKS, ['new:isle']],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+          newItems: [null, { handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+        }),
+        { log: logger },
+      )
+      expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+        entryId: 'entry-2',
+        count: 3,
+        layer: 'per_turn_classifier',
+      })
+      expect(createdEntries(events).map((e) => [e.kind, e.name])).toEqual([
+        ['location', 'Smuggler Docks'],
+        ['item', 'rusted key'],
+      ])
+    })
+
+    it("counts an item list's null create as the only malformed one", async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          worldTimeDelta: 30,
+          newItems: [null, { handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+        }),
+        { log: logger },
+      )
+      expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+        entryId: 'entry-2',
+        count: 1,
+        layer: 'per_turn_classifier',
+      })
+      const [key, ...others] = createdEntries(events)
+      expect(key).toMatchObject({ kind: 'item', name: 'rusted key' })
+      expect(others).toEqual([])
+      expect(metadataPatch(events).stateReport?.newItems).toEqual([
+        {
+          handle: 'new:key',
+          name: 'rusted key',
+          description: 'an iron key',
+          outcome: 'created',
+          id: key?.id,
+        },
+      ])
+    })
+
     it('does not warn when every create is well formed', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
       seedFallbackTurn()

@@ -67,6 +67,21 @@ const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it onl
 const createText = () =>
   z.preprocess((value) => (typeof value === 'string' ? value : ''), z.string())
 
+// Likewise a create that isn't an object reads as an empty one, and a null list as none.
+const createList = <T extends z.ZodType>(create: T) =>
+  z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z
+      .array(
+        z.preprocess(
+          (value) =>
+            typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {},
+          create,
+        ),
+      )
+      .optional(),
+  )
+
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
     .array(z.string())
@@ -75,29 +90,26 @@ export const fallbackClassifierSchema = z.object({
     ),
   // newLocations before currentLocation and newItems before transfers, so an in-order model
   // declares those handles before it uses them.
-  newLocations: z
-    .array(
-      z.object({
-        handle: createText().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
-        name: createText(),
-        description: z
-          .string()
-          .optional()
-          .catch(undefined)
-          .describe('One short sentence describing the place.'),
-        parent: z
-          .string()
-          .optional()
-          .catch(undefined)
-          .describe(
-            'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations. Omit it for a top-level place.',
-          ),
-      }),
-    )
-    .optional()
-    .describe(
-      'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
-    ),
+  newLocations: createList(
+    z.object({
+      handle: createText().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
+      name: createText(),
+      description: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .describe('One short sentence describing the place.'),
+      parent: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .describe(
+          'The place it is part of: its ID from Places when Places lists it, or the handle of another location in newLocations. Omit it for a top-level place.',
+        ),
+    }),
+  ).describe(
+    'Places this turn creates, when the scene settles somewhere not in Places. A new place is kept only as currentLocation or a place currentLocation is part of; any other is dropped.',
+  ),
   currentLocation: z
     .string()
     .optional()
@@ -118,22 +130,19 @@ export const fallbackClassifierSchema = z.object({
       }),
     )
     .optional(),
-  newItems: z
-    .array(
-      z.object({
-        handle: createText().describe(NEW_ITEM_HANDLE_DESCRIPTION),
-        name: createText(),
-        description: z
-          .string()
-          .optional()
-          .catch(undefined)
-          .describe('One short sentence describing the item.'),
-      }),
-    )
-    .optional()
-    .describe(
-      'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
-    ),
+  newItems: createList(
+    z.object({
+      handle: createText().describe(NEW_ITEM_HANDLE_DESCRIPTION),
+      name: createText(),
+      description: z
+        .string()
+        .optional()
+        .catch(undefined)
+        .describe('One short sentence describing the item.'),
+    }),
+  ).describe(
+    'Items this turn creates, when a character takes or receives something new. A new item is kept only when the last transfers.items entry naming it gives it to a character; any other is dropped.',
+  ),
   transfers: z
     .object({
       items: z
