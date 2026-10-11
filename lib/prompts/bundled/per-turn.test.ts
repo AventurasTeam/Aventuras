@@ -720,10 +720,21 @@ describe('bundled per-turn template — create instructions', () => {
     expect(newItem).toBeGreaterThan(-1)
     expect(newLocation).toBeLessThan(rendered.indexOf('<current_location>'))
     expect(newItem).toBeLessThan(rendered.indexOf('<transfers>'))
+    expect(rendered).toContain('<item id="item ID, or the handle of a new_item above"')
+  })
+
+  it('offers an ID from Places for <current_location> only when the map lists a place', () => {
     expect(rendered).toContain(
+      '<current_location>the handle of a new_location above</current_location>',
+    )
+    expect(rendered).not.toContain('<current_location>the ID from Places')
+    const withPlaces = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
+    })
+    expect(withPlaces).toContain(
       '<current_location>the ID from Places, or the handle of a new_location above</current_location>',
     )
-    expect(rendered).toContain('<item id="item ID, or the handle of a new_item above"')
   })
 
   it('explains handles and carries the significance rules', () => {
