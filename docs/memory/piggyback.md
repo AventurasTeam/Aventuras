@@ -158,8 +158,8 @@ else is written; later upkeep of places and items isn't this writer's.
 
 **Where a handle is used.** The prompt asks for a new place's handle
 only as the `<current_location>` or another new place's `parent`, and
-for a new item's handle only as a transfer's item `id` or in
-`<scene_entities>` (the item is present); the parser also tolerates a
+for a new item's handle only as a transfer's item `id` or, when the item
+is in the scene, in `<scene_entities>`; the parser also tolerates a
 new place's handle in `<scene_entities>`. A handle in any other field, a
 visual change's id or a transfer's holder, or one the block's creates
 don't declare, fails the field it sits in, like an unknown id. A

@@ -705,6 +705,12 @@ describe('creation tags', () => {
     expect(result.block.currentLocation).toBe('new:a')
   })
 
+  it('fails the state block when the cut lands right after a create opener', () => {
+    const result = parseStateBlock('<state><scene_entities>c1</scene_entities><new_location')
+    expect(result.failures).toEqual([{ field: 'state', detail: 'block with creates cut off' }])
+    expect(result.malformedCreates).toBe(1)
+  })
+
   it('fails the state block when a cut-off block holds a whole create with bad attributes', () => {
     const result = parseStateBlock(
       `<state><new_item handle="new:k" name='key'>iron</new_item><scene_entities>c1`,

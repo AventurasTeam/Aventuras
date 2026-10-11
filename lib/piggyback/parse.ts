@@ -212,7 +212,7 @@ function createTagPattern(tag: string): RegExp {
 }
 
 function openedTagCount(segment: string, tag: string): number {
-  return segment.match(new RegExp(`<${tag}[\\s/>]`, 'g'))?.length ?? 0
+  return segment.match(new RegExp(`<${tag}(?:[\\s/>]|$)`, 'g'))?.length ?? 0
 }
 
 type ParsedCreates = {
