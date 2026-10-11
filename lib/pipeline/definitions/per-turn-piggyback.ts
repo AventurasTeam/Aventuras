@@ -61,6 +61,11 @@ const NEW_HANDLE_PREFIX_DESCRIPTION =
 const NEW_LOCATION_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in currentLocation and another new place's parent.`
 const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in transfers.items[].id and sceneEntities.`
 
+// A create follows the tags' rules: a wrong-typed handle or name reads as '', which
+// normalizeCreates drops and counts. Not .catch(''): that emits `default: ""` to the model.
+const createText = () =>
+  z.preprocess((value) => (typeof value === 'string' ? value : ''), z.string())
+
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
     .array(z.string())
@@ -71,12 +76,17 @@ export const fallbackClassifierSchema = z.object({
   newLocations: z
     .array(
       z.object({
-        handle: z.string().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
-        name: z.string(),
-        description: z.string().optional().describe('One short sentence describing the place.'),
+        handle: createText().describe(NEW_LOCATION_HANDLE_DESCRIPTION),
+        name: createText(),
+        description: z
+          .string()
+          .optional()
+          .catch(undefined)
+          .describe('One short sentence describing the place.'),
         parent: z
           .string()
           .optional()
+          .catch(undefined)
           .describe(
             'The place it is part of: an ID from Places, or the handle of another location in newLocations. Omit it for a top-level place.',
           ),
@@ -109,9 +119,13 @@ export const fallbackClassifierSchema = z.object({
   newItems: z
     .array(
       z.object({
-        handle: z.string().describe(NEW_ITEM_HANDLE_DESCRIPTION),
-        name: z.string(),
-        description: z.string().optional().describe('One short sentence describing the item.'),
+        handle: createText().describe(NEW_ITEM_HANDLE_DESCRIPTION),
+        name: createText(),
+        description: z
+          .string()
+          .optional()
+          .catch(undefined)
+          .describe('One short sentence describing the item.'),
       }),
     )
     .optional()

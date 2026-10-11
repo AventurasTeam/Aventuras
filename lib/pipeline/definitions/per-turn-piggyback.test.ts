@@ -2653,6 +2653,90 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
+    // JSON's way to say "none"; a schema that rejected it would fail the whole reply.
+    it('reads a null parent as none, creating the place at the root', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            { handle: 'new:isle', name: 'Gull Isle', description: 'a bare rock', parent: null },
+          ],
+          currentLocation: 'new:isle',
+          worldTimeDelta: 30,
+          summary: 'Aria rowed out to Gull Isle.',
+        }),
+      )
+      const [isle] = createdEntries(events)
+      if (!isle) throw new Error('expected a location create')
+      expect(isle).toMatchObject({ name: 'Gull Isle', state: { parent_location_id: null } })
+      const patch = metadataPatch(events)
+      expect(patch).toMatchObject({
+        sceneEntities: [HERO],
+        currentLocationId: isle.id,
+        worldTime: 130,
+        summary: 'Aria rowed out to Gull Isle.',
+      })
+      expect(patch.stateReport?.newLocations).toEqual([
+        {
+          handle: 'new:isle',
+          name: 'Gull Isle',
+          description: 'a bare rock',
+          outcome: 'created',
+          id: isle.id,
+        },
+      ])
+    })
+
+    it('reads a null description as none, creating the row without one', async () => {
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [{ ...DOCKS, description: null }],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: 'rusted key', description: null }],
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+        }),
+      )
+      const [docks, key] = createdEntries(events)
+      if (!docks || !key) throw new Error('expected a location create and an item create')
+      expect(docks).toMatchObject({ name: 'Smuggler Docks', description: null })
+      expect(key).toMatchObject({ name: 'rusted key', description: null })
+      expect(metadataPatch(events)).toMatchObject({ currentLocationId: docks.id, worldTime: 130 })
+    })
+
+    it('drops and counts a create with a null handle or name, applying the rest', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      seedFallbackTurn()
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [DOCKS, { handle: null, name: 'Gull Isle', description: 'a bare rock' }],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: null, description: 'an iron key' }],
+          summary: 'Aria reached the docks.',
+        }),
+        { log: logger },
+      )
+      expect(warnSpy).toHaveBeenCalledWith('classifier.create_malformed', {
+        entryId: 'entry-2',
+        count: 2,
+        layer: 'per_turn_classifier',
+      })
+      const [docks, ...others] = createdEntries(events)
+      expect(docks).toMatchObject({ name: 'Smuggler Docks' })
+      expect(others).toEqual([])
+      expect(metadataPatch(events)).toMatchObject({
+        sceneEntities: [HERO],
+        currentLocationId: docks?.id,
+        worldTime: 130,
+        summary: 'Aria reached the docks.',
+      })
+    })
+
     it('does not warn when every create is well formed', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
       seedFallbackTurn()
@@ -2717,18 +2801,21 @@ describe('per-turn-piggyback', () => {
   describe('fallbackClassifierSchema', () => {
     // Scoped to the exact node, not `toContain` over the blob. '[]' (not 'items') steps into
     // the array-element schema, since 'items' is itself a real property name on transfers.
-    function fieldDescription(schema: unknown, path: readonly string[]): string | undefined {
+    function schemaNode(schema: unknown, path: readonly string[]): Record<string, unknown> {
       let node: unknown = schema
       for (const key of path) {
-        if (typeof node !== 'object' || node === null) return undefined
+        if (typeof node !== 'object' || node === null) return {}
         if (key === '[]') {
           node = (node as { items?: unknown }).items
           continue
         }
         node = (node as { properties?: Record<string, unknown> }).properties?.[key]
       }
-      if (typeof node !== 'object' || node === null) return undefined
-      const description = (node as { description?: unknown }).description
+      return typeof node === 'object' && node !== null ? (node as Record<string, unknown>) : {}
+    }
+
+    function fieldDescription(schema: unknown, path: readonly string[]): string | undefined {
+      const { description } = schemaNode(schema, path)
       return typeof description === 'string' ? description : undefined
     }
 
@@ -2784,6 +2871,21 @@ describe('per-turn-piggyback', () => {
       const jsonSchema = z.toJSONSchema(fallbackClassifierSchema)
       expect(fieldDescription(jsonSchema, path)).toContain(marker)
     })
+
+    // A null handle or name parses as '' to be dropped, but the model is still asked for both,
+    // with no default offering it the empty string.
+    it.each(['newLocations', 'newItems'] as const)(
+      'asks for a %s handle and name as required strings',
+      (field) => {
+        const create = schemaNode(z.toJSONSchema(fallbackClassifierSchema), [field, '[]'])
+        expect(create.required).toEqual(['handle', 'name'])
+        for (const key of ['handle', 'name']) {
+          const property = schemaNode(create, [key])
+          expect(property.type).toBe('string')
+          expect(property).not.toHaveProperty('default')
+        }
+      },
+    )
 
     // The describes have to survive z.toJSONSchema — that is the only path by which
     // they reach the provider, and it throws on a transform.
