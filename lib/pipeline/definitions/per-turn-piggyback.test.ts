@@ -2736,14 +2736,14 @@ describe('per-turn-piggyback', () => {
       return typeof description === 'string' ? description : undefined
     }
 
-    // A field with no describe is one the model never fills well; parity means the
-    // fallback states it too (state-emission.ts; piggyback.md → Fallback classifier context).
     it('lists each create array before the fields that name its handles', () => {
       const order = Object.keys(z.toJSONSchema(fallbackClassifierSchema).properties ?? {})
       expect(order.indexOf('newLocations')).toBeLessThan(order.indexOf('currentLocation'))
       expect(order.indexOf('newItems')).toBeLessThan(order.indexOf('transfers'))
     })
 
+    // A field with no describe is one the model never fills well; parity means the
+    // fallback states it too (state-emission.ts; piggyback.md → Fallback classifier context).
     it.each([
       ['sceneEntities', ['sceneEntities'], 'present in this scene'],
       ['sceneEntities handles', ['sceneEntities'], 'exact handle it declares'],

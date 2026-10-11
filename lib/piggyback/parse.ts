@@ -294,7 +294,7 @@ function bareHandle(handle: string): string {
 }
 
 /** A block whose creates may omit `description`, as the fallback's structured reply can. */
-export type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
+type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems'> & {
   newLocations?: (Omit<NewLocationEmission, 'description'> & { description?: string })[]
   newItems?: (Omit<NewItemEmission, 'description'> & { description?: string })[]
 }
@@ -302,7 +302,8 @@ export type CreateBlockInput = Omit<ParsedStateBlock, 'newLocations' | 'newItems
 /**
  * Drops, and counts, a create with no `new:` handle, a blank name, or a handle an earlier create
  * declared (locations before items); unwraps a bracketed handle, trims what it keeps, and drops a
- * blank parent; a missing description reads as ''. Never a field failure: one bad create must not hand the whole turn to the fallback.
+ * blank parent; a missing description reads as ''. Never a field failure: one bad create must not
+ * hand the whole turn to the fallback.
  */
 export function normalizeCreates(block: CreateBlockInput): {
   block: ParsedStateBlock

@@ -58,14 +58,14 @@ const TRANSFER_PARTY_DESCRIPTION =
 
 const NEW_HANDLE_PREFIX_DESCRIPTION =
   'A handle you choose, starting with "new:" (e.g. new:docks), so it is never mistaken for a listed ID.'
-const NEW_LOCATION_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in currentLocation, another new place's parent and sceneEntities.`
+const NEW_LOCATION_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in currentLocation and another new place's parent.`
 const NEW_ITEM_HANDLE_DESCRIPTION = `${NEW_HANDLE_PREFIX_DESCRIPTION} Use it only in transfers.items[].id and sceneEntities.`
 
 export const fallbackClassifierSchema = z.object({
   sceneEntities: z
     .array(z.string())
     .describe(
-      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered. A place or item you create appears here only by the exact handle it declares in newLocations / newItems.',
+      'IDs of every character and item present in this scene — physically there in the last entry, not merely mentioned or remembered. An item you create appears here only by the exact handle it declares in newItems.',
     ),
   // Before the fields that reference a handle, so a model filling the object in order picks it
   // before it uses it.
