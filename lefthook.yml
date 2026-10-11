@@ -1,12 +1,30 @@
+glob_matcher: doublestar
+
 pre-commit:
   commands:
     check_migrations:
       glob: "src-tauri/migrations/*.sql"
       run: node scripts/check_migrations.js {staged_files}
 
+# Each glob only gates the command; the command still runs over the whole project.
 pre-push:
   commands:
     lint:
+      glob:
+        - "**/*.{js,mjs,cjs,ts,svelte}"
+        - ".prettierrc"
+        - "package.json"
+        - "package-lock.json"
       run: NODE_OPTIONS="--max-old-space-size=8192" node scripts/pm.js run lint
     check:
+      glob:
+        - "**/*.{js,ts,svelte}"
+        - "tsconfig.json"
+        - "package.json"
+        - "package-lock.json"
       run: node scripts/pm.js run check
+    rust-fmt:
+      glob:
+        - "src-tauri/**/*.rs"
+        - "src-tauri/Cargo.toml"
+      run: cargo fmt --manifest-path src-tauri/Cargo.toml --check

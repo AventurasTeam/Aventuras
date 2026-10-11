@@ -8,7 +8,9 @@ Managed by [lefthook](https://github.com/evilmartians/lefthook) (`lefthook.yml`)
 
 - **pre-commit**: runs `scripts/check_migrations.js` against staged `src-tauri/migrations/*.sql` files to
   reject CRLF line endings.
-- **pre-push**: runs `lint` and `check` (type-checking) via `scripts/pm.js`.
+- **pre-push**: runs `lint` and `check` (type-checking) via `scripts/pm.js`, and
+  `cargo fmt --check` on the Rust crate. Each runs only when the commits being pushed touch a file
+  its `glob` matches, and then runs over the whole project, not just those files.
 
 `scripts/pm.js` picks the package manager at run time: `aube` when it did the install
 (`node_modules/.aube-state` exists) and is still on `PATH`, `npm` otherwise. It also drives
@@ -23,7 +25,9 @@ re-resolving the `package-lock.json` npm just wrote.
 GitHub Actions workflows in `.github/workflows/`:
 
 - **`lint-and-typecheck.yml`** - runs `lint`, `check`, `test`, and `build` on every pull request
-  targeting `master`, `develop`, or `dev`.
+  targeting `master`, except one that touches only `src-tauri/`, `docs/` or Markdown.
+- **`rust-lint.yml`** ("Rust Lint") - runs `cargo fmt --check` on pull requests targeting `master`
+  that touch Rust sources or the Cargo manifest or lockfile.
 - **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Leaves a draft GitHub
   release with auto-updater metadata; publishing it by hand is the step that ships it.
 - **`pre-release.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`).

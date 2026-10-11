@@ -4,8 +4,10 @@ on:
   pull_request:
     branches:
       - master
-      - develop
-      - dev
+    paths-ignore:
+      - 'src-tauri/**'
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
