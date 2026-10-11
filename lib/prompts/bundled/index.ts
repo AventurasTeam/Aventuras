@@ -38,11 +38,7 @@ export const bundledPack: Pack = {
       ...PIGGYBACK_FALLBACK_CLASSIFIER,
     },
     [TEMPLATE_IDS.periodicClassifier]: { group: 'classifierContext', ...PERIODIC_CLASSIFIER },
-    [TEMPLATE_IDS.suggestionRefresh]: {
-      group: 'generationContext',
-      system: '',
-      user: SUGGESTION_REFRESH,
-    },
+    [TEMPLATE_IDS.suggestionRefresh]: { group: 'generationContext', ...SUGGESTION_REFRESH },
     // A wizard template's system half is empty (architecture.md → System and user halves).
     [TEMPLATE_IDS.wizardOpening]: { group: 'wizard', system: '', user: WIZARD_OPENING },
     [TEMPLATE_IDS.wizardOpeningRefine]: {

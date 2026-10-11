@@ -88,8 +88,8 @@ describe('structural-floor invariant — active + in-scene always inject', () =>
   })
 
   it('bundled suggestion-refresh template injects a disabled-but-active-in-scene entity', () => {
-    expect(injectsSceneEntity(SUGGESTION_REFRESH)).toBe(true)
-    expect(render(SUGGESTION_REFRESH)).toContain('A wary scout.')
+    expect(injectsSceneEntity(SUGGESTION_REFRESH.user)).toBe(true)
+    expect(render(SUGGESTION_REFRESH.user)).toContain('A wary scout.')
   })
 
   it('permanent negative fixture: an injectionMode-respecting variant DROPS it', () => {
