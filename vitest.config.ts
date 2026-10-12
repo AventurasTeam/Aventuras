@@ -1,8 +1,7 @@
 import { defineConfig } from 'vitest/config'
 
-// Deliberately does NOT use the sveltekit() plugin: these are plain unit tests of TS logic, and
-// pulling in the full SvelteKit pipeline would make them slow to run and easy to break. `#lib`
-// resolves through the `imports` field in package.json.
+// No sveltekit() plugin: plain unit tests of TS logic stay fast. `#lib` resolves through the
+// `imports` field in package.json.
 export default defineConfig({
   test: {
     environment: 'node',
