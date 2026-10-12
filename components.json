@@ -11,11 +11,11 @@
     "prefix": ""
   },
   "aliases": {
-    "components": "$lib/components",
-    "utils": "$lib/utils/cn",
-    "ui": "$lib/components/ui",
-    "hooks": "$lib/hooks",
-    "lib": "$lib"
+    "components": "#lib/components",
+    "utils": "#lib/utils/cn",
+    "ui": "#lib/components/ui",
+    "hooks": "#lib/hooks",
+    "lib": "#lib"
   },
   "typescript": true,
   "registry": "https://tw3.shadcn-svelte.com/registry/default"
