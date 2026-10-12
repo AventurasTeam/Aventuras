@@ -13,7 +13,7 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
 import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
 import type { JSONObject, LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
-import type { XaiProviderOptions } from '@ai-sdk/xai'
+import type { XaiLanguageModelResponsesOptions } from '@ai-sdk/xai'
 import type { PollinationsLanguageModelSettings } from 'ai-sdk-pollinations'
 
 import { settings } from '$lib/stores/settings.svelte'
@@ -66,7 +66,7 @@ export function buildProviderOptions(
   if (!settings.advancedRequestSettings.manualMode) {
     switch (providerType) {
       case 'xai':
-        options = { parallel_function_calling: true } satisfies XaiProviderOptions
+        options = { parallelToolCalls: true } satisfies XaiLanguageModelResponsesOptions
         break
       case 'google': {
         // Reinject safety settings here for complete model-request coverage

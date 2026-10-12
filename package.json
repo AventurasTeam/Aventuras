@@ -31,7 +31,7 @@
     "@ai-sdk/mistral": "^4.0.62",
     "@ai-sdk/openai": "^4.0.91",
     "@ai-sdk/openai-compatible": "^3.0.67",
-    "@ai-sdk/xai": "^4.0.25",
+    "@ai-sdk/xai": "^5.0.20",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-liquid": "^6.3.3",
     "@codemirror/language": "^6.13.1",
