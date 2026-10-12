@@ -6,6 +6,7 @@ import { updateEntrySceneFields, type DbCtx } from '@/lib/actions'
 import type { Entity, StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { resolveHeadTurn } from '@/lib/head-turn'
+import { placeModes } from '@/lib/world'
 
 /** An id the panel may mention, resolved to a display name where the row survives. */
 export type ResolvedEntity = { id: string; name?: string }
@@ -50,19 +51,6 @@ export function useSceneEditing(
   // scoping would render them as unknown.
   const entityNames = useMemo(() => entities.map((e) => ({ id: e.id, name: e.name })), [entities])
 
-  const sceneOptions = useMemo<SceneOptions>(
-    () => ({
-      characters: entities
-        .filter((e) => e.kind === 'character')
-        .map((e) => ({ id: e.id, name: e.name })),
-      items: entities.filter((e) => e.kind === 'item').map((e) => ({ id: e.id, name: e.name })),
-      locations: entities
-        .filter((e) => e.kind === 'location')
-        .map((e) => ({ id: e.id, name: e.name })),
-    }),
-    [entities],
-  )
-
   // Resolved here, not in the card: only this entry gets edit handlers, so every other
   // card renders no control at all rather than a disabled one. Gated on the window
   // reaching the live edge because the action layer resolves the same head turn off the
@@ -73,6 +61,29 @@ export function useSceneEditing(
     () => (holdsLiveEdge ? (resolveHeadTurn(entries)?.tail.id ?? null) : null),
     [entries, holdsLiveEdge],
   )
+
+  // entry-card.md → Scene editor: a retired place can't be entered, and the way into a disabled
+  // region is re-enabling it; the tail's own location keeps showing until it's changed.
+  const tailLocationId = useMemo(
+    () => entries.find((e) => e.id === tailEntryId)?.metadata?.currentLocationId ?? null,
+    [entries, tailEntryId],
+  )
+  const sceneOptions = useMemo<SceneOptions>(() => {
+    const modes = placeModes(entities, tailLocationId)
+    return {
+      characters: entities
+        .filter((e) => e.kind === 'character')
+        .map((e) => ({ id: e.id, name: e.name })),
+      items: entities.filter((e) => e.kind === 'item').map((e) => ({ id: e.id, name: e.name })),
+      locations: entities
+        .filter(
+          (e) =>
+            e.kind === 'location' &&
+            (e.id === tailLocationId || (e.status !== 'retired' && !modes.isDisabled(e.id))),
+        )
+        .map((e) => ({ id: e.id, name: e.name })),
+    }
+  }, [entities, tailLocationId])
 
   const [sceneEditId, setSceneEditId] = useState<string | null>(null)
 

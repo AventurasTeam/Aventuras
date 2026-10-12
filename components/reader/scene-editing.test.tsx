@@ -82,6 +82,63 @@ describe('useSceneEditing → resolution pools', () => {
   })
 })
 
+// entry-card.md → Scene editor: the location list leaves out retired places and disabled ones,
+// those disabled through an ancestor included; the tail's current location keeps showing.
+describe('useSceneEditing → location list', () => {
+  const place = (id: string, parent: string | null, extra: Partial<Entity> = {}) =>
+    ({
+      id,
+      kind: 'location',
+      name: id,
+      status: 'active',
+      injectionMode: 'auto',
+      state: { parent_location_id: parent },
+      ...extra,
+    }) as unknown as Entity
+  const tailAt = (currentLocationId: string) =>
+    [
+      entry('e1', 1, ['char_a']),
+      {
+        ...entry('e2', 2, ['char_a']),
+        metadata: { sceneEntities: ['char_a'], currentLocationId, worldTime: 60 },
+      },
+    ] as StoryEntry[]
+  const ids = (result: ReturnType<typeof render>['result']) =>
+    result.current.sceneOptions.locations.map((l) => l.id)
+
+  it('leaves out retired places, disabled ones and places disabled through an ancestor', () => {
+    const { result } = render(tailAt('loc_keep'), [
+      place('loc_keep', null),
+      place('loc_sunk', null, { status: 'retired' }),
+      place('loc_vault', null, { injectionMode: 'disabled' }),
+      place('loc_crypt', 'loc_vault'),
+      place('loc_mill', null, { status: 'staged' }),
+    ])
+    expect(ids(result)).toEqual(['loc_keep', 'loc_mill'])
+  })
+
+  it('keeps the current location though it is retired or disabled', () => {
+    expect(
+      ids(render(tailAt('loc_sunk'), [place('loc_sunk', null, { status: 'retired' })]).result),
+    ).toEqual(['loc_sunk'])
+    expect(
+      ids(
+        render(tailAt('loc_vault'), [place('loc_vault', null, { injectionMode: 'disabled' })])
+          .result,
+      ),
+    ).toEqual(['loc_vault'])
+  })
+
+  it('offers the places around a story inside a disabled region, but not the region', () => {
+    const { result } = render(tailAt('loc_crypt'), [
+      place('loc_vault', null, { injectionMode: 'disabled' }),
+      place('loc_crypt', 'loc_vault'),
+      place('loc_ossuary', 'loc_vault'),
+    ])
+    expect(ids(result)).toEqual(['loc_crypt', 'loc_ossuary'])
+  })
+})
+
 describe('useSceneEditing → tail rule', () => {
   it('reads the tail off the end of the ascending rows', () => {
     const { result } = render(ENTRIES)
