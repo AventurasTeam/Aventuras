@@ -962,6 +962,35 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     })
   })
 
+  // retrieval.md → Pool exclusions: the places effectively disabled around the scene's location,
+  // the same one the prompt's map is built from.
+  it('passes the places disabled around the scene, suspended for a region the scene is inside', async () => {
+    const place = (id: string, parent: string | null, over: Partial<Entity> = {}): Entity => ({
+      ...entity(id, 'location', id),
+      state: { parent_location_id: parent },
+      ...over,
+    })
+    seedOpenStory({
+      entries: [entry(1, 'opening', 'The keep stands.', meta({ currentLocationId: 'loc_anchor' }))],
+      entities: [
+        place('loc_eldra', null),
+        place('loc_vellis', 'loc_eldra', { injectionMode: 'disabled' }),
+        place('loc_anchor', 'loc_vellis'),
+        place('loc_market', 'loc_vellis'),
+        place('loc_thorn', null, { injectionMode: 'disabled' }),
+        place('loc_shrine', 'loc_thorn'),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect([...lastParams().disabledPlaceIds].sort()).toEqual([
+      'loc_shrine',
+      'loc_thorn',
+      'loc_vellis',
+    ])
+  })
+
   // The sync scope is no longer passed alongside the branch — runRetrieval
   // derives it from this one field, so the pair cannot disagree. Pinning the
   // field is all that is left to get wrong here.

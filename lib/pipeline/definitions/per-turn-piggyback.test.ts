@@ -2855,6 +2855,26 @@ describe('per-turn-piggyback', () => {
         entryId: 'entry-2',
         currentLocation: 'new:docks',
         kind: null,
+        status: null,
+      })
+    })
+
+    // piggyback.md → A bad ref in the two writers: the fallback substitutes with badRef 'drop', so
+    // a retired place's id reaches the fold, which keeps the previous location.
+    it('rejects a retired place as the location and keeps the previous one', async () => {
+      seedFallbackTurn([...fallbackWorld(), market('retired')])
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          currentLocation: 'l2',
+          worldTimeDelta: 30,
+        }),
+      )
+      const patch = metadataPatch(events)
+      expect(patch.currentLocationId).toBe(TOWN)
+      expect(patch.stateReport).toMatchObject({
+        currentLocation: MARKET,
+        currentLocationRejected: true,
       })
     })
 

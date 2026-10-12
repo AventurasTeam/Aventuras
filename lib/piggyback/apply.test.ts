@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   emptyEntityState,
@@ -6,6 +6,7 @@ import {
   type CharacterState,
   type Entity,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
@@ -1006,6 +1007,37 @@ describe('buildPiggybackActions', () => {
       expect(result.applied.currentLocationRejected).toBe(true)
       // The rejection is why the previous location was kept, so both must agree.
       expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    // piggyback.md → A bad ref in the two writers: a retired place can't be entered.
+    it('rejects a retired location, logged, and keeps the previous one', () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      const sunk = mockEntity({
+        id: 'loc_sunk',
+        kind: 'location',
+        name: 'Saltmere',
+        status: 'retired',
+      })
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        turn: planned({ currentLocation: 'loc_sunk' }),
+        entities: [sunk],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.currentLocationRejected).toBe(true)
+      expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
+      expect(warnSpy).toHaveBeenCalledWith('classifier.current_location_rejected', {
+        entryId: 'entry_1',
+        currentLocation: 'loc_sunk',
+        kind: 'location',
+        status: 'retired',
+      })
     })
 
     it('does not flag a location the model named correctly', () => {

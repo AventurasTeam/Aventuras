@@ -55,6 +55,11 @@ describe('periodic classifier template', () => {
     expect(rendered.system).toMatch(/wandered off/i)
   })
 
+  // classifier.md → What the classifier writes: never a location.
+  it('names only characters and factions as retirable', () => {
+    expect(render().system).toContain('Move a character or faction to retired only on')
+  })
+
   it('labels every window turn with its provenance handle', () => {
     const { user } = render()
     expect(user).toContain('[t1]')

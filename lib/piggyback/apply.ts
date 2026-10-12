@@ -78,14 +78,19 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // carried had the model said nothing. `entities` must therefore be the whole
   // branch — openStory hydrates entitiesStore unwindowed, unlike entriesStore —
   // or a legitimate id the prompt just offered would be refused here.
+  // A retired place can't be entered (data-model.md → LocationState shape), and a place pinned
+  // `always` can still put one in the prompt with its id.
   const named = block.currentLocation
-  const namedIsLocation = named !== undefined && byId.get(named)?.kind === 'location'
+  const namedRow = named === undefined ? undefined : byId.get(named)
+  const namedIsLocation =
+    named !== undefined && namedRow?.kind === 'location' && namedRow.status !== 'retired'
   const currentLocationRejected = named !== undefined && !namedIsLocation
   if (currentLocationRejected) {
     logger.warn('classifier.current_location_rejected', {
       entryId,
       currentLocation: named,
-      kind: byId.get(named)?.kind ?? null,
+      kind: namedRow?.kind ?? null,
+      status: namedRow?.status ?? null,
     })
   }
   const currentLocationId = namedIsLocation ? named : previousMetadata.currentLocationId

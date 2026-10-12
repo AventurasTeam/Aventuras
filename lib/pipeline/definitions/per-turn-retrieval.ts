@@ -19,6 +19,7 @@ import {
   type RetrievalOutcome,
 } from '@/lib/retrieval'
 import { appSettingsStore } from '@/lib/stores'
+import { placeModes } from '@/lib/world'
 
 import { readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -69,6 +70,12 @@ export async function* retrievalPhase(
   // retrieval.md → POV-awareness scope queries `sceneEntities ∩ characters`;
   // sceneEntities itself is kind-mixed (data-model.md → Entry metadata shape).
   const sceneCharacterIds = scene.sceneEntities.filter((id) => characterIds.has(id))
+  // Around the same location the prompt's map is built from, so a place the map hides is never
+  // retrieved with an id the map doesn't show.
+  const modes = placeModes(entities, scene.currentLocationId)
+  const disabledPlaceIds = new Set(
+    entities.filter((e) => e.kind === 'location' && modes.isDisabled(e.id)).map((e) => e.id),
+  )
 
   // The same window generation-context composes for the prompt, so the capture
   // prices what the pools actually competed against rather than re-deriving the
@@ -142,6 +149,7 @@ export async function* retrievalPhase(
         sceneCharacterIds,
         sceneEntityIds: scene.sceneEntities,
         currentLocationId: scene.currentLocationId,
+        disabledPlaceIds,
         // Layer A scans the recent un-classified buffer prose (edge-cases.md →
         // Layer A — retrieval-time same-name suppression); the prompt buffer only
         // approximates that set, over-suppressing while classifierCadence stays

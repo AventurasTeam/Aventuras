@@ -197,6 +197,7 @@ const floorFixture = () =>
     threads: FLOOR_THREADS,
     sceneEntityIds: ['e_scene'],
     currentLocationId: 'e_loc',
+    disabledPlaceIds: new Set(),
   })
 
 describe('buildCapturePayload', () => {

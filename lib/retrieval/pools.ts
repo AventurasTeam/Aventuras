@@ -44,6 +44,8 @@ export type StructuralFloorInput = {
   threads: readonly ThreadRow[]
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
+  /** Places effectively disabled around the scene; never the current location. */
+  disabledPlaceIds: ReadonlySet<string>
 }
 
 // The floor is built over loaded source rows, which carry `embeddingStale` (and
@@ -114,8 +116,12 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   // live in filterEntityPool and only ever see rows the floor did not take
   // (edge-cases.md → Layer A). Adding a status predicate here would make
   // `always` unreachable for retired rows, which is its only opt-in.
+  // A place disabled through an ancestor isn't seated: the ancestor's `disabled` wins.
   const alwaysEntities = input.entities
-    .filter((e) => e.injectionMode === 'always' && !seatedIds.has(e.id))
+    .filter(
+      (e) =>
+        e.injectionMode === 'always' && !seatedIds.has(e.id) && !input.disabledPlaceIds.has(e.id),
+    )
     .map(narrowEntity)
   const alwaysLore = input.lore
     .filter((l) => l.injectionMode === 'always' && !seatedIds.has(l.id))
@@ -140,6 +146,8 @@ export type EntityPoolInput = {
   floorIds: ReadonlySet<string>
   /** Un-classified buffer prose, for Layer-A same-name suppression. */
   recentProse: string
+  /** Places effectively disabled around the scene (retrieval.md → Pool exclusions). */
+  disabledPlaceIds: ReadonlySet<string>
 }
 
 // Allowlists, not fall-through: status reaches the pool through an unchecked
@@ -179,7 +187,7 @@ export function filterEntityPool<T extends EntityRow>(
 
   return rows.filter((r) => {
     if (input.floorIds.has(r.id)) return false
-    if (r.injectionMode === 'disabled') return false
+    if (r.injectionMode === 'disabled' || input.disabledPlaceIds.has(r.id)) return false
     if (r.status === 'retired') return r.injectionMode === 'always'
     if (!POOLABLE_ENTITY_STATUS.has(r.status)) return false
     if (suppressedIds.has(r.id)) return false

@@ -212,6 +212,7 @@ const BASE: RetrievalParams = {
   sceneCharacterIds: ['char_a'],
   sceneEntityIds: ['char_a'],
   currentLocationId: null,
+  disabledPlaceIds: new Set(),
   recentProse: '',
   scanText: 'I ask about the amulet.\nKara Vex drew the blade.',
   keywordRetrieval: { mode: 'boost', budgetShare: 0.5, cascade: false, cascadeMaxDepth: 2 },
@@ -971,6 +972,26 @@ describe('runRetrieval — query stack', () => {
     expect(expectOk(out).queries.specs[1].text).toBe(
       'Kara Vex, The Hollow.\nActive threads: The Amulet.',
     )
+  })
+
+  it('keeps the places disabled around the scene off the floor and out of the pool', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('loc_room', 'Vault Room', { kind: 'location', mode: 'always' }),
+            entityRow('loc_hall', 'Vault Hall', { kind: 'location' }),
+            entityRow('char_b', 'Mira'),
+          ],
+          knn: [hit('loc_hall'), hit('char_b')],
+        }),
+      }),
+      params({ disabledPlaceIds: new Set(['loc_room', 'loc_hall']) }),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.floor.alwaysEntities).toEqual([])
+    expect(ok.bundles.entities.selected.map((r) => r.id)).toEqual(['char_b'])
   })
 
   it('skips the embed call when every query is empty', async () => {

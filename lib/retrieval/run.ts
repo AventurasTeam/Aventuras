@@ -78,6 +78,11 @@ export type RetrievalParams = {
   sceneCharacterIds: readonly string[]
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
+  /**
+   * Places effectively disabled around the scene (lib/world placeModes), kept out of the `always`
+   * seat and every pool. The caller computes it: source rows carry no parent to walk.
+   */
+  disabledPlaceIds: ReadonlySet<string>
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
   /**
@@ -311,6 +316,7 @@ async function runRetrievalPass(
     threads: sourceRows.threads,
     sceneEntityIds: params.sceneEntityIds,
     currentLocationId: params.currentLocationId,
+    disabledPlaceIds: params.disabledPlaceIds,
   })
   partial.floor = floor
 
@@ -344,6 +350,7 @@ async function runRetrievalPass(
     happenings: [] as readonly LoadedHappeningRow[],
     awareness,
     recentProse: params.recentProse,
+    disabledPlaceIds: params.disabledPlaceIds,
     scanText: params.scanText,
   }
 
@@ -407,6 +414,7 @@ async function runRetrievalPass(
     lore: sourceRows.lore,
     floorIds: floor.seatedIds,
     recentProse: params.recentProse,
+    disabledPlaceIds: params.disabledPlaceIds,
     scanText: params.scanText,
     budgets: params.budgets,
     params: RANKER_DEFAULTS,
@@ -556,6 +564,7 @@ type PoolCtx = {
   happenings: readonly LoadedHappeningRow[]
   awareness: readonly AwarenessRow[]
   recentProse: string
+  disabledPlaceIds: ReadonlySet<string>
   scanText: string
 }
 
@@ -753,6 +762,7 @@ function assembleCandidates(
       const pool = filterEntityPool(fresh(sourceRows.entities), {
         floorIds: floor.seatedIds,
         recentProse: ctx.recentProse,
+        disabledPlaceIds: ctx.disabledPlaceIds,
       })
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
