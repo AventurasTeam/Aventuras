@@ -73,8 +73,7 @@
     onOpenAssistant,
     onApproveAllAsync,
     hideHeader = false,
-    // eslint-disable-next-line unused-imports/no-unused-vars -- output-only binding, written by an effect
-    hasChanges = $bindable(false),
+    hasChanges: _hasChangesOut = $bindable(false),
   }: Props = $props()
 
   // Local state for editing - initialized from props but mutable
@@ -167,7 +166,7 @@
   let entriesDirty = $state(false)
   const _hasChanges = $derived(settingsDirty || entriesDirty)
   $effect(() => {
-    hasChanges = _hasChanges
+    _hasChangesOut = _hasChanges
   })
   let savedFeedback = $state<'settings' | 'entry' | null>(null)
 
