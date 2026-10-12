@@ -30,6 +30,11 @@ for the placement rule.
   its Connections pickers and its Merge refusals, with the scene
   editor's location list
   ([`entry-card.md → Scene editor`](./ui/patterns/entry-card.md#scene-editor)).
+  Check first, unverified in the design: that CTRL-Z undoes newest-first
+  across World saves and turns, so undoing the Save that brought a
+  place back can't leave the tail scene in it once retired again. If a
+  Save can be undone past a later turn, that undo needs the
+  `story-inside` refusal too.
 
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
