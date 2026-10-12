@@ -372,14 +372,16 @@ slice-planning gate forces its resolution before that slice is planned.
   Raised 2026-10-11 by the system and user halves PR's cache check
   (developer checks before merge, step 3).
 
-- **The state block's location instruction counts retired places.**
-  `{% if locationMap.size > 0 %}` in
-  `lib/prompts/bundled/state-emission.ts` now counts retired rows too,
-  which carry no id, so a branch whose only places are retired is still
-  told to use "the ID from Places". Cosmetic; a count of the rows with
-  an id, or a flag the builder sets, fixes it, and the prompt content
-  pass may reword the line anyway. Raised 2026-10-12 by the retired and
-  disabled places implementation.
+- **The location instructions count retired places.** Two prompt lines
+  are gated on `{% if locationMap.size > 0 %}`, which now counts retired
+  rows too, and those carry no id: the narrator's "Use an ID from
+  Places" line (`lib/prompts/bundled/per-turn.ts`) and the
+  state block's `<current_location>` hint
+  (`lib/prompts/bundled/state-emission.ts`). A branch whose only places
+  are retired is still told to use an ID from Places. A count of the
+  rows with an id, or a flag the builder sets, fixes both; the prompt
+  content pass may reword the lines anyway. Raised 2026-10-12 by the
+  retired and disabled places implementation.
 
 - **The fallback classifier's roster lists effectively disabled places
   with ids.** `lib/prompts/bundled/piggyback-fallback-classifier.ts`
