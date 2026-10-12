@@ -48,13 +48,20 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
+      # In the restore prefix, so a dependency update starts cold instead of saving new
+      # artifacts beside the old ones. See docs/development/ci-caching.md.
+      - name: Hash Rust dependencies
+        id: cargo-deps
+        shell: bash
+        run: echo "hash=$(node scripts/ci/cargo-deps-hash.js)" >> "$GITHUB_OUTPUT"
+
       # Same cache discipline as the desktop/Android legs: saved from master only
       # (ci.yml), restored everywhere else.
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          key: ios
+          key: ios-${{ steps.cargo-deps.outputs.hash }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # tauri ios init/build drive XcodeGen, which the CLI only auto-installs
