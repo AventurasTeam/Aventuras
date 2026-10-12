@@ -78,7 +78,7 @@ erDiagram
         text name
         text description
         text status "staged | active | retired"
-        text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'temple destroyed in quake', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
+        text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
         json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes (append-only, never removes). Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
@@ -789,6 +789,59 @@ tower fell, the gate was breached) are recorded as `happenings` rows
 with the location as a participant via `happening_involvements` — not
 as state mutations. State carries the _running consequence_ (`condition:
 "earthquake-damaged"`), not the event log.
+
+**Retired places.** A retired place is gone: it can't be entered.
+Destruction is a `condition` ("burned to the ground", "sank beneath
+the waves"), and a destroyed place stays active, since ruins can still
+be visited. Only the user retires a place; the periodic classifier
+never does
+([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)).
+A World Save that retires a place retires every place inside it in the
+same action, after a confirm naming them, each with the same
+`retired_reason`, so one undo restores them all. That keeps an
+invariant: **no active or staged place sits inside a retired one.**
+Every write that could break it refuses, or redirects:
+
+- retiring a place while the branch's tail scene is in it or anywhere
+  inside it refuses (`story-inside`);
+- bringing back a place whose parent is retired refuses
+  (`retired-parent`), so a cascade comes back top-down, or by undo;
+- a World create or re-parent into a retired place refuses
+  (`retired-parent`); a retired place may still sit inside another
+  retired one;
+- a per-turn create naming a retired parent goes to the root, logged,
+  as an unresolvable parent does
+  ([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item));
+- a location merge refuses a result that breaks it
+  ([`world.md → Merge`](./ui/screens/world/world.md#merge)).
+
+Nothing enters a retired place: the per-turn writer refuses one as the
+`<current_location>`, keeping the previous location; the reader's scene
+editor and World's position pickers don't offer one, and the action
+layer refuses it (`retired-place`). Characters and items already there
+when a place retires stay where they were, as the last place they were
+seen, until the story or the user moves them. Places an earlier
+classifier retired, and active places inside them, need no migration:
+every reader renders them as they stand.
+
+**Disabled places.** `injection_mode = 'disabled'` keeps a place out of
+the prompt with every place inside it. A location is effectively
+disabled when its own mode is `disabled` or an ancestor's is, unless
+the story is inside that ancestor: while the tail scene's location is
+the disabled ancestor or below it, the ancestor's disabling doesn't
+reach the places around the story, though the ancestor itself stays
+off the map unless it is the current location. The effective mode is
+computed, never written, so every place keeps its own mode and
+re-enabling a parent gives the children theirs back. The location map
+([`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)),
+retrieval
+([`retrieval.md → Pool exclusions`](./memory/retrieval.md#pool-exclusions))
+and World read it; it follows `parent_location_id` only, so the
+characters and items at a place are unaffected. Disabling a place, or
+moving one into a disabled region, refuses while the tail scene is in
+it or inside it (`story-inside`): a disabled region the story enters is
+one the model walked into through the prose, never one disabled around
+it.
 
 #### `ItemState` shape
 
@@ -1888,7 +1941,8 @@ create planner did with it.** Three things can differ from the
 absolute state beside them:
 
 - `currentLocation` is rejected when the id does not resolve to a
-  `kind='location'` entity, and the previous location is inherited
+  `kind='location'` entity, or resolves to a retired one, and the
+  previous location is inherited
   instead. `currentLocationRejected` records that decision. The
   fallback rejects a new item's handle there the same way, and keeps
   the handle in `currentLocation` when the item isn't created
@@ -1897,8 +1951,8 @@ absolute state beside them:
   to the remaining headroom when it would push `worldTime` past the
   ceiling. `worldTimeDeltaApplied` records what landed.
 - A create in `newLocations` or `newItems` is created, reused (a
-  location's exact sibling, or an earlier new location of the same
-  name and parent in the block) or dropped (unused, or the narrative
+  location's exact match under the parent the map showed, or an earlier
+  new location of the same name and parent in the block) or dropped (unused, or the narrative
   block it sits in has a failing field), and a location's parent can
   be dropped to the root. Its `outcome`, `id` and
   `parentDropped` record that, and the report's other fields carry the
@@ -2256,6 +2310,10 @@ swap UX warns about this case.
     [docs/memory/retrieval.md → Hybrid retrieval per type](./memory/retrieval.md#hybrid-retrieval-per-type).
 - `disabled` — never include automatically; only surfaces if
   explicitly referenced.
+
+For a location, `disabled` also covers every place inside it, and a
+disabled ancestor beats a place's own `always`
+([`LocationState shape`](#locationstate-shape)).
 
 **Keyword behaviour is a second, orthogonal axis — not a fourth enum
 value.** `injection_mode` answers "does this row inject." What a

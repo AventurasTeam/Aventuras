@@ -19,6 +19,7 @@ Used by:
 - [Provider / profile deletion](../screens/app-settings/app-settings.md#provider-menu-) — confirm-with-impact dialog enumerating broken-reference counts (profile / agent-default), destructive CTA. Blocker-dialog variant (single OK action) fires when an active default or per-story embedder anchors the deletion. Rules in [data-model.md → App settings storage](../../data-model.md#app-settings-storage); UX surface in app-settings.md.
 - [Memory probe](../screens/memory-probe/memory-probe.md) — `Clear all captures` destructive confirm. Default CTA.
 - [World / Plot delete confirm](../screens/world/world.md#delete) (`DeleteConfirmDialog`) — entity, lore, thread and happening row deletes; entity and happening confirms list what goes, lore and thread confirms list nothing. Destructive CTA.
+- [World place cascade confirm](../screens/world/world.md#settings--entity-management-chrome) — a Save that retires or disables a place with places inside it, or moves a place into a disabled one; the retire confirm lists the places it takes, the disable one counts them. One confirm per Save. Default CTA.
 
 Branch-row and per-row destructive actions inside overlays / panels
 use the lighter [`inline-delete-confirm.md`](./inline-delete-confirm.md)

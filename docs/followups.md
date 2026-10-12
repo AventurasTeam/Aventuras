@@ -13,6 +13,24 @@ for the placement rule.
 
 ## Data-model
 
+- **Implement retired and disabled places.** Designed 2026-10-12
+  ([exploration record](./explorations/2026-10-12-retired-and-disabled-places.md));
+  the spec is canon:
+  [`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)
+  for what retired and disabled mean for a place, the cascades and the
+  refusals, with that file's injection-mode line and `stateReport`;
+  [`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)
+  and [`→ Matching before creating`](./memory/piggyback.md#matching-before-creating)
+  for the map and the matcher;
+  [`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)
+  for the classifier never retiring a place;
+  [`retrieval.md → Pool exclusions`](./memory/retrieval.md#pool-exclusions)
+  for the effective mode in retrieval; and
+  [`world.md → Settings`](./ui/screens/world/world.md#settings--entity-management-chrome),
+  its Connections pickers and its Merge refusals, with the scene
+  editor's location list
+  ([`entry-card.md → Scene editor`](./ui/patterns/entry-card.md#scene-editor)).
+
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
   extraction, reconciled by Layer B
@@ -24,7 +42,12 @@ for the placement rule.
   periodic classifier creates them behind a story setting that defaults
   to off, matched by the per-turn writer's sibling rule
   ([`piggyback.md → Matching before creating`](./memory/piggyback.md#matching-before-creating))
-  and parented from the window. Open: which writer wins when the
+  and parented from the window. The classifier sees every place, flat,
+  so its matcher compares a new place with its real siblings; to
+  parent one it gets the places as a full tree, every place in any mode
+  or status with its id, in place of the flat location lines in Known
+  entities, not the narrator's map, which hides places it must still
+  name. Open: which writer wins when the
   per-turn writer and a pass create the same new place in one window
   (leaning the pass, or the pair goes to collision review); and
   re-checking the parked
@@ -41,7 +64,10 @@ for the placement rule.
   description refresh. A refresh reverses the authorship contract's
   user-only description
   ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)),
-  so the design decides whether chapter close may rewrite one.
+  so the design decides whether chapter close may rewrite one. It
+  never retires a place: a destroyed place stays active, its
+  destruction a `condition`
+  ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
 
 - **Prompt content pass.** The
   [system and user halves](./architecture.md#system-and-user-halves)
@@ -75,26 +101,6 @@ for the placement rule.
     active and staged entries;
   - the suggestion refresh's In scene list prints an empty line under
     an entity with no description.
-
-- **Revisit leaving places off the `# Places` map.** The map leaves
-  out retired places and `injection_mode = 'disabled'` ones (unless
-  current), and hangs a left-out place's children under its nearest
-  listed ancestor (`lib/world/location-map.ts`,
-  [`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)).
-  The per-turn writer compares a re-created place with the siblings
-  under its real `parent_location_id` (`planLocations`,
-  `matchNewLocation`), so a place whose parent is hidden, re-created by
-  exact name under the parent the map shows, is an unflagged duplicate
-  ([`→ Matching before creating`](./memory/piggyback.md#matching-before-creating)).
-  Retired parents cause it as well as disabled ones, and both leave
-  active children behind: retiring a place, by the periodic classifier
-  or a World Save, changes only its own status, and a mode change only
-  its own column, so neither moves nor retires its children. Candidate
-  directions, none chosen: always list disabled places and keep only
-  retired ones off; show a hidden parent as a bare name line; match a
-  re-created place against the parent the map shows. Raised 2026-10-11
-  by the locations-and-items-from-prose slice review, reopened by the
-  developer from its dismissals.
 
 ## UX
 

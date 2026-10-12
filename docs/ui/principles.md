@@ -816,6 +816,10 @@ that the UI exposes as a dropdown:
 | `auto`     | Keyword + embedding + LLM-fallback retrieval (smart default) |
 | `disabled` | Exists in data, never reaches the prompt                     |
 
+For a place, `disabled` covers every place inside it too, with the
+places around the story exempt while the story is inside
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+
 **Default: `auto`.** `happenings` deliberately don't expose this —
 the `happening_awareness` graph IS their structural injection rule.
 

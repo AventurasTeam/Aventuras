@@ -1036,9 +1036,16 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         <div class="field-label">status
           <span class="type-hint">enum &middot; entities.status</span>
         </div>
-        <div class="input-select">
-          <span>active</span>
-          <span style="color: var(--ink-faint);">&#9662;</span>
+        <div>
+          <div class="input-select">
+            <span>active</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+          <!-- Place variant: retiring cascades and refuses per world.md → Settings. The refusal shows on this field. -->
+          <div class="kind-entity-only" style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+            For a place, retiring retires every place inside it: Save asks first ("Retire Port Vellis and the 3 places inside it?").
+            <span style="color: var(--warn);"><br>Refused: The story is in The Rusty Anchor, inside Port Vellis.</span>
+          </div>
         </div>
       </div>
       <div class="field-row">
@@ -1053,7 +1060,9 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
             <b>always</b>: unconditional &middot; <b>auto</b>: keyword + embedding + LLM-fallback &middot; <b>disabled</b>: excluded. Overridden for in-scene active entities.
             <!-- Place variant: the shipped hint adds this line for a location only. -->
-            <span class="kind-entity-only"><br>For a place, <b>always</b> and <b>auto</b> keep its name on the location map and govern only its description; <b>disabled</b> takes it off the map too, unless it is the current location.</span>
+            <span class="kind-entity-only"><br>For a place, <b>always</b> and <b>auto</b> keep its name on the location map and govern only its description; <b>disabled</b> takes it off the map with every place inside it, unless it is the current location. Save asks first when it has places inside.</span>
+            <!-- Inherited variant: shown only on a place disabled through an ancestor; its own dropdown stays editable. -->
+            <span class="kind-entity-only" style="color: var(--ink);"><br>Disabled through Port Vellis: stays out of the story whatever its own mode, unless it's the current location.</span>
           </div>
         </div>
       </div>

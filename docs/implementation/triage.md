@@ -148,26 +148,6 @@ slice-planning gate forces its resolution before that slice is planned.
   told which person to write in. Raised 2026-10-11 by the system and
   user prompt halves design.
 
-- **The per-turn writers plan against the entity snapshot taken before
-  their model call.** Both read `working.set.entities` ahead of the
-  call (`lib/pipeline/definitions/per-turn.ts:52`,
-  `per-turn-piggyback.ts:213`), while the periodic classifier runs
-  no-gate and can retire an entity mid-stream
-  ([`cadence.md → Single-writer-per-write-set in v1`](../memory/cadence.md#single-writer-per-write-set-in-v1)).
-  A retire landing mid-stream on the place the turn moves to leaves the
-  scene at a retired row, so the next prompt seats no
-  `# Current location` (`lib/retrieval/pools.ts`). Already on main this
-  happens when the model names the place by its listed id, since
-  `apply.ts` takes any `kind === 'location'` row as
-  `<current_location>` with no status check; this PR adds the create
-  planner, which reuses a sibling retired mid-stream because
-  `lib/world/new-entity-match.ts` filters retired rows out of a list
-  that predates the retire. Candidate fixes: re-read the branch's
-  entities after the call for apply and the planner; or a status gate
-  in apply, which needs the fresh read too, since the snapshot still
-  shows the row active. Raised 2026-10-11 by the
-  locations-and-items-from-prose slice review.
-
 - **The scene editor doesn't promote a staged current location it
   sets.** `updateEntrySceneFields`
   (`lib/actions/story-entries/scene-fields.ts`, ~line 108) passes only

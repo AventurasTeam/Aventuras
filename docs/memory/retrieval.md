@@ -1171,10 +1171,11 @@ The retrieval pool per type after the structural floor is satisfied.
 | Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                                                                                                                                                          |
 | Current location entity        | `entities.status='active' AND id = currentLocationId` — same short-circuit. A staged, retired or deleted `currentLocationId` seats nothing, so the location block is guarded on the seated row, never on the id                                              |
 | Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                |
-| `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                                                                                                                                                                      |
+| `injection_mode='always'` rows | Across entities / lore / threads — user-intent override. A location disabled through an ancestor isn't seated: the ancestor's `disabled` wins ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape))                                |
 
 Beside the floor, the per-turn prompt carries the location map, every
-listed location's name and id as a tree, the in-scene characters' held
+listed location's name as a tree with the id of each one not retired,
+the in-scene characters' held
 items and the items lying at the current location
 ([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)).
 They bypass the ranker and are seated unconditionally, so they count
@@ -1240,6 +1241,10 @@ with it is seated. Nothing is ranked in between.
   [Common-knowledge happenings — special case](#common-knowledge-happenings--special-case)).
 - **Pending / resolved / failed threads** join the ranker pool subject
   to `injection_mode`.
+- **Effectively disabled locations** — a place whose own mode or an
+  ancestor's is `disabled` is excluded, except an ancestor the story
+  is inside, whose disabling doesn't reach the places around the story
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 - **Same-name suppression** — staged entities whose names appear in
   recent un-classified buffer prose are suppressed from the current
   pool (see

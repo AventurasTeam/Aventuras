@@ -129,7 +129,7 @@ Two paths to staged → active. Both converge on the same end state.
 When piggyback's `sceneEntities` includes an entity ID currently at
 `status='staged'`, that's a strong signal of intentional introduction.
 So is a `<current_location>` naming a staged location, or a new
-location reusing a staged sibling.
+location reusing a staged place.
 Piggyback processing auto-promotes inline:
 
 1. Detect staged-ID in emitted `sceneEntities`.
@@ -187,6 +187,11 @@ unambiguous prose evidence:
 Conservative bias. Single-line ambiguous prose ("Kael wandered off")
 does **not** trigger retirement.
 
+Places are out of scope: a retired place can't be entered, so a
+destroyed one stays active with its destruction as a `condition`, and
+only the user retires a place
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+
 ### "Wandered off" stays active
 
 Off-screen-but-alive characters stay `status='active'` with stale
@@ -204,7 +209,7 @@ the hard-finality model and would mislead the design.
 Across the closed range, can demote `active → retired` on chapter-scope
 evidence ("character mentioned once in 50 turns; last seen leaving the
 kingdom permanently") that single-prose-line periodic classifier would
-(correctly) skip.
+(correctly) skip. Never a location, for the reason above.
 
 ### Retired → active is user-only in v1
 

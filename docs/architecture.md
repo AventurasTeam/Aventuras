@@ -940,7 +940,9 @@ metadata.sceneEntities` are ALWAYS injected, regardless of
 - **Active threads.** `threads.status='active'` must-inject as
   structural framing.
 - **`injection_mode='always'` rows** across entities / lore /
-  threads — user-intent override.
+  threads — user-intent override, except a location disabled through
+  an ancestor
+  ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
 
 Rationale for the active+in-scene invariant: the entity IS what the
 current narrative revolves around. Excluding one on a user-set

@@ -322,6 +322,13 @@ prohibits. `MultiSelect` therefore contributes
 overlay, and the location field forces `Select`'s inline `radio` mode
 rather than letting the auto-derivation pick `dropdown`.
 
+The location list leaves out retired places and disabled ones,
+including places disabled only through an ancestor
+([`data-model.md → LocationState shape`](../../data-model.md#locationstate-shape)):
+a retired place can't be entered, and the way into a disabled region
+is re-enabling it first. A current location that is already one of
+them keeps showing until it is changed.
+
 Tier split and hosting otherwise follow the world-time overlay: at
 desktop and tablet the card hosts a Dialog itself; at phone it renders
 no Sheet and calls a request handler, with the host presenting the

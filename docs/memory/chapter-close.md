@@ -377,7 +377,9 @@ and considers retirement on chapter-scope evidence:
 - **Auto-retire** when the chapter contains explicit hard-finality
   signal that the periodic classifier may have missed on single-line
   ambiguity (a death scene the classifier read as injury, the
-  chapter-scope context confirms otherwise).
+  chapter-scope context confirms otherwise). Never a location: only
+  the user retires a place
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 - **Surface for user review** when a character's `lastSeenAt` is
   far back AND prose doesn't explicitly justify keeping them
   active. Doesn't auto-mutate; surfaces in the World panel as
