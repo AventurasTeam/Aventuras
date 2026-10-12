@@ -29,8 +29,8 @@
   } from '@lucide/svelte'
 
   // Icon map for rendering selected icon in collapsed state
+  import type { LucideIcon } from '@lucide/svelte'
   import {
-    Icon,
     Heart,
     Shield,
     Sword,
@@ -75,7 +75,7 @@
     Gauge,
   } from '@lucide/svelte'
 
-  const ICON_COMPONENTS: Record<string, typeof Icon> = {
+  const ICON_COMPONENTS: Record<string, LucideIcon> = {
     Heart,
     Shield,
     Sword,

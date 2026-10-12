@@ -3,8 +3,8 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { cn } from '$lib/utils/cn'
+  import type { LucideIcon } from '@lucide/svelte'
   import {
-    Icon,
     Heart,
     Shield,
     Sword,
@@ -60,7 +60,7 @@
   let open = $state(false)
   let search = $state('')
 
-  type IconEntry = { name: string; component: typeof Icon }
+  type IconEntry = { name: string; component: LucideIcon }
 
   const ICONS: IconEntry[] = [
     { name: 'Heart', component: Heart },

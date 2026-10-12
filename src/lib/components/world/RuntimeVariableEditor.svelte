@@ -2,8 +2,8 @@
   import type { RuntimeVariable } from '$lib/services/packs/types'
   import { Input } from '$lib/components/ui/input'
   import * as Select from '$lib/components/ui/select'
+  import type { LucideIcon } from '@lucide/svelte'
   import {
-    Icon as LucideIcon,
     Heart,
     Shield,
     Sword,
@@ -57,7 +57,7 @@
 
   let { definition, currentValue, onChange }: Props = $props()
 
-  const ICON_MAP: Record<string, typeof LucideIcon> = {
+  const ICON_MAP: Record<string, LucideIcon> = {
     Heart,
     Shield,
     Sword,

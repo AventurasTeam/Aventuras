@@ -5,8 +5,8 @@
     RuntimeVariableValue,
   } from '$lib/services/packs/types'
   import RuntimeVariableEditor from './RuntimeVariableEditor.svelte'
+  import type { LucideIcon } from '@lucide/svelte'
   import {
-    Icon as LucideIcon,
     Heart,
     Shield,
     Sword,
@@ -71,7 +71,7 @@
     class: className = '',
   }: Props = $props()
 
-  const ICON_MAP: Record<string, typeof LucideIcon> = {
+  const ICON_MAP: Record<string, LucideIcon> = {
     Heart,
     Shield,
     Sword,

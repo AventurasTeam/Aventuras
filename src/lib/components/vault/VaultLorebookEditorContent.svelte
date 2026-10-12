@@ -73,6 +73,7 @@
     onOpenAssistant,
     onApproveAllAsync,
     hideHeader = false,
+    // eslint-disable-next-line unused-imports/no-unused-vars -- output-only binding, written by an effect
     hasChanges = $bindable(false),
   }: Props = $props()
 
