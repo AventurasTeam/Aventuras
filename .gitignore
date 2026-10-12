@@ -29,6 +29,7 @@ node_modules/
 .pnpm-store/
 .yarn/
 .npm/
+.npm-cache/
 
 # -----------------------------------------------------------------------------
 # Build Outputs
