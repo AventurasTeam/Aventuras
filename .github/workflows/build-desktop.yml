@@ -51,8 +51,8 @@ jobs:
     container: ${{ matrix.container }}
 
     steps:
-      # zstd isn't in the plain ubuntu:22.04 image (unlike the ubuntu-latest runner image), so
-      # without it actions/cache falls back to a slower gzip compressor for this leg's caches.
+      # zstd isn't in the plain ubuntu:22.04 image. actions/cache needs it for speed and so this leg's
+      # npm entry matches the Android job's (docs/development/ci-caching.md#npm).
       - name: Install Linux build dependencies
         if: matrix.artifact_name == 'linux'
         env:

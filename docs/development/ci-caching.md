@@ -224,8 +224,13 @@ Consequences:
   ones are the least recently used, so they go first. Deleting them by hand
   (`gh cache list --key v0-rust-` then `gh cache delete <id>`) frees the space immediately.
 
-Expected footprint: about 3.9 GB of platform Rust caches at 2026-10-01 sizes, plus Clippy's
-`target/` (~600 MiB) and the `main` branch's ~0.9 GB.
+Expected footprint, across all caches: about 3.9 GB of platform Rust caches at 2026-10-01 sizes,
+plus Clippy's `target/` (~600 MiB), the `main` branch's ~0.9 GB, [Gradle](#gradle)'s 843 MB and
+three ~140 MB [npm](#npm) entries (Linux, Windows, macOS): about 6.7 GB. A dependency-update merge
+briefly adds a second generation of Rust caches, and a change to any `*.gradle*` file a second
+Gradle entry (the basic provider has no restore-keys and no cleanup). Together they pass 10 GB;
+eviction takes the stale generation first, and `gh cache list --key setup-java-Linux-` then
+`gh cache delete <id>` frees the old Gradle entry immediately.
 
 **Re-check** if rust-cache ships #381 (an exact-match restore would make the hash unnecessary), or
 if dependency updates become frequent enough that the cold builds hurt.
@@ -233,9 +238,10 @@ if dependency updates become frequent enough that the cold builds hurt.
 ## Gradle
 
 `build-android.yml` uses `gradle/actions/setup-gradle@v6` with the **basic** provider: one 843 MB
-entry holding `~/.gradle/caches` and `~/.gradle/wrapper`, keyed on a hash of the build files,
-restored as an exact hit on every run. It saved only dependency and wrapper downloads; the task
-work ran regardless (see [Android generated Kotlin](#android-generated-kotlin)).
+entry holding `~/.gradle/caches` and `~/.gradle/wrapper`, keyed on a hash of the build files and
+restored as an exact hit on every run. It runs before `npm-install`, so the hash covers only tracked
+files. It saves dependency resolution and wrapper downloads; Gradle's task work still runs every
+time (see [Android generated Kotlin](#android-generated-kotlin)).
 
 The **enhanced** provider ([docs](https://github.com/gradle/actions/blob/main/docs/setup-gradle.md#enhanced-caching))
 was considered instead:
@@ -269,7 +275,7 @@ Gradle does not log without `--info`. Net cost uncached: about 1m45s per run, on
 already finishes last.
 
 **Decision:** cached, `cache-provider: basic` so the proprietary component is never selected.
-It saves only from the default branch, like the other caches.
+It saves only from `master` (`cache-read-only`), like the other caches.
 
 ## npm
 
@@ -289,11 +295,14 @@ On Linux the action therefore points `npm_config_cache` at `.npm-cache` inside t
 `/home/runner/work/Aventuras/Aventuras/.npm-cache` on the host. Those are the same directory, and
 the literal path and the relative position match. A sibling `../.npm-cache` would restore but
 never save: `actions/cache/save` resolves its paths with `@actions/glob`, which rejects `..`
-segments, and the action reports that only as a warning.
+segments, and the action reports that only as a warning. An absolute path outside the workspace,
+such as `/tmp/npm-cache`, has one literal path but sits at a different depth from each workspace
+(`../../../tmp` in the container, `../../../../../tmp` on the host), so it fails like `~/.npm`.
 
-Windows keeps the Dev Drive path `build-desktop.yml` sets, and macOS has no container split, so
-neither changes. Desktop Linux installs `zstd` before this action; without it, the compression
-method would differ and split the entry again.
+A caller that sets `npm_config_cache` keeps it on every OS; on Linux that gives up the shared
+entry. Windows keeps the Dev Drive path `build-desktop.yml` sets, and macOS has no container split.
+Desktop Linux installs `zstd` before this action; without it, the compression method would differ
+and split the entry again.
 
 ## armv7
 
