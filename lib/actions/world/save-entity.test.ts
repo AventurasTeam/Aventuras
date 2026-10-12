@@ -535,17 +535,20 @@ describe('saveEntity — places', () => {
     })
   })
 
-  it('reads the story from the entry before a tail with no scene', async () => {
+  // The scene the next turn's prompt reads: the latest narrative entry, past actions with none.
+  it('reads the story from the latest narrative entry, past actions with no scene', async () => {
     const { db, ctx } = await seed(REGION, 'loc_back')
-    await db.insert(storyEntries).values({
-      id: 'entry_2',
-      branchId: 'br_1',
-      position: 2,
-      kind: 'user_action',
-      content: 'I wait.',
-      metadata: null,
-      createdAt: 2,
-    })
+    await db.insert(storyEntries).values(
+      [2, 3].map((position) => ({
+        id: `entry_${position}`,
+        branchId: 'br_1',
+        position,
+        kind: 'user_action' as const,
+        content: 'I wait.',
+        metadata: null,
+        createdAt: position,
+      })),
+    )
     const result = await saveEntity(
       await locationSave(db, 'loc_vellis', { injectionMode: 'disabled' }),
       ctx,

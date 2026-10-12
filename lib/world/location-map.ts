@@ -20,6 +20,12 @@ export type LocationMapView = {
   rows: LocationMapRow[]
   isListed: (id: string) => boolean
   anchorOf: (id: string) => MapAnchor
+  /**
+   * How many left-out places lie between a place and `parentId` (null: the root) on this map, or
+   * null when the map wouldn't hang it there. A left-out `parentId` counts as listed: a per-turn
+   * create reaches one only through a handle already reused onto it.
+   */
+  hiddenBetween: (id: string, parentId: string | null) => number | null
 }
 
 function mapRow(location: Entity, depth: number): LocationMapRow {
@@ -82,11 +88,20 @@ export function locationMapView(
   for (const location of unreached) rows.push(mapRow(location, 0))
   const atRoot = new Set(unreached.map((e) => e.id))
 
-  return {
-    rows,
-    isListed: (id) => listedIds.has(id),
-    anchorOf: (id) => (atRoot.has(id) ? { parentId: null, hidden: 0 } : chainAnchor(id)),
+  const anchorOf = (id: string): MapAnchor =>
+    atRoot.has(id) ? { parentId: null, hidden: 0 } : chainAnchor(id)
+  const hiddenBetween = (id: string, parentId: string | null): number | null => {
+    const anchor = anchorOf(id)
+    if (anchor.parentId === parentId) return anchor.hidden
+    let hidden = 0
+    for (const ancestorId of parentChainIds(id, parentOf)) {
+      if (ancestorId === parentId) return hidden
+      if (listedIds.has(ancestorId)) return null
+      if (locationIds.has(ancestorId)) hidden++
+    }
+    return null
   }
+  return { rows, isListed: (id) => listedIds.has(id), anchorOf, hiddenBetween }
 }
 
 export function buildLocationMap(

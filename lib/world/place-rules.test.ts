@@ -575,6 +575,30 @@ describe('placeSaveConfirm', () => {
     expect(confirm?.move).toEqual({ region: named(disabledThorn), place: named(MARKET), count: 0 })
   })
 
+  it('asks nothing for a move of a place already out of the story', () => {
+    const disabledThorn = { ...THORNWOOD, injectionMode: 'disabled' as const }
+    const disabledVellis = { ...VELLIS, injectionMode: 'disabled' as const }
+    const ownDisabled = { ...ANCHOR, injectionMode: 'disabled' as const }
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: ownDisabled,
+          draft: { parentLocationId: 'loc_thorn' },
+          entities: [ELDRA, VELLIS, ownDisabled, disabledThorn],
+        }),
+      ),
+    ).toBeNull()
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: ANCHOR,
+          draft: { parentLocationId: 'loc_thorn' },
+          entities: [ELDRA, disabledVellis, ANCHOR, disabledThorn],
+        }),
+      ),
+    ).toBeNull()
+  })
+
   it('asks nothing for a move within a disabled region', () => {
     const disabledVellis = { ...VELLIS, injectionMode: 'disabled' as const }
     expect(
@@ -630,12 +654,26 @@ describe('storyLocationIdOf', () => {
     worldTime: 0,
   })
 
-  it("reads the tail's location, falling back one entry for a metadata-less tail", () => {
-    expect(storyLocationIdOf({ tail: { metadata: meta('loc_a') }, previous: null })).toBe('loc_a')
+  // generation-context's readSceneSource: the latest ai_reply or opening, whatever sits after it.
+  it("reads the latest narrative entry's location, past actions with no scene", () => {
     expect(
-      storyLocationIdOf({ tail: { metadata: null }, previous: { metadata: meta('loc_b') } }),
+      storyLocationIdOf([
+        { kind: 'opening', metadata: meta('loc_a') },
+        { kind: 'ai_reply', metadata: meta('loc_b') },
+        { kind: 'user_action', metadata: null },
+        { kind: 'user_action', metadata: null },
+      ]),
     ).toBe('loc_b')
-    expect(storyLocationIdOf(null)).toBeNull()
+  })
+
+  it('reads no location from a narrative entry with no scene, or from no entries', () => {
+    expect(
+      storyLocationIdOf([
+        { kind: 'opening', metadata: meta('loc_a') },
+        { kind: 'ai_reply', metadata: null },
+      ]),
+    ).toBeNull()
+    expect(storyLocationIdOf([])).toBeNull()
   })
 })
 
@@ -799,6 +837,56 @@ describe('mergePlaceRefusal', () => {
         },
       ),
     ).toBeNull()
+  })
+
+  // A nested pair: the story's chain runs through the inner row, so its own mode counts before.
+  it('lets a disabled canonical inside the loser keep the story it already holds', () => {
+    const outer = place('loc_outer', 'Rusty Anchor', 'loc_vellis')
+    const inner = place('loc_inner', 'Rusty Anchor', 'loc_outer', { injectionMode: 'disabled' })
+    const room = place('loc_room', 'Cellar', 'loc_inner')
+    expect(
+      merge(
+        { injectionMode: 'disabled', parentId: null },
+        {
+          canonical: inner,
+          loser: outer,
+          entities: [ELDRA, VELLIS, outer, inner, room],
+          story: 'loc_room',
+        },
+      ),
+    ).toBeNull()
+  })
+
+  it('lets a disabled loser inside the canonical hand its mode to the place around the story', () => {
+    const outer = place('loc_outer', 'Rusty Anchor', 'loc_vellis')
+    const inner = place('loc_inner', 'Rusty Anchor', 'loc_outer', { injectionMode: 'disabled' })
+    expect(
+      merge(
+        { injectionMode: 'disabled' },
+        {
+          canonical: outer,
+          loser: inner,
+          entities: [ELDRA, VELLIS, outer, inner],
+          story: 'loc_inner',
+        },
+      ),
+    ).toBeNull()
+  })
+
+  it("still refuses a nested merge that turns the story's place disabled", () => {
+    const outer = place('loc_outer', 'Rusty Anchor', 'loc_vellis')
+    const inner = place('loc_inner', 'Rusty Anchor', 'loc_outer')
+    expect(
+      merge(
+        { injectionMode: 'disabled', parentId: null },
+        {
+          canonical: inner,
+          loser: outer,
+          entities: [ELDRA, VELLIS, outer, inner],
+          story: 'loc_inner',
+        },
+      ),
+    ).toBe('story-inside')
   })
 
   it('lets a merge the story is outside through', () => {

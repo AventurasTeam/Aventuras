@@ -33,12 +33,17 @@ export function checkParentChain(
 
 type LocationRow = Pick<Entity, 'id' | 'kind' | 'state'>
 
+/** A location row's parent; null at the root. */
+export function parentIdOf(row: Pick<Entity, 'state'>): string | null {
+  return (row.state as LocationState | null)?.parent_location_id ?? null
+}
+
 /** Parent pointers of the location rows; any other id has none. */
 export function parentOfLocations(rows: readonly LocationRow[]): ParentOf {
   const parents = new Map<string, string | null>()
   for (const row of rows) {
     if (row.kind !== 'location') continue
-    parents.set(row.id, (row.state as LocationState | null)?.parent_location_id ?? null)
+    parents.set(row.id, parentIdOf(row))
   }
   return (id) => parents.get(id) ?? null
 }

@@ -966,6 +966,30 @@ describe('useRowSaveSession — confirm before commit', () => {
     expect(proceed).not.toHaveBeenCalled()
   })
 
+  // The leave dialog hides behind the question, so a leave raised meanwhile was never declined.
+  it('keeps a leave raised while the question was up, on cancel, for its own dialog', async () => {
+    const proceed = vi.fn()
+    const hook = setup(okCommit(), undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    act(() => hook.result.current.requestLeave(proceed))
+    act(() => hook.result.current.resolveConfirm('cancel'))
+    expect(hook.result.current.pendingLeave).toBe(true)
+    expect(proceed).not.toHaveBeenCalled()
+  })
+
+  it('clears the previous rejection when a Save parks behind its question', async () => {
+    let ask: RowSaveConfirm | null = null
+    const commit = vi.fn<Commit>(async () => ({ status: 'rejected', reason: 'blocked' }))
+    const hook = setup(commit, undefined, { confirmBeforeCommit: () => ask })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    expect(hook.result.current.saveError).toBe('blocked')
+    ask = ASK
+    await saveOutcome(hook)
+    expect(hook.result.current.saveError).toBeNull()
+  })
+
   it('runs a leave waiting on the Save once the confirmed write lands', async () => {
     const proceed = vi.fn()
     const hook = setup(okCommit(), undefined, { confirmBeforeCommit: asksAlways })

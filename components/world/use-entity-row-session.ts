@@ -74,16 +74,16 @@ export function useEntityRowSession<Draft extends EntityDraft>({
       if (result.status === 'rejected') {
         // A place rule names its own field and places (data-model.md → LocationState shape).
         const { refusal } = result
-        const placeText = refusal == null ? null : placeRefusalText(refusal)
-        const target =
-          refusal == null || placeText == null
-            ? fieldErrors?.[result.code]
-            : { field: refusal.field as Path<Draft>, message: placeText }
+        const place =
+          refusal == null
+            ? null
+            : { field: refusal.field as Path<Draft>, message: placeRefusalText(refusal) }
+        const target = place ?? fieldErrors?.[result.code]
         // A row switch while the write was in flight: this refusal is no longer this row's to show.
         if (target != null && rowKeyRef.current === startKey) {
           formRef.current?.setError(target.field, { type: 'server', message: target.message })
         }
-        return { status: 'rejected', reason: placeText ?? saveRejectionText(result.code) }
+        return { status: 'rejected', reason: place?.message ?? saveRejectionText(result.code) }
       }
       if (rowKeyRef.current === startKey) keywords?.markSaved(draft.keywords)
       // The write landed: a throwing onSaved must not read as failed, or a retry creates it twice.

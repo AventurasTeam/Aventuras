@@ -38,6 +38,7 @@ import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
+import { loadSceneSource } from '../story-entries/head-turn'
 import type { DbCtx } from '../types'
 
 export const COLLISION_REJECTION = {
@@ -141,6 +142,7 @@ function buildResolution(
   branchId: string,
   resolution: CollisionResolution,
   head: HeadTurn<StoryEntry> | null,
+  storyLocationId: string | null,
 ): Built {
   const gated = gateRefusal()
   if (gated) return gated
@@ -175,7 +177,7 @@ function buildResolution(
           loser,
           merged: mergedPlaceOf(actions, canonical),
           branchEntities,
-          storyLocationId: storyLocationIdOf(head),
+          storyLocationId,
         })
         if (code != null) return refusal(code, `the merged place breaks a place rule: ${code}`)
       }
@@ -209,7 +211,15 @@ async function commitMerge(
   return withTailMetadataLock<DeltaGroupResult>(
     branchId,
     ctx,
-    (head) => commit(branchId, () => buildResolution(branchId, resolution, head), ctx),
+    async (head) => {
+      const scene = await loadSceneSource(branchId, ctx)
+      const storyLocationId = storyLocationIdOf(scene == null ? [] : [scene])
+      return commit(
+        branchId,
+        () => buildResolution(branchId, resolution, head, storyLocationId),
+        ctx,
+      )
+    },
     () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
   )
 }
@@ -220,7 +230,7 @@ function dispatch(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   if (resolution.mode === 'merge') return commitMerge(branchId, resolution, ctx)
-  return commit(branchId, () => buildResolution(branchId, resolution, null), ctx)
+  return commit(branchId, () => buildResolution(branchId, resolution, null, null), ctx)
 }
 
 function rejected(

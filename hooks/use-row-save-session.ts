@@ -188,6 +188,8 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const [pendingLeave, setPendingLeave] = useState(false)
   const [pendingConfirm, setPendingConfirmState] = useState<RowSaveConfirm | null>(null)
   const pendingConfirmRef = useRef<RowSaveConfirm | null>(null)
+  // How many queued leaves were waiting on the Save when it parked: a cancel drops only those.
+  const parkedIntentsRef = useRef(0)
   const setPendingConfirm = useCallback((ask: RowSaveConfirm | null) => {
     pendingConfirmRef.current = ask
     setPendingConfirmState(ask)
@@ -310,9 +312,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
           return { status: 'invalid', reason: issue == null ? '' : issueText(issue) }
         }
         const draft = cloneValue(form.getValues())
+        setSaveError(null)
         const ask = confirmed ? null : (confirmBeforeCommit?.(draft) ?? null)
         if (ask != null) return { status: 'confirm', ask }
-        setSaveError(null)
         const result = await commit(draft)
         return result.status === 'ok' ? { status: 'ok', draft } : result
       } catch (error) {
@@ -356,7 +358,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
       if (written.status === 'invalid') return { outcome: written, clean: false }
       if (written.status === 'confirm') {
         // Not across a row switch: the question would be about a draft the form no longer holds.
-        if (appliedRef.current.rowKey === key) setPendingConfirm(written.ask)
+        if (appliedRef.current.rowKey === key) {
+          parkedIntentsRef.current = intentsRef.current.length
+          setPendingConfirm(written.ask)
+        }
         return { outcome: { status: 'confirm' }, clean: false }
       }
       if (written.status === 'rejected') reportRejection(written.reason)
@@ -416,14 +421,16 @@ export function useRowSaveSession<Draft extends FieldValues>({
     (outcome: 'save' | 'cancel') => {
       if (pendingConfirmRef.current == null || busyRef.current) return
       setPendingConfirm(null)
-      // The user did not consent, so a leave waiting on this Save must not fire later either.
+      // The user did not consent, so a leave waiting on this Save must not fire later either. One
+      // raised while the question hid the leave dialog was never declined, so it gets that dialog.
       if (outcome === 'cancel') {
-        clearIntents()
+        intentsRef.current = intentsRef.current.slice(parkedIntentsRef.current)
+        setPendingLeave(intentsRef.current.length > 0)
         return
       }
       void runSave(true)
     },
-    [clearIntents, runSave, setPendingConfirm],
+    [runSave, setPendingConfirm],
   )
 
   const requestLeave = useCallback(

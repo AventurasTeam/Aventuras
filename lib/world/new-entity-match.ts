@@ -1,10 +1,9 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
-import { stateOf } from './entity-draft'
 import type { LocationMapView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
-import { parentChainIds, parentOfLocations } from './parent-chain'
+import { parentIdOf } from './parent-chain'
 
 const SAME_PARENT = 'same-parent' satisfies CollisionReason
 
@@ -14,31 +13,6 @@ export type PlaceMatch =
 
 function byAge(a: Entity, b: Entity): number {
   return a.createdAt - b.createdAt || compareId(a.id, b.id)
-}
-
-const parentIdOf = (e: Entity): string | null => stateOf(e, 'location').parent_location_id ?? null
-
-/**
- * How many left-out places lie between a place and `parentId` on the map the prompt showed, or null
- * when the map would not have hung it there. A left-out parent counts as listed: a create reaches
- * one only through a handle the matcher already reused onto it.
- */
-function hiddenBetween(
-  place: Entity,
-  parentId: string | null,
-  view: LocationMapView,
-  isLocation: (id: string) => boolean,
-  parentOf: (id: string) => string | null,
-): number | null {
-  const anchor = view.anchorOf(place.id)
-  if (anchor.parentId === parentId) return anchor.hidden
-  let hidden = 0
-  for (const ancestorId of parentChainIds(place.id, parentOf)) {
-    if (ancestorId === parentId) return hidden
-    if (view.isListed(ancestorId)) return null
-    if (isLocation(ancestorId)) hidden++
-  }
-  return null
 }
 
 /**
@@ -54,14 +28,11 @@ export function matchNewLocation(
   view: LocationMapView,
 ): PlaceMatch {
   const locations = entities.filter((e) => e.kind === 'location')
-  const locationIds = new Set(locations.map((e) => e.id))
-  const parentOf = parentOfLocations(locations)
-  const isLocation = (id: string) => locationIds.has(id)
 
   const [reused] = locations
     .filter((e) => e.status !== 'retired' && nameBasis(candidate.name, e.name) === 'same-name')
     .flatMap((entity) => {
-      const hidden = hiddenBetween(entity, candidate.parentId, view, isLocation, parentOf)
+      const hidden = view.hiddenBetween(entity.id, candidate.parentId)
       if (hidden === null) return []
       return [{ entity, real: parentIdOf(entity) === candidate.parentId ? 0 : 1, hidden }]
     })

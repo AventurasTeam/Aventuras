@@ -4,13 +4,15 @@ import {
   type Entity,
   type EntryMetadata,
   type LocationState,
+  type StoryEntry,
 } from '@/lib/db'
+import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { blankToNull } from '@/lib/text'
 
 import type { EntitySaveInput } from './entity-actions'
 import { stateOf, type LocationDraft } from './entity-draft'
 import { byName } from './overview'
-import { parentChainIds, parentOfLocations, type ParentOf } from './parent-chain'
+import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
 import { placeModes } from './place-modes'
 
 /** data-model.md → LocationState shape: the codes a write that would break a place rule refuses with. */
@@ -51,24 +53,22 @@ type PlaceSaveArgs = EntitySaveInput & {
   /** The store's row at Save; null in create mode. */
   row: Entity | null
   branchEntities: readonly Entity[]
-  /** The tail scene's location (storyLocationIdOf); only a location update reads it. */
+  /** The story's location (storyLocationIdOf); only a location update reads it. */
   storyLocationId: string | null
 }
 
-type HeadScene = {
-  tail: { metadata: Partial<EntryMetadata> | null }
-  previous: { metadata: Partial<EntryMetadata> | null } | null
-}
+type SceneEntry = { kind: StoryEntry['kind']; metadata: Partial<EntryMetadata> | null }
 
-/** The story's location: the tail scene's, a metadata-less tail falling back one entry. */
-export function storyLocationIdOf(head: HeadScene | null): string | null {
-  return inheritedEntryMetadata(head?.tail.metadata ?? head?.previous?.metadata).currentLocationId
+/**
+ * The story's location: the latest narrative entry's, the scene the next turn's prompt reads
+ * (generation-context's readSceneSource). `entries` ascending by position.
+ */
+export function storyLocationIdOf(entries: readonly SceneEntry[]): string | null {
+  const source = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
+  return inheritedEntryMetadata(source?.metadata).currentLocationId
 }
 
 const namedOf = (e: Pick<Entity, 'id' | 'name'>): NamedPlace => ({ id: e.id, name: e.name })
-
-const parentIdOf = (e: Entity | null): string | null =>
-  e == null ? null : (stateOf(e, 'location').parent_location_id ?? null)
 
 /** The places inside `id`, by its stored parents; a looping chain stops at the repeat. */
 function descendantsOf(id: string, entities: readonly Entity[], parentOf: ParentOf): Entity[] {
@@ -279,7 +279,8 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
     )
     const region = regionId == null ? undefined : byId.get(regionId)
     const plain = placeModes(entities, null)
-    if (region !== undefined)
+    // A place already out of the story, by its own mode or its old chain, loses nothing more.
+    if (region !== undefined && !plain.isDisabled(row.id))
       move = {
         region: namedOf(region),
         place: save.self,
@@ -355,8 +356,10 @@ export function mergePlaceRefusal(args: {
   }
 
   if (!inLoser && !inCanonical) return null
-  // The story's side, read before and after: the loser's own place becomes the canonical's.
-  const side = inLoser ? loser : canonical
+  // The story's side, read before and after: the loser's own place becomes the canonical's. A
+  // nested pair holds the story under both, and its chain runs through the inner row.
+  const canonicalInsideLoser = parentChainIds(canonical.id, parentOf).includes(loser.id)
+  const side = inCanonical && (!inLoser || canonicalInsideLoser) ? canonical : loser
   const before = ownDisabledChain(
     { id: canonical.id, injectionMode: side.injectionMode },
     parentIdOf(side),
