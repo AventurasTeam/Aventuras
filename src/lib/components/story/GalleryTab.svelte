@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { database } from '$lib/services/database'
-  import { imageExportService } from '$lib/services/imageExport'
-  import { retryImageGeneration } from '$lib/services/ai/image'
-  import { errMessage } from '$lib/utils/error'
-  import type { EmbeddedImageMeta } from '$lib/types'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { database } from '#lib/services/database.ts'
+  import { imageExportService } from '#lib/services/imageExport.ts'
+  import { retryImageGeneration } from '#lib/services/ai/image/index.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import type { EmbeddedImageMeta } from '#lib/types/index.ts'
   import {
     Download,
     ImageIcon,
@@ -18,10 +18,10 @@
     ClockArrowDown,
     ClockArrowUp,
   } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Checkbox } from '$lib/components/ui/checkbox'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteSet, SvelteMap } from 'svelte/reactivity'
   import type { Attachment } from 'svelte/attachments'
 

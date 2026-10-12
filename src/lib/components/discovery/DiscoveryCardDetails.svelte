@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { DiscoveryCard } from '$lib/services/discovery'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
+  import type { DiscoveryCard } from '#lib/services/discovery/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
   import {
     Download,
     ArrowLeft,
@@ -11,9 +11,9 @@
     ChevronsUpDown,
     Loader2,
   } from '@lucide/svelte'
-  import * as Alert from '$lib/components/ui/alert'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
   import { slide } from 'svelte/transition'
-  import { discoveryService } from '$lib/services/discovery'
+  import { discoveryService } from '#lib/services/discovery/index.ts'
 
   interface Props {
     card: DiscoveryCard

@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { HTMLInputAttributes, HTMLInputTypeAttribute } from 'svelte/elements'
   import type { WithElementRef } from 'bits-ui'
-  import { cn } from '$lib/utils/cn.js'
-  import { Label } from '$lib/components/ui/label'
+  import { cn } from '#lib/utils/cn.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
   import { Eye, EyeOff, Search } from '@lucide/svelte'
 
   type InputType = Exclude<HTMLInputTypeAttribute, 'file'>

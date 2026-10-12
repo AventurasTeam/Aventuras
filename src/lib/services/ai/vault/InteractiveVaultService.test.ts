@@ -15,28 +15,28 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getPresetConfig: vi.fn(() => ({ model: 'test-model' })),
     getServicePresetId: vi.fn(() => 'test-preset'),
   },
 }))
 
-vi.mock('$lib/stores/characterVault.svelte', () => ({
+vi.mock('#lib/stores/characterVault.svelte.ts', () => ({
   characterVault: { items: [], getById: vi.fn() },
 }))
 
-vi.mock('$lib/stores/lorebookVault.svelte', () => ({
+vi.mock('#lib/stores/lorebookVault.svelte.ts', () => ({
   lorebookVault: { items: [], getById: vi.fn(), getEntryVersion: vi.fn(() => 0) },
 }))
 
-vi.mock('$lib/stores/scenarioVault.svelte', () => ({
+vi.mock('#lib/stores/scenarioVault.svelte.ts', () => ({
   scenarioVault: { items: [], getById: vi.fn() },
 }))
 
 // Pulled in transitively via BaseAIService -> sdk/generate, unused by the paths
 // under test here (they never call this.generate()).
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -44,14 +44,14 @@ vi.mock('$lib/stores/activity.svelte', () => ({
     recordStep: vi.fn(() => ''),
   },
 }))
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { log: vi.fn(), isActive: false },
 }))
 
 // In-memory fake mirroring the real DB's semantics (see database.ts): create()
 // inserts a full row, save() does a partial column update on an existing row.
 const conversationRows = new Map<string, Record<string, unknown>>()
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     // Null makes ContextBuilder fall back to the built-in templates, so these tests render
     // the real interactive-lorebook prompt.
@@ -103,7 +103,7 @@ vi.mock('../sdk/agents/factory', () => ({
 
 const { InteractiveVaultService, getActiveToolNames, TOOL_CATEGORIES, ALWAYS_ACTIVE_TOOLS } =
   await import('./InteractiveVaultService')
-const { database } = await import('$lib/services/database')
+const { database } = await import('#lib/services/database.ts')
 type Service = import('./InteractiveVaultService').InteractiveVaultService
 type VaultState = import('./InteractiveVaultService').VaultState
 type VaultSummary = import('./InteractiveVaultService').VaultSummary

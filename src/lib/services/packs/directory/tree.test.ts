@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
+import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
 import { ABOUT_FILE, GITATTRIBUTES_FILE, PACK_FILE, REFERENCE_DIR, UNGROUPED_DIR } from './layout'
 import {
   buildShippedBaselineTree,

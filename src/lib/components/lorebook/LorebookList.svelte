@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Entry, EntryType } from '$lib/types'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import type { Entry, EntryType } from '#lib/types/index.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import {
     Search,
     Plus,
@@ -15,11 +15,11 @@
   } from '@lucide/svelte'
   import LorebookEntryCard from './LorebookEntryCard.svelte'
 
-  import { Input } from '$lib/components/ui/input'
-  import { Button } from '$lib/components/ui/button'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Checkbox } from '$lib/components/ui/checkbox'
-  import * as Dialog from '$lib/components/ui/dialog'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import {
     DropdownMenu,
     DropdownMenuContent,
@@ -29,7 +29,7 @@
     DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-  } from '$lib/components/ui/dropdown-menu'
+  } from '#lib/components/ui/dropdown-menu/index.ts'
 
   interface Props {
     onNewEntry?: () => void

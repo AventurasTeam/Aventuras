@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { errMessage } from '$lib/utils/error'
-  import { story } from '$lib/stores/story.svelte'
-  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
   import { Upload, FileJson, FileText, Loader2 } from '@lucide/svelte'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
-  import { Label } from '$lib/components/ui/label'
-  import { cn } from '$lib/utils/cn'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   let selectedFormat = $state<LorebookImportExport.ExportFormat>('aventura')
   let exportSelected = $state(false)

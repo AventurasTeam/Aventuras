@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { tagStore } from '$lib/stores/tags.svelte'
-  import type { VaultType } from '$lib/types'
+  import { tagStore } from '#lib/stores/tags.svelte.ts'
+  import type { VaultType } from '#lib/types/index.ts'
   import { Check, Plus } from '@lucide/svelte'
   import TagBadge from './TagBadge.svelte'
   import { fade } from 'svelte/transition'

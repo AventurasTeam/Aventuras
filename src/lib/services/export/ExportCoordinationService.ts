@@ -3,7 +3,7 @@
  * Coordinates with the main exportService to provide complete story data.
  */
 
-import { database } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
 import type {
   StoryEntry,
   Character,
@@ -16,8 +16,8 @@ import type {
   CheckpointRecord,
   Branch,
   EmbeddedImageMeta,
-} from '$lib/types'
-import type { PackBindingExport } from '$lib/services/import'
+} from '#lib/types/index.ts'
+import type { PackBindingExport } from '#lib/services/import/index.ts'
 
 /** Complete story data for export */
 export interface StoryExportData {

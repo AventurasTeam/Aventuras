@@ -1,25 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { settings, STORY_WIDTH_OPTIONS } from '$lib/stores/settings.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { database } from '$lib/services/database'
-  import { grammarService } from '$lib/services/grammar'
+  import { settings, STORY_WIDTH_OPTIONS } from '#lib/stores/settings.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { database } from '#lib/services/database.ts'
+  import { grammarService } from '#lib/services/grammar.ts'
   import { THEMES } from '../../../../themes/themes'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Slider } from '$lib/components/ui/slider'
-  import { Label } from '$lib/components/ui/label'
-  import * as Select from '$lib/components/ui/select'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Badge } from '$lib/components/ui/badge'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import ColorPicker from '$lib/components/shared/ColorPicker.svelte'
-  import { Separator } from '$lib/components/ui/separator'
-  import { cn } from '$lib/utils/cn'
-  import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
-  import { updaterService, UpdateError } from '$lib/services/updater'
-  import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
-  import { isAndroid } from '$lib/utils/platform'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import ColorPicker from '#lib/components/shared/ColorPicker.svelte'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { getSupportedLanguages } from '#lib/services/ai/utils/TranslationService.ts'
+  import { updaterService, UpdateError } from '#lib/services/updater.ts'
+  import { updateNotifier } from '#lib/stores/updateNotifier.svelte.ts'
+  import { isAndroid } from '#lib/utils/platform.ts'
   import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from '@lucide/svelte'
 
   const showIncognitoKeyboard = isAndroid()
@@ -169,7 +169,7 @@
     }
   }
 
-  import type { FontSizeOption } from '$lib/types'
+  import type { FontSizeOption } from '#lib/types/index.ts'
 
   const fontSizes = [
     { value: 'small', label: 'Small' },

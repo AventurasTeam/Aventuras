@@ -5,11 +5,11 @@
  * and chapter context using the Vercel AI SDK ToolLoopAgent.
  */
 
-import type { Entry, Chapter, StoryEntry, TimeTracker } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import type { Entry, Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { createLogger } from '$lib/log'
-import { formatStoryTimeOrNull } from '$lib/utils/storyTime'
+import { createLogger } from '#lib/log.ts'
+import { formatStoryTimeOrNull } from '#lib/utils/storyTime.ts'
 import { splitRecentTail } from './recentTail'
 import { AGENTIC_RETRIEVAL_DEFAULTS } from '../core/defaults'
 import {
@@ -26,12 +26,12 @@ import {
   type RetrievalToolContext,
   type AgenticWorldState,
 } from '../sdk/tools'
-import { ContextBuilder } from '$lib/services/context'
-import { debug } from '$lib/stores/debug.svelte'
-import { activity } from '$lib/stores/activity.svelte'
-import { describeActivityError } from '$lib/services/activity'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { debug } from '#lib/stores/debug.svelte.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
+import { describeActivityError } from '#lib/services/activity/index.ts'
 import { retrievalStep, retrievalStepStatus } from './retrievalSteps'
-import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
+import { recentContent, AS_PROSE } from '#lib/utils/recentContent.ts'
 import {
   formatRetrievalHistory,
   retrievalMetrics,

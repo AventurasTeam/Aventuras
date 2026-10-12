@@ -5,7 +5,7 @@
  * should have to import the other for it.
  */
 
-import type { Entry } from '$lib/types'
+import type { Entry } from '#lib/types/index.ts'
 
 export function createDefaultEntryState(type: Entry['type']): Entry['state'] {
   switch (type) {

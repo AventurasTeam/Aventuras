@@ -8,19 +8,19 @@
 
 import { tool } from 'ai'
 import * as z from 'zod'
-import type { VaultCharacter } from '$lib/types'
-import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
+import type { VaultCharacter } from '#lib/types/index.ts'
+import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
 import {
   generateImage,
   generatePortrait as sdkGeneratePortrait,
   isImageGenerationEnabled,
   hasRequiredCredentials,
-} from '$lib/services/ai/image'
-import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
-import { database } from '$lib/services/database'
-import { ContextBuilder } from '$lib/services/context'
-import { settings } from '$lib/stores/settings.svelte'
-import { descriptorsToString } from '$lib/utils/visualDescriptors'
+} from '#lib/services/ai/image/index.ts'
+import { DEFAULT_FALLBACK_STYLE_PROMPT } from '#lib/services/ai/image/constants.ts'
+import { database } from '#lib/services/database.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { descriptorsToString } from '#lib/utils/visualDescriptors.ts'
 
 /**
  * Context provided to image tools.

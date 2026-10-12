@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const createEmbeddedImage = vi.fn().mockResolvedValue(undefined)
 const updateEmbeddedImage = vi.fn().mockResolvedValue(undefined)
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     createEmbeddedImage: (...args: unknown[]) => createEmbeddedImage(...args),
     updateEmbeddedImage: (...args: unknown[]) => updateEmbeddedImage(...args),
@@ -15,7 +15,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     systemServicesSettings: {
       imageGeneration: { profileId: 'p1', styleId: 'st', size: 'square', referenceProfileId: 'p1' },
@@ -29,7 +29,7 @@ vi.mock('./providers/registry', () => ({
   generateImage: async () => ({ base64: null, error: 'no backend in test' }),
 }))
 
-vi.mock('$lib/services/events', () => ({
+vi.mock('#lib/services/events.ts', () => ({
   emitImageQueued: vi.fn(),
   emitImageReady: vi.fn(),
   emitImageAnalysisFailed: vi.fn(),

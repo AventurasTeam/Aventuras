@@ -12,17 +12,17 @@
  * 4. Swap all placeholders back with final HTML
  */
 
-import type { EmbeddedImage } from '$lib/types'
-import { parseStoryMarkdown, parseStoryMarkdownInline } from '$lib/utils/markdown'
-import { dialogueSpans } from '$lib/utils/dialogue'
-import { sanitizeVisualProse } from '$lib/utils/htmlSanitize'
+import type { EmbeddedImage } from '#lib/types/index.ts'
+import { parseStoryMarkdown, parseStoryMarkdownInline } from '#lib/utils/markdown.ts'
+import { dialogueSpans } from '#lib/utils/dialogue.ts'
+import { sanitizeVisualProse } from '#lib/utils/htmlSanitize.ts'
 import {
   picTagRegex,
   renderSinglePicTag,
   type ImageReplacementInfo,
   type PicTagRenderOptions,
-} from '$lib/utils/inlineImageParser'
-import { createFuzzyTextRegex } from '$lib/utils/text'
+} from '#lib/utils/inlineImageParser.ts'
+import { createFuzzyTextRegex } from '#lib/utils/text.ts'
 
 interface ImageMarker {
   start: number

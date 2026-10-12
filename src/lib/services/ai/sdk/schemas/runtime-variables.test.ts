@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as z from 'zod'
-import type { RuntimeVariable } from '$lib/services/packs/types'
+import type { RuntimeVariable } from '#lib/services/packs/types.ts'
 import { buildExtendedClassificationSchema, salvageClassification } from './runtime-variables'
 
 function variable(overrides: Partial<RuntimeVariable> & Pick<RuntimeVariable, 'variableName'>) {

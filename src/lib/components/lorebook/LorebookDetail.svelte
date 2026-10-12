@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Entry, EntryType } from '$lib/types'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import type { Entry, EntryType } from '#lib/types/index.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import {
     Users,
     MapPin,

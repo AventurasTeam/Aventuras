@@ -1,13 +1,16 @@
 <script lang="ts">
-  import type { ImportValidationResult, ConflictStrategy } from '$lib/services/packs/import-export'
-  import type { PresetPack } from '$lib/services/packs/types'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import * as Alert from '$lib/components/ui/alert'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
+  import type {
+    ImportValidationResult,
+    ConflictStrategy,
+  } from '#lib/services/packs/import-export.ts'
+  import type { PresetPack } from '#lib/services/packs/types.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { AlertTriangle, Download } from '@lucide/svelte'
-  import { renderDescription } from '$lib/utils/markdown'
+  import { renderDescription } from '#lib/utils/markdown.ts'
 
   interface Props {
     open: boolean

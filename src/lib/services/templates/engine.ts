@@ -7,7 +7,7 @@
 
 import { Liquid } from 'liquidjs'
 import type { TemplateContext } from './types'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('TemplateEngine')
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     Users,
     MapPin,
@@ -12,18 +12,22 @@
     BookMarked,
     Brain,
   } from '@lucide/svelte'
-  import CharacterPanel from '$lib/components/world/CharacterPanel.svelte'
+  import CharacterPanel from '#lib/components/world/CharacterPanel.svelte'
 
-  import LocationPanel from '$lib/components/world/LocationPanel.svelte'
-  import InventoryPanel from '$lib/components/world/InventoryPanel.svelte'
-  import QuestPanel from '$lib/components/world/QuestPanel.svelte'
-  import TimePanel from '$lib/components/world/TimePanel.svelte'
-  import BranchPanel from '$lib/components/branch/BranchPanel.svelte'
-  import { swipe } from '$lib/utils/swipe'
-  import { DESKTOP_BREAKPOINT, MAX_SIDEBAR_WIDTH, MAX_SIDEBAR_RATIO } from '$lib/constants/layout'
+  import LocationPanel from '#lib/components/world/LocationPanel.svelte'
+  import InventoryPanel from '#lib/components/world/InventoryPanel.svelte'
+  import QuestPanel from '#lib/components/world/QuestPanel.svelte'
+  import TimePanel from '#lib/components/world/TimePanel.svelte'
+  import BranchPanel from '#lib/components/branch/BranchPanel.svelte'
+  import { swipe } from '#lib/utils/swipe.ts'
+  import {
+    DESKTOP_BREAKPOINT,
+    MAX_SIDEBAR_WIDTH,
+    MAX_SIDEBAR_RATIO,
+  } from '#lib/constants/layout.ts'
 
-  import * as Tabs from '$lib/components/ui/tabs'
-  import { Button } from '$lib/components/ui/button'
+  import * as Tabs from '#lib/components/ui/tabs/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
 
   const tabs = [
     { id: 'characters' as const, icon: Users, label: 'Characters' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Entry, VaultLorebookEntry } from '$lib/types'
+import type { Entry, VaultLorebookEntry } from '#lib/types/index.ts'
 import {
   uniqueInjectionTerms,
   withUniqueEntryTerms,

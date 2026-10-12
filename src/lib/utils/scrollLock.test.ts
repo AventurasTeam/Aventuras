@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isBodyLocked, isWithinCloseGrace, hasEntitledOwner } from './scrollLock'
-import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
+import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
 
 /** The half-locked states are the point: they are what the library's deferred apply produces. */
 describe('isBodyLocked', () => {

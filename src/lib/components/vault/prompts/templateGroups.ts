@@ -5,8 +5,8 @@
  * in the Vault prompt editor UI.
  */
 
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
-import type { PromptTemplate } from '$lib/services/prompts/types'
+import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
+import type { PromptTemplate } from '#lib/services/prompts/types.ts'
 
 export interface TemplateGroup {
   name: string

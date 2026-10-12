@@ -20,13 +20,13 @@ import type {
   TimeAnchor,
   PersistentStyleReviewState,
   EmbeddedImage,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import type {
   CustomVariableType,
   EnumOption,
   RuntimeEntityType,
   RuntimeVariableType,
-} from '$lib/services/packs/types'
+} from '#lib/services/packs/types.ts'
 
 /**
  * A pack variable definition as it travels in a `.avt`.

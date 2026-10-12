@@ -13,7 +13,7 @@
  * on-disk spelling and is the only place allowed to.
  */
 
-import type { ProviderType, ReasoningEffort } from '$lib/types'
+import type { ProviderType, ReasoningEffort } from '#lib/types/index.ts'
 
 /** Every level, ascending. Index order is the slider's order. */
 export const REASONING_LEVELS: readonly ReasoningEffort[] = [

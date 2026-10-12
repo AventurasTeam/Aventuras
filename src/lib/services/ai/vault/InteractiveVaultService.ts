@@ -6,17 +6,22 @@
  * Uses the Vercel AI SDK streamText with tools for real-time responses.
  */
 
-import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
+import type {
+  VaultCharacter,
+  VaultLorebook,
+  VaultLorebookEntry,
+  VaultScenario,
+} from '#lib/types/index.ts'
 import { tool, type ModelMessage } from 'ai'
 import * as z from 'zod'
-import { settings, type ServiceId } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { characterVault } from '$lib/stores/characterVault.svelte'
-import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import { createLogger } from '$lib/log'
+import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+import { createLogger } from '#lib/log.ts'
 import { FandomService } from '../../fandom'
-import { ContextBuilder } from '$lib/services/context'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import { stopWhenDone } from '../sdk/agents/stopConditions'
 import {
   createCharacterTools,
@@ -38,9 +43,9 @@ import {
   type ImageToolContext,
 } from '../sdk/tools'
 import type { VaultPendingChange } from '../sdk/schemas/vault'
-import { database } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
-import { mergeIntent, scenarioToRecord, characterToRecord } from '$lib/utils/vaultMerge'
+import { mergeIntent, scenarioToRecord, characterToRecord } from '#lib/utils/vaultMerge.ts'
 
 const log = createLogger('InteractiveVault')
 

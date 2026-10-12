@@ -16,19 +16,19 @@
     ChevronDown,
     MapPin,
   } from '@lucide/svelte'
-  import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
-  import type { ExpandedSetting, GeneratedCharacter } from '$lib/services/ai/sdk'
-  import type { VaultScenario } from '$lib/types'
-  import { QUICK_START_SEEDS } from '$lib/services/templates'
+  import UniversalVaultBrowser from '#lib/components/vault/UniversalVaultBrowser.svelte'
+  import type { ExpandedSetting, GeneratedCharacter } from '#lib/services/ai/sdk/index.ts'
+  import type { VaultScenario } from '#lib/types/index.ts'
+  import { QUICK_START_SEEDS } from '#lib/services/templates.ts'
 
   // Shadcn Components
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Separator } from '$lib/components/ui/separator'
-  import { Badge } from '$lib/components/ui/badge'
-  import * as Collapsible from '$lib/components/ui/collapsible'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
 
   interface Props {
     settingSeed: string

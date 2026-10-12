@@ -2,9 +2,9 @@
   import { onMount } from 'svelte'
   import { getVersion } from '@tauri-apps/api/app'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import {
     Settings2,
     RotateCcw,
@@ -19,15 +19,15 @@
     BookOpen,
   } from '@lucide/svelte'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Tabs, TabsContent } from '$lib/components/ui/tabs'
-  import { Button } from '$lib/components/ui/button'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Tabs, TabsContent } from '#lib/components/ui/tabs/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
 
-  import { Separator } from '$lib/components/ui/separator'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import * as Dialog from '$lib/components/ui/dialog'
-  import { Toggle } from '$lib/components/ui/toggle'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import { Toggle } from '#lib/components/ui/toggle/index.ts'
 
   import ApiConnectionTab from './tabs/api-connection.svelte'
   import GenerationTab from './tabs/generation.svelte'

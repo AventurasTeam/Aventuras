@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from 'bits-ui'
-  import { cn } from '$lib/utils/cn.js'
+  import { cn } from '#lib/utils/cn.ts'
 
   let {
     ref = $bindable(null),

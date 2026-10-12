@@ -1,23 +1,23 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { createDebouncedSave } from '$lib/utils/debounce'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Label } from '$lib/components/ui/label'
-  import { Input } from '$lib/components/ui/input'
-  import { Button } from '$lib/components/ui/button'
-  import * as Select from '$lib/components/ui/select'
-  import { Slider } from '$lib/components/ui/slider'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { createDebouncedSave } from '#lib/utils/debounce.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
   import { Play, Square, RefreshCw, Loader2 } from '@lucide/svelte'
-  import { GOOGLE_TRANSLATE_LANGUAGES, aiTTSService } from '$lib/services/ai/utils/TTSService'
+  import { GOOGLE_TRANSLATE_LANGUAGES, aiTTSService } from '#lib/services/ai/utils/TTSService.ts'
   import {
     prepareTTSSegments,
     resolveDialogueVoice,
     supportsDialogueVoice,
     supportsVolumeOverride,
-  } from '$lib/services/ai/utils/ttsText'
+  } from '#lib/services/ai/utils/ttsText.ts'
   import TTSVoiceSelector from './TTSVoiceSelector.svelte'
-  import { isIos } from '$lib/utils/platform'
+  import { isIos } from '#lib/utils/platform.ts'
 
   const PREVIEW_TEXT =
     'This is a preview of the selected voice. The story narration will sound like this.'

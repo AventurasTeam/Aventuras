@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     GitBranch,
@@ -14,12 +14,12 @@
     LayerArrowUp,
     Lock,
   } from '@lucide/svelte'
-  import type { Branch } from '$lib/types'
+  import type { Branch } from '#lib/types/index.ts'
   import { SvelteSet } from 'svelte/reactivity'
   import { tick, untrack } from 'svelte'
-  import { supportsHover } from '$lib/utils/platform'
-  import { errMessage } from '$lib/utils/error'
-  import { checkpointsOnBranch, jumpToEntry } from '$lib/utils/storyNavigation'
+  import { supportsHover } from '#lib/utils/platform.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { checkpointsOnBranch, jumpToEntry } from '#lib/utils/storyNavigation.ts'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))

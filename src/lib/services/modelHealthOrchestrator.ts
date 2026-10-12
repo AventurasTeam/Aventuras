@@ -5,17 +5,17 @@
  * Rate-limited models (429) are stored as 'rate_limited' status and skipped on next run if still fresh.
  */
 
-import type { APIProfile } from '$lib/types'
-import { settings } from '$lib/stores/settings.svelte'
-import { pingModel, getEffectiveBaseUrl } from '$lib/services/ai/sdk/providers/modelPing'
-import { pLimit } from '$lib/utils/async'
+import type { APIProfile } from '#lib/types/index.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { pingModel, getEffectiveBaseUrl } from '#lib/services/ai/sdk/providers/modelPing.ts'
+import { pLimit } from '#lib/utils/async.ts'
 import {
   upsertBatch,
   isFresh,
   deleteModelHealthForKey,
   type UpsertRow,
-} from '$lib/services/modelHealthCache'
-import { modelHealth } from '$lib/stores/modelHealth.svelte'
+} from '#lib/services/modelHealthCache.ts'
+import { modelHealth } from '#lib/stores/modelHealth.svelte.ts'
 import {
   PING_CONCURRENCY,
   PING_TTL_AUTO_MS,
@@ -23,7 +23,7 @@ import {
   PING_TTL_DEFAULT_MS,
   isPingEligibleProvider,
   type PingResult,
-} from '$lib/constants/modelHealth'
+} from '#lib/constants/modelHealth.ts'
 
 export function isPingEligible(profile: APIProfile | undefined | null): boolean {
   if (!profile || !profile.pingEnabled || !profile.apiKey) return false

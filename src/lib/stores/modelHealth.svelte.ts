@@ -5,10 +5,10 @@
  */
 
 import { SvelteMap } from 'svelte/reactivity'
-import type { APIProfile } from '$lib/types'
-import { type CachedHealth, type PingResult } from '$lib/constants/modelHealth'
-import { getAllForKey } from '$lib/services/modelHealthCache'
-import { getEffectiveBaseUrl } from '$lib/services/ai/sdk/providers/modelPing'
+import type { APIProfile } from '#lib/types/index.ts'
+import { type CachedHealth, type PingResult } from '#lib/constants/modelHealth.ts'
+import { getAllForKey } from '#lib/services/modelHealthCache.ts'
+import { getEffectiveBaseUrl } from '#lib/services/ai/sdk/providers/modelPing.ts'
 
 function key(providerId: string, modelId: string, baseUrl: string): string {
   return `${providerId}|${modelId}|${baseUrl}`

@@ -10,10 +10,10 @@
  * outside the rollback window.
  */
 
-import { database } from '$lib/services/database'
-import { DEFAULT_PACK_ID, matchPack } from '$lib/services/packs/binding'
-import type { PackMatch } from '$lib/services/packs/binding'
-import type { PresetPack } from '$lib/services/packs/types'
+import { database } from '#lib/services/database.ts'
+import { DEFAULT_PACK_ID, matchPack } from '#lib/services/packs/binding.ts'
+import type { PackMatch } from '#lib/services/packs/binding.ts'
+import type { PresetPack } from '#lib/services/packs/types.ts'
 import type { PackBindingExport, PackRuntimeVariableExport, PackVariableExport } from './types'
 
 /** What a resolver is told about the file it is being asked to bind. */

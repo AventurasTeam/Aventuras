@@ -8,7 +8,7 @@
  * for values that should be user-configurable via Advanced Settings.
  */
 
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 import { MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS } from './defaults'
 
 /**

@@ -10,17 +10,17 @@
    * restart; Android, a `.deb` install and an unpackaged dev build all hand off to the
    * browser. `canInstallInApp` is the branch, `manualInstallReason` supplies the wording.
    */
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Progress } from '$lib/components/ui/progress'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Progress } from '#lib/components/ui/progress/index.ts'
   import { Download, RefreshCw, ExternalLink, AlertTriangle, CheckCircle2 } from '@lucide/svelte'
   import {
     updaterService,
     type UpdateProgress,
     type ManualInstallReason,
-  } from '$lib/services/updater'
-  import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
-  import { parseMarkdown } from '$lib/utils/markdown'
+  } from '#lib/services/updater.ts'
+  import { updateNotifier } from '#lib/stores/updateNotifier.svelte.ts'
+  import { parseMarkdown } from '#lib/utils/markdown.ts'
 
   type Phase = 'idle' | 'downloading' | 'installed' | 'handedOff' | 'error'
 

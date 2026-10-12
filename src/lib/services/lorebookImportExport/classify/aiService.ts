@@ -1,15 +1,15 @@
-import { settings, type ServiceId } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
 /**
  * LorebookClassifierService
  *
  * LLM-based entry type classification service
  */
 
-import { createLogger } from '$lib/log'
-import type { StoryMode, EntryType } from '$lib/types'
-import { BaseAIService } from '$lib/services/ai/BaseAIService'
-import { lorebookClassificationResultSchema } from '$lib/services/ai/sdk/schemas'
-import { ContextBuilder } from '$lib/services/context'
+import { createLogger } from '#lib/log.ts'
+import type { StoryMode, EntryType } from '#lib/types/index.ts'
+import { BaseAIService } from '#lib/services/ai/BaseAIService.ts'
+import { lorebookClassificationResultSchema } from '#lib/services/ai/sdk/schemas/index.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import type { ImportedEntry } from '../types'
 
 const log = createLogger('LorebookClassifierService')

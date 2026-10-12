@@ -16,7 +16,7 @@
  * paid over and over.
  */
 
-import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
+import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 
 /**
  * `Year 1, Day 4, 14:30`, or null when the time is not known.

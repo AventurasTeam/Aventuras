@@ -11,16 +11,16 @@
  * `tier3WholesaleWordBudget`; the budgets differ because their candidates do.
  */
 
-import type { StoryEntry } from '$lib/types'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
+import type { StoryEntry } from '#lib/types/index.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { generateStructured } from '../sdk/generate'
-import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
+import { recentContent, AS_PROSE } from '#lib/utils/recentContent.ts'
 import { TIER3_SELECTION_CACHE_POSITIONS } from '../core/defaults'
 
-import { activity } from '$lib/stores/activity.svelte'
-import { failStep } from '$lib/services/activity'
+import { activity } from '#lib/stores/activity.svelte.ts'
+import { failStep } from '#lib/services/activity/index.ts'
 
 const log = createLogger('Tier3Selection')
 

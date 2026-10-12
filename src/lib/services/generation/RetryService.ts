@@ -16,9 +16,9 @@ import type {
   TimeTracker,
   ActionInputType,
   PersistentCharacterSnapshot,
-} from '$lib/types'
-import { createLogger } from '$lib/log'
-import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
+} from '#lib/types/index.ts'
+import { createLogger } from '#lib/log.ts'
+import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 
 const log = createLogger('RetryService')
 

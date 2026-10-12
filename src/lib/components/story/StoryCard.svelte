@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Trash2, Clock, Pencil } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import * as Card from '$lib/components/ui/card'
-  import TagBadge from '$lib/components/tags/TagBadge.svelte'
-  import type { Story } from '$lib/types'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import TagBadge from '#lib/components/tags/TagBadge.svelte'
+  import type { Story } from '#lib/types/index.ts'
   import { resolveGenreColor } from './genreColors'
 
   interface Props {

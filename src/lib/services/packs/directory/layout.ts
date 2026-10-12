@@ -6,7 +6,7 @@
  * data loss, so neither derives a path of its own.
  */
 
-import { describeTemplate } from '$lib/components/vault/prompts/templateGroups'
+import { describeTemplate } from '#lib/components/vault/prompts/templateGroups.ts'
 
 /** Pack metadata and custom variables. */
 export const PACK_FILE = 'pack.yaml'

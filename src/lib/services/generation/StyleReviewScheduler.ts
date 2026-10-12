@@ -3,9 +3,9 @@
  * Manages counter state via callbacks and triggers review when threshold is met.
  */
 
-import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-import { createLogger } from '$lib/log'
+import type { StoryEntry, StoryMode, POV, Tense } from '#lib/types/index.ts'
+import type { StyleReviewResult } from '#lib/services/ai/generation/StyleReviewerService.ts'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('StyleReviewScheduler')
 

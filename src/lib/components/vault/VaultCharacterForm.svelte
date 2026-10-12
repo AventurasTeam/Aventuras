@@ -1,15 +1,15 @@
 <script lang="ts">
-  import type { VaultCharacter } from '$lib/types'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
+  import type { VaultCharacter } from '#lib/types/index.ts'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
   import { Loader2, Bot, X } from '@lucide/svelte'
   import VaultCharacterFormFields from './VaultCharacterFormFields.svelte'
-  import type { VaultCharacterInput } from '$lib/services/ai/sdk/schemas/vault'
-  import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
+  import type { VaultCharacterInput } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import type { FocusedEntity } from '#lib/services/ai/vault/InteractiveVaultService.ts'
   import { untrack, onDestroy } from 'svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
 
   interface Props {
     character?: VaultCharacter | null

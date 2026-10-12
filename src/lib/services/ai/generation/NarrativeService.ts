@@ -11,16 +11,16 @@
  * Uses ContextBuilder for prompt generation through the unified Liquid template pipeline.
  */
 
-import { describeActivityError } from '$lib/services/activity'
+import { describeActivityError } from '#lib/services/activity/index.ts'
 import { APICallError, RetryError } from 'ai'
 import { streamNarrative, generateNarrative } from '../sdk/generate'
-import { ContextBuilder } from '$lib/services/context'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import { StyleReviewerService } from './StyleReviewerService'
-import { templateEngine } from '$lib/services/templates/engine'
-import { createLogger } from '$lib/log'
-import { stripPicTags } from '$lib/utils/inlineImageParser'
-import { formatTimeSpan } from '$lib/utils/storyTime'
-import { storyImageMode } from '$lib/utils/image'
+import { templateEngine } from '#lib/services/templates/engine.ts'
+import { createLogger } from '#lib/log.ts'
+import { stripPicTags } from '#lib/utils/inlineImageParser.ts'
+import { formatTimeSpan } from '#lib/utils/storyTime.ts'
+import { storyImageMode } from '#lib/utils/image.ts'
 import { STREAM_FAILURE, type StreamChunk } from '../core/types'
 import type {
   Story,
@@ -31,7 +31,7 @@ import type {
   Item,
   StoryBeat,
   Chapter,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { TimelineFillResult } from '../retrieval/TimelineFillService'
 

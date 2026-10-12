@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Chapter, StoryEntry } from '$lib/types'
+import type { Chapter, StoryEntry } from '#lib/types/index.ts'
 
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -10,14 +10,14 @@ vi.mock('$lib/stores/activity.svelte', () => ({
   },
 }))
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: {
     addDebugRequest: vi.fn(),
     addDebugResponse: vi.fn(),
   },
 }))
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     systemServicesSettings: {
       timelineFill: {
@@ -42,7 +42,7 @@ vi.mock('../sdk/generate', () => ({
 const rendered: Record<string, string>[] = []
 /** Set by the test covering a prompt that cannot be rendered. */
 let renderError: Error | null = null
-vi.mock('$lib/services/context', () => ({
+vi.mock('#lib/services/context/index.ts', () => ({
   ContextBuilder: class ContextBuilderMock {
     static async forPack() {
       return new ContextBuilderMock()
@@ -60,7 +60,7 @@ vi.mock('$lib/services/context', () => ({
 }))
 
 import { TimelineFillService } from './TimelineFillService'
-import { activity } from '$lib/stores/activity.svelte'
+import { activity } from '#lib/stores/activity.svelte.ts'
 
 const mockEntries: StoryEntry[] = [
   { id: 'se-1', content: 'She looked up at the fortress.', type: 'narration' } as StoryEntry,

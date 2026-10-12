@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getImageProfile: vi.fn(),
     apiSettings: {
@@ -9,7 +9,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }))
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debugStore: {
     logApiRequest: vi.fn(),
     logApiResponse: vi.fn(),
@@ -40,8 +40,8 @@ import { createComfyProvider } from './comfy'
 import { createGoogleProvider } from './google'
 import type { ImageModelInfo } from './types'
 import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
-import { settings } from '$lib/stores/settings.svelte'
-import type { ImageProviderType } from '$lib/types'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import type { ImageProviderType } from '#lib/types/index.ts'
 
 describe('Image Provider Registry', () => {
   beforeEach(() => {

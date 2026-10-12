@@ -9,9 +9,9 @@
  * own resolved view of these records.
  */
 
-import { story } from '$lib/stores/story.svelte'
-import { database } from '$lib/services/database'
-import { createLogger } from '$lib/log'
+import { story } from '#lib/stores/story.svelte.ts'
+import { database } from '#lib/services/database.ts'
+import { createLogger } from '#lib/log.ts'
 import {
   findEntityDuplicates,
   pairKeys,
@@ -19,7 +19,7 @@ import {
   type DuplicateEntity,
   type DuplicatePool,
   type EntityDuplicateGroup,
-} from '$lib/services/duplicates'
+} from '#lib/services/duplicates/index.ts'
 import {
   applyMergePlan,
   planCharacterMerge,
@@ -28,7 +28,7 @@ import {
   planLocationMerge,
   type MergePlan,
 } from './mergeEntities'
-import type { Character, Entry, Item, Location } from '$lib/types'
+import type { Character, Entry, Item, Location } from '#lib/types/index.ts'
 
 const log = createLogger('EntityConsolidation')
 

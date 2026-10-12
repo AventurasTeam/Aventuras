@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 // PostGenerationPhase imports TranslationService for its `shouldTranslate` gate, and that
 // class extends BaseAIService. Stubbing the two rune-based stores it reaches lets the real
 // gate run rather than a reimplementation of it.
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -11,10 +11,10 @@ vi.mock('$lib/stores/activity.svelte', () => ({
     recordStep: vi.fn(() => ''),
   },
 }))
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getServicePresetId: () => 'translation',
     getPresetConfig: () => ({ model: 'test-model', temperature: 0 }),
@@ -29,7 +29,7 @@ import {
   type PostGenerationInput,
 } from './PostGenerationPhase'
 import type { GenerationEvent } from '../types'
-import type { TranslationSettings } from '$lib/types'
+import type { TranslationSettings } from '#lib/types/index.ts'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []

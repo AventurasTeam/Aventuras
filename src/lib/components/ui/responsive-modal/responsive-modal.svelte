@@ -1,10 +1,10 @@
 <script lang="ts">
-  import * as Dialog from '$lib/components/ui/dialog'
-  import * as Drawer from '$lib/components/ui/drawer'
-  import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import * as Drawer from '#lib/components/ui/drawer/index.ts'
+  import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
   import type { Snippet } from 'svelte'
   import { setResponsiveModalContext } from './context'
-  import { blurFocusedElement } from '$lib/utils/scrollLock'
+  import { blurFocusedElement } from '#lib/utils/scrollLock.ts'
   import type { OnChangeFn } from 'vaul-svelte'
 
   type Props = {

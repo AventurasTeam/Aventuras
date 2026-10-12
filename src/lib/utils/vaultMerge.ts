@@ -1,4 +1,4 @@
-import type { VaultCharacter, VaultScenario } from '$lib/types'
+import type { VaultCharacter, VaultScenario } from '#lib/types/index.ts'
 
 /**
  * Merge array changes from `prevArr` → `dataArr` onto `baseArr`.

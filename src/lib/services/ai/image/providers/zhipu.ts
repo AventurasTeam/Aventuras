@@ -6,7 +6,7 @@
  * - img2img: Not supported
  */
 
-import { specToPixels, formatImageSize } from '$lib/utils/image'
+import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,

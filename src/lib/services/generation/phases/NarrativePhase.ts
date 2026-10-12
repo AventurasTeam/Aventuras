@@ -18,16 +18,16 @@ import type {
   WorldState,
   RetrievalResult,
 } from '../types'
-import type { Story, StoryEntry } from '$lib/types'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-import { STREAM_FAILURE, type StreamChunk } from '$lib/services/ai/core/types'
+import type { Story, StoryEntry } from '#lib/types/index.ts'
+import type { StyleReviewResult } from '#lib/services/ai/generation/StyleReviewerService.ts'
+import { STREAM_FAILURE, type StreamChunk } from '#lib/services/ai/core/types.ts'
 import { NoOutputGeneratedError } from 'ai'
 import {
   NO_ACTIVITY,
   describeActivityError,
   failStep,
   type ActivityReporter,
-} from '$lib/services/activity'
+} from '#lib/services/activity/index.ts'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 const EMPTY_RESPONSE = 'Empty response'

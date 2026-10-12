@@ -6,7 +6,7 @@
  * well be fine. See docs/architecture/story-time.md.
  */
 
-import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
+import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import { toMinutes } from './minutes'
 
 /** An entry shorter than this whose clock jumps a day or more is worth a look. */

@@ -7,7 +7,7 @@
  * owning it.
  */
 
-import type { UpdateInfo } from '$lib/services/updater'
+import type { UpdateInfo } from '#lib/services/updater.ts'
 
 class UpdateNotifier {
   /** Whether the dialog is showing. */

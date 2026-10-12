@@ -1,4 +1,4 @@
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 import type { ParsedCard } from './types'
 import { isV1Card, isV2OrV3Card } from './sillyTavernCards'
 

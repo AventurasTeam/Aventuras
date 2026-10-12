@@ -8,7 +8,7 @@
 import { templateEngine } from './engine'
 import { variableRegistry } from './variables'
 import type { ValidationResult, ValidationError } from './types'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('TemplateValidator')
 

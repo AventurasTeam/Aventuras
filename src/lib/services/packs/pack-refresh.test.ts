@@ -6,7 +6,7 @@ const getPack = vi.fn()
 const getPackTemplates = vi.fn()
 const refreshPackTemplatesToShipped = vi.fn()
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     getPack: (...a: unknown[]) => getPack(...a),
     getPackTemplates: (...a: unknown[]) => getPackTemplates(...a),
@@ -15,7 +15,7 @@ vi.mock('$lib/services/database', () => ({
 }))
 
 const { packService } = await import('./pack-service')
-const { PROMPT_TEMPLATES } = await import('$lib/services/prompts/templates')
+const { PROMPT_TEMPLATES } = await import('#lib/services/prompts/templates/index.ts')
 
 const SHIPPED = PROMPT_TEMPLATES[0]
 const OTHER = PROMPT_TEMPLATES[1]

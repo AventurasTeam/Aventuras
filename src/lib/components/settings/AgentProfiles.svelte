@@ -1,12 +1,12 @@
 <script lang="ts">
   import { SvelteMap } from 'svelte/reactivity'
   import { onDestroy } from 'svelte'
-  import { createDebouncedSave } from '$lib/utils/debounce'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { errMessage } from '$lib/utils/error'
-  import type { GenerationPreset } from '$lib/types'
-  import type { ServiceId } from '$lib/stores/settings.svelte'
+  import { createDebouncedSave } from '#lib/utils/debounce.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import type { GenerationPreset } from '#lib/types/index.ts'
+  import type { ServiceId } from '#lib/stores/settings.svelte.ts'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     X,
@@ -32,19 +32,19 @@
     AlertCircle,
     AlertTriangle,
   } from '@lucide/svelte'
-  import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
+  import { fetchModelsFromProvider } from '#lib/services/ai/sdk/providers/index.ts'
   import {
     resolveStructuredOutputs,
     thinkingNudgeApplies,
-  } from '$lib/services/ai/sdk/presetResolution'
+  } from '#lib/services/ai/sdk/presetResolution.ts'
 
   // Shadcn Components
-  import * as Card from '$lib/components/ui/card'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Switch } from '$lib/components/ui/switch'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import GenerationParamsForm from './GenerationParamsForm.svelte'
 
   // All system services that can be assigned to profiles

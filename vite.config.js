@@ -19,7 +19,6 @@ export default defineConfig(async () => ({
       adapter: adapter({
         fallback: 'index.html',
       }),
-      alias: { $lib: 'src/lib' },
       // Updates ship through the Tauri updater, not a redeploy.
       version: { pollInterval: 0 },
     }),

@@ -1,14 +1,14 @@
 <script lang="ts">
-  import type { VaultCharacterInput } from '$lib/services/ai/sdk/schemas/vault'
-  import { descriptorsToString, stringToDescriptors } from '$lib/utils/visualDescriptors'
+  import type { VaultCharacterInput } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import { descriptorsToString, stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
   import { X, User, ImageUp, Loader2 } from '@lucide/svelte'
-  import { normalizeImageDataUrl } from '$lib/utils/image'
-  import TagInput from '$lib/components/tags/TagInput.svelte'
-  import TermsInput from '$lib/components/shared/TermsInput.svelte'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Button } from '$lib/components/ui/button'
-  import { Label } from '$lib/components/ui/label'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import TagInput from '#lib/components/tags/TagInput.svelte'
+  import TermsInput from '#lib/components/shared/TermsInput.svelte'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
 
   import { untrack } from 'svelte'
 

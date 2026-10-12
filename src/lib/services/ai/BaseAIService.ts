@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { settings, type ServiceId } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
 import { generateStructured } from './sdk/generate'
 
 export abstract class BaseAIService {

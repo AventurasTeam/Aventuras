@@ -3,15 +3,20 @@
  * Order: pre → retrieval → narrative → [(classification ‖ translation → image) ‖ background ‖ post]
  */
 
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('GenerationPipeline')
 
 import type { GenerationEvent, GenerationContext, ErrorEvent, RetrievalResult } from './types'
-import type { ActionInputType, TranslationSettings, Character, StoryBeat } from '$lib/types'
-import type { StoryMode, POV, Tense } from '$lib/types'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import type {
+  ActionInputType,
+  TranslationSettings,
+  Character,
+  StoryBeat,
+} from '#lib/types/index.ts'
+import type { StoryMode, POV, Tense } from '#lib/types/index.ts'
+import type { StyleReviewResult } from '#lib/services/ai/generation/StyleReviewerService.ts'
+import type { ActivationTracker } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
 import {
   PreGenerationPhase,
   RetrievalPhase,
@@ -41,9 +46,9 @@ import {
   type BackgroundImageResult,
   type BackgroundImageSettings,
 } from './phases/BackgroundImagePhase'
-import { mergeGenerators } from '$lib/utils/async'
-import { NO_ACTIVITY, trackPhase, type ActivityReporter } from '$lib/services/activity'
-import { sameEntityName } from '$lib/utils/text'
+import { mergeGenerators } from '#lib/utils/async.ts'
+import { NO_ACTIVITY, trackPhase, type ActivityReporter } from '#lib/services/activity/index.ts'
+import { sameEntityName } from '#lib/utils/text.ts'
 
 export interface PipelineDependencies
   extends

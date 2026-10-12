@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { WorldStateTranslationService } from './WorldStateTranslationService'
-import type { Character } from '$lib/types'
+import type { Character } from '#lib/types/index.ts'
 
 describe('WorldStateTranslationService', () => {
   it('returns translatedCount 0 when no matching entities are found', async () => {

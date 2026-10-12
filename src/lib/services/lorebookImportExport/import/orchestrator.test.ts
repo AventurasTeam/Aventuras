@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { LorebookImportResult } from '../types'
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: { addEntry: vi.fn(async () => undefined) },
 }))
 vi.mock('../classify/classify', () => ({
   classifyEntries: vi.fn(async (entries: unknown[]) => entries),
 }))
 
-import { database } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
 import { classifyEntries } from '../classify/classify'
 import { importEntries } from './orchestrator'
 

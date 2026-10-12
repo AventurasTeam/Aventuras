@@ -8,7 +8,7 @@ vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 // image fetch adapter. Rune modules cannot be imported by this suite (no SvelteKit plugin, so
 // `$state` is undefined), and the helpers under test never touch it -- see the README's note
 // on why services mock stores rather than the suite gaining a Svelte compiler.
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 

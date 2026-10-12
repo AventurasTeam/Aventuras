@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { resolveSaveTarget } from './exportTarget'
-import type { EmbeddedImageMeta } from '$lib/types'
+import type { EmbeddedImageMeta } from '#lib/types/index.ts'
 
 /**
  * ImageExportService — exports embedded images to disk.

@@ -5,12 +5,12 @@
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
  */
 
-import type { Chapter, StoryEntry } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import type { Chapter, StoryEntry } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
-import { entryTimeTag, formatTimeSpan } from '$lib/utils/storyTime'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
+import { entryTimeTag, formatTimeSpan } from '#lib/utils/storyTime.ts'
 import { generatePlainText } from '../sdk/generate'
 import {
   timelineQueriesResultSchema,
@@ -20,11 +20,16 @@ import {
 } from '../sdk/schemas/timeline'
 import { resolveQueryChapterNumbers, groupByChapterCoverage } from './timelineFillGrouping'
 import { buildChapterRead, type ChapterForRead } from './chapterContentBudget'
-import { countTokens } from '$lib/services/tokenizer'
+import { countTokens } from '#lib/services/tokenizer.ts'
 import { chapterReadBudget } from '../core/defaults'
 
-import { activity } from '$lib/stores/activity.svelte'
-import { closeStep, describeActivityError, isAbortError, failStep } from '$lib/services/activity'
+import { activity } from '#lib/stores/activity.svelte.ts'
+import {
+  closeStep,
+  describeActivityError,
+  isAbortError,
+  failStep,
+} from '#lib/services/activity/index.ts'
 
 /** Close a step by how many of its questions were actually answered. */
 function closeAnswerStep(id: string, answers: TimelineAnswer[]): void {

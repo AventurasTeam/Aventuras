@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Chapter, Entry, LoreManagementResult } from '$lib/types'
+import type { Chapter, Entry, LoreManagementResult } from '#lib/types/index.ts'
 import {
   LoreManagementCoordinator,
   isLoreManagementRunning,

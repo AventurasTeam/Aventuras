@@ -2,7 +2,7 @@
  * Convert imported entries to full Entry objects
  */
 
-import type { Entry, EntryCreator, VaultLorebookEntry } from '$lib/types'
+import type { Entry, EntryCreator, VaultLorebookEntry } from '#lib/types/index.ts'
 import type { ImportedEntry } from '../types'
 
 export function entryToVaultEntry(entry: Entry): VaultLorebookEntry {

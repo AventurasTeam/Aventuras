@@ -4,7 +4,7 @@
  * Generates against gen.pollinations.ai/v1; model discovery uses Pollinations' own catalogue.
  */
 
-import { specToPixels, formatImageSize } from '$lib/utils/image'
+import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,

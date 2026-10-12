@@ -1,10 +1,10 @@
 <script lang="ts" generics="T">
   import { Check, ChevronsUpDown, Plus } from '@lucide/svelte'
   import VirtualList from '@tutorlatin/svelte-tiny-virtual-list'
-  import * as Command from '$lib/components/ui/command'
-  import * as Popover from '$lib/components/ui/popover'
-  import { Button } from '$lib/components/ui/button'
-  import { cn } from '$lib/utils/cn'
+  import * as Command from '#lib/components/ui/command/index.ts'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import type { Snippet } from 'svelte'
 
   interface Props {

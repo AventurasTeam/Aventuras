@@ -15,8 +15,16 @@
  * each step receives the updated entity and time state from the previous chapter.
  */
 
-import type { Chapter, Entry, StoryEntry, StoryMode, POV, Tense, TimeTracker } from '$lib/types'
-import type { ClassificationResult } from '$lib/services/ai/sdk'
+import type {
+  Chapter,
+  Entry,
+  StoryEntry,
+  StoryMode,
+  POV,
+  Tense,
+  TimeTracker,
+} from '#lib/types/index.ts'
+import type { ClassificationResult } from '#lib/services/ai/sdk/index.ts'
 import { planChapterBoundaries } from './ChapterBatchPlanner'
 import {
   LoreManagementCoordinator,
@@ -24,7 +32,7 @@ import {
   type LoreManagementCallbacks,
   type LoreManagementUICallbacks,
 } from './LoreManagementCoordinator'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('ChapterBatchService')
 

@@ -15,7 +15,7 @@
  * Plain TypeScript with no store or SDK imports, so it is testable on its own.
  */
 
-import { foldName } from '$lib/utils/text'
+import { foldName } from '#lib/utils/text.ts'
 
 /** The minimum an entry needs to look like for this module to compare it. */
 export interface DuplicateCandidateInput {

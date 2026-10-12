@@ -1,7 +1,7 @@
 import {
   narratorSettingReasons,
   type NarratorSettingReasons,
-} from '$lib/services/prompts/templates'
+} from '#lib/services/prompts/templates/index.ts'
 import { ContextBuilder } from './context-builder'
 
 export type { NarratorSettingReasons }

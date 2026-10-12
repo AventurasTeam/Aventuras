@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { VaultLorebook } from '$lib/types'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { cn } from '$lib/utils/cn'
+  import type { VaultLorebook } from '#lib/types/index.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import VaultLorebookEditorContent from './VaultLorebookEditorContent.svelte'
-  import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
-  import { ui } from '$lib/stores/ui.svelte'
+  import type { FocusedEntity } from '#lib/services/ai/vault/InteractiveVaultService.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { onDestroy } from 'svelte'
 
   interface Props {

@@ -3,10 +3,10 @@ import {
   type Tense,
   type WizardData,
   scenarioService,
-} from '$lib/services/ai/wizard/ScenarioService'
-import { aiService } from '$lib/services/ai'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import { settings } from '$lib/stores/settings.svelte'
+} from '#lib/services/ai/wizard/ScenarioService.ts'
+import { aiService } from '#lib/services/ai/index.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
 import type {
   TimeTracker,
   StoryMode,
@@ -15,10 +15,10 @@ import type {
   NarratorReinforcement,
   VaultLorebook,
   ImageGenerationMode,
-} from '$lib/types'
-import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
-import type { GeneratedOpening } from '$lib/services/ai/sdk'
-import { ContextBuilder } from '$lib/services/context'
+} from '#lib/types/index.ts'
+import type { ImportedLorebookItem } from '#lib/components/wizard/wizardTypes.ts'
+import type { GeneratedOpening } from '#lib/services/ai/sdk/index.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import {
   formatStoryTime,
   normalizeTime,
@@ -26,7 +26,7 @@ import {
   returnedStart,
   templateReceivesStartingTime,
   type ResultStartSource,
-} from '$lib/services/storyTime'
+} from '#lib/services/storyTime/index.ts'
 
 export class NarrativeStore {
   // Step 1: Mode

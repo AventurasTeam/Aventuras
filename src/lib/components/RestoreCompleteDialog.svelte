@@ -1,6 +1,6 @@
 <script lang="ts">
-  import * as Dialog from '$lib/components/ui/dialog'
-  import { ui } from '$lib/stores/ui.svelte'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
 </script>
 
 <!-- Not dismissable: the database is closed, and the app exits shortly or the user closes it -->

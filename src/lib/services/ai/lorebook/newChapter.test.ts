@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Chapter, StoryEntry } from '$lib/types'
+import type { Chapter, StoryEntry } from '#lib/types/index.ts'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from '../retrieval/recentTail'
 import { renderLoreProse, loreChapterContext, loreRecentEntries } from './newChapter'
 

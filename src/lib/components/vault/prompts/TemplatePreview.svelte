@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { templateEngine } from '$lib/services/templates/engine'
-  import { variableRegistry } from '$lib/services/templates/variables'
-  import type { CustomVariable } from '$lib/services/packs/types'
-  import type { TemplateContext } from '$lib/services/templates/types'
+  import { templateEngine } from '#lib/services/templates/engine.ts'
+  import { variableRegistry } from '#lib/services/templates/variables.ts'
+  import type { CustomVariable } from '#lib/services/packs/types.ts'
+  import type { TemplateContext } from '#lib/services/templates/types.ts'
   import { AlertTriangle } from '@lucide/svelte'
 
   interface Props {

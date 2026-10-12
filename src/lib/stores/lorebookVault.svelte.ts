@@ -1,11 +1,11 @@
-import type { VaultLorebook, EntryType, VaultLorebookEntry } from '$lib/types'
-import { database } from '$lib/services/database'
-import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import { exchangeToVaultLorebook, hasStorySideFields } from '$lib/services/exchange'
-import { withUniqueVaultEntryTerms } from '$lib/utils/lorebookTerms'
+import type { VaultLorebook, EntryType, VaultLorebookEntry } from '#lib/types/index.ts'
+import { database } from '#lib/services/database.ts'
+import { discoveryService, type DiscoveryCard } from '#lib/services/discovery/index.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import { exchangeToVaultLorebook, hasStorySideFields } from '#lib/services/exchange/index.ts'
+import { withUniqueVaultEntryTerms } from '#lib/utils/lorebookTerms.ts'
 import { ui } from './ui.svelte'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('LorebookVault')
 

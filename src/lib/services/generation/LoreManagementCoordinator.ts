@@ -12,9 +12,9 @@ import type {
   StoryMode,
   POV,
   Tense,
-} from '$lib/types'
-import { createLogger } from '$lib/log'
-import { branchScopeKey } from '$lib/utils/branchScope'
+} from '#lib/types/index.ts'
+import { createLogger } from '#lib/log.ts'
+import { branchScopeKey } from '#lib/utils/branchScope.ts'
 
 const log = createLogger('LoreManagementCoordinator')
 

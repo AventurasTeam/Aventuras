@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { StorySettings } from '$lib/types'
+import type { StorySettings } from '#lib/types/index.ts'
 import { IMAGE_GENERATION_MODES, readStorySettings } from './storySettings'
 
 // Settings as an older version, or a hand-edited export, may have stored them.

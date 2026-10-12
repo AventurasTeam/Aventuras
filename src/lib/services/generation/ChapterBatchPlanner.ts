@@ -4,8 +4,8 @@
  * token-threshold/buffer math as story.tokensOutsideBuffer, without any AI call.
  */
 
-import type { StoryEntry } from '$lib/types'
-import { countTokens } from '$lib/services/tokenizer'
+import type { StoryEntry } from '#lib/types/index.ts'
+import { countTokens } from '#lib/services/tokenizer.ts'
 
 export interface ChapterBoundary {
   startIndex: number

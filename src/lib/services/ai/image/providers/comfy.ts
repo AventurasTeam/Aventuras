@@ -24,7 +24,7 @@ import {
 import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
-import { specToPixels } from '$lib/utils/image'
+import { specToPixels } from '#lib/utils/image.ts'
 import { imageGetFetch } from './fetchAdapter'
 import type { ComfyApiFetchInternals } from './comfyFetchMembers'
 import { TauriWebSocket } from './tauriWebSocket'

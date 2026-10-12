@@ -3,7 +3,7 @@
  * a setting does nothing unless one of the prompts that will actually run reads its variable.
  */
 
-import { templateEngine } from '$lib/services/templates/engine'
+import { templateEngine } from '#lib/services/templates/engine.ts'
 
 /**
  * Whether a template could read the variable. A template that does not parse counts as reading

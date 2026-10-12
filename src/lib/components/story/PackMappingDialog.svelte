@@ -9,14 +9,14 @@
   it renders is owned here.
 -->
 <script lang="ts">
-  import * as Dialog from '$lib/components/ui/dialog'
-  import { Button } from '$lib/components/ui/button'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import StepPackSelection from '../wizard/steps/StepPackSelection.svelte'
-  import { database } from '$lib/services/database'
-  import { DEFAULT_PACK_ID } from '$lib/services/packs'
-  import type { PresetPack, CustomVariable } from '$lib/services/packs'
-  import { customVariableValue, mergeCustomVariableValues } from '$lib/services/import'
-  import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
+  import { database } from '#lib/services/database.ts'
+  import { DEFAULT_PACK_ID } from '#lib/services/packs/index.ts'
+  import type { PresetPack, CustomVariable } from '#lib/services/packs/index.ts'
+  import { customVariableValue, mergeCustomVariableValues } from '#lib/services/import/index.ts'
+  import type { PackBindingContext, PackBindingResolution } from '#lib/services/import/index.ts'
 
   interface Props {
     context: PackBindingContext

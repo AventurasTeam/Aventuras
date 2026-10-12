@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Character } from '$lib/types'
+import type { Character } from '#lib/types/index.ts'
 import {
   PendingPortraits,
   referencePortraitSources,

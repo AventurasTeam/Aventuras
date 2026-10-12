@@ -1,4 +1,4 @@
-import type { Entry, EntryInjection, VaultLorebookEntry } from '$lib/types'
+import type { Entry, EntryInjection, VaultLorebookEntry } from '#lib/types/index.ts'
 import { uniqueTerms } from './text'
 
 /** The injection with its keywords deduped by `termKey`. */

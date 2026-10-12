@@ -1,4 +1,4 @@
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('characterCardImport')
 

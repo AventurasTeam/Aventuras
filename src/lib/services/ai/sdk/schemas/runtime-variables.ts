@@ -15,7 +15,7 @@
  */
 
 import * as z from 'zod'
-import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
+import type { RuntimeVariable, RuntimeEntityType } from '#lib/services/packs/types.ts'
 import {
   classificationResultSchema,
   characterUpdateSchema,

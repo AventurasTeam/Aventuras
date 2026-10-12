@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Character } from '$lib/types'
+import type { Character } from '#lib/types/index.ts'
 import { resolveCharacterPresence } from './characterPresence'
 
 function character(name: string, overrides: Partial<Character> = {}): Character {

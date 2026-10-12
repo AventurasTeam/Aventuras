@@ -5,7 +5,7 @@
  * import: everything past this point is the code that already handles `.prompt.json`.
  */
 
-import { templateEngine } from '$lib/services/templates/engine'
+import { templateEngine } from '#lib/services/templates/engine.ts'
 import { validatePackImport, type PackExport } from '../validation'
 import { PACK_FILE, collectTemplateFiles } from './layout'
 import { parsePackFile, parseTemplateFile, type TreeSource } from './serialize'

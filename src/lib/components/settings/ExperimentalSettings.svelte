@@ -8,8 +8,8 @@
 </script>
 
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import {
     FlaskConical,
     Download,
@@ -29,18 +29,18 @@
     Bell,
     Eye,
   } from '@lucide/svelte'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Label } from '$lib/components/ui/label'
-  import { Button } from '$lib/components/ui/button'
-  import { Slider } from '$lib/components/ui/slider'
-  import { Separator } from '$lib/components/ui/separator'
-  import * as Dialog from '$lib/components/ui/dialog'
-  import { database } from '$lib/services/database'
-  import { isAndroid, isIos } from '$lib/utils/platform'
-  import { autosize } from '$lib/utils/autosize'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import { database } from '#lib/services/database.ts'
+  import { isAndroid, isIos } from '#lib/utils/platform.ts'
+  import { autosize } from '#lib/utils/autosize.ts'
   import { ask, open } from '@tauri-apps/plugin-dialog'
-  import { openFilters } from '$lib/utils/dialogFilters'
-  import { errMessage } from '$lib/utils/error'
+  import { openFilters } from '#lib/utils/dialogFilters.ts'
+  import { errMessage } from '#lib/utils/error.ts'
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
   let stateTrackingChecked = $state(settings.experimentalFeatures.stateTracking)
@@ -122,7 +122,7 @@
     isBackingUp = true
     backupResult = null
     try {
-      const { backupService } = await import('$lib/services/backupService')
+      const { backupService } = await import('#lib/services/backupService.ts')
       const savedPath = await backupService.createFullBackup()
       if (savedPath) {
         backupResult = { success: true, message: `Backup saved to:\n${savedPath}` }
@@ -173,7 +173,7 @@
     isRestoring = true
     restoreError = null
     try {
-      const { backupService } = await import('$lib/services/backupService')
+      const { backupService } = await import('#lib/services/backupService.ts')
       await backupService.restoreFromBackup(zipPath)
     } catch (error) {
       console.error('[ExperimentalSettings] Restore failed:', error)

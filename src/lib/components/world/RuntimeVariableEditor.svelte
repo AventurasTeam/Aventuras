@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { RuntimeVariable } from '$lib/services/packs/types'
-  import { Input } from '$lib/components/ui/input'
-  import * as Select from '$lib/components/ui/select'
+  import type { RuntimeVariable } from '#lib/services/packs/types.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
   import type { LucideIcon } from '@lucide/svelte'
   import {
     Heart,

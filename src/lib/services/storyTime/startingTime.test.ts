@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { TimeTracker } from '$lib/types'
+import type { TimeTracker } from '#lib/types/index.ts'
 import {
   greetingStart,
   returnedStart,

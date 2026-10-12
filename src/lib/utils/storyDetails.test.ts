@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { storyDetailsUpdate } from './storyDetails'
-import type { Story, StoryDetails } from '$lib/types'
+import type { Story, StoryDetails } from '#lib/types/index.ts'
 
 const story = (overrides: Partial<Story> = {}): Story =>
   ({

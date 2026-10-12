@@ -1,4 +1,4 @@
-import type { RetrievalSnapshot } from '$lib/services/ai/retrieval/retrievalSnapshot'
+import type { RetrievalSnapshot } from '#lib/services/ai/retrieval/retrievalSnapshot.ts'
 // Core entity types for Aventura
 export type StoryMode = 'adventure' | 'creative-writing'
 export type POV = 'first' | 'second' | 'third'
@@ -778,7 +778,7 @@ export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | '
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport
 
-import type { ActivityReporting } from '$lib/services/activity'
+import type { ActivityReporting } from '#lib/services/activity/index.ts'
 
 export type FontSource = 'default' | 'system' | 'google'
 

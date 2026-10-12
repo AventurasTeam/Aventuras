@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { WithElementRef, WithoutChildren } from 'bits-ui'
   import type { HTMLTextareaAttributes } from 'svelte/elements'
-  import { cn } from '$lib/utils/cn.js'
-  import { autosize } from '$lib/utils/autosize'
+  import { cn } from '#lib/utils/cn.ts'
+  import { autosize } from '#lib/utils/autosize.ts'
 
   type Props = WithoutChildren<WithElementRef<HTMLTextareaAttributes>> & {
     /** Grow with the content up to `max-h`, instead of keeping the height a caller set. */

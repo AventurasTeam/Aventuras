@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Entry, EntryType } from '$lib/types'
+  import type { Entry, EntryType } from '#lib/types/index.ts'
   import {
     Users,
     MapPin,
@@ -10,9 +10,9 @@
     BookOpen,
     ChevronRight,
   } from '@lucide/svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { Checkbox } from '$lib/components/ui/checkbox'
-  import { cn } from '$lib/utils/cn'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     entry: Entry

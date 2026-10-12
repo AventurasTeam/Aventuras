@@ -1,12 +1,12 @@
 <script lang="ts">
   import '../app.css'
   import { onMount } from 'svelte'
-  import Toast from '$lib/components/Toast.svelte'
-  import RestoreCompleteDialog from '$lib/components/RestoreCompleteDialog.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { isAndroid } from '$lib/utils/platform'
-  import { errMessage } from '$lib/utils/error'
+  import Toast from '#lib/components/Toast.svelte'
+  import RestoreCompleteDialog from '#lib/components/RestoreCompleteDialog.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { isAndroid } from '#lib/utils/platform.ts'
+  import { errMessage } from '#lib/utils/error.ts'
 
   let { children } = $props()
 

@@ -9,14 +9,14 @@
  * Services fetch those directly from the pack and inject data programmatically.
  */
 
-import { database } from '$lib/services/database'
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
-import { templateEngine } from '$lib/services/templates/engine'
-import { createLogger } from '$lib/log'
+import { database } from '#lib/services/database.ts'
+import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
+import { templateEngine } from '#lib/services/templates/engine.ts'
+import { createLogger } from '#lib/log.ts'
 import type { RenderResult } from './types'
-import type { Character, Location, Item, StoryBeat } from '$lib/types'
-import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
-import { storyImageMode } from '$lib/utils/image'
+import type { Character, Location, Item, StoryBeat } from '#lib/types/index.ts'
+import type { RuntimeVariable, RuntimeVarsMap } from '#lib/services/packs/types.ts'
+import { storyImageMode } from '#lib/utils/image.ts'
 
 const log = createLogger('ContextBuilder')
 

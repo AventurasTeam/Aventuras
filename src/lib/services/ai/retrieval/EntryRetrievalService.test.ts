@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EntryRetrievalService, SimpleActivationTracker } from './EntryRetrievalService'
-import type { Entry, StoryEntry } from '$lib/types'
+import type { Entry, StoryEntry } from '#lib/types/index.ts'
 
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -11,14 +11,14 @@ vi.mock('$lib/stores/activity.svelte', () => ({
   },
 }))
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: {
     addDebugRequest: vi.fn(),
     addDebugResponse: vi.fn(),
   },
 }))
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     systemServicesSettings: {
       entryRetrieval: {

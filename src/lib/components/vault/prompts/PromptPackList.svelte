@@ -1,19 +1,19 @@
 <script lang="ts">
-  import type { PresetPack } from '$lib/services/packs/types'
-  import { packService } from '$lib/services/packs/pack-service'
-  import { database } from '$lib/services/database'
+  import type { PresetPack } from '#lib/services/packs/types.ts'
+  import { packService } from '#lib/services/packs/pack-service.ts'
+  import { database } from '#lib/services/database.ts'
   import {
     importExportService,
     type DirectoryExportPlan,
     type ImportValidationResult,
-  } from '$lib/services/packs/import-export'
-  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
-  import type { PackUpdateSummary } from '$lib/services/packs/update-summary'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { errMessage } from '$lib/utils/error'
-  import { Skeleton } from '$lib/components/ui/skeleton'
-  import { Button } from '$lib/components/ui/button'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  } from '#lib/services/packs/import-export.ts'
+  import { supportsDirectoryTransfer } from '#lib/services/packs/directory/support.ts'
+  import type { PackUpdateSummary } from '#lib/services/packs/update-summary.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { Skeleton } from '#lib/components/ui/skeleton/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { fade } from 'svelte/transition'
   import PromptPackCard from './PromptPackCard.svelte'
   import CreatePackDialog from './CreatePackDialog.svelte'

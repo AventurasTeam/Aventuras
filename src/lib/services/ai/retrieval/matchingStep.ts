@@ -1,4 +1,4 @@
-import type { MatchingStats } from '$lib/utils/text'
+import type { MatchingStats } from '#lib/utils/text.ts'
 
 function formatMs(ms: number): string {
   return ms < 10 ? `${ms.toFixed(1)} ms` : `${Math.round(ms)} ms`

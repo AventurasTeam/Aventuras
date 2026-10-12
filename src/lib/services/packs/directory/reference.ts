@@ -6,9 +6,9 @@
  * so it follows a new release without anyone maintaining it.
  */
 
-import { variableRegistry } from '$lib/services/templates/variables'
-import { templateEngine } from '$lib/services/templates/engine'
-import type { VariableCategory, VariableDefinition } from '$lib/services/templates/types'
+import { variableRegistry } from '#lib/services/templates/variables.ts'
+import { templateEngine } from '#lib/services/templates/engine.ts'
+import type { VariableCategory, VariableDefinition } from '#lib/services/templates/types.ts'
 import { classifyTemplate, isUntouched } from '../staleness'
 import type { PackTemplate } from '../types'
 import {

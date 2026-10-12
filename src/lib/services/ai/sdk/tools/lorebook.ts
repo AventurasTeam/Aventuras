@@ -7,7 +7,7 @@
 
 import { tool } from 'ai'
 import * as z from 'zod'
-import type { VaultLorebook, VaultLorebookEntry } from '$lib/types'
+import type { VaultLorebook, VaultLorebookEntry } from '#lib/types/index.ts'
 import {
   entryTypeSchema,
   injectionModeSchema,
@@ -15,7 +15,7 @@ import {
   type LorebookEntryPendingChangeSchema,
   type VaultLorebookPendingChangeSchema,
 } from '../schemas/lorebook'
-import { entityNameMatches, foldName } from '$lib/utils/text'
+import { entityNameMatches, foldName } from '#lib/utils/text.ts'
 import type { ChapterQueryBudget } from './chapterQueries'
 import { cleanAliases, cleanKeywords, describeDropped } from '../../lorebook/entryFields'
 

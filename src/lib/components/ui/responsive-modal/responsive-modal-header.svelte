@@ -1,10 +1,10 @@
 <script lang="ts">
-  import * as Dialog from '$lib/components/ui/dialog'
-  import * as Drawer from '$lib/components/ui/drawer'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import * as Drawer from '#lib/components/ui/drawer/index.ts'
   import { getResponsiveModalContext } from './context'
-  import { cn } from '$lib/utils/cn'
+  import { cn } from '#lib/utils/cn.ts'
   import { X } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import type { Snippet } from 'svelte'
 
   type Props = {

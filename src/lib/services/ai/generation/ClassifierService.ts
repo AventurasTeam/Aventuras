@@ -6,7 +6,7 @@ import { generateStructured } from '../sdk/generate'
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
  *
  * NOTE: For classifier output types (CharacterUpdate, NewCharacter, etc.),
- * import directly from '$lib/services/ai/sdk/schemas/classifier'.
+ * import directly from '#lib/services/ai/sdk/schemas/classifier.ts'.
  *
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
@@ -19,14 +19,14 @@ import type {
   Item,
   StoryBeat,
   TimeTracker,
-} from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+} from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
-import { database } from '$lib/services/database'
-import { createLogger } from '$lib/log'
-import { CLEAN_FOR_CLASSIFICATION, narrationCleaner } from '$lib/utils/narrationClean'
-import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { database } from '#lib/services/database.ts'
+import { createLogger } from '#lib/log.ts'
+import { CLEAN_FOR_CLASSIFICATION, narrationCleaner } from '#lib/utils/narrationClean.ts'
+import { recentContent, AS_PROSE } from '#lib/utils/recentContent.ts'
 import {
   classificationResultSchema,
   clampNumber,
@@ -36,10 +36,10 @@ import {
   buildExtendedClassificationSchema,
   salvageClassification,
 } from '../sdk/schemas/runtime-variables'
-import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
+import type { RuntimeVariable, RuntimeEntityType } from '#lib/services/packs/types.ts'
 import { NoObjectGeneratedError } from 'ai'
 import { jsonrepair } from 'jsonrepair'
-import { describeActivityError, isAbortError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '#lib/services/activity/index.ts'
 
 const log = createLogger('Classifier')
 

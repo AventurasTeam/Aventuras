@@ -5,13 +5,13 @@
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
  */
 
-import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import type { StoryEntry, StoryMode, POV, Tense } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
-import { CLEAN_FOR_REVIEW, CLEAN_NONE } from '$lib/utils/narrationClean'
+import { CLEAN_FOR_REVIEW, CLEAN_NONE } from '#lib/utils/narrationClean.ts'
 import { buildReviewPassages } from './styleReviewPassages'
 
 const log = createLogger('StyleReviewer')

@@ -23,10 +23,10 @@
  *   that is no longer the default.
  */
 
-import { parseImageSpec, type ImageSpec } from '$lib/utils/image'
-import { ENTRY_RETRIEVAL_DEFAULTS } from '$lib/services/ai/core/defaults'
-import { REASONING_LEVELS } from '$lib/services/ai/core/reasoning'
-import type { ReasoningEffort } from '$lib/types'
+import { parseImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+import { ENTRY_RETRIEVAL_DEFAULTS } from '#lib/services/ai/core/defaults.ts'
+import { REASONING_LEVELS } from '#lib/services/ai/core/reasoning.ts'
+import type { ReasoningEffort } from '#lib/types/index.ts'
 
 /** Default of the removed `maxEntriesPerTier` slider, for telling tuned from untouched. */
 const LEGACY_MAX_ENTRIES_PER_TIER = 20

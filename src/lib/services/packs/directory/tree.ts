@@ -5,7 +5,7 @@
  * a property of this map, and a map is something a test can compare byte for byte.
  */
 
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
+import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
 import type { PackExport } from '../validation'
 import {
   ABOUT_FILE,

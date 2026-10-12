@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { apiSettings: { llmTimeoutMs: 60_000 } },
 }))
 
-import { ActivityRecorder, ATTEMPT_NUMBER } from '$lib/services/activity'
+import { ActivityRecorder, ATTEMPT_NUMBER } from '#lib/services/activity/index.ts'
 import { activityMiddleware, AttemptTracker } from './activityMiddleware'
 import { retryOn429Middleware } from './retryMiddleware'
 

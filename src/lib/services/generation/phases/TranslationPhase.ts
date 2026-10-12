@@ -17,12 +17,12 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { TranslationSettings } from '$lib/types'
-import type { TranslationResult } from '$lib/services/ai/utils/TranslationService'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
+import type { TranslationSettings } from '#lib/types/index.ts'
+import type { TranslationResult } from '#lib/services/ai/utils/TranslationService.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
 
 /** Dependencies for translation phase - injected to avoid tight coupling */
-import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '#lib/services/activity/index.ts'
 
 export interface TranslationDependencies {
   translateNarration: (

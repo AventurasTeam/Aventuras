@@ -25,7 +25,7 @@
   import X from '@lucide/svelte/icons/x'
   import type { Snippet } from 'svelte'
   import SheetOverlay from './sheet-overlay.svelte'
-  import { cn } from '$lib/utils/cn.js'
+  import { cn } from '#lib/utils/cn.ts'
 
   let {
     ref = $bindable(null),

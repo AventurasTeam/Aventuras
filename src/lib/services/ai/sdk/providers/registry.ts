@@ -16,10 +16,10 @@ import { createGroq } from '@ai-sdk/groq'
 import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createMistral } from '@ai-sdk/mistral'
 
-import type { APIProfile } from '$lib/types'
+import type { APIProfile } from '#lib/types/index.ts'
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 
 export function createModelFromProfile(options: {
   profile: APIProfile

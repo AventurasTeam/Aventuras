@@ -17,8 +17,8 @@ import {
   type ChapterBatchInput,
   type ChapterBatchCallbacks,
 } from './ChapterBatchService'
-import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
-import type { ClassificationResult } from '$lib/services/ai/sdk'
+import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
+import type { ClassificationResult } from '#lib/services/ai/sdk/index.ts'
 
 /** `count` narration entries, 1000 tokens each — one boundary per entry at
  * threshold 1000 (all-narration avoids the turn-alignment extension, which

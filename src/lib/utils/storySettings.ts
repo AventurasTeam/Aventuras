@@ -1,4 +1,4 @@
-import type { ImageGenerationMode, StorySettings } from '$lib/types'
+import type { ImageGenerationMode, StorySettings } from '#lib/types/index.ts'
 
 export const IMAGE_GENERATION_MODES: readonly ImageGenerationMode[] = ['none', 'agentic', 'inline']
 

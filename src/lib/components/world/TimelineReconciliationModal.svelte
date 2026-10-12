@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { story, type TimelineReconciliationPreview } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import * as Dialog from '$lib/components/ui/dialog'
+  import { story, type TimelineReconciliationPreview } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { X } from '@lucide/svelte'
-  import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
-  import { swipe } from '$lib/utils/swipe'
+  import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
+  import { swipe } from '#lib/utils/swipe.ts'
   import { tick, untrack, type Snippet } from 'svelte'
   import {
     TriangleAlert,
@@ -18,8 +18,8 @@
     Pencil,
     Plus,
   } from '@lucide/svelte'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { entryNumber as numberOfEntry } from '$lib/utils/storyNavigation'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { entryNumber as numberOfEntry } from '#lib/utils/storyNavigation.ts'
   import {
     toMinutes,
     parseStoryTime,
@@ -31,14 +31,14 @@
     outstandingDurations,
     rangeIntervals,
     refuseRange,
-  } from '$lib/services/storyTime'
+  } from '#lib/services/storyTime/index.ts'
   import type {
     SelectableRange,
     RangeInterval,
     RangeRefusal,
     Boundary,
-  } from '$lib/services/storyTime'
-  import type { StoryEntry, TimeTracker } from '$lib/types'
+  } from '#lib/services/storyTime/index.ts'
+  import type { StoryEntry, TimeTracker } from '#lib/types/index.ts'
 
   let {
     open = $bindable(false),

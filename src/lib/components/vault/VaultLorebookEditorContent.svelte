@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { VaultLorebook, VaultLorebookEntry, EntryType } from '$lib/types'
-  import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
-  import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
+  import type { VaultLorebook, VaultLorebookEntry, EntryType } from '#lib/types/index.ts'
+  import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import type { FocusedEntity } from '#lib/services/ai/vault/InteractiveVaultService.ts'
   import {
     X,
     Plus,
@@ -25,20 +25,20 @@
     Upload,
   } from '@lucide/svelte'
   import { untrack, onDestroy } from 'svelte'
-  import TagInput from '$lib/components/tags/TagInput.svelte'
+  import TagInput from '#lib/components/tags/TagInput.svelte'
   import VaultLorebookEntryFields from './VaultLorebookEntryFields.svelte'
   import VaultPendingOperations, { type PendingOperation } from './VaultPendingOperations.svelte'
-  import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
-  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
+  import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
+  import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
 
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Label } from '$lib/components/ui/label'
-  import * as Tabs from '$lib/components/ui/tabs'
-  import { cn } from '$lib/utils/cn'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import * as Tabs from '#lib/components/ui/tabs/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
   interface Props {
@@ -201,7 +201,7 @@
     entry: VaultLorebookEntry
     index: number
     isPending: boolean
-    pendingChange: import('$lib/services/ai/sdk/schemas/vault').VaultPendingChange | null
+    pendingChange: import('#lib/services/ai/sdk/schemas/vault.ts').VaultPendingChange | null
     pendingAction?: 'create' | 'edit' | 'delete' | 'merge-source' | 'merge-result'
   }
 

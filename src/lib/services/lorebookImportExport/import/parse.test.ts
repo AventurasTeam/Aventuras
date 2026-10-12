@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EXCHANGE_FORMAT, EXCHANGE_FORMAT_VERSION } from '$lib/services/exchange'
+import { EXCHANGE_FORMAT, EXCHANGE_FORMAT_VERSION } from '#lib/services/exchange/index.ts'
 import { parse } from './parse'
 
 describe('lorebookImportExport / parse', () => {

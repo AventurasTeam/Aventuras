@@ -16,7 +16,7 @@ import {
   failStep,
   isAbortError,
   type ActivityReporter,
-} from '$lib/services/activity'
+} from '#lib/services/activity/index.ts'
 import type { RetryHooks } from './retryMiddleware'
 
 export class AttemptTracker {

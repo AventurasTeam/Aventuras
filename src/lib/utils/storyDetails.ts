@@ -1,4 +1,4 @@
-import type { Story, StoryDetails } from '$lib/types'
+import type { Story, StoryDetails } from '#lib/types/index.ts'
 
 /**
  * The columns a story's edited details change, or `null` when they change nothing — the library

@@ -13,7 +13,7 @@
  * - is_user: false   → 'narration'
  */
 
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 export interface STChatMessage {
   type: StoryEntry['type']

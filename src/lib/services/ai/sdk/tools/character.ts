@@ -7,9 +7,9 @@
 
 import { tool } from 'ai'
 import * as z from 'zod'
-import type { VaultCharacter } from '$lib/types'
+import type { VaultCharacter } from '#lib/types/index.ts'
 import type { VaultPendingChange } from '../schemas/vault'
-import { applyTermChanges, uniqueTerms } from '$lib/utils/text'
+import { applyTermChanges, uniqueTerms } from '#lib/utils/text.ts'
 import { vaultCharacterInputSchema, visualDescriptorsSchema } from '../schemas'
 
 /**

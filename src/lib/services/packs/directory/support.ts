@@ -1,4 +1,4 @@
-import { isAndroid } from '$lib/utils/platform'
+import { isAndroid } from '#lib/utils/platform.ts'
 
 /**
  * Whether this platform can export or import a pack as a directory.

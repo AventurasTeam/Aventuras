@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
   import { Check, FileJson, Loader2, Download } from '@lucide/svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Progress } from '$lib/components/ui/progress'
-  import { Checkbox } from '$lib/components/ui/checkbox'
-  import { Label } from '$lib/components/ui/label'
-  import { cn } from '$lib/utils/cn'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Progress } from '#lib/components/ui/progress/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   let dragOver = $state(false)
   let parseResult = $state<LorebookImportExport.LorebookImportResult | null>(null)

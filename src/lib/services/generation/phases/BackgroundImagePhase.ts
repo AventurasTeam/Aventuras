@@ -13,7 +13,7 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { StoryEntry, ImageGenerationMode } from '$lib/types'
+import type { StoryEntry, ImageGenerationMode } from '#lib/types/index.ts'
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface BackgroundImageDependencies {

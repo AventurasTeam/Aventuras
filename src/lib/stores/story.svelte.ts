@@ -23,9 +23,9 @@ import type {
   LocationBeforeState,
   ItemBeforeState,
   StoryBeatBeforeState,
-} from '$lib/types'
-import { database } from '$lib/services/database'
-import { rollbackService } from '$lib/services/rollbackService'
+} from '#lib/types/index.ts'
+import { database } from '#lib/services/database.ts'
+import { rollbackService } from '#lib/services/rollbackService.ts'
 import { ui } from './ui.svelte'
 import {
   analyzeTimeline,
@@ -45,7 +45,7 @@ import {
   type ReconciliationPlan,
   type SelectableRange,
   type TimelineAnomaly,
-} from '$lib/services/storyTime'
+} from '#lib/services/storyTime/index.ts'
 
 /** What a previewed reconciliation carries: the refusal, the outstanding requests, or the plan. */
 export type TimelineReconciliationPreview =
@@ -62,14 +62,14 @@ export type TimelineReconciliationPreview =
       inputs: { durations: Record<string, number>; intervals: Record<string, number> }
     }
 import { settings } from './settings.svelte'
-import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-variables'
-import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
-import type { RuntimeVariable } from '$lib/services/packs/types'
-import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
-import { chapterReadBudget } from '$lib/services/ai/core/defaults'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import { countTokens } from '$lib/services/tokenizer'
-import type { STChatMessage } from '$lib/services/stChatImporter'
+import { extractInlineCustomVars } from '#lib/services/ai/sdk/schemas/runtime-variables.ts'
+import type { ClassificationResult } from '#lib/services/ai/sdk/schemas/classifier.ts'
+import type { RuntimeVariable } from '#lib/services/packs/types.ts'
+import { DEFAULT_MEMORY_CONFIG } from '#lib/services/ai/generation/MemoryService.ts'
+import { chapterReadBudget } from '#lib/services/ai/core/defaults.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import { countTokens } from '#lib/services/tokenizer.ts'
+import type { STChatMessage } from '#lib/services/stChatImporter.ts'
 import {
   eventBus,
   emitStoryLoaded,
@@ -79,31 +79,31 @@ import {
   type CheckpointCreatedEvent,
   type StoryCreatedEvent,
   type BranchSwitchedEvent,
-} from '$lib/services/events'
+} from '#lib/services/events.ts'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
-import { aiService } from '$lib/services/ai'
+import { aiService } from '#lib/services/ai/index.ts'
 import {
   ChapterBatchService,
   buildLoreManagementCallbacks,
   buildLoreManagementUICallbacks,
   resolveCharacterPresence,
   type WorldState,
-} from '$lib/services/generation'
-import { createLogger } from '$lib/log'
-import { withUniqueEntryTerms } from '$lib/utils/lorebookTerms'
-import { applyTermChanges, sameEntityName, uniqueTerms } from '$lib/utils/text'
-import { storyDetailsUpdate } from '$lib/utils/storyDetails'
-import { grammarService } from '$lib/services/grammar'
-import { clearTier3SelectionCache } from '$lib/services/ai'
-import { clearImageMarkerCache } from '$lib/services/image'
-import { GenerationLease } from '$lib/utils/generationLease'
-import { findLiveCharacter, sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
-import { checkpointDeletionBlocker } from '$lib/utils/storyNavigation'
+} from '#lib/services/generation/index.ts'
+import { createLogger } from '#lib/log.ts'
+import { withUniqueEntryTerms } from '#lib/utils/lorebookTerms.ts'
+import { applyTermChanges, sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
+import { storyDetailsUpdate } from '#lib/utils/storyDetails.ts'
+import { grammarService } from '#lib/services/grammar.ts'
+import { clearTier3SelectionCache } from '#lib/services/ai/index.ts'
+import { clearImageMarkerCache } from '#lib/services/image/index.ts'
+import { GenerationLease } from '#lib/utils/generationLease.ts'
+import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
+import { checkpointDeletionBlocker } from '#lib/utils/storyNavigation.ts'
 import {
   buildChapterBanners,
   lastResolvedChapterEnd,
   type ChapterBanner,
-} from '$lib/utils/chapterBanners'
+} from '#lib/utils/chapterBanners.ts'
 
 const log = createLogger('StoryStore')
 

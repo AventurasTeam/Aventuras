@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Branch, Chapter, Checkpoint, StoryEntry } from '$lib/types'
+import type { Branch, Chapter, Checkpoint, StoryEntry } from '#lib/types/index.ts'
 import { buildChapterBanners } from './chapterBanners'
 import {
   branchesUsingCheckpoint,

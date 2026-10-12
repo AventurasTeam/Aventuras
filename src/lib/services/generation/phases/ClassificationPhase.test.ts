@@ -1,8 +1,8 @@
-import { ActivityRecorder } from '$lib/services/activity'
+import { ActivityRecorder } from '#lib/services/activity/index.ts'
 import { describe, it, expect, vi } from 'vitest'
 import { ClassificationPhase, type ClassificationInput } from './ClassificationPhase'
 import type { GenerationEvent } from '../types'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []

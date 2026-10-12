@@ -6,7 +6,7 @@
  * - Models:  GET  /sdapi/v1/sd-models
  */
 
-import { specToPixels } from '$lib/utils/image'
+import { specToPixels } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,

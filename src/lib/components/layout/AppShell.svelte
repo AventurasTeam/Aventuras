@@ -1,27 +1,27 @@
 <script lang="ts">
-  import { debug } from '$lib/stores/debug.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
+  import { debug } from '#lib/stores/debug.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import Sidebar from './Sidebar.svelte'
   import StoryNavPanel from './StoryNavPanel.svelte'
   import Header from './Header.svelte'
   import ProfileWarningBanner from './ProfileWarningBanner.svelte'
-  import StoryView from '$lib/components/story/StoryView.svelte'
-  import LibraryView from '$lib/components/story/LibraryView.svelte'
-  import GalleryTab from '$lib/components/story/GalleryTab.svelte'
-  import LorebookView from '$lib/components/lorebook/LorebookView.svelte'
-  import MemoryView from '$lib/components/memory/MemoryView.svelte'
-  import VaultPanel from '$lib/components/vault/VaultPanel.svelte'
-  import SettingsModal from '$lib/components/settings/SettingsModal.svelte'
-  import LorebookDebugPanel from '$lib/components/debug/LorebookDebugPanel.svelte'
-  import DebugLogModal from '$lib/components/debug/DebugLogModal.svelte'
-  import SyncModal from '$lib/components/sync/SyncModal.svelte'
-  import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
-  import UpdateDialog from '$lib/components/updater/UpdateDialog.svelte'
-  import { swipe, type SwipeEvent } from '$lib/utils/swipe'
-  import { releaseOrphanScrollLock, isBodyLockPresent } from '$lib/utils/scrollLock'
-  import { createLogger } from '$lib/log'
+  import StoryView from '#lib/components/story/StoryView.svelte'
+  import LibraryView from '#lib/components/story/LibraryView.svelte'
+  import GalleryTab from '#lib/components/story/GalleryTab.svelte'
+  import LorebookView from '#lib/components/lorebook/LorebookView.svelte'
+  import MemoryView from '#lib/components/memory/MemoryView.svelte'
+  import VaultPanel from '#lib/components/vault/VaultPanel.svelte'
+  import SettingsModal from '#lib/components/settings/SettingsModal.svelte'
+  import LorebookDebugPanel from '#lib/components/debug/LorebookDebugPanel.svelte'
+  import DebugLogModal from '#lib/components/debug/DebugLogModal.svelte'
+  import SyncModal from '#lib/components/sync/SyncModal.svelte'
+  import STChatImportModal from '#lib/components/modals/STChatImportModal.svelte'
+  import UpdateDialog from '#lib/components/updater/UpdateDialog.svelte'
+  import { swipe, type SwipeEvent } from '#lib/utils/swipe.ts'
+  import { releaseOrphanScrollLock, isBodyLockPresent } from '#lib/utils/scrollLock.ts'
+  import { createLogger } from '#lib/log.ts'
   import { Bug } from '@lucide/svelte'
   import {
     DESKTOP_BREAKPOINT,
@@ -29,7 +29,7 @@
     MAX_SIDEBAR_WIDTH,
     MAX_SIDEBAR_RATIO,
     MODAL_CLOSE_TRANSITION_MS,
-  } from '$lib/constants/layout'
+  } from '#lib/constants/layout.ts'
   import type { Snippet } from 'svelte'
 
   let { children }: { children?: Snippet } = $props()
@@ -198,7 +198,7 @@
 
   /**
    * The single owner of orphaned-scroll-lock recovery, for the whole app. Two triggers, one
-   * release: see `$lib/utils/scrollLock`.
+   * release: see `#lib/utils/scrollLock.ts`.
    *
    * The observer fires on writes to `body.style`, which an orphaned lock stops producing, so
    * input is the trigger that cannot miss. Document level because a locked `<body>` leaves hit

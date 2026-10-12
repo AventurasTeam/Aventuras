@@ -5,7 +5,7 @@
     CLASSIFIER_WINDOW_MAX,
     ENTRY_RETRIEVAL_WINDOW_MIN,
     ENTRY_RETRIEVAL_WINDOW_MAX,
-  } from '$lib/stores/settings.svelte'
+  } from '#lib/stores/settings.svelte.ts'
   import {
     ChevronDown,
     RotateCcw,
@@ -20,12 +20,12 @@
     Users,
     PenLine,
   } from '@lucide/svelte'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Label } from '$lib/components/ui/label'
-  import { Button } from '$lib/components/ui/button'
-  import { Slider } from '$lib/components/ui/slider'
-  import * as Collapsible from '$lib/components/ui/collapsible'
-  import { Separator } from '$lib/components/ui/separator'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
   import { advancedPanelView } from './advancedPanelView'
 
   // Open/closed state for every collapsible section, keyed by id so `sectionHeader` can

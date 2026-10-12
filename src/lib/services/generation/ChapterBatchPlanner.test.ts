@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { planChapterBoundaries } from './ChapterBatchPlanner'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 /** Entries alternate user_action/narration, each with an explicit tokenCount
  * so tests don't depend on the real tokenizer. */

@@ -15,8 +15,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile: vi.fn(), readTextFile: vi.fn() }))
-vi.mock('$lib/services/import/native', () => ({ importFromFile: vi.fn() }))
-vi.mock('$lib/services/exportTarget', () => ({
+vi.mock('#lib/services/import/native.ts', () => ({ importFromFile: vi.fn() }))
+vi.mock('#lib/services/exportTarget.ts', () => ({
   resolveSaveTarget: vi.fn(async () => ({ destPath: '/tmp/out.avt' })),
 }))
 
@@ -38,7 +38,7 @@ const db = {
   customVariableValues: null as Record<string, string> | null,
 }
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     getStoryEntries: vi.fn(async () => []),
     getCharacters: vi.fn(async () => []),
@@ -62,7 +62,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-const { gatherStoryData, exportService } = await import('$lib/services/export')
+const { gatherStoryData, exportService } = await import('#lib/services/export.ts')
 
 beforeEach(() => {
   invoke.mockClear()

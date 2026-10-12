@@ -1,17 +1,17 @@
-import { type Genre, scenarioService } from '$lib/services/ai/wizard/ScenarioService'
-import { aiService } from '$lib/services/ai'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import { settings } from '$lib/stores/settings.svelte'
-import { characterVault } from '$lib/stores/characterVault.svelte'
-import type { StoryMode, POV, TimeTracker, VaultCharacter } from '$lib/types'
-import { descriptorsToString, stringToDescriptors } from '$lib/utils/visualDescriptors'
-import { parseTerms, uniqueTerms } from '$lib/utils/text'
-import { CharacterCardImport } from '$lib/services/characterCardImport'
+import { type Genre, scenarioService } from '#lib/services/ai/wizard/ScenarioService.ts'
+import { aiService } from '#lib/services/ai/index.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+import type { StoryMode, POV, TimeTracker, VaultCharacter } from '#lib/types/index.ts'
+import { descriptorsToString, stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
+import { parseTerms, uniqueTerms } from '#lib/utils/text.ts'
+import { CharacterCardImport } from '#lib/services/characterCardImport/index.ts'
 import type {
   ExpandedSetting,
   GeneratedCharacter,
   GeneratedProtagonist,
-} from '$lib/services/ai/sdk'
+} from '#lib/services/ai/sdk/index.ts'
 import { SvelteSet } from 'svelte/reactivity'
 
 export class CharacterStore {

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { variableRegistry } from '$lib/services/templates/variables'
-  import type { CustomVariable } from '$lib/services/packs/types'
-  import * as Popover from '$lib/components/ui/popover'
-  import * as Command from '$lib/components/ui/command'
+  import { variableRegistry } from '#lib/services/templates/variables.ts'
+  import type { CustomVariable } from '#lib/services/packs/types.ts'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import * as Command from '#lib/components/ui/command/index.ts'
   import { Braces } from '@lucide/svelte'
 
   interface Props {

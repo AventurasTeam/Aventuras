@@ -1,8 +1,8 @@
 <script lang="ts">
-  import * as Popover from '$lib/components/ui/popover'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { cn } from '$lib/utils/cn'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import type { LucideIcon } from '@lucide/svelte'
   import {
     Heart,

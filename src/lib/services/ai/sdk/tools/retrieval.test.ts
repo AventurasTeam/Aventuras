@@ -9,7 +9,7 @@ import {
   UNCHAPTERIZED,
   type RetrievalToolContext,
 } from './retrieval'
-import type { Chapter, StoryEntry } from '$lib/types'
+import type { Chapter, StoryEntry } from '#lib/types/index.ts'
 
 function chapter(number: number, summary: string, title: string | null = null): Chapter {
   return { number, title, summary } as Chapter

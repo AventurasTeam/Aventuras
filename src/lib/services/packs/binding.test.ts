@@ -11,7 +11,7 @@ import type { PresetPack, RuntimeVarsMap } from './types'
 
 const db = { packs: [] as PresetPack[] }
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: { getAllPacks: vi.fn(async () => db.packs) },
 }))
 

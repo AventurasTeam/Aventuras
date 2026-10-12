@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { RefreshCw, AlertTriangle } from '@lucide/svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Alert, AlertDescription, AlertTitle } from '#lib/components/ui/alert/index.ts'
 
   interface Props {
     chapterId: string | null

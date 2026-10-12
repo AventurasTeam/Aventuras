@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import { Brain, Settings2 } from '@lucide/svelte'
-  import type { ReasoningEffort } from '$lib/types'
-  import { cn } from '$lib/utils/cn'
-  import { supportsReasoning, supportsCapabilityFetch } from '$lib/services/ai/sdk/providers'
+  import type { ReasoningEffort } from '#lib/types/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import {
+    supportsReasoning,
+    supportsCapabilityFetch,
+  } from '#lib/services/ai/sdk/providers/index.ts'
   import {
     clampReasoningToCapability,
     REASONING_LABELS,
@@ -11,11 +14,11 @@
     REASONING_SHORT_LABELS,
     reasoningCapabilityFor,
     type ReasoningCapability,
-  } from '$lib/services/ai/core/reasoning'
+  } from '#lib/services/ai/core/reasoning.ts'
 
-  import { Label } from '$lib/components/ui/label'
-  import { Slider } from '$lib/components/ui/slider'
-  import { Input } from '$lib/components/ui/input'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
   import ModelSelector from './ModelSelector.svelte'
 
   interface Props {

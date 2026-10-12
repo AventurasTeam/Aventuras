@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { isTouchDevice } from '$lib/utils/swipe'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Button } from '$lib/components/ui/button'
+  import { isTouchDevice } from '#lib/utils/swipe.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { Send, Square } from '@lucide/svelte'
 
   let {

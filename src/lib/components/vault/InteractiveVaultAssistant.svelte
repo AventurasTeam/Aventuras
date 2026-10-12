@@ -5,16 +5,16 @@
     type ToolCallDisplay,
     type VaultState,
     type FocusedEntity,
-  } from '$lib/services/ai/vault/InteractiveVaultService'
-  import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
-  import type { VaultConversation } from '$lib/types'
-  import { database } from '$lib/services/database'
+  } from '#lib/services/ai/vault/InteractiveVaultService.ts'
+  import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import type { VaultConversation } from '#lib/types/index.ts'
+  import { database } from '#lib/services/database.ts'
 
-  import { characterVault } from '$lib/stores/characterVault.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-  import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+  import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import {
     ChevronLeft,
     Bot,
@@ -39,18 +39,18 @@
     CircleUser,
     Pencil,
   } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import VaultDiffView from './VaultDiffView.svelte'
   import VaultEntityEditPanel from './VaultEntityEditPanel.svelte'
   import VaultAssistantInput from './VaultAssistantInput.svelte'
   import { fade, slide } from 'svelte/transition'
   import { onMount, onDestroy, tick } from 'svelte'
-  import * as Dialog from '$lib/components/ui/dialog'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { parseMarkdown } from '$lib/utils/markdown'
-  import { cn } from '$lib/utils/cn'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { parseMarkdown } from '#lib/utils/markdown.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { SvelteSet } from 'svelte/reactivity'
-  import { createIsCompact } from '$lib/hooks/is-compact.svelte'
+  import { createIsCompact } from '#lib/hooks/is-compact.svelte.ts'
 
   interface Props {
     onClose: () => void

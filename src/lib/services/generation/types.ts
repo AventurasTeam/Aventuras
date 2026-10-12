@@ -13,11 +13,11 @@ import type {
   StoryBeat,
   MemoryConfig,
   Entry,
-} from '$lib/types'
-import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
-import type { TimelineFillResult } from '$lib/services/ai/retrieval'
-import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
-import type { WorldStateInjectionResult } from '$lib/services/ai/generation/WorldStateInjector'
+} from '#lib/types/index.ts'
+import type { ClassificationResult } from '#lib/services/ai/sdk/schemas/classifier.ts'
+import type { TimelineFillResult } from '#lib/services/ai/retrieval/index.ts'
+import type { EntryRetrievalResult } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
+import type { WorldStateInjectionResult } from '#lib/services/ai/generation/WorldStateInjector.ts'
 
 // Generation Phases
 export type GenerationPhase =

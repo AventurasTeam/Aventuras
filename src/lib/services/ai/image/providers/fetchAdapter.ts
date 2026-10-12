@@ -7,9 +7,9 @@
  */
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
-import { debug } from '$lib/stores/debug.svelte'
-import { bytesToBase64 } from '$lib/utils/image'
-import { isPublicHttpUrl } from '$lib/utils/url'
+import { debug } from '#lib/stores/debug.svelte.ts'
+import { bytesToBase64 } from '#lib/utils/image.ts'
+import { isPublicHttpUrl } from '#lib/utils/url.ts'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 

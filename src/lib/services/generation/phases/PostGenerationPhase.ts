@@ -25,9 +25,9 @@ import type {
   Location,
   Item,
   StoryBeat,
-} from '$lib/types'
-import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
+} from '#lib/types/index.ts'
+import type { Suggestion, ActionChoice } from '#lib/services/ai/sdk/schemas/index.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
 
 /** Prompt context for macro expansion */
 export interface PromptContext {
@@ -50,7 +50,12 @@ export interface PostWorldState {
 }
 
 /** Dependencies for post-generation phase */
-import { NO_ACTIVITY, isAbortError, trackStep, type ActivityReporter } from '$lib/services/activity'
+import {
+  NO_ACTIVITY,
+  isAbortError,
+  trackStep,
+  type ActivityReporter,
+} from '#lib/services/activity/index.ts'
 
 export interface PostGenerationDependencies {
   generateSuggestions: (

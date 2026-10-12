@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { visualDescriptorsSchema } from '$lib/services/ai/sdk/schemas'
+import { visualDescriptorsSchema } from '#lib/services/ai/sdk/schemas/index.ts'
 import { EXCHANGE_FORMAT } from './types'
 
 const metadata = z.record(z.string(), z.unknown()).default({})

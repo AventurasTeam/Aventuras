@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { WorldStateInjector } from './WorldStateInjector'
-import type { Character, Location, Item, StoryBeat, StoryEntry } from '$lib/types'
+import type { Character, Location, Item, StoryBeat, StoryEntry } from '#lib/types/index.ts'
 
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('$lib/stores/activity.svelte', () => ({
   },
 }))
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: {
     addDebugRequest: vi.fn(),
     addDebugResponse: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('../retrieval/tier3Selection', async (importOriginal) => ({
   runTier3Selection: (...args: unknown[]) => runTier3Selection(...args),
 }))
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getServicePresetId: () => 'context',
     systemServicesSettings: {

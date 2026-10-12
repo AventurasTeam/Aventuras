@@ -3,7 +3,7 @@
     RuntimeVariable,
     RuntimeVarsMap,
     RuntimeVariableValue,
-  } from '$lib/services/packs/types'
+  } from '#lib/services/packs/types.ts'
   import RuntimeVariableEditor from './RuntimeVariableEditor.svelte'
   import type { LucideIcon } from '@lucide/svelte'
   import {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { RetrievalPhase, type RetrievalDependencies } from './RetrievalPhase'
 import type { GenerationContext } from '../types'
-import type { Chapter, StoryEntry } from '$lib/types'
+import type { Chapter, StoryEntry } from '#lib/types/index.ts'
 
 function makeMockContext(overrides: Partial<GenerationContext> = {}): GenerationContext {
   return {

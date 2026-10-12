@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { parseSTChat, type STChatParseResult } from '$lib/services/stChatImporter'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { parseSTChat, type STChatParseResult } from '#lib/services/stChatImporter.ts'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
   import {
@@ -15,10 +15,10 @@
     X,
   } from '@lucide/svelte'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import ChapterizeOptions from '$lib/components/shared/ChapterizeOptions.svelte'
-  import { cn } from '$lib/utils/cn'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import ChapterizeOptions from '#lib/components/shared/ChapterizeOptions.svelte'
+  import { cn } from '#lib/utils/cn.ts'
 
   let dragOver = $state(false)
   let parseResult = $state<STChatParseResult | null>(null)

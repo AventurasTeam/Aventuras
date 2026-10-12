@@ -1,5 +1,5 @@
 import type { LanguageModelMiddleware } from 'ai'
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 
 const RETRY_DELAYS_MS = [10_000, 20_000, 30_000]
 const JITTER_FACTOR = 0.1

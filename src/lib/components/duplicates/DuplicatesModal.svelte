@@ -18,12 +18,12 @@
     APPEND,
     type MergePlan,
     type ScopedDuplicateGroup,
-  } from '$lib/services/generation'
-  import { story } from '$lib/stores/story.svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Badge } from '$lib/components/ui/badge'
+  } from '#lib/services/generation/index.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
   import {
     Merge,
     SplitSquareHorizontal,

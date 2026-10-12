@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { syncService } from '$lib/services/sync'
-  import { importSyncedStory, pushSyncedStory } from '$lib/services/syncActions'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { syncService } from '#lib/services/sync.ts'
+  import { importSyncedStory, pushSyncedStory } from '#lib/services/syncActions.ts'
   import { getVersion } from '@tauri-apps/api/app'
   import {
     QrCode,
@@ -15,17 +15,17 @@
     Check,
   } from '@lucide/svelte'
   import { Html5Qrcode } from 'html5-qrcode'
-  import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
+  import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '#lib/types/sync.ts'
   import { onDestroy, untrack } from 'svelte'
-  import PackMappingDialog from '$lib/components/story/PackMappingDialog.svelte'
-  import type { PresetPack } from '$lib/services/packs'
-  import { planPackBinding, previewImport } from '$lib/services/import'
-  import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Card, CardHeader, CardTitle, CardDescription } from '$lib/components/ui/card'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Badge } from '$lib/components/ui/badge'
+  import PackMappingDialog from '#lib/components/story/PackMappingDialog.svelte'
+  import type { PresetPack } from '#lib/services/packs/index.ts'
+  import { planPackBinding, previewImport } from '#lib/services/import/index.ts'
+  import type { PackBindingContext, PackBindingResolution } from '#lib/services/import/index.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Card, CardHeader, CardTitle, CardDescription } from '#lib/components/ui/card/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
 
   /** Non-null only while a transfer is waiting on the user's pack choice. */
   let packMapping = $state<{

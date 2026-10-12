@@ -1,11 +1,11 @@
 <script lang="ts">
   import { Users, Map, BookOpen, Loader2, AlertCircle, Check, RefreshCw } from '@lucide/svelte'
-  import * as Card from '$lib/components/ui/card'
-  import * as Alert from '$lib/components/ui/alert'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Button } from '$lib/components/ui/button'
-  import { CharacterCardImport } from '$lib/services/characterCardImport'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { CharacterCardImport } from '#lib/services/characterCardImport/index.ts'
 
   interface Props {
     cardParsedData: CharacterCardImport.ParsedCard | null

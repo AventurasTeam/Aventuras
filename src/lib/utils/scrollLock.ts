@@ -13,7 +13,7 @@
  * Nothing here is a substitute for closing a modal properly. It is the net under it.
  */
 
-import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
+import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
 
 /** Marks menu content that has opted out of the body lock, so it is never mistaken for an owner. */
 export const NO_SCROLL_LOCK_ATTR = 'data-no-scroll-lock'

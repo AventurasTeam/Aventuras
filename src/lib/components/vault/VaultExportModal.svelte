@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+  import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
   import { Upload, FileJson, FileText, Loader2 } from '@lucide/svelte'
-  import type { VaultLorebook, VaultCharacter, VaultScenario } from '$lib/types'
+  import type { VaultLorebook, VaultCharacter, VaultScenario } from '#lib/types/index.ts'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
-  import { Label } from '$lib/components/ui/label'
-  import { cn } from '$lib/utils/cn'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { errMessage } from '$lib/utils/error'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { errMessage } from '#lib/utils/error.ts'
 
   type ExportFormat = LorebookImportExport.ExportFormat
   type EntityType = 'lorebook' | 'character' | 'scenario'

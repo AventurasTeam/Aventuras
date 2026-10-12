@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Drawer as DrawerPrimitive } from 'vaul-svelte'
-  import { isAndroid } from '$lib/utils/platform'
+  import { isAndroid } from '#lib/utils/platform.ts'
   import { DRAWER_CLOSE_THRESHOLD } from './swipe-guard'
 
   let {

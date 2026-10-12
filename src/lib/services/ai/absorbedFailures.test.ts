@@ -9,11 +9,11 @@ const activity = vi.hoisted(() => ({
   endStep: vi.fn(),
   recordStep: vi.fn(() => ''),
 }))
-vi.mock('$lib/stores/activity.svelte', () => ({ activity }))
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({ activity }))
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getServicePresetId: vi.fn(() => 'preset'),
     systemServicesSettings: { timelineFill: { maxQueries: 3 } },
@@ -23,7 +23,7 @@ vi.mock('./core/config', () => ({
   getContextConfig: () => ({ recentEntriesForSuggestions: 5, recentEntriesForChoices: 5 }),
   getLorebookConfig: () => ({ maxForSuggestions: 5 }),
 }))
-vi.mock('$lib/services/context', () => ({
+vi.mock('#lib/services/context/index.ts', () => ({
   ContextBuilder: class {
     static async forPack() {
       return new this()

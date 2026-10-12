@@ -7,7 +7,7 @@
 
 import { tool } from 'ai'
 import * as z from 'zod'
-import type { VaultScenario } from '$lib/types'
+import type { VaultScenario } from '#lib/types/index.ts'
 import type { VaultPendingChange } from '../schemas/vault'
 import { vaultScenarioInputSchema, vaultScenarioNpcSchema } from '../schemas'
 

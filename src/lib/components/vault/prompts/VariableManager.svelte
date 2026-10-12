@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { CustomVariable } from '$lib/services/packs/types'
-  import { database } from '$lib/services/database'
+  import type { CustomVariable } from '#lib/services/packs/types.ts'
+  import { database } from '#lib/services/database.ts'
   import VariableCard from './VariableCard.svelte'
-  import { Button } from '$lib/components/ui/button'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { Plus, Variable } from '@lucide/svelte'
 
   interface Props {

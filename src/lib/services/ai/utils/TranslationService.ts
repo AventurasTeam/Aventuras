@@ -5,13 +5,13 @@
  * using the Vercel AI SDK.
  */
 
-import type { TranslationSettings } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import type { TranslationSettings } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 import { generatePlainText } from '../sdk/generate'
-import { ContextBuilder } from '$lib/services/context'
-import { describeActivityError, isAbortError } from '$lib/services/activity'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { describeActivityError, isAbortError } from '#lib/services/activity/index.ts'
 import {
   translatedUIResultSchema,
   translatedSuggestionsResultSchema,

@@ -4,7 +4,7 @@
  * Single source of truth for all provider metadata, defaults, and capabilities.
  */
 
-import type { ProviderType, ReasoningEffort } from '$lib/types'
+import type { ProviderType, ReasoningEffort } from '#lib/types/index.ts'
 
 // ============================================================================
 // Types

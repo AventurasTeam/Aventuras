@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Character, Entry, Item, Location } from '$lib/types'
+import type { Character, Entry, Item, Location } from '#lib/types/index.ts'
 import {
   APPEND,
   applyMergePlan,

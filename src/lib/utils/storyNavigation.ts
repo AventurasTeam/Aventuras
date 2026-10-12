@@ -1,4 +1,4 @@
-import type { Branch, Checkpoint, StoryEntry } from '$lib/types'
+import type { Branch, Checkpoint, StoryEntry } from '#lib/types/index.ts'
 import { chapterBannerLabel, type ChapterBanner } from './chapterBanners'
 
 /**

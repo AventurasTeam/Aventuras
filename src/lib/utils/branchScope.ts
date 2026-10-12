@@ -1,4 +1,4 @@
-import type { Character } from '$lib/types'
+import type { Character } from '#lib/types/index.ts'
 
 /**
  * How a story branch is named when it is used as a map or set key.

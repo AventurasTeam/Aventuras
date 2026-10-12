@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { toRetrievalSnapshot, snapshotSize } from '$lib/services/ai/retrieval'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { exportService, gatherStoryData } from '$lib/services/export'
-  import { errMessage } from '$lib/utils/error'
-  import { Button } from '$lib/components/ui/button'
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { toRetrievalSnapshot, snapshotSize } from '#lib/services/ai/retrieval/index.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { exportService, gatherStoryData } from '#lib/services/export.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import {
     PanelRight,
     PanelLeft,

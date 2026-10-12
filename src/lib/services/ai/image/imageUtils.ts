@@ -5,12 +5,17 @@
  */
 
 import { generateImage, supportsImageGeneration, requiresApiKey } from './providers/registry'
-import { database } from '$lib/services/database'
-import { settings } from '$lib/stores/settings.svelte'
-import type { EmbeddedImage, StorySettings } from '$lib/types'
-import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
-import { createLogger } from '$lib/log'
-import { expectedPixels, defaultImageSpec, storyImageMode, type ImageSpec } from '$lib/utils/image'
+import { database } from '#lib/services/database.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import type { EmbeddedImage, StorySettings } from '#lib/types/index.ts'
+import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '#lib/services/events.ts'
+import { createLogger } from '#lib/log.ts'
+import {
+  expectedPixels,
+  defaultImageSpec,
+  storyImageMode,
+  type ImageSpec,
+} from '#lib/utils/image.ts'
 
 const log = createLogger('ImageUtils')
 

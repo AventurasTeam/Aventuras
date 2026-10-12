@@ -6,7 +6,7 @@
  * the start belonging to the opening that is used is the one that seeds the story.
  */
 
-import type { TimeTracker } from '$lib/types'
+import type { TimeTracker } from '#lib/types/index.ts'
 import { formatStoryTime, parseStoryTime } from './duration'
 import { normalizeTime } from './minutes'
 

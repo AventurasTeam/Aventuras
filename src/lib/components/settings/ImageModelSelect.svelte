@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { ImageModelInfo } from '$lib/services/ai/image'
-  import { Autocomplete } from '$lib/components/ui/autocomplete'
-  import { Button } from '$lib/components/ui/button'
+  import type { ImageModelInfo } from '#lib/services/ai/image/index.ts'
+  import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { RefreshCw, Loader2, Check, ImagePlus } from '@lucide/svelte'
-  import { cn } from '$lib/utils/cn'
+  import { cn } from '#lib/utils/cn.ts'
   import {
     DEFAULT_AVG_PROMPT_TOKENS,
     DEFAULT_AVG_IMAGE_TOKENS,
-  } from '$lib/services/ai/image/constants'
+  } from '#lib/services/ai/image/constants.ts'
 
   interface Props {
     models: ImageModelInfo[]

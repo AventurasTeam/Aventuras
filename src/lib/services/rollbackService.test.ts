@@ -21,7 +21,7 @@ vi.mock('./database', () => ({
 
 import { rollbackService } from './rollbackService'
 import { database } from './database'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 describe('RollbackService', () => {
   beforeEach(() => {

@@ -1,17 +1,17 @@
-import type { VaultCharacter, Character } from '$lib/types'
-import { database } from '$lib/services/database'
+import type { VaultCharacter, Character } from '#lib/types/index.ts'
+import { database } from '#lib/services/database.ts'
 import {
   discoveryService,
   METADATA_ONLY_CHARACTER_MIME,
   type DiscoveryCard,
-} from '$lib/services/discovery'
-import { CharacterCardImport } from '$lib/services/characterCardImport'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import { exchangeToCharacter, parseExchange } from '$lib/services/exchange'
+} from '#lib/services/discovery/index.ts'
+import { CharacterCardImport } from '#lib/services/characterCardImport/index.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import { exchangeToCharacter, parseExchange } from '#lib/services/exchange/index.ts'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
-import { createLogger } from '$lib/log'
-import { uniqueTerms } from '$lib/utils/text'
+import { createLogger } from '#lib/log.ts'
+import { uniqueTerms } from '#lib/utils/text.ts'
 
 const log = createLogger('CharacterVault')
 

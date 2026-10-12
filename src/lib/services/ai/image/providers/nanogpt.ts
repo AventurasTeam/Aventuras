@@ -7,7 +7,7 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 import { generateOpenAICompatible } from './openaiCompatible'
-import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '$lib/utils/image'
+import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '#lib/utils/image.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
 // The text provider's default host, copied onto image profiles migrated from an API profile.

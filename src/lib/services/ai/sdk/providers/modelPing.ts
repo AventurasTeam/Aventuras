@@ -9,13 +9,13 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { PROVIDERS } from './config'
-import type { APIProfile } from '$lib/types'
+import type { APIProfile } from '#lib/types/index.ts'
 import {
   HEALTHY_THRESHOLD_MS,
   PING_TIMEOUT_MS,
   type HealthStatus,
   type PingResult,
-} from '$lib/constants/modelHealth'
+} from '#lib/constants/modelHealth.ts'
 
 export function getEffectiveBaseUrl(profile: APIProfile): string {
   const fromProfile = profile.baseUrl?.trim()

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import type { VaultLorebook } from '$lib/types'
-  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-  import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import type { VaultLorebook } from '#lib/types/index.ts'
+  import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+  import UniversalVaultBrowser from '#lib/components/vault/UniversalVaultBrowser.svelte'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { Archive, Loader2 } from '@lucide/svelte'
 
   interface Props {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Collapsible as CollapsiblePrimitive } from 'bits-ui'
-  import { cn } from '$lib/utils/cn.js'
+  import { cn } from '#lib/utils/cn.ts'
   import type { ClassValue } from 'clsx'
 
   let {

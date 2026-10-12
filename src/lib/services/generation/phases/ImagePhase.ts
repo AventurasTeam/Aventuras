@@ -11,9 +11,9 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { ImageGenerationContext } from '$lib/services/ai'
-import type { Character, ImageGenerationMode } from '$lib/types'
-import type { ActivityReporter } from '$lib/services/activity'
+import type { ImageGenerationContext } from '#lib/services/ai/index.ts'
+import type { Character, ImageGenerationMode } from '#lib/types/index.ts'
+import type { ActivityReporter } from '#lib/services/activity/index.ts'
 
 type PhaseImageContext = Omit<
   ImageGenerationContext,

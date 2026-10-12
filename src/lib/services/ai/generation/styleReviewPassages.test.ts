@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import type { StoryEntry } from '$lib/types'
-import { CLEAN_NONE } from '$lib/utils/narrationClean'
+import type { StoryEntry } from '#lib/types/index.ts'
+import { CLEAN_NONE } from '#lib/utils/narrationClean.ts'
 import { buildReviewPassages } from './styleReviewPassages'
 
 function entry(

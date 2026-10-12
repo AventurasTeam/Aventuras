@@ -7,8 +7,8 @@
  * large `.avt` whose base64 would not fit in the WebView heap.
  */
 
-import { database } from '$lib/services/database'
-import { errMessage } from '$lib/utils/error'
+import { database } from '#lib/services/database.ts'
+import { errMessage } from '#lib/utils/error.ts'
 import type { AventuraExport, ImportResult, IdMaps } from './types'
 import { validateExport, logVersionCompatibilityWarnings } from './validate'
 import { buildIdMaps } from './idMaps'

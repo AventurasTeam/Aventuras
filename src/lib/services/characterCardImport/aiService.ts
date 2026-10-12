@@ -1,14 +1,14 @@
-import { createLogger } from '$lib/log'
-import { exchangeImportRedirect } from '$lib/services/exchange'
-import type { ServiceId } from '$lib/stores/settings.svelte'
-import { BaseAIService } from '$lib/services/ai/BaseAIService'
-import type { GeneratedCharacter } from '$lib/services/ai/sdk'
-import type { Genre } from '$lib/services/ai/wizard'
-import { ContextBuilder } from '$lib/services/context'
+import { createLogger } from '#lib/log.ts'
+import { exchangeImportRedirect } from '#lib/services/exchange/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
+import { BaseAIService } from '#lib/services/ai/BaseAIService.ts'
+import type { GeneratedCharacter } from '#lib/services/ai/sdk/index.ts'
+import type { Genre } from '#lib/services/ai/wizard/index.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import { cardImportResultSchema, vaultCharacterImportSchema } from './schemas'
 import type { CardImportResult, ParsedCard, SanitizedCharacter } from './types'
 import { parseJson } from './parseJson'
-import { parseTerms } from '$lib/utils/text'
+import { parseTerms } from '#lib/utils/text.ts'
 
 const log = createLogger('characterCardImport:aiService')
 

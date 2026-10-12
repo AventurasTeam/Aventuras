@@ -1,24 +1,24 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
-  import { activity } from '$lib/stores/activity.svelte'
+  import { ui, type RetrievalCacheKey } from '#lib/stores/ui.svelte.ts'
+  import { activity } from '#lib/stores/activity.svelte.ts'
   import {
     describeActivityError,
     trackStep,
     turnOutcome,
     type TurnEnding,
-  } from '$lib/services/activity'
-  import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
-  import { buildTimelineFillBlock } from '$lib/services/ai/generation'
-  import { joinPromptBlocks } from '$lib/utils/promptBlocks'
-  import { countTokens } from '$lib/services/tokenizer'
-  import { story } from '$lib/stores/story.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
-  import type { EntryMetadata, Story } from '$lib/types'
-  import { aiService } from '$lib/services/ai'
-  import { database } from '$lib/services/database'
-  import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
-  import { TranslationService } from '$lib/services/ai/utils/TranslationService'
+  } from '#lib/services/activity/index.ts'
+  import { toRetrievalSnapshot } from '#lib/services/ai/retrieval/index.ts'
+  import { buildTimelineFillBlock } from '#lib/services/ai/generation/index.ts'
+  import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
+  import { countTokens } from '#lib/services/tokenizer.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import type { EntryMetadata, Story } from '#lib/types/index.ts'
+  import { aiService } from '#lib/services/ai/index.ts'
+  import { database } from '#lib/services/database.ts'
+  import { SimpleActivationTracker } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
+  import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
   import { Send, Wand2, MessageSquare, Brain, Sparkles, PenLine, Square } from '@lucide/svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
@@ -30,11 +30,11 @@
     eventBus,
     type ResponseStreamingEvent,
     type ClassificationCompleteEvent,
-  } from '$lib/services/events'
-  import { isTouchDevice } from '$lib/utils/swipe'
-  import { isAndroid } from '$lib/utils/platform'
-  import { findPrecedingUserAction, GENERATION_ERROR_SOURCE } from '$lib/utils/storyEntries'
-  import { errMessage } from '$lib/utils/error'
+  } from '#lib/services/events.ts'
+  import { isTouchDevice } from '#lib/utils/swipe.ts'
+  import { isAndroid } from '#lib/utils/platform.ts'
+  import { findPrecedingUserAction, GENERATION_ERROR_SOURCE } from '#lib/utils/storyEntries.ts'
+  import { errMessage } from '#lib/utils/error.ts'
   import {
     GenerationPipeline,
     retryService,
@@ -53,11 +53,11 @@
     type PipelineUICallbacks,
     type PipelineEventState,
     type RestoreResult,
-  } from '$lib/services/generation'
-  import { InlineImageTracker } from '$lib/services/ai/image'
-  import type { BranchScope } from '$lib/utils/branchScope'
-  import type { GenerationLease } from '$lib/utils/generationLease'
-  import { storyImageMode } from '$lib/utils/image'
+  } from '#lib/services/generation/index.ts'
+  import { InlineImageTracker } from '#lib/services/ai/image/index.ts'
+  import type { BranchScope } from '#lib/utils/branchScope.ts'
+  import type { GenerationLease } from '#lib/utils/generationLease.ts'
+  import { storyImageMode } from '#lib/utils/image.ts'
 
   function log(...args: any[]) {
     console.log('[ActionInput]', ...args)
@@ -1014,7 +1014,7 @@
         }
 
         const protagonist = story.characters.find((c) => c.relationship === 'self')
-        const promptContext: import('$lib/services/generation/phases/PostGenerationPhase').PromptContext =
+        const promptContext: import('#lib/services/generation/phases/PostGenerationPhase.ts').PromptContext =
           {
             mode: 'adventure',
             pov: story.pov,

@@ -13,7 +13,7 @@
  * Plain TypeScript with no store or SDK imports, so it is testable on its own.
  */
 
-import type { Entry, VaultLorebookEntry } from '$lib/types'
+import type { Entry, VaultLorebookEntry } from '#lib/types/index.ts'
 import type { LorebookEntryPendingChangeSchema } from '../sdk/schemas/lorebook'
 import { createDefaultEntryState } from './entryState'
 

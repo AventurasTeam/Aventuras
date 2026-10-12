@@ -5,7 +5,7 @@ with `npm test`.
 
 **Rune modules cannot be imported by tests.** `vitest.config.ts` deliberately omits the SvelteKit plugin
 to keep the suite fast and stable, so any `*.svelte.ts` file fails at import with `$state is not defined`.
-Services reach the stores through `vi.mock('$lib/stores/…')`; logic that needs testing on its own is
+Services reach the stores through `vi.mock('#lib/stores/….svelte.ts')`; logic that needs testing on its own is
 extracted into a plain `.ts` module instead (`settingsMigrations.ts`, `advancedPanelView.ts`,
 `stickiness.ts`, `recentTail.ts` are all this pattern). Those modules are production code with real
 callers, not test scaffolding.

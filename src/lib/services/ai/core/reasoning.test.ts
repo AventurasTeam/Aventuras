@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ReasoningEffort } from '$lib/types'
+import type { ReasoningEffort } from '#lib/types/index.ts'
 import {
   clampReasoningToCapability,
   ENFORCED_REASONING_FLOOR,

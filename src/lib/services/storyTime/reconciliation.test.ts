@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Chapter, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
-import type { Checkpoint } from '$lib/types'
+import type { Chapter, StoryEntry, TimeTracker, WorldStateDelta } from '#lib/types/index.ts'
+import type { Checkpoint } from '#lib/types/index.ts'
 import {
   planReconciliation,
   fingerprintPreview,

@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import * as Dialog from '$lib/components/ui/dialog'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import {
     parseStoryTime,
     formatStoryTime,
     storyTimeIsInvalid,
     toMinutes,
-  } from '$lib/services/storyTime'
-  import { entryNumber } from '$lib/utils/storyNavigation'
+  } from '#lib/services/storyTime/index.ts'
+  import { entryNumber } from '#lib/utils/storyNavigation.ts'
 
   const DESCRIPTION_FOLD_KEY = 'aventuras.entryTime.descriptionFolded'
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { activity } from '$lib/stores/activity.svelte'
+  import { activity } from '#lib/stores/activity.svelte.ts'
   import {
     failuresShownBelow,
     failureMarks,
@@ -7,7 +7,7 @@
     flattenTree,
     formatStepDuration,
     type ActivityTurn,
-  } from '$lib/services/activity'
+  } from '#lib/services/activity/index.ts'
   import { Sparkles, TriangleAlert } from '@lucide/svelte'
 
   let { turn, now }: { turn: ActivityTurn; now: number } = $props()

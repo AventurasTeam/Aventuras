@@ -1,17 +1,17 @@
-import { story } from '$lib/stores/story.svelte'
-import { exchangeImportRedirect } from '$lib/services/exchange'
-import { ui } from '$lib/stores/ui.svelte'
-import { settings } from '$lib/stores/settings.svelte'
-import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
+import { story } from '#lib/stores/story.svelte.ts'
+import { exchangeImportRedirect } from '#lib/services/exchange/index.ts'
+import { ui } from '#lib/stores/ui.svelte.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { scenarioService, type WizardData } from '#lib/services/ai/wizard/ScenarioService.ts'
 import {
   parseSTChat,
   type STChatParseResult,
   type STChatMessage,
-} from '$lib/services/stChatImporter'
-import { CharacterCardImport } from '$lib/services/characterCardImport'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
-import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
+} from '#lib/services/stChatImporter.ts'
+import { CharacterCardImport } from '#lib/services/characterCardImport/index.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import { replaceUserPlaceholders } from '#lib/components/wizard/wizardTypes.ts'
+import type { ImportedLorebookItem } from '#lib/components/wizard/wizardTypes.ts'
 import type {
   StoryMode,
   POV,
@@ -19,21 +19,21 @@ import type {
   VaultLorebook,
   VaultLorebookEntry,
   ImageGenerationMode,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import type {
   ExpandedSetting,
   GeneratedCharacter,
   GeneratedOpening,
   GeneratedProtagonist,
-} from '$lib/services/ai/sdk'
-import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
-import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import { uniqueTerms } from '$lib/utils/text'
-import { database } from '$lib/services/database'
-import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
+} from '#lib/services/ai/sdk/index.ts'
+import type { Genre, Tense } from '#lib/services/ai/wizard/ScenarioService.ts'
+import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+import { uniqueTerms } from '#lib/utils/text.ts'
+import { database } from '#lib/services/database.ts'
+import { ImageStore } from '#lib/stores/wizard/imageStore.svelte.ts'
 import { SvelteMap } from 'svelte/reactivity'
-import { packService } from '$lib/services/packs/pack-service'
-import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
+import { packService } from '#lib/services/packs/pack-service.ts'
+import type { PresetPack, CustomVariable } from '#lib/services/packs/types.ts'
 import { AISDKError, APICallError, NoObjectGeneratedError } from 'ai'
 
 /**

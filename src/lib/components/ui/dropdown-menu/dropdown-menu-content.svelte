@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { cn } from '$lib/utils/cn.js'
+  import { cn } from '#lib/utils/cn.ts'
   import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui'
-  import { NO_SCROLL_LOCK_ATTR } from '$lib/utils/scrollLock'
+  import { NO_SCROLL_LOCK_ATTR } from '#lib/utils/scrollLock.ts'
 
   let {
     ref = $bindable(null),

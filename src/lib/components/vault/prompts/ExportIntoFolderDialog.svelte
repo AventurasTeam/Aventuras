@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { DirectoryExportPlan } from '$lib/services/packs/import-export'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Button } from '$lib/components/ui/button'
+  import type { DirectoryExportPlan } from '#lib/services/packs/import-export.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
 
   interface Props {
     /** The planned export awaiting an answer, or null when nothing is pending. */

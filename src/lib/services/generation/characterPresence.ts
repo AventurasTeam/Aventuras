@@ -12,8 +12,8 @@
  * trusted — see `resolveCharacterPresence`.
  */
 
-import { sameEntityName } from '$lib/utils/text'
-import type { Character } from '$lib/types'
+import { sameEntityName } from '#lib/utils/text.ts'
+import type { Character } from '#lib/types/index.ts'
 
 export interface PresenceInput {
   characters: Character[]

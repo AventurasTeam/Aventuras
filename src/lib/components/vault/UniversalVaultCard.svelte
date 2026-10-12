@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { VaultCharacter, VaultLorebook, VaultScenario } from '$lib/types'
-  import { normalizeImageDataUrl } from '$lib/utils/image'
-  import { Badge } from '$lib/components/ui/badge'
+  import type { VaultCharacter, VaultLorebook, VaultScenario } from '#lib/types/index.ts'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
   import {
     User,
     Users,
@@ -14,9 +14,9 @@
     Calendar,
     Link,
   } from '@lucide/svelte'
-  import TagBadge from '$lib/components/tags/TagBadge.svelte'
-  import { tagStore } from '$lib/stores/tags.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
+  import TagBadge from '#lib/components/tags/TagBadge.svelte'
+  import { tagStore } from '#lib/stores/tags.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
   import VaultCard from './shared/VaultCard.svelte'
 
   type VaultItem = VaultCharacter | VaultLorebook | VaultScenario

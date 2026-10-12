@@ -6,7 +6,7 @@
  * Modules don't call each other directly - they communicate through events and shared state.
  */
 
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('EventBus')
 const logStreamingEvents = false

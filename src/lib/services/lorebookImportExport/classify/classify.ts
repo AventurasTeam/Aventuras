@@ -2,7 +2,7 @@
  * Public wrapper for LLM-based entry classification
  */
 
-import type { StoryMode } from '$lib/types'
+import type { StoryMode } from '#lib/types/index.ts'
 import type { ImportedEntry } from '../types'
 import { LorebookClassifierService } from './aiService'
 

@@ -8,19 +8,19 @@
     X,
     BookOpen,
   } from '@lucide/svelte'
-  import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
-  import type { EntryType, VaultLorebook } from '$lib/types'
+  import UniversalVaultBrowser from '#lib/components/vault/UniversalVaultBrowser.svelte'
+  import type { EntryType, VaultLorebook } from '#lib/types/index.ts'
   import type { ImportedLorebookItem } from '../wizardTypes'
   import { getTypeCounts, getTypeColor } from '../wizardTypes'
 
-  import * as Card from '$lib/components/ui/card'
-  import * as Alert from '$lib/components/ui/alert'
-  import * as Collapsible from '$lib/components/ui/collapsible'
-  import { Button, buttonVariants } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Progress } from '$lib/components/ui/progress'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { cn } from '$lib/utils/cn'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import { Button, buttonVariants } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Progress } from '#lib/components/ui/progress/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     importedLorebooks: ImportedLorebookItem[]

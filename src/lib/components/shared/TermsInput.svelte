@@ -1,8 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { parseTerms } from '$lib/utils/text'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { parseTerms } from '#lib/utils/text.ts'
 
   interface Props {
     value: string[]
