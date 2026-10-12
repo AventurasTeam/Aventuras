@@ -31,7 +31,6 @@ aventuras/
 ├── third-party-licenses/    # License texts for bundled third-party code (e.g. Harper)
 ├── .github/workflows/       # CI/CD (lint/typecheck, release, pre-release)
 ├── lefthook.yml             # Git hooks configuration
-├── components.json          # shadcn-svelte component generator config
 └── package.json             # Node dependencies and scripts
 ```
 
@@ -47,14 +46,10 @@ there is no bare `#lib` entry either.
 `eslint.config.js` does. Two gaps:
 
 - **TypeScript accepts `.js` for a `.ts` file.** Under `moduleResolution: "bundler"` it maps
-  `#lib/x.js` to `x.ts`, and both tools that write these specifiers rely on it:
-  - The `lib-alias` task of `sv migrate sveltekit-3` gives an extensionless `$lib/…` path the
-    extension of the file it finds, spelled `.js` (`ui.svelte` becomes `ui.svelte.js`, `types`
-    becomes `types/index.js`). It leaves a path that already has an extension alone.
-  - shadcn-svelte writes its aliases from `components.json` with `.js` appended
-    (`utils/cn.js`, `ui/dialog/index.js`).
-
-  Code from either one passes `check` with those spellings.
+  `#lib/x.js` to `x.ts`, and the `lib-alias` task of `sv migrate sveltekit-3` relies on it: it
+  gives an extensionless `$lib/…` path the extension of the file it finds, spelled `.js`
+  (`ui.svelte` becomes `ui.svelte.js`, `types` becomes `types/index.js`), and leaves a path that
+  already has an extension alone. Its output passes `check` with those spellings.
 - **TypeScript never sees `vi.mock` paths.** Vitest resolves the string itself. A path that does
   not resolve, including a leftover `$lib/…`, registers a mock that never applies, and the test
   runs against the real module without any error.
@@ -63,6 +58,14 @@ The rule requires each `#lib` specifier, in imports, exports, `import()` and the
 calls, to be an existing file whose path matches case exactly. It reports `$lib` outright. The
 case check matters on Windows and macOS, where TypeScript resolves `#lib/Services/…` and Linux CI
 does not.
+
+### UI components
+
+`src/lib/components/ui/` began as shadcn-svelte output and is now maintained by hand on bits-ui.
+There is no `components.json`. The generator's Tailwind 3 registry can't be reached from a
+Tailwind 4 project, and current output fails `check` and `lint` here and doesn't match these
+components. Write a new primitive on bits-ui. The evidence, and what bringing the generator back
+would take: [shadcn-svelte.md](../development/shadcn-svelte.md).
 
 ## Panels and gestures
 
