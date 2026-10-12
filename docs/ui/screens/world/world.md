@@ -1200,8 +1200,10 @@ on the status, mode and parent it would leave: it refuses a retired
 result while the story is in either place (`story-inside`) or while
 either has a place inside that isn't retired (`places-inside`), a
 result that isn't retired under a retired parent (`retired-parent`),
-and a disabled result while the story is in either place
-(`story-inside`). A merge that changes which places are disabled adds
+and a result that puts the place the story is in inside a disabled
+place it wasn't inside, by that place's own mode or an ancestor's
+(`story-inside`): as with a Save, a disabled region the story walked
+into stays mergeable. A merge that changes which places are disabled adds
 no line to the confirm. A retired row comes back through a merge too:
 picking `active` for the status brings it back, and its retired
 children may sit inside the active result. The reason clears once the

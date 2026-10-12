@@ -371,3 +371,25 @@ slice-planning gate forces its resolution before that slice is planned.
 
   Raised 2026-10-11 by the system and user halves PR's cache check
   (developer checks before merge, step 3).
+
+- **The state block's location instruction counts retired places.**
+  `{% if locationMap.size > 0 %}` in
+  `lib/prompts/bundled/state-emission.ts` now counts retired rows too,
+  which carry no id, so a branch whose only places are retired is still
+  told to use "the ID from Places". Cosmetic; a count of the rows with
+  an id, or a flag the builder sets, fixes it, and the prompt content
+  pass may reword the line anyway. Raised 2026-10-12 by the retired and
+  disabled places implementation.
+
+- **The fallback classifier's roster lists effectively disabled places
+  with ids.** `lib/prompts/bundled/piggyback-fallback-classifier.ts`
+  renders every active and staged entity, so a place disabled by its
+  own mode or an ancestor's reaches the fallback with its id although
+  the map leaves it out, and
+  [`principles.md → Injection / retrieval rules`](../ui/principles.md#injection--retrieval-rules-for-prompt-context)
+  says a disabled row never reaches the prompt. It helps the fallback
+  name a place the prose walked into, but it gives a place disabled as
+  a secret to the extraction call. Decide whether the roster follows
+  the map's effective mode. Predates this change for a place disabled
+  by its own mode. Raised 2026-10-12 by the retired and disabled places
+  implementation.
