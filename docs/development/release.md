@@ -136,13 +136,14 @@ jobs leave behind on `master` are the ones a release restores. It skips the push
 `scripts/release.js` makes when it pushes a version bump to `master`: every cache key below
 already ignores the app's own version, so that push can only rebuild for nothing.
 
-- **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
-  build workflows, so only `ci.yml` (or a run of `release.yml`/`pre-release.yml` if one is ever
-  dispatched from `master` directly) writes it. `rust-lint.yml`'s Clippy job does the same: its
-  `master` push run saves the cache and PRs only restore it, so a PR's ~600 MiB `target/` never
-  lands in a scope no other run can read. Every rust-cache `key` ends in a hash of the Rust
-  dependency set (`scripts/ci/cargo-deps-hash.js`), so a dependency, feature or profile change
-  starts each Rust cache cold instead of saving the new artifacts beside the old ones. See
+- **Rust** (`swatinem/rust-cache`) goes through the `.github/actions/rust-cache` composite action in
+  both build workflows and `rust-lint.yml`'s Clippy job, the one place that sets
+  `save-if: ${{ github.ref == 'refs/heads/master' }}`. Only `ci.yml` (or a run of
+  `release.yml`/`pre-release.yml` if one is ever dispatched from `master` directly) writes the build
+  caches, and Clippy's `master` push run saves its own while PRs only restore, so a PR's ~600 MiB
+  `target/` never lands in a scope no other run can read. The action also ends every `key` in a hash
+  of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`), so a dependency, feature or profile
+  change starts each Rust cache cold instead of saving the new artifacts beside the old ones. See
   [ci-caching.md](ci-caching.md#rust-cache-growth).
 - **Gradle** is not cached: `setup-gradle` runs with `cache-disabled: true`. Its entry only saved
   dependency downloads. See [ci-caching.md](ci-caching.md#gradle).

@@ -10,6 +10,7 @@ on:
       - 'src-tauri/Cargo.lock'
       - '.github/workflows/rust-lint.yml'
       - 'scripts/ci/cargo-deps-hash.js'
+      - '.github/actions/rust-cache/**'
   # Saves the Clippy cache in master's scope, the only one every PR can restore from.
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - 'src-tauri/Cargo.lock'
       - '.github/workflows/rust-lint.yml'
       - 'scripts/ci/cargo-deps-hash.js'
+      - '.github/actions/rust-cache/**'
   workflow_dispatch:
 
 permissions:
@@ -68,19 +70,10 @@ jobs:
         with:
           components: clippy
 
-      # In the restore prefix, so a dependency update starts cold instead of saving new
-      # artifacts beside the old ones. See docs/development/ci-caching.md.
-      - name: Hash Rust dependencies
-        id: cargo-deps
-        shell: bash
-        run: echo "hash=$(node scripts/ci/cargo-deps-hash.js)" >> "$GITHUB_OUTPUT"
-
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: ./.github/actions/rust-cache
         with:
-          workspaces: './src-tauri -> target'
-          key: clippy-${{ steps.cargo-deps.outputs.hash }}
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          key: clippy
 
       - name: Run clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings

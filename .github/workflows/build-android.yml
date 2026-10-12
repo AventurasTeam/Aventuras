@@ -40,22 +40,13 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
-      # In the restore prefix, so a dependency update starts cold instead of saving new
-      # artifacts beside the old ones. See docs/development/ci-caching.md.
-      - name: Hash Rust dependencies
-        id: cargo-deps
-        shell: bash
-        run: echo "hash=$(node scripts/ci/cargo-deps-hash.js)" >> "$GITHUB_OUTPUT"
-
       # cache-directories keeps the generated Kotlin's mtimes consistent with the cached
       # fingerprints. It is not part of the key, so adding a path means bumping the suffix.
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: ./.github/actions/rust-cache
         with:
-          workspaces: './src-tauri -> target'
-          key: android-v2-${{ steps.cargo-deps.outputs.hash }}
+          key: android-v2
           cache-directories: src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated
-          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Setup Java
         uses: actions/setup-java@v6

@@ -204,9 +204,9 @@ ones are needed"). An exact-match-only restore mode
 
 `scripts/ci/cargo-deps-hash.js` hashes `Cargo.lock`'s registry and git packages (dropping
 `aventura`, the same filter rust-cache uses) and `src-tauri/Cargo.toml` without the `[package]`
-version line, and prints the first 16 hex characters. Each of the four rust-cache steps
-(`build-desktop.yml`, `build-android.yml`, `build-ios.yml`, `rust-lint.yml`'s Clippy job) appends it
-to its `key`. The manifest is included because a feature or profile change with an unchanged
+version line, and prints the first 16 hex characters. The `.github/actions/rust-cache` composite action appends it to
+the `key` of all four rust-cache users (`build-desktop.yml`, `build-android.yml`, `build-ios.yml`,
+`rust-lint.yml`'s Clippy job), and fails the step if the script fails. The manifest is included because a feature or profile change with an unchanged
 `Cargo.lock` re-hashes the affected crates just as a version bump does.
 
 Consequences:

@@ -106,19 +106,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # In the restore prefix, so a dependency update starts cold instead of saving new
-      # artifacts beside the old ones. See docs/development/ci-caching.md.
-      - name: Hash Rust dependencies
-        id: cargo-deps
-        shell: bash
-        run: echo "hash=$(node scripts/ci/cargo-deps-hash.js)" >> "$GITHUB_OUTPUT"
-
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: ./.github/actions/rust-cache
         with:
-          workspaces: "${{ env.DEV_DRIVE_WORKSPACE || '.' }}/src-tauri -> target"
-          key: ${{ matrix.target }}-${{ steps.cargo-deps.outputs.hash }}
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          key: ${{ matrix.target }}
+          working-directory: ${{ env.DEV_DRIVE_WORKSPACE || '.' }}
 
       - name: Resolve build version
         id: version
