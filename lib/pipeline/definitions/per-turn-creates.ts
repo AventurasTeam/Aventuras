@@ -22,6 +22,7 @@ import {
 import {
   checkParentChain,
   itemNamesakes,
+  locationMapView,
   matchNewLocation,
   nameBasis,
   parentOfLocations,
@@ -96,7 +97,7 @@ function logDropped(
 function logParentDropped(
   log: Logger,
   emission: NewLocationEmission,
-  cause: 'unresolved' | 'chain-broken',
+  cause: 'unresolved' | 'retired' | 'chain-broken',
 ): void {
   log.warn('classifier.create_parent_dropped', {
     handle: emission.handle,
@@ -180,12 +181,14 @@ function planLocations(args: {
   kept: ReadonlySet<string>
   entities: readonly Entity[]
   byId: ReadonlyMap<string, Entity>
+  mapCurrentLocationId: string | null
   branchId: string
   now: () => number
   newId: (prefix: 'loc') => string
   log: Logger
 }): { fates: Map<string, LocationFate>; rows: Entity[]; reusedIds: string[] } {
   const { entities, byId } = args
+  const view = locationMapView(entities, args.mapCurrentLocationId)
   const fates = new Map<string, LocationFate>()
   const rows: Entity[] = []
   const reused = new Set<string>()
@@ -202,6 +205,11 @@ function planLocations(args: {
     let parentDropped = parentUnresolved
     if (parentUnresolved) {
       logParentDropped(args.log, emission, 'unresolved')
+    } else if (parentId !== null && byId.get(parentId)?.status === 'retired') {
+      // Nothing active may sit inside a retired place (data-model.md → LocationState shape).
+      logParentDropped(args.log, emission, 'retired')
+      parentId = null
+      parentDropped = true
     } else if (
       parentId !== null &&
       // The new row has no children, so only a loop already stored above its parent fails.
@@ -221,7 +229,7 @@ function planLocations(args: {
     if (twin !== undefined) {
       fate = { outcome: 'reused', id: twin.id, parentId, parentDropped }
     } else {
-      const match = matchNewLocation({ name: text.name, parentId }, entities)
+      const match = matchNewLocation({ name: text.name, parentId }, entities, view)
       if (match.kind === 'reuse') {
         if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
         fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
@@ -373,6 +381,8 @@ export async function planTurnCreates(input: {
   block: SubstitutedStateBlock
   /** The branch's entities (entitiesStore, whole branch). */
   entities: readonly Entity[]
+  /** The location the prompt's `# Places` map was built around, so reuse sees what it showed. */
+  mapCurrentLocationId: string | null
   branchId: string
   source: 'piggyback_tagged_block' | 'per_turn_classifier'
   embed: EmbedDescriptions
@@ -381,7 +391,7 @@ export async function planTurnCreates(input: {
   /** The phase's logger, so a dropped create's entry carries the action. */
   log: Logger
 }): Promise<TurnCreatePlan> {
-  const { block, entities, branchId, source, embed, now, newId, log } = input
+  const { block, entities, mapCurrentLocationId, branchId, source, embed, now, newId, log } = input
   const byId = new Map(entities.map((e) => [e.id, e]))
   const locations = block.newLocations ?? []
   const items = block.newItems ?? []
@@ -399,6 +409,7 @@ export async function planTurnCreates(input: {
     kept: keptLocations,
     entities,
     byId,
+    mapCurrentLocationId,
     branchId,
     now,
     newId,

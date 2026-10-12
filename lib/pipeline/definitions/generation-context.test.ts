@@ -133,7 +133,7 @@ const seedEntries = (rows: StoryEntry[]) =>
  * is about, and everything it omits stays at the fixture default.
  * onConflictDoNothing because a case that builds twice seeds the same rows twice.
  */
-async function buildContext(args: {
+type BuildArgs = {
   entries?: StoryEntry[]
   entities?: unknown[]
   definition?: unknown
@@ -144,7 +144,9 @@ async function buildContext(args: {
   piggybackFires?: boolean
   suggestionsFire?: boolean
   refreshGuidance?: string
-}): Promise<Record<string, unknown>> {
+}
+
+async function buildLoad(args: BuildArgs) {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
@@ -171,7 +173,11 @@ async function buildContext(args: {
     refreshGuidance: args.refreshGuidance,
   })
   if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
-  return load.context
+  return load
+}
+
+async function buildContext(args: BuildArgs): Promise<Record<string, unknown>> {
+  return (await buildLoad(args)).context
 }
 
 describe('buildGenerationContext', () => {
@@ -1502,6 +1508,24 @@ describe('buildGenerationContext — location map and held items', () => {
       { retired: false, id: 'l2', name: 'Eldra', depth: 0, retiredReason: null },
       { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
     ])
+  })
+
+  // The per-turn planner rebuilds the map's left-out places around this id, unsubstituted.
+  it('returns the real id of the location it built the map around', async () => {
+    const entities = [
+      place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+      place(ELDRA, 'Eldra', null),
+    ]
+    const seated = await buildLoad({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities,
+      entries: sceneAt(ELDRA),
+      retrieval: retrievalSuccess({ floor: { currentLocation: floorPlace(VAULT, 'The Vault') } }),
+    })
+    expect(seated.mapCurrentLocationId).toBe(VAULT)
+    resetPhaseDb(testDb)
+    const sceneOnly = await buildLoad({ entities, entries: sceneAt(ELDRA), retrieval: undefined })
+    expect(sceneOnly.mapCurrentLocationId).toBe(ELDRA)
   })
 
   it("names the structural location's listed ancestors, nearest first", async () => {

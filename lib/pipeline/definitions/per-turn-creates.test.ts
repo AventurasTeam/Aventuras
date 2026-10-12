@@ -79,6 +79,7 @@ function runPlanner(
     entities?: readonly Entity[]
     embed?: EmbedDescriptions
     source?: 'piggyback_tagged_block' | 'per_turn_classifier'
+    mapCurrentLocationId?: string | null
   } = {},
 ) {
   // Deterministic per-prefix ids, so a case can name the rows it expects.
@@ -86,6 +87,7 @@ function runPlanner(
   return planTurnCreates({
     block: assumeSubstituted(block),
     entities: opts.entities ?? world(),
+    mapCurrentLocationId: opts.mapCurrentLocationId ?? null,
     branchId: BRANCH,
     source: opts.source ?? 'piggyback_tagged_block',
     embed: opts.embed ?? noEmbed,
@@ -514,6 +516,37 @@ describe('planTurnCreates — parents', () => {
   })
 })
 
+describe('planTurnCreates — a retired parent', () => {
+  // piggyback.md → Creating a place or an item: a place pinned `always` can put a retired place in
+  // the prompt with its id, and nothing active may sit inside a retired place.
+  it('creates under a retired parent at the root, logged', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const retiredPort = row({
+      id: PORT,
+      kind: 'location',
+      name: 'Port Vellis',
+      status: 'retired',
+      state: { parent_location_id: ELDRA },
+    })
+    const plan = await runPlanner(
+      {
+        newLocations: [
+          { handle: 'new:docks', name: 'Smuggler Docks', description: 'a pier', parent: PORT },
+        ],
+        currentLocation: 'new:docks',
+      },
+      { entities: [row({ id: ELDRA, kind: 'location', name: 'Eldra' }), retiredPort] },
+    )
+    expect(createdEntries(plan.creates)[0]?.state).toEqual({ parent_location_id: null })
+    expect(plan.report.newLocations[0]).toMatchObject({ parent: PORT, parentDropped: true })
+    expect(warnSpy).toHaveBeenCalledWith('classifier.create_parent_dropped', {
+      handle: 'new:docks',
+      parent: PORT,
+      cause: 'retired',
+    })
+  })
+})
+
 describe('planTurnCreates — matching', () => {
   const marketCreate = (name: string, parent: string): ParsedStateBlock => ({
     newLocations: [{ handle: 'new:market', name, description: 'mud and awnings', parent }],
@@ -557,6 +590,48 @@ describe('planTurnCreates — matching', () => {
         nameCollisionPartnerId: MARKET,
         nameCollisionReason: 'same-parent',
       }),
+    ])
+  })
+
+  it('flags an exact retired sibling instead of reusing it', async () => {
+    const plan = await runPlanner(marketCreate('The Drowned Market', PORT), {
+      entities: world(market('retired')),
+    })
+    expect(createdEntries(plan.creates)).toEqual([
+      expect.objectContaining({
+        name: 'The Drowned Market',
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: MARKET,
+        nameCollisionReason: 'same-parent',
+      }),
+    ])
+  })
+
+  // piggyback.md → Matching before creating: reuse by the map the prompt showed, rebuilt around
+  // the location that map was built from.
+  it('reuses a place the map hid under the parent it showed', async () => {
+    const disabledPort = row({
+      id: PORT,
+      kind: 'location',
+      name: 'Port Vellis',
+      injectionMode: 'disabled',
+      state: { parent_location_id: ELDRA },
+    })
+    const entities = [
+      row({ id: ELDRA, kind: 'location', name: 'Eldra' }),
+      disabledPort,
+      market('active'),
+    ]
+    const hidden = await runPlanner(marketCreate('The Drowned Market', ELDRA), { entities })
+    expect(hidden.creates).toEqual([])
+    expect(hidden.block.currentLocation).toBe(MARKET)
+    // Around Port Vellis the map lists it, with the market under it rather than under Eldra.
+    const shown = await runPlanner(marketCreate('The Drowned Market', ELDRA), {
+      entities,
+      mapCurrentLocationId: PORT,
+    })
+    expect(createdEntries(shown.creates)).toEqual([
+      expect.objectContaining({ name: 'The Drowned Market', nameCollisionFlag: 0 }),
     ])
   })
 
@@ -947,6 +1022,7 @@ describe('planner input', () => {
         // @ts-expect-error nor may it reach the planner
         block: normalized,
         entities: world(),
+        mapCurrentLocationId: null,
         branchId: BRANCH,
         source: 'per_turn_classifier',
         embed: noEmbed,
