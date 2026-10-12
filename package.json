@@ -69,8 +69,8 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.26",
-    "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.0.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.12.2",
@@ -103,6 +103,9 @@
   "overrides": {
     "@saintno/comfyui-sdk": {
       "typescript": "$typescript"
+    },
+    "runed": {
+      "@sveltejs/kit": "$@sveltejs/kit"
     }
   },
   "aube": {
