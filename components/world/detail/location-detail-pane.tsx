@@ -61,8 +61,7 @@ export function LocationDetailPane({
     onRejected,
     onSession,
     fieldErrors: FIELD_ERRORS,
-    // world.md → Settings: a Save that retires or disables a place with places inside, or moves it
-    // into a disabled one, asks first.
+    // world.md → Settings: a cascading retire/disable or a move into a disabled place asks first.
     confirmBeforeCommit: (draft) => {
       const confirm = placeSaveConfirm({
         kind: 'location',

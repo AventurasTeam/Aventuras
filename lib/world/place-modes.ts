@@ -12,9 +12,8 @@ export type PlaceModes<Row extends PlaceRow> = {
 }
 
 /**
- * data-model.md → LocationState shape: a place's effective mode. An ancestor that is the story's
- * location, or contains it, disables nothing under it, though it stays disabled itself; the story's
- * location never is. A null `storyLocationId` gives the plain cascade.
+ * data-model.md → LocationState shape. An ancestor at or above `storyLocationId` disables nothing
+ * under it yet stays disabled itself; that location never is. Null gives the plain cascade.
  */
 export function placeModes<Row extends PlaceRow>(
   rows: readonly Row[],

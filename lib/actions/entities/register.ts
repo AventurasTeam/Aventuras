@@ -179,12 +179,9 @@ function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string
   return current.nameCollisionFlag === 1 ? null : 'only a flagged entity has a partner to re-point'
 }
 
-/**
- * data-model.md → LocationState: the pre-commit walk, on every entity-handler write. A create of a
- * place that isn't retired also refuses a retired parent: no group brings a parent back beside a
- * new child, so the state before the group is the one that counts. An update can't be judged that
- * way (a merge brings a retired row back while re-parenting under it), so its builders check it.
- */
+// data-model.md → LocationState: the pre-commit walk. A create that isn't itself retired refuses a
+// retired parent: no group revives one beside a new child, so pre-group state counts. An update
+// can't be judged so (a merge revives a retired row while re-parenting), so its builders check it.
 async function refuseParent(
   branchId: string,
   id: string,

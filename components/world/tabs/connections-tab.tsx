@@ -28,8 +28,7 @@ type Shared = {
   entities: readonly Entity[]
 }
 
-// world.md → Connections: a retired place can't be entered, and nothing active sits inside one.
-// The picker keeps a stored value it excludes, so a retired one still shows until it's changed.
+// world.md → Connections. The picker still shows an excluded stored value until it's changed.
 const retiredPlaceIds = (entities: readonly Entity[]): string[] =>
   entities.filter((e) => e.kind === 'location' && e.status === 'retired').map((e) => e.id)
 
@@ -131,7 +130,7 @@ export function LocationConnections({
     control: Control<LocationDraft>
     onOpenEntity: (id: string) => void
   }) {
-  // A retired place may sit inside another retired one, so only a place that isn't retired loses them.
+  // A retired place may sit inside another retired one, so only an unretired place loses them.
   const status = useWatch({ control, name: 'status' })
   const excluded = [
     ...(selfId == null ? [] : [selfId]),

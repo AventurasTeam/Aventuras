@@ -21,9 +21,8 @@ export type LocationMapView = {
   isListed: (id: string) => boolean
   anchorOf: (id: string) => MapAnchor
   /**
-   * How many left-out places lie between a place and `parentId` (null: the root) on this map, or
-   * null when the map wouldn't hang it there. A left-out `parentId` counts as listed: a per-turn
-   * create reaches one only through a handle already reused onto it.
+   * Left-out places between a place and `parentId` (null: root), or null if the map wouldn't hang
+   * it there. A left-out `parentId` counts as listed: only a reused handle can reach one.
    */
   hiddenBetween: (id: string, parentId: string | null) => number | null
 }
@@ -42,9 +41,8 @@ function mapRow(location: Entity, depth: number): LocationMapRow {
 }
 
 /**
- * piggyback.md → What the writer sees: the `# Places` tree in pre-order, siblings by name. A place
- * effectively disabled is left out, unless it is the current location; a left-out place's listed
- * children hang under its nearest listed ancestor.
+ * piggyback.md → What the writer sees. Effectively disabled places are left out, bar the current
+ * location; a left-out place's listed children hang under its nearest listed ancestor.
  */
 export function locationMapView(
   entities: readonly Entity[],

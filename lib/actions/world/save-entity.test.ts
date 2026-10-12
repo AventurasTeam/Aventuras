@@ -535,7 +535,7 @@ describe('saveEntity — places', () => {
     })
   })
 
-  // The scene the next turn's prompt reads: the latest narrative entry, past actions with none.
+  // The same scene the next turn's prompt reads.
   it('reads the story from the latest narrative entry, past actions with no scene', async () => {
     const { db, ctx } = await seed(REGION, 'loc_back')
     await db.insert(storyEntries).values(

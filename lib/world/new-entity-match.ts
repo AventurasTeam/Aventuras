@@ -16,11 +16,9 @@ function byAge(a: Entity, b: Entity): number {
 }
 
 /**
- * piggyback.md → Matching before creating. Reuse goes by `view`, the map the prompt showed: an exact
- * name among the active and staged places it would have hung under `parentId` (null: the root) had
- * it listed every place it left out, a real child first, then the fewest left-out places between,
- * then the oldest. Otherwise the real siblings of any status flag it: an exact retired namesake,
- * then a contained name, then a keyword hit.
+ * piggyback.md → Matching before creating. Reuses a non-retired exact namesake the prompt's map
+ * (`view`) hangs under `parentId` (null: the root), places it left out included; otherwise flags
+ * against real siblings of any status.
  */
 export function matchNewLocation(
   candidate: { name: string; parentId: string | null },

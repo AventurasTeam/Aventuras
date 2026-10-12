@@ -560,7 +560,7 @@ describe('placeSaveConfirm', () => {
     })
   })
 
-  // Q3: asks even while the story's presence suspends the region, as it will drop out later.
+  // Asks even while the story's presence suspends the region, as it will drop out later.
   it('asks for a move into a region the story is inside elsewhere', () => {
     const disabledThorn = { ...THORNWOOD, injectionMode: 'disabled' as const }
     const shrine = place('loc_shrine', 'Shrine', 'loc_thorn')
@@ -791,7 +791,7 @@ describe('mergePlaceRefusal', () => {
     ).toBeNull()
   })
 
-  // Q1, revised: the story's place lands in a disabled region it wasn't already in.
+  // The story's place lands in a disabled region it wasn't already in.
   it('refuses when the story is in the loser and the canonical is disabled', () => {
     expect(merge({ injectionMode: 'disabled' }, { story: 'loc_dup' })).toBe('story-inside')
   })

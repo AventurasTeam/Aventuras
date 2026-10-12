@@ -82,8 +82,7 @@ describe('useSceneEditing → resolution pools', () => {
   })
 })
 
-// entry-card.md → Scene editor: the location list leaves out retired places and disabled ones,
-// those disabled through an ancestor included; the tail's current location keeps showing.
+// entry-card.md → Scene editor.
 describe('useSceneEditing → location list', () => {
   const place = (id: string, parent: string | null, extra: Partial<Entity> = {}) =>
     ({

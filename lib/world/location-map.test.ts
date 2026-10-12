@@ -92,7 +92,7 @@ describe('buildLocationMap', () => {
     expect(outline(buildLocationMap([ELDRA, saltmere], null))).toEqual(['Eldra', '  Saltmere'])
   })
 
-  // piggyback.md → What the writer sees: a retired place is listed, without an id, with its reason.
+  // piggyback.md → What the writer sees.
   it('lists a retired location without an id, followed by its reason', () => {
     const retired: Entity = { ...RETIRED_VELLIS, retiredReason: 'swallowed by the rift' }
     const map = buildLocationMap([ELDRA, retired, ANCHOR], null)
@@ -152,8 +152,7 @@ describe('buildLocationMap', () => {
     ])
   })
 
-  // A story inside a disabled region opens the places around it; the region itself stays off
-  // the map, so its listed children hang under its nearest listed ancestor.
+  // A story inside a disabled region opens the places in it; the region itself stays off the map.
   it('hangs the places around a story inside a disabled region under the nearest listed ancestor', () => {
     const world = [ELDRA, DISABLED_VELLIS, ANCHOR, BACK_ROOM, MARKET, THORNWOOD]
     expect(outline(buildLocationMap(world, 'loc_anchor'))).toEqual([

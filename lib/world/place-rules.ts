@@ -15,7 +15,7 @@ import { byName } from './overview'
 import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
 import { placeModes } from './place-modes'
 
-/** data-model.md → LocationState shape: the codes a write that would break a place rule refuses with. */
+/** data-model.md → LocationState shape: the codes a write breaking a place rule refuses with. */
 export const PLACE_REFUSAL = {
   storyInside: 'story-inside',
   retiredParent: 'retired-parent',
@@ -82,7 +82,7 @@ function holdsStory(id: string, storyLocationId: string | null, parentOf: Parent
   return storyLocationId === id || parentChainIds(storyLocationId, parentOf).includes(id)
 }
 
-/** The places whose own mode is `disabled` on the chain from `startId` up, `start` read as given. */
+/** The places whose own mode is `disabled` on the chain from `start` up, `start` read as given. */
 function ownDisabledChain(
   start: { id: string; injectionMode: Entity['injectionMode'] },
   parentId: string | null,
@@ -98,10 +98,7 @@ function ownDisabledChain(
   return disabled
 }
 
-/**
- * The places whose own mode is `disabled` that the new parent chain adds over the old one: what a
- * move puts a place inside that it wasn't. Ignores the story's suspension.
- */
+/** The own-`disabled` places the new chain adds over the old; ignores the story's suspension. */
 function gainedDisabled(
   oldParentId: string | null,
   newParentId: string | null,
@@ -188,9 +185,8 @@ function locationRefusal(
 }
 
 /**
- * data-model.md → LocationState shape: whether a World Save breaks a place rule, judged on the
- * state it would leave. Each rule fires on the change it guards, so a row already in breach (older
- * data) still saves its other fields. The first rule that applies wins.
+ * data-model.md → LocationState shape, judged on the state the Save would leave. Each rule fires
+ * on the change it guards, so a row already in breach still saves other fields. First match wins.
  */
 export function placeSaveRefusal(args: PlaceSaveArgs): PlaceSaveRefusal | null {
   const { row, branchEntities } = args
@@ -322,10 +318,9 @@ export function mergedPlaceOf(actions: readonly PipelineAction[], canonical: Ent
 }
 
 /**
- * world.md → Merge: a location merge runs the checks a Save does on the place it would leave. A
- * retired result refuses while the story is in either place or either has a place inside that
- * isn't retired; a result that isn't retired refuses under a retired parent; and the merge refuses
- * when it puts the story's place inside a disabled place it wasn't inside.
+ * world.md → Merge, on the place the merge would leave: retired with the story in either place, or
+ * with a place inside either that isn't retired; not retired under a retired parent, moved or not;
+ * or the story's place gaining a disabled place.
  */
 export function mergePlaceRefusal(args: {
   canonical: Entity
