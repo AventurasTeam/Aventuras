@@ -7,6 +7,7 @@ import {
   buildLocationMap,
   heldItemLines,
   listedAncestorNames,
+  locationMapView,
   looseItemLines,
 } from './location-map'
 
@@ -32,8 +33,23 @@ const holder = (held: Partial<Pick<CharacterState, 'inventory' | 'equipped_items
   })
 
 // Each row as the template indents it, so a wrong depth or order reads at a glance.
-const outline = (rows: readonly { name: string; depth: number }[]): string[] =>
-  rows.map((row) => `${'  '.repeat(row.depth)}${row.name}`)
+const outline = (
+  rows: readonly { name: string; depth: number; retired: boolean; retiredReason: string | null }[],
+): string[] =>
+  rows.map((row) => {
+    const retired = row.retired
+      ? ` (retired${row.retiredReason ? `: ${row.retiredReason}` : ''})`
+      : ''
+    return `${'  '.repeat(row.depth)}${row.name}${retired}`
+  })
+
+const listed = (id: string, name: string, depth: number) => ({
+  retired: false,
+  id,
+  name,
+  depth,
+  retiredReason: null,
+})
 
 const ELDRA = location('loc_eldra', 'Eldra', null)
 const VELLIS = location('loc_vellis', 'Port Vellis', 'loc_eldra')
@@ -50,12 +66,12 @@ const DISABLED_VELLIS: Entity = { ...VELLIS, injectionMode: 'disabled' }
 describe('buildLocationMap', () => {
   it('nests every location under its parent in pre-order, siblings by name', () => {
     expect(buildLocationMap(WORLD, null)).toEqual([
-      { id: 'loc_eldra', name: 'Eldra', depth: 0 },
-      { id: 'loc_vellis', name: 'Port Vellis', depth: 1 },
-      { id: 'loc_market', name: 'Harbor Market', depth: 2 },
-      { id: 'loc_anchor', name: 'The Rusty Anchor', depth: 2 },
-      { id: 'loc_back', name: 'the back room', depth: 3 },
-      { id: 'loc_thorn', name: 'Thornwood', depth: 0 },
+      listed('loc_eldra', 'Eldra', 0),
+      listed('loc_vellis', 'Port Vellis', 1),
+      listed('loc_market', 'Harbor Market', 2),
+      listed('loc_anchor', 'The Rusty Anchor', 2),
+      listed('loc_back', 'the back room', 3),
+      listed('loc_thorn', 'Thornwood', 0),
     ])
   })
 
@@ -76,17 +92,59 @@ describe('buildLocationMap', () => {
     expect(outline(buildLocationMap([ELDRA, saltmere], null))).toEqual(['Eldra', '  Saltmere'])
   })
 
-  it('leaves a retired location out and hangs its children under the nearest listed ancestor', () => {
-    expect(
-      outline(buildLocationMap([ELDRA, RETIRED_VELLIS, ANCHOR, BACK_ROOM, MARKET], null)),
-    ).toEqual(['Eldra', '  Harbor Market', '  The Rusty Anchor', '    the back room'])
+  // piggyback.md → What the writer sees: a retired place is listed, without an id, with its reason.
+  it('lists a retired location without an id, followed by its reason', () => {
+    const retired: Entity = { ...RETIRED_VELLIS, retiredReason: 'swallowed by the rift' }
+    const map = buildLocationMap([ELDRA, retired, ANCHOR], null)
+    expect(map[1]).toEqual({
+      retired: true,
+      id: null,
+      name: 'Port Vellis',
+      depth: 1,
+      retiredReason: 'swallowed by the rift',
+    })
+    expect(outline(map)).toEqual([
+      'Eldra',
+      '  Port Vellis (retired: swallowed by the rift)',
+      '    The Rusty Anchor',
+    ])
   })
 
-  it('leaves a disabled location out unless it is the current location', () => {
-    expect(outline(buildLocationMap([ELDRA, DISABLED_VELLIS, MARKET], null))).toEqual([
+  it('gives a retired location with a blank reason no reason', () => {
+    const retired: Entity = { ...RETIRED_VELLIS, retiredReason: '  ' }
+    expect(buildLocationMap([retired], null)[0]).toMatchObject({
+      retired: true,
+      retiredReason: null,
+    })
+  })
+
+  it('lists a retired current location as retired', () => {
+    expect(outline(buildLocationMap([ELDRA, RETIRED_VELLIS], 'loc_vellis'))).toEqual([
       'Eldra',
-      '  Harbor Market',
+      '  Port Vellis (retired)',
     ])
+  })
+
+  it('leaves out a retired location that is effectively disabled', () => {
+    const retiredDisabled: Entity = { ...RETIRED_VELLIS, injectionMode: 'disabled' }
+    expect(outline(buildLocationMap([ELDRA, retiredDisabled], null))).toEqual(['Eldra'])
+    expect(
+      outline(
+        buildLocationMap(
+          [{ ...ELDRA, injectionMode: 'disabled' }, RETIRED_VELLIS, THORNWOOD],
+          null,
+        ),
+      ),
+    ).toEqual(['Thornwood'])
+  })
+
+  it('leaves a disabled location out with every place inside it', () => {
+    expect(
+      outline(buildLocationMap([...WORLD.filter((e) => e !== VELLIS), DISABLED_VELLIS], null)),
+    ).toEqual(['Eldra', 'Thornwood'])
+  })
+
+  it('lists a disabled current location, and the places around a story inside it', () => {
     expect(outline(buildLocationMap([ELDRA, DISABLED_VELLIS, MARKET], 'loc_vellis'))).toEqual([
       'Eldra',
       '  Port Vellis',
@@ -94,8 +152,17 @@ describe('buildLocationMap', () => {
     ])
   })
 
-  it('leaves a retired current location out', () => {
-    expect(outline(buildLocationMap([ELDRA, RETIRED_VELLIS], 'loc_vellis'))).toEqual(['Eldra'])
+  // A story inside a disabled region opens the places around it; the region itself stays off
+  // the map, so its listed children hang under its nearest listed ancestor.
+  it('hangs the places around a story inside a disabled region under the nearest listed ancestor', () => {
+    const world = [ELDRA, DISABLED_VELLIS, ANCHOR, BACK_ROOM, MARKET, THORNWOOD]
+    expect(outline(buildLocationMap(world, 'loc_anchor'))).toEqual([
+      'Eldra',
+      '  Harbor Market',
+      '  The Rusty Anchor',
+      '    the back room',
+      'Thornwood',
+    ])
   })
 
   it('lists only locations, and roots one whose parent resolves to no row', () => {
@@ -126,6 +193,36 @@ describe('buildLocationMap', () => {
   })
 })
 
+describe('locationMapView.anchorOf', () => {
+  it('anchors a listed place at its nearest listed ancestor, passing no left-out place', () => {
+    expect(locationMapView(WORLD, null).anchorOf('loc_back')).toEqual({
+      parentId: 'loc_anchor',
+      hidden: 0,
+    })
+  })
+
+  it('counts the left-out places between a place and its anchor', () => {
+    const disabledAnchor: Entity = { ...ANCHOR, injectionMode: 'disabled' }
+    const world = [ELDRA, DISABLED_VELLIS, disabledAnchor, BACK_ROOM, MARKET]
+    const view = locationMapView(world, null)
+    expect(view.anchorOf('loc_back')).toEqual({ parentId: 'loc_eldra', hidden: 2 })
+    expect(view.anchorOf('loc_vellis')).toEqual({ parentId: 'loc_eldra', hidden: 0 })
+  })
+
+  it('anchors a place whose parent resolves to no row at the root, as the map shows it', () => {
+    const orphan = location('loc_orphan', 'Orphan Quay', 'loc_gone')
+    expect(locationMapView([orphan], null).anchorOf('loc_orphan')).toEqual({
+      parentId: null,
+      hidden: 0,
+    })
+  })
+
+  it('anchors a listed row a loop keeps from the root at the root, as the map lists it', () => {
+    const loop = [location('loc_la', 'Ashgate', 'loc_lb'), location('loc_lb', 'Bellmoor', 'loc_la')]
+    expect(locationMapView(loop, null).anchorOf('loc_la')).toEqual({ parentId: null, hidden: 0 })
+  })
+})
+
 describe('listedAncestorNames', () => {
   it('names the listed ancestors, nearest first', () => {
     expect(listedAncestorNames('loc_back', WORLD)).toEqual([
@@ -135,14 +232,26 @@ describe('listedAncestorNames', () => {
     ])
   })
 
-  it('skips a retired or disabled ancestor', () => {
+  it('names a retired ancestor, which the map lists', () => {
     expect(listedAncestorNames('loc_back', [ELDRA, RETIRED_VELLIS, ANCHOR, BACK_ROOM])).toEqual([
       'The Rusty Anchor',
+      'Port Vellis',
       'Eldra',
     ])
+  })
+
+  it('skips a disabled ancestor, which stays off the map though the story is inside it', () => {
     expect(listedAncestorNames('loc_back', [ELDRA, DISABLED_VELLIS, ANCHOR, BACK_ROOM])).toEqual([
       'The Rusty Anchor',
       'Eldra',
+    ])
+  })
+
+  it('names an ancestor under a disabled one the story is inside', () => {
+    const disabledEldra: Entity = { ...ELDRA, injectionMode: 'disabled' }
+    expect(listedAncestorNames('loc_back', [disabledEldra, VELLIS, ANCHOR, BACK_ROOM])).toEqual([
+      'The Rusty Anchor',
+      'Port Vellis',
     ])
   })
 

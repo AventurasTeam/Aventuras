@@ -74,7 +74,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'LocationMapRow[]',
       category: 'Entities',
       description:
-        "Every active and staged place on the branch as { id, name, depth }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. Retired places are left out, and so is a disabled one unless it is structuralLocation (currentLocationId when that is null); a left-out place's children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no listed place.",
+        "Every place on the branch as { retired, id, name, depth, retiredReason }, in pre-order: a child follows its parent at depth + 1, siblings sorted by name. An active or staged place carries its id. A retired place has retired true, id null and its retiredReason (null when blank): render it by name and reason, since it can't be entered or nested under. A place that is effectively disabled, by its own injection mode or an ancestor's, is left out unless it is structuralLocation (currentLocationId when that is null); while the scene is inside a disabled ancestor, that ancestor stays left out but its disabling doesn't reach the places under it. A left-out place's listed children hang under its nearest listed ancestor. Built from the whole branch, never filtered through retrieval or Layer-A suppression. Empty when the branch has no listed place.",
       required: true,
     },
     {
@@ -82,7 +82,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Entities',
       description:
-        "Names of structuralLocation's listed ancestors (the locationMap places it is part of), nearest first, for a line like `The Rusty Anchor — in Port Vellis › Eldra`. Empty when no ancestor is listed (a top-level place, or one whose ancestors are all left out of locationMap), and when structuralLocation is null.",
+        "Names of structuralLocation's listed ancestors (the locationMap places it is part of, retired ones included), nearest first, for a line like `The Rusty Anchor — in Port Vellis › Eldra`. Empty when no ancestor is listed (a top-level place, or one whose ancestors are all left out of locationMap), and when structuralLocation is null.",
       required: true,
     },
     {
@@ -177,7 +177,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Retrieval',
       description:
-        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places: ranked entity rows arrive as RetrievedRow with no kind, so those IDs can be entirely characters. Not the set to offer for <current_location>: a move may name any listed place on the branch, so offer locationMap's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
+        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places: ranked entity rows arrive as RetrievedRow with no kind, so those IDs can be entirely characters. Not the set to offer for <current_location>: a move may name any listed place on the branch that isn't retired, so offer locationMap's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
       required: true,
     },
     {

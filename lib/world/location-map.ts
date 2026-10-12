@@ -1,36 +1,69 @@
 import type { Entity } from '@/lib/db'
+import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
 import { byName, itemsAt, locationAncestors } from './overview'
 import { parentChainIds, parentOfLocations } from './parent-chain'
+import { placeModes } from './place-modes'
 
-export type LocationMapRow = { id: string; name: string; depth: number }
+/** A retired place carries no id: the model can neither move the scene there nor nest under it. */
+export type LocationMapRow =
+  | { retired: false; id: string; name: string; depth: number; retiredReason: null }
+  | { retired: true; id: null; name: string; depth: number; retiredReason: string | null }
 export type HeldItemLine = { id: string; name: string; equipped: boolean }
 export type LooseItemLine = { id: string; name: string }
 
-// The structural floor seats the current location whatever its injection mode, so the map
-// lists it too (piggyback.md → What the writer sees).
-function isListed(entity: Entity, currentLocationId: string | null): boolean {
-  if (entity.kind !== 'location' || entity.status === 'retired') return false
-  return entity.injectionMode !== 'disabled' || entity.id === currentLocationId
+/** Where the map hangs a place, listed or not, and how many left-out places lie in between. */
+export type MapAnchor = { parentId: string | null; hidden: number }
+
+export type LocationMapView = {
+  rows: LocationMapRow[]
+  isListed: (id: string) => boolean
+  anchorOf: (id: string) => MapAnchor
+}
+
+function mapRow(location: Entity, depth: number): LocationMapRow {
+  const { id, name } = location
+  return location.status === 'retired'
+    ? {
+        retired: true,
+        id: null,
+        name,
+        depth,
+        retiredReason: blankToNull(location.retiredReason ?? ''),
+      }
+    : { retired: false, id, name, depth, retiredReason: null }
 }
 
 /**
- * The `# Places` tree in pre-order, siblings by name. A left-out location's children hang under
- * its nearest listed ancestor.
+ * piggyback.md → What the writer sees: the `# Places` tree in pre-order, siblings by name. A place
+ * effectively disabled is left out, unless it is the current location; a left-out place's listed
+ * children hang under its nearest listed ancestor.
  */
-export function buildLocationMap(
+export function locationMapView(
   entities: readonly Entity[],
   currentLocationId: string | null,
-): LocationMapRow[] {
-  const listed = entities.filter((e) => isListed(e, currentLocationId))
+): LocationMapView {
+  const modes = placeModes(entities, currentLocationId)
+  const locations = entities.filter((e) => e.kind === 'location')
+  const locationIds = new Set(locations.map((e) => e.id))
+  const listed = locations.filter((e) => !modes.isDisabled(e.id))
   const listedIds = new Set(listed.map((e) => e.id))
   const parentOf = parentOfLocations(entities)
+  const chainAnchor = (id: string): MapAnchor => {
+    let hidden = 0
+    for (const ancestorId of parentChainIds(id, parentOf)) {
+      if (listedIds.has(ancestorId)) return { parentId: ancestorId, hidden }
+      if (locationIds.has(ancestorId)) hidden++
+    }
+    return { parentId: null, hidden }
+  }
+
   const childrenOf = new Map<string | null, Entity[]>()
   for (const location of listed) {
-    const anchor = parentChainIds(location.id, parentOf).find((id) => listedIds.has(id)) ?? null
-    const siblings = childrenOf.get(anchor)
-    if (siblings === undefined) childrenOf.set(anchor, [location])
+    const { parentId } = chainAnchor(location.id)
+    const siblings = childrenOf.get(parentId)
+    if (siblings === undefined) childrenOf.set(parentId, [location])
     else siblings.push(location)
   }
 
@@ -39,21 +72,35 @@ export function buildLocationMap(
   const walk = (parentId: string | null, depth: number): void => {
     for (const location of (childrenOf.get(parentId) ?? []).sort(byName)) {
       reached.add(location.id)
-      rows.push({ id: location.id, name: location.name, depth })
+      rows.push(mapRow(location, depth))
       walk(location.id, depth + 1)
     }
   }
   walk(null, 0)
   // A chain looping through listed rows never reaches the root: list those rows there, flat.
-  for (const location of listed.filter((e) => !reached.has(e.id)).sort(byName))
-    rows.push({ id: location.id, name: location.name, depth: 0 })
-  return rows
+  const unreached = listed.filter((e) => !reached.has(e.id)).sort(byName)
+  for (const location of unreached) rows.push(mapRow(location, 0))
+  const atRoot = new Set(unreached.map((e) => e.id))
+
+  return {
+    rows,
+    isListed: (id) => listedIds.has(id),
+    anchorOf: (id) => (atRoot.has(id) ? { parentId: null, hidden: 0 } : chainAnchor(id)),
+  }
+}
+
+export function buildLocationMap(
+  entities: readonly Entity[],
+  currentLocationId: string | null,
+): LocationMapRow[] {
+  return locationMapView(entities, currentLocationId).rows
 }
 
 /** `# Current location`'s chain: the listed ancestors' names, nearest first. */
 export function listedAncestorNames(locationId: string, entities: readonly Entity[]): string[] {
+  const modes = placeModes(entities, locationId)
   return locationAncestors(locationId, entities)
-    .filter((e) => isListed(e, locationId))
+    .filter((e) => !modes.isDisabled(e.id))
     .map((e) => e.name)
 }
 

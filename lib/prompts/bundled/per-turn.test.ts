@@ -557,6 +557,25 @@ describe('bundled per-turn template — the location map and item lines', () => 
     )
   })
 
+  // piggyback.md → What the writer sees: a retired place is listed without an id, with its reason.
+  const RETIRED_MAP = [
+    { retired: false, id: 'loc_0', name: 'Highmoor', depth: 0, retiredReason: null },
+    { retired: true, id: null, name: 'Saltmere', depth: 1, retiredReason: 'swallowed by the rift' },
+    { retired: true, id: null, name: 'the Drowned Chapel', depth: 2, retiredReason: null },
+  ]
+
+  it('renders a retired place without an id, with its reason or none', () => {
+    expect(render({ locationMap: RETIRED_MAP })).toContain(
+      '# Places\n[loc_0] Highmoor\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
+    )
+  })
+
+  it('marks a retired place when piggyback does not fire', () => {
+    expect(render({ piggybackFires: false, locationMap: RETIRED_MAP })).toContain(
+      '# Places\nHighmoor\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
+    )
+  })
+
   it('puts the map after the current location and before the memory blocks', () => {
     const rendered = render({
       structuralLocation: KEEP,

@@ -218,6 +218,23 @@ describe('bundled piggyback fallback classifier template', () => {
       expect(render(context())).toContain('# Places\n[l2] The Marsh\n  [l1] The Drowned Keep\n')
     })
 
+    it('renders a retired place without an id, with its reason or none', () => {
+      const locationMap = [
+        { retired: false, id: 'l2', name: 'The Marsh', depth: 0, retiredReason: null },
+        {
+          retired: true,
+          id: null,
+          name: 'Saltmere',
+          depth: 1,
+          retiredReason: 'swallowed by the rift',
+        },
+        { retired: true, id: null, name: 'the Drowned Chapel', depth: 2, retiredReason: null },
+      ]
+      expect(render(context({ locationMap }))).toContain(
+        '# Places\n[l2] The Marsh\n  Saltmere (retired: swallowed by the rift)\n    the Drowned Chapel (retired)\n',
+      )
+    })
+
     it('renders the current location with its chain and the items lying there, with IDs', () => {
       expect(render(context())).toContain(
         'The Drowned Keep — in The Marsh: Half sunk into the marsh.\nHere: [i5] a rusted lantern\n',

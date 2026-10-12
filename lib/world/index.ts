@@ -82,7 +82,16 @@ export {
   buildLocationMap,
   heldItemLines,
   listedAncestorNames,
+  locationMapView,
   looseItemLines,
 } from './location-map'
-export type { HeldItemLine, LocationMapRow, LooseItemLine } from './location-map'
+export type {
+  HeldItemLine,
+  LocationMapRow,
+  LocationMapView,
+  LooseItemLine,
+  MapAnchor,
+} from './location-map'
+export { placeModes } from './place-modes'
+export type { PlaceModes } from './place-modes'
 export { itemNamesakes, matchNewLocation } from './new-entity-match'

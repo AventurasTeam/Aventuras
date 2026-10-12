@@ -60,7 +60,7 @@ Here: {% for i in looseItems %}{% if piggybackFires %}[{{ i.id }}] {% endif %}{{
 {% endif -%}
 {% if locationMap.size > 0 -%}
 # Places
-{% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}
+{% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
 {% endfor %}
 {% endif -%}
 {% include 'macro_memory_blocks' -%}
