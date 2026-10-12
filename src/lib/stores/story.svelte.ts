@@ -2550,7 +2550,7 @@ class StoryStore {
       log('Portrait dropped: character already has one', { characterId: live.id })
       return
     }
-    await this.updateCharacter(live.id, { portrait }, scope, { origin: 'agent' })
+    await this.updateCharacter(live.id, { portrait }, scope, { origin: 'image' })
   }
 
   // Delete a character (protagonist cannot be deleted)
@@ -3132,7 +3132,7 @@ class StoryStore {
 
     // Locations this run created; a new-location entry merges into one of them.
     const createdLocationIds: string[] = []
-    const recordCtx = entryId ? this.recordContext({ origin: 'agent', entryId }) : null
+    const recordCtx = entryId ? this.recordContext({ origin: 'classifier', entryId }) : null
     const stateBefore = recordCtx ? cloneState(this.trackedState()) : null
     const locationBefore = this.locations.find((l) => l.current)?.id ?? null
 

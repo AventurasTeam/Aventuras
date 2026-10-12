@@ -1029,10 +1029,11 @@ export interface WorldStateDelta {
 export type TrackedEntityType = 'character' | 'location' | 'item' | 'story_beat' | 'lorebook_entry'
 
 /**
- * Who made a change: the classifier or another automatic writer (`agent`), lore management after
- * a chapter (`chapter`), a lore management run the reader started (`tidy`), or the reader.
+ * Who made a change: the classifier, the story-image generator's portraits (`image`), lore
+ * management after a chapter (`chapter`), a lore management run the reader started (`tidy`), or
+ * the reader (`manual`).
  */
-export type ChangeOrigin = 'agent' | 'chapter' | 'tidy' | 'manual'
+export type ChangeOrigin = 'classifier' | 'image' | 'chapter' | 'tidy' | 'manual'
 
 /** `softDelete` sets the row's tombstone flag; `delete` removes the row. */
 export type ChangeOp = 'create' | 'update' | 'delete' | 'softDelete'

@@ -37,8 +37,10 @@ Every writer is covered: the classifier, lore management (after a chapter, and T
 Duplicates merge, lorebook file imports, and manual add, edit and delete in the world and lorebook
 panels. Each change carries its origin and is attached to an entry:
 
-- `agent` — the classifier, on its narration, and other automatic writes such as a generated
-  portrait, on the latest entry.
+- `classifier` — the classifier, on its narration.
+- `image` — a portrait the story-image generator gave a character who had none, on the latest
+  entry. The generator runs during a turn and on demand from any narration, without the
+  classifier.
 - `chapter` — lore management after a chapter, on the narration of the turn that created it, or on
   the last completed entry for a chapter made by hand. That is where the new lore starts to shape
   generation, so a checkpoint before it holds the lore its entries were written with.

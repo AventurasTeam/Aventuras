@@ -54,7 +54,7 @@ function change(
     seq,
     createdAt: seq,
     kind: 'change',
-    origin: opts.origin ?? 'agent',
+    origin: opts.origin ?? 'classifier',
     entityType: opts.type ?? 'character',
     entityId,
     op,

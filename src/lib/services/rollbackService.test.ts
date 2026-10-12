@@ -140,7 +140,7 @@ describe('RollbackService', () => {
         seq: 1,
         createdAt: 6,
         kind: 'change',
-        origin: 'agent',
+        origin: 'classifier',
         entityType: 'lorebook_entry',
         entityId: 'lore',
         op: 'update',

@@ -43,13 +43,17 @@ describe('store writes', () => {
     expect(bodyOf(method)).toContain('this.recordContext(')
   })
 
+  it('records a generated portrait under the image origin', () => {
+    expect(bodyOf('saveGeneratedPortrait')).toContain("{ origin: 'image' }")
+  })
+
   it('records nothing while State Tracking is off', () => {
     expect(bodyOf('recordContext')).toContain('!settings.experimentalFeatures.stateTracking')
   })
 
   it('records the classifier as one batch with its header', () => {
     const body = bodyOf('applyClassificationResult')
-    expect(body).toContain("this.recordContext({ origin: 'agent', entryId })")
+    expect(body).toContain("this.recordContext({ origin: 'classifier', entryId })")
     expect(body).toContain('diffStates(')
     expect(body).not.toContain('worldStateDelta')
   })

@@ -9,7 +9,7 @@ import {
   type TrackedState,
 } from '.'
 
-const ctx: RecordContext = { storyId: 's', branchId: 'b', entryId: 'e1', origin: 'agent' }
+const ctx: RecordContext = { storyId: 's', branchId: 'b', entryId: 'e1', origin: 'classifier' }
 
 function character(id: string, fields: Partial<Character> = {}): Character {
   return {

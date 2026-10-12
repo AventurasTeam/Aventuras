@@ -43,7 +43,7 @@ describe('fromWorldStateDelta', () => {
 
   it('does not carry the name into the restored fields', () => {
     const update = records.find((r) => r.kind === 'change' && r.op === 'update')
-    expect(update).toMatchObject({ entityId: 'c-old', origin: 'agent' })
+    expect(update).toMatchObject({ entityId: 'c-old', origin: 'classifier' })
     expect(update?.kind === 'change' && update.before).toEqual({
       status: 'active',
       relationship: 'ally',

@@ -49,7 +49,7 @@ export function fromWorldStateDelta(entry: StoryEntry, delta: WorldStateDelta): 
     id: `${entry.id}:${seq}`,
     seq: seq++,
     kind: 'change',
-    origin: 'agent',
+    origin: 'classifier',
     entityType,
     entityId,
     op,
