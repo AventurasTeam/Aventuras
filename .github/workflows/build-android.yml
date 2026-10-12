@@ -40,19 +40,13 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
-      # Verified version-insensitive: rust-cache zeroes package.version in the workspace
-      # Cargo.toml and drops workspace crates from the Cargo.lock hash, so a release bump
-      # reuses this key. Re-check on upgrade — a TOML parse failure or an unsupported
-      # Cargo.lock format falls back to hashing the raw files, warning in the job log.
       # cache-directories keeps the generated Kotlin's mtimes consistent with the cached
       # fingerprints. It is not part of the key, so adding a path means bumping the suffix.
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: ./.github/actions/rust-cache
         with:
-          workspaces: './src-tauri -> target'
           key: android-v2
           cache-directories: src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated
-          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Setup Java
         uses: actions/setup-java@v6
@@ -60,15 +54,13 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Caches the Gradle wrapper distribution and dependencies via the 'basic' (MIT,
-      # actions/cache-backed) provider. Not combined with actions/setup-java's own
-      # 'cache: gradle', which the upstream docs warn interferes with this action's caching.
-      # Defaults to read-only off the default branch, so only ci.yml running on
-      # master writes to it.
+      # Uncached: it only saved dependency downloads for 843 MB of the cache quota.
+      # See docs/development/ci-caching.md.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
+          cache-disabled: true
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4

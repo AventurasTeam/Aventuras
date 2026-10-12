@@ -48,14 +48,10 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      # Same cache discipline as the desktop/Android legs: saved from master only
-      # (ci.yml), restored everywhere else.
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: ./.github/actions/rust-cache
         with:
-          workspaces: './src-tauri -> target'
           key: ios
-          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       # tauri ios init/build drive XcodeGen, which the CLI only auto-installs
       # interactively — not an option on a runner.

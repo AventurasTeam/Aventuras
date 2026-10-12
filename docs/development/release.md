@@ -54,7 +54,7 @@ GitHub Actions workflows in `.github/workflows/`:
   non-publishing run leaves every platform's build downloadable from the run summary.
 - **`bootstrap-ios.yml`** - one-shot manual-dispatch workflow that regenerates the tracked
   `src-tauri/gen/apple` Xcode scaffold (see [Building iOS](#building-ios)).
-- **`ci.yml`** - builds `master` with `publish: false` so the Rust, Gradle and npm caches a
+- **`ci.yml`** - builds `master` with `publish: false` so the Rust and npm caches a
   release restores from are warm, and so every push/schedule leaves downloadable per-platform builds.
   See [Build caching and speed](#build-caching-and-speed) and [Build version](#build-version).
 
@@ -136,15 +136,17 @@ jobs leave behind on `master` are the ones a release restores. It skips the push
 `scripts/release.js` makes when it pushes a version bump to `master`: every cache key below
 already ignores the app's own version, so that push can only rebuild for nothing.
 
-- **Rust** (`swatinem/rust-cache`) sets `save-if: ${{ github.ref == 'refs/heads/master' }}` in both
-  build workflows, so only `ci.yml` (or a run of `release.yml`/`pre-release.yml` if one is ever
-  dispatched from `master` directly) writes it. `rust-lint.yml`'s Clippy job does the same: its
-  `master` push run saves the cache and PRs only restore it, so a PR's ~600 MiB `target/` never
-  lands in a scope no other run can read.
-- **Gradle**, in `build-android.yml`, uses `gradle/actions/setup-gradle` with
-  `cache-provider: basic` — the MIT-licensed provider, not the default proprietary one — which
-  already defaults to read-only off the default branch. It also caches the Gradle wrapper
-  distribution download, which `actions/setup-java`'s `cache: gradle` option did not.
+- **Rust** (`swatinem/rust-cache`) goes through the `.github/actions/rust-cache` composite action in
+  both build workflows and `rust-lint.yml`'s Clippy job, the one place that sets
+  `save-if: ${{ github.ref == 'refs/heads/master' }}`. Only `ci.yml` (or a run of
+  `release.yml`/`pre-release.yml` if one is ever dispatched from `master` directly) writes the build
+  caches, and Clippy's `master` push run saves its own while PRs only restore, so a PR's ~600 MiB
+  `target/` never lands in a scope no other run can read. The action also ends every `key` in a hash
+  of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`), so a dependency, feature or profile
+  change starts each Rust cache cold instead of saving the new artifacts beside the old ones. See
+  [ci-caching.md](ci-caching.md#rust-cache-growth).
+- **Gradle** is not cached: `setup-gradle` runs with `cache-disabled: true`. Its entry only saved
+  dependency downloads. See [ci-caching.md](ci-caching.md#gradle).
 - **npm**, across all three CI workflows, uses the `.github/actions/npm-install` composite action
   instead of `actions/setup-node`'s built-in cache. `scripts/release.js` bumps the version in
   `package.json`/`package-lock.json` on every release, and `setup-node`'s cache key is a plain hash
@@ -152,20 +154,10 @@ already ignores the app's own version, so that push can only rebuild for nothing
   fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
   hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
   entry on a miss; it also only saves on `master`.
-- **Android's Rust cache also persists the generated Kotlin.** The build scripts of `tauri` and `wry`
-  write Kotlin into the gitignored
-  `src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated/` and declare
-  `rerun-if-changed` on it, so on a fresh checkout cargo marks both crates dirty ("the file ... is
-  missing") and rebuilds every plugin and `tauri-runtime-wry` behind them, in each of the four cargo
-  builds. `cache-directories` stores that directory in the same entry as `target/`, so the files
-  come back with the mtimes the cached fingerprints expect and only the app crate compiles. The
-  option is not part of rust-cache's key, so an exact hit never re-saves: add a path, or change what
-  is persisted, by bumping the key suffix (`android-v2`), which makes the next `master` run cold.
-  The saving is small beside the app crate's release compile (about 70-95s per build) and
-  disappears in run-to-run noise. The second `aarch64` build still recompiles the app crate,
-  because the CLI rewrites `gen/android/tauri.settings.gradle` between the two builds. Cargo prints
-  dirty reasons only under `-v`: set `CARGO_TERM_VERBOSE: true` on the build step to see them. iOS
-  cargo output stays hidden under `xcodebuild` even then, but neither crate generates files on iOS.
+- **Android's Rust cache also persists the `tauri`/`wry`-generated Kotlin** (`cache-directories`),
+  without which `tauri`, `wry` and every plugin recompile in each of the four cargo builds. The
+  option is not part of the key: change what is persisted by bumping the `android-v2` suffix. See
+  [ci-caching.md](ci-caching.md#android-generated-kotlin).
 
 The **Windows** desktop leg builds on a ReFS [Dev Drive](https://learn.microsoft.com/en-us/windows/dev-drive/)
 created by `samypr100/setup-dev-drive` (a dynamic VHDX, recreated every run — the drive itself is

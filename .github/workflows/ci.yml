@@ -3,7 +3,7 @@ name: CI
 # Builds every platform on `master` with publish: false — it exercises the exact same
 # build-desktop.yml / build-android.yml jobs a release uses, without publishing anything, so:
 #
-# - The Rust, Gradle and npm caches it leaves behind are the ones a release run picks up.
+# - The Rust and npm caches it leaves behind are the ones a release run picks up.
 #   Tag-triggered release runs (release.yml, pre-release.yml) can only restore caches created
 #   on the tag itself or on the default branch (GitHub: caches cannot be restored across
 #   different tag names), and nothing else builds on `master`, so without this workflow every
@@ -43,10 +43,10 @@ concurrency:
 
 jobs:
   # scripts/release.js pushes a `chore: bump version to X` commit to `master` alongside the tag.
-  # It touches only version fields. Every cache key here (rust-cache, the Gradle basic provider,
-  # lockfile-hash.js) is already insensitive to that change, so a run triggered by it would
-  # rebuild for nothing; the next scheduled or manual run still warms caches for any real
-  # dependency change made in the same push.
+  # It touches only version fields. Every cache key here (cargo-deps-hash.js plus rust-cache's
+  # own lock hash, lockfile-hash.js) is already insensitive to that change, so a run triggered
+  # by it would rebuild for nothing; the next scheduled or manual run still warms caches for any
+  # real dependency change made in the same push.
   build-desktop:
     if: "github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: bump version')"
     uses: ./.github/workflows/build-desktop.yml

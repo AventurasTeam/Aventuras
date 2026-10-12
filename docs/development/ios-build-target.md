@@ -120,7 +120,8 @@ macOS-only (guards on `uname`, repo root, tool availability). Steps:
 
 Mirrors `build-android.yml`: `workflow_call` with `prerelease`/`publish` inputs;
 `macos-15`; checkout → npm install → release-guard (when publishing) → Rust stable with
-`aarch64-apple-ios` → `rust-cache` (`key: ios`, saved from `master` only) → **Ensure
+`aarch64-apple-ios` → `rust-cache` (`key: ios-<dependency hash>`, saved from `master` only;
+see [ci-caching.md](ci-caching.md)) → **Ensure
 XcodeGen** (`brew install xcodegen` — the CLI only auto-installs it interactively,
 impossible on a runner) → build-version action → **generate the scaffold if not
 committed** (`tauri ios init --skip-targets-install` when `gen/apple/project.yml` is
