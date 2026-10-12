@@ -153,7 +153,7 @@ already ignores the app's own version, so that push can only rebuild for nothing
   of `package-lock.json` with no fallback — so a release always missed that cache and then saved a
   fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
   hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
-  entry on a miss; it also only saves on `master`. On Linux it caches `../.npm-cache` beside the
+  entry on a miss; it also only saves on `master`. On Linux it caches `.npm-cache` inside the
   checkout, so the containerized desktop job and the Android job share one entry. See
   [ci-caching.md](ci-caching.md#npm).
 - **Android's Rust cache also persists the `tauri`/`wry`-generated Kotlin** (`cache-directories`),

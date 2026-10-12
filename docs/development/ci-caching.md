@@ -16,7 +16,7 @@ everything below is judged on cache hits and on what cargo actually recompiles.
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Every rust-cache `key` carries a hash of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`)   | rust-cache otherwise keeps every old dependency version forever; the Rust caches had doubled to 8 GB     | [Rust cache growth](#rust-cache-growth)               |
 | Gradle is cached with `setup-gradle`'s basic provider                                                | Without it the Android job, already the longest, takes ~1m45s more; the dependency hash freed the 843 MB | [Gradle](#gradle)                                     |
-| Desktop Linux and Android share one npm entry (`../.npm-cache` on Linux)                             | The container's different home directory otherwise splits one key into two identical ~140 MB entries     | [npm](#npm)                                           |
+| Desktop Linux and Android share one npm entry (`.npm-cache` in the checkout on Linux)                | The container's different home directory otherwise splits one key into two identical ~140 MB entries     | [npm](#npm)                                           |
 | Android's Rust cache also stores the generated Kotlin (`cache-directories`, key suffix `android-v2`) | Without it `tauri`, `wry` and every plugin recompile in each of the four cargo builds                    | [Android generated Kotlin](#android-generated-kotlin) |
 | The second `aarch64` app-crate rebuild on Android stays                                              | About a minute; no fix without reaching into the Tauri CLI's build internals                             | [Android generated Kotlin](#android-generated-kotlin) |
 | `armv7` stays an Android target                                                                      | It is the only build 32-bit-userspace phones can install, and those are still sold new                   | [armv7](#armv7)                                       |
@@ -284,12 +284,16 @@ Passing the same literal path is not enough. `actions/cache` stores tar entries 
 container would restore on the host to `/home/runner/github/home/.npm`. That is reported as a hit,
 which also skips the save.
 
-On Linux the action therefore points `npm_config_cache` at `../.npm-cache`, a sibling of the checkout:
-`/__w/Aventuras/.npm-cache` in the container and `/home/runner/work/Aventuras/.npm-cache` on the
-host. Those are the same directory, and the literal path and the relative position match. Windows
-keeps the Dev Drive path `build-desktop.yml` sets, and macOS has no container split, so neither
-changes. Desktop Linux installs `zstd` before this action; without it, the compression method
-would differ and split the entry again.
+On Linux the action therefore points `npm_config_cache` at `.npm-cache` inside the checkout:
+`/__w/Aventuras/Aventuras/.npm-cache` in the container and
+`/home/runner/work/Aventuras/Aventuras/.npm-cache` on the host. Those are the same directory, and
+the literal path and the relative position match. A sibling `../.npm-cache` would restore but
+never save: `actions/cache/save` resolves its paths with `@actions/glob`, which rejects `..`
+segments, and the action reports that only as a warning.
+
+Windows keeps the Dev Drive path `build-desktop.yml` sets, and macOS has no container split, so
+neither changes. Desktop Linux installs `zstd` before this action; without it, the compression
+method would differ and split the entry again.
 
 ## armv7
 
