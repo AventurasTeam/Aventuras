@@ -145,15 +145,17 @@ already ignores the app's own version, so that push can only rebuild for nothing
   of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`), so a dependency, feature or profile
   change starts each Rust cache cold instead of saving the new artifacts beside the old ones. See
   [ci-caching.md](ci-caching.md#rust-cache-growth).
-- **Gradle** is not cached: `setup-gradle` runs with `cache-disabled: true`. Its entry only saved
-  dependency downloads. See [ci-caching.md](ci-caching.md#gradle).
+- **Gradle** is cached by `setup-gradle`'s basic provider, which saves only from `master`. Without
+  it the Android job takes about 1m45s longer. See [ci-caching.md](ci-caching.md#gradle).
 - **npm**, across all three CI workflows, uses the `.github/actions/npm-install` composite action
   instead of `actions/setup-node`'s built-in cache. `scripts/release.js` bumps the version in
   `package.json`/`package-lock.json` on every release, and `setup-node`'s cache key is a plain hash
   of `package-lock.json` with no fallback — so a release always missed that cache and then saved a
   fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
   hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
-  entry on a miss; it also only saves on `master`.
+  entry on a miss; it also only saves on `master`. On Linux it caches `../.npm-cache` beside the
+  checkout, so the containerized desktop job and the Android job share one entry. See
+  [ci-caching.md](ci-caching.md#npm).
 - **Android's Rust cache also persists the `tauri`/`wry`-generated Kotlin** (`cache-directories`),
   without which `tauri`, `wry` and every plugin recompile in each of the four cargo builds. The
   option is not part of the key: change what is persisted by bumping the `android-v2` suffix. See

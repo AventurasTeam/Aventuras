@@ -12,14 +12,15 @@ everything below is judged on cache hits and on what cargo actually recompiles.
 
 ## Decisions
 
-| Decision                                                                                             | Why                                                                                                  | Section                                               |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Every rust-cache `key` carries a hash of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`)   | rust-cache otherwise keeps every old dependency version forever; the Rust caches had doubled to 8 GB | [Rust cache growth](#rust-cache-growth)               |
-| Gradle is not cached (`setup-gradle` with `cache-disabled: true`)                                    | 843 MB that only saved dependency downloads; the enhanced provider would use more space, not less    | [Gradle](#gradle)                                     |
-| Android's Rust cache also stores the generated Kotlin (`cache-directories`, key suffix `android-v2`) | Without it `tauri`, `wry` and every plugin recompile in each of the four cargo builds                | [Android generated Kotlin](#android-generated-kotlin) |
-| The second `aarch64` app-crate rebuild on Android stays                                              | About a minute; no fix without reaching into the Tauri CLI's build internals                         | [Android generated Kotlin](#android-generated-kotlin) |
-| `armv7` stays an Android target                                                                      | It is the only build 32-bit-userspace phones can install, and those are still sold new               | [armv7](#armv7)                                       |
-| iOS cache reuse is not investigated further                                                          | Timings say the cache works; confirming it costs cold-cache runs                                     | [iOS](#ios)                                           |
+| Decision                                                                                             | Why                                                                                                      | Section                                               |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Every rust-cache `key` carries a hash of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`)   | rust-cache otherwise keeps every old dependency version forever; the Rust caches had doubled to 8 GB     | [Rust cache growth](#rust-cache-growth)               |
+| Gradle is cached with `setup-gradle`'s basic provider                                                | Without it the Android job, already the longest, takes ~1m45s more; the dependency hash freed the 843 MB | [Gradle](#gradle)                                     |
+| Desktop Linux and Android share one npm entry (`../.npm-cache` on Linux)                             | The container's different home directory otherwise splits one key into two identical ~140 MB entries     | [npm](#npm)                                           |
+| Android's Rust cache also stores the generated Kotlin (`cache-directories`, key suffix `android-v2`) | Without it `tauri`, `wry` and every plugin recompile in each of the four cargo builds                    | [Android generated Kotlin](#android-generated-kotlin) |
+| The second `aarch64` app-crate rebuild on Android stays                                              | About a minute; no fix without reaching into the Tauri CLI's build internals                             | [Android generated Kotlin](#android-generated-kotlin) |
+| `armv7` stays an Android target                                                                      | It is the only build 32-bit-userspace phones can install, and those are still sold new                   | [armv7](#armv7)                                       |
+| iOS cache reuse is not investigated further                                                          | Timings say the cache works; confirming it costs cold-cache runs                                         | [iOS](#ios)                                           |
 
 ## Diagnostic runs (2026-10-01)
 
@@ -231,7 +232,7 @@ if dependency updates become frequent enough that the cold builds hurt.
 
 ## Gradle
 
-`build-android.yml` used `gradle/actions/setup-gradle@v6` with the **basic** provider: one 843 MB
+`build-android.yml` uses `gradle/actions/setup-gradle@v6` with the **basic** provider: one 843 MB
 entry holding `~/.gradle/caches` and `~/.gradle/wrapper`, keyed on a hash of the build files,
 restored as an exact hit on every run. It saved only dependency and wrapper downloads; the task
 work ran regardless (see [Android generated Kotlin](#android-generated-kotlin)).
@@ -250,10 +251,45 @@ was considered instead:
   `.so` files change with every commit.
 - Basic offers no cleanup and no include/exclude paths, so it is on or off.
 
-**Decision:** caching off (`cache-disabled: true`). `setup-gradle` stays for wrapper validation and
-the job summary, with `cache-provider: basic` so the proprietary component is never selected. The
-cost is downloading the Gradle distribution and dependencies on every Android run, estimated at
-30–90 s (not measured).
+#612 turned caching off to save quota. Uncached runs
+([38192218726](https://github.com/AventurasTeam/Aventuras/actions/runs/38192218726),
+[38197882367](https://github.com/AventurasTeam/Aventuras/actions/runs/38197882367)) against warm
+ones ([38111960581](https://github.com/AventurasTeam/Aventuras/actions/runs/38111960581),
+[38071840978](https://github.com/AventurasTeam/Aventuras/actions/runs/38071840978)):
+
+| Android phase                            | Uncached    | Cached      |
+| ---------------------------------------- | ----------- | ----------- |
+| `setup-gradle` (restore)                 | 1–2.5 s     | 12–17 s     |
+| Gradle startup to the first Rust handoff | 92 s / 96 s | ~24 s       |
+| Packaging after the last Rust target     | ~120 s      | ~79 s       |
+| `./gradlew :app:lintUniversalDebug`      | 49 s / 46 s | 37 s / 36 s |
+
+The distribution zip itself downloads in ~1.5 s; the rest is Maven dependency resolution, which
+Gradle does not log without `--info`. Net cost uncached: about 1m45s per run, on the job that
+already finishes last.
+
+**Decision:** cached, `cache-provider: basic` so the proprietary component is never selected.
+It saves only from the default branch, like the other caches.
+
+## npm
+
+`.github/actions/npm-install` keys on `npm-<os>-<arch>-<lockfile hash>`. Desktop Linux runs in an
+`ubuntu:22.04` container where `HOME=/github/home`; Android runs on the host. With the default
+`~/.npm`, the two jobs produced the same key but two ~140 MB entries, because `actions/cache` keeps
+entries apart by a version hashed from the literal `path` input and the compression method. Their
+contents were the same: one lockfile, one Node version, both linux-x64-glibc.
+
+Passing the same literal path is not enough. `actions/cache` stores tar entries relative to
+`GITHUB_WORKSPACE` and extracts with `tar -P -C <workspace>`, so a `~/.npm` archive saved in the
+container would restore on the host to `/home/runner/github/home/.npm`. That is reported as a hit,
+which also skips the save.
+
+On Linux the action therefore points `npm_config_cache` at `../.npm-cache`, a sibling of the checkout:
+`/__w/Aventuras/.npm-cache` in the container and `/home/runner/work/Aventuras/.npm-cache` on the
+host. Those are the same directory, and the literal path and the relative position match. Windows
+keeps the Dev Drive path `build-desktop.yml` sets, and macOS has no container split, so neither
+changes. Desktop Linux installs `zstd` before this action; without it, the compression method
+would differ and split the entry again.
 
 ## armv7
 

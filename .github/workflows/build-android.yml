@@ -54,13 +54,12 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Uncached: it only saved dependency downloads for 843 MB of the cache quota.
-      # See docs/development/ci-caching.md.
+      # The MIT 'basic' provider, read-only off the default branch. Not combined with
+      # setup-java's `cache: gradle`, which interferes with it. See docs/development/ci-caching.md.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
-          cache-disabled: true
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
