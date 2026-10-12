@@ -1553,13 +1553,11 @@ export const DisabledThroughAncestor: Story = {
   },
   play: async () => {
     await userEvent.click(tab(/^Settings/))
-    await expect(
-      await screen.findByText(
-        new RegExp(t('world:fields.disabledThrough', { place: 'Veil’s Hollow' }).slice(0, 30)),
-        {},
-        WAIT,
-      ),
-    ).toBeVisible()
+    const line = t('world:fields.disabledThrough', { place: 'Veil’s Hollow' })
+    const hint = await screen.findByText(new RegExp(line.slice(0, 30)), {}, WAIT)
+    await expect(hint).toBeVisible()
+    // Its own line under the explanation, not run into it.
+    await expect(hint.textContent).toContain(`\n${line}`)
   },
 }
 

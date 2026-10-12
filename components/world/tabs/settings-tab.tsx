@@ -29,12 +29,14 @@ export function SettingsTab({
   const status = useWatch({ control, name: 'status' })
   const gate = { blocked, blockedReason }
   const injectionHint = [
-    t('world:fields.injectionOverride'),
-    ...(isPlace ? [t('world:fields.injectionPlaceMap')] : []),
+    [
+      t('world:fields.injectionOverride'),
+      ...(isPlace ? [t('world:fields.injectionPlaceMap')] : []),
+    ].join(' '),
     ...(isPlace && disabledThrough != null
       ? [t('world:fields.disabledThrough', { place: disabledThrough })]
       : []),
-  ].join(' ')
+  ].join('\n')
   return (
     <View className="gap-4">
       <Controller
