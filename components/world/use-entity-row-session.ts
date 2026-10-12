@@ -4,6 +4,7 @@ import type { FieldValues, Path, Resolver, UseFormReturn } from 'react-hook-form
 import {
   useRowSaveSession,
   type RowCommitResult,
+  type RowSaveConfirm,
   type RowSaveSession,
   type RowSessionHandle,
 } from '@/hooks/use-row-save-session'
@@ -13,7 +14,7 @@ import { logger } from '@/lib/diagnostics'
 import type { EntityBaseDraft } from '@/lib/world'
 
 import { useDraftBase, type DraftBase } from './use-draft-base'
-import { saveFailureText, saveRejectionText } from './world-copy'
+import { placeRefusalText, saveFailureText, saveRejectionText } from './world-copy'
 
 type RefusalFields<Draft extends FieldValues> = Readonly<
   Partial<Record<string, { field: Path<Draft>; message: string }>>
@@ -41,6 +42,8 @@ type EntityRowSessionOptions<Draft extends EntityDraft> = {
   onSession: (handle: RowSessionHandle | null) => void
   /** A refusal code the pane shows on a field (`parent-cycle` → the parent picker). Stable. */
   fieldErrors?: RefusalFields<Draft>
+  /** What a Save asks before it writes (a place's cascade); see `useRowSaveSession`. */
+  confirmBeforeCommit?: (draft: Draft) => RowSaveConfirm | null
 }
 
 /** A World detail pane's row save session: translated refusals, field errors, route handle. */
@@ -57,6 +60,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
   onRejected,
   onSession,
   fieldErrors,
+  confirmBeforeCommit,
 }: EntityRowSessionOptions<Draft>): RowSaveSession<Draft> {
   const rowKey = rowId ?? `create:${kind}:${createSeq}`
   const formRef = useRef<UseFormReturn<Draft> | null>(null)
@@ -68,12 +72,18 @@ export function useEntityRowSession<Draft extends EntityDraft>({
       const keywords = keywordsRef.current
       const result = await onSave(draft, keywords?.base ?? values.keywords)
       if (result.status === 'rejected') {
-        const target = result.code == null ? undefined : fieldErrors?.[result.code]
+        // A place rule names its own field and places (data-model.md → LocationState shape).
+        const { refusal } = result
+        const placeText = refusal == null ? null : placeRefusalText(refusal)
+        const target =
+          refusal == null || placeText == null
+            ? fieldErrors?.[result.code]
+            : { field: refusal.field as Path<Draft>, message: placeText }
         // A row switch while the write was in flight: this refusal is no longer this row's to show.
         if (target != null && rowKeyRef.current === startKey) {
           formRef.current?.setError(target.field, { type: 'server', message: target.message })
         }
-        return { status: 'rejected', reason: saveRejectionText(result.code) }
+        return { status: 'rejected', reason: placeText ?? saveRejectionText(result.code) }
       }
       if (rowKeyRef.current === startKey) keywords?.markSaved(draft.keywords)
       // The write landed: a throwing onSaved must not read as failed, or a retry creates it twice.
@@ -98,6 +108,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
     issueText,
     failureText: saveFailureText,
     commit,
+    confirmBeforeCommit,
     onRejected,
   })
   const { form, dirty, requestLeave } = session

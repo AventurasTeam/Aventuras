@@ -44,6 +44,7 @@ const PANE_DATA: EntityPaneData = {
   worldTime: 120,
   calendar: EARTH_GREGORIAN,
   leadId: null,
+  storyLocationId: null,
 }
 
 function props(model: PeekBodyProps['model'], entryIndex: PeekEntryIndex = READ) {

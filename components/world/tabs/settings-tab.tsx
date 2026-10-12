@@ -18,23 +18,34 @@ export function SettingsTab({
   blocked,
   blockedReason,
   isPlace = false,
+  disabledThrough = null,
 }: Gate & {
   control: Control<EntityBaseDraft>
-  /** A location: the injection hint adds what each mode does to the location map. */
+  /** A location: the hints add what retiring and each mode do to the places inside it. */
   isPlace?: boolean
+  /** The ancestor whose `disabled` reaches this place, by name; null when none does. */
+  disabledThrough?: string | null
 }) {
   const status = useWatch({ control, name: 'status' })
   const gate = { blocked, blockedReason }
-  const injectionHint = isPlace
-    ? `${t('world:fields.injectionOverride')} ${t('world:fields.injectionPlaceMap')}`
-    : t('world:fields.injectionOverride')
+  const injectionHint = [
+    t('world:fields.injectionOverride'),
+    ...(isPlace ? [t('world:fields.injectionPlaceMap')] : []),
+    ...(isPlace && disabledThrough != null
+      ? [t('world:fields.disabledThrough', { place: disabledThrough })]
+      : []),
+  ].join(' ')
   return (
     <View className="gap-4">
       <Controller
         control={control}
         name="status"
-        render={({ field }) => (
-          <FormRow label={t('world:fields.status')}>
+        render={({ field, fieldState }) => (
+          <FormRow
+            label={t('world:fields.status')}
+            hint={isPlace ? t('world:fields.statusPlace') : undefined}
+            error={issueLabel(fieldState.error?.message)}
+          >
             <Select
               label={t('world:fields.status')}
               value={field.value}
@@ -52,8 +63,12 @@ export function SettingsTab({
       <Controller
         control={control}
         name="injectionMode"
-        render={({ field }) => (
-          <FormRow label={t('world:fields.injectionMode')} hint={injectionHint}>
+        render={({ field, fieldState }) => (
+          <FormRow
+            label={t('world:fields.injectionMode')}
+            hint={injectionHint}
+            error={issueLabel(fieldState.error?.message)}
+          >
             {/* Options with help text make Select render radio. */}
             <Select
               label={t('world:fields.injectionMode')}

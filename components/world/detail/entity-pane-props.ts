@@ -23,6 +23,8 @@ export type EntityPaneData = {
   worldTime: number
   calendar: CalendarSystem
   leadId: string | null
+  /** The tail scene's location (`storyLocationIdOf`), for the place rules' "the story". */
+  storyLocationId: string | null
 }
 
 export type EntityPaneProps = {

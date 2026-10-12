@@ -104,6 +104,61 @@ describe('useEntityRowSession', () => {
     await waitFor(() => expect(hook.result.current.invalidReason).toBeNull())
   })
 
+  // data-model.md → LocationState shape: a place rule names its own field and places.
+  it('lands a place refusal on the field it names, with the places in the text', async () => {
+    const { hook, onRejected } = setup({
+      status: 'rejected',
+      reason: 'place rule: retired-parent',
+      code: 'retired-parent',
+      refusal: {
+        code: 'retired-parent',
+        field: 'status',
+        parent: { id: 'loc_p', name: 'Port Vellis' },
+      },
+    })
+    act(() => {
+      hook.result.current.form.setValue('status', 'staged', { shouldDirty: true })
+    })
+    await act(async () => {
+      await hook.result.current.save()
+    })
+    const text = 'Port Vellis is retired. Bring it back first.'
+    expect(hook.result.current.form.getFieldState('status').error?.message).toBe(text)
+    expect(hook.result.current.form.getFieldState('parentLocationId').error).toBeUndefined()
+    expect(onRejected).toHaveBeenCalledWith(text)
+    expect(hook.result.current.saveError).toBe(text)
+  })
+
+  it('names the story inside a place, or the place itself when the story is there', async () => {
+    const story = (storyId: string) =>
+      setup({
+        status: 'rejected',
+        reason: 'place rule: story-inside',
+        code: 'story-inside',
+        refusal: {
+          code: 'story-inside',
+          field: 'injectionMode',
+          place: { id: 'loc_p', name: 'Port Vellis' },
+          story: { id: storyId, name: storyId === 'loc_p' ? 'Port Vellis' : 'The Rusty Anchor' },
+        },
+      })
+    for (const [storyId, text] of [
+      ['loc_inn', 'The story is in The Rusty Anchor, inside Port Vellis.'],
+      ['loc_p', 'The story is in Port Vellis.'],
+    ] as const) {
+      const { hook, onRejected } = story(storyId)
+      act(() => {
+        hook.result.current.form.setValue('injectionMode', 'disabled', { shouldDirty: true })
+      })
+      await act(async () => {
+        await hook.result.current.save()
+      })
+      expect(hook.result.current.form.getFieldState('injectionMode').error?.message).toBe(text)
+      expect(onRejected).toHaveBeenCalledWith(text)
+      cleanup()
+    }
+  })
+
   it('reports the saved id', async () => {
     const { hook, onSaved } = setup({ status: 'ok', id: 'loc_shop' })
     act(() => {

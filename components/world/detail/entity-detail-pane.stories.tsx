@@ -188,6 +188,10 @@ type HarnessProps = {
   commitLinks?: boolean
   /** Save stays pending until the harness's `Finish save` button. */
   holdSave?: boolean
+  /** The branch's entities; the shared cast by default. */
+  entities?: readonly Entity[]
+  /** The tail scene's location, which the place rules read as the story. */
+  storyLocationId?: string | null
   onSave: (input: EntitySaveInput) => void
   onSaved: (id: string) => void
   onRejected: (reason: string) => void
@@ -209,6 +213,8 @@ function Harness({
   storeKeyword,
   commitLinks = false,
   holdSave = false,
+  entities = ENTITIES,
+  storyLocationId = null,
   onSave,
   onSaved,
   onRejected,
@@ -237,15 +243,16 @@ function Harness({
   const data = useMemo<EntityPaneData>(
     () => ({
       branchId: 'br_1',
-      entities: ENTITIES,
+      entities,
       relationships: links ?? (row?.id === 'char_kael' ? KAEL_LINKS : NO_LINKS),
       involvements: row?.id === 'char_kael' ? KAEL_INVOLVEMENTS : NO_INVOLVEMENTS,
       entryIndex: ENTRY_INDEX,
       worldTime: 1000 + 2 * DAY,
       calendar: EARTH_GREGORIAN,
       leadId,
+      storyLocationId,
     }),
-    [row, links, leadId],
+    [row, links, leadId, entities, storyLocationId],
   )
   const save = useCallback(
     async (input: EntitySaveInput): Promise<EntitySaveResult> => {
@@ -1374,5 +1381,272 @@ export const FactionStaged: Story = {
   },
   play: async () => {
     await expectStatusPill('staged')
+  },
+}
+
+// data-model.md → LocationState shape: retired and disabled places.
+const THORNWOOD = makeEntity({
+  id: 'loc_thorn',
+  kind: 'location',
+  name: 'Thornwood',
+  injectionMode: 'disabled',
+  state: { parent_location_id: null },
+})
+const SALTMERE = makeEntity({
+  id: 'loc_salt',
+  kind: 'location',
+  name: 'Saltmere',
+  status: 'retired',
+  retiredReason: 'swallowed by the rift',
+  state: { parent_location_id: null },
+})
+const PLACES = [...ENTITIES, THORNWOOD, SALTMERE]
+
+async function pickStatus(name: string) {
+  await userEvent.click(tab(/^Settings/))
+  const status = await screen.findByRole('radiogroup', { name: 'Status' }, WAIT)
+  await userEvent.click(within(status).getByRole('radio', { name }))
+}
+
+async function pickMode(name: string) {
+  await userEvent.click(tab(/^Settings/))
+  const mode = await screen.findByRole(
+    'radiogroup',
+    { name: t('world:fields.injectionMode') },
+    WAIT,
+  )
+  await userEvent.click(within(mode).getByRole('radio', { name: new RegExp(`^${name}`) }))
+}
+
+// The dialog fades in, so its text is in the tree before it reads as visible.
+async function expectInDialog(dialog: HTMLElement, text: string | RegExp) {
+  await waitFor(() => expect(within(dialog).getByText(text)).toBeVisible(), WAIT)
+}
+
+async function clickSave() {
+  const bar = await screen.findByTestId('save-bar', {}, WAIT)
+  await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+}
+
+/** world.md → Settings: retiring a place with places inside asks first, listing them. */
+export const RetireConfirmListsPlaces: Story = {
+  args: { kind: 'location', row: HOLLOW, entities: PLACES },
+  play: async ({ args }) => {
+    await pickStatus(t('world:tiers.retired'))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await expectInDialog(
+      dialog,
+      t('world:placeConfirm.retireTitle', { place: 'Veil’s Hollow', count: 1 }),
+    )
+    await expectInDialog(dialog, /The Drowned Market/)
+    await expect(args.onSave).not.toHaveBeenCalled()
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('world:placeConfirm.retire') }),
+    )
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ draft: expect.objectContaining({ status: 'retired' }) }),
+    )
+  },
+}
+
+/** Cancel leaves the draft as it was and writes nothing. */
+export const RetireConfirmCancelKeepsDraft: Story = {
+  args: { kind: 'location', row: HOLLOW, entities: PLACES },
+  play: async ({ args }) => {
+    await pickStatus(t('world:tiers.retired'))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await userEvent.click(within(dialog).getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), WAIT)
+    await expect(args.onSave).not.toHaveBeenCalled()
+    await expect(saveBar()).toHaveTextContent('Status')
+  },
+}
+
+/** Disabling a place counts the places inside it that weren't out of the story already. */
+export const DisableConfirmCounts: Story = {
+  args: { kind: 'location', row: HOLLOW, entities: PLACES },
+  play: async ({ args }) => {
+    await pickMode(t('world:fields.injection.disabled'))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await expectInDialog(dialog, t('world:placeConfirm.disableTitle', { place: 'Veil’s Hollow' }))
+    await expectInDialog(
+      dialog,
+      t('world:placeConfirm.disableLine', { place: 'Veil’s Hollow', count: 1 }),
+    )
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('world:placeConfirm.disable') }),
+    )
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** Moving a place into a disabled one asks first, naming the region. */
+export const MoveIntoDisabledConfirm: Story = {
+  args: { kind: 'location', row: MARKET, entities: PLACES },
+  play: async ({ args }) => {
+    await userEvent.click(tab(/^Connections/))
+    await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
+    await userEvent.click(await screen.findByRole('option', { name: /Thornwood/ }, WAIT))
+    await clickSave()
+    const dialog = await screen.findByRole('alertdialog', {}, WAIT)
+    await expectInDialog(
+      dialog,
+      t('world:placeConfirm.moveLine', { region: 'Thornwood', place: 'The Drowned Market' }),
+    )
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: t('world:placeConfirm.move') }),
+    )
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** A refused retire shows its named reason on the status field, and asks nothing first. */
+export const StoryInsideRefusalOnStatus: Story = {
+  args: {
+    kind: 'location',
+    row: HOLLOW,
+    entities: PLACES,
+    storyLocationId: 'loc_market',
+    saveResult: {
+      status: 'rejected',
+      reason: 'place rule: story-inside',
+      code: 'story-inside',
+      refusal: {
+        code: 'story-inside',
+        field: 'status',
+        place: { id: 'loc_hollow', name: 'Veil’s Hollow' },
+        story: { id: 'loc_market', name: 'The Drowned Market' },
+      },
+    },
+  },
+  play: async ({ args }) => {
+    await pickStatus(t('world:tiers.retired'))
+    await clickSave()
+    const text = t('world:placeRefusal.storyInside', {
+      story: 'The Drowned Market',
+      place: 'Veil’s Hollow',
+    })
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(screen.queryByRole('alertdialog')).toBeNull()
+    // On the status field, inside the Settings tab rather than the save bar.
+    await waitFor(
+      () => expect(within(screen.getByRole('tabpanel')).getByText(text)).toBeVisible(),
+      WAIT,
+    )
+    await expect(args.onRejected).toHaveBeenCalledWith(text)
+  },
+}
+
+/** A place disabled through an ancestor says so under the mode explanation. */
+export const DisabledThroughAncestor: Story = {
+  args: {
+    kind: 'location',
+    row: MARKET,
+    entities: [
+      ...ENTITIES.filter((e) => e.id !== 'loc_hollow'),
+      { ...HOLLOW, injectionMode: 'disabled' },
+    ],
+  },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(
+      await screen.findByText(
+        new RegExp(t('world:fields.disabledThrough', { place: 'Veil’s Hollow' }).slice(0, 30)),
+        {},
+        WAIT,
+      ),
+    ).toBeVisible()
+  },
+}
+
+/** Its own mode stays editable, and the line leaves while the story is inside the region. */
+export const DisabledThroughSuspendedAroundTheStory: Story = {
+  args: {
+    kind: 'location',
+    row: MARKET,
+    storyLocationId: 'loc_market',
+    entities: [
+      ...ENTITIES.filter((e) => e.id !== 'loc_hollow'),
+      { ...HOLLOW, injectionMode: 'disabled' },
+    ],
+  },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await screen.findByRole('radiogroup', { name: t('world:fields.injectionMode') }, WAIT)
+    await expect(screen.queryByText(/Disabled through/)).toBeNull()
+  },
+}
+
+/** A place's status explains that retiring takes the places inside it; a character's doesn't. */
+export const PlaceStatusHint: Story = {
+  args: { kind: 'location', row: HOLLOW },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await expect(await screen.findByText(t('world:fields.statusPlace'), {}, WAIT)).toBeVisible()
+  },
+}
+
+/** world.md → Connections: a character's location picker doesn't offer a retired place. */
+export const PickersDropRetiredPlaces: Story = {
+  args: { entities: PLACES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Current location/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
+  },
+}
+
+/** A stored value naming a retired place keeps showing until it is changed. */
+export const PickerKeepsStoredRetiredPlace: Story = {
+  args: {
+    entities: PLACES,
+    row: { ...KAEL, state: characterState({ current_location_id: 'loc_salt' }) },
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await expect(
+      await screen.findByRole('button', { name: /^Current location: Saltmere/ }, WAIT),
+    ).toBeVisible()
+  },
+}
+
+/** A retired place's own parent may be retired: its parent picker offers retired places. */
+export const RetiredPlaceParentPickerOffersRetired: Story = {
+  args: {
+    kind: 'location',
+    entities: PLACES,
+    row: { ...MARKET, status: 'retired' },
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Saltmere/ }, WAIT)).toBeVisible()
+  },
+}
+
+/** An item's location picker doesn't offer a retired place either. */
+export const ItemPickerDropsRetiredPlaces: Story = {
+  args: { kind: 'item', row: BLADE, entities: PLACES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^At location/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
+  },
+}
+
+/** Nothing active sits inside a retired place: an active place's parent picker drops them. */
+export const ParentPickerDropsRetiredPlaces: Story = {
+  args: { kind: 'location', row: MARKET, entities: PLACES },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: /^Connections/ }, WAIT))
+    await userEvent.click(await screen.findByRole('button', { name: /^Part of/ }, WAIT))
+    await expect(await screen.findByRole('option', { name: /Thornwood/ }, WAIT)).toBeVisible()
+    await expect(screen.queryByRole('option', { name: /Saltmere/ })).toBeNull()
   },
 }

@@ -4,6 +4,7 @@ import {
   type OverflowMenuEntry,
   type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
+import type { RowSaveConfirm } from '@/hooks/use-row-save-session'
 import {
   ENTITY_REJECTION,
   LEAD_REJECTION,
@@ -25,6 +26,8 @@ import {
   type ItemDraft,
   type LocationDraft,
   type LoreDraft,
+  type PlaceSaveConfirm,
+  type PlaceSaveRefusal,
   type WorldIssue,
 } from '@/lib/world'
 
@@ -92,6 +95,67 @@ const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
 /** A refused save's user-facing text; the actions' own reasons are developer strings. */
 export function saveRejectionText(code: RowSaveRejectionCode): string {
   return SAVE_REJECTION_TEXT[code]()
+}
+
+/** A place rule's refusal, naming the places: shown on the field the rule guards. */
+export function placeRefusalText(refusal: PlaceSaveRefusal): string {
+  switch (refusal.code) {
+    case 'story-inside':
+      return refusal.story.id === refusal.place.id
+        ? t('world:placeRefusal.storyAt', { place: refusal.place.name })
+        : t('world:placeRefusal.storyInside', {
+            story: refusal.story.name,
+            place: refusal.place.name,
+          })
+    case 'retired-parent':
+      return t('world:placeRefusal.retiredParent', { parent: refusal.parent.name })
+    case 'retired-place':
+      return t('world:placeRefusal.retiredPlace', { place: refusal.place.name })
+  }
+}
+
+/** world.md → Settings: one confirm per Save, titled by its weightiest change, with every line. */
+export function placeConfirmCopy({ retire, disable, move }: PlaceSaveConfirm): RowSaveConfirm {
+  const lines = [
+    ...(disable == null
+      ? []
+      : [t('world:placeConfirm.disableLine', { place: disable.place.name, count: disable.count })]),
+    ...(move == null
+      ? []
+      : [
+          move.count === 0
+            ? t('world:placeConfirm.moveLine', { region: move.region.name, place: move.place.name })
+            : t('world:placeConfirm.moveLineInside', {
+                region: move.region.name,
+                place: move.place.name,
+                count: move.count,
+              }),
+        ]),
+  ]
+  const items = retire?.inside.map((p) => p.name) ?? []
+  if (retire != null)
+    return {
+      title: t('world:placeConfirm.retireTitle', {
+        place: retire.place.name,
+        count: retire.inside.length,
+      }),
+      lines,
+      items,
+      confirmLabel: t('world:placeConfirm.retire'),
+    }
+  if (disable != null)
+    return {
+      title: t('world:placeConfirm.disableTitle', { place: disable.place.name }),
+      lines,
+      items,
+      confirmLabel: t('world:placeConfirm.disable'),
+    }
+  return {
+    title: t('world:placeConfirm.moveTitle', { place: move?.place.name ?? '' }),
+    lines,
+    items,
+    confirmLabel: t('world:placeConfirm.move'),
+  }
 }
 
 export function saveFailureText(): string {

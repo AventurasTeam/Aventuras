@@ -11,6 +11,8 @@ import {
   entityIssueText,
   entityMenuEntries,
   importFailureText,
+  placeConfirmCopy,
+  placeRefusalText,
   importRejectionText,
   itemPositionHint,
   lastSeenDetail,
@@ -155,6 +157,103 @@ describe('labels and issues', () => {
     expect(saveRejectionText('failed')).toBe(
       "Couldn't save your changes. They're still here — try again.",
     )
+    expect(saveRejectionText('story-inside')).toBe(
+      "Couldn't save: the story is in this place or inside it.",
+    )
+    expect(saveRejectionText('retired-parent')).toBe(
+      "Couldn't save: this place's parent is retired. Bring it back first.",
+    )
+    expect(saveRejectionText('retired-place')).toBe(
+      "Couldn't save: that place is retired, so nothing can enter it.",
+    )
+  })
+})
+
+// world.md → Settings: canon's copy for the place rules and their confirm.
+describe('placeRefusalText', () => {
+  const VELLIS = { id: 'loc_vellis', name: 'Port Vellis' }
+  const ANCHOR = { id: 'loc_anchor', name: 'The Rusty Anchor' }
+
+  it('names the story inside the place, or the place when the story is there', () => {
+    expect(
+      placeRefusalText({ code: 'story-inside', field: 'status', place: VELLIS, story: ANCHOR }),
+    ).toBe('The story is in The Rusty Anchor, inside Port Vellis.')
+    expect(
+      placeRefusalText({ code: 'story-inside', field: 'status', place: VELLIS, story: VELLIS }),
+    ).toBe('The story is in Port Vellis.')
+  })
+
+  it('names the retired parent and the retired place', () => {
+    expect(placeRefusalText({ code: 'retired-parent', field: 'status', parent: VELLIS })).toBe(
+      'Port Vellis is retired. Bring it back first.',
+    )
+    expect(
+      placeRefusalText({ code: 'retired-place', field: 'currentLocationId', place: VELLIS }),
+    ).toBe('Port Vellis is retired, so nothing can enter it.')
+  })
+})
+
+describe('placeConfirmCopy', () => {
+  const VELLIS = { id: 'loc_vellis', name: 'Port Vellis' }
+  const ANCHOR = { id: 'loc_anchor', name: 'The Rusty Anchor' }
+  const named = (name: string) => ({ id: name, name })
+
+  it('titles a retire by the places it takes and lists them', () => {
+    expect(
+      placeConfirmCopy({
+        retire: {
+          place: VELLIS,
+          inside: [named('Harbor Market'), named('The Rusty Anchor'), named('the back room')],
+        },
+        disable: null,
+        move: null,
+      }),
+    ).toEqual({
+      title: 'Retire Port Vellis and the 3 places inside it?',
+      lines: [],
+      items: ['Harbor Market', 'The Rusty Anchor', 'the back room'],
+      confirmLabel: 'Retire',
+    })
+    expect(
+      placeConfirmCopy({
+        retire: { place: VELLIS, inside: [named('Harbor Market')] },
+        disable: null,
+        move: null,
+      }).title,
+    ).toBe('Retire Port Vellis and the place inside it?')
+  })
+
+  it('counts a disable and names a move, as one confirm with both lines', () => {
+    expect(
+      placeConfirmCopy({
+        retire: null,
+        disable: { place: VELLIS, count: 3 },
+        move: { region: VELLIS, place: ANCHOR, count: 2 },
+      }),
+    ).toEqual({
+      title: 'Disable Port Vellis?',
+      lines: [
+        'Disabling Port Vellis also keeps the 3 places inside it out of the story.',
+        'Port Vellis is disabled, so The Rusty Anchor and the 2 places inside it will stay out of the story.',
+      ],
+      items: [],
+      confirmLabel: 'Disable',
+    })
+  })
+
+  it('names a move alone, with nothing inside the moved place', () => {
+    expect(
+      placeConfirmCopy({
+        retire: null,
+        disable: null,
+        move: { region: VELLIS, place: ANCHOR, count: 0 },
+      }),
+    ).toEqual({
+      title: 'Move The Rusty Anchor?',
+      lines: ['Port Vellis is disabled, so The Rusty Anchor will stay out of the story.'],
+      items: [],
+      confirmLabel: 'Move',
+    })
   })
 })
 

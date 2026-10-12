@@ -196,7 +196,9 @@
       "disabledHelp": "Never injected automatically."
     },
     "injectionOverride": "An active entity in the current scene is always injected, whatever this says.",
-    "injectionPlaceMap": "For a place, Always and Auto keep its name on the location map and govern only its description; Disabled takes it off the map too, unless it is the current location.",
+    "injectionPlaceMap": "For a place, Always and Auto keep its name on the location map and govern only its description; Disabled takes it off the map with every place inside it, unless it is the current location. Save asks first when it has places inside.",
+    "disabledThrough": "Disabled through {{place}}: stays out of the story whatever its own mode, unless it's the current location.",
+    "statusPlace": "For a place, retiring retires every place inside it. Save asks first.",
     "retiredReason": "Retired reason",
     "retiredReasonPlaceholder": "e.g. killed by Kael",
     "retiredReasonHint": "Only for a retired entity.",
@@ -311,6 +313,20 @@
     "storyInside": "The story is in {{story}}, inside {{place}}.",
     "retiredParent": "{{parent}} is retired. Bring it back first.",
     "retiredPlace": "{{place}} is retired, so nothing can enter it."
+  },
+  "placeConfirm": {
+    "retireTitle_one": "Retire {{place}} and the place inside it?",
+    "retireTitle_other": "Retire {{place}} and the {{count}} places inside it?",
+    "retire": "Retire",
+    "disableTitle": "Disable {{place}}?",
+    "disable": "Disable",
+    "moveTitle": "Move {{place}}?",
+    "move": "Move",
+    "disableLine_one": "Disabling {{place}} also keeps the place inside it out of the story.",
+    "disableLine_other": "Disabling {{place}} also keeps the {{count}} places inside it out of the story.",
+    "moveLine": "{{region}} is disabled, so {{place}} will stay out of the story.",
+    "moveLineInside_one": "{{region}} is disabled, so {{place}} and the place inside it will stay out of the story.",
+    "moveLineInside_other": "{{region}} is disabled, so {{place}} and the {{count}} places inside it will stay out of the story."
   },
   "overview": {
     "notDescribed": "— not yet described —",
