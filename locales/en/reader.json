@@ -168,6 +168,7 @@
     "failedNotTail": "Only the newest entry's scene can be edited.",
     "failedNoMetadata": "This entry has no world state to edit.",
     "failedNotFound": "This entry no longer exists.",
+    "failedRetiredPlace": "That place is retired, so the story can't move there.",
     "proseNote": "This doesn't change the entry's text. If the prose still names someone you removed, edit it too."
   },
   "rail": {

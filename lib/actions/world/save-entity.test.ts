@@ -2,11 +2,16 @@ import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CharacterState, Delta, Entity, NewEntity } from '@/lib/db'
-import { branches, characterRelationships, deltas, entities, stories } from '@/lib/db'
+import { branches, characterRelationships, deltas, entities, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
-import { characterRelationshipsStore, generationStore, resetAllStores } from '@/lib/stores'
+import {
+  characterRelationshipsStore,
+  entitiesStore,
+  generationStore,
+  resetAllStores,
+} from '@/lib/stores'
 import { characterDraftFrom, locationDraftFrom } from '@/lib/world'
 
 import { saveEntity } from './save-entity'
@@ -429,5 +434,192 @@ describe('saveEntity', () => {
       id: 'char_kael',
       code: 'in-flight',
     })
+  })
+})
+
+// data-model.md → LocationState shape: the World Save's place rules, against the real delta log.
+describe('saveEntity — places', () => {
+  const place = (id: string, parent: string | null, extra: Partial<NewEntity> = {}): NewEntity => ({
+    ...loc(id, parent),
+    name:
+      {
+        loc_eldra: 'Eldra',
+        loc_vellis: 'Port Vellis',
+        loc_anchor: 'The Rusty Anchor',
+        loc_back: 'the back room',
+      }[id] ?? id,
+    ...extra,
+  })
+
+  // The rows in both the DB and the store a Save reads, plus a tail whose scene is at `storyAt`.
+  async function seed(rows: NewEntity[], storyAt: string | null) {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values(rows)
+    const stored = (await db.select().from(entities)) as Entity[]
+    entitiesStore.hydrate('br_1', stored)
+    await db.insert(storyEntries).values({
+      id: 'entry_1',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content: 'Once.',
+      metadata: { sceneEntities: [], currentLocationId: storyAt, worldTime: 0 },
+      createdAt: 1,
+    })
+    return { db, ctx }
+  }
+
+  const locationSave = async (
+    db: Db,
+    id: string,
+    changes: Partial<ReturnType<typeof locationDraftFrom>>,
+  ) => {
+    const row = await rowOf(db, id)
+    return {
+      kind: 'location' as const,
+      branchId: 'br_1',
+      row,
+      keywordsBase: row.keywords,
+      draft: { ...locationDraftFrom(row), ...changes },
+    }
+  }
+
+  const REGION = [
+    place('loc_eldra', null),
+    place('loc_vellis', 'loc_eldra'),
+    place('loc_anchor', 'loc_vellis'),
+    place('loc_back', 'loc_anchor'),
+  ]
+
+  it('retires a place and every place inside in one action, and one undo restores them all', async () => {
+    const { db, ctx } = await seed(REGION, 'loc_eldra')
+    const result = await saveEntity(
+      await locationSave(db, 'loc_vellis', { status: 'retired', retiredReason: 'sank' }),
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok', id: 'loc_vellis' })
+    const rows = await deltaRows(db)
+    expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
+    expect(rows.map((r) => r.targetId).sort()).toEqual(['loc_anchor', 'loc_back', 'loc_vellis'])
+    for (const id of ['loc_vellis', 'loc_anchor', 'loc_back'])
+      expect(await rowOf(db, id)).toMatchObject({ status: 'retired', retiredReason: 'sank' })
+
+    expect(await reverseReplayDeltas(rows[0].actionId, ctx)).toBe(3)
+    for (const id of ['loc_vellis', 'loc_anchor', 'loc_back'])
+      expect(await rowOf(db, id)).toMatchObject({ status: 'active', retiredReason: null })
+  })
+
+  it('refuses retiring a place the story is inside, naming both, and writes nothing', async () => {
+    const { db, ctx } = await seed(REGION, 'loc_back')
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const result = await saveEntity(
+      await locationSave(db, 'loc_vellis', { status: 'retired' }),
+      ctx,
+    )
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+      refusal: {
+        code: 'story-inside',
+        field: 'status',
+        place: { id: 'loc_vellis', name: 'Port Vellis' },
+        story: { id: 'loc_back', name: 'the back room' },
+      },
+    })
+    expect(await deltaRows(db)).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith('action_layer.entity_save_rejected', {
+      branchId: 'br_1',
+      id: 'loc_vellis',
+      create: false,
+      code: 'story-inside',
+    })
+  })
+
+  it('reads the story from the entry before a tail with no scene', async () => {
+    const { db, ctx } = await seed(REGION, 'loc_back')
+    await db.insert(storyEntries).values({
+      id: 'entry_2',
+      branchId: 'br_1',
+      position: 2,
+      kind: 'user_action',
+      content: 'I wait.',
+      metadata: null,
+      createdAt: 2,
+    })
+    const result = await saveEntity(
+      await locationSave(db, 'loc_vellis', { injectionMode: 'disabled' }),
+      ctx,
+    )
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+      refusal: { field: 'injectionMode' },
+    })
+  })
+
+  it('refuses bringing back a place whose parent is retired', async () => {
+    const { db, ctx } = await seed(
+      [
+        place('loc_eldra', null),
+        place('loc_vellis', 'loc_eldra', { status: 'retired' }),
+        place('loc_anchor', 'loc_vellis', { status: 'retired' }),
+      ],
+      'loc_eldra',
+    )
+    const result = await saveEntity(await locationSave(db, 'loc_anchor', { status: 'active' }), ctx)
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'retired-parent',
+      refusal: { field: 'status', parent: { id: 'loc_vellis', name: 'Port Vellis' } },
+    })
+    expect(await deltaRows(db)).toHaveLength(0)
+  })
+
+  it("refuses moving a character into a retired place, and saves one that's already there", async () => {
+    const { db, ctx } = await seed(
+      [
+        place('loc_vellis', null, { status: 'retired' }),
+        character('char_kael', 'Kael'),
+        character('char_mira', 'Mira', {
+          state: {
+            ...(character('x', 'x').state as CharacterState),
+            current_location_id: 'loc_vellis',
+          },
+        }),
+      ],
+      null,
+    )
+    const kael = await rowOf(db, 'char_kael')
+    const moved = await saveEntity(
+      {
+        kind: 'character',
+        branchId: 'br_1',
+        row: kael,
+        keywordsBase: [],
+        draft: { ...characterDraftFrom(kael, []), currentLocationId: 'loc_vellis' },
+        relationships: [],
+        relationshipsBase: [],
+      },
+      ctx,
+    )
+    expect(moved).toMatchObject({
+      status: 'rejected',
+      code: 'retired-place',
+      refusal: { field: 'currentLocationId' },
+    })
+    const mira = await rowOf(db, 'char_mira')
+    const stays = await saveEntity(
+      {
+        kind: 'character',
+        branchId: 'br_1',
+        row: mira,
+        keywordsBase: [],
+        draft: { ...characterDraftFrom(mira, []), description: 'waits' },
+        relationships: [],
+        relationshipsBase: [],
+      },
+      ctx,
+    )
+    expect(stays).toEqual({ status: 'ok', id: 'char_mira' })
   })
 })

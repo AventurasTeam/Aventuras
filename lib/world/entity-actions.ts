@@ -29,6 +29,7 @@ import {
   type RelationshipBaseLink,
   type RelationshipLink,
 } from './entity-draft'
+import { retireCascade } from './place-rules'
 
 export type EntitySaveInput = (
   | {
@@ -375,8 +376,9 @@ function positionActions(args: EntityActionArgs): PipelineAction[] {
 }
 
 /**
- * A create, or an update's changed columns and state paths, plus relationship writes; on a rename
- * or re-parent, also a flag clear on each row the save leaves unpaired (world.md → Surfacing).
+ * A create, or an update's changed columns and state paths, plus relationship writes and a retire's
+ * cascade to the places inside; on a rename or re-parent, also a flag clear on each row the save
+ * leaves unpaired (world.md → Surfacing).
  */
 export function entityActions(args: EntityActionArgs): PipelineAction[] {
   const { branchId, row, id, now, draft } = args
@@ -415,6 +417,10 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
     }
   }
   actions.push(...positionActions(args))
+  if (args.kind === 'location')
+    actions.push(
+      ...retireCascade({ branchId, row, draft: args.draft, branchEntities: args.branchEntities }),
+    )
   if (args.kind === 'character') {
     actions.push(
       ...relationshipActions(

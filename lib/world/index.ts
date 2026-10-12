@@ -94,4 +94,21 @@ export type {
 } from './location-map'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
+export {
+  mergedPlaceOf,
+  mergePlaceRefusal,
+  PLACE_REFUSAL,
+  placeSaveConfirm,
+  placeSaveRefusal,
+  retireCascade,
+  retiredPlaceEntered,
+  storyLocationIdOf,
+} from './place-rules'
+export type {
+  MergedPlace,
+  MergePlaceRefusalCode,
+  NamedPlace,
+  PlaceSaveConfirm,
+  PlaceSaveRefusal,
+} from './place-rules'
 export { itemNamesakes, matchNewLocation } from './new-entity-match'

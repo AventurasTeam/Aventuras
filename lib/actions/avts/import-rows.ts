@@ -23,7 +23,7 @@ export type ImportRowResult =
   | { status: 'ok'; id: string }
   | { status: 'rejected'; reason: string; code: ImportRejectionCode }
 
-// An import writes no parent location, so a parent code can't arise; one that did is a failure.
+// An import writes no location ref, so a parent or place code can't arise; one that did is a failure.
 function importResult(result: RowSaveResult): ImportRowResult {
   if (result.status === 'ok') return result
   const code =

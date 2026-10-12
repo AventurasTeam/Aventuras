@@ -8,6 +8,9 @@ const COLLISION_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
   [COLLISION_REJECTION.leadEntity]: () => t('world:collision.rejection.leadEntity'),
   [COLLISION_REJECTION.parentCycle]: () => t('world:collision.rejection.parentCycle'),
   [COLLISION_REJECTION.parentChainBroken]: () => t('world:collision.rejection.parentChainBroken'),
+  [COLLISION_REJECTION.storyInside]: () => t('world:collision.rejection.storyInside'),
+  [COLLISION_REJECTION.placesInside]: () => t('world:collision.rejection.placesInside'),
+  [COLLISION_REJECTION.retiredParent]: () => t('world:collision.rejection.retiredParent'),
   [COLLISION_REJECTION.invalidRename]: () => t('world:collision.rejection.invalidRename'),
   [COLLISION_REJECTION.failed]: () => t('world:collision.failed'),
 }

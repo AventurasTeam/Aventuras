@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import type { EntryMetadata, NewStoryEntry, StoryEntry } from '@/lib/db'
 import { entryMetadataSchema, inheritedEntryMetadata, storyEntries } from '@/lib/db'
 import { entriesStore } from '@/lib/stores'
+import { PLACE_REFUSAL } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import { register, type ActionHandler } from '../delta/registry'
@@ -17,6 +18,7 @@ export const STORY_ENTRY_REJECTION = {
   invalidWorldTime: 'invalid-world-time',
   noMetadata: 'no-metadata',
   notTailEntry: 'not-tail-entry',
+  retiredPlace: PLACE_REFUSAL.retiredPlace,
   deltaFailed: 'delta-failed',
 } as const
 export type StoryEntryRejectionCode =

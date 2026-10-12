@@ -566,6 +566,50 @@ describe('parent_location_id cycle guard', () => {
   })
 })
 
+// data-model.md → LocationState shape: nothing active or staged sits inside a retired place. The
+// builders refuse first; the create handler is the backstop for a machine writer that doesn't.
+describe('a retired parent on create', () => {
+  const create = (entry: NewEntity) => ({
+    action: {
+      kind: 'createEntity' as const,
+      source: 'piggyback_tagged_block' as const,
+      payload: { entry },
+    },
+    actionId: 'act_1',
+    branchId: 'br_1',
+  })
+
+  it('refuses a place that is not retired under a retired parent, writing nothing', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([{ ...loc('loc_sunk', null), status: 'retired' }])
+    expect(await applyDeltaAction(create(loc('loc_new', 'loc_sunk')), ctx)).toMatchObject({
+      status: 'rejected',
+      reason: 'retired-parent',
+      code: 'retired-parent',
+    })
+    expect(await rowFor(db, 'loc_new')).toBeUndefined()
+    expect(
+      await applyDeltaAction(create({ ...loc('loc_staged', 'loc_sunk'), status: 'staged' }), ctx),
+    ).toMatchObject({ status: 'rejected', code: 'retired-parent' })
+  })
+
+  it('accepts a retired place under a retired parent', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([{ ...loc('loc_sunk', null), status: 'retired' }])
+    const result = await applyDeltaAction(
+      create({ ...loc('loc_ruin', 'loc_sunk'), status: 'retired' }),
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+  })
+
+  it('accepts a place under an active parent', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([loc('loc_town', null)])
+    expect((await applyDeltaAction(create(loc('loc_new', 'loc_town')), ctx)).status).toBe('ok')
+  })
+})
+
 type EntityPatch = PipelineActionMap['updateEntity']['payload']['patch']
 
 const patchChar = (patch: EntityPatch, actionId: string) => ({

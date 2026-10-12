@@ -1,4 +1,6 @@
+import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import type { HeadTurn } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import {
   characterRelationshipsStore,
@@ -15,10 +17,13 @@ import {
   entityKeepActions,
   entityMergeActions,
   entityRenameActions,
+  mergedPlaceOf,
+  mergePlaceRefusal,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  PLACE_REFUSAL,
+  storyLocationIdOf,
   type CollisionPairMiss,
-  type DeleteTail,
   type EntityRename,
   type MergeScalar,
 } from '@/lib/world'
@@ -41,6 +46,9 @@ export const COLLISION_REJECTION = {
   leadEntity: ENTITY_DELETE_REJECTION.leadEntity,
   parentCycle: PARENT_CYCLE,
   parentChainBroken: PARENT_CHAIN_BROKEN,
+  storyInside: PLACE_REFUSAL.storyInside,
+  placesInside: PLACE_REFUSAL.placesInside,
+  retiredParent: PLACE_REFUSAL.retiredParent,
   invalidRename: 'invalid-rename',
   failed: 'failed',
 } as const
@@ -132,7 +140,7 @@ function gateRefusal(): Refusal | null {
 function buildResolution(
   branchId: string,
   resolution: CollisionResolution,
-  tail: DeleteTail | null,
+  head: HeadTurn<StoryEntry> | null,
 ): Built {
   const gated = gateRefusal()
   if (gated) return gated
@@ -142,6 +150,7 @@ function buildResolution(
   const { pair } = lookup
   switch (resolution.mode) {
     case 'merge': {
+      const tail = deleteTailOf(head)
       const actions = entityMergeActions({
         branchId,
         pair,
@@ -157,6 +166,19 @@ function buildResolution(
         tail,
         newId: generateId,
       })
+      const canonical = pair.find((e) => e.id === resolution.canonicalId)
+      const loser = pair.find((e) => e.id === resolution.loserId)
+      if (canonical?.kind === 'location' && loser !== undefined) {
+        // world.md → Merge: the checks a Save runs, on the place the merge would leave.
+        const code = mergePlaceRefusal({
+          canonical,
+          loser,
+          merged: mergedPlaceOf(actions, canonical),
+          branchEntities,
+          storyLocationId: storyLocationIdOf(head),
+        })
+        if (code != null) return refusal(code, `the merged place breaks a place rule: ${code}`)
+      }
       return { status: 'ok', actions }
     }
     case 'rename': {
@@ -187,10 +209,7 @@ async function commitMerge(
   return withTailMetadataLock<DeltaGroupResult>(
     branchId,
     ctx,
-    (head) => {
-      const tail = deleteTailOf(head)
-      return commit(branchId, () => buildResolution(branchId, resolution, tail), ctx)
-    },
+    (head) => commit(branchId, () => buildResolution(branchId, resolution, head), ctx),
     () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
   )
 }

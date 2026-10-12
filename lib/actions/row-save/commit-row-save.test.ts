@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, entities, stories, type EntityState, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore, resetAllStores } from '@/lib/stores'
+import type { PlaceSaveRefusal } from '@/lib/world'
 
 import { commitRowSave, flatRowSaveResult } from './commit-row-save'
 import { withKeyLock } from '../delta/key-lock'
@@ -37,7 +38,10 @@ const setParent = (id: string, parent: string): PipelineAction => ({
 const save = (build: () => PipelineAction[], ctx: Awaited<ReturnType<typeof setup>>['ctx']) =>
   commitRowSave('entity', { branchId: 'b1', rowId: 'loc_a', idPrefix: 'loc', build }, ctx)
 
-afterEach(() => resetAllStores())
+afterEach(() => {
+  resetAllStores()
+  vi.restoreAllMocks()
+})
 
 describe('commitRowSave — every refusal carries a code from the closed set', () => {
   it('reports a reversal that starts while the save waits on its lock as in-flight', async () => {
@@ -88,7 +92,71 @@ describe('commitRowSave — every refusal carries a code from the closed set', (
   })
 })
 
+describe('commitRowSave — place rules', () => {
+  const REFUSAL: PlaceSaveRefusal = {
+    code: 'retired-place',
+    field: 'currentLocationId',
+    place: { id: 'loc_sunk', name: 'Saltmere' },
+  }
+
+  it('returns a refusal with its code and detail, never building or writing', async () => {
+    const { ctx } = await setup()
+    const build = vi.fn(() => [] as PipelineAction[])
+    const result = await commitRowSave(
+      'entity',
+      { branchId: 'b1', rowId: 'char_1', idPrefix: 'char', refuse: () => REFUSAL, build },
+      ctx,
+    )
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'place rule: retired-place',
+      code: 'retired-place',
+      refusal: REFUSAL,
+    })
+    expect(build).not.toHaveBeenCalled()
+  })
+
+  it('checks the gate before the place rules', async () => {
+    const { ctx } = await setup()
+    vi.spyOn(generationStore, 'isUserEditBlocked').mockReturnValue(true)
+    const refuse = vi.fn(() => REFUSAL)
+    const result = await commitRowSave(
+      'entity',
+      { branchId: 'b1', rowId: 'char_1', idPrefix: 'char', refuse, build: () => [] },
+      ctx,
+    )
+    expect(result).toMatchObject({ code: 'in-flight' })
+    expect(refuse).not.toHaveBeenCalled()
+  })
+
+  it("passes the create handler's retired-parent refusal through with its own code", async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([{ ...loc('loc_sunk', null), status: 'retired' }])
+    const create: PipelineAction = {
+      kind: 'createEntity',
+      source: 'user_edit',
+      payload: { entry: loc('loc_new', 'loc_sunk') },
+    }
+    expect(
+      await commitRowSave(
+        'entity',
+        { branchId: 'b1', rowId: null, idPrefix: 'loc', build: () => [create] },
+        ctx,
+      ),
+    ).toMatchObject({ status: 'rejected', code: 'retired-parent' })
+  })
+})
+
 describe('flatRowSaveResult', () => {
+  it('reports a place-rule code as a failure', () => {
+    for (const code of ['story-inside', 'retired-parent', 'retired-place'] as const)
+      expect(flatRowSaveResult({ status: 'rejected', reason: 'r', code })).toEqual({
+        status: 'rejected',
+        reason: 'r',
+        code: 'failed',
+      })
+  })
+
   it('reports a parent code as a failure and passes every other result through', () => {
     for (const code of ['parent-cycle', 'parent-chain-broken'] as const)
       expect(flatRowSaveResult({ status: 'rejected', reason: 'r', code })).toEqual({
