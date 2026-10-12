@@ -27,98 +27,7 @@
     Check,
     Pin,
   } from '@lucide/svelte'
-
-  // Icon map for rendering selected icon in collapsed state
-  import type { LucideIcon } from '@lucide/svelte'
-  import {
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  } from '@lucide/svelte'
-
-  const ICON_COMPONENTS: Record<string, LucideIcon> = {
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  }
+  import { runtimeVariableIcon } from './runtimeVariableIcons.ts'
 
   interface Props {
     variable: RuntimeVariable
@@ -365,7 +274,7 @@
     emitUpdate()
   }
 
-  let IconComponent = $derived(variable.icon ? ICON_COMPONENTS[variable.icon] : undefined)
+  let IconComponent = $derived(runtimeVariableIcon(variable.icon))
 </script>
 
 <div class="border-border bg-card rounded-lg border">
