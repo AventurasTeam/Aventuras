@@ -1,6 +1,6 @@
 # Working in this repository
 
-Aventuras is a Tauri 2 + SvelteKit 2 interactive-fiction app: TypeScript strict, Svelte 5
+Aventuras is a Tauri 2 + SvelteKit 3 interactive-fiction app: TypeScript strict, Svelte 5
 runes, SQLite, and a Rust layer for anything that would otherwise blow up the WebView heap.
 
 ## Commands
@@ -56,6 +56,8 @@ that block; do not add more of it.
   plain `.ts` module. See [docs/development/testing.md](docs/development/testing.md).
 - Never write `?? <default>` for a value that has a default in `ai/core/defaults.ts`.
 - Import a service through its `index.ts`, not its internals.
+- Import from `src/lib` as `#lib/…` with the real extension: `#lib/services/database.ts`,
+  `#lib/components/ui/button/index.ts`. Omitting it does not resolve. There is no `$lib`.
 
 ## Where the reasoning lives
 
