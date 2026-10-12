@@ -530,22 +530,9 @@ socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
 
 ## Network transport
 
-Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
-user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
-them. Use the existing helper: `createTimeoutFetch` for AI SDK providers, `imageFetch` /
-`imageGetFetch` / `fetchPublicImageBase64` for images, `corsFetch` for discovery.
-
-What the plugin changes for the server on the other end:
-
-- Every request carries `Origin` set to the webview origin: `http://tauri.localhost` on Windows and
-  Android, `tauri://localhost` elsewhere, the dev-server URL in dev. It cannot be dropped without
-  the `unsafe-headers` feature.
-- Certificates are checked against bundled webpki roots, not the OS trust store.
-- Responses arrive uncompressed; reqwest's decompression features are off.
-
-Known limitation: stock Ollama allows `tauri://*` and `http://localhost:*` origins but not
-`http://tauri.localhost`, so it may reject Windows and Android requests until the user sets
-`OLLAMA_ORIGINS=http://tauri.localhost`. Unverified; not yet tested against a release build.
+Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`. Which helper to call
+is in [network-requests.md](../development/network-requests.md); why, and what the plugin changes
+for the server on the other end, is in [network-transport.md](network-transport.md).
 
 ## Environment
 

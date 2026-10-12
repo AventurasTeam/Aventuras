@@ -22,6 +22,7 @@ comments stay short and say only what the next reader cannot infer — see
 | [story-time.md](architecture/story-time.md)               | `services/storyTime/`, time anchors, timeline anomalies, reconciliation, or a new story's starting time                                 |
 | [exchange-format.md](architecture/exchange-format.md)     | `services/exchange/`, exporting or importing a vault character, scenario or lorebook, the Aventura JSON format                          |
 | [narration-cleaning.md](architecture/narration-cleaning.md) | `utils/narrationClean.ts`, or sending story entries to a model that should not read `<pic>` tags, HTML or layout markup              |
+| [network-transport.md](architecture/network-transport.md) | Tauri's HTTP plugin, its Cargo features, the capability URL scopes, or the case for the WebView's `fetch`                               |
 
 ## Development
 
@@ -33,6 +34,7 @@ comments stay short and say only what the next reader cannot infer — see
 | [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`    |
 | [platform-support.md](development/platform-support.md) | using a new JS, CSS or Web API, or changing the bundle targets or minimum OS versions |
 | [shadcn-svelte.md](development/shadcn-svelte.md)       | regenerating `components/ui/` or bringing back the shadcn-svelte generator |
+| [network-requests.md](development/network-requests.md) | making a remote HTTP request, or adding a provider or SDK that makes one |
 
 ## Keeping them true
 
