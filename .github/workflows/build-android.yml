@@ -24,6 +24,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      # basic: the enhanced provider is proprietary. Ahead of npm-install so the build-file hash sees
+      # only tracked files. Don't also set setup-java's `cache: gradle`; the two conflict.
+      # See docs/development/ci-caching.md#gradle.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+
       - name: Install npm dependencies
         uses: ./.github/actions/npm-install
 
@@ -47,19 +62,6 @@ jobs:
         with:
           key: android-v2
           cache-directories: src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated
-
-      - name: Setup Java
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      # The MIT 'basic' provider, read-only off the default branch. Not combined with
-      # setup-java's `cache: gradle`, which interferes with it. See docs/development/ci-caching.md.
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4

@@ -6,8 +6,8 @@ description: >
   release, so a release build can still hit the cache. Restores fall back to the newest
   cache for the same OS/arch when the exact hash misses; saves only happen on master, so
   branch and PR runs don't fill the repo's cache quota with entries nothing else can read.
-  On Linux the cache sits inside the checkout, so the containerized desktop job and the host
-  Android job share one entry (see docs/development/ci-caching.md#npm).
+  On Linux the cache sits inside the checkout unless the caller sets npm_config_cache, so the
+  containerized desktop job and the host Android job share one entry (see docs/development/ci-caching.md#npm).
 
 inputs:
   working-directory:
@@ -28,10 +28,8 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        # actions/cache versions an entry by the literal path and stores it relative to the
-        # workspace, so both must match between the container and the host. It sits inside the
-        # workspace because actions/cache/save rejects a path with a '..' segment.
-        if [ "$RUNNER_OS" = Linux ]; then
+        # In the workspace so the container and host jobs share one entry; see docs/development/ci-caching.md#npm.
+        if [ "$RUNNER_OS" = Linux ] && [ -z "${npm_config_cache:-}" ]; then
           echo "npm_config_cache=$GITHUB_WORKSPACE/.npm-cache" >> "$GITHUB_ENV"
           echo "dir=.npm-cache" >> "$GITHUB_OUTPUT"
         else

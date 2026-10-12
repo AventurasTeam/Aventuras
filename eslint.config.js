@@ -77,6 +77,7 @@ export default [
       '.svelte-kit/',
       'dist/',
       'node_modules/',
+      '.npm-cache/',
       'src-tauri/',
       '.release-pre3-check/',
     ],
