@@ -1,18 +1,18 @@
 <script lang="ts">
-  import * as RadioGroup from '$lib/components/ui/radio-group'
-  import { Button } from '$lib/components/ui/button'
-  import { Label } from '$lib/components/ui/label'
-  import { Input } from '$lib/components/ui/input'
-  import { Switch } from '$lib/components/ui/switch'
+  import * as RadioGroup from '#lib/components/ui/radio-group/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import { BookOpen, User, Eye, AlignLeft, Repeat } from '@lucide/svelte'
-  import { IMAGE_GENERATION_MODES } from '$lib/utils/storySettings'
+  import { IMAGE_GENERATION_MODES } from '#lib/utils/storySettings.ts'
   import type {
     POV,
     Tense,
     TargetLength,
     ImageGenerationMode,
     NarratorReinforcement,
-  } from '$lib/types'
+  } from '#lib/types/index.ts'
 
   interface Props {
     selectedPOV: POV

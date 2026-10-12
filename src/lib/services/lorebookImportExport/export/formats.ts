@@ -2,8 +2,12 @@
  * Format-specific export functions
  */
 
-import type { Entry, EntryType } from '$lib/types'
-import { serializeExchange, storyEntriesToExchange, wrapExchange } from '$lib/services/exchange'
+import type { Entry, EntryType } from '#lib/types/index.ts'
+import {
+  serializeExchange,
+  storyEntriesToExchange,
+  wrapExchange,
+} from '#lib/services/exchange/index.ts'
 import type { SillyTavernEntry, SillyTavernLorebook } from '../types'
 import { entryToSillyTavern } from './convert'
 

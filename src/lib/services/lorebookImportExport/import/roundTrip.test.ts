@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { Entry } from '$lib/types'
-import { exchangeToVaultLorebook, hasStorySideFields } from '$lib/services/exchange'
+import type { Entry } from '#lib/types/index.ts'
+import { exchangeToVaultLorebook, hasStorySideFields } from '#lib/services/exchange/index.ts'
 import { exportToAventura } from '../export/formats'
 import { convertToEntries } from './convert'
 import { parse } from './parse'

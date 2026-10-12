@@ -2,7 +2,7 @@
  * Convert Entry objects to SillyTavern format
  */
 
-import type { Entry } from '$lib/types'
+import type { Entry } from '#lib/types/index.ts'
 import type { SillyTavernEntry } from '../types'
 
 export function entryToSillyTavern(entry: Entry, index: number): SillyTavernEntry {

@@ -5,8 +5,8 @@ import type {
   VaultLorebook,
   VaultLorebookEntry,
   VaultScenario,
-} from '$lib/types'
-import { normalizeTime } from '$lib/services/storyTime'
+} from '#lib/types/index.ts'
+import { normalizeTime } from '#lib/services/storyTime/index.ts'
 import type {
   ExchangeCharacter,
   ExchangeDocument,

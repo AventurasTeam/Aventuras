@@ -13,12 +13,16 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
 import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
 import type { JSONObject, LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
-import type { XaiProviderOptions } from '@ai-sdk/xai'
 import type { PollinationsLanguageModelSettings } from 'ai-sdk-pollinations'
 
-import { settings } from '$lib/stores/settings.svelte'
-import type { APIProfile, GenerationPreset, ProviderType, ReasoningEffort } from '$lib/types'
-import { isReasoningOn } from '$lib/services/ai/core/reasoning'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import type {
+  APIProfile,
+  GenerationPreset,
+  ProviderType,
+  ReasoningEffort,
+} from '#lib/types/index.ts'
+import { isReasoningOn } from '#lib/services/ai/core/reasoning.ts'
 import { createModelFromProfile } from './providers'
 import { GOOGLE_SAFETY_SETTINGS, PROVIDERS, usesThinkTag } from './providers/config'
 
@@ -65,9 +69,6 @@ export function buildProviderOptions(
 
   if (!settings.advancedRequestSettings.manualMode) {
     switch (providerType) {
-      case 'xai':
-        options = { parallel_function_calling: true } satisfies XaiProviderOptions
-        break
       case 'google': {
         // Reinject safety settings here for complete model-request coverage
         options = {

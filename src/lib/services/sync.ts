@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
+import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '#lib/types/sync.ts'
 import type { AventuraExport } from './export'
 // The one piece of the `.avt` exporter sync shares. See the note on `exportStoryToJson` for what
 // is deliberately *not* shared.

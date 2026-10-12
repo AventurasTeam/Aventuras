@@ -5,11 +5,16 @@
  * Uses explicit provider selection from APIProfile.providerType.
  */
 
-import { createLogger } from '$lib/log'
-import { debug } from '$lib/stores/debug.svelte'
+import { createLogger } from '#lib/log.ts'
+import { debug } from '#lib/stores/debug.svelte.ts'
 
-import { settings } from '$lib/stores/settings.svelte'
-import type { APIProfile, GenerationPreset, ProviderType, ReasoningEffort } from '$lib/types'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import type {
+  APIProfile,
+  GenerationPreset,
+  ProviderType,
+  ReasoningEffort,
+} from '#lib/types/index.ts'
 import type { LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
 import type { LanguageModelMiddleware } from 'ai'
 import {
@@ -25,7 +30,7 @@ import * as z from 'zod'
 import { loggingMiddleware, patchResponseMiddleware, promptSchemaMiddleware } from './middleware'
 import { retryOn429Middleware } from './middleware/retryMiddleware'
 import { activityMiddleware, AttemptTracker } from './middleware/activityMiddleware'
-import { activity } from '$lib/stores/activity.svelte'
+import { activity } from '#lib/stores/activity.svelte.ts'
 import {
   buildProviderOptions,
   type ResolvedPreset,

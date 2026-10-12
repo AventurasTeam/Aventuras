@@ -1,21 +1,21 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { WizardStore } from '$lib/stores/wizard/wizard.svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { releaseOrphanScrollLock, blurFocusedElement } from '$lib/utils/scrollLock'
-  import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
-  import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
-  import { Button } from '$lib/components/ui/button'
+  import { WizardStore } from '#lib/stores/wizard/wizard.svelte.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { releaseOrphanScrollLock, blurFocusedElement } from '#lib/utils/scrollLock.ts'
+  import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
+  import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { ChevronLeft, ChevronRight, Play, X } from '@lucide/svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
-  import { hasRequiredCredentials } from '$lib/services/ai/image'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import { hasRequiredCredentials } from '#lib/services/ai/image/index.ts'
   import {
     resolveNarratorSettingAvailability,
     type NarratorSettingReasons,
-  } from '$lib/services/context'
-  import type { VaultCharacter } from '$lib/types'
+  } from '#lib/services/context/index.ts'
+  import type { VaultCharacter } from '#lib/types/index.ts'
 
   import WizardExitConfirm from './WizardExitConfirm.svelte'
 
@@ -45,7 +45,7 @@
 
   /**
    * A close driven from this side never reaches `vaul`'s restore, and `onClose()` unmounts
-   * the component, so the teardown is done by hand. See `$lib/utils/scrollLock`.
+   * the component, so the teardown is done by hand. See `#lib/utils/scrollLock.ts`.
    */
   function handleClose() {
     blurFocusedElement(isMobile.current)

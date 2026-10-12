@@ -6,7 +6,7 @@
  * boundary is therefore not a special case, it simply is that anchor.
  */
 
-import type { StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
+import type { StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
 import { toMinutes } from './minutes'
 
 export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork'

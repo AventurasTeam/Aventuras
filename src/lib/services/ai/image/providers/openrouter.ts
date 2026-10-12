@@ -15,7 +15,7 @@ import {
   base64ImageMime,
   type ImageSpec,
   type ImageSizeTier,
-} from '$lib/utils/image'
+} from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,

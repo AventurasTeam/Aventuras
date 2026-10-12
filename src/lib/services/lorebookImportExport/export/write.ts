@@ -3,7 +3,7 @@
  */
 
 import { writeTextFile } from '@tauri-apps/plugin-fs'
-import { resolveSaveTarget } from '$lib/services/exportTarget'
+import { resolveSaveTarget } from '#lib/services/exportTarget.ts'
 import type { LorebookExportOptions } from '../types'
 import { exportToAventura, exportToSillyTavern, exportToText } from './formats'
 import { getFormatInfo } from './metadata'

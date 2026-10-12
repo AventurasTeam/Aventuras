@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import { BookOpen, Volume2, Pencil, Trash2 } from '@lucide/svelte'
-  import { parseStoryMarkdown } from '$lib/utils/markdown'
+  import { parseStoryMarkdown } from '#lib/utils/markdown.ts'
   import ReasoningBlock from './ReasoningBlock.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { replacePicTagsWithPlaceholders } from '$lib/utils/inlineImageParser'
-  import { storyImageMode } from '$lib/utils/image'
-  import { activity } from '$lib/stores/activity.svelte'
-  import { formatDuration, turnDuration } from '$lib/services/activity'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { replacePicTagsWithPlaceholders } from '#lib/utils/inlineImageParser.ts'
+  import { storyImageMode } from '#lib/utils/image.ts'
+  import { activity } from '#lib/stores/activity.svelte.ts'
+  import { formatDuration, turnDuration } from '#lib/services/activity/index.ts'
   import ActivitySummary from './ActivitySummary.svelte'
   import ActivityTimeline from './ActivityTimeline.svelte'
-  import { reportRenderError } from '$lib/utils/activityDisplay'
+  import { reportRenderError } from '#lib/utils/activityDisplay.ts'
 
   // Reactive binding to streaming content
   let content = $derived(ui.streamingContent)

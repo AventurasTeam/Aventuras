@@ -3,9 +3,9 @@
  */
 
 import type { Wand2 } from '@lucide/svelte'
-import type { Genre, Tense } from '$lib/services/ai/wizard'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import type { POV, EntryType } from '$lib/types'
+import type { Genre, Tense } from '#lib/services/ai/wizard/index.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import type { POV, EntryType } from '#lib/types/index.ts'
 
 /**
  * An imported lorebook with its entries and metadata

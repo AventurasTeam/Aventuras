@@ -11,15 +11,15 @@
  * 4. The rendering layer replaces <pic> tags with actual images
  */
 
-import type { Character, EmbeddedImage } from '$lib/types'
+import type { Character, EmbeddedImage } from '#lib/types/index.ts'
 import { runImageGeneration } from './imageUtils'
-import { database } from '$lib/services/database'
-import { settings } from '$lib/stores/settings.svelte'
-import { emitImageQueued } from '$lib/services/events'
-import { normalizeImageDataUrl, expectedPixels } from '$lib/utils/image'
-import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
+import { database } from '#lib/services/database.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { emitImageQueued } from '#lib/services/events.ts'
+import { normalizeImageDataUrl, expectedPixels } from '#lib/utils/image.ts'
+import { extractPicTags, type ParsedPicTag } from '#lib/utils/inlineImageParser.ts'
 import { resolveStylePrompt } from './stylePrompt'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('InlineImageGen')
 

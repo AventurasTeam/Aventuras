@@ -1,4 +1,4 @@
-import { settings, type ServiceId } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
 /**
  * Entry Retrieval Service for Aventura
  * Per design doc section 3.2.3: Tiered Injection
@@ -24,17 +24,17 @@ import { settings, type ServiceId } from '$lib/stores/settings.svelte'
  * `WorldStateInjector` is code reuse, not a shared responsibility.
  */
 
-import { entityNameMatches, measureMatching } from '$lib/utils/text'
-import { activity } from '$lib/stores/activity.svelte'
-import type { Entry, EntryType, StoryEntry } from '$lib/types'
+import { entityNameMatches, measureMatching } from '#lib/utils/text.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
+import type { Entry, EntryType, StoryEntry } from '#lib/types/index.ts'
 import { BaseAIService } from '../BaseAIService'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 import { runTier3Selection, resolveTier3Selection, countWholesaleWords } from './tier3Selection'
 import { secondPassHaystack } from './tier2SecondPass'
 import { matchingStepDetail } from './matchingStep'
 import { resolveStickiness } from './stickiness'
 import { ENTRY_RETRIEVAL_DEFAULTS } from '../core/defaults'
-import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
+import { recentContent, AS_HAYSTACK } from '#lib/utils/recentContent.ts'
 
 const log = createLogger('EntryRetrieval')
 

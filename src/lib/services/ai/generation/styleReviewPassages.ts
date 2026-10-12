@@ -1,9 +1,9 @@
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 import {
   CLEAN_FOR_REVIEW,
   cleanNarration,
   type NarrationCleanOptions,
-} from '$lib/utils/narrationClean'
+} from '#lib/utils/narrationClean.ts'
 
 /**
  * The passages the Style Reviewer reads: the last `recentEntriesCount` narration entries

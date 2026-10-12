@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import {
     Plus,
     Target,
@@ -12,17 +12,17 @@
     Save,
     X,
   } from '@lucide/svelte'
-  import type { StoryBeat } from '$lib/types'
-  import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Label } from '$lib/components/ui/label'
-  import * as Select from '$lib/components/ui/select'
-  import IconRow from '$lib/components/ui/icon-row.svelte'
-  import { cn } from '$lib/utils/cn'
-  import { database } from '$lib/services/database'
+  import type { StoryBeat } from '#lib/types/index.ts'
+  import type { RuntimeVariable, RuntimeVarsMap } from '#lib/services/packs/types.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import IconRow from '#lib/components/ui/icon-row.svelte'
+  import { cn } from '#lib/utils/cn.ts'
+  import { database } from '#lib/services/database.ts'
   import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
 
   let showAddForm = $state(false)

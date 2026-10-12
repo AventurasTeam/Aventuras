@@ -5,7 +5,7 @@
  * a failed fetch yields an empty list.
  */
 
-import { specToPixels, formatImageSize } from '$lib/utils/image'
+import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,

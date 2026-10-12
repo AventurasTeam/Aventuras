@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 // `tier3Selection` reaches `sdk/generate`, which transitively pulls in the debug rune store
 // and fails to import under `environment: 'node'`. Mocked rather than worked around: the LLM
 // call is not what these tests are about, and stubbing it is what makes the failure path
 // reachable at all.
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('$lib/stores/activity.svelte', () => ({
   },
 }))
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 
@@ -25,7 +25,7 @@ vi.mock('../sdk/generate', () => ({
 
 const rendered: Record<string, string>[] = []
 const packedFor: (string | undefined)[] = []
-vi.mock('$lib/services/context', () => ({
+vi.mock('#lib/services/context/index.ts', () => ({
   ContextBuilder: class ContextBuilderMock {
     static async forPack(storyId: string | undefined) {
       packedFor.push(storyId)
@@ -48,7 +48,7 @@ import {
   type Tier3SelectionResult,
 } from './tier3Selection'
 import { TIER3_SELECTION_CACHE_POSITIONS } from '../core/defaults'
-import { activity } from '$lib/stores/activity.svelte'
+import { activity } from '#lib/stores/activity.svelte.ts'
 
 /** A candidate list in the order the prompt was built from. */
 const candidates = [

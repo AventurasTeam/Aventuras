@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import ChapterEntryList from './ChapterEntryList.svelte'
   import {
     ChevronDown,
@@ -18,12 +18,12 @@
     MilestoneIcon,
   } from '@lucide/svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { Button } from '$lib/components/ui/button'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Badge } from '$lib/components/ui/badge'
-  import { cn } from '$lib/utils/cn'
-  import { entryNumberRange } from '$lib/utils/storyNavigation'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { entryNumberRange } from '#lib/utils/storyNavigation.ts'
 
   interface Props {
     chapter: Chapter

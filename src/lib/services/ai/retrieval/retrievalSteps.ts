@@ -9,7 +9,7 @@
  */
 
 import type { RetrievalEvent } from './retrievalHistory'
-import type { StartStepOptions } from '$lib/services/activity'
+import type { StartStepOptions } from '#lib/services/activity/index.ts'
 
 export interface RetrievalStep {
   label: string

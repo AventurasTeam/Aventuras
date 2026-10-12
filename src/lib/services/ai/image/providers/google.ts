@@ -6,7 +6,7 @@
  * (gemini-*-image, nano-banana-*) transparently via google.image().
  */
 
-import { specToAspectRatio } from '$lib/utils/image'
+import { specToAspectRatio } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,

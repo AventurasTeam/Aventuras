@@ -1,4 +1,4 @@
-import type { Chapter, LoreNewChapterInput, StoryEntry } from '$lib/types'
+import type { Chapter, LoreNewChapterInput, StoryEntry } from '#lib/types/index.ts'
 import type { LoreManagementChapter } from './LoreManagementService'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from '../retrieval/recentTail'
 

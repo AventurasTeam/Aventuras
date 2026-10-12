@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { APICallError } from 'ai'
 import { NarrativePhase, type NarrativeInput } from './NarrativePhase'
 import type { GenerationEvent, RetrievalResult } from '../types'
-import { STREAM_FAILURE, type StreamChunk } from '$lib/services/ai/core/types'
+import { STREAM_FAILURE, type StreamChunk } from '#lib/services/ai/core/types.ts'
 
 const streamFailure = (message: string) =>
   Object.assign(new Error(message), { name: STREAM_FAILURE })
-import { ActivityRecorder } from '$lib/services/activity'
+import { ActivityRecorder } from '#lib/services/activity/index.ts'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []

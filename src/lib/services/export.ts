@@ -2,8 +2,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { resolveSaveTarget } from './exportTarget'
-import { errMessage } from '$lib/utils/error'
-import { openFilters } from '$lib/utils/dialogFilters'
+import { errMessage } from '#lib/utils/error.ts'
+import { openFilters } from '#lib/utils/dialogFilters.ts'
 import { importFromJson, importFromFile, EXPORT_FORMAT_VERSION } from './import'
 import type { AventuraExport, ImportResult, RunImportOptions } from './import'
 import type { PackBindingExport } from './import'
@@ -24,7 +24,7 @@ import type {
   Branch,
   EmbeddedImageMeta,
   TimeAnchor,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 
 class ExportService {
   // Export to Aventura format (.avt - JSON)

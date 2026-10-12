@@ -3,7 +3,7 @@ import {
   descriptorsToString,
   stringToDescriptors,
   hasDescriptors,
-} from '$lib/utils/visualDescriptors'
+} from '#lib/utils/visualDescriptors.ts'
 
 describe('descriptorsToString', () => {
   it('renders in the fixed category order, not the object key order', () => {

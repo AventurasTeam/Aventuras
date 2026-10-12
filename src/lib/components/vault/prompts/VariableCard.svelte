@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { CustomVariable, CustomVariableType, EnumOption } from '$lib/services/packs/types'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Separator } from '$lib/components/ui/separator'
-  import * as Select from '$lib/components/ui/select'
+  import type { CustomVariable, CustomVariableType, EnumOption } from '#lib/services/packs/types.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
   import { ChevronDown, ChevronUp, Trash2, Plus, ArrowUp, ArrowDown, X } from '@lucide/svelte'
 
   interface Props {

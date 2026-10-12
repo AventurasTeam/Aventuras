@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Library, BookOpen, Clock, ScanSearch } from '@lucide/svelte'
-  import * as Card from '$lib/components/ui/card'
-  import { Switch } from '$lib/components/ui/switch'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
 
   interface Props {
     chapterizeAfterImport: boolean

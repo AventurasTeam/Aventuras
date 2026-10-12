@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { characterVault } from '$lib/stores/characterVault.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { errMessage } from '$lib/utils/error'
-  import type { VaultCharacter, VaultLorebook, VaultScenario } from '$lib/types'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import type { VaultCharacter, VaultLorebook, VaultScenario } from '#lib/types/index.ts'
   import {
     Plus,
     Search as SearchIcon,
@@ -26,39 +26,39 @@
   import VaultCharacterForm from './VaultCharacterForm.svelte'
   import VaultLorebookEditor from './VaultLorebookEditor.svelte'
   import VaultScenarioEditor from './VaultScenarioEditor.svelte'
-  import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
-  import DiscoveryModal from '$lib/components/discovery/DiscoveryModal.svelte'
+  import type { FocusedEntity } from '#lib/services/ai/vault/InteractiveVaultService.ts'
+  import DiscoveryModal from '#lib/components/discovery/DiscoveryModal.svelte'
   import TagFilter from './TagFilter.svelte'
-  import TagManager from '$lib/components/tags/TagManager.svelte'
-  import { tagStore } from '$lib/stores/tags.svelte'
+  import TagManager from '#lib/components/tags/TagManager.svelte'
+  import { tagStore } from '#lib/stores/tags.svelte.ts'
   import { fade } from 'svelte/transition'
   import { tick } from 'svelte'
   import PromptPackList from './prompts/PromptPackList.svelte'
   import PromptPackEditor from './prompts/PromptPackEditor.svelte'
   import ImportPreviewDialog from './prompts/ImportPreviewDialog.svelte'
   import VaultExportModal from './VaultExportModal.svelte'
-  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
+  import { supportsDirectoryTransfer } from '#lib/services/packs/directory/support.ts'
   import {
     importExportService,
     type ImportValidationResult,
     type ConflictStrategy,
-  } from '$lib/services/packs/import-export'
-  import type { PresetPack } from '$lib/services/packs/types'
+  } from '#lib/services/packs/import-export.ts'
+  import type { PresetPack } from '#lib/services/packs/types.ts'
 
   // Shared Components
-  import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
+  import EmptyState from '#lib/components/ui/empty-state/empty-state.svelte'
 
   // Shadcn Components
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Skeleton } from '$lib/components/ui/skeleton'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { cn } from '$lib/utils/cn'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Tabs, TabsContent, TabsList, TabsTrigger } from '#lib/components/ui/tabs/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Skeleton } from '#lib/components/ui/skeleton/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   // Types
-  import type { VaultTab } from '$lib/stores/ui.svelte'
+  import type { VaultTab } from '#lib/stores/ui.svelte.ts'
   type VaultType = 'character' | 'lorebook' | 'scenario'
 
   type AnyVaultItem = VaultCharacter | VaultLorebook | VaultScenario

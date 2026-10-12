@@ -1,13 +1,13 @@
 <script lang="ts">
-  import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
+  import WritingStyleFields from '#lib/components/shared/WritingStyleFields.svelte'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import type {
     POV,
     Tense,
     TargetLength,
     NarratorReinforcement,
     ImageGenerationMode,
-  } from '$lib/types'
+  } from '#lib/types/index.ts'
 
   interface Props {
     selectedPOV: POV

@@ -14,19 +14,19 @@
  * 3. After entry is created, call flushToDatabase() to persist images
  */
 
-import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
+import { extractPicTags, type ParsedPicTag } from '#lib/utils/inlineImageParser.ts'
 import {
   generateImage as registryGenerateImage,
   supportsImageGeneration,
 } from './providers/registry'
 import { recordImageResult } from './imageUtils'
-import { database } from '$lib/services/database'
-import { settings } from '$lib/stores/settings.svelte'
-import { emitImageQueued, emitImageReady } from '$lib/services/events'
-import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
+import { database } from '#lib/services/database.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { emitImageQueued, emitImageReady } from '#lib/services/events.ts'
+import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '#lib/utils/image.ts'
 import { resolveStylePrompt } from './stylePrompt'
-import { createLogger } from '$lib/log'
-import type { Character, EmbeddedImage } from '$lib/types'
+import { createLogger } from '#lib/log.ts'
+import type { Character, EmbeddedImage } from '#lib/types/index.ts'
 
 const log = createLogger('InlineImageTracker')
 

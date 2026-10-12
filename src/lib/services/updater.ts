@@ -28,8 +28,8 @@ import { relaunch } from '@tauri-apps/plugin-process'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { getVersion, getBundleType, type BundleType } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { isAndroid, isIos } from '$lib/utils/platform'
-import { isNewerVersion } from '$lib/utils/version'
+import { isAndroid, isIos } from '#lib/utils/platform.ts'
+import { isNewerVersion } from '#lib/utils/version.ts'
 
 /**
  * The repository the release workflow publishes to. Must stay in step with the `updater`

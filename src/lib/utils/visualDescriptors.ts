@@ -5,7 +5,7 @@
  * and display strings (for UI editing).
  */
 
-import type { VisualDescriptors } from '$lib/types'
+import type { VisualDescriptors } from '#lib/types/index.ts'
 
 const CATEGORY_ORDER: (keyof VisualDescriptors)[] = [
   'face',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SYSTEM_VARIABLES, RUNTIME_VARIABLES } from '$lib/services/templates/variables'
+import { SYSTEM_VARIABLES, RUNTIME_VARIABLES } from '#lib/services/templates/variables.ts'
 import {
   aboutDoc,
   gitattributesDoc,

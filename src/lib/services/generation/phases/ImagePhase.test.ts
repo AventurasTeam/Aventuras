@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ImagePhase, type ImageDependencies, type ImageInput } from './ImagePhase'
 import type { GenerationEvent } from '../types'
-import type { Character } from '$lib/types'
+import type { Character } from '#lib/types/index.ts'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []

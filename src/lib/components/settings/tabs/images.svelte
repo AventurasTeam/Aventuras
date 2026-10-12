@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte'
-  import { createDebouncedSave } from '$lib/utils/debounce'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { Label } from '$lib/components/ui/label'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Autocomplete } from '$lib/components/ui/autocomplete'
-  import { Slider } from '$lib/components/ui/slider'
+  import { createDebouncedSave } from '#lib/utils/debounce.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
   import { RotateCcw, Info, Plus, Copy, Eye, EyeOff, ChevronRight, Check } from '@lucide/svelte'
-  import { Textarea } from '$lib/components/ui/textarea'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import {
     listImageModelsByProvider,
     getProviderSamplerInfo,
@@ -17,24 +17,24 @@
     requiresApiKey,
     ComfyMode,
     type ImageModelInfo,
-  } from '$lib/services/ai/image'
+  } from '#lib/services/ai/image/index.ts'
   import {
     validateApiWorkflow,
     detectWorkflowFields,
     fetchModelList,
     clearComfyCacheForUrl,
-  } from '$lib/services/ai/image/providers/comfy'
-  import type { ComfyCustomWorkflow } from '$lib/services/ai/image/providers/types'
-  import ImageModelSelect from '$lib/components/settings/ImageModelSelect.svelte'
-  import type { ImageProfile, ImageProviderType, APIProfile } from '$lib/types'
-  import * as Tabs from '$lib/components/ui/tabs'
-  import * as Alert from '$lib/components/ui/alert'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import * as Collapsible from '$lib/components/ui/collapsible'
+  } from '#lib/services/ai/image/providers/comfy.ts'
+  import type { ComfyCustomWorkflow } from '#lib/services/ai/image/providers/types.ts'
+  import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
+  import type { ImageProfile, ImageProviderType, APIProfile } from '#lib/types/index.ts'
+  import * as Tabs from '#lib/components/ui/tabs/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
   import { SvelteSet } from 'svelte/reactivity'
-  import IconRow from '$lib/components/ui/icon-row.svelte'
-  import ImageResolutionSelector from '$lib/components/settings/ImageResolutionSelector.svelte'
-  import { defaultImageSpec, type ImageSpec } from '$lib/utils/image'
+  import IconRow from '#lib/components/ui/icon-row.svelte'
+  import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
+  import { defaultImageSpec, type ImageSpec } from '#lib/utils/image.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },

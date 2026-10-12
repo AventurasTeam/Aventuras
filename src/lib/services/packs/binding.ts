@@ -14,7 +14,7 @@
  * guessed at now.
  */
 
-import { database } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
 import type { PresetPack, RuntimeVarsMap, RuntimeEntityType } from './types'
 
 /**

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { getTemplateGroups } from './templateGroups'
-  import * as Collapsible from '$lib/components/ui/collapsible'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { ChevronRight, Variable, Settings, Activity } from '@lucide/svelte'
-  import { cn } from '$lib/utils/cn'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     selectedTemplateId: string | null

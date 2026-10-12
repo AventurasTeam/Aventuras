@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Entry, VaultCharacter, VaultLorebook, VaultScenario } from '$lib/types'
+import type { Entry, VaultCharacter, VaultLorebook, VaultScenario } from '#lib/types/index.ts'
 import {
   EXCHANGE_FORMAT,
   EXCHANGE_FORMAT_VERSION,

@@ -1,11 +1,11 @@
-import { scenarioService, type Genre } from '$lib/services/ai/wizard/ScenarioService'
-import { type ExpandedSetting } from '$lib/services/ai/sdk'
-import { aiService } from '$lib/services/ai'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import { settings } from '$lib/stores/settings.svelte'
-import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import type { GeneratedCharacter } from '$lib/services/ai/sdk'
+import { scenarioService, type Genre } from '#lib/services/ai/wizard/ScenarioService.ts'
+import { type ExpandedSetting } from '#lib/services/ai/sdk/index.ts'
+import { aiService } from '#lib/services/ai/index.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import type { GeneratedCharacter } from '#lib/services/ai/sdk/index.ts'
 
 export class SettingStore {
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */

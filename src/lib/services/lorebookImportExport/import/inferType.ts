@@ -1,7 +1,7 @@
 /**
  * Entry type inference based on keyword matching
  */
-import type { EntryType } from '$lib/types'
+import type { EntryType } from '#lib/types/index.ts'
 
 const TYPE_KEYWORDS: Record<EntryType, string[]> = {
   character: [

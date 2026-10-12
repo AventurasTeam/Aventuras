@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import { Server, Check, RefreshCw, Star, AlertTriangle, Brain, Braces } from '@lucide/svelte'
-  import Autocomplete from '$lib/components/ui/autocomplete/Autocomplete.svelte'
-  import * as Select from '$lib/components/ui/select'
-  import { Button } from '$lib/components/ui/button'
-  import { Label } from '$lib/components/ui/label'
-  import { cn } from '$lib/utils/cn'
-  import { modelHealth } from '$lib/stores/modelHealth.svelte'
-  import { isPingEligible, shouldShowHealthFor } from '$lib/services/modelHealthOrchestrator'
-  import { getEffectiveBaseUrl } from '$lib/services/ai/sdk/providers/modelPing'
+  import Autocomplete from '#lib/components/ui/autocomplete/Autocomplete.svelte'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { modelHealth } from '#lib/stores/modelHealth.svelte.ts'
+  import { isPingEligible, shouldShowHealthFor } from '#lib/services/modelHealthOrchestrator.ts'
+  import { getEffectiveBaseUrl } from '#lib/services/ai/sdk/providers/modelPing.ts'
   import HealthIndicator from './HealthIndicator.svelte'
 
   interface Props {

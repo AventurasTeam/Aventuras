@@ -7,12 +7,12 @@
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import type { StoryEntry, Entry, Character, Location, Item, StoryBeat } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import type { StoryEntry, Entry, Character, Location, Item, StoryBeat } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
-import { describeActivityError, isAbortError } from '$lib/services/activity'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
+import { describeActivityError, isAbortError } from '#lib/services/activity/index.ts'
 import { getContextConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 

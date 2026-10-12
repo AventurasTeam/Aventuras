@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { DiscoveryCard } from '$lib/services/discovery'
+  import type { DiscoveryCard } from '#lib/services/discovery/index.ts'
   import { Download, Check, Eye } from '@lucide/svelte'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Button } from '$lib/components/ui/button'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
 
   type NsfwMode = 'disable' | 'blur' | 'enable'
 

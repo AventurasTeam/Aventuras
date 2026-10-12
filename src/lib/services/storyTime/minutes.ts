@@ -7,7 +7,7 @@
  * converts back once.
  */
 
-import type { TimeTracker } from '$lib/types'
+import type { TimeTracker } from '#lib/types/index.ts'
 
 const MINUTES_PER_HOUR = 60
 const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR

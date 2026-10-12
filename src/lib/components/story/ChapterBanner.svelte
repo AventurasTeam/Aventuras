@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import type { ChapterBanner, ChapterBannerLink } from '$lib/utils/chapterBanners'
-  import { Button } from '$lib/components/ui/button'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import type { ChapterBanner, ChapterBannerLink } from '#lib/utils/chapterBanners.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { ChevronLeft, ChevronRight } from '@lucide/svelte'
 
   let {

@@ -3,10 +3,10 @@
     RuntimeVariable,
     RuntimeVariableType,
     RuntimeEntityType,
-  } from '$lib/services/packs/types'
-  import { database } from '$lib/services/database'
+  } from '#lib/services/packs/types.ts'
+  import { database } from '#lib/services/database.ts'
   import RuntimeVariableCard from './RuntimeVariableCard.svelte'
-  import { Button } from '$lib/components/ui/button'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { Plus, Activity, AlertTriangle } from '@lucide/svelte'
 
   interface Props {

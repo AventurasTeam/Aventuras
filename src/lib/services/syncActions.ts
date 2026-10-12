@@ -1,4 +1,4 @@
-import type { SyncConnectionData } from '$lib/types/sync'
+import type { SyncConnectionData } from '#lib/types/sync.ts'
 import type { ImportResult, PackBindingResolution } from './import'
 import { exportService } from './export'
 import { syncService } from './sync'

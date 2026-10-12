@@ -1,4 +1,4 @@
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 /**
  * The last `count` story entries, flattened into one string.

@@ -4,10 +4,10 @@
  * Handles chapter summarization and memory retrieval for long-form narratives.
  */
 
-import type { Chapter, StoryEntry, SummaryDetail } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import type { Chapter, StoryEntry, SummaryDetail } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import {
   chapterAnalysisSchema,
   chapterSummaryResultSchema,
@@ -19,8 +19,8 @@ import {
   type RetrievalDecision,
 } from '../sdk/schemas/memory'
 import { AI_CONFIG } from '../core/config'
-import { createLogger } from '$lib/log'
-import { entryTimeTag, formatTimeSpan } from '$lib/utils/storyTime'
+import { createLogger } from '#lib/log.ts'
+import { entryTimeTag, formatTimeSpan } from '#lib/utils/storyTime.ts'
 
 const log = createLogger('Memory')
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { Entry } from '$lib/types'
-import { EXCHANGE_FORMAT, EXCHANGE_FORMAT_VERSION } from '$lib/services/exchange'
+import type { Entry } from '#lib/types/index.ts'
+import { EXCHANGE_FORMAT, EXCHANGE_FORMAT_VERSION } from '#lib/services/exchange/index.ts'
 import { exportToAventura, exportToSillyTavern, exportToText } from './formats'
 
 const entry: Entry = {

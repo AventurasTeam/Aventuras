@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { activity } from '$lib/stores/activity.svelte'
-  import { formatStepDuration, rootStep, type ActivityTurn } from '$lib/services/activity'
+  import { activity } from '#lib/stores/activity.svelte.ts'
+  import { formatStepDuration, rootStep, type ActivityTurn } from '#lib/services/activity/index.ts'
   import { ChevronRight } from '@lucide/svelte'
 
   let { turn }: { turn: ActivityTurn } = $props()

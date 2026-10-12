@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import * as Dialog from '$lib/components/ui/dialog'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { Trash2 } from '@lucide/svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { parseStoryTime, formatStoryTime, storyTimeIsInvalid } from '$lib/services/storyTime'
-  import { entryNumber, resolveEntryByNumber } from '$lib/utils/storyNavigation'
-  import type { StoryEntry } from '$lib/types'
+  import {
+    parseStoryTime,
+    formatStoryTime,
+    storyTimeIsInvalid,
+  } from '#lib/services/storyTime/index.ts'
+  import { entryNumber, resolveEntryByNumber } from '#lib/utils/storyNavigation.ts'
+  import type { StoryEntry } from '#lib/types/index.ts'
 
   const NOTE_LIMIT = 140
 

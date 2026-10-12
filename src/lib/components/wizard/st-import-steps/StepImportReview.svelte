@@ -13,18 +13,18 @@
     CheckCircle2,
     Circle,
   } from '@lucide/svelte'
-  import * as Card from '$lib/components/ui/card'
-  import * as Alert from '$lib/components/ui/alert'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Button } from '$lib/components/ui/button'
-  import ChapterizeOptions from '$lib/components/shared/ChapterizeOptions.svelte'
-  import type { GeneratedProtagonist, GeneratedCharacter } from '$lib/services/ai/sdk'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import ChapterizeOptions from '#lib/components/shared/ChapterizeOptions.svelte'
+  import type { GeneratedProtagonist, GeneratedCharacter } from '#lib/services/ai/sdk/index.ts'
   import type { ImportedLorebookItem } from '../wizardTypes'
-  import type { StoryMode, POV } from '$lib/types'
-  import type { Tense } from '$lib/services/ai/wizard'
+  import type { StoryMode, POV } from '#lib/types/index.ts'
+  import type { Tense } from '#lib/services/ai/wizard/index.ts'
 
   interface Props {
     storyTitle: string

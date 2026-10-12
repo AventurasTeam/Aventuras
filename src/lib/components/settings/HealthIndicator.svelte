@@ -3,15 +3,15 @@
   import SignalLow from '@lucide/svelte/icons/signal-low'
   import Clock from '@lucide/svelte/icons/clock'
   import X from '@lucide/svelte/icons/x'
-  import { cn } from '$lib/utils/cn'
-  import { isFresh } from '$lib/services/modelHealthCache'
+  import { cn } from '#lib/utils/cn.ts'
+  import { isFresh } from '#lib/services/modelHealthCache.ts'
   import {
     PING_TTL_AUTO_MS,
     PING_TTL_DEFAULT_MS,
     type CachedHealth,
     type HealthStatus,
-  } from '$lib/constants/modelHealth'
-  import type { ProviderType } from '$lib/types'
+  } from '#lib/constants/modelHealth.ts'
+  import type { ProviderType } from '#lib/types/index.ts'
 
   interface Props {
     health: CachedHealth | undefined

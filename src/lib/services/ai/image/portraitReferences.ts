@@ -1,12 +1,12 @@
-import type { Character } from '$lib/types'
+import type { Character } from '#lib/types/index.ts'
 import {
   branchScopeKey,
   canonicalId,
   findLiveCharacter,
   type BranchScope,
-} from '$lib/utils/branchScope'
-import { normalizeImageDataUrl } from '$lib/utils/image'
-import { sameEntityName } from '$lib/utils/text'
+} from '#lib/utils/branchScope.ts'
+import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+import { sameEntityName } from '#lib/utils/text.ts'
 import type { ImageableScene } from '../sdk/schemas/imageanalysis'
 
 /** A saved portrait, or one still generating (null when it failed). */

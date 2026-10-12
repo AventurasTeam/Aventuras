@@ -1,5 +1,5 @@
-import { database } from '$lib/services/database'
-import type { VaultTag, VaultType } from '$lib/types'
+import { database } from '#lib/services/database.ts'
+import type { VaultTag, VaultType } from '#lib/types/index.ts'
 
 class TagStore {
   tags = $state<VaultTag[]>([])

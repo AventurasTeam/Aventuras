@@ -1,28 +1,28 @@
 <script lang="ts">
   import { slide } from 'svelte/transition'
   import { FileJson, Loader2, Check, Sparkles, PenTool, Book, X, ChevronDown } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import * as Card from '$lib/components/ui/card'
-  import * as ScrollArea from '$lib/components/ui/scroll-area'
-  import { Badge } from '$lib/components/ui/badge'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as ScrollArea from '#lib/components/ui/scroll-area/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
 
-  import type { StoryMode, POV, Tense, TimeTracker } from '$lib/types'
+  import type { StoryMode, POV, Tense, TimeTracker } from '#lib/types/index.ts'
   import {
     formatStoryTime,
     normalizeTime,
     parseStoryTime,
     storyTimeIsInvalid,
     STARTING_TIME_VAR,
-  } from '$lib/services/storyTime'
+  } from '#lib/services/storyTime/index.ts'
   import type {
     ExpandedSetting,
     GeneratedOpening,
     GeneratedProtagonist,
-  } from '$lib/services/ai/sdk'
-  import type { Genre } from '$lib/services/ai/wizard'
+  } from '#lib/services/ai/sdk/index.ts'
+  import type { Genre } from '#lib/services/ai/wizard/index.ts'
   import type { POVOption } from '../wizardTypes'
   import { styleUserPlaceholders, tenseOptions } from '../wizardTypes'
 

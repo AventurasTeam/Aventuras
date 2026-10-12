@@ -1,54 +1,10 @@
 <script lang="ts">
-  import * as Popover from '$lib/components/ui/popover'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { cn } from '$lib/utils/cn'
-  import {
-    Icon,
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    AlertTriangle,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  } from '@lucide/svelte'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import type { LucideIcon } from '@lucide/svelte'
+  import { RUNTIME_VARIABLE_ICONS, runtimeVariableIcon } from './runtimeVariableIcons.ts'
 
   interface Props {
     value?: string
@@ -60,57 +16,12 @@
   let open = $state(false)
   let search = $state('')
 
-  type IconEntry = { name: string; component: typeof Icon }
+  type IconEntry = { name: string; component: LucideIcon }
 
-  const ICONS: IconEntry[] = [
-    { name: 'Heart', component: Heart },
-    { name: 'Shield', component: Shield },
-    { name: 'Sword', component: Sword },
-    { name: 'Star', component: Star },
-    { name: 'Flame', component: Flame },
-    { name: 'Zap', component: Zap },
-    { name: 'Crown', component: Crown },
-    { name: 'Eye', component: Eye },
-    { name: 'Brain', component: Brain },
-    { name: 'Target', component: Target },
-    { name: 'Compass', component: Compass },
-    { name: 'Skull', component: Skull },
-    { name: 'Gem', component: Gem },
-    { name: 'Key', component: Key },
-    { name: 'Lock', component: Lock },
-    { name: 'Map', component: Map },
-    { name: 'Mountain', component: Mountain },
-    { name: 'Droplet', component: Droplet },
-    { name: 'Wind', component: Wind },
-    { name: 'Sun', component: Sun },
-    { name: 'Moon', component: Moon },
-    { name: 'Clock', component: Clock },
-    { name: 'Activity', component: Activity },
-    { name: 'AlertTriangle', component: AlertTriangle },
-    { name: 'Award', component: Award },
-    { name: 'Battery', component: Battery },
-    { name: 'Bookmark', component: Bookmark },
-    { name: 'CircleDot', component: CircleDot },
-    { name: 'Crosshair', component: Crosshair },
-    { name: 'Feather', component: Feather },
-    { name: 'Flag', component: Flag },
-    { name: 'Gift', component: Gift },
-    { name: 'Globe', component: Globe },
-    { name: 'Hammer', component: Hammer },
-    { name: 'Lightbulb', component: Lightbulb },
-    { name: 'Music', component: Music },
-    { name: 'Palette', component: Palette },
-    { name: 'Scale', component: Scale },
-    { name: 'Sparkles', component: Sparkles },
-    { name: 'Trophy', component: Trophy },
-    { name: 'Wand2', component: Wand2 },
-    { name: 'Users', component: Users },
-    { name: 'Gauge', component: Gauge },
-  ]
-
-  const ICON_MAP: globalThis.Map<string, IconEntry> = new globalThis.Map(
-    ICONS.map((i) => [i.name, i]),
-  )
+  const ICONS: IconEntry[] = Object.entries(RUNTIME_VARIABLE_ICONS).map(([name, component]) => ({
+    name,
+    component,
+  }))
 
   let filtered = $derived(
     search.trim()
@@ -118,7 +29,7 @@
       : ICONS,
   )
 
-  let selectedIcon = $derived(value ? ICON_MAP.get(value) : undefined)
+  let SelectedIcon = $derived(runtimeVariableIcon(value))
 
   function handleSelect(iconName: string | undefined) {
     onSelect(iconName)
@@ -131,9 +42,9 @@
   <Popover.Trigger>
     {#snippet child({ props })}
       <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" {...props}>
-        {#if selectedIcon}
-          <selectedIcon.component class="h-3.5 w-3.5" />
-          <span class="text-muted-foreground">{selectedIcon.name}</span>
+        {#if SelectedIcon}
+          <SelectedIcon class="h-3.5 w-3.5" />
+          <span class="text-muted-foreground">{value}</span>
         {:else}
           <span class="text-muted-foreground">No icon</span>
         {/if}

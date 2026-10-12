@@ -19,8 +19,8 @@
  * - translate*() - TranslationService
  */
 
-import { createLogger } from '$lib/log'
-import { database } from '$lib/services/database'
+import { createLogger } from '#lib/log.ts'
+import { database } from '#lib/services/database.ts'
 import {
   emitImageAnalysisStarted,
   emitImageAnalysisComplete,
@@ -31,12 +31,12 @@ import {
   emitBackgroundImageAnalysisFailed,
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
-} from '$lib/services/events'
+} from '#lib/services/events.ts'
 import type {
   PromptContext,
   LoreManagementCallbacks,
   LoreRunOptions,
-} from '$lib/services/generation'
+} from '#lib/services/generation/index.ts'
 import type {
   Chapter,
   Character,
@@ -57,9 +57,9 @@ import type {
   SummaryDetail,
   Tense,
   TimeTracker,
-} from '$lib/types'
-import { findLiveCharacter, type BranchScope } from '$lib/utils/branchScope'
-import { expectedPixels, type ImageSpec } from '$lib/utils/image'
+} from '#lib/types/index.ts'
+import { findLiveCharacter, type BranchScope } from '#lib/utils/branchScope.ts'
+import { expectedPixels, type ImageSpec } from '#lib/utils/image.ts'
 import type { StreamChunk } from './core/types'
 import { serviceFactory } from './core/factory'
 import {
@@ -111,10 +111,10 @@ import type {
   SuggestionsResult,
 } from './sdk'
 import type { Translated, TranslationResult, UITranslationItem } from './utils'
-import { recentContent, AS_HAYSTACK, AS_PROSE } from '$lib/utils/recentContent'
-import { joinPromptBlocks } from '$lib/utils/promptBlocks'
-import { activity } from '$lib/stores/activity.svelte'
-import { describeActivityError, failStep, isAbortError } from '$lib/services/activity'
+import { recentContent, AS_HAYSTACK, AS_PROSE } from '#lib/utils/recentContent.ts'
+import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
+import { describeActivityError, failStep, isAbortError } from '#lib/services/activity/index.ts'
 
 // Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
 export interface TimelineFillSettings {

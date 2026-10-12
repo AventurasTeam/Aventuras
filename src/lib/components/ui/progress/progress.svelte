@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Progress as ProgressPrimitive, type WithoutChildrenOrChild } from 'bits-ui'
-  import { cn } from '$lib/utils/cn.js'
+  import { cn } from '#lib/utils/cn.ts'
 
   let {
     ref = $bindable(null),

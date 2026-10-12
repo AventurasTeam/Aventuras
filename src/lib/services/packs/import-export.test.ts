@@ -4,15 +4,15 @@ import type { PresetPack } from './types'
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile: vi.fn(), readTextFile: vi.fn() }))
-vi.mock('$lib/services/exportTarget', () => ({ resolveSaveTarget: vi.fn() }))
-vi.mock('$lib/services/templates/engine', () => ({
+vi.mock('#lib/services/exportTarget.ts', () => ({ resolveSaveTarget: vi.fn() }))
+vi.mock('#lib/services/templates/engine.ts', () => ({
   templateEngine: { parseTemplate: vi.fn(() => ({ success: true })) },
 }))
 
 const replacePackContents = vi.fn()
 const getPack = vi.fn()
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     replacePackContents: (...args: unknown[]) => replacePackContents(...args),
     getPackTemplates: vi.fn(async () => []),

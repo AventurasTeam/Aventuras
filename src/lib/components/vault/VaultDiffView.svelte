@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
+  import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
   import type {
     VaultCharacter,
     VaultLorebookEntry,
     VaultScenarioNpc,
     VisualDescriptors,
-  } from '$lib/types'
+  } from '#lib/types/index.ts'
   import {
     Check,
     X,
@@ -22,8 +22,8 @@
     Zap,
   } from '@lucide/svelte'
   import { fade } from 'svelte/transition'
-  import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
-  import { computeDelta } from '$lib/utils/vaultMerge'
+  import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
+  import { computeDelta } from '#lib/utils/vaultMerge.ts'
 
   interface Props {
     change: VaultPendingChange

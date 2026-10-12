@@ -13,22 +13,22 @@
     ChevronDown,
     User,
   } from '@lucide/svelte'
-  import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
-  import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
-  import type { VaultCharacter } from '$lib/types'
+  import UniversalVaultBrowser from '#lib/components/vault/UniversalVaultBrowser.svelte'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import type { GeneratedCharacter, GeneratedProtagonist } from '#lib/services/ai/sdk/index.ts'
+  import type { VaultCharacter } from '#lib/types/index.ts'
 
   // Shadcn Components
-  import * as Card from '$lib/components/ui/card'
-  import * as Collapsible from '$lib/components/ui/collapsible'
-  import * as Avatar from '$lib/components/ui/avatar'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Separator } from '$lib/components/ui/separator'
-  import { Badge } from '$lib/components/ui/badge'
-  import TermsInput from '$lib/components/shared/TermsInput.svelte'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import * as Avatar from '#lib/components/ui/avatar/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import TermsInput from '#lib/components/shared/TermsInput.svelte'
 
   interface Props {
     protagonist: GeneratedProtagonist | null

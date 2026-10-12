@@ -14,18 +14,18 @@ import type {
   TranslationSettings,
   UISettings,
   UpdateSettings,
-} from '$lib/types'
-import { database } from '$lib/services/database'
-import { grammarService } from '$lib/services/grammar'
-import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+} from '#lib/types/index.ts'
+import { database } from '#lib/services/database.ts'
+import { grammarService } from '#lib/services/grammar.ts'
+import { PROVIDERS } from '#lib/services/ai/sdk/providers/config.ts'
 import {
   AGENTIC_RETRIEVAL_DEFAULTS,
   ENTRY_RETRIEVAL_DEFAULTS,
   LORE_MANAGEMENT_DEFAULTS,
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   WORLD_STATE_INJECTION_DEFAULTS,
-} from '$lib/services/ai/core/defaults'
-import { isReasoningOn } from '$lib/services/ai/core/reasoning'
+} from '#lib/services/ai/core/defaults.ts'
+import { isReasoningOn } from '#lib/services/ai/core/reasoning.ts'
 import {
   clearDanglingAssignments,
   migrateContextWindow,
@@ -36,16 +36,19 @@ import {
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
-import { ui, NAV_FILTER_SETTING } from '$lib/stores/ui.svelte'
-import { LANDMARK_FILTER_GROUPS } from '$lib/utils/storyNavigation'
+import { ui, NAV_FILTER_SETTING } from '#lib/stores/ui.svelte.ts'
+import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
-import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
-import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '$lib/constants/layout'
+import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
+import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '#lib/constants/layout.ts'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
-import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
-import { applyIncognitoKeyboard } from '$lib/utils/platform'
-import type { ActivityReporting } from '$lib/services/activity'
-import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
+import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
+import { applyIncognitoKeyboard } from '#lib/utils/platform.ts'
+import type { ActivityReporting } from '#lib/services/activity/index.ts'
+import type {
+  ImageGenerationServiceSettings,
+  TimelineFillSettings,
+} from '#lib/services/ai/index.ts'
 import { debug } from './debug.svelte'
 import { activity } from './activity.svelte'
 import { modelHealth } from './modelHealth.svelte'
@@ -53,7 +56,7 @@ import {
   isPingEligible,
   pingProfileModels,
   clearProfileHealth,
-} from '$lib/services/modelHealthOrchestrator'
+} from '#lib/services/modelHealthOrchestrator.ts'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -663,7 +666,7 @@ export function getDefaultImageGenerationSettings(): ImageGenerationServiceSetti
     styleId: 'image-style-soft-anime',
     portraitStyleId: 'image-style-soft-anime',
     // Same pixels as the `WIDTHxHEIGHT` defaults these replace: 1024x1024, 1024x1024,
-    // 512x512, 1024x576 (was 1280x720, the nearest tier). See `$lib/utils/image`.
+    // 512x512, 1024x576 (was 1280x720, the nearest tier). See `#lib/utils/image.ts`.
     size: { orientation: 'square', size: 'small' },
     referenceSize: { orientation: 'square', size: 'small' },
     portraitSize: { orientation: 'square', size: 'tiny' },

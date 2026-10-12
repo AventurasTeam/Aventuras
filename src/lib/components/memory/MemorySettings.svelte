@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { onDestroy } from 'svelte'
   import { slide } from 'svelte/transition'
-  import { createDebouncedSave } from '$lib/utils/debounce'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Slider } from '$lib/components/ui/slider'
-  import { Label } from '$lib/components/ui/label'
-  import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group'
+  import { createDebouncedSave } from '#lib/utils/debounce.ts'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { ToggleGroup, ToggleGroupItem } from '#lib/components/ui/toggle-group/index.ts'
 
   /**
    * Threshold bounds. The ceiling was 100,000, which nothing could use: a chapter is built to

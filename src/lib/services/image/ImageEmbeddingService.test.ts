@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { EmbeddedImage } from '$lib/types'
+import type { EmbeddedImage } from '#lib/types/index.ts'
 import { processStoryContent } from './ImageEmbeddingService'
 
 /**

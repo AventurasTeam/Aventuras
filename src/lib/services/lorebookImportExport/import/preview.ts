@@ -2,7 +2,7 @@
  * Preview and summary utilities for lorebook imports
  */
 
-import type { EntryType, EntryInjectionMode } from '$lib/types'
+import type { EntryType, EntryInjectionMode } from '#lib/types/index.ts'
 import type { ImportedEntry } from '../types'
 import { parse } from './parse'
 

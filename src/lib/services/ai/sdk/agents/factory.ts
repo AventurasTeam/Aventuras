@@ -14,10 +14,10 @@ import {
   type PrepareStepFunction,
   type ToolLoopAgentSettings,
 } from 'ai'
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 import { resolvePresetModel, type ResolvedPreset } from '../presetResolution'
 import { uniqueToolCallIdMiddleware } from '../middleware'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('AgentFactory')
 

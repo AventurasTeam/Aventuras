@@ -17,8 +17,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile: vi.fn(), readTextFile: vi.fn() }))
-vi.mock('$lib/services/import/native', () => ({ importFromFile: vi.fn() }))
-vi.mock('$lib/services/exportTarget', () => ({
+vi.mock('#lib/services/import/native.ts', () => ({ importFromFile: vi.fn() }))
+vi.mock('#lib/services/exportTarget.ts', () => ({
   resolveSaveTarget: vi.fn(async () => ({ destPath: '/tmp/out.avt' })),
 }))
 
@@ -67,7 +67,7 @@ const written = {
   characters: [] as any[],
 }
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     // --- export side ---
     getStoryEntries: vi.fn(async () => []),
@@ -110,7 +110,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-const { gatherStoryData } = await import('$lib/services/export')
+const { gatherStoryData } = await import('#lib/services/export.ts')
 const { exportService } = await import('../export')
 const { runImport } = await import('../import')
 const { remapRuntimeVars } = await import('./binding')

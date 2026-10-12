@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 import {
   findPrecedingUserAction,
   GENERATION_ERROR_SOURCE,

@@ -1,17 +1,17 @@
 <script lang="ts">
-  import type { Chapter } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { aiService } from '$lib/services/ai'
-  import { runManualLoreManagement } from '$lib/services/generation'
+  import type { Chapter } from '#lib/types/index.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { aiService } from '#lib/services/ai/index.ts'
+  import { runManualLoreManagement } from '#lib/services/generation/index.ts'
   import MemoryHeader from './MemoryHeader.svelte'
   import MemorySettings from './MemorySettings.svelte'
   import ChapterCard from './ChapterCard.svelte'
   import ManualChapterModal from './ManualChapterModal.svelte'
   import ResummarizeModal from './ResummarizeModal.svelte'
   import { BookOpen, ArrowLeft } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { EmptyState } from '$lib/components/ui/empty-state'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { EmptyState } from '#lib/components/ui/empty-state/index.ts'
 
   // Get chapters sorted by number (descending - newest first)
 

@@ -1,4 +1,4 @@
-import type { TextModel } from '$lib/types'
+import type { TextModel } from '#lib/types/index.ts'
 
 export function dedupeTextModels(models: TextModel[]): TextModel[] {
   const deduped = new Map<string, TextModel>()

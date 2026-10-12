@@ -24,7 +24,7 @@ const calls = {
 }
 let failOnCreateStory = false
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     createStory: vi.fn(async (s: any) => {
       if (failOnCreateStory) throw new Error('disk on fire')
@@ -170,7 +170,7 @@ describe('runImport — rollback', () => {
     // to be missed by the rollback entirely, because `storyCreated` was only set true *after*
     // importStructure fully resolved. That left the story, its entries, and everything else
     // already written stuck in the database forever while `runImport` reported failure.
-    const { database } = await import('$lib/services/database')
+    const { database } = await import('#lib/services/database.ts')
     vi.mocked(database.addChapter).mockRejectedValueOnce(new Error('FOREIGN KEY constraint failed'))
 
     const data = { ...sampleExport(), chapters: [{ id: 'chap-1', storyId: 'story-old' }] }
@@ -183,7 +183,7 @@ describe('runImport — rollback', () => {
   })
 
   it('reports the original failure even when the rollback itself fails', async () => {
-    const { database } = await import('$lib/services/database')
+    const { database } = await import('#lib/services/database.ts')
     vi.mocked(database.deleteStory).mockRejectedValueOnce(new Error('rollback also failed'))
 
     const result = await runImport(sampleExport(), {

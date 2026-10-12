@@ -7,7 +7,13 @@
  * not at all.
  */
 
-import type { Chapter, Checkpoint, StoryEntry, TimeTracker, WorldStateDelta } from '$lib/types'
+import type {
+  Chapter,
+  Checkpoint,
+  StoryEntry,
+  TimeTracker,
+  WorldStateDelta,
+} from '#lib/types/index.ts'
 import type { ReconciledTime } from './reconcile'
 import type { Boundary } from './boundaries'
 import { toMinutes } from './minutes'

@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Upload, ImageIcon, Check, X, MessageSquare, User, AlertCircle } from '@lucide/svelte'
-  import * as Card from '$lib/components/ui/card'
-  import * as Alert from '$lib/components/ui/alert'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { cn } from '$lib/utils/cn'
-  import type { STChatParseResult } from '$lib/services/stChatImporter'
-  import type { CharacterCardImport } from '$lib/services/characterCardImport'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import type { STChatParseResult } from '#lib/services/stChatImporter.ts'
+  import type { CharacterCardImport } from '#lib/services/characterCardImport/index.ts'
 
   interface Props {
     chatParseResult: STChatParseResult | null

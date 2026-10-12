@@ -11,12 +11,12 @@
  * is safe only because every access happens inside a callback, never at module scope.
  */
 
-import { story } from '$lib/stores/story.svelte'
-import { sameBranchScope, type BranchScope } from '$lib/utils/branchScope'
-import { ui } from '$lib/stores/ui.svelte'
-import { aiService } from '$lib/services/ai'
-import { database } from '$lib/services/database'
-import { pairKeys, scopeToPool } from '$lib/services/duplicates'
+import { story } from '#lib/stores/story.svelte.ts'
+import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
+import { ui } from '#lib/stores/ui.svelte.ts'
+import { aiService } from '#lib/services/ai/index.ts'
+import { database } from '#lib/services/database.ts'
+import { pairKeys, scopeToPool } from '#lib/services/duplicates/index.ts'
 import type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,

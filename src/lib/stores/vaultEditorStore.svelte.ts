@@ -8,14 +8,14 @@
  *  - Approval / rejection / edit workflows
  */
 
-import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas'
-import type { VaultLorebook, VaultLorebookEntry } from '$lib/types'
-import type { InteractiveVaultService } from '$lib/services/ai/vault/InteractiveVaultService'
+import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/index.ts'
+import type { VaultLorebook, VaultLorebookEntry } from '#lib/types/index.ts'
+import type { InteractiveVaultService } from '#lib/services/ai/vault/InteractiveVaultService.ts'
 import { lorebookVault } from './lorebookVault.svelte'
 import { characterVault } from './characterVault.svelte'
 import { scenarioVault } from './scenarioVault.svelte'
 import { SvelteMap } from 'svelte/reactivity'
-import { composePendingOnto, scenarioToRecord, characterToRecord } from '$lib/utils/vaultMerge'
+import { composePendingOnto, scenarioToRecord, characterToRecord } from '#lib/utils/vaultMerge.ts'
 
 class VaultEditorStore {
   // ── Core state ────────────────────────────────────────────────────────

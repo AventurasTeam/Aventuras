@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
   import {
     Plus,
     User,
@@ -19,30 +19,30 @@
     UserPlus,
     Save,
   } from '@lucide/svelte'
-  import type { Character } from '$lib/types'
-  import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
+  import type { Character } from '#lib/types/index.ts'
+  import type { RuntimeVariable, RuntimeVarsMap } from '#lib/services/packs/types.ts'
   import {
     hasRequiredCredentials,
     getProviderDisplayName,
     generatePortrait as sdkGeneratePortrait,
-  } from '$lib/services/ai/image'
-  import { database } from '$lib/services/database'
+  } from '#lib/services/ai/image/index.ts'
+  import { database } from '#lib/services/database.ts'
   import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
-  import { ContextBuilder } from '$lib/services/context'
-  import { normalizeImageDataUrl } from '$lib/utils/image'
-  import { createLogger } from '$lib/log'
+  import { ContextBuilder } from '#lib/services/context/index.ts'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import { createLogger } from '#lib/log.ts'
 
   const log = createLogger('CharacterPortrait')
-  import { Button, buttonVariants } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Badge } from '$lib/components/ui/badge'
-  import * as Avatar from '$lib/components/ui/avatar'
-  import * as ToggleGroup from '$lib/components/ui/toggle-group'
-  import { Label } from '$lib/components/ui/label'
-  import { cn } from '$lib/utils/cn'
-  import IconRow from '$lib/components/ui/icon-row.svelte'
-  import { resolveStylePrompt } from '$lib/services/ai/image'
+  import { Button, buttonVariants } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import * as Avatar from '#lib/components/ui/avatar/index.ts'
+  import * as ToggleGroup from '#lib/components/ui/toggle-group/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import IconRow from '#lib/components/ui/icon-row.svelte'
+  import { resolveStylePrompt } from '#lib/services/ai/image/index.ts'
 
   let showAddForm = $state(false)
   let newName = $state('')
@@ -117,14 +117,14 @@
     () => story.characters.find((c) => c.relationship === 'self')?.name ?? 'current',
   )
 
-  import type { VisualDescriptors } from '$lib/types'
+  import type { VisualDescriptors } from '#lib/types/index.ts'
   import {
     descriptorsToString,
     stringToDescriptors,
     hasDescriptors as hasVisualDescriptors,
-  } from '$lib/utils/visualDescriptors'
+  } from '#lib/utils/visualDescriptors.ts'
   import { SvelteSet } from 'svelte/reactivity'
-  import TermsInput from '$lib/components/shared/TermsInput.svelte'
+  import TermsInput from '#lib/components/shared/TermsInput.svelte'
 
   // Color palette for descriptor categories
   const CATEGORY_COLORS: Record<keyof VisualDescriptors, string> = {

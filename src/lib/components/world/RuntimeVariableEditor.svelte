@@ -1,53 +1,8 @@
 <script lang="ts">
-  import type { RuntimeVariable } from '$lib/services/packs/types'
-  import { Input } from '$lib/components/ui/input'
-  import * as Select from '$lib/components/ui/select'
-  import {
-    Icon as LucideIcon,
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    AlertTriangle,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  } from '@lucide/svelte'
+  import type { RuntimeVariable } from '#lib/services/packs/types.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import { runtimeVariableIcon } from '#lib/components/vault/prompts/runtimeVariableIcons.ts'
 
   interface Props {
     definition: RuntimeVariable
@@ -57,53 +12,7 @@
 
   let { definition, currentValue, onChange }: Props = $props()
 
-  const ICON_MAP: Record<string, typeof LucideIcon> = {
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    AlertTriangle,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  }
-
-  let Icon = $derived(definition.icon ? (ICON_MAP[definition.icon] ?? null) : null)
+  let Icon = $derived(runtimeVariableIcon(definition.icon))
 
   // Local state for text/number inputs (synced from props via $effect below)
   let textValue = $state('')

@@ -11,7 +11,7 @@ import {
   type CachedHealth,
   type HealthStatus,
   type PingResult,
-} from '$lib/constants/modelHealth'
+} from '#lib/constants/modelHealth.ts'
 
 export function isFresh(checkedAt: number, ttlMs = PING_TTL_DEFAULT_MS): boolean {
   return Date.now() - checkedAt < ttlMs

@@ -1,7 +1,7 @@
 import { LocalLinter, type Lint, type Suggestion, type LintConfig } from 'harper.js'
 import { binary } from 'harper.js/binary'
-import { database } from '$lib/services/database'
-import { createLogger } from '$lib/log'
+import { database } from '#lib/services/database.ts'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('Grammar')
 

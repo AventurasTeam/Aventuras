@@ -1,23 +1,27 @@
-import { story } from '$lib/stores/story.svelte'
-import { ui } from '$lib/stores/ui.svelte'
-import { settings } from '$lib/stores/settings.svelte'
-import { aiService } from '$lib/services/ai'
+import { story } from '#lib/stores/story.svelte.ts'
+import { ui } from '#lib/stores/ui.svelte.ts'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import { aiService } from '#lib/services/ai/index.ts'
 import {
   type ExpandedSetting,
   type GeneratedCharacter,
-} from '$lib/services/ai/sdk/schemas/scenario'
-import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import { QUICK_START_SEEDS } from '$lib/services/templates'
-import { formatStoryTime, greetingStart, scenarioOpeningStart } from '$lib/services/storyTime'
-import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
-import type { VaultScenario } from '$lib/types'
-import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-import { stringToDescriptors } from '$lib/utils/visualDescriptors'
-import { uniqueTerms } from '$lib/utils/text'
-import { packService } from '$lib/services/packs/pack-service'
-import { database } from '$lib/services/database'
-import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
+} from '#lib/services/ai/sdk/schemas/scenario.ts'
+import { scenarioService, type WizardData } from '#lib/services/ai/wizard/ScenarioService.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
+import { QUICK_START_SEEDS } from '#lib/services/templates.ts'
+import {
+  formatStoryTime,
+  greetingStart,
+  scenarioOpeningStart,
+} from '#lib/services/storyTime/index.ts'
+import { replaceUserPlaceholders } from '#lib/components/wizard/wizardTypes.ts'
+import type { VaultScenario } from '#lib/types/index.ts'
+import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+import { stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
+import { uniqueTerms } from '#lib/utils/text.ts'
+import { packService } from '#lib/services/packs/pack-service.ts'
+import { database } from '#lib/services/database.ts'
+import type { PresetPack, CustomVariable } from '#lib/services/packs/types.ts'
 
 // Import Modular Stores
 import { NarrativeStore } from './narrativeStore.svelte'

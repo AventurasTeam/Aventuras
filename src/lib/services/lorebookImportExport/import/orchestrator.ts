@@ -2,9 +2,9 @@
  * Full import orchestration with progress tracking
  */
 
-import { database } from '$lib/services/database'
-import { withUniqueEntryTerms } from '$lib/utils/lorebookTerms'
-import type { Entry } from '$lib/types'
+import { database } from '#lib/services/database.ts'
+import { withUniqueEntryTerms } from '#lib/utils/lorebookTerms.ts'
+import type { Entry } from '#lib/types/index.ts'
 import type { ImportOptions, ImportResult, LorebookImportResult } from '../types'
 import { classifyEntries } from '../classify/classify'
 import { convertToEntries } from './convert'

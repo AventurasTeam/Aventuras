@@ -21,8 +21,9 @@ The floor is the WebView the app runs in: **Chrome 111 / Safari 16.4**, both rel
 - **Vite adds no polyfills.** "By default, Vite only handles syntax transforms and does not cover
   polyfills" ([building for production](https://vite.dev/guide/build)). A newer API than the floor
   works on a current dev machine and throws on a device at the floor.
-- **TypeScript will not catch it.** The generated `.svelte-kit/tsconfig.json` sets `target` and
-  `lib` to `esnext` (plus `DOM`), so `check` accepts any API the installed TypeScript knows.
+- **TypeScript will not catch it.** The generated `$app/tsconfig` that `tsconfig.json` extends
+  sets `target` and `lib` to `esnext` (plus `DOM`), so `check` accepts any API the installed
+  TypeScript knows.
 
 **Rule.** Before using a JS, CSS or Web API, confirm on MDN that it works in Chrome 111 and Safari
 16.4 or earlier. `Array.prototype.toReversed` passes: Chrome 110, Safari 16

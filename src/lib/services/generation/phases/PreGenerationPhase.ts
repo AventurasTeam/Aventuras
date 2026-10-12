@@ -21,8 +21,8 @@ import type {
   StoryBeat,
   TimeTracker,
   ActionInputType,
-} from '$lib/types'
-import { NO_ACTIVITY, type ActivityReporter } from '$lib/services/activity'
+} from '#lib/types/index.ts'
+import { NO_ACTIVITY, type ActivityReporter } from '#lib/services/activity/index.ts'
 
 /**
  * Data needed for retry backup - prepared by this phase, applied by caller

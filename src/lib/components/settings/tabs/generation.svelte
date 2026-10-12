@@ -1,24 +1,24 @@
 <script lang="ts">
   import MainNarrative from '../MainNarrative.svelte'
   import AgentProfiles from '../AgentProfiles.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from '$lib/components/ui/card'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Slider } from '$lib/components/ui/slider'
+  } from '#lib/components/ui/card/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
   import {
     LLM_TIMEOUT_MIN,
     LLM_TIMEOUT_MAX,
     LLM_TIMEOUT_STEP,
     LLM_TIMEOUT_MIN_SECONDS,
     LLM_TIMEOUT_MAX_SECONDS,
-  } from '$lib/constants/timeout'
+  } from '#lib/constants/timeout.ts'
 
   interface Props {
     onOpenManualBodyEditor: (title: string, value: string, onSave: (v: string) => void) => void

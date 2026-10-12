@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { Entry, VaultLorebookEntry } from '$lib/types'
+import type { Entry, VaultLorebookEntry } from '#lib/types/index.ts'
 import { LoreSessionLedger } from './sessionChanges'
 import { createDefaultEntryState } from './entryState'
 

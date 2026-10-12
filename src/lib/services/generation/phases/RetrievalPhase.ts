@@ -11,24 +11,24 @@ import type {
   RetrievalResult,
   AbortedEvent,
 } from '../types'
-import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
-import type { RetrievalResult as AgenticRetrievalResult } from '$lib/services/ai/retrieval/AgenticRetrievalService'
+import type { TimelineFillResult } from '#lib/services/ai/retrieval/TimelineFillService.ts'
+import type { RetrievalResult as AgenticRetrievalResult } from '#lib/services/ai/retrieval/AgenticRetrievalService.ts'
 import type {
   EntryRetrievalResult,
   EntryRetrievalOptions,
   ActivationTracker,
   SceneEntity,
-} from '$lib/services/ai/retrieval/EntryRetrievalService'
+} from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
 import type {
   WorldStateInjectorOptions,
   WorldStateInjectionResult,
-} from '$lib/services/ai/generation/WorldStateInjector'
+} from '#lib/services/ai/generation/WorldStateInjector.ts'
 import {
   formatAlreadyInContext,
   type ContextEntity,
-} from '$lib/services/ai/retrieval/alreadyInContext'
-import { joinPromptBlocks } from '$lib/utils/promptBlocks'
-import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
+} from '#lib/services/ai/retrieval/alreadyInContext.ts'
+import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '#lib/services/activity/index.ts'
 
 /** Dependencies injected from AIService - phase calls these methods rather than duplicating logic */
 export interface RetrievalDependencies {

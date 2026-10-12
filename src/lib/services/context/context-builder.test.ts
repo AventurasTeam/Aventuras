@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ContextBuilder } from './context-builder'
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     getStory: vi.fn(),
     getStoryPackId: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { database } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
 
 describe('ContextBuilder', () => {
   beforeEach(() => {

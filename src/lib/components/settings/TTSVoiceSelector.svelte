@@ -8,11 +8,11 @@
    * near-identical blocks to keep in step, which is what this component exists to
    * prevent.
    */
-  import { Label } from '$lib/components/ui/label'
-  import { Input } from '$lib/components/ui/input'
-  import * as Select from '$lib/components/ui/select'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
   import { Loader2 } from '@lucide/svelte'
-  import { GOOGLE_TRANSLATE_LANGUAGES } from '$lib/services/ai/utils/TTSService'
+  import { GOOGLE_TRANSLATE_LANGUAGES } from '#lib/services/ai/utils/TTSService.ts'
 
   interface SystemVoice {
     name: string

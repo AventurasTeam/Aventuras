@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import {
     buildLandmarks,
     checkpointDeletionBlocker,
@@ -11,20 +11,20 @@
     resolveEntryByNumber,
     type Landmark,
     type LandmarkFilterGroup,
-  } from '$lib/utils/storyNavigation'
-  import { supportsHover } from '$lib/utils/platform'
+  } from '#lib/utils/storyNavigation.ts'
+  import { supportsHover } from '#lib/utils/platform.ts'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { Button } from '$lib/components/ui/button'
-  import FilterButton from '$lib/components/ui/filter-button.svelte'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
-  import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
-  import * as Tabs from '$lib/components/ui/tabs'
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import * as Popover from '$lib/components/ui/popover'
-  import TimelinePanel from '$lib/components/world/TimelinePanel.svelte'
-  import { swipe } from '$lib/utils/swipe'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import FilterButton from '#lib/components/ui/filter-button.svelte'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
+  import EmptyState from '#lib/components/ui/empty-state/empty-state.svelte'
+  import * as Tabs from '#lib/components/ui/tabs/index.ts'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import TimelinePanel from '#lib/components/world/TimelinePanel.svelte'
+  import { swipe } from '#lib/utils/swipe.ts'
   import {
     ArrowDownToLine,
     ArrowUpToLine,

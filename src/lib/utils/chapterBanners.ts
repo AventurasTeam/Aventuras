@@ -1,4 +1,4 @@
-import type { Chapter, StoryEntry } from '$lib/types'
+import type { Chapter, StoryEntry } from '#lib/types/index.ts'
 
 export const TAIL_BANNER_TITLE = 'The Story Continues'
 

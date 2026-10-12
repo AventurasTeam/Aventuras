@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { PackUpdateSummary } from '$lib/services/packs/update-summary'
-  import type { PackExport } from '$lib/services/packs/validation'
-  import type { PresetPack } from '$lib/services/packs/types'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import * as Alert from '$lib/components/ui/alert'
+  import type { PackUpdateSummary } from '#lib/services/packs/update-summary.ts'
+  import type { PackExport } from '#lib/services/packs/validation.ts'
+  import type { PresetPack } from '#lib/services/packs/types.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
   import { AlertTriangle, Download } from '@lucide/svelte'
 
   interface Props {

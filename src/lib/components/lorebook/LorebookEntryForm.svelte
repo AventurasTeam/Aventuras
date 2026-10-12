@@ -6,27 +6,32 @@
     EntryState,
     AdventureEntryState,
     CreativeEntryState,
-  } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  } from '#lib/types/index.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { ChevronDown, ChevronUp, Plus, X } from '@lucide/svelte'
 
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Button } from '$lib/components/ui/button'
-  import { Label } from '$lib/components/ui/label'
-  import { Slider } from '$lib/components/ui/slider'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-  import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Slider } from '#lib/components/ui/slider/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+  } from '#lib/components/ui/select/index.ts'
+  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
   import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
-  } from '$lib/components/ui/collapsible'
-  import { cn } from '$lib/utils/cn'
-  import { uniqueTerms } from '$lib/utils/text'
+  } from '#lib/components/ui/collapsible/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { uniqueTerms } from '#lib/utils/text.ts'
 
   interface Props {
     entry?: Entry | null

@@ -12,10 +12,10 @@
 </script>
 
 <script lang="ts">
-  import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
+  import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '#lib/types/index.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     User,
     BookOpen,
@@ -38,55 +38,55 @@
     MoreVertical,
     MilestoneIcon,
   } from '@lucide/svelte'
-  import { aiService } from '$lib/services/ai'
-  import { aiTTSService } from '$lib/services/ai/utils/TTSService'
+  import { aiService } from '#lib/services/ai/index.ts'
+  import { aiTTSService } from '#lib/services/ai/utils/TTSService.ts'
   import {
     prepareTTSSegments,
     resolveDialogueVoice,
     resolveTTSSanitizeOptions,
-  } from '$lib/services/ai/utils/ttsText'
-  import { parseMarkdown, parseStoryMarkdown } from '$lib/utils/markdown'
-  import { findPrecedingUserAction, isGenerationErrorEntry } from '$lib/utils/storyEntries'
-  import { entryNumber } from '$lib/utils/storyNavigation'
-  import { sanitizeTextForTTS } from '$lib/utils/htmlSanitize'
+  } from '#lib/services/ai/utils/ttsText.ts'
+  import { parseMarkdown, parseStoryMarkdown } from '#lib/utils/markdown.ts'
+  import { findPrecedingUserAction, isGenerationErrorEntry } from '#lib/utils/storyEntries.ts'
+  import { entryNumber } from '#lib/utils/storyNavigation.ts'
+  import { sanitizeTextForTTS } from '#lib/utils/htmlSanitize.ts'
   import {
     processStoryContent,
     processVisualProseStoryContent,
     getPlacedImageIds,
-  } from '$lib/services/image'
+  } from '#lib/services/image/index.ts'
   import {
     eventBus,
     type ImageReadyEvent,
     type ImageQueuedEvent,
     type ImageAnalysisFailedEvent,
     type TTSQueuedEvent,
-  } from '$lib/services/events'
+  } from '#lib/services/events.ts'
   import {
     inlineImageService,
     resolveStylePrompt,
     retryImageGeneration,
-  } from '$lib/services/ai/image'
-  import { database } from '$lib/services/database'
+  } from '#lib/services/ai/image/index.ts'
+  import { database } from '#lib/services/database.ts'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import ActivitySummary from './ActivitySummary.svelte'
   import ActivityTimeline from './ActivityTimeline.svelte'
-  import { activity } from '$lib/stores/activity.svelte'
-  import { formatDuration, turnDuration } from '$lib/services/activity'
-  import { reportRenderError } from '$lib/utils/activityDisplay'
-  import { countTokens } from '$lib/services/tokenizer'
-  import { errMessage } from '$lib/utils/error'
-  import { sameBranchScope } from '$lib/utils/branchScope'
-  import { Button } from '$lib/components/ui/button'
-  import * as Popover from '$lib/components/ui/popover'
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Input } from '$lib/components/ui/input'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  import { activity } from '#lib/stores/activity.svelte.ts'
+  import { formatDuration, turnDuration } from '#lib/services/activity/index.ts'
+  import { reportRenderError } from '#lib/utils/activityDisplay.ts'
+  import { countTokens } from '#lib/services/tokenizer.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { sameBranchScope } from '#lib/utils/branchScope.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
-  import { escapeHtml } from '$lib/utils/inlineImageParser'
-  import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
-  import { storyImageMode } from '$lib/utils/image'
+  import { escapeHtml } from '#lib/utils/inlineImageParser.ts'
+  import { extractSentenceAt, expandRangeBidirectional } from '#lib/utils/text.ts'
+  import { storyImageMode } from '#lib/utils/image.ts'
 
   let { entry }: { entry: StoryEntry } = $props()
 

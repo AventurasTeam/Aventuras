@@ -5,7 +5,7 @@
  *
  * Usage:
  * ```typescript
- * import { generateStructured, suggestionsResultSchema } from '$lib/services/ai/sdk';
+ * import { generateStructured, suggestionsResultSchema } from '#lib/services/ai/sdk/index.ts';
  *
  * const result = await generateStructured({
  *   presetId: 'suggestions',
@@ -42,7 +42,7 @@ export {
 } from './tools'
 
 // Types
-export type { ProviderType, APIProfile } from '$lib/types'
+export type { ProviderType, APIProfile } from '#lib/types/index.ts'
 export type { ProviderConfig, ServiceModelDefaults } from './providers'
 export type { ResolvedAgentConfig, CreateAgentOptions, AgentResult } from './agents'
 export type {

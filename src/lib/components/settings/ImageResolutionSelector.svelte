@@ -8,14 +8,14 @@
     type ImageSpec,
     type ImageOrientation,
     type ImageSizeTier,
-  } from '$lib/utils/image'
-  import { Label } from '$lib/components/ui/label'
+  } from '#lib/utils/image.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
   import { Square, RectangleHorizontal, RectangleVertical, Scaling } from '@lucide/svelte'
-  import { cn } from '$lib/utils/cn'
+  import { cn } from '#lib/utils/cn.ts'
 
   /**
    * Orientation + size tier. No pixel field, because there is no pixel size every backend
-   * accepts — see `$lib/utils/image`.
+   * accepts — see `#lib/utils/image.ts`.
    */
   interface Props {
     label?: string

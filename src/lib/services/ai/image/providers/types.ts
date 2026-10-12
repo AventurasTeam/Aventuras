@@ -5,8 +5,8 @@
  * Each provider makes direct HTTP calls instead of going through the Vercel AI SDK.
  */
 
-import type { ImageProviderType } from '$lib/types'
-import type { ImageSpec } from '$lib/utils/image'
+import type { ImageProviderType } from '#lib/types/index.ts'
+import type { ImageSpec } from '#lib/utils/image.ts'
 import type { DeepKeys } from '@saintno/comfyui-sdk'
 // Provider specific types
 export type ComfySamplerInfo = {

@@ -4,16 +4,21 @@
  */
 
 import { writeTextFile } from '@tauri-apps/plugin-fs'
-import { resolveSaveTarget } from '$lib/services/exportTarget'
-import type { VaultLorebook, VaultLorebookEntry, VaultCharacter, VaultScenario } from '$lib/types'
-import type { Entry } from '$lib/types'
+import { resolveSaveTarget } from '#lib/services/exportTarget.ts'
+import type {
+  VaultLorebook,
+  VaultLorebookEntry,
+  VaultCharacter,
+  VaultScenario,
+} from '#lib/types/index.ts'
+import type { Entry } from '#lib/types/index.ts'
 import {
   characterToExchange,
   scenarioToExchange,
   serializeExchange,
   vaultLorebookToExchange,
   wrapExchange,
-} from '$lib/services/exchange'
+} from '#lib/services/exchange/index.ts'
 import type { ExportFormat } from '../types'
 import { exportToSillyTavern, exportToText } from './formats'
 import { getFormatInfo } from './metadata'

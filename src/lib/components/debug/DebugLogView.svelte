@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type DebugLogEntry } from '$lib/stores/debug.svelte'
+  import { type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
   import {
     ArrowUpCircle,
     ArrowDownCircle,
@@ -13,14 +13,14 @@
     Download,
   } from '@lucide/svelte'
   import { writeTextFile } from '@tauri-apps/plugin-fs'
-  import { resolveSaveTarget } from '$lib/services/exportTarget'
-  import { Button } from '$lib/components/ui/button'
-  import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
-  import * as Select from '$lib/components/ui/select'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Separator } from '$lib/components/ui/separator'
-  import { Autocomplete } from '$lib/components/ui/autocomplete'
-  import { cn } from '$lib/utils/cn.js'
+  import { resolveSaveTarget } from '#lib/services/exportTarget.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     logs: DebugLogEntry[]

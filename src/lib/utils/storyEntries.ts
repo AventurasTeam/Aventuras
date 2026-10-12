@@ -1,4 +1,4 @@
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 /** `metadata.source` of the system entry a failed generation leaves in place of its narration. */
 export const GENERATION_ERROR_SOURCE = 'generation-error'

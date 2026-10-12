@@ -16,11 +16,11 @@ import type {
   ClassificationCompleteEvent,
   WorldState,
 } from '../types'
-import type { Story, StoryEntry, TimeTracker } from '$lib/types'
-import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
+import type { Story, StoryEntry, TimeTracker } from '#lib/types/index.ts'
+import type { ClassificationResult } from '#lib/services/ai/sdk/schemas/classifier.ts'
 
 /** Dependencies for classification phase - injected to avoid tight coupling */
-import { NO_ACTIVITY, failStep, type ActivityReporter } from '$lib/services/activity'
+import { NO_ACTIVITY, failStep, type ActivityReporter } from '#lib/services/activity/index.ts'
 
 export interface ClassificationDependencies {
   classifyResponse: (

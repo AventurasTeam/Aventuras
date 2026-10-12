@@ -2,10 +2,10 @@
  * Lorebook parsing logic for multiple formats
  */
 
-import { createLogger } from '$lib/log'
-import type { EntryInjectionMode } from '$lib/types'
-import { classifyExchange } from '$lib/services/exchange'
-import { uniqueTerms } from '$lib/utils/text'
+import { createLogger } from '#lib/log.ts'
+import type { EntryInjectionMode } from '#lib/types/index.ts'
+import { classifyExchange } from '#lib/services/exchange/index.ts'
+import { uniqueTerms } from '#lib/utils/text.ts'
 import type { ImportedEntry, LorebookImportResult, SillyTavernEntry } from '../types'
 import { inferEntryType } from './inferType'
 

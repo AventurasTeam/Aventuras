@@ -1,13 +1,13 @@
-import type { VaultScenario, VaultScenarioNpc } from '$lib/types'
-import { database } from '$lib/services/database'
-import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
-import { CharacterCardImport } from '$lib/services/characterCardImport'
-import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-import { exchangeToScenario, parseExchange } from '$lib/services/exchange'
+import type { VaultScenario, VaultScenarioNpc } from '#lib/types/index.ts'
+import { database } from '#lib/services/database.ts'
+import { discoveryService, type DiscoveryCard } from '#lib/services/discovery/index.ts'
+import { CharacterCardImport } from '#lib/services/characterCardImport/index.ts'
+import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
+import { exchangeToScenario, parseExchange } from '#lib/services/exchange/index.ts'
 import { lorebookVault } from './lorebookVault.svelte'
-import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
+import type { Genre } from '#lib/services/ai/wizard/ScenarioService.ts'
 import { ui } from './ui.svelte'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('ScenarioVault')
 

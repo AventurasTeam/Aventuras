@@ -4,9 +4,9 @@
  * Fetches available models from AI providers.
  */
 
-import type { ProviderType, TextModel } from '$lib/types'
-import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
-import { createLogger } from '$lib/log'
+import type { ProviderType, TextModel } from '#lib/types/index.ts'
+import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
+import { createLogger } from '#lib/log.ts'
 import { getBaseUrl, PROVIDERS } from './config'
 import { createTimeoutFetch } from './fetch'
 

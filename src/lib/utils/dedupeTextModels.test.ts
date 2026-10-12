@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { dedupeTextModels } from './dedupeTextModels'
-import type { TextModel } from '$lib/types'
+import type { TextModel } from '#lib/types/index.ts'
 
 /**
  * Model lists arrive from several places at once -- a provider's `/models`, a hardcoded

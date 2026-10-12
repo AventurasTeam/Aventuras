@@ -4,16 +4,16 @@
     RuntimeVariableType,
     RuntimeEntityType,
     EnumOption,
-  } from '$lib/services/packs/types'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Separator } from '$lib/components/ui/separator'
-  import * as Select from '$lib/components/ui/select'
+  } from '#lib/services/packs/types.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
   import IconPicker from './IconPicker.svelte'
-  import ColorPicker from '$lib/components/shared/ColorPicker.svelte'
+  import ColorPicker from '#lib/components/shared/ColorPicker.svelte'
   import {
     ChevronDown,
     ChevronUp,
@@ -27,98 +27,7 @@
     Check,
     Pin,
   } from '@lucide/svelte'
-
-  // Icon map for rendering selected icon in collapsed state
-  import {
-    Icon,
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  } from '@lucide/svelte'
-
-  const ICON_COMPONENTS: Record<string, typeof Icon> = {
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  }
+  import { runtimeVariableIcon } from './runtimeVariableIcons.ts'
 
   interface Props {
     variable: RuntimeVariable
@@ -365,7 +274,7 @@
     emitUpdate()
   }
 
-  let IconComponent = $derived(variable.icon ? ICON_COMPONENTS[variable.icon] : undefined)
+  let IconComponent = $derived(runtimeVariableIcon(variable.icon))
 </script>
 
 <div class="border-border bg-card rounded-lg border">

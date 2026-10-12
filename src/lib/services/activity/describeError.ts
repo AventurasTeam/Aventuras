@@ -6,7 +6,7 @@
  */
 
 import { APICallError, RetryError } from 'ai'
-import { errMessage } from '$lib/utils/error'
+import { errMessage } from '#lib/utils/error.ts'
 
 /** A reason is shown in full, but a provider can echo a whole prompt back in its error body. */
 const MAX_REASON_LENGTH = 300

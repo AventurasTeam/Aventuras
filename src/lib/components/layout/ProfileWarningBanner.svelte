@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { AlertTriangle, Settings } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
+  import { Button } from '#lib/components/ui/button/index.ts'
 
   let hasIssues = $derived(settings.hasGenerationConfigIssues)
   let healthReason = $derived(settings.modelHealthBlockReason)

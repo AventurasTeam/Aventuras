@@ -6,7 +6,7 @@
  */
 
 import * as z from 'zod'
-import type { RuntimeVariable } from '$lib/services/packs/types'
+import type { RuntimeVariable } from '#lib/services/packs/types.ts'
 
 // ============================================================================
 // Visual Descriptors Schema

@@ -12,7 +12,7 @@ import {
 import {
   ENTRY_RETRIEVAL_DEFAULTS,
   WORLD_STATE_INJECTION_DEFAULTS,
-} from '$lib/services/ai/core/defaults'
+} from '#lib/services/ai/core/defaults.ts'
 
 interface MergedWorldState {
   tier3WholesaleWordBudget: number

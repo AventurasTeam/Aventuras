@@ -1,17 +1,17 @@
 <script lang="ts">
   import { User, Loader2, X, Wand2, ImageUp, AlertCircle } from '@lucide/svelte'
-  import { normalizeImageDataUrl } from '$lib/utils/image'
-  import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import type { GeneratedCharacter, GeneratedProtagonist } from '#lib/services/ai/sdk/index.ts'
 
   // Shadcn Components
-  import * as Card from '$lib/components/ui/card'
-  import * as Avatar from '$lib/components/ui/avatar'
-  import * as Alert from '$lib/components/ui/alert'
-  import { Button } from '$lib/components/ui/button'
-  import { Label } from '$lib/components/ui/label'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Separator } from '$lib/components/ui/separator'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import * as Avatar from '#lib/components/ui/avatar/index.ts'
+  import * as Alert from '#lib/components/ui/alert/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
 
   interface Props {
     protagonist: GeneratedProtagonist | null

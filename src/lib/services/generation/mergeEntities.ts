@@ -23,8 +23,8 @@
  * Plain TypeScript: no store, no database.
  */
 
-import type { Character, Entry, Item, Location } from '$lib/types'
-import { containsWholeUnit, termKey, uniqueTerms } from '$lib/utils/text'
+import type { Character, Entry, Item, Location } from '#lib/types/index.ts'
+import { containsWholeUnit, termKey, uniqueTerms } from '#lib/utils/text.ts'
 
 /** Where a field's value came from, which is what the preview shows next to it. */
 export type FieldOrigin =

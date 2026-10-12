@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { database } from '$lib/services/database'
-  import { initPlatform } from '$lib/utils/platform'
-  import { settings } from '$lib/stores/settings.svelte'
-  import { grammarService } from '$lib/services/grammar'
-  import { updaterService } from '$lib/services/updater'
-  import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
-  import { packService } from '$lib/services/packs/pack-service'
-  import { warmupAllProfiles } from '$lib/services/modelHealthOrchestrator'
-  import AppShell from '$lib/components/layout/AppShell.svelte'
-  import WelcomeScreen from '$lib/components/intro/WelcomeScreen.svelte'
+  import { database } from '#lib/services/database.ts'
+  import { initPlatform } from '#lib/utils/platform.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { grammarService } from '#lib/services/grammar.ts'
+  import { updaterService } from '#lib/services/updater.ts'
+  import { updateNotifier } from '#lib/stores/updateNotifier.svelte.ts'
+  import { packService } from '#lib/services/packs/pack-service.ts'
+  import { warmupAllProfiles } from '#lib/services/modelHealthOrchestrator.ts'
+  import AppShell from '#lib/components/layout/AppShell.svelte'
+  import WelcomeScreen from '#lib/components/intro/WelcomeScreen.svelte'
 
   let initialized = $state(false)
   let error = $state<string | null>(null)

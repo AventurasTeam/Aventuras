@@ -7,7 +7,7 @@
  * than simple character-based estimation.
  */
 import { countTokens as gptCountTokens, encode } from 'gpt-tokenizer'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('Tokenizer')
 const logTokenCounts = false

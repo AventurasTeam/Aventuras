@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from '$lib/components/ui/button'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { Filter } from '@lucide/svelte'
   import type { ComponentProps } from 'svelte'
 

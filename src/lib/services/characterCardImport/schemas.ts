@@ -5,7 +5,7 @@
  */
 
 import * as z from 'zod'
-import { visualDescriptorsSchema } from '$lib/services/ai/sdk/schemas/classifier'
+import { visualDescriptorsSchema } from '#lib/services/ai/sdk/schemas/classifier.ts'
 
 /**
  * NPC extracted from character card.

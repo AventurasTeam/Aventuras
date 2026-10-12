@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { PresetPack } from '$lib/services/packs/types'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Button } from '$lib/components/ui/button'
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import type { PresetPack } from '#lib/services/packs/types.ts'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import { Upload, RefreshCw, Trash2, Lock, FileJson, FolderOpen } from '@lucide/svelte'
-  import { stripToPlainText } from '$lib/utils/markdown'
-  import { supportsDirectoryTransfer } from '$lib/services/packs/directory/support'
+  import { stripToPlainText } from '#lib/utils/markdown.ts'
+  import { supportsDirectoryTransfer } from '#lib/services/packs/directory/support.ts'
 
   interface Props {
     pack: PresetPack

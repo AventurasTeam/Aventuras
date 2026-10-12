@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { StoryEntry, TimeTracker } from '$lib/types'
+import type { StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import {
   reconcileRange,
   outstandingDurations,

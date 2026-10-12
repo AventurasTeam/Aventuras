@@ -1,11 +1,11 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { countRequests, debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
+  import { countRequests, debug, type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
   import { ExternalLink, RefreshCcw } from '@lucide/svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import DebugLogView from './DebugLogView.svelte'
-  import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
+  import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
 
   /** Throttle window. The snapshot is a whole copy of the log, so this is not free. */
   const THROTTLE_MS = 1200

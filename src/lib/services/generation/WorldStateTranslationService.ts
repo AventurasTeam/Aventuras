@@ -3,11 +3,11 @@
  * Extracts from ActionInput.svelte translateWorldStateElements() logic.
  */
 
-import type { Character, Location, Item, StoryBeat } from '$lib/types'
-import type { UITranslationItem } from '$lib/services/ai/utils/TranslationService'
-import { hasDescriptors, descriptorsToString } from '$lib/utils/visualDescriptors'
-import { createLogger } from '$lib/log'
-import { parseTerms } from '$lib/utils/text'
+import type { Character, Location, Item, StoryBeat } from '#lib/types/index.ts'
+import type { UITranslationItem } from '#lib/services/ai/utils/TranslationService.ts'
+import { hasDescriptors, descriptorsToString } from '#lib/utils/visualDescriptors.ts'
+import { createLogger } from '#lib/log.ts'
+import { parseTerms } from '#lib/utils/text.ts'
 
 const log = createLogger('WorldStateTranslationService')
 

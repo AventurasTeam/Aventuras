@@ -11,7 +11,7 @@ const state = {
   profiles: {} as Record<string, { id: string; providerType: string; apiKey: string }>,
 }
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     get imageGeneration() {
       return state.imageGeneration

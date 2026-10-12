@@ -1,4 +1,4 @@
-import type { ImageGenerationMode, StorySettings } from '$lib/types'
+import type { ImageGenerationMode, StorySettings } from '#lib/types/index.ts'
 
 export function normalizeImageDataUrl(imageData: string | null | undefined): string | null {
   if (!imageData) {

@@ -4,9 +4,9 @@
  * lookup is `ContextBuilder`'s -- only the "nothing usable" tail is ours.
  */
 
-import { database } from '$lib/services/database'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
+import { database } from '#lib/services/database.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 
 const log = createLogger('StylePrompt')

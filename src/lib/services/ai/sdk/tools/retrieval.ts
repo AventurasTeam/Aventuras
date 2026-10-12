@@ -7,7 +7,15 @@
 
 import { tool, type ToolSet } from 'ai'
 import * as z from 'zod'
-import type { Entry, Chapter, StoryEntry, Character, Location, Item, StoryBeat } from '$lib/types'
+import type {
+  Entry,
+  Chapter,
+  StoryEntry,
+  Character,
+  Location,
+  Item,
+  StoryBeat,
+} from '#lib/types/index.ts'
 import { entryTypeSchema } from '../schemas/lorebook'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_RETRIEVAL } from './chapterQueries'
 import {
@@ -15,10 +23,10 @@ import {
   findTextMatches,
   paragraphMatches,
   truncateAroundMatch,
-} from '$lib/utils/text'
+} from '#lib/utils/text.ts'
 import type { RetrievalEventInput } from '../../retrieval/retrievalHistory'
 import { sampleMatches } from '../../retrieval/grepSampling'
-import { entryTimeTag } from '$lib/utils/storyTime'
+import { entryTimeTag } from '#lib/utils/storyTime.ts'
 
 /**
  * Shape of live WorldState snapshot available during agentic retrieval.

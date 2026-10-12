@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: {
     addDebugRequest: vi.fn(),
     addDebugResponse: vi.fn(),
   },
 }))
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     apiSettings: {
       mainNarrativeProfileId: 'p1',
@@ -19,7 +19,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
 }))
 
 import { isPingEligible, shouldShowHealthFor } from './modelHealthOrchestrator'
-import type { APIProfile } from '$lib/types'
+import type { APIProfile } from '#lib/types/index.ts'
 
 describe('modelHealthOrchestrator', () => {
   it('checks profile ping eligibility correctly', () => {

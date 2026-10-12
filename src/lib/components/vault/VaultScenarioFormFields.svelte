@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { VaultScenarioInput } from '$lib/services/ai/sdk/schemas/vault'
-  import type { VaultCharacter } from '$lib/types'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
+  import type { VaultScenarioInput } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import type { VaultCharacter } from '#lib/types/index.ts'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
   import {
     Plus,
     Trash2,
@@ -12,24 +12,24 @@
     Search,
     User,
   } from '@lucide/svelte'
-  import TagInput from '$lib/components/tags/TagInput.svelte'
-  import TermsInput from '$lib/components/shared/TermsInput.svelte'
-  import { normalizeImageDataUrl } from '$lib/utils/image'
+  import TagInput from '#lib/components/tags/TagInput.svelte'
+  import TermsInput from '#lib/components/shared/TermsInput.svelte'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
   import {
     formatStoryTime,
     normalizeTime,
     parseStoryTime,
     storyTimeIsInvalid,
-  } from '$lib/services/storyTime'
+  } from '#lib/services/storyTime/index.ts'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Label } from '$lib/components/ui/label'
-  import * as Tabs from '$lib/components/ui/tabs'
-  import * as Avatar from '$lib/components/ui/avatar'
-  import * as Collapsible from '$lib/components/ui/collapsible'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import * as Tabs from '#lib/components/ui/tabs/index.ts'
+  import * as Avatar from '#lib/components/ui/avatar/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
 
   interface Props {
     data: VaultScenarioInput

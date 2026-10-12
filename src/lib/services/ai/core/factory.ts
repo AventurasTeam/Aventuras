@@ -5,7 +5,7 @@
  * Services receive a service ID and resolve presets dynamically via settings.getServicePresetId().
  */
 
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 import { NarrativeService } from '../generation/NarrativeService'
 import { ClassifierService } from '../generation/ClassifierService'
 import { MemoryService } from '../generation/MemoryService'

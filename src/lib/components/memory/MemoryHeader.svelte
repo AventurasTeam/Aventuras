@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { Plus, Settings } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Progress } from '$lib/components/ui/progress'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Label } from '$lib/components/ui/label'
-  import { cn } from '$lib/utils/cn'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import { Progress } from '#lib/components/ui/progress/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     onCreateChapter?: () => void

@@ -4,7 +4,7 @@
  * - references:    POST {baseUrl}/images/edits (multipart, `image` or repeated `image[]`)
  */
 
-import { base64ImageMime, base64ToBytes } from '$lib/utils/image'
+import { base64ImageMime, base64ToBytes } from '#lib/utils/image.ts'
 import type { ImageGenerateResult } from './types'
 import { fetchImageBase64, imageFetch } from './fetchAdapter'
 

@@ -14,18 +14,18 @@ import type {
   TimeTracker,
   EmbeddedImageMeta,
   PersistentCharacterSnapshot,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import * as z from 'zod'
-import type { ActionChoice } from '$lib/services/ai/sdk/schemas/actionchoices'
-import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
-import { actionChoiceSchema, suggestionSchema } from '$lib/services/ai/sdk/schemas'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
+import type { ActionChoice } from '#lib/services/ai/sdk/schemas/actionchoices.ts'
+import type { Suggestion } from '#lib/services/ai/sdk/schemas/suggestions.ts'
+import { actionChoiceSchema, suggestionSchema } from '#lib/services/ai/sdk/schemas/index.ts'
+import type { StyleReviewResult } from '#lib/services/ai/generation/StyleReviewerService.ts'
 import type {
   EntryRetrievalResult,
   ActivationTracker,
-} from '$lib/services/ai/retrieval/EntryRetrievalService'
-import type { RetrievalResult } from '$lib/services/generation/types'
-import type { WorldStateInjectionResult } from '$lib/services/ai/generation/WorldStateInjector'
+} from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
+import type { RetrievalResult } from '#lib/services/generation/types.ts'
+import type { WorldStateInjectionResult } from '#lib/services/ai/generation/WorldStateInjector.ts'
 
 /** What a cached retrieval result was computed for. All four must match to reuse it. */
 export interface RetrievalCacheKey {
@@ -35,16 +35,16 @@ export interface RetrievalCacheKey {
   position: number
   actionContent: string
 }
-import type { SyncMode } from '$lib/types/sync'
-import { DESKTOP_BREAKPOINT } from '$lib/constants/layout'
-import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
-import { database } from '$lib/services/database'
-import { eventBus, type EventType } from '$lib/services/events'
+import type { SyncMode } from '#lib/types/sync.ts'
+import { DESKTOP_BREAKPOINT } from '#lib/constants/layout.ts'
+import { SimpleActivationTracker } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
+import { database } from '#lib/services/database.ts'
+import { eventBus, type EventType } from '#lib/services/events.ts'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
-import { StreamingHtmlRenderer } from '$lib/utils/htmlStreaming'
-import { countTokens } from '$lib/services/tokenizer'
-import { branchScopeKey } from '$lib/utils/branchScope'
-import type { LandmarkFilterGroup } from '$lib/utils/storyNavigation'
+import { StreamingHtmlRenderer } from '#lib/utils/htmlStreaming.ts'
+import { countTokens } from '#lib/services/tokenizer.ts'
+import { branchScopeKey } from '#lib/utils/branchScope.ts'
+import type { LandmarkFilterGroup } from '#lib/utils/storyNavigation.ts'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 

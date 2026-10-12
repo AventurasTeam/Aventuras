@@ -5,7 +5,7 @@
  * UI pulls them via `snapshot()` when `version` changes -- per-step reactivity on a path
  * that appends several times a second is waste, and the same reasoning shapes `debug`.
  *
- * All logic lives in `$lib/services/activity`; this file only wires it to a rune.
+ * All logic lives in `#lib/services/activity/index.ts`; this file only wires it to a rune.
  */
 
 import { SvelteMap } from 'svelte/reactivity'
@@ -22,7 +22,7 @@ import {
   type GroupOptions,
   type StartStepOptions,
   type TurnOutcome,
-} from '$lib/services/activity'
+} from '#lib/services/activity/index.ts'
 
 class ActivityStore {
   /** Increments on every recorded change. Read it to make a derivation reactive. */

@@ -1,8 +1,8 @@
 <script lang="ts" generics="T">
   import { Search } from '@lucide/svelte'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Skeleton } from '$lib/components/ui/skeleton'
-  import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Skeleton } from '#lib/components/ui/skeleton/index.ts'
+  import EmptyState from '#lib/components/ui/empty-state/empty-state.svelte'
   import type { Snippet } from 'svelte'
 
   interface Props {

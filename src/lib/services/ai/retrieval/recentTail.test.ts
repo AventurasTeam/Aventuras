@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { splitRecentTail } from './recentTail'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 const entry = (content: string): StoryEntry => ({ type: 'narration', content }) as StoryEntry
 

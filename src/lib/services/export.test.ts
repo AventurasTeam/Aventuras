@@ -21,10 +21,10 @@ const dialogOpen = vi.fn()
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a: unknown[]) => dialogOpen(...a) }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile: vi.fn(), readTextFile: vi.fn() }))
 const importFromFile = vi.fn()
-vi.mock('$lib/services/import/native', () => ({
+vi.mock('#lib/services/import/native.ts', () => ({
   importFromFile: (...a: unknown[]) => importFromFile(...a),
 }))
-vi.mock('$lib/services/exportTarget', () => ({ resolveSaveTarget: vi.fn() }))
+vi.mock('#lib/services/exportTarget.ts', () => ({ resolveSaveTarget: vi.fn() }))
 
 /** Records every write the import performs, so tests can assert on the resulting graph. */
 const calls = {
@@ -44,7 +44,7 @@ const calls = {
   currentBranch: [] as any[],
 }
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     createStory: vi.fn(async (s: any) => void calls.stories.push(s)),
     addStoryEntry: vi.fn(async (e: any) => void calls.entries.push(e)),

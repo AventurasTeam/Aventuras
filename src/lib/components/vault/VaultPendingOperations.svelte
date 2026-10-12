@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
+  import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
   import {
     GitMerge,
     Plus,
@@ -10,8 +10,8 @@
     Check,
     CheckCheck,
   } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { cn } from '$lib/utils/cn'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { slide } from 'svelte/transition'
   import X from '@lucide/svelte/icons/x'
 

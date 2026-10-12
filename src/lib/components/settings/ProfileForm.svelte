@@ -1,19 +1,19 @@
 <script lang="ts">
-  import type { ProviderType, TextModel } from '$lib/types'
-  import { PROVIDERS, hasDefaultEndpoint } from '$lib/services/ai/sdk/providers/config'
+  import type { ProviderType, TextModel } from '#lib/types/index.ts'
+  import { PROVIDERS, hasDefaultEndpoint } from '#lib/services/ai/sdk/providers/config.ts'
   import ProviderTypeSelector from './ProviderTypeSelector.svelte'
-  import { isMobileDevice } from '$lib/utils/swipe'
+  import { isMobileDevice } from '#lib/utils/swipe.ts'
 
   // Shadcn Components
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Switch } from '$lib/components/ui/switch'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Alert, AlertDescription } from '$lib/components/ui/alert'
-  import * as Dialog from '$lib/components/ui/dialog'
-  import { isPingEligibleProvider } from '$lib/constants/modelHealth'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Alert, AlertDescription } from '#lib/components/ui/alert/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import { isPingEligibleProvider } from '#lib/constants/modelHealth.ts'
   import {
     AlertCircle,
     Box,

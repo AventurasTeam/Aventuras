@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { tagStore } from '$lib/stores/tags.svelte'
-  import type { VaultTag, VaultType } from '$lib/types'
+  import { tagStore } from '#lib/stores/tags.svelte.ts'
+  import type { VaultTag, VaultType } from '#lib/types/index.ts'
   import { Trash2, Edit2, Check, Plus } from '@lucide/svelte'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs'
-  import { Input } from '$lib/components/ui/input'
-  import { Button } from '$lib/components/ui/button'
-  import { cn } from '$lib/utils/cn'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Tabs, TabsList, TabsTrigger } from '#lib/components/ui/tabs/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { fade } from 'svelte/transition'
 
   interface Props {

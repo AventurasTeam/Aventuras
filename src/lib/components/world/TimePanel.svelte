@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
   import { Pencil, RotateCcw, Save } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
 
   let isEditing = $state(false)
   let editYears = $state(0)

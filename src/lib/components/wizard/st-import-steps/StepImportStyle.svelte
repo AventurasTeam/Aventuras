@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Sword, Feather, MessageSquare, FileText } from '@lucide/svelte'
-  import * as Card from '$lib/components/ui/card'
-  import { Label } from '$lib/components/ui/label'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
-  import { hasRequiredCredentials } from '$lib/services/ai/image'
-  import type { StoryMode, POV, ImageGenerationMode } from '$lib/types'
-  import type { Tense } from '$lib/services/ai/wizard/ScenarioService'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import WritingStyleFields from '#lib/components/shared/WritingStyleFields.svelte'
+  import { hasRequiredCredentials } from '#lib/services/ai/image/index.ts'
+  import type { StoryMode, POV, ImageGenerationMode } from '#lib/types/index.ts'
+  import type { Tense } from '#lib/services/ai/wizard/ScenarioService.ts'
 
   interface Props {
     selectedMode: StoryMode

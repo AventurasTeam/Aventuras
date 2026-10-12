@@ -80,7 +80,7 @@ account of how the target was added and how the unsigned CI pipeline works).
 
 ## Tech stack
 
-TypeScript (strict) · SvelteKit 2 · Svelte 5 runes · Tauri 2 (Rust) · Tailwind + shadcn-svelte ·
+TypeScript (strict) · SvelteKit 3 · Svelte 5 runes · Tauri 2 (Rust) · Tailwind + bits-ui ·
 SQLite (`tauri-plugin-sql` / `sqlx`) · Vercel AI SDK · LiquidJS · CodeMirror 6 · Zod ·
 Harper.js (WASM) · Vitest
 

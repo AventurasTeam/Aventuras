@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import {
     toRetrievalSnapshot,
     positionsToTurns,
@@ -9,8 +9,8 @@
     splitTier3,
     type RetrievalSnapshot,
     type RetrievalSnapshotEntry,
-  } from '$lib/services/ai/retrieval'
-  import { Button } from '$lib/components/ui/button'
+  } from '#lib/services/ai/retrieval/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import {
     BookOpen,
     Globe,
@@ -29,18 +29,18 @@
     Merge,
     Brain,
   } from '@lucide/svelte'
-  import { runManualLoreManagement } from '$lib/services/generation'
-  import DuplicatesModal from '$lib/components/duplicates/DuplicatesModal.svelte'
+  import { runManualLoreManagement } from '#lib/services/generation/index.ts'
+  import DuplicatesModal from '#lib/components/duplicates/DuplicatesModal.svelte'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import * as Collapsible from '$lib/components/ui/collapsible'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Separator } from '$lib/components/ui/separator'
-  import { cn } from '$lib/utils/cn'
-  import type { SidebarTab } from '$lib/types'
-  import { countTokens } from '$lib/services/tokenizer'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Card, CardContent } from '#lib/components/ui/card/index.ts'
+  import { Separator } from '#lib/components/ui/separator/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import type { SidebarTab } from '#lib/types/index.ts'
+  import { countTokens } from '#lib/services/tokenizer.ts'
 
   /**
    * Live for the turn that just ran, persisted for every other case.

@@ -4,7 +4,7 @@
  * Provides AI-powered scenario generation for the story wizard.
  */
 
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 import type {
   StoryMode,
   POV,
@@ -15,10 +15,10 @@ import type {
   Item,
   ImageGenerationMode,
   TimeTracker,
-} from '$lib/types'
-import { ContextBuilder } from '$lib/services/context'
-import { startingTimePromptValue } from '$lib/services/storyTime'
-import { createLogger } from '$lib/log'
+} from '#lib/types/index.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { startingTimePromptValue } from '#lib/services/storyTime/index.ts'
+import { createLogger } from '#lib/log.ts'
 import {
   type ExpandedSetting,
   type GeneratedProtagonist,
@@ -28,8 +28,8 @@ import {
   generatedProtagonistSchema,
   generatedCharactersSchema,
   generatedOpeningSchema,
-} from '$lib/services/ai/sdk/schemas/scenario'
-import { generateStructured } from '$lib/services/ai/sdk'
+} from '#lib/services/ai/sdk/schemas/scenario.ts'
+import { generateStructured } from '#lib/services/ai/sdk/index.ts'
 
 const log = createLogger('ScenarioService')
 

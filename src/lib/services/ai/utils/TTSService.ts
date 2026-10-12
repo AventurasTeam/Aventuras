@@ -5,9 +5,9 @@
  */
 
 import { PROVIDERS } from '../sdk/providers/config'
-import { corsFetch } from '$lib/services/discovery/utils'
+import { corsFetch } from '#lib/services/discovery/utils.ts'
 import { SPEAKABLE, supportsVolumeOverride } from './ttsText'
-import { isIos } from '$lib/utils/platform'
+import { isIos } from '#lib/utils/platform.ts'
 
 // Constants
 export const DEFAULT_SPEECH_RATE = 1.0

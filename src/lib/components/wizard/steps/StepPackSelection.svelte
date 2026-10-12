@@ -1,13 +1,13 @@
 <script lang="ts">
-  import * as Select from '$lib/components/ui/select'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Switch } from '$lib/components/ui/switch'
-  import { Label } from '$lib/components/ui/label'
-  import { Badge } from '$lib/components/ui/badge'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
   import { Package } from '@lucide/svelte'
-  import { renderDescription } from '$lib/utils/markdown'
-  import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
+  import { renderDescription } from '#lib/utils/markdown.ts'
+  import type { PresetPack, CustomVariable } from '#lib/services/packs/types.ts'
 
   interface Props {
     availablePacks: PresetPack[]

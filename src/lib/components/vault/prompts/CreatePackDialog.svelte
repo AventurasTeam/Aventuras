@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { PresetPack } from '$lib/services/packs/types'
-  import { packService } from '$lib/services/packs/pack-service'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Label } from '$lib/components/ui/label'
+  import type { PresetPack } from '#lib/services/packs/types.ts'
+  import { packService } from '#lib/services/packs/pack-service.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
 
   interface Props {
     open: boolean

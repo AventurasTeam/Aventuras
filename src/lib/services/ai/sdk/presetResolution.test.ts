@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     advancedRequestSettings: {
       manualMode: false,
@@ -8,7 +8,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }))
 
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debugStore: {
     logApiRequest: vi.fn(),
     logApiResponse: vi.fn(),
@@ -21,7 +21,7 @@ import {
   thinkingNudgeApplies,
 } from './presetResolution'
 import { usesThinkTag } from './providers/config'
-import type { GenerationPreset } from '$lib/types'
+import type { GenerationPreset } from '#lib/types/index.ts'
 
 describe('buildProviderOptions', () => {
   const basePreset: GenerationPreset = {

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { StoryEntry } from '$lib/types'
+  import type { StoryEntry } from '#lib/types/index.ts'
   import { slide } from 'svelte/transition'
   import { MessageSquare, Scroll, MilestoneIcon } from '@lucide/svelte'
-  import { Badge } from '$lib/components/ui/badge'
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { entryNumber, jumpToEntry } from '$lib/utils/storyNavigation'
-  import { supportsHover } from '$lib/utils/platform'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { entryNumber, jumpToEntry } from '#lib/utils/storyNavigation.ts'
+  import { supportsHover } from '#lib/utils/platform.ts'
 
   interface Props {
     entries: StoryEntry[]

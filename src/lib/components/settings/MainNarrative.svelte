@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { createDebouncedSave } from '$lib/utils/debounce'
-  import { settings } from '$lib/stores/settings.svelte'
+  import { createDebouncedSave } from '#lib/utils/debounce.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
   import { Cpu, AlertTriangle } from '@lucide/svelte'
-  import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
+  import { fetchModelsFromProvider } from '#lib/services/ai/sdk/providers/index.ts'
 
   // Shadcn Components
-  import * as Card from '$lib/components/ui/card'
-  import { Label } from '$lib/components/ui/label'
-  import { Button } from '$lib/components/ui/button'
-  import { Textarea } from '$lib/components/ui/textarea'
+  import * as Card from '#lib/components/ui/card/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import GenerationParamsForm from './GenerationParamsForm.svelte'
 
   interface Props {

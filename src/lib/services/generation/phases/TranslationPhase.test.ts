@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 // That class extends BaseAIService, so loading it reaches the debug and settings stores --
 // rune-based modules the test runner cannot evaluate. Both are stubbed so the *real* gate
 // runs: reimplementing the predicate here would leave the thing under test untested.
-vi.mock('$lib/stores/activity.svelte', () => ({
+vi.mock('#lib/stores/activity.svelte.ts', () => ({
   activity: {
     startStep: vi.fn(() => ''),
     updateStep: vi.fn(),
@@ -12,10 +12,10 @@ vi.mock('$lib/stores/activity.svelte', () => ({
     recordStep: vi.fn(() => ''),
   },
 }))
-vi.mock('$lib/stores/debug.svelte', () => ({
+vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
-vi.mock('$lib/stores/settings.svelte', () => ({
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getServicePresetId: () => 'translation',
     getPresetConfig: () => ({ model: 'test-model', temperature: 0 }),
@@ -25,9 +25,9 @@ vi.mock('$lib/stores/settings.svelte', () => ({
 }))
 
 import { TranslationPhase, type TranslationInput } from './TranslationPhase'
-import { ActivityRecorder } from '$lib/services/activity'
+import { ActivityRecorder } from '#lib/services/activity/index.ts'
 import type { GenerationEvent } from '../types'
-import type { TranslationSettings } from '$lib/types'
+import type { TranslationSettings } from '#lib/types/index.ts'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []

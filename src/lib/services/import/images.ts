@@ -6,7 +6,7 @@
  * story graph — inline through the JS heap here, or natively for a large file.
  */
 
-import { database } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
 import type { AventuraExport, IdMaps } from './types'
 
 /** Old image id -> the imported entry it hangs off. Enough for a native importer to place a row. */

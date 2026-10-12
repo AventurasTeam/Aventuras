@@ -1,4 +1,4 @@
-import type { TemplateInitialState } from '$lib/types'
+import type { TemplateInitialState } from '#lib/types/index.ts'
 
 /**
  * Quick Start Seed - pre-configured data for the story wizard

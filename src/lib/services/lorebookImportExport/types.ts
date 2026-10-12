@@ -2,8 +2,8 @@
  * Shared types for lorebook import/export operations
  */
 
-import type { Entry, EntryType, EntryInjectionMode } from '$lib/types'
-import type { BranchScope } from '$lib/utils/branchScope'
+import type { Entry, EntryType, EntryInjectionMode } from '#lib/types/index.ts'
+import type { BranchScope } from '#lib/utils/branchScope.ts'
 
 // ===== Import Types =====
 
@@ -52,7 +52,7 @@ export type ImportProgress = {
 export type ImportOptions = {
   scope: BranchScope
   useAIClassification: boolean
-  storyMode: import('$lib/types').StoryMode
+  storyMode: import('#lib/types/index.ts').StoryMode
   onProgress?: (progress: ImportProgress) => void
 }
 

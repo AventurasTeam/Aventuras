@@ -1,5 +1,5 @@
-import type { VisualDescriptors } from '$lib/types'
-import type { GeneratedCharacter } from '$lib/services/ai/sdk'
+import type { VisualDescriptors } from '#lib/types/index.ts'
+import type { GeneratedCharacter } from '#lib/services/ai/sdk/index.ts'
 
 export type SanitizedCharacter = {
   name: string

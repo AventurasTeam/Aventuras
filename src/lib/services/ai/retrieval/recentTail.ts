@@ -22,7 +22,7 @@
  * the agent reading a fragment that starts mid-sentence.
  */
 
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry } from '#lib/types/index.ts'
 
 /** Separator `AgenticRetrievalService` joins entry content with, charged to the budget. */
 const JOIN_LENGTH = 2

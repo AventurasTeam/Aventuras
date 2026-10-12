@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { ProviderType } from '$lib/types'
-  import { getProviderList } from '$lib/services/ai/sdk/providers/config'
-  import Autocomplete from '$lib/components/ui/autocomplete/Autocomplete.svelte'
-  import { Label } from '$lib/components/ui/label'
+  import type { ProviderType } from '#lib/types/index.ts'
+  import { getProviderList } from '#lib/services/ai/sdk/providers/config.ts'
+  import Autocomplete from '#lib/components/ui/autocomplete/Autocomplete.svelte'
+  import { Label } from '#lib/components/ui/label/index.ts'
 
   interface Props {
     value: ProviderType

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildChapterRead,
   type ChapterForRead,
-} from '$lib/services/ai/retrieval/chapterContentBudget'
+} from '#lib/services/ai/retrieval/chapterContentBudget.ts'
 
 function chapter(number: number, entryTokens: number[]): ChapterForRead {
   return {

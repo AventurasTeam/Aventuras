@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { tagStore } from '$lib/stores/tags.svelte'
-  import type { VaultType } from '$lib/types'
+  import { tagStore } from '#lib/stores/tags.svelte.ts'
+  import type { VaultType } from '#lib/types/index.ts'
   import { Filter, Check, X } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import * as Command from '$lib/components/ui/command'
-  import * as Popover from '$lib/components/ui/popover'
-  import { cn } from '$lib/utils/cn'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import * as Command from '#lib/components/ui/command/index.ts'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     selectedTags: string[]

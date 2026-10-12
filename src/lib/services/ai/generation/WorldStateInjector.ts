@@ -31,13 +31,13 @@
  * appended retrieval's output to its own block and so could not run before it.
  */
 
-import type { Character, Location, Item, StoryBeat, StoryEntry } from '$lib/types'
-import { settings, type ServiceId } from '$lib/stores/settings.svelte'
+import type { Character, Location, Item, StoryBeat, StoryEntry } from '#lib/types/index.ts'
+import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
 import { WORLD_STATE_INJECTION_DEFAULTS } from '../core/defaults'
-import { createLogger } from '$lib/log'
-import { entityNameMatches, measureMatching } from '$lib/utils/text'
-import { activity } from '$lib/stores/activity.svelte'
+import { createLogger } from '#lib/log.ts'
+import { entityNameMatches, measureMatching } from '#lib/utils/text.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
 import {
   runTier3Selection,
   resolveTier3Selection,
@@ -49,7 +49,7 @@ import {
 type WorldStateCandidate = Tier3Candidate<WorldStateContextEntry['type']>
 import type { ActivationTracker } from '../retrieval/EntryRetrievalService'
 import { resolveStickiness } from '../retrieval/stickiness'
-import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
+import { recentContent, AS_HAYSTACK } from '#lib/utils/recentContent.ts'
 import { secondPassHaystack } from '../retrieval/tier2SecondPass'
 import { matchingStepDetail } from '../retrieval/matchingStep'
 

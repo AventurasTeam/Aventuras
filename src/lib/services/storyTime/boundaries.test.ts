@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { StoryEntry, TimeAnchor, TimeTracker } from '$lib/types'
+import type { StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
 import { listBoundaries, selectableRanges, refuseRange } from './boundaries'
 
 function t(hours: number, minutes = 0): TimeTracker {

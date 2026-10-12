@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 // The aggregate character-card API also loads its AI sanitizer and Svelte stores. Live provider
 // tests only need the production file reader/parser and run in a plain Node environment.
 // eslint-disable-next-line boundaries/dependencies
-import { parseJson } from '$lib/services/characterCardImport/parseJson'
+import { parseJson } from '#lib/services/characterCardImport/parseJson.ts'
 // eslint-disable-next-line boundaries/dependencies
-import { readFile } from '$lib/services/characterCardImport/readFile'
+import { readFile } from '#lib/services/characterCardImport/readFile.ts'
 import { discoveryService, METADATA_ONLY_CHARACTER_MIME } from '../index'
 
 vi.mock('../utils', () => ({

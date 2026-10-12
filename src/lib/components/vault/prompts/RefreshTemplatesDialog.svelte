@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ClassifiedTemplates, RefreshScope } from '$lib/services/packs/staleness'
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
+  import type { ClassifiedTemplates, RefreshScope } from '#lib/services/packs/staleness.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { describeTemplate } from './templateGroups'
 
   interface Props {

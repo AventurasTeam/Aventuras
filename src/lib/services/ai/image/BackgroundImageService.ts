@@ -1,12 +1,12 @@
-import { emitBackgroundImageAnalysisFailed } from '$lib/services/events'
-import { ContextBuilder } from '$lib/services/context'
-import { settings, type ServiceId } from '$lib/stores/settings.svelte'
-import type { StoryEntry } from '$lib/types'
-import { createLogger } from '$lib/log'
+import { emitBackgroundImageAnalysisFailed } from '#lib/services/events.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
+import type { StoryEntry } from '#lib/types/index.ts'
+import { createLogger } from '#lib/log.ts'
 import { backgroundImageAnalysisResultSchema, type BackgroundImageAnalysisResult } from '../sdk'
 import { BaseAIService } from '../BaseAIService'
 import { generateImage } from './providers/registry'
-import { describeActivityError, isAbortError } from '$lib/services/activity'
+import { describeActivityError, isAbortError } from '#lib/services/activity/index.ts'
 
 const log = createLogger('BackgroundImageService')
 

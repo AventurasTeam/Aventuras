@@ -10,9 +10,9 @@
  * 4. Cleans up auto-snapshots after the rollback position
  */
 
-import type { WorldStateDelta, StoryEntry, TimeTracker } from '$lib/types'
+import type { WorldStateDelta, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import { database } from './database'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('RollbackService')
 

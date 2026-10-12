@@ -1,19 +1,22 @@
 <script lang="ts">
-  import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
-  import type { VaultCharacterInput, VaultScenarioInput } from '$lib/services/ai/sdk/schemas/vault'
-  import type { VaultLorebook, VaultLorebookEntry } from '$lib/types'
-  import { Button } from '$lib/components/ui/button'
+  import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import type {
+    VaultCharacterInput,
+    VaultScenarioInput,
+  } from '#lib/services/ai/sdk/schemas/vault.ts'
+  import type { VaultLorebook, VaultLorebookEntry } from '#lib/types/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
   import { X, Check, Save, User, BookOpen, Map as MapIcon } from '@lucide/svelte'
   import VaultCharacterFormFields from './VaultCharacterFormFields.svelte'
   import VaultScenarioFormFields from './VaultScenarioFormFields.svelte'
   import VaultLorebookEditorContent from './VaultLorebookEditorContent.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
-  import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-  import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
-  import { characterToRecord, scenarioToRecord } from '$lib/utils/vaultMerge'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+  import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
+  import { characterToRecord, scenarioToRecord } from '#lib/utils/vaultMerge.ts'
   import { SvelteMap } from 'svelte/reactivity'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
 
   interface Props {
     change: VaultPendingChange

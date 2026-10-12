@@ -6,16 +6,16 @@
  * sdk/generate.ts generateImage().
  */
 
-import { settings } from '$lib/stores/settings.svelte'
-import type { ImageProviderType } from '$lib/types'
-import { parseImageSpec, describeImageSpec, type ImageSpec } from '$lib/utils/image'
+import { settings } from '#lib/stores/settings.svelte.ts'
+import type { ImageProviderType } from '#lib/types/index.ts'
+import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
 
 // Provider factory imports (lazy)

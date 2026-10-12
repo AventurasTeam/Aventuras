@@ -2,7 +2,7 @@
  * Extract embedded lorebooks from character cards
  */
 
-import type { VaultLorebookEntry } from '$lib/types'
+import type { VaultLorebookEntry } from '#lib/types/index.ts'
 import type { LorebookImportResult } from '../types'
 import { parse } from './parse'
 

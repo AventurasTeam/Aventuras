@@ -1,4 +1,9 @@
-import type { EntryInjectionMode, EntryType, TimeTracker, VisualDescriptors } from '$lib/types'
+import type {
+  EntryInjectionMode,
+  EntryType,
+  TimeTracker,
+  VisualDescriptors,
+} from '#lib/types/index.ts'
 
 export const EXCHANGE_FORMAT = 'aventuras-exchange'
 export const EXCHANGE_FORMAT_VERSION = '1.0.0'

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ui } from '$lib/stores/ui.svelte'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import { X, AlertTriangle, Info, AlertCircle } from '@lucide/svelte'
 
   function getIcon() {

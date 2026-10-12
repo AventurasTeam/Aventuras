@@ -1,21 +1,25 @@
 <script lang="ts">
   import { X, Search, Loader2, Filter, Check, EyeOff, Eye, Blend, Globe } from '@lucide/svelte'
-  import { discoveryService, type DiscoveryCard, type SearchResult } from '$lib/services/discovery'
+  import {
+    discoveryService,
+    type DiscoveryCard,
+    type SearchResult,
+  } from '#lib/services/discovery/index.ts'
   import DiscoveryCardComponent from './DiscoveryCard.svelte'
   import DiscoveryCardDetails from './DiscoveryCardDetails.svelte'
-  import { characterVault } from '$lib/stores/characterVault.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
 
-  import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { Badge } from '$lib/components/ui/badge'
-  import * as Select from '$lib/components/ui/select'
-  import * as ToggleGroup from '$lib/components/ui/toggle-group'
-  import * as Popover from '$lib/components/ui/popover'
-  import * as Command from '$lib/components/ui/command'
-  import { cn } from '$lib/utils/cn'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Badge } from '#lib/components/ui/badge/index.ts'
+  import * as Select from '#lib/components/ui/select/index.ts'
+  import * as ToggleGroup from '#lib/components/ui/toggle-group/index.ts'
+  import * as Popover from '#lib/components/ui/popover/index.ts'
+  import * as Command from '#lib/components/ui/command/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { SvelteSet } from 'svelte/reactivity'
 
   interface Props {

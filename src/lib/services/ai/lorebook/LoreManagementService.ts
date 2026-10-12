@@ -14,10 +14,10 @@ import type {
   StoryMode,
   Tense,
   VaultLorebookEntry,
-} from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+} from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { createLogger } from '$lib/log'
+import { createLogger } from '#lib/log.ts'
 import {
   createAgentFromPreset,
   extractToolResults,
@@ -27,7 +27,7 @@ import {
 import type { PrepareStepFunction } from 'ai'
 import { createLoreManagementTools } from '../sdk/tools'
 import type { FinishLoreManagementSchema } from '../sdk/schemas/lorebook'
-import { ContextBuilder } from '$lib/services/context'
+import { ContextBuilder } from '#lib/services/context/index.ts'
 import type { LoreManagementToolContext } from '../sdk/tools/lorebook'
 import {
   findDuplicateGroups,
@@ -35,7 +35,7 @@ import {
   groupIsSettledBy,
   pairKeys,
   type DuplicateGroup,
-} from '$lib/services/duplicates'
+} from '#lib/services/duplicates/index.ts'
 import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS, recentStoryBudgetChars } from '../core/defaults'

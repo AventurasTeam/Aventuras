@@ -6,10 +6,10 @@
  * All it adds is the store reads and the guard against a second concurrent run.
  */
 
-import { story } from '$lib/stores/story.svelte'
-import { aiService } from '$lib/services/ai'
-import { createLogger } from '$lib/log'
-import type { Chapter } from '$lib/types'
+import { story } from '#lib/stores/story.svelte.ts'
+import { aiService } from '#lib/services/ai/index.ts'
+import { createLogger } from '#lib/log.ts'
+import type { Chapter } from '#lib/types/index.ts'
 import {
   LoreManagementCoordinator,
   isLoreManagementRunning,

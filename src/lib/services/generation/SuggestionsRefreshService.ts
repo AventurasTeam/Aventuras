@@ -3,11 +3,17 @@
  * Coordinates suggestion generation and optional translation for creative writing mode.
  */
 
-import type { StoryEntry, StoryBeat, Entry, StoryMode, TranslationSettings } from '$lib/types'
-import type { Suggestion, SuggestionsResult } from '$lib/services/ai/sdk/schemas/suggestions'
-import type { RetrievedEntry } from '$lib/services/ai/retrieval/EntryRetrievalService'
-import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import { createLogger } from '$lib/log'
+import type {
+  StoryEntry,
+  StoryBeat,
+  Entry,
+  StoryMode,
+  TranslationSettings,
+} from '#lib/types/index.ts'
+import type { Suggestion, SuggestionsResult } from '#lib/services/ai/sdk/schemas/suggestions.ts'
+import type { RetrievedEntry } from '#lib/services/ai/retrieval/EntryRetrievalService.ts'
+import { TranslationService } from '#lib/services/ai/utils/TranslationService.ts'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('SuggestionsRefreshService')
 

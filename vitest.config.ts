@@ -1,15 +1,8 @@
 import { defineConfig } from 'vitest/config'
-import { fileURLToPath } from 'node:url'
 
-// Deliberately does NOT use the sveltekit() plugin: these are plain unit tests of TS logic, and
-// pulling in the full SvelteKit pipeline would make them slow to run and easy to break. Only the
-// $lib alias is needed, so it is resolved by hand.
+// No sveltekit() plugin: plain unit tests of TS logic stay fast. `#lib` resolves through the
+// `imports` field in package.json.
 export default defineConfig({
-  resolve: {
-    alias: {
-      $lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
-    },
-  },
   test: {
     environment: 'node',
     // `scripts/` for the release script's version arithmetic. Plain `.js`: not built.

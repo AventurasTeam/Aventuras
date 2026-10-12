@@ -1,13 +1,13 @@
-import { settings } from '$lib/stores/settings.svelte'
+import { settings } from '#lib/stores/settings.svelte.ts'
 import {
   hasRequiredCredentials,
   getProviderDisplayName,
   generatePortrait as sdkGeneratePortrait,
   resolveStylePromptForPack,
-} from '$lib/services/ai/image'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
-import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
+} from '#lib/services/ai/image/index.ts'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
+import type { GeneratedCharacter, GeneratedProtagonist } from '#lib/services/ai/sdk/index.ts'
 
 const log = createLogger('WizardPortrait')
 

@@ -13,7 +13,7 @@
  * Plain TypeScript, no SDK or store imports.
  */
 
-import { termKey } from '$lib/utils/text'
+import { termKey } from '#lib/utils/text.ts'
 
 /** A term with no letter or digit is dead or fires on ordinary punctuation. */
 const hasWord = (term: string) => /[\p{L}\p{N}]/u.test(term)

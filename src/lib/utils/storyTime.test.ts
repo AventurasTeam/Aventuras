@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { entryTime, entryTimeTag, formatStoryTimeOrNull, formatTimeSpan } from './storyTime'
-import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
+import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 
 const t = (years: number, days: number, hours: number, minutes: number): TimeTracker => ({
   years,

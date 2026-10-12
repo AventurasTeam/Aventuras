@@ -9,12 +9,12 @@
  */
 
 import { NoObjectGeneratedError } from 'ai'
-import { describeActivityError, isAbortError } from '$lib/services/activity'
-import type { VisualDescriptors } from '$lib/types'
-import type { ServiceId } from '$lib/stores/settings.svelte'
+import { describeActivityError, isAbortError } from '#lib/services/activity/index.ts'
+import type { VisualDescriptors } from '#lib/types/index.ts'
+import type { ServiceId } from '#lib/stores/settings.svelte.ts'
 import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '$lib/log'
+import { ContextBuilder } from '#lib/services/context/index.ts'
+import { createLogger } from '#lib/log.ts'
 import {
   sceneAnalysisResultSchema,
   imageableSceneSchema,

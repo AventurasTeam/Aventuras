@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { PresetPack, RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
-import type { MatchConfidence } from '$lib/services/packs/binding'
+import type { PresetPack, RuntimeVariable, RuntimeVarsMap } from '#lib/services/packs/types.ts'
+import type { MatchConfidence } from '#lib/services/packs/binding.ts'
 
 const invoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }))
@@ -31,7 +31,7 @@ const calls = {
   deleted: [] as string[],
 }
 
-vi.mock('$lib/services/database', () => ({
+vi.mock('#lib/services/database.ts', () => ({
   database: {
     createStory: vi.fn(async (s: any) => void calls.stories.push(s)),
     addStoryEntry: vi.fn(async (e: any) => void calls.entries.push(e)),

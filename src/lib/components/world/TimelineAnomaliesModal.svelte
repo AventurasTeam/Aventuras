@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { Button } from '$lib/components/ui/button'
-  import * as Dialog from '$lib/components/ui/dialog'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { TriangleAlert, Info, CornerDownLeft, Wrench } from '@lucide/svelte'
-  import { formatStoryTime } from '$lib/services/storyTime'
-  import type { TimelineAnomaly } from '$lib/services/storyTime'
-  import { entryNumber, jumpToEntry } from '$lib/utils/storyNavigation'
-  import { supportsHover } from '$lib/utils/platform'
-  import type { StoryEntry } from '$lib/types'
+  import { formatStoryTime } from '#lib/services/storyTime/index.ts'
+  import type { TimelineAnomaly } from '#lib/services/storyTime/index.ts'
+  import { entryNumber, jumpToEntry } from '#lib/utils/storyNavigation.ts'
+  import { supportsHover } from '#lib/utils/platform.ts'
+  import type { StoryEntry } from '#lib/types/index.ts'
 
   let {
     open = $bindable(false),

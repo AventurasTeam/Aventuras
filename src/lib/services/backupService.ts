@@ -22,7 +22,7 @@ import * as path from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 import { database } from './database'
 import { resolveSaveTarget } from './exportTarget'
-import { errMessage } from '$lib/utils/error'
+import { errMessage } from '#lib/utils/error.ts'
 
 interface BackupMetadata {
   version: number

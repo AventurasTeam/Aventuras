@@ -30,7 +30,7 @@ import type {
   VaultConversation,
   VisualDescriptors,
   WorldStateSnapshot,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import type {
   PresetPack,
   PackTemplate,
@@ -39,20 +39,20 @@ import type {
   RuntimeVariableType,
   RuntimeEntityType,
   EnumOption,
-} from '$lib/services/packs/types'
-import { hashContent } from '$lib/services/packs/hash'
+} from '#lib/services/packs/types.ts'
+import { hashContent } from '#lib/services/packs/hash.ts'
 import {
   packReplacementStatements,
   shippedTemplateStatements,
-} from '$lib/services/packs/replace-statements'
-import type { PackExport } from '$lib/services/packs/validation'
-import { readStorySettings } from '$lib/utils/storySettings'
-import { uniqueTerms } from '$lib/utils/text'
+} from '#lib/services/packs/replace-statements.ts'
+import type { PackExport } from '#lib/services/packs/validation.ts'
+import { readStorySettings } from '#lib/utils/storySettings.ts'
+import { uniqueTerms } from '#lib/utils/text.ts'
 import {
   uniqueInjectionTerms,
   withUniqueEntryTerms,
   withUniqueVaultEntryTerms,
-} from '$lib/utils/lorebookTerms'
+} from '#lib/utils/lorebookTerms.ts'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.

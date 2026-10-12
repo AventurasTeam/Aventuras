@@ -12,9 +12,9 @@ import type {
   POV,
   Tense,
   SummaryDetail,
-} from '$lib/types'
-import type { ChapterAnalysis, ChapterSummaryResult } from '$lib/services/ai/sdk/schemas/memory'
-import { createLogger } from '$lib/log'
+} from '#lib/types/index.ts'
+import type { ChapterAnalysis, ChapterSummaryResult } from '#lib/services/ai/sdk/schemas/memory.ts'
+import { createLogger } from '#lib/log.ts'
 
 const log = createLogger('ChapterService')
 

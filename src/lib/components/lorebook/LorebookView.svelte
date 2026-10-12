@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { Entry } from '$lib/types'
-  import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+  import type { Entry } from '#lib/types/index.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { LorebookImportExport } from '#lib/services/lorebookImportExport/index.ts'
   import { onMount } from 'svelte'
   import LorebookList from './LorebookList.svelte'
   import LorebookDetail from './LorebookDetail.svelte'
@@ -12,12 +12,12 @@
   import LorebookExportModal from './LorebookExportModal.svelte'
   import LorebookVaultImportModal from './LorebookVaultImportModal.svelte'
   import { BookOpen, Plus, ArrowLeft, Loader2, Bot, AlertCircle, RotateCcw } from '@lucide/svelte'
-  import { runManualLoreManagement } from '$lib/services/generation'
+  import { runManualLoreManagement } from '#lib/services/generation/index.ts'
 
-  import { Button } from '$lib/components/ui/button'
-  import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert'
-  import { EmptyState } from '$lib/components/ui/empty-state'
-  import { cn } from '$lib/utils/cn'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Alert, AlertDescription, AlertTitle } from '#lib/components/ui/alert/index.ts'
+  import { EmptyState } from '#lib/components/ui/empty-state/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   // Lore management active state
   const isLoreManagementActive = $derived(ui.loreManagementActive)

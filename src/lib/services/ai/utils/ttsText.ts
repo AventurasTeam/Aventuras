@@ -6,9 +6,9 @@
  * and both are silent when wrong.
  */
 
-import type { TTSSanitizeOptions } from '$lib/utils/htmlSanitize'
-import { segmentDialogue } from '$lib/utils/dialogue'
-import { escapeRegex } from '$lib/utils/text'
+import type { TTSSanitizeOptions } from '#lib/utils/htmlSanitize.ts'
+import { segmentDialogue } from '#lib/utils/dialogue.ts'
+import { escapeRegex } from '#lib/utils/text.ts'
 import type { TTSSegment } from './TTSService'
 
 export interface TTSTextSettings {

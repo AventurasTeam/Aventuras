@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PreGenerationPhase, type PreGenerationInput } from './PreGenerationPhase'
 import type { GenerationEvent } from '../types'
-import type { Character, StoryEntry } from '$lib/types'
+import type { Character, StoryEntry } from '#lib/types/index.ts'
 
 async function drain<R>(gen: AsyncGenerator<GenerationEvent, R>) {
   const events: GenerationEvent[] = []

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
   import {
     Anchor,
     Wrench,
@@ -11,17 +11,17 @@
     ChevronRight,
     ChevronDown,
   } from '@lucide/svelte'
-  import { Button } from '$lib/components/ui/button'
-  import FilterButton from '$lib/components/ui/filter-button.svelte'
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import { entryNumber, jumpToEntry } from '$lib/utils/storyNavigation'
-  import { supportsHover } from '$lib/utils/platform'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import FilterButton from '#lib/components/ui/filter-button.svelte'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
+  import { entryNumber, jumpToEntry } from '#lib/utils/storyNavigation.ts'
+  import { supportsHover } from '#lib/utils/platform.ts'
   import TimelineReconciliationModal from './TimelineReconciliationModal.svelte'
   import TimelineAnomaliesModal from './TimelineAnomaliesModal.svelte'
   import TimeAnchorModal from './TimeAnchorModal.svelte'
   import EntryTimeModal from './EntryTimeModal.svelte'
-  import { formatStoryTime, toMinutes } from '$lib/services/storyTime'
-  import type { TimeTracker } from '$lib/types'
+  import { formatStoryTime, toMinutes } from '#lib/services/storyTime/index.ts'
+  import type { TimeTracker } from '#lib/types/index.ts'
 
   let reconcileOpen = $state(false)
   /** Set when the reader arrives from an anomaly, which decides the range opened on. */

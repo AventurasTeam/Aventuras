@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { VaultLorebookEntry } from '$lib/types'
-  import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
-  import { Label } from '$lib/components/ui/label'
-  import TermsInput from '$lib/components/shared/TermsInput.svelte'
+  import type { VaultLorebookEntry } from '#lib/types/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import TermsInput from '#lib/components/shared/TermsInput.svelte'
   import SelectTrigger from '../ui/select/select-trigger.svelte'
   import { Select, SelectContent, SelectItem } from '../ui/select'
-  import type { EntryType, EntryInjectionMode } from '$lib/types'
+  import type { EntryType, EntryInjectionMode } from '#lib/types/index.ts'
 
   interface Props {
     data: VaultLorebookEntry

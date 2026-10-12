@@ -4,8 +4,8 @@
  * separately so that the heavy base64 can take a different route (see `images.ts`).
  */
 
-import { database } from '$lib/services/database'
-import type { CreateStoryInput } from '$lib/services/database'
+import { database } from '#lib/services/database.ts'
+import type { CreateStoryInput } from '#lib/services/database.ts'
 import type {
   StoryEntry,
   Character,
@@ -16,13 +16,13 @@ import type {
   Entry,
   Branch,
   WorldStateDelta,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 import type { AventuraExport, IdMaps, PackRuntimeVariableExport } from './types'
-import { remapRuntimeVars } from '$lib/services/packs'
-import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs'
+import { remapRuntimeVars } from '#lib/services/packs/index.ts'
+import type { RuntimeVariable, RuntimeEntityType } from '#lib/services/packs/index.ts'
 import type { PackBindingResolution } from './packBinding'
 import { createMappers } from './idMaps'
-import { normalizeTime } from '$lib/services/storyTime'
+import { normalizeTime } from '#lib/services/storyTime/index.ts'
 
 /** The resolved binding, plus both sides' runtime variable definitions for the re-keying. */
 export interface StoryPackBinding extends PackBindingResolution {

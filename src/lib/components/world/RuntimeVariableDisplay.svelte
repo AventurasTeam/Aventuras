@@ -3,54 +3,9 @@
     RuntimeVariable,
     RuntimeVarsMap,
     RuntimeVariableValue,
-  } from '$lib/services/packs/types'
+  } from '#lib/services/packs/types.ts'
   import RuntimeVariableEditor from './RuntimeVariableEditor.svelte'
-  import {
-    Icon as LucideIcon,
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    AlertTriangle,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  } from '@lucide/svelte'
+  import { runtimeVariableIcon } from '#lib/components/vault/prompts/runtimeVariableIcons.ts'
 
   interface Props {
     definitions: RuntimeVariable[]
@@ -70,52 +25,6 @@
     pinnedOnly = undefined,
     class: className = '',
   }: Props = $props()
-
-  const ICON_MAP: Record<string, typeof LucideIcon> = {
-    Heart,
-    Shield,
-    Sword,
-    Star,
-    Flame,
-    Zap,
-    Crown,
-    Eye,
-    Brain,
-    Target,
-    Compass,
-    Skull,
-    Gem,
-    Key,
-    Lock,
-    Map,
-    Mountain,
-    Droplet,
-    Wind,
-    Sun,
-    Moon,
-    Clock,
-    Activity,
-    AlertTriangle,
-    Award,
-    Battery,
-    Bookmark,
-    CircleDot,
-    Crosshair,
-    Feather,
-    Flag,
-    Gift,
-    Globe,
-    Hammer,
-    Lightbulb,
-    Music,
-    Palette,
-    Scale,
-    Sparkles,
-    Trophy,
-    Wand2,
-    Users,
-    Gauge,
-  }
 
   const sorted = $derived([...definitions].sort((a, b) => a.sortOrder - b.sortOrder))
 
@@ -152,11 +61,6 @@
   function hasMinMax(def: RuntimeVariable): boolean {
     return def.minValue != null && def.maxValue != null
   }
-
-  function getIconComponent(iconName?: string) {
-    if (!iconName) return null
-    return ICON_MAP[iconName] ?? null
-  }
 </script>
 
 {#if filtered.length > 0}
@@ -176,7 +80,7 @@
       {#each filtered as def (def.id)}
         {@const rawVal = getRawValue(def)}
         {@const isSet = rawVal != null}
-        {@const Icon = getIconComponent(def.icon)}
+        {@const Icon = runtimeVariableIcon(def.icon)}
 
         <div
           class="rounded-md px-2 py-1"
