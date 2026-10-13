@@ -72,7 +72,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
   const warnings: string[] = []
   const notices: string[] = []
   const written: string[] = []
-  const read = (file: string) => readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n')
+  const read = (file: string) => readFileSync(path.join(root, file), 'utf8')
 
   let files = listFiles(root)
   const tags = loadTags(root, files, errors)
@@ -546,13 +546,12 @@ function plainText(tokens: Token[] | undefined): string {
 }
 
 function splitFrontmatter(text: string): { data: string | null; body: string } {
-  const normalized = text.replace(/\r\n/g, '\n')
-  if (!normalized.startsWith('---\n')) return { data: null, body: normalized }
-  const end = normalized.indexOf('\n---', 3)
-  if (end === -1 || !/^\n---(\n|$)/.test(normalized.slice(end, end + 5))) {
-    return { data: null, body: normalized }
+  if (!text.startsWith('---\n')) return { data: null, body: text }
+  const end = text.indexOf('\n---', 3)
+  if (end === -1 || !/^\n---(\n|$)/.test(text.slice(end, end + 5))) {
+    return { data: null, body: text }
   }
-  return { data: normalized.slice(4, end + 1), body: normalized.slice(end + 4) }
+  return { data: text.slice(4, end + 1), body: text.slice(end + 4) }
 }
 
 function stripFrontmatter(text: string): string {
