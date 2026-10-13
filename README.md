@@ -74,9 +74,7 @@ npx tauri dev
 
 Desktop builds are `npx tauri build`; Android and iOS are documented in
 [docs/development/release.md](docs/development/release.md). iOS produces an **unsigned**
-device `.ipa` (no Apple certificates or signing secrets — see
-[docs/development/ios-build-target.md](docs/development/ios-build-target.md) for the full
-account of how the target was added and how the unsigned CI pipeline works).
+device `.ipa` (no Apple certificates or signing secrets).
 
 ## Tech stack
 
@@ -87,7 +85,7 @@ Harper.js (WASM) · Vitest
 ## Contributing
 
 Start with [docs/](docs/README.md) — the architecture is documented per area, and
-[CLAUDE.md](CLAUDE.md) has the conventions. CI runs lint, type-check, tests and a build on every
+[docs/development](docs/development/README.md) lists the development rules. CI runs lint, type-check, tests and a build on every
 PR against `master`, `develop` or `dev`.
 
 ## Acknowledgments

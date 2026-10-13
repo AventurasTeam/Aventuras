@@ -26,15 +26,8 @@ comments stay short and say only what the next reader cannot infer — see
 
 ## Development
 
-| Document                                              | Read it before                                                        |
-| ----------------------------------------------------- | --------------------------------------------------------------------- |
-| [testing.md](development/testing.md)                  | writing a test — the suite has real constraints on what it can import |
-| [release.md](development/release.md)                  | cutting a release, or changing the updater, CI or the build scripts   |
-| [ci-caching.md](development/ci-caching.md)            | changing a CI cache key, what a cache stores, or the Android targets  |
-| [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`    |
-| [platform-support.md](development/platform-support.md) | using a new JS, CSS or Web API, or changing the bundle targets or minimum OS versions |
-| [shadcn-svelte.md](development/shadcn-svelte.md)       | regenerating `components/ui/` or bringing back the shadcn-svelte generator |
-| [network-requests.md](development/network-requests.md) | making a remote HTTP request, or adding a provider or SDK that makes one |
+The rules for writing, testing and shipping code are listed in
+[development/README.md](development/README.md), each linked to the document that states it in full.
 
 ## Keeping them true
 
