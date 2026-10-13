@@ -14,6 +14,8 @@ import path from 'node:path'
 import { Lexer, marked, type Token, type Tokens } from 'marked'
 import { parse as parseYaml } from 'yaml'
 
+export const AGENTS_BLOCK_MAX_LINES = 40
+
 const DECISIONS_DIR = 'docs/decisions/'
 const EVIDENCE_DIR = 'docs/evidence/'
 const README = 'docs/README.md'
@@ -26,7 +28,6 @@ const END_MARKER = '<!-- END GENERATED: decisions -->'
 const SUMMARY_AIM = 118
 const SUMMARY_WARN = 236
 const SUMMARY_MAX = 512
-export const AGENTS_BLOCK_MAX_LINES = 40
 const REGENERATE = 'run `npm run docs:gen` and commit the result'
 
 const FRONTMATTER_KEYS = ['summary', 'tags', 'cross-cutting', 'active', 'superseded-by']
