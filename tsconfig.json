@@ -1,5 +1,5 @@
 {
   // `strict` is on: TypeScript 6 enables it by default.
   "extends": "$app/tsconfig",
-  "include": ["src", "vite.config.js", "vitest.config.ts"]
+  "include": ["src", "scripts/**/*.ts", "vite.config.js", "vitest.config.ts"]
 }

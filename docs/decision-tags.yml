@@ -1,0 +1,11 @@
+# Tags for decision records, in the order docs/README.md lists them. Each names a concern that
+# cuts across locations; a tag that would map to one directory is a DECISION(slug) anchor instead.
+documentation: How decisions and documentation are recorded and kept true
+code-style: Comments, naming, imports, and the idioms new code is written in
+testing: What is tested, how, and what runs in CI
+persistence: SQLite schema, migrations, storage, and the settings blob
+performance: WebView heap, rendering cost, and what moves to the Rust layer
+network: HTTP transport, request helpers, and provider connections
+platform: Supported platforms, the browser-engine floor, and mobile scaffolds
+build-release: Builds, CI caching, signing, updates, and releases
+ai-providers: AI services, providers, models, and prompt assembly
