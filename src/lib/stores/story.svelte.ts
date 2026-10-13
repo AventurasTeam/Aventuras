@@ -29,6 +29,7 @@ import { database, type DbStatement } from '#lib/services/database.ts'
 import { errMessage } from '#lib/utils/error.ts'
 import {
   changeRecord,
+  clockAfter,
   changedFields,
   cloneState,
   diffStates,
@@ -213,6 +214,11 @@ export interface PastCheckpointPreview {
   chapters: number
   /** Without a refusal, the full state the rebuild starts from. */
   source: AnchorLabel | null
+  /**
+   * Positions of the snapshots between the entry and the full state used (or diagnosed) that
+   * could not be used: saved without the lorebook, by an older build.
+   */
+  skipped: number[]
   /** On a refusal, the full states the reader may build it from anyway. */
   overrides: { next: AnchorLabel | null; previous: AnchorLabel | null } | null
 }
@@ -964,7 +970,6 @@ class StoryStore {
       const header = this.startHeader(
         storyId,
         last.id,
-        this.currentStory.timeTracker ?? null,
         this.locations.find((l) => l.current)?.id ?? null,
       )
       await database.transaction([database.worldStateRecordStatement(header)])
@@ -1478,9 +1483,9 @@ class StoryStore {
       console.error('[StoryStore] Rollback failed before regenerate:', error)
     }
 
-    // Fallback for the no-delta case, and for a delta that recorded no time tracker.
-    if (!timeUndone && entry.metadata?.timeStart) {
-      await this.restoreTimeTrackerSnapshot(entry.metadata.timeStart)
+    // The rollback sets the clock; this covers one that failed.
+    if (!timeUndone) {
+      await this.restoreTimeTrackerSnapshot(clockAfter(this.entries, entry.position))
       timeUndone = true
     }
 
@@ -2168,7 +2173,6 @@ class StoryStore {
     return records.filter((r) => onLine.has(r.entryId))
   }
 
-  /** Marks the latest entry as a point no reconstruction crosses. */
   /**
    * The header of an entry the story starts from — a wizard's opening, or the last entry of an
    * imported chat. It has nothing to undo, and nothing tracked precedes it to interrupt.
@@ -2176,7 +2180,6 @@ class StoryStore {
   private startHeader(
     storyId: string,
     entryId: string,
-    clockBefore: TimeTracker | null,
     locationBefore: string | null,
   ): WorldStateHeaderRecord {
     return {
@@ -2188,7 +2191,6 @@ class StoryStore {
       createdAt: Date.now(),
       kind: 'header',
       continuous: true,
-      clockBefore,
       locationBefore,
       coverage: 'full',
     }
@@ -3708,7 +3710,6 @@ class StoryStore {
             breakSince,
             this.currentStory.createdAt,
           ),
-          clockBefore: stateBefore.timeTracker,
           locationBefore,
           coverage: 'full',
         }
@@ -3807,6 +3808,15 @@ class StoryStore {
 
     // Emit event
     emitChapterCreated(chapter.id, chapter.number, chapter.title)
+  }
+
+  /**
+   * The last entry of the newest chapter on the open branch. A chapter's lore is attached there:
+   * the chapter exists from that entry on, for a revert, a past checkpoint and a branch alike.
+   */
+  latestChapterEndEntryId(): string | undefined {
+    const newest = [...this.currentBranchChapters].sort((a, b) => b.createdAt - a.createdAt)[0]
+    return newest?.endEntryId
   }
 
   // Get the next chapter number from the database (handles deletions correctly)
@@ -4244,7 +4254,8 @@ class StoryStore {
           },
           loreCallbacks: buildLoreManagementCallbacks(
             { storyId: this.currentStory.id, branchId: this.currentStory.currentBranchId },
-            { origin: 'chapter' },
+            // One pass over the whole batch, attached with its last chapter.
+            () => ({ origin: 'chapter', entryId: this.latestChapterEndEntryId() }),
           ),
           loreUICallbacks: buildLoreManagementUICallbacks({
             onStatus: (status) => {
@@ -4385,12 +4396,15 @@ class StoryStore {
     const lineBranches = new Set(this.lineBranchIds())
     const last = this.entries[this.entries.length - 1]
     const candidates: AnchorCandidate[] = [
-      ...snapshots.map((s) => ({
-        kind: 'snapshot' as const,
-        id: s.id,
-        position: s.entryPosition,
-        takenAt: s.createdAt,
-      })),
+      // One missing a part cannot anchor; leaving it out lets the next full state be used.
+      ...snapshots
+        .filter((s) => s.complete)
+        .map((s) => ({
+          kind: 'snapshot' as const,
+          id: s.id,
+          position: s.entryPosition,
+          takenAt: s.createdAt,
+        })),
       // Any checkpoint on the branch line counts, the fork's included: an ancestor's checkpoint
       // at an entry this branch inherits holds the state this branch had there. One made after
       // its entry had a successor was itself rebuilt, so it cannot vouch.
@@ -4436,6 +4450,8 @@ class StoryStore {
       late: run.late,
       entryPositions: positions,
       keep,
+      // Never the anchor's clock: the entry's own end time.
+      clock: clockAfter(this.entries, entry.position + 1),
     })
     return { entry, plan, anchor: run.anchor }
   }
@@ -4471,6 +4487,22 @@ class StoryStore {
    * would undo. `refusal` is the reason it cannot, for the reader.
    */
   async previewCheckpointAt(entryId: string): Promise<PastCheckpointPreview> {
+    const preview = await this.previewPastState(entryId)
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!this.currentStory || !entry) return preview
+    const bound = preview.source?.position ?? preview.diagnosis?.anchor?.position ?? Infinity
+    const snapshots = await database.getWorldStateSnapshotTimes(
+      this.currentStory.id,
+      this.currentStory.currentBranchId ?? null,
+    )
+    const skipped = snapshots
+      .filter((s) => !s.complete && s.entryPosition >= entry.position && s.entryPosition <= bound)
+      .map((s) => s.entryPosition)
+      .sort((a, b) => a - b)
+    return { ...preview, skipped }
+  }
+
+  private async previewPastState(entryId: string): Promise<PastCheckpointPreview> {
     try {
       const { plan, anchor } = await this.rebuildPastState(entryId, KEEP_ALL)
       return {
@@ -4482,6 +4514,7 @@ class StoryStore {
         unkeepable: plan.unkeepable,
         chapters: plan.chapters,
         source: this.anchorLabel(anchor),
+        skipped: [],
         overrides: null,
       }
     } catch (error) {
@@ -4510,6 +4543,7 @@ class StoryStore {
           unkeepable: [],
           chapters: 0,
           source: null,
+          skipped: [],
           overrides: null,
         }
       }
@@ -4522,6 +4556,7 @@ class StoryStore {
         unkeepable: undo?.plan.unkeepable ?? [],
         chapters: undo?.plan.chapters ?? 0,
         source: null,
+        skipped: [],
         overrides: {
           next: next ? this.anchorLabel(next.anchor) : null,
           previous: previous ? this.anchorLabel(previous.anchor) : null,
@@ -5960,12 +5995,7 @@ class StoryStore {
       log('Added opening scene')
 
       if (settings.experimentalFeatures.stateTracking) {
-        const header = this.startHeader(
-          storyId,
-          openingEntry.id,
-          storyData.timeTracker ?? null,
-          startingLocationId,
-        )
+        const header = this.startHeader(storyId, openingEntry.id, startingLocationId)
         await database.transaction([database.worldStateRecordStatement(header)])
       }
     }

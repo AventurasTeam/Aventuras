@@ -18,10 +18,11 @@ the insert itself. Three kinds of row:
 - **change** — one write to one character, location, item, story beat or lorebook entry. `entity_id`
   is the row actually written, which on a lightweight branch can be an override or a tombstone.
   `before` holds the changed fields of an update, the full row of a delete, or the row a create
-  shadows (a copy-on-write override shadows its parent). `after` is kept for manual changes only.
+  shadows (a copy-on-write override shadows its parent). `after` holds the new values, except on
+  the classifier's records.
 - **header** — one per narration classified while tracking is on, even when nothing changed, so
-  "recorded, nothing changed" is not mistaken for "not recorded". It carries the clock and the
-  current location from before the classification, and `continuous`. An entry a story starts
+  "recorded, nothing changed" is not mistaken for "not recorded". It carries `continuous`, and the
+  current location from before the classification for history recorded in the older form. An entry a story starts
   from gets an empty, continuous one while tracking is on: a wizard's opening, and the last entry
   of an imported SillyTavern chat.
 - **break** — no reconstruction crosses it. Only an export writes one, into the file, where it
@@ -41,9 +42,11 @@ panels. Each change carries its origin and is attached to an entry:
 - `image` — a portrait the story-image generator gave a character who had none, on the latest
   entry. The generator runs during a turn and on demand from any narration, without the
   classifier.
-- `chapter` — lore management after a chapter, on the narration of the turn that created it, or on
-  the last completed entry for a chapter made by hand. That is where the new lore starts to shape
-  generation, so a checkpoint before it holds the lore its entries were written with.
+- `chapter` — lore management after a chapter, automatic, by hand or batch, on the chapter's last
+  entry. A chapter exists from that entry on everywhere — a revert removes it with its entries, a
+  branch inherits it when it ends before the fork — so its lore comes and goes with it. The session
+  still reads a tail past the chapter, so a checkpoint between the chapter's end and the tail's holds
+  lore that has read a little ahead.
 - `tidy` — a lore management run the reader started, on the last completed entry when it started.
 - `manual` — the reader's edits in the world and lorebook panels, the Duplicates merge and lorebook
   file imports, on the last completed entry.
@@ -69,6 +72,11 @@ resulting state and the database operations that would produce it. The reader's 
 can each be kept: they are applied again afterwards from their `after` values, and one whose entity
 no longer exists (an automatic change in the range created it) is reported as unkeepable rather than
 dropped silently.
+
+The clock is not recorded at all. After a revert, and in a past checkpoint, it is the end time of
+the last entry that remains (`clockAfter`): a gap before the removed entries goes with them, and
+no full state's or header's clock is ever restored. An entry without a time is looked past; with
+none before, the clock is cleared.
 
 Revert on delete runs that plan over the live state and executes it in one transaction, so it lands
 whole or not at all. The delete is confirmed in a modal, like a checkpoint or a branch. When it
@@ -140,6 +148,9 @@ anchor.
 Closing snapshots carry the id prefix `closing:`, which is how the landmark filter's "Show snapshots"
 filter names them apart from automatic ones without a column of its own.
 
-Story-time reconciliation rewrites a header's recorded clock as it does a delta's, and deletes the
-snapshots of the entries it rewrites; a run that loses its closing snapshot that way refuses past
-checkpoints rather than rebuilding them wrongly.
+Story-time reconciliation deletes the snapshots of the entries it rewrites; a run that loses its
+closing snapshot that way refuses past checkpoints rather than rebuilding them wrongly. Records hold
+no clock, so it has none of theirs to rewrite.
+
+A snapshot saved without the lorebook, by an older build, is no candidate: the next full state is
+used, and the checkpoint form names each such snapshot it passed over.

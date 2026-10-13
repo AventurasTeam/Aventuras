@@ -6,7 +6,13 @@ export {
   type TrackedRow,
   type TrackedState,
 } from './state'
-export { planReversal, type ReversalInput, type ReversalOp, type ReversalPlan } from './reverse'
+export {
+  clockAfter,
+  planReversal,
+  type ReversalInput,
+  type ReversalOp,
+  type ReversalPlan,
+} from './reverse'
 export { fromWorldStateDelta } from './legacy'
 export {
   isContinuous,

@@ -59,6 +59,13 @@ describe('store writes', () => {
   })
 })
 
+describe('chapter lore', () => {
+  it("lands on the chapter's last entry", () => {
+    expect(bodyOf('latestChapterEndEntryId')).toContain('newest?.endEntryId')
+    expect(bodyOf('chapterizeFromBeginning')).toContain('this.latestChapterEndEntryId()')
+  })
+})
+
 describe('opening', () => {
   it('heads the opening narration while tracking is on', () => {
     const body = bodyOf('createStoryFromWizard')
@@ -100,6 +107,16 @@ describe('closing snapshots', () => {
 })
 
 describe('past checkpoints', () => {
+  it('leaves incomplete snapshots out of the candidates, so the next full state is used', () => {
+    expect(bodyOf('rebuildPastState')).toContain('.filter((s) => s.complete)')
+  })
+
+  it('reports the incomplete snapshots it skipped, up to the state used', () => {
+    const body = bodyOf('previewCheckpointAt')
+    expect(body).toContain('!s.complete')
+    expect(body).toContain('s.entryPosition <= bound')
+  })
+
   it('counts checkpoints on the whole branch line, the fork checkpoint included', () => {
     const body = bodyOf('rebuildPastState')
     expect(body).toContain('new Set(this.lineBranchIds())')

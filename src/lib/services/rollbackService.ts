@@ -10,6 +10,7 @@
 import type { StoryEntry, TrackedEntityType, WorldStateRecord } from '#lib/types/index.ts'
 import { database, type DbStatement } from './database'
 import {
+  clockAfter,
   fromWorldStateDelta,
   planReversal,
   type ReversalOp,
@@ -66,6 +67,10 @@ export function planRollback(input: RollbackInput): ReversalPlan & { records: Wo
     records,
     entryPositions: new Map(input.entries.map((e) => [e.id, e.position])),
     keep: input.keep,
+    // Only a revert that removes entries moves the clock.
+    clock: input.entries.some((e) => e.position >= input.fromPosition)
+      ? clockAfter(input.entries, input.fromPosition)
+      : undefined,
   })
   return { ...plan, records }
 }

@@ -32,7 +32,6 @@ describe('record rows', () => {
       id: 'h1',
       kind: 'header',
       continuous: true,
-      clockBefore: { years: 1, days: 2, hours: 3, minutes: 4 },
       locationBefore: 'loc',
       coverage: 'full',
     }
@@ -44,17 +43,15 @@ describe('record rows', () => {
     expect(roundTrip(record)).toEqual(record)
   })
 
-  it('stores a header with no clock as null', () => {
+  it('stores a header that does not continue a run as 0', () => {
     const values = recordToRow({
       ...base,
       id: 'h2',
       kind: 'header',
       continuous: false,
-      clockBefore: null,
       locationBefore: null,
       coverage: 'full',
     })
-    expect(values[RECORD_COLUMNS.indexOf('clock_before')]).toBeNull()
     expect(values[RECORD_COLUMNS.indexOf('continuous')]).toBe(0)
   })
 })

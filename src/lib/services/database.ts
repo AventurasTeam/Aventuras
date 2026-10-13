@@ -1720,14 +1720,25 @@ class DatabaseService {
   async getWorldStateSnapshotTimes(
     storyId: string,
     branchId: string | null,
-  ): Promise<{ id: string; entryId: string; entryPosition: number; createdAt: number }[]> {
+  ): Promise<
+    { id: string; entryId: string; entryPosition: number; createdAt: number; complete: boolean }[]
+  > {
     const db = await this.getDb()
+    // `complete`: it holds the lorebook too, which a snapshot from the old build lacks.
+    const columns =
+      'id, entry_id, entry_position, created_at, (lorebook_entries_snapshot IS NOT NULL) AS complete'
     const rows = await db.select<
-      { id: string; entry_id: string; entry_position: number; created_at: number }[]
+      {
+        id: string
+        entry_id: string
+        entry_position: number
+        created_at: number
+        complete: number
+      }[]
     >(
       branchId === null
-        ? 'SELECT id, entry_id, entry_position, created_at FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL'
-        : 'SELECT id, entry_id, entry_position, created_at FROM world_state_snapshots WHERE story_id = ? AND branch_id = ?',
+        ? `SELECT ${columns} FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL`
+        : `SELECT ${columns} FROM world_state_snapshots WHERE story_id = ? AND branch_id = ?`,
       branchId === null ? [storyId] : [storyId, branchId],
     )
     return rows.map((r) => ({
@@ -1735,6 +1746,7 @@ class DatabaseService {
       entryId: r.entry_id,
       entryPosition: r.entry_position,
       createdAt: r.created_at,
+      complete: Boolean(r.complete),
     }))
   }
 

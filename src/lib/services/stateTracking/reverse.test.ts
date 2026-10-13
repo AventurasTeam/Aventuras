@@ -7,7 +7,7 @@ import type {
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
 } from '#lib/types/index.ts'
-import { planReversal, type TrackedState } from '.'
+import { clockAfter, planReversal, type TrackedState } from '.'
 
 function character(id: string, fields: Partial<Character> = {}): Character {
   return {
@@ -63,7 +63,7 @@ function change(
   }
 }
 
-function header(entryId: string, clockDays: number): WorldStateHeaderRecord {
+function header(entryId: string): WorldStateHeaderRecord {
   seq++
   return {
     id: `h${seq}`,
@@ -74,7 +74,6 @@ function header(entryId: string, clockDays: number): WorldStateHeaderRecord {
     createdAt: seq,
     kind: 'header',
     continuous: true,
-    clockBefore: { years: 0, days: clockDays, hours: 0, minutes: 0 },
     locationBefore: null,
     coverage: 'full',
   }
@@ -140,14 +139,29 @@ describe('planReversal', () => {
     expect(plan.ops).toEqual([{ kind: 'delete', entityType: 'character', id: 'o' }])
   })
 
-  it('restores the clock from the earliest header in range', () => {
+  it('sets the clock it is given, never one recorded in a header', () => {
     const plan = planReversal({
       state: state([]),
-      records: [header('e3', 9), header('e2', 5)],
+      records: [header('e3'), header('e2')],
+      entryPositions: positions,
+      keep: { manual: false, tidy: false },
+      clock: { years: 0, days: 5, hours: 0, minutes: 0 },
+    })
+    expect(plan.state.timeTracker?.days).toBe(5)
+    expect(plan.ops).toContainEqual({
+      kind: 'clock',
+      timeTracker: { years: 0, days: 5, hours: 0, minutes: 0 },
+    })
+  })
+
+  it('leaves the clock alone when given none', () => {
+    const plan = planReversal({
+      state: state([]),
+      records: [header('e2')],
       entryPositions: positions,
       keep: { manual: false, tidy: false },
     })
-    expect(plan.state.timeTracker?.days).toBe(5)
+    expect(plan.ops.some((op) => op.kind === 'clock')).toBe(false)
   })
 
   it('keeps a manual edit made over an automatic one', () => {
@@ -289,5 +303,27 @@ describe('planReversal', () => {
       keep: { manual: false, tidy: false },
     })
     expect(plan.chapters).toBe(2)
+  })
+})
+
+describe('clockAfter', () => {
+  const t = (days: number) => ({ years: 0, days, hours: 0, minutes: 0 })
+  const entries = [
+    { position: 1, metadata: { timeEnd: t(1) } },
+    { position: 2, metadata: { timeEnd: t(2) } },
+    { position: 3, metadata: null },
+    { position: 4, metadata: { timeEnd: t(9) } },
+  ]
+
+  it('is the end time of the last entry before the position', () => {
+    expect(clockAfter(entries, 3)?.days).toBe(2)
+  })
+
+  it('looks back past entries with no time, and drops a gap before the removed entry', () => {
+    expect(clockAfter(entries, 4)?.days).toBe(2)
+  })
+
+  it('is null when no earlier entry has a time', () => {
+    expect(clockAfter(entries, 1)).toBeNull()
   })
 })

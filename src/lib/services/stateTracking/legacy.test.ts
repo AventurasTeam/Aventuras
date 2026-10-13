@@ -80,6 +80,7 @@ describe('fromWorldStateDelta', () => {
     })
     expect(plan.state.characters.map((c) => [c.id, c.relationship])).toEqual([['c-old', 'ally']])
     expect(plan.state.locations.find((l) => l.current)?.id).toBe('loc-1')
-    expect(plan.state.timeTracker).toBeNull()
+    // The clock comes from the entries, not from the delta's recorded one.
+    expect(plan.state.timeTracker?.days).toBe(3)
   })
 })

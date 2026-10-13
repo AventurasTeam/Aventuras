@@ -405,7 +405,8 @@
       // Built once the narration is in, so the session's changes attach to this turn.
       loreCallbacks: buildLoreManagementCallbacks(
         { storyId, branchId },
-        { origin: 'chapter', entryId: story.entries[story.entries.length - 1]?.id },
+        // The chapter is cut after this is built; its lore lands on the chapter's last entry.
+        () => ({ origin: 'chapter', entryId: story.latestChapterEndEntryId() }),
       ),
       loreUICallbacks: buildLoreManagementUICallbacks(),
     }

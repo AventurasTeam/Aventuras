@@ -61,8 +61,8 @@ manually from the Memory view, and once per batch during `chapterizeFromBeginnin
 SillyTavern import path) — and on demand from **Run lore management** in the Active Context
 panel, called Tidy below (`runManualLoreManagement`, shared by both manual callers). With State
 Tracking on, every change a session makes is recorded: a session after a chapter as `chapter` on the
-turn's narration (or the last completed entry for a chapter made by hand), a Tidy run as `tidy` on
-the last completed entry, so a revert can undo them — see [state-tracking.md](state-tracking.md).
+chapter's last entry, a Tidy run as `tidy` on the last completed entry, so a revert can undo them —
+see [state-tracking.md](state-tracking.md).
 
 **By default, the chapter that triggered a run arrives in full, not as a summary.** Every other
 chapter is still a `{number, title, summary}` line, but the one just written is handed over as its own

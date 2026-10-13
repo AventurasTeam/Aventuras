@@ -45,32 +45,36 @@ function assertScope(scope: LoreCallbackScope, action: string): void {
   )
 }
 
-/** `record` says who the session's changes belong to: its origin and the entry they attach to. */
+/**
+ * `record` says who the session's changes belong to: its origin and the entry they attach to. A
+ * function is read at each write, for a session whose chapter is cut after the callbacks exist.
+ */
 export function buildLoreManagementCallbacks(
   scope: LoreCallbackScope,
-  record: RecordOptions,
+  recordOrResolve: RecordOptions | (() => RecordOptions),
 ): LoreManagementCallbacks {
+  const resolve = typeof recordOrResolve === 'function' ? recordOrResolve : () => recordOrResolve
   return {
     // `addLorebookEntry` assigns its own id, storyId and timestamps over whatever is
     // passed, so handing it the entry whole is both shorter and safer than listing the
     // fields to keep — a field added to `Entry` is carried without touching this.
     onCreateEntry: async (entry) => {
       assertScope(scope, `create "${entry.name}"`)
-      await story.addLorebookEntry(entry, record)
+      await story.addLorebookEntry(entry, resolve())
     },
     onUpdateEntry: async (id, updates) => {
       assertScope(scope, `update entry ${id}`)
-      await story.updateLorebookEntry(id, updates, record)
+      await story.updateLorebookEntry(id, updates, resolve())
     },
     onDeleteEntry: async (id) => {
       assertScope(scope, `delete entry ${id}`)
-      await story.deleteLorebookEntry(id, record)
+      await story.deleteLorebookEntry(id, resolve())
     },
     // Survivor first: deleting first loses every source if the insert then fails.
     onMergeEntries: async (entryIds, mergedEntry) => {
       assertScope(scope, `merge into "${mergedEntry.name}"`)
-      await story.addLorebookEntry(mergedEntry, record)
-      await story.deleteLorebookEntries(entryIds, record)
+      await story.addLorebookEntry(mergedEntry, resolve())
+      await story.deleteLorebookEntries(entryIds, resolve())
     },
     // The user's dismissals and the agent's are the same decision, so they share a table.
     // Addressed by scope directly: no store involved, so there is nothing to be stale.

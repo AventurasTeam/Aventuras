@@ -148,12 +148,15 @@ describe('RollbackService', () => {
         after: null,
       },
     ]
+    const day = (days: number) => ({ years: 0, days, hours: 0, minutes: 0 })
+    const before = { ...legacyEntry, worldStateDelta: null, metadata: { timeEnd: day(2) } }
     const entry = { ...legacyEntry, id: 'e6', position: 6, worldStateDelta: null }
     await rollbackService.rollbackFromPosition(
-      input({ entries: [entry], records, fromPosition: 6 }),
+      input({ entries: [before, entry], records, fromPosition: 6 }),
     )
     expect(statements()).toEqual([
       { sql: 'updateEntry', params: ['lore', { description: 'earlier' }] },
+      { sql: 'saveTimeTracker', params: ['story-1', day(2)] },
     ])
   })
 

@@ -212,14 +212,6 @@ export function reconciliationStatements(
     })
   }
 
-  // A header records the clock as it stood before its entry was classified, as a delta does.
-  for (const time of plan.times) {
-    statements.push({
-      sql: "UPDATE world_state_changes SET clock_before = ? WHERE entry_id = ? AND kind = 'header'",
-      params: [time.start ? JSON.stringify(time.start) : null, time.entryId],
-    })
-  }
-
   for (const update of plan.checkpointClocks) {
     statements.push({
       sql: 'UPDATE checkpoints SET time_tracker_snapshot = ? WHERE id = ?',

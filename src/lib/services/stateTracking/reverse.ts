@@ -36,6 +36,8 @@ export interface ReversalInput {
   late?: WorldStateChangeRecord[]
   /** Which of the reader's and Tidy's changes to apply again after the reversal. */
   keep: { manual: boolean; tidy: boolean }
+  /** The clock to leave: the end time of the last entry that remains. Omitted, it is untouched. */
+  clock?: TimeTracker | null
 }
 
 export interface ReversalPlan {
@@ -173,16 +175,13 @@ export function planReversal(input: ReversalInput): ReversalPlan {
   for (const record of [...(input.late ?? [])].sort((a, b) => a.seq - b.seq)) ws.redo(record)
   for (const record of [...changes].reverse()) ws.undo(record)
 
-  const earliest = headers[0]
-  if (earliest) {
-    ws.state = {
-      ...ws.state,
-      timeTracker: earliest.clockBefore ? { ...earliest.clockBefore } : null,
-    }
-    ws.ops.push({ kind: 'clock', timeTracker: earliest.clockBefore })
-    // Classifier-only history recorded the current location apart from the location rows.
-    if (earliest.coverage === 'classifier') restoreCurrentLocation(ws, earliest.locationBefore)
+  if (input.clock !== undefined) {
+    ws.state = { ...ws.state, timeTracker: input.clock ? { ...input.clock } : null }
+    ws.ops.push({ kind: 'clock', timeTracker: input.clock })
   }
+  // Classifier-only history recorded the current location apart from the location rows.
+  const earliest = headers[0]
+  if (earliest?.coverage === 'classifier') restoreCurrentLocation(ws, earliest.locationBefore)
 
   const manual = changes.filter((r) => r.origin === 'manual')
   const tidy = changes.filter((r) => r.origin === 'tidy')
@@ -201,4 +200,24 @@ function restoreCurrentLocation(ws: Workspace, locationId: string | null): void 
     const current = location.id === locationId
     if (location.current !== current) ws.patch('location', location.id, { current })
   }
+}
+
+/**
+ * The clock once everything from `position` on is gone: the end time of the last entry before
+ * it that has one. A gap before the removed entries goes with them. Null when none has a time.
+ */
+export function clockAfter(
+  entries: { position: number; metadata?: { timeEnd?: TimeTracker } | null }[],
+  position: number,
+): TimeTracker | null {
+  let found: TimeTracker | null = null
+  let at = -Infinity
+  for (const entry of entries) {
+    const end = entry.metadata?.timeEnd
+    if (end && entry.position < position && entry.position > at) {
+      found = end
+      at = entry.position
+    }
+  }
+  return found ? { ...found } : null
 }

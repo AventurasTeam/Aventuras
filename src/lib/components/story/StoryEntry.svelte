@@ -510,6 +510,11 @@
     if (checked && !checkpointName.trim()) checkpointName = 'Approximate — '
   }
 
+  function skippedSnapshotText(position: number): string {
+    const at = story.entries.find((e) => e.position === position)
+    return `The snapshot at entry ${at ? entryNumber(at) : position + 1} was saved without the lorebook, so it can't be used.`
+  }
+
   function entryNumberOf(id: string): number | null {
     const at = story.entries.find((e) => e.id === id)
     return at ? entryNumber(at) : null
@@ -2512,6 +2517,9 @@
                 ? `The nearest full world state is ${anchorText(diagnosis.anchor)}.`
                 : 'No full world state was saved after this entry.',
             )}
+            {#each pastCheckpoint.skipped as position, i (i)}
+              {@render finding('warn', skippedSnapshotText(position))}
+            {/each}
             {#if diagnosis.anchor}
               {#each diagnosis.gaps as gap, i (i)}
                 {@render finding(
@@ -2605,6 +2613,12 @@
         <div class="text-muted-foreground space-y-1 text-xs">
           {#if pastCheckpoint.source}
             <p>The world state at this entry is known:</p>
+            {#each pastCheckpoint.skipped as position, i (i)}
+              <p class="flex items-start gap-1.5">
+                <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+                {skippedSnapshotText(position)}
+              </p>
+            {/each}
             <p class="flex items-start gap-1.5">
               <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
               {pastCheckpoint.source.position === entry.position

@@ -1071,7 +1071,6 @@ export interface WorldStateChangeRecord extends WorldStateRecordBase {
 export interface WorldStateHeaderRecord extends WorldStateRecordBase {
   kind: 'header'
   continuous: boolean
-  clockBefore: TimeTracker | null
   locationBefore: string | null
   /** `classifier` marks history recorded before lorebook and manual changes were tracked. */
   coverage: 'full' | 'classifier'

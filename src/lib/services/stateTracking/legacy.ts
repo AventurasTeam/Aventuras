@@ -5,7 +5,7 @@ import type {
   WorldStateDelta,
   WorldStateHeaderRecord,
   WorldStateRecord,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 
 // Names were captured but never restored; restoring them would undo a later, unrecorded rename.
 const NOT_RESTORED = new Set(['id', 'name', 'title'])
@@ -34,7 +34,6 @@ export function fromWorldStateDelta(entry: StoryEntry, delta: WorldStateDelta): 
     seq: seq++,
     kind: 'header',
     continuous: false,
-    clockBefore: delta.previousState.timeTracker ?? null,
     locationBefore: delta.previousState.currentLocationId ?? null,
     coverage: 'classifier',
   }
