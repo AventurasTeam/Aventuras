@@ -4,7 +4,8 @@
 # across docs/decisions/, and never changed after merge.
 #
 # Required. The ruling in one or two imperative sentences, readable without opening the file.
-# At most 200 characters. It becomes this ADR's line in docs/README.md.
+# Aim for under 118 characters, one line; over 236 draws a notice, and 512 is the limit. It
+# becomes this ADR's line in docs/README.md.
 summary: '{Do X; Y would break Z.}'
 # Optional, default []. Concerns this is about, from docs/decision-tags.yml. Not locations:
 # an ADR(slug) comment at the code it governs carries those.

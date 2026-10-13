@@ -6,7 +6,7 @@
  *
  *   node scripts/docs-check.ts            validate; fail on errors, including stale outputs
  *   node scripts/docs-check.ts --write    regenerate the outputs, then validate
- *   node scripts/docs-check.ts --strict   validate; warnings fail too (CI)
+ *   node scripts/docs-check.ts --strict   validate; warnings fail too, except notices (CI)
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -21,7 +21,11 @@ const AGENTS = 'AGENTS.md'
 const TAGS_FILE = 'docs/decision-tags.yml'
 const BEGIN_MARKER = '<!-- BEGIN GENERATED: decisions -->'
 const END_MARKER = '<!-- END GENERATED: decisions -->'
-const SUMMARY_MAX = 200
+// A summary should fit one 120-column line of the generated list after its `- `; a second,
+// indented line is fine. Past two it draws a notice, and past the maximum it is a paragraph.
+const SUMMARY_AIM = 118
+const SUMMARY_WARN = 236
+const SUMMARY_MAX = 512
 export const AGENTS_BLOCK_MAX_LINES = 40
 const REGENERATE = 'run `npm run docs:gen` and commit the result'
 
@@ -58,12 +62,15 @@ export interface Result {
   ok: boolean
   errors: string[]
   warnings: string[]
+  /** Warnings that fail nothing, even under --strict. */
+  notices: string[]
   written: string[]
 }
 
 export function docsCheck(root: string, { write = false, strict = false } = {}): Result {
   const errors: string[] = []
   const warnings: string[] = []
+  const notices: string[] = []
   const written: string[] = []
   const read = (file: string) => readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n')
 
@@ -71,7 +78,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
   const tags = loadTags(root, files, errors)
   const adrs = files
     .filter((f) => f.startsWith(DECISIONS_DIR) && f.endsWith('.md'))
-    .map((f) => parseAdr(f, read(f), tags, errors))
+    .map((f) => parseAdr(f, read(f), tags, errors, notices))
     .filter((a): a is Adr => a !== null)
     .sort(byFilename)
   const bySlug = indexAdrs(adrs, errors)
@@ -159,6 +166,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     ok: errors.length === 0 && (!strict || warnings.length === 0),
     errors,
     warnings,
+    notices,
     written,
   }
 }
@@ -218,6 +226,7 @@ function parseAdr(
   text: string,
   vocabulary: Map<string, string>,
   errors: string[],
+  notices: string[],
 ): Adr | null {
   const name = path.posix.basename(file)
   const match = FILENAME.exec(name)
@@ -255,7 +264,13 @@ function parseAdr(
   if (typeof front.summary === 'string' && front.summary.trim()) {
     summary = oneLine(front.summary)
     if (summary.length > SUMMARY_MAX) {
-      fail(`summary is ${summary.length} characters; shorten it to ${SUMMARY_MAX}`)
+      fail(
+        `summary is ${summary.length} characters, over the limit of ${SUMMARY_MAX}; it is the ruling, not a paragraph: aim for under ${SUMMARY_AIM}`,
+      )
+    } else if (summary.length > SUMMARY_WARN) {
+      notices.push(
+        `${file}: summary is ${summary.length} characters, past two lines; aim for under ${SUMMARY_AIM}`,
+      )
     }
   } else {
     fail('summary is required: the ruling in one or two imperative sentences')
@@ -596,7 +611,8 @@ if (import.meta.main) {
   })
   for (const file of result.written) console.log(`docs-check: wrote ${file}`)
   for (const error of result.errors) console.error(`error: ${error}`)
-  for (const warning of result.warnings) console.error(`warning: ${warning}`)
+  for (const warning of [...result.warnings, ...result.notices])
+    console.error(`warning: ${warning}`)
   if (result.ok) console.log('docs-check: ok')
   else process.exitCode = 1
 }

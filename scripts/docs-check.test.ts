@@ -153,7 +153,7 @@ describe('frontmatter', () => {
   it.each([
     ['tags: [cache]', 'summary is required'],
     ['summary: "   "', 'summary is required'],
-    [`summary: ${'x'.repeat(201)}`, 'summary is 201 characters'],
+    [`summary: ${'x'.repeat(513)}`, 'summary is 513 characters, over the limit of 512'],
     ['summary: A.\nstatus: accepted', 'unknown frontmatter key "status"'],
     ['summary: A.\ntags: cache', 'tags must be a list of strings'],
     ['summary: A.\ntags: [nope]', 'tag "nope" is not in docs/decision-tags.yml'],
@@ -171,7 +171,16 @@ describe('frontmatter', () => {
   })
 
   it('accepts a summary of exactly the limit', () => {
-    expect(errorsFor({ [file]: adr(`summary: ${'x'.repeat(200)}`) })).toEqual([])
+    expect(errorsFor({ [file]: adr(`summary: ${'x'.repeat(512)}`) })).toEqual([])
+  })
+
+  it('notes a summary over two lines, without failing even under --strict', () => {
+    expect(check(repo({ [file]: adr(`summary: ${'x'.repeat(236)}`) }), true).notices).toEqual([])
+    const result = check(repo({ [file]: adr(`summary: ${'x'.repeat(237)}`) }), true)
+    expect(result).toMatchObject({ ok: true, errors: [], warnings: [] })
+    expect(result.notices).toEqual([
+      `${file}: summary is 237 characters, past two lines; aim for under 118`,
+    ])
   })
 })
 
