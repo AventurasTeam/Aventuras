@@ -32,7 +32,7 @@ tooling check everything a check can check.
   `active` and `superseded-by`. State is derived from the last two; there is no status field.
 * `docs/README.md` and the cross-cutting block in `AGENTS.md` are generated from frontmatter by
   `npm run docs:gen` and never edited by hand.
-* A `DECISION(slug)` comment ties a decision to the code it governs. Anchors to a superseded,
+* An `ADR(slug)` comment ties a decision to the code it governs. Anchors to a superseded,
   retired or missing ADR fail the check.
 * Raw material goes in `docs/evidence/` and must be linked from an ADR, directly or through its
   folder.

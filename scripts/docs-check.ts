@@ -1,6 +1,6 @@
 /**
  * Generates and validates the decision records: `docs/README.md`, the generated block in
- * `AGENTS.md`, ADR frontmatter and headings, `DECISION(slug)` anchors, doc paths named in source,
+ * `AGENTS.md`, ADR frontmatter and headings, `ADR(slug)` anchors, doc paths named in source,
  * relative links in Markdown, and evidence coverage. The rules are in the bootstrap ADR,
  * docs/decisions/2026-10-12-decision-records.md.
  *
@@ -38,7 +38,7 @@ const SCAN_SKIP = new Set(['scripts/docs-check.ts', 'scripts/docs-check.test.ts'
 
 const FILENAME = /^(\d{4})-(\d{2})-(\d{2})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-const ANCHOR = /DECISION\(([^)\n]*)\)/g
+const ANCHOR = /\bADR\(([^)\n]*)\)/g
 const DOC_PATH = /(?<![\w./-])docs\/[\w./-]*?\.md(?![\w-])(?:#[\w-]+)?/g
 const HTML_ID = /<a\s(?:[^>]*\s)?(?:id|name)="([^"]+)"/g
 
@@ -132,7 +132,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     const buffer = readFileSync(path.join(root, file))
     if (buffer.subarray(0, 8000).includes(0)) continue
     const text = buffer.toString('utf8')
-    if (!text.includes('DECISION(') && !text.includes('docs/')) continue
+    if (!text.includes('ADR(') && !text.includes('docs/')) continue
     text.split('\n').forEach((line, i) => {
       const where = `${file}:${i + 1}`
       for (const [, raw] of line.matchAll(ANCHOR)) {
@@ -365,12 +365,12 @@ function indexAdrs(adrs: Adr[], errors: string[]): Map<string, Adr> {
 
 function anchorProblem(slug: string, bySlug: Map<string, Adr>): string | null {
   const adr = bySlug.get(slug)
-  if (!adr) return `DECISION(${slug}) names no ADR; fix the slug or write the ADR`
+  if (!adr) return `ADR(${slug}) names no ADR; fix the slug or write the ADR`
   if (adr.state === 'superseded') {
-    return `DECISION(${slug}) names a superseded ADR; bring the code in line with ${terminal(adr, bySlug)} and update the anchor`
+    return `ADR(${slug}) names a superseded ADR; bring the code in line with ${terminal(adr, bySlug)} and update the anchor`
   }
   if (adr.state === 'retired') {
-    return `DECISION(${slug}) names a retired ADR; remove the anchor`
+    return `ADR(${slug}) names a retired ADR; remove the anchor`
   }
   return null
 }

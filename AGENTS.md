@@ -56,7 +56,7 @@ A decision is one file in `docs/decisions/`, copied from
 - Write it in the PR that makes the decision. Merging accepts it.
 - Don't edit a merged ADR's ruling. Supersede it with a new one: set `superseded-by` on the old one,
   and `active: true` as well if existing code may keep following it.
-- Where a decision governs specific code, put `DECISION(slug)` in a comment there, with a short
+- Where a decision governs specific code, put `ADR(slug)` in a comment there, with a short
   reason. Read the ADR before "fixing" code that carries one.
 - Put raw material (logs, benchmarks, investigation notes) in `docs/evidence/` and link it from
   the ADR.

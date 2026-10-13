@@ -271,28 +271,28 @@ describe('code anchors', () => {
   }
 
   it('accepts anchors to active and deprecated ADRs', () => {
-    const source = '// DECISION(live): why\n/* DECISION(fading) */\n'
+    const source = '// ADR(live): why\n/* ADR(fading) */\nLOADR(nothing)\n'
     expect(errorsFor({ ...decisions, 'src/a.ts': source })).toEqual([])
   })
 
   it('rejects anchors to superseded, retired and missing ADRs, with the line', () => {
-    const source = '// DECISION(gone)\n# DECISION(dropped)\n<!-- DECISION(nothing) -->\n'
+    const source = '// ADR(gone)\n# ADR(dropped)\n<!-- ADR(nothing) -->\n'
     expect(errorsFor({ ...decisions, 'src/a.svelte': source })).toEqual([
-      'src/a.svelte:1: DECISION(gone) names a superseded ADR; bring the code in line with live and update the anchor',
-      'src/a.svelte:2: DECISION(dropped) names a retired ADR; remove the anchor',
-      'src/a.svelte:3: DECISION(nothing) names no ADR; fix the slug or write the ADR',
+      'src/a.svelte:1: ADR(gone) names a superseded ADR; bring the code in line with live and update the anchor',
+      'src/a.svelte:2: ADR(dropped) names a retired ADR; remove the anchor',
+      'src/a.svelte:3: ADR(nothing) names no ADR; fix the slug or write the ADR',
     ])
   })
 
   it('ignores Markdown, docs/, binaries and ignored files', () => {
     expect(
       errorsFor({
-        'notes.md': 'Write `DECISION(slug)` in a comment.\n',
-        'docs/evidence/x.ts': '// DECISION(nothing)\n',
+        'notes.md': 'Write `ADR(slug)` in a comment.\n',
+        'docs/evidence/x.ts': '// ADR(nothing)\n',
         'docs/decisions/2026-01-01-a.md': adr('summary: A.\n', `${BODY}\n[x](../evidence/x.ts)\n`),
-        'bin.dat': 'DECISION(nothing)\0',
+        'bin.dat': 'ADR(nothing)\0',
         '.gitignore': 'ignored.ts\n',
-        'ignored.ts': '// DECISION(nothing)\n',
+        'ignored.ts': '// ADR(nothing)\n',
       }),
     ).toEqual([])
   })

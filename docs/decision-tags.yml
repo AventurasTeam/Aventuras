@@ -1,5 +1,5 @@
 # Tags for decision records, in the order docs/README.md lists them. Each names a concern that
-# cuts across locations; a tag that would map to one directory is a DECISION(slug) anchor instead.
+# cuts across locations; a tag that would map to one directory is an ADR(slug) anchor instead.
 documentation: How decisions and documentation are recorded and kept true
 code-style: Comments, naming, imports, and the idioms new code is written in
 testing: What is tested, how, and what runs in CI
