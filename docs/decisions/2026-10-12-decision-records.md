@@ -1,5 +1,5 @@
 ---
-summary: 'Record decisions, not descriptions: one ADR per decision in docs/decisions/, written in the PR that makes it. Never document what the code says.'
+summary: 'Record decisions: one ADR per decision in docs/decisions/, written in the PR that makes it. Only document what the code cannot express.'
 tags: [documentation]
 cross-cutting: true
 ---
@@ -8,7 +8,7 @@ cross-cutting: true
 
 ## Context and Problem Statement
 
-`docs/` restated what the code says, drifted from it, and grew without structure. Agents read it, trusted it, and acted on stale content. How do we keep the reasoning that does not fit in a comment without keeping a second, drifting copy of the code?
+`docs/` restated what the code says, drifted from it, and grew without structure. Agents read it, trusted it, and acted on stale content or spent time and context determining truth. How do we keep the reasoning that does not fit in a comment without keeping a second, drifting copy of the code?
 
 ## Considered Options
 

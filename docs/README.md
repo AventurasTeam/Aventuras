@@ -10,4 +10,4 @@ start from [adr-template.md](adr-template.md).
 
 ## documentation: How decisions and documentation are recorded and kept true
 
-- Record decisions, not descriptions: one ADR per decision in docs/decisions/, written in the PR that makes it. Never document what the code says. [decision-records](decisions/2026-10-12-decision-records.md)
+- Record decisions: one ADR per decision in docs/decisions/, written in the PR that makes it. Only document what the code cannot express. [decision-records](decisions/2026-10-12-decision-records.md)
