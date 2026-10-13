@@ -379,6 +379,21 @@ describe('evidence', () => {
     })
     expect(check(root).warnings).toHaveLength(1)
   })
+
+  it('does not count a link to docs/evidence/ itself, or to anything above it', () => {
+    const root = repo({
+      'docs/decisions/2026-01-01-a.md': adr(
+        'summary: A.',
+        `${BODY}\n[all](../evidence/) [docs](../) [root](../../)\n`,
+      ),
+      'docs/evidence/run.log': 'data\n',
+      'docs/evidence/study/data.csv': 'a,b\n',
+    })
+    expect(check(root).warnings).toEqual([
+      expect.stringContaining('docs/evidence/run.log: no ADR links'),
+      expect.stringContaining('docs/evidence/study/data.csv: no ADR links'),
+    ])
+  })
 })
 
 describe('generated outputs', () => {

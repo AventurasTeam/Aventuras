@@ -123,7 +123,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
       const link = resolve(file, href)
       if (link === null) continue
       if (link.error) errors.push(`${file}: ${link.error}`)
-      else if (isAdr && `${link.target}/`.startsWith(EVIDENCE_DIR)) evidenceLinks.push(link.target)
+      else if (isAdr && link.target.startsWith(EVIDENCE_DIR)) evidenceLinks.push(link.target)
     }
   }
 
