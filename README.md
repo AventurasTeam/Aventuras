@@ -84,9 +84,10 @@ Harper.js (WASM) · Vitest
 
 ## Contributing
 
-Start with [docs/](docs/README.md) — the architecture is documented per area, and
-[docs/development](docs/development/README.md) lists the development rules. CI runs lint, type-check, tests and a build on every
-PR against `master`, `develop` or `dev`.
+Start with [AGENTS.md](AGENTS.md), the working rules for people and coding agents alike.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) maps the code, [docs/README.md](docs/README.md) indexes
+the decisions in force, and [docs/development](docs/development/README.md) lists the development
+rules. CI runs lint, type-check, tests and a build on every PR against `master`, `develop` or `dev`.
 
 ## Acknowledgments
 

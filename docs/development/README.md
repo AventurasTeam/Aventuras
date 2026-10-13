@@ -4,8 +4,9 @@ The rules for changing this codebase, one line each. Each links to the document 
 rule in full: where it applies, what to do, and the short reason. That document links the
 measurements and sources behind it.
 
-[CLAUDE.md](../../CLAUDE.md) repeats the rules under [Every change](#every-change). The
-architecture of each area is in [docs/README.md](../README.md).
+[AGENTS.md](../../AGENTS.md) repeats the rules under [Every change](#every-change). The
+architecture of each area is in [ARCHITECTURE.md](../ARCHITECTURE.md), and the decisions in force
+are indexed in [docs/README.md](../README.md).
 
 ## Every change
 
@@ -18,8 +19,9 @@ architecture of each area is in [docs/README.md](../README.md).
   versions, and name the modernizations in the commit message. [modern-code.md](modern-code.md)
 - Use no JS, CSS or Web API newer than Chrome 111 / Safari 16.4 unless MDN says it works there.
   [platform-support.md](platform-support.md)
-- Read an area's architecture doc before changing it, and update the doc in the same commit when
-  the behaviour it describes changes. [docs/README.md](../README.md)
+- Read an area's decisions and architecture doc before changing it. Record a decision as an ADR in
+  the PR that makes it, and update an area doc in the same commit when the behaviour it describes
+  changes. [ARCHITECTURE.md](../ARCHITECTURE.md), [docs/README.md](../README.md)
 
 ## TypeScript and Svelte
 
