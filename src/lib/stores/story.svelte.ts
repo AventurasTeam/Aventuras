@@ -52,7 +52,11 @@ import {
   type ReversalPlan,
   type TrackedState,
 } from '#lib/services/stateTracking/index.ts'
-import { planRollback, rollbackService, type RollbackSummary } from '#lib/services/rollbackService.ts'
+import {
+  planRollback,
+  rollbackService,
+  type RollbackSummary,
+} from '#lib/services/rollbackService.ts'
 import { ui } from './ui.svelte'
 import {
   analyzeTimeline,

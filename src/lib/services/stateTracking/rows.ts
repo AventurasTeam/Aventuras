@@ -1,4 +1,9 @@
-import type { ChangeOp, ChangeOrigin, TrackedEntityType, WorldStateRecord } from '#lib/types/index.ts'
+import type {
+  ChangeOp,
+  ChangeOrigin,
+  TrackedEntityType,
+  WorldStateRecord,
+} from '#lib/types/index.ts'
 
 export const RECORD_COLUMNS = [
   'id',

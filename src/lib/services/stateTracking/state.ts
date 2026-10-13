@@ -6,7 +6,7 @@ import type {
   StoryBeat,
   TimeTracker,
   TrackedEntityType,
-} from '$lib/types'
+} from '#lib/types/index.ts'
 
 /** The visible world state of one branch, as the store holds it. */
 export interface TrackedState {

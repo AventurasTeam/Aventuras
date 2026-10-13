@@ -1,4 +1,9 @@
-import type { ChangeOp, ChangeOrigin, TrackedEntityType, WorldStateChangeRecord } from '#lib/types/index.ts'
+import type {
+  ChangeOp,
+  ChangeOrigin,
+  TrackedEntityType,
+  WorldStateChangeRecord,
+} from '#lib/types/index.ts'
 import { TRACKED_ENTITY_TYPES, canonicalId, rowsOf, type TrackedState } from './state'
 
 export interface RecordContext {
