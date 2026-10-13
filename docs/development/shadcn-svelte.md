@@ -1,8 +1,9 @@
 # shadcn-svelte
 
 `src/lib/components/ui/` started as shadcn-svelte output. The repo no longer carries the
-generator's `components.json`, and the components are maintained by hand on bits-ui. This is the
-evidence behind that decision and what it would take to bring the generator back.
+generator's `components.json`, and the components are maintained by hand on bits-ui. The rules
+are in [ui-components.md](ui-components.md); this is the evidence behind them and what it would
+take to bring the generator back.
 
 Investigated 2026-10-12 against shadcn-svelte 1.7.0 (released 2026-09-16). The CLI source was read
 at `huntabyte/shadcn-svelte` `main`, commit `7c99619b` (2026-10-05). All file paths below are under

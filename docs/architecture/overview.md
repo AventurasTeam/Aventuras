@@ -64,8 +64,8 @@ does not.
 `src/lib/components/ui/` began as shadcn-svelte output and is now maintained by hand on bits-ui.
 There is no `components.json`. The generator's Tailwind 3 registry can't be reached from a
 Tailwind 4 project, and current output fails `check` and `lint` here and doesn't match these
-components. Write a new primitive on bits-ui. The evidence, and what bringing the generator back
-would take: [shadcn-svelte.md](../development/shadcn-svelte.md).
+components. Write a new primitive on bits-ui; the rules are in
+[ui-components.md](../development/ui-components.md).
 
 ## Panels and gestures
 
