@@ -1,6 +1,10 @@
 # Release, CI and Updates
 
-How a build reaches a user, and why publishing the draft is the step that ships it.
+How a build reaches a user. Publishing the draft release is the step that ships it.
+
+The measurements, upstream source readings and alternatives behind these rules are in
+[release-evidence.md](release-evidence.md), the CI caches' in [ci-caching.md](ci-caching.md), and
+the iOS target's in [ios-build-target.md](ios-build-target.md).
 
 ## Git Hooks
 
@@ -62,34 +66,26 @@ Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `AN
 `ANDROID_KEY_*` secrets to be configured on the repository. The iOS build needs none — it is
 unsigned by design.
 
-Both `release.yml` and `pre-release.yml` run a `create-release` job before the build matrix, which creates (or
-reuses) the GitHub release for the tag and passes its numeric ID to `build-desktop.yml` as `releaseId`.
-Without this, each of the four desktop matrix legs asks `tauri-action` to find-or-create the release
-for the same tag independently; two legs hitting "not found" within the same moment each create a
-release, splitting the platform assets across duplicate drafts. Passing a known `releaseId` skips that
-lookup entirely. `build-android.yml` doesn't take a `releaseId` — `action-gh-release` has no such
-input — but its job depends on `create-release` too, so by the time it looks the release up by tag,
-`create-release` has already guaranteed exactly one exists.
+**One release per tag.** Both `release.yml` and `pre-release.yml` run a `create-release` job before
+the build matrix. It creates or reuses the GitHub release for the tag and passes its numeric ID to
+`build-desktop.yml` as `releaseId`, so the parallel desktop legs never look the release up
+themselves. `build-android.yml` depends on `create-release` and looks the release up by tag
+([why](release-evidence.md#one-release-per-tag)).
 
 **Nothing ever uploads to an already-published release.** `create-release` starts with
 `.github/actions/release-guard`, which refuses the run when the tag's release is already
 published, or when a pushed tag doesn't match the version in `tauri.conf.json`. `build-desktop.yml`
-and `build-android.yml` each run the same guard again before their own upload step — "Re-run failed
-jobs" skips `create-release`, so a re-run after a release has been published would otherwise
-overwrite live assets or `latest.json` under the old tag. The guard uses `gh api graphql` (its `--jq`
-flag is built into `gh`, not a separate `jq` install) so it needs a current `gh`; the Linux desktop
-leg installs one from GitHub's own apt repository, since `ubuntu:22.04`'s packaged version is 2.4.0
-and too old.
+and `build-android.yml` each run the same guard again before their own upload step, because
+"Re-run failed jobs" skips `create-release`. The guard needs a current `gh`; the Linux desktop leg
+installs one from GitHub's own apt repository.
 
-Both workflows now create their release as a **draft** — `release.yml` always did; `pre-release.yml`
-used to publish immediately. A `publish` job in `pre-release.yml`, gated on the desktop and
-Android builds succeeding (iOS is best-effort: its failure leaves the `.ipa` missing but does
-not block publishing the other platforms), turns the draft into a pre-release with
-`gh release edit --draft=false`. A stable
-release is still published by hand, as before (see [Cutting a New
-Release](#cutting-a-new-release)). Every upload step (`build-desktop.yml`'s `releaseDraft`,
-`build-android.yml`'s `draft`) sets `draft: true` to match, regardless of `prerelease` — only the
-dedicated publish step, or a human, ever flips a release to published.
+**Only a publish step or a human makes a release public.** Both workflows create their release as
+a **draft**, and every upload step (`build-desktop.yml`'s `releaseDraft`, `build-android.yml`'s
+`draft`) sets `draft: true`, regardless of `prerelease`. In `pre-release.yml`, a `publish` job gated
+on the desktop and Android builds turns the draft into a pre-release with
+`gh release edit --draft=false`; iOS is best-effort, so its failure leaves the `.ipa` missing
+without blocking the other platforms. A stable release is published by hand (see
+[Cutting a New Release](#cutting-a-new-release)).
 
 The release body is set once, in `create-release`, only when the draft is first created — softprops
 keeps the existing body on an empty `body` input, so a re-run never overwrites notes already typed
@@ -145,17 +141,15 @@ already ignores the app's own version, so that push can only rebuild for nothing
   of the Rust dependency set (`scripts/ci/cargo-deps-hash.js`), so a dependency, feature or profile
   change starts each Rust cache cold instead of saving the new artifacts beside the old ones. See
   [ci-caching.md](ci-caching.md#rust-cache-growth).
-- **Gradle** is cached by `setup-gradle`'s basic provider, which saves only from `master`. Without
-  it the Android job takes about 1m45s longer. See [ci-caching.md](ci-caching.md#gradle).
+- **Gradle** is cached by `setup-gradle`'s basic provider, which saves only from `master`. See
+  [ci-caching.md](ci-caching.md#gradle).
 - **npm**, across all three CI workflows, uses the `.github/actions/npm-install` composite action
-  instead of `actions/setup-node`'s built-in cache. `scripts/release.js` bumps the version in
-  `package.json`/`package-lock.json` on every release, and `setup-node`'s cache key is a plain hash
-  of `package-lock.json` with no fallback — so a release always missed that cache and then saved a
-  fresh entry nothing else could restore. The action keys on `scripts/ci/lockfile-hash.js`, which
-  hashes the lockfile with the version fields removed, and falls back to the newest same-OS/arch
-  entry on a miss; it also only saves on `master`. On Linux it caches `.npm-cache` inside the
-  checkout, so the containerized desktop job and the Android job share one entry. See
-  [ci-caching.md](ci-caching.md#npm).
+  instead of `actions/setup-node`'s built-in cache. The action keys on
+  `scripts/ci/lockfile-hash.js`, which hashes the lockfile with the version fields removed, so a
+  release's version bump keeps the cache ([why](release-evidence.md#npm-cache)). It falls back to
+  the newest same-OS/arch entry on a miss, and only saves on `master`. On Linux it caches
+  `.npm-cache` inside the checkout, so the containerized desktop job and the Android job share one
+  entry. See [ci-caching.md](ci-caching.md#npm).
 - **Android's Rust cache also persists the `tauri`/`wry`-generated Kotlin** (`cache-directories`),
   without which `tauri`, `wry` and every plugin recompile in each of the four cargo builds. The
   option is not part of the key: change what is persisted by bumping the `android-v2` suffix. See
@@ -169,64 +163,41 @@ back to `.` on the other legs, where it is unset), so `node_modules`, `build/` a
 the Dev Drive. `CARGO_HOME` and `npm_config_cache` are pointed there too, so the cache restores land
 on it. The rustup toolchain stays on `C:`. Local actions (`uses: ./.github/actions/...`) and
 `release-guard` still resolve against the original checkout, which has the same contents. The
-Dev Drive is not marked trusted or added to Defender's exclusions: the runner image
-[turns off Defender's real-time monitoring](https://github.com/actions/runner-images/blob/main/images/windows/scripts/build/Configure-WindowsDefender.ps1)
-machine-wide, not just for its `C:\` and `D:\` exclusions, and a run that logged
-`Get-MpComputerStatus` on the Dev Drive leg reported `RealTimeProtectionEnabled: False`.
+Dev Drive is not marked trusted or added to Defender's exclusions, because real-time monitoring is
+already off on the runner image
+([evidence](release-evidence.md#windows-dev-drive-and-defender)).
 
-`build-android.yml` also builds `--apk` only (the AAB was built and discarded on every run) and
-targets `aarch64`, `armv7` and `x86_64` (32-bit `x86` served only old emulators). Both build
-workflows pass `--config src-tauri/tauri.release.conf.json`, which sets `build.features` to `[]` for
-that build: `tauri.conf.json`'s own `features: ["devtools"]` is only meant for `tauri dev` (the
-plugin is registered under `debug_assertions` in `src-tauri/src/lib.rs`), and on Android the CLI's
-own plugin-init build and Gradle's build used to end up on different feature sets for the same
-target, forcing one target to compile twice.
+`build-android.yml` builds `--apk` only and targets `aarch64`, `armv7` and `x86_64`
+([why](release-evidence.md#android-builds)). Both build workflows pass
+`--config src-tauri/tauri.release.conf.json`, which sets `build.features` to `[]` for that build:
+`tauri.conf.json`'s own `features: ["devtools"]` is only meant for `tauri dev` (the plugin is
+registered under `debug_assertions` in `src-tauri/src/lib.rs`).
 
 The `.rpm` payload is compressed with `xz` level 6 (`bundle.linux.rpm.compression` in
-`tauri.conf.json`) instead of Tauri's default `gzip` level 6. `xz` produces the smaller archive, as
-expected, but it also bundles faster on this runner: the `Bundling ... .rpm` step dropped from
-~60s (`gzip`, run 35175189321) to ~14-18s (`xz`, runs 35229623700 and 35230697779), so this isn't a
-size-for-time tradeoff. `flate2`'s pure-Rust deflate is apparently the slower path here, not `xz`'s
-liblzma binding. Any `rpm` from 4.8 on reads `xz` payloads. The other formats have no compression
-setting in Tauri's config except NSIS, whose default is already `lzma`.
+`tauri.conf.json`) instead of Tauri's default `gzip` level 6: it is smaller and, on this runner,
+faster to bundle ([timings](release-evidence.md#rpm-compression)). The other formats have no
+compression setting in Tauri's config except NSIS, whose default is already `lzma`.
 
 ### Build version
 
-A `publish: false` run (`ci.yml`) never bumped `tauri.conf.json`'s `version`, so without
-intervention every build-validation run would reuse whatever version `master` last shipped —
-indistinguishable bundle filenames and in-app "About" text across every commit since. Both
-build workflows call `.github/actions/build-version`, which on a non-publishing run writes
-`ci-version.conf.json` (a `{"version": "<base>-sha<short-sha>"}` override, gitignored, never
-committed) and emits the `--config` list that carries it to `tauri build`/`tauri android
-build`, merged on top of `tauri.release.conf.json`. Both workflows take that list from the
-action's `config-args` output, so the rule lives in one place.
-`tauri-action` re-resolves the same `--config` list itself to name
-workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the
-bundle filenames, and `getVersion()` inside the running app all agree on one
-`<base>-sha<short-sha>` string.
+A non-publishing run (`ci.yml`) versions its build `<base>-sha<short-sha>`, so each commit's bundle
+filenames and in-app "About" text are distinct. Both build workflows call
+`.github/actions/build-version`, which on a non-publishing run writes `ci-version.conf.json` (a
+`{"version": "<base>-sha<short-sha>"}` override, gitignored, never committed) and emits the
+`--config` list that carries it to `tauri build`/`tauri android build`, merged on top of
+`tauri.release.conf.json`. Both workflows take that list from the action's `config-args` output, so
+the rule lives in one place. `tauri-action` re-resolves the same `--config` list itself to name
+workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the bundle
+filenames, and `getVersion()` inside the running app all agree on one string.
 
-The suffix is appended, not substituted, for two reasons that both require a valid `X.Y.Z`
-prefix: Tauri's config deserializer validates `version` as semver (a bare SHA fails to
-parse), and `src/lib/utils/version.ts`'s `isNewerVersion` — the Android update check — expects
-the same `major.minor.patch` shape and silently refuses to compare anything else. A useful
-side effect: since a CI build's version is a semver pre-release of the last release, its
-own update check correctly reports the real release as newer, instead of "up to date".
-
-The suffix is prefixed with `sha` rather than left bare because a short SHA that happens to
-be all digits with a leading zero (about 0.4% of commits) is not valid semver on its own —
-`sha` makes the identifier alphanumeric, so it always parses.
+Keep both prefixes: the `X.Y.Z` base and the `sha` before the commit hash. Tauri and
+`isNewerVersion` both need valid semver ([why](release-evidence.md#build-version)). Since a CI
+build's version is then a semver pre-release of the last release, its own update check correctly
+reports the real release as newer.
 
 A real release (`release.yml`/`pre-release.yml`, `publish: true`) never takes this path —
 its version is the one `scripts/release.js` bumped, and it must stay exactly what the pushed
 tag names.
-
-**Deferred: per-ABI parallel Android builds.** The four (now three) Android ABIs are still built one
-after another by a single `tauri android build` invocation. A matrix job per target — each building
-its Rust `.so` and uploading it plus the tauri/wry-generated Gradle sources, followed by a packaging
-job that runs Gradle with the `rustBuild*Release` tasks excluded — would let them build in parallel.
-It is deferred: it bypasses the CLI's supported build flow, and with a warm cache each target's Rust
-build is already only 1-1.5 minutes, so the likely saving is a few minutes, not worth the added
-maintenance surface yet.
 
 ## The Updater
 
@@ -238,69 +209,46 @@ for it. `UpdateInfo.canInstallInApp` is the flag that tells them apart, and the 
 `updater.endpoints` entry in `tauri.conf.json`, verifies its signature against the `pubkey`
 there, and installs the new build itself.
 
-**Mobile has no updater at all, and this is not a configuration problem.**
-`tauri-plugin-updater` declares Android support level `none` and has no iOS support either
-(its `updater_os()` has branches for linux/macos/windows only), so `check()` fails with
-`UnsupportedOs` before a single request is sent. There is no install path either: an APK/IPA
-is installed by the system (package installer, sideloading tool), not by the app it replaces.
-The mobile path therefore calls the GitHub Releases API directly, compares the tag against
-`getVersion()` using `src/lib/utils/version.ts`, and opens the platform's own package asset
-(`.apk` on Android, `.ipa` on iOS) in the browser. String comparison is not adequate for
-that — `'0.10.0' > '0.9.0'` is false lexically — which is why the comparison is a tested
-module of its own.
+**Mobile has no in-app updater**: the plugin supports neither Android nor iOS, and the system,
+not the app, installs an APK or IPA ([evidence](release-evidence.md#no-updater-on-mobile)). The
+mobile path calls the GitHub Releases API directly, compares the tag against `getVersion()` using
+`src/lib/utils/version.ts`, and opens the platform's own package asset (`.apk` on Android, `.ipa`
+on iOS) in the browser. The comparison is semver, not string order (`'0.10.0' > '0.9.0'` is false
+lexically), which is why it is a tested module of its own. The check is unauthenticated, so it
+shares GitHub's per-IP rate limit; a 403 is reported as a network-kind error.
 
-Two things must stay in step, or the platforms will offer different versions to their users:
-the `RELEASE_REPO` constant in `updater.ts` and the `updater.endpoints` URL in
-`tauri.conf.json`.
+Keep the `RELEASE_REPO` constant in `updater.ts` and the `updater.endpoints` URL in
+`tauri.conf.json` in step, or the platforms will offer different versions to their users.
 
-**A draft release is invisible to the updater.** `release.yml` publishes a draft (a
-non-pre-release run of `build-desktop.yml` sets `releaseDraft`), and both paths resolve `/releases/latest`, which GitHub defines as the
-latest **published, non-pre-release** release. Until the draft is published by hand, the
-desktop endpoint 404s and the API returns the previous release — so the last step of every
-release is publishing the draft on GitHub. Nothing reaches users before that.
+**A draft release is invisible to the updater.** Both paths resolve `/releases/latest`, which
+GitHub defines as the latest **published, non-pre-release** release. Until the draft is published
+by hand, the desktop endpoint 404s and the API returns the previous release, so the last step of
+every release is publishing the draft on GitHub. The desktop check reports that 404 as the
+`no-release` kind ("it may still be a draft"), distinct from `network` and `unsupported`.
 
-The desktop check surfaces that state honestly rather than as a generic failure: a 404 becomes
-the `no-release` kind ("it may still be a draft"), distinct from `network` and `unsupported`.
+**The release notes users read are the GitHub release body, on both platforms.** `latest.json`'s
+`notes` field is a placeholder ([why](release-evidence.md#release-notes-in-latestjson)), so
+`releaseNotesFor` fetches the release from the API and uses its body, falling back to
+`latest.json` if the call fails; the update installs either way. So:
 
-**The release notes users read are the GitHub release body, on both platforms.** They are not
-taken from `latest.json`, whose `notes` field is written by `tauri-action` at build time from
-the fixed `releaseBody` string in `build-desktop.yml` — which is a placeholder, not a changelog, and
-cannot be otherwise, since the notes are written after the build. `releaseNotesFor` therefore
-fetches the release from the API and uses its body, falling back to `latest.json` if the call
-fails; the update installs either way. Two consequences:
+- Write the notes **before** publishing the draft. Publishing is what makes the release visible to
+  the check, and a release published with the placeholder still in it shows that placeholder.
+- Editing a published release's text on GitHub changes what every client shows, with no rebuild
+  and no new version.
+- The fetched notes are used only when the release tag matches the version being offered — notes
+  belonging to a different release are worse than none.
 
-- Editing a published release's text on GitHub changes what every client shows, with no
-  rebuild and no new version.
-- The notes must be written **before** the draft is published, because publishing is what
-  makes the release visible to the check. A release published with the placeholder still in
-  it will show that placeholder.
+**Some installs are never updated in place.** The check reports `canInstallInApp: false` and the
+dialog opens the releases page instead for:
 
-The fetched notes are used only when the release tag matches the version being offered —
-notes belonging to a different release are worse than none.
+- **a `.deb` install** (`manualInstallReason: 'deb-package'`): the plugin's privileged install
+  chain can end half-finished, and the package manager owns that install anyway;
+- **an unpackaged build** (`getBundleType()` returns `null`, `manualInstallReason: 'unpackaged'`):
+  on Linux the plugin would replace the dev binary with the release AppImage. On macOS
+  `bundle_type()` never returns `None`, so this guard does not fire there.
 
-**A `.deb` install is deliberately not updated in place.** The plugin would attempt it —
-`install_deb` writes the package to a temp dir and runs `dpkg -i` through `pkexec`, falling
-back to zenity/kdialog and finally to a terminal `sudo` that a windowed app has no terminal
-for — but that chain has too many ways to end half-finished for something the user starts
-with one click, and the package manager is the thing that owns that install anyway. So the
-check reports `canInstallInApp: false` with `manualInstallReason: 'deb-package'` and the
-dialog opens the releases page instead.
-
-**An unpackaged build never installs either, and this one is a safety guard.** On Linux the
-plugin's `extract_path` _is_ the running executable, so in `tauri dev` "Download and install"
-moves the dev binary into a `TempDir`, writes the release AppImage over it, then drops the
-`TempDir` — deleting the backup — and reports success. The developer is left with a 100 MB
-AppImage where their build was. `getBundleType()` returns `null` for a build the bundler never
-touched, which is exactly that case, so it is routed to the browser with
-`manualInstallReason: 'unpackaged'`.
-
-Note that on macOS `bundle_type()` falls back to `App` rather than `None`, so this guard does
-not fire there.
-
-`.rpm` currently still installs in place, through the same privileged-helper chain.
-
-One more limit: **the mobile check is unauthenticated**, so it shares GitHub's per-IP rate
-limit. A 403 is reported as a network-kind error.
+`.rpm` still installs in place, through the same privileged-helper chain. The plugin internals
+behind all three are in [release-evidence.md](release-evidence.md#installs-not-updated-in-place).
 
 ## Building Release Binaries
 
@@ -349,8 +297,9 @@ provisioning profiles or signing secrets are involved at any step, and none are 
 in CI. An unsigned `.ipa` cannot be installed with Xcode or Finder — it targets
 sideloading tools (AltStore, Sideloadly, TrollStore) or a future signing step.
 
-**The Xcode scaffold (`src-tauri/gen/apple/`) is tracked in git, like `gen/android/`.**
-Do NOT run `npx tauri ios init` on a working tree that already has it. To (re)generate it —
+**The Xcode scaffold (`src-tauri/gen/apple/`) is meant to be tracked in git, like `gen/android/`,
+but is not committed yet**, so CI generates it on every build (see below). Once it is committed,
+do NOT run `npx tauri ios init` on a working tree that has it. To (re)generate it —
 first setup, or after a major Tauri CLI upgrade — run the **"Bootstrap iOS scaffold"**
 workflow (`.github/workflows/bootstrap-ios.yml`, manual dispatch): it runs `tauri ios init`
 on `macos-15`, smoke-tests a full unsigned build, and uploads the scaffold plus the test
@@ -427,25 +376,19 @@ src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-rele
 
 **Injecting Kotlin into the generated WebView.** wry generates
 `src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated/RustWebView.kt` fresh on
-every build — it's gitignored and must never be hand-edited. wry's `build.rs` substitutes an
-env var named `WRY_<FILE_STEM>_CLASS_EXTENSION` (file stem uppercased, e.g.
-`WRY_RUSTWEBVIEW_CLASS_EXTENSION` for `RustWebView.kt`) into a `{{class-extension}}` placeholder in
-that file. The repo-root `.cargo/config.toml` sets this to inject a one-line
-`onCreateInputConnection` override (used for the incognito-keyboard setting) that delegates to a
-normal, git-tracked Kotlin class. `cargo`'s config discovery walks up from the build's working
-directory, so this only works because both `npx tauri android ...` and `./compileApk.sh` run with
-the repo root as their working directory — confirmed by tracing `BuildTask.kt`'s `workingDir`.
+every build — it's gitignored and must never be hand-edited. The repo-root `.cargo/config.toml`
+sets `WRY_RUSTWEBVIEW_CLASS_EXTENSION`, which wry's `build.rs` substitutes into a
+`{{class-extension}}` placeholder in that file, to inject a one-line `onCreateInputConnection`
+override (used for the incognito-keyboard setting) that delegates to a normal, git-tracked Kotlin
+class. Run Android builds from the repo root, as `npx tauri android ...` and `./compileApk.sh` do:
+cargo finds `.cargo/config.toml` by walking up from the build's working directory.
 
-This substitution is undocumented wry internals, not a public API — verified by reading
-`wry-0.55.1`'s `build.rs` directly (search the vendored crate's registry checkout for
-`CLASS_EXTENSION` if this ever needs re-verifying after a wry bump). If the override silently
-stops appearing in the generated `RustWebView.kt`, that build script — not any docs page — is
-where the renamed placeholder or env var will be found.
-
+The substitution is undocumented wry internals, not a public API.
 `scripts/check_wry_injection.js` runs after `tauri android build` in `build-android.yml` and
 fails the build if the lines `.cargo/config.toml` injects are absent from the generated
 `RustWebView.kt`, so a wry bump that breaks the substitution stops the release instead of
-shipping a dead setting.
+shipping a dead setting. When it fires, wry's `build.rs` is where the renamed placeholder or env
+var will be found ([how it was verified](release-evidence.md#the-wry-class-extension-hook)).
 
 ### Signing APK
 
