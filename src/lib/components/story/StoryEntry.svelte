@@ -384,6 +384,8 @@
       if (position !== undefined) preview = await story.previewRegenerate(position)
     } catch (error) {
       console.error('[StoryEntry] Could not preview the regenerate:', error)
+      ui.showToast(`Could not check what regenerating undoes: ${errMessage(error)}`, 'error')
+      return
     }
     if (!preview || preview.manual.length + preview.tidy.length + preview.lore.length === 0) {
       regenerate(retry)
@@ -409,7 +411,8 @@
       revertPreview = await story.previewRevert(entry.id)
     } catch (error) {
       console.error('[StoryEntry] Could not preview the revert:', error)
-      revertPreview = { manual: [], tidy: [], unkeepable: [], lore: [] }
+      isDeleting = false
+      ui.showToast(`Could not check what deleting undoes: ${errMessage(error)}`, 'error')
     }
   }
 
