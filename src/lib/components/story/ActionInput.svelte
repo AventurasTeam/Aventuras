@@ -958,7 +958,8 @@
           }
           if (
             ui.chapterCheckActiveFor(bgStoryId, bgBranchId) ||
-            chapterCards.pending(bgStoryId, bgBranchId)
+            chapterCards.pending(bgStoryId, bgBranchId) ||
+            isLoreManagementRunning(bgStoryId, bgBranchId)
           ) {
             return 'busy'
           }

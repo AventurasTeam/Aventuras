@@ -58,7 +58,8 @@ export interface ChapterCardReporting {
   /**
    * Whether the cut can still become a chapter. `open`: its branch is open and its entries are
    * still the first ones no chapter covers. `busy`: another chapter check or card on the branch
-   * is running and may cut them first. `closed`: the span was cut, changed or left.
+   * is running and may cut them first, or a lore management run holds the branch and would refuse
+   * the chapter's own. `closed`: the span was cut, changed or left.
    */
   cutState: (cut: ChapterCut) => 'open' | 'busy' | 'closed'
 }
@@ -69,7 +70,7 @@ export const CUT_NO_LONGER_OPEN =
 
 /** Why a retry was put off: another chapter on the branch is being checked or written. */
 export const CUT_BUSY =
-  'Another chapter is being checked or written on this branch; retry once it is done'
+  'Another chapter or lore management run is in progress on this branch; retry once it is done'
 
 export interface BackgroundTaskInput {
   // Style review input
