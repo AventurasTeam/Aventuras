@@ -235,7 +235,7 @@
       return true
     } catch (error) {
       console.error('[ExperimentalSettings] Closing snapshots failed:', error)
-      return ask(
+      return await ask(
         `The closing snapshots could not be saved: ${errMessage(error)}\n\n` +
           'Without them, past checkpoints in what was tracked may be refused. ' +
           'Turn State Tracking off anyway?',
@@ -622,7 +622,13 @@
         Disable all experimental features and reset to defaults.
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={handleResetAll} class="gap-2">
+    <Button
+      variant="outline"
+      size="sm"
+      onclick={handleResetAll}
+      disabled={closingTracking}
+      class="gap-2"
+    >
       <RotateCcw class="h-4 w-4" />
       Reset
     </Button>
