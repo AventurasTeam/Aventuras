@@ -1980,6 +1980,8 @@ class DatabaseService {
       },
       // Chapters reference story entries, so remove them before their branch's entries.
       { sql: 'DELETE FROM chapters WHERE branch_id = ?', params: [id] },
+      // A record can sit on an inherited entry, which the entry cascade does not reach.
+      { sql: 'DELETE FROM world_state_changes WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM story_entries WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM characters WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM locations WHERE branch_id = ?', params: [id] },

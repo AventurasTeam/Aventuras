@@ -216,18 +216,34 @@
         return
       }
     }
-    if (!checked) {
-      // Before the setting changes: branches must still resolve as they did while tracked.
-      closingTracking = true
-      try {
-        await story.takeClosingSnapshots()
-      } catch (error) {
-        console.error('[ExperimentalSettings] Closing snapshots failed:', error)
-      } finally {
-        closingTracking = false
-      }
+    if (!checked && !(await closeTracking())) {
+      stateTrackingChecked = true
+      return
     }
     await settings.updateExperimentalFeatures({ stateTracking: checked })
+  }
+
+  /**
+   * Before tracking goes off: branches must still resolve as they did while tracked. False when
+   * the snapshots failed and the reader chose to keep tracking on, since a later attempt
+   * can only run while it still is.
+   */
+  async function closeTracking(): Promise<boolean> {
+    closingTracking = true
+    try {
+      await story.takeClosingSnapshots()
+      return true
+    } catch (error) {
+      console.error('[ExperimentalSettings] Closing snapshots failed:', error)
+      return ask(
+        `The closing snapshots could not be saved: ${errMessage(error)}\n\n` +
+          'Without them, past checkpoints in what was tracked may be refused. ' +
+          'Turn State Tracking off anyway?',
+        { title: 'Turn off State Tracking', kind: 'warning' },
+      )
+    } finally {
+      closingTracking = false
+    }
   }
 
   async function handleRollbackToggle(checked: boolean) {
@@ -294,6 +310,7 @@
   }
 
   async function handleResetAll() {
+    if (settings.experimentalFeatures.stateTracking && !(await closeTracking())) return
     await settings.resetExperimentalFeatures()
     stateTrackingChecked = settings.experimentalFeatures.stateTracking
   }

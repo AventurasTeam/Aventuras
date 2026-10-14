@@ -535,8 +535,14 @@
     advancedOpen = false
     overruleGaps = false
     if (!isLatestEntry) {
-      pastCheckpoint = await story.previewCheckpointAt(entry.id)
-      gapOverride = pastCheckpoint.overrides?.next ? 'undoRecorded' : 'previousAsIs'
+      try {
+        pastCheckpoint = await story.previewCheckpointAt(entry.id)
+        gapOverride = pastCheckpoint.overrides?.next ? 'undoRecorded' : 'previousAsIs'
+      } catch (error) {
+        console.error('[StoryEntry] Could not preview the checkpoint:', error)
+        isCreatingCheckpoint = false
+        ui.showToast(errMessage(error), 'error')
+      }
     }
   }
 

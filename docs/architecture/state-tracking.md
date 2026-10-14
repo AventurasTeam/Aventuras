@@ -151,7 +151,9 @@ from P. This is a known limitation.
 
 Closing snapshots make an interrupted run usable afterwards: turning the feature off snapshots every
 branch written to since it was turned on, before the setting changes, since lightweight branches
-resolve differently once it has. A checkpoint created after its entry already had a successor was
+resolve differently once it has. Resetting the experimental features takes them the same way. When
+they fail, the reader is asked whether to turn tracking off anyway: they can only be taken while it
+is still on. A checkpoint created after its entry already had a successor was
 itself rebuilt, possibly carrying manual changes back by the reader's choice, so it is never an
 anchor.
 

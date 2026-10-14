@@ -116,7 +116,16 @@
     void story.entries.length
     void story.currentStory?.currentBranchId
     if (!showSnapshots || !tracking) return
-    void story.snapshotMarks().then((marks) => (snapshotMarks = marks))
+    let stale = false
+    story
+      .snapshotMarks()
+      .then((marks) => {
+        if (!stale) snapshotMarks = marks
+      })
+      .catch((error) => console.error('[StoryNavPanel] Could not list snapshots:', error))
+    return () => {
+      stale = true
+    }
   })
 
   const filtered = $derived(

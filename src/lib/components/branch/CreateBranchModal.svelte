@@ -1,5 +1,7 @@
 <script lang="ts">
   import { story } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { errMessage } from '#lib/utils/error.ts'
   import type { Checkpoint } from '#lib/types/index.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -38,7 +40,7 @@
       name = ''
     } catch (error) {
       console.error('[CreateBranchModal] Failed to create branch:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create branch')
+      ui.showToast(errMessage(error), 'error')
     } finally {
       saving = false
     }
