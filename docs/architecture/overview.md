@@ -529,7 +529,9 @@ It finishes when lore management finishes: with banners on it names the chapter 
 **Go to Chapter N**, landing on the banner, and **Dismiss**; with banners off it reads that
 chapter creation is finished. A failed summary leaves no chapter and offers **Retry**, while
 the span is still the first one no chapter covers, and **Dismiss**; a later turn cuts the span
-again. Lore management that fails, or is refused by the branch lock,
+again. A retry runs outside the turn's background tasks, so it is put off while another chapter
+check or card on the branch is running (`cutState`), and `createManualChapter` refuses while a
+card on the branch is pending, as it does during a turn's background tasks. Lore management that fails, or is refused by the branch lock,
 leaves a chapter without its lore, so the card offers **Restart lore management**, recorded as a
 further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Both kinds of
 failure also raise a toast, since the reader may already be on the next turn or another branch.

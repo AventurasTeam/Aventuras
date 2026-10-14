@@ -31,6 +31,7 @@ class ChapterCardsStore {
   }
 
   pending(storyId: string, branchId: string | null): boolean {
+    void this.version
     return this.cards.pending(storyId, branchId)
   }
 }

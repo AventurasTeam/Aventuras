@@ -951,13 +951,20 @@
         openRecord: (key) => activity.startRecord(key, 'chapter'),
         reopenRecord: (key) => activity.reopenRecord(key),
         closeRecord: (id) => activity.endRecord(id),
-        isCutOpen: (cut) => {
+        cutState: (cut) => {
           const open = story.currentScope
           if (!open || !sameBranchScope(open, { storyId: bgStoryId, branchId: bgBranchId })) {
-            return false
+            return 'closed'
+          }
+          if (
+            ui.chapterCheckActiveFor(bgStoryId, bgBranchId) ||
+            chapterCards.pending(bgStoryId, bgBranchId)
+          ) {
+            return 'busy'
           }
           const start = story.lastChapterEndIndex
-          return cut.entries.every((entry, i) => story.entries[start + i]?.id === entry.id)
+          const uncut = cut.entries.every((entry, i) => story.entries[start + i]?.id === entry.id)
+          return uncut ? 'open' : 'closed'
         },
       }
       turnEndsLater = true

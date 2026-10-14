@@ -27,6 +27,7 @@ import type {
 import { database } from '#lib/services/database.ts'
 import { rollbackService } from '#lib/services/rollbackService.ts'
 import { ui } from './ui.svelte'
+import { chapterCards } from './chapterCards.svelte'
 import {
   analyzeTimeline,
   applyReconciliation,
@@ -3938,7 +3939,11 @@ class StoryStore {
     // half: the check that has to hold is here, because both paths call
     // `buildAndSaveChapter` over `lastChapterEndIndex`, and two of them racing produce two
     // chapters covering the same entries.
-    if (ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId)) {
+    // A card's retried summary runs outside the turn's background tasks, so it is checked too.
+    if (
+      ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId) ||
+      chapterCards.pending(this.currentStory.id, this.currentStory.currentBranchId ?? null)
+    ) {
       log('Background chapter work in flight, refusing manual chapter creation')
       // Said out loud as well as returned: the caller closes the modal either way, so a
       // silent refusal looks exactly like a chapter that was created.

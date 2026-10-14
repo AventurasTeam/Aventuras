@@ -4,6 +4,7 @@ import { ActivityRecorder } from '#lib/services/activity/index.ts'
 import { ChapterCards } from '#lib/services/chapterCreation/index.ts'
 import {
   BackgroundTaskCoordinator,
+  CUT_BUSY,
   CUT_NO_LONGER_OPEN,
   type BackgroundTaskInput,
 } from './BackgroundTaskCoordinator'
@@ -18,7 +19,7 @@ interface Overrides {
 }
 
 function setup(over: Overrides = {}) {
-  const cutOpen = { value: true }
+  const cutState = { value: 'open' as 'open' | 'busy' | 'closed' }
   const order: string[] = []
   const recorder = new ActivityRecorder()
   recorder.setReporting('tree')
@@ -119,7 +120,7 @@ function setup(over: Overrides = {}) {
       openRecord: (key) => recorder.startRecord(key, 'chapter'),
       reopenRecord: (key) => recorder.reopenRecord(key),
       closeRecord: (id) => recorder.endRecord(id),
-      isCutOpen: () => cutOpen.value,
+      cutState: () => cutState.value,
     },
   }
 
@@ -139,7 +140,7 @@ function setup(over: Overrides = {}) {
     cards,
     loreSession,
     onTurnWorkEnded,
-    cutOpen,
+    cutState,
   }
 }
 
@@ -306,7 +307,7 @@ describe('a cut chapter', () => {
     })
     ;(t.cards as any).notify = notify
     await t.coordinator.runBackgroundTasks(t.input)
-    t.cutOpen.value = false
+    t.cutState.value = 'closed'
 
     await t.cards.retrySummary(t.card().id)
 
@@ -341,5 +342,27 @@ describe('a cut chapter', () => {
     await running
     expect(t.onTurnWorkEnded).toHaveBeenCalledWith(true)
     expect(checking).toEqual([true, false])
+  })
+
+  it('puts a retry off while another chapter runs on the branch, and keeps it available', async () => {
+    let fail = true
+    const t = setup({
+      summary: async () => {
+        if (fail) throw new Error('provider down')
+        return { summary: 'They crossed.', title: 'The Ferry', keywords: [] }
+      },
+    })
+    await t.coordinator.runBackgroundTasks(t.input)
+    t.cutState.value = 'busy'
+
+    await t.cards.retrySummary(t.card().id)
+
+    expect(t.card()).toMatchObject({ phase: 'summary-failed', retryable: true, reason: CUT_BUSY })
+    expect(t.deps.chapterService.summarizeChapter).toHaveBeenCalledTimes(1)
+
+    fail = false
+    t.cutState.value = 'open'
+    await t.cards.retrySummary(t.card().id)
+    expect(t.card()).toMatchObject({ phase: 'finished' })
   })
 })

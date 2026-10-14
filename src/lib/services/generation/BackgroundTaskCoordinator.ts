@@ -56,15 +56,20 @@ export interface ChapterCardReporting {
   reopenRecord: (key: string) => string
   closeRecord: (id: string) => void
   /**
-   * Whether the cut can still become a chapter: its branch is open and its entries are still the
-   * first ones no chapter covers. A failed summary offers a retry only while it is.
+   * Whether the cut can still become a chapter. `open`: its branch is open and its entries are
+   * still the first ones no chapter covers. `busy`: another chapter check or card on the branch
+   * is running and may cut them first. `closed`: the span was cut, changed or left.
    */
-  isCutOpen: (cut: ChapterCut) => boolean
+  cutState: (cut: ChapterCut) => 'open' | 'busy' | 'closed'
 }
 
 /** Why a retry was not made: the span was cut, changed or left since the summary failed. */
 export const CUT_NO_LONGER_OPEN =
   "This chapter's entries have changed or been cut since; a later turn will cut them again"
+
+/** Why a retry was put off: another chapter on the branch is being checked or written. */
+export const CUT_BUSY =
+  'Another chapter is being checked or written on this branch; retry once it is done'
 
 export interface BackgroundTaskInput {
   // Style review input
@@ -247,8 +252,13 @@ export class BackgroundTaskCoordinator {
         failStep(activity, summaryId, error)
         log('Chapter creation failed (non-fatal)', error)
         if (card && reporting) {
-          const retry = async () => {
-            if (!reporting.isCutOpen(cut)) {
+          const retry = async (): Promise<void> => {
+            const state = reporting.cutState(cut)
+            if (state === 'busy') {
+              reporting.cards.summaryFailed(card.id, CUT_BUSY, retry, false)
+              return
+            }
+            if (state === 'closed') {
               reporting.cards.summaryFailed(card.id, CUT_NO_LONGER_OPEN, undefined, false)
               return
             }
