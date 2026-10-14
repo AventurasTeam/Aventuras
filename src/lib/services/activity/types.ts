@@ -32,9 +32,16 @@ export interface ActivityStep {
 /** How a turn ended. `halted`: a failure stopped it before its narration was produced. */
 export type TurnOutcome = 'finished' | 'halted' | 'stopped'
 
+/**
+ * `turn`: a generation turn, keyed by its narration entry. `chapter`: the work of a chapter
+ * creation card, keyed by the card. Only turns count against the retention bound.
+ */
+export type ActivityRecordKind = 'turn' | 'chapter'
+
 export interface ActivityTurn {
   id: string
-  /** The narration entry this turn produced. Set when the turn starts. */
+  kind: ActivityRecordKind
+  /** The narration entry this turn produced, or the card's key. Set when the record starts. */
   entryId: string
   startedAt: number
   endedAt?: number

@@ -149,17 +149,32 @@ Three callers can start one and none of them sees the others; two agents on one 
 over each other, because each takes an index snapshot at the start and edits by index. The lock
 is at the funnel they all pass through — `ui.loreManagementActive` could not be it, since it
 lingers two seconds after a run so the summary can be read. Keyed by branch rather than story,
-because a branch has its own resolved view of the entries. The same reasoning covers chapters:
+because a branch has its own resolved view of the entries. A session the lock refuses is reported
+as skipped (`LORE_SESSION_BUSY`), not silently dropped. The same reasoning covers chapters:
 a turn's background tasks create one, so `ui.backgroundTasksActiveFor(storyId, branchId)`
 disables **Create Chapter Now** and `createManualChapter` refuses outright, or two chapters get
-built over overlapping ranges of the same entries.
+built over overlapping ranges of the same entries. A turn starts no chapter check of its own while
+a chapter creation card on its branch is still working or any session holds the branch; see
+[Chapter creation cards](overview.md#chapter-creation-cards).
+
+**The agent writes nothing while it runs.** Each change it approves goes into
+`LoreSessionLedger`; `saveLoreSession` writes them in order once it has finished. An agent that
+fails leaves the lorebook untouched; a write that fails partway through saving leaves the ones
+before it.
+
+In the activity record a run is a list of model calls and tool calls side by side. A model call is
+named before it is made, by why the loop makes it (`loreModelCallReason` in `loreSteps.ts`): every
+run opens by reviewing the lorebook, and a later call exists to act on what the previous call's
+tools returned, to resolve duplicates a refused finish left open, or to sum up on the forced last
+step. Nothing more about a call is known in advance; the model chooses its tools once called.
 
 **The session's inputs are read when it starts, not when the turn did.** Everything in them
 moves during a turn: the classifier writes lorebook entries, and the chapter check that decides
 whether lore management runs at all creates the chapter. A snapshot taken up front handed the
 agent a lorebook missing what was just classified, a chapter list missing the chapter that
 triggered the run, and a "recent story" still holding the entries that chapter had absorbed. Both
-the background path and the batch importer now pass a thunk.
+the background path and the batch importer now pass a thunk. The background path's thunk throws
+when the turn's story and branch are no longer open, and the session does not start.
 
 `query_chapter` here shares `ChapterQueryBudget` with the retrieval agent — see
 [Agentic Retrieval](context-injection.md) — at its own allowance of six per session, and with no

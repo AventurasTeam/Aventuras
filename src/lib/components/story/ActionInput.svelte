@@ -2,6 +2,7 @@
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '#lib/stores/ui.svelte.ts'
   import { activity } from '#lib/stores/activity.svelte.ts'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
   import {
     describeActivityError,
     trackStep,
@@ -44,6 +45,7 @@
     SuggestionsRefreshService,
     buildLoreManagementCallbacks,
     buildLoreManagementUICallbacks,
+    isLoreManagementRunning,
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
@@ -55,7 +57,7 @@
     type RestoreResult,
   } from '#lib/services/generation/index.ts'
   import { InlineImageTracker } from '#lib/services/ai/image/index.ts'
-  import type { BranchScope } from '#lib/utils/branchScope.ts'
+  import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
   import type { GenerationLease } from '#lib/utils/generationLease.ts'
   import { storyImageMode } from '#lib/utils/image.ts'
 
@@ -332,15 +334,22 @@
       chapterService: {
         analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
         summarizeChapter: aiService.summarizeChapter.bind(aiService),
-        getNextChapterNumber: story.getNextChapterNumber.bind(story),
         addChapter: story.addChapter.bind(story),
       },
       loreManagement: {
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
       },
       styleReview: {
-        analyzeStyle: (entries, mode, pov, tense, recentEntriesCount) =>
-          aiService.analyzeStyle(storyId, entries, mode, pov, tense, recentEntriesCount),
+        analyzeStyle: (entries, mode, pov, tense, recentEntriesCount, activityParentId) =>
+          aiService.analyzeStyle(
+            storyId,
+            entries,
+            mode,
+            pov,
+            tense,
+            recentEntriesCount,
+            activityParentId,
+          ),
       },
     }
   }
@@ -390,18 +399,24 @@
       // A thunk: read when the session starts, after the classifier and the chapter check
       // have run. See BackgroundTaskInput.loreSession. The scope is the turn's, matching the
       // callbacks below, so a story switch refuses the session instead of misdirecting it.
-      loreSession: () => ({
-        storyId,
-        currentBranchId: branchId,
-        lorebookEntries: story.lorebookEntries,
-        chapters: story.currentBranchChapters,
-        recentEntries: story.getUnchapterizedEntries(),
-        mode,
-        pov: story.pov,
-        tense: story.tense,
-        tokenThreshold: story.memoryConfig.tokenThreshold,
-        chapterBuffer: story.memoryConfig.chapterBuffer,
-      }),
+      loreSession: () => {
+        const open = story.currentScope
+        if (!open || !sameBranchScope(open, { storyId, branchId })) {
+          throw new Error('The story or branch this chapter belongs to is no longer open')
+        }
+        return {
+          storyId,
+          currentBranchId: branchId,
+          lorebookEntries: story.lorebookEntries,
+          chapters: story.currentBranchChapters,
+          recentEntries: story.getUnchapterizedEntries(),
+          mode,
+          pov: story.pov,
+          tense: story.tense,
+          tokenThreshold: story.memoryConfig.tokenThreshold,
+          chapterBuffer: story.memoryConfig.chapterBuffer,
+        }
+      },
       loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
       loreUICallbacks: buildLoreManagementUICallbacks(),
     }
@@ -578,12 +593,15 @@
 
     // What the turn ran into, for the outcome its record closes with.
     const ending: Omit<TurnEnding, 'stopRequested'> = {}
+    let turnRecordId = ''
+    // Set once the background work is handed off: the record then ends when that work does.
+    let turnEndsLater = false
 
     try {
       // Inside the try: only its `finally` closes the turn, and a throw before that point
       // would leave a record nothing can close.
       const inputTranslation = options?.inputTranslation
-      activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
+      turnRecordId = activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
       if (inputTranslation) {
         activity.recordStep('Translating input', {
           isLLM: true,
@@ -906,11 +924,44 @@
         buildBackgroundTaskDependencies(currentStoryRef.id),
       )
       const input = buildBackgroundTaskInput(currentStoryRef, countStyleReview, styleReviewSource)
-      if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
-      // Deliberately not awaited — but the flag has to outlive the call, or the Memory
-      // view will offer to create a chapter while this one is being created.
       const bgStoryId = currentStoryRef.id
       const bgBranchId = leasedBranchId
+      // Another chapter still being created, or another lore run holding the branch, would
+      // have this turn cut a second chapter whose own lore management is then refused.
+      if (
+        !story.memoryConfig.autoSummarize ||
+        chapterCards.pending(bgStoryId, bgBranchId) ||
+        isLoreManagementRunning(bgStoryId, bgBranchId)
+      ) {
+        input.chapterCheck.tokensOutsideBuffer = 0
+      }
+      const afterTurnId = activity.startStep('After the turn', { recordId: turnRecordId })
+      const recordId = turnRecordId
+      input.activity = activity
+      input.activityParentId = afterTurnId
+      input.onTurnWorkEnded = (recordedAnything) => {
+        if (recordedAnything) activity.endStep(afterTurnId)
+        else activity.discardStep(afterTurnId)
+        activity.endRecord(recordId)
+      }
+      input.chapterCard = {
+        cards: chapterCards.cards,
+        anchorEntryId: narrationEntryId,
+        openRecord: (key) => activity.startRecord(key, 'chapter'),
+        reopenRecord: (key) => activity.reopenRecord(key),
+        closeRecord: (id) => activity.endRecord(id),
+        isCutOpen: (cut) => {
+          const open = story.currentScope
+          if (!open || !sameBranchScope(open, { storyId: bgStoryId, branchId: bgBranchId })) {
+            return false
+          }
+          const start = story.lastChapterEndIndex
+          return cut.entries.every((entry, i) => story.entries[start + i]?.id === entry.id)
+        },
+      }
+      turnEndsLater = true
+      // Deliberately not awaited — but the flag has to outlive the call, or the Memory
+      // view will offer to create a chapter while this one is being created.
       ui.setBackgroundTasksActive(bgStoryId, bgBranchId, true)
       coordinator
         .runBackgroundTasks(input)
@@ -969,8 +1020,10 @@
       ui.setGenerating(false)
       ui.setGenerationStatus('')
       // Closes the turn even when a step was left running, so the record is bounded.
-      const { outcome, error } = turnOutcome({ ...ending, stopRequested })
-      activity.endTurn(outcome, error)
+      if (!turnEndsLater) {
+        const { outcome, error } = turnOutcome({ ...ending, stopRequested })
+        activity.endRecord(turnRecordId, outcome, error)
+      }
       activeAbortController = null
       stopUnavailable = false
 

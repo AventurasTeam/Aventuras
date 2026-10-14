@@ -254,6 +254,7 @@ export class TimelineFillService extends BaseAIService {
     chapterNumbers?: number[],
     getChapterEntries?: (chapter: Chapter) => StoryEntry[],
     maxChapterTokens: number = chapterReadBudget(undefined),
+    activityParentId?: string,
   ): Promise<TimelineAnswer> {
     log('answerQuestion called', {
       query,
@@ -272,6 +273,7 @@ export class TimelineFillService extends BaseAIService {
       storyId,
       query,
       this.buildContent(targetChapters, maxChapterTokens, getChapterEntries),
+      activityParentId,
     )
   }
 

@@ -13,6 +13,7 @@ import type { Chapter } from '#lib/types/index.ts'
 import {
   LoreManagementCoordinator,
   isLoreManagementRunning,
+  type LoreSessionActivity,
   type LoreSessionResult,
 } from './LoreManagementCoordinator'
 import { buildLoreManagementCallbacks, buildLoreManagementUICallbacks } from './loreCallbacks'
@@ -33,22 +34,29 @@ const log = createLogger('ManualLoreManagement')
  *
  * @param newChapter The chapter just created by hand, if this run follows one. Given to the
  * agent in full; absent for the Tidy lorebook button, which has no new chapter.
+ * @param reporting Where the run records itself. A recorded run is not refused up front by
+ * another holding the branch: the coordinator refuses it, so the refusal is recorded too.
  */
 export async function runManualLoreManagement(
   newChapter?: Chapter,
+  reporting?: LoreSessionActivity,
 ): Promise<LoreSessionResult | null> {
   try {
-    return await startManualLoreManagement(newChapter)
+    return await startManualLoreManagement(newChapter, reporting)
   } catch (error) {
     log('Manual lore management failed', error)
     return null
   }
 }
 
-async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSessionResult | null> {
+async function startManualLoreManagement(
+  newChapter?: Chapter,
+  reporting?: LoreSessionActivity,
+): Promise<LoreSessionResult | null> {
   if (
     !story.currentStory ||
-    isLoreManagementRunning(story.currentStory.id, story.currentStory.currentBranchId)
+    (!reporting &&
+      isLoreManagementRunning(story.currentStory.id, story.currentStory.currentBranchId))
   )
     return null
 
@@ -86,5 +94,6 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
       branchId: currentStory.currentBranchId,
     }),
     buildLoreManagementUICallbacks(),
+    reporting,
   )
 }

@@ -3574,10 +3574,18 @@ class StoryStore {
   }
 
   // Add a chapter
-  async addChapter(chapter: Chapter): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+  /**
+   * `scope`: the story and branch the chapter was built for. The row is always written, since it
+   * carries its own story and branch; the loaded list only takes it while that scope is open.
+   */
+  async addChapter(chapter: Chapter, scope?: BranchScope): Promise<void> {
+    if (!scope && !this.currentStory) throw new Error('No story loaded')
 
     await database.addChapter(chapter)
+    if (scope && !this.isOpen(scope)) {
+      log('Chapter added to a branch that is not open:', chapter.number, scope)
+      return
+    }
     this.chapters = [...this.chapters, chapter]
 
     // Invalidate chapter cache

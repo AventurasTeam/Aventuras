@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Chapter, Entry, LoreManagementResult } from '#lib/types/index.ts'
+import { ActivityRecorder } from '#lib/services/activity/index.ts'
 import {
+  LORE_SESSION_BUSY,
   LoreManagementCoordinator,
   isLoreManagementRunning,
   type LoreManagementCallbacks,
@@ -206,5 +208,78 @@ describe('chapterBuffer forwarding', () => {
 
     const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
     expect(options?.chapterBuffer).toBeUndefined()
+  })
+})
+
+describe('the recorded step', () => {
+  function recorded() {
+    const recorder = new ActivityRecorder()
+    recorder.setReporting('tree')
+    const recordId = recorder.startRecord('chapter:card', 'chapter')
+    return { recorder, reporting: { activity: recorder, placement: { recordId } } }
+  }
+  const stepsOf = (recorder: ActivityRecorder) => recorder.find('chapter:card')!.steps
+
+  it('closes done with the change count, and is the parent the run records under', async () => {
+    const { recorder, reporting } = recorded()
+    const runLoreManagement = vi.fn(async () => ({
+      ...emptyResult(),
+      changes: [{ type: 'create' as const }, { type: 'update' as const }],
+    }))
+
+    const result = await new LoreManagementCoordinator({ runLoreManagement }).runSession(
+      input(),
+      callbacks(),
+      undefined,
+      reporting,
+    )
+
+    const [step] = stepsOf(recorder)
+    expect(step).toMatchObject({ label: 'Lore management', status: 'done', detail: '2 changes' })
+    expect(runLoreManagement.mock.calls[0]).toContain(step.id)
+    expect(result).toMatchObject({ completed: true, changeCount: 2 })
+  })
+
+  it('fails with the reason, and the result carries it', async () => {
+    const { recorder, reporting } = recorded()
+    const runLoreManagement = vi.fn(async () => {
+      throw new Error('context overflow')
+    })
+
+    const result = await new LoreManagementCoordinator({ runLoreManagement }).runSession(
+      input(),
+      callbacks(),
+      undefined,
+      reporting,
+    )
+
+    expect(stepsOf(recorder)[0]).toMatchObject({ status: 'failed', error: 'context overflow' })
+    expect(result).toMatchObject({ completed: false, error: 'context overflow' })
+  })
+
+  it('is skipped with the lock as its reason when another session holds the branch', async () => {
+    const { recorder, reporting } = recorded()
+    const first = gatedCoordinator()
+    const running = first.coordinator.runSession(input(), callbacks())
+
+    const result = await gatedCoordinator().coordinator.runSession(
+      input(),
+      callbacks(),
+      undefined,
+      reporting,
+    )
+    first.finish()
+    await running
+
+    expect(stepsOf(recorder)[0]).toMatchObject({ status: 'skipped', detail: LORE_SESSION_BUSY })
+    expect(result).toMatchObject({ completed: false, skipped: true, error: LORE_SESSION_BUSY })
+  })
+
+  it('records nothing without reporting', async () => {
+    const runLoreManagement = vi.fn(async (..._args: unknown[]) => emptyResult())
+
+    await new LoreManagementCoordinator({ runLoreManagement }).runSession(input(), callbacks())
+
+    expect(runLoreManagement.mock.calls[0][7]).toBeUndefined()
   })
 })

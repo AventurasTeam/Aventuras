@@ -17,6 +17,7 @@ import { ui } from '#lib/stores/ui.svelte.ts'
 import { aiService } from '#lib/services/ai/index.ts'
 import { database } from '#lib/services/database.ts'
 import { pairKeys, scopeToPool } from '#lib/services/duplicates/index.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
 import type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,
@@ -78,16 +79,22 @@ export function buildLoreManagementCallbacks(scope: LoreCallbackScope): LoreMana
       await database.addKeptSeparate(scope.storyId, scope.branchId, 'lorebook', pairKeys(names))
     },
     // Guarded too: a chapter number resolves against whichever story's chapters are loaded.
-    onQueryChapter: async (chapterNumber, question) => {
+    // `activityParentId` is the read's own step: the answer's absorbed failure closes it.
+    onQueryChapter: async (chapterNumber, question, activityParentId) => {
       assertScope(scope, `read chapter ${chapterNumber}`)
-      return aiService.answerChapterQuestion(
+      const answer = await aiService.queryChapter(
         scope.storyId,
         chapterNumber,
         question,
         story.currentBranchChapters,
         story.getChapterEntries.bind(story),
         story.chapterReadBudget,
+        activityParentId,
       )
+      if (answer.failure && activityParentId) {
+        activity.endStep(activityParentId, 'failed', undefined, answer.failure)
+      }
+      return answer.answer
     },
   }
 }

@@ -15,6 +15,7 @@ import {
   deepestRunningStep,
   hasFailedStep,
   type ActivityNode,
+  type ActivityRecordKind,
   type ActivityReporting,
   type ActivityStatus,
   type ActivityStep,
@@ -73,11 +74,15 @@ class ActivityStore {
   }
 
   /** Whether the report is showing the full timeline rather than the line. */
-  /** Open by default for the latest turn in tree mode, and for any turn in which a step failed. */
+  /**
+   * Open by default in tree mode for the latest turn, and for a chapter record while it runs; and
+   * for any record in which a step failed.
+   */
   isTreeExpanded(turn: ActivityTurn): boolean {
+    const open = turn.kind === 'chapter' ? !this.hasEnded(turn) : this.isLatest(turn)
     return (
       this.treeExpanded.get(turn.entryId) ??
-      ((this.isLatest(turn) && this.reporting === 'tree') || this.hasFailure(turn))
+      ((open && this.reporting === 'tree') || this.hasFailure(turn))
     )
   }
 
@@ -120,11 +125,18 @@ class ActivityStore {
     }
   }
 
-  startTurn(entryId: string, startedAt?: number) {
-    this.guard(() => this.recorder.startTurn(entryId, startedAt), undefined)
-    if (!this.recorder.enabled) return
+  /** Returns the turn's record id, for `endRecord`, or `''` when nothing was recorded. */
+  startTurn(entryId: string, startedAt?: number): string {
+    return this.startRecord(entryId, 'turn', startedAt)
+  }
+
+  /** Open a record keyed by `entryId`. Returns its id, or `''` when nothing was recorded. */
+  startRecord(entryId: string, kind: ActivityRecordKind, startedAt?: number): string {
+    const id = this.guard(() => this.recorder.startRecord(entryId, kind, startedAt), '')
+    if (!id) return ''
     this.now = Date.now()
     this.startClock()
+    return id
   }
 
   rebindTurn(fromEntryId: string, toEntryId: string) {
@@ -138,10 +150,39 @@ class ActivityStore {
     }
   }
 
+  /** End the newest open turn. */
   endTurn(outcome?: TurnOutcome, error?: string | null) {
     this.guard(() => this.recorder.endTurn(outcome, error), undefined)
+    this.afterEnd()
+  }
+
+  endRecord(id: string, outcome?: TurnOutcome, error?: string | null) {
+    this.guard(() => this.recorder.endRecord(id, outcome, error), undefined)
+    this.afterEnd()
+  }
+
+  /** See `ActivityRecorder.reopenRecord`. */
+  reopenRecord(entryId: string): string {
+    const id = this.guard(() => this.recorder.reopenRecord(entryId), '')
+    if (!id) return ''
     this.now = Date.now()
-    this.stopClock()
+    this.startClock()
+    return id
+  }
+
+  /** Drop the record keyed by `entryId` and the reader's choices for it. */
+  discardRecord(entryId: string) {
+    this.guard(() => this.recorder.discardRecord(entryId), undefined)
+    this.reportVisible.delete(entryId)
+    this.treeExpanded.delete(entryId)
+    this.afterEnd()
+  }
+
+  // The clock runs while any record is open: a turn's background work and a chapter card's can
+  // outlast the turn that started them.
+  private afterEnd() {
+    this.now = Date.now()
+    if (!this.recorder.hasOpenRecords) this.stopClock()
   }
 
   startStep(label: string, options?: StartStepOptions): string {
@@ -180,7 +221,7 @@ class ActivityStore {
     return this.guard(() => this.recorder.groupChildren(parentId, label, options), '')
   }
 
-  /** The turn in flight. Touches `version` so callers re-read as it grows. */
+  /** The newest turn in flight. Touches `version` so callers re-read as it grows. */
   get activeTurn(): ActivityTurn | null {
     void this.version
     return this.recorder.activeTurn

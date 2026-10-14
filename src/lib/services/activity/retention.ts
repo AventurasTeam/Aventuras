@@ -10,10 +10,15 @@ import type { ActivityTurn } from './types'
 /** Turns whose records are kept. Beyond this the oldest are discarded. */
 export const RETAINED_TURNS = 20
 
-/** Drop the oldest turns until at most `bound` remain. Input order is oldest-first. */
+/**
+ * Drop the oldest turns until at most `bound` remain. Input order is oldest-first.
+ *
+ * Only `turn` records count and are dropped: a chapter record lives as long as its card.
+ */
 export function retainTurns(turns: ActivityTurn[], bound: number = RETAINED_TURNS): ActivityTurn[] {
-  if (bound <= 0) return []
-  return turns.length <= bound ? turns : turns.slice(turns.length - bound)
+  let excess = turns.filter((turn) => turn.kind === 'turn').length - Math.max(0, bound)
+  if (excess <= 0) return turns
+  return turns.filter((turn) => turn.kind !== 'turn' || excess-- <= 0)
 }
 
 /** The retained record for an entry, or null once it has been evicted. */

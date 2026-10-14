@@ -7,6 +7,9 @@
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import ChapterBanner from './ChapterBanner.svelte'
+  import ChapterCreationCard from './ChapterCreationCard.svelte'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
+  import type { ChapterCard } from '#lib/services/chapterCreation/index.ts'
   import TimeAnchorModal from '#lib/components/world/TimeAnchorModal.svelte'
   import EntryTimeModal from '#lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -125,6 +128,17 @@
   const chapterBanners = $derived(
     settings.uiSettings.showChapterBanners ? story.chapterBanners : null,
   )
+
+  // Each card sits after the narration of the turn that cut its chapter, on that branch only.
+  const cardsByAnchor = $derived.by(() => {
+    const byAnchor: Record<string, ChapterCard[]> = {}
+    const current = story.currentStory
+    if (!current) return byAnchor
+    for (const card of chapterCards.forScope(current.id, current.currentBranchId ?? null)) {
+      ;(byAnchor[card.anchorEntryId] ??= []).push(card)
+    }
+    return byAnchor
+  })
 
   // Load earlier entries above, compensate scroll, then trim the bottom if it's
   // safely off-screen (two-phase so each compensation is isolated and correct).
@@ -599,6 +613,9 @@
             {/if}
             <StoryEntry {entry} />
           </div>
+          {#each cardsByAnchor[entry.id] ?? [] as card (card.id)}
+            <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
+          {/each}
         {/each}
 
         <!-- Show streaming entry while generating -->

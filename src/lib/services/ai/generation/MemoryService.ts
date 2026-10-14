@@ -72,6 +72,7 @@ export class MemoryService extends BaseAIService {
     pov: string = 'second',
     tense: string = 'present',
     summaryDetail: SummaryDetail = 'auto',
+    activityParentId?: string,
   ): Promise<ChapterSummaryResult> {
     log('summarizeChapter', {
       entryCount: entries.length,
@@ -103,6 +104,7 @@ export class MemoryService extends BaseAIService {
       system,
       prompt,
       'chapter-summarization',
+      activityParentId,
     )
 
     log('summarizeChapter complete', {
@@ -125,6 +127,7 @@ export class MemoryService extends BaseAIService {
     mode: string = 'adventure',
     pov: string = 'second',
     tense: string = 'present',
+    activityParentId?: string,
   ): Promise<ChapterAnalysis> {
     log('analyzeForChapter', { entryCount: entries.length, tokensOutsideBuffer })
 
@@ -145,7 +148,13 @@ export class MemoryService extends BaseAIService {
     })
     const { system, user: prompt } = await ctx.render('chapter-analysis')
 
-    const result = await this.generate(chapterAnalysisSchema, system, prompt, 'chapter-analysis')
+    const result = await this.generate(
+      chapterAnalysisSchema,
+      system,
+      prompt,
+      'chapter-analysis',
+      activityParentId,
+    )
 
     log('analyzeForChapter complete', {
       shouldCreateChapter: result.shouldCreateChapter,

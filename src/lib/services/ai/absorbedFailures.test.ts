@@ -22,6 +22,7 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 vi.mock('./core/config', () => ({
   getContextConfig: () => ({ recentEntriesForSuggestions: 5, recentEntriesForChoices: 5 }),
   getLorebookConfig: () => ({ maxForSuggestions: 5 }),
+  AI_CONFIG: { memory: { defaultTokenThreshold: 1000, defaultChapterBuffer: 2 } },
 }))
 vi.mock('#lib/services/context/index.ts', () => ({
   ContextBuilder: class {
@@ -54,6 +55,8 @@ import { SuggestionsService } from './generation/SuggestionsService'
 import { ActionChoicesService } from './generation/ActionChoicesService'
 import { TimelineFillService } from './retrieval/TimelineFillService'
 import { ImageAnalysisService } from './image/ImageAnalysisService'
+import { StyleReviewerService } from './generation/StyleReviewerService'
+import { MemoryService } from './generation/MemoryService'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -150,6 +153,60 @@ describe('absorbed failures', () => {
     const service = new TranslationService('translation' as any)
     await service.translateNarration('Hi.', 'it', false, 's')
     expect(activity.endStep).not.toHaveBeenCalled()
+  })
+})
+
+describe('style review', () => {
+  const entries = [{ id: 'n1', type: 'narration', content: 'She ran.' }] as any
+
+  it('returns its fallback with the reason', async () => {
+    const service = new StyleReviewerService('styleReviewer' as any, false)
+    const result = await service.analyzeStyle('s', entries)
+    expect(result).toMatchObject({
+      phrases: [],
+      overallAssessment: 'Analysis failed.',
+      failure: 'provider down',
+    })
+  })
+})
+
+describe('request parents', () => {
+  const parentOf = (call: unknown[]) => (call[0] as { activityParentId?: string }).activityParentId
+  const entries = [{ id: 'n1', type: 'narration', content: 'She ran.' }] as any
+
+  it('reach the chapter analysis and summary requests', async () => {
+    generateStructured.mockResolvedValue({ keywords: [], shouldCreateChapter: false })
+    const service = new MemoryService('memory' as any)
+
+    await service.analyzeForChapter('s', entries, 0, 100, 'adventure', 'second', 'present', 'check')
+    await service.summarizeChapter(
+      's',
+      entries,
+      [],
+      'adventure',
+      'second',
+      'present',
+      'auto',
+      'sum',
+    )
+
+    expect(generateStructured.mock.calls.map(parentOf)).toEqual(['check', 'sum'])
+  })
+
+  it('reaches the style review request', async () => {
+    const service = new StyleReviewerService('styleReviewer' as any, false)
+    await service.analyzeStyle('s', entries, 'adventure', 'second', 'present', 32, 'review')
+    expect(parentOf(generateStructured.mock.calls[0])).toBe('review')
+  })
+
+  it('reaches a chapter question', async () => {
+    generatePlainText.mockResolvedValue('Ilsa left.')
+    const service = new TimelineFillService('timelineFill' as any, 3)
+    const chapter = { number: 1, summary: 'The start.' } as any
+
+    await service.answerQuestion('s', 'Who left?', [chapter], [1], undefined, 1000, 'read')
+
+    expect(parentOf(generatePlainText.mock.calls[0])).toBe('read')
   })
 })
 
