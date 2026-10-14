@@ -37,10 +37,11 @@
         return 'Updating the lorebook'
       case 'finished':
         return bannersOn ? 'Finished' : 'Chapter creation is finished'
+      // A failure keeps the line of the stage it stopped in; the line marks it.
       case 'summary-failed':
-        return 'Chapter creation failed'
+        return 'Writing a summary'
       case 'lore-incomplete':
-        return 'Lore management did not complete'
+        return 'Updating the lorebook'
     }
   })
   let busy = $state(false)
@@ -133,11 +134,10 @@
   <!-- A bystander to the card, as on an entry: a fault rendering it leaves the card standing. -->
   <svelte:boundary onerror={reportRenderError}>
     <p class="text-muted-foreground mt-1 flex flex-wrap items-baseline gap-x-2 text-sm">
-      {#if failed}
-        <span class="text-red-700 dark:text-red-500">{status}</span>
-      {:else}
-        <span>{status}</span>
-      {/if}
+      <span>
+        {status}{#if failed}
+          — <span class="text-red-700 dark:text-red-500">failed</span>{/if}
+      </span>
       {#if record}
         <button
           type="button"

@@ -542,3 +542,21 @@ describe('several open records', () => {
     expect(recorder.hasOpenRecords).toBe(false)
   })
 })
+
+describe('failure count', () => {
+  it('counts steps that failed or kept an error, in the record they belong to', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const ok = recorder.startStep('Narrative')
+    recorder.endStep(ok)
+    expect(recorder.find('entry')?.failures).toBeUndefined()
+
+    const check = recorder.startStep('Chapter check')
+    recorder.endStep(check, 'failed', undefined, '401')
+    recorder.recordStep('Classification', { error: 'salvaged a broken response' })
+    recorder.recordStep('Skipped', { status: 'skipped' })
+
+    expect(recorder.find('entry')?.failures).toBe(2)
+  })
+})

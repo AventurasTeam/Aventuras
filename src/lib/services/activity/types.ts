@@ -49,6 +49,8 @@ export interface ActivityTurn {
   outcome?: TurnOutcome
   /** Why a halted turn halted. */
   error?: string
+  /** Steps that failed or kept an error so far. Absent until the first. */
+  failures?: number
   steps: ActivityStep[]
 }
 

@@ -206,6 +206,7 @@ export class ActivityRecorder {
     step.endedAt = this.now()
     if (detail !== undefined) step.detail = detail
     if (error) step.error = error
+    this.countFailure(id, step)
     this.onChange()
   }
 
@@ -228,6 +229,7 @@ export class ActivityRecorder {
     step.endedAt = step.startedAt + (options.durationMs ?? 0)
     if (options.durationMs === undefined) step.untimed = true
     if (options.error) step.error = options.error
+    this.countFailure(id, step)
     this.onChange()
     return id
   }
@@ -319,6 +321,12 @@ export class ActivityRecorder {
 
   private newestOpenTurn(): ActivityTurn | null {
     return this.open.findLast((record) => record.kind === 'turn') ?? null
+  }
+
+  private countFailure(id: string, step: ActivityStep): void {
+    if (step.status !== 'failed' && !step.error) return
+    const record = this.owner.get(id)
+    if (record) record.failures = (record.failures ?? 0) + 1
   }
 
   private openStep(id: string): ActivityStep | undefined {

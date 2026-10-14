@@ -185,12 +185,18 @@ describe('the turn stage', () => {
 })
 
 describe('a cut chapter', () => {
-  it('hands off from the check, ends the turn before the summary, and finishes the card', async () => {
+  it('hands off from the check, ends the turn, and finishes the card', async () => {
     const t = setup()
 
     const result = await t.coordinator.runBackgroundTasks(t.input)
 
-    expect(t.order).toEqual(['analysis', 'turn ended (true)', 'summary', 'lore'])
+    // The turn's end and the card's work overlap; only their own orders are fixed.
+    expect(t.order.filter((o) => o !== 'turn ended (true)')).toEqual([
+      'analysis',
+      'summary',
+      'lore',
+    ])
+    expect(t.order).toContain('turn ended (true)')
     expect(t.turnSteps().map((s) => s.label)).toEqual([
       'After the turn',
       'Chapter check',
@@ -311,5 +317,29 @@ describe('a cut chapter', () => {
     })
     expect(t.deps.chapterService.summarizeChapter).toHaveBeenCalledTimes(1)
     expect(notify).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts the card on the cut, without waiting for the style review', async () => {
+    const t = setup()
+    let finishReview!: () => void
+    t.input.styleReview = { ...t.input.styleReview, enabled: true, currentCounter: 5 }
+    t.deps.styleReview.analyzeStyle = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishReview = () =>
+            resolve({ phrases: [], overallAssessment: '', reviewedEntryCount: 0, timestamp: 0 })
+        }),
+    )
+    const checking: boolean[] = []
+    t.input.onChapterCheck = (active) => checking.push(active)
+
+    const running = t.coordinator.runBackgroundTasks(t.input)
+    await vi.waitFor(() => expect(t.card()?.phase).toBe('finished'))
+    expect(t.onTurnWorkEnded).not.toHaveBeenCalled()
+
+    finishReview()
+    await running
+    expect(t.onTurnWorkEnded).toHaveBeenCalledWith(true)
+    expect(checking).toEqual([true, false])
   })
 })

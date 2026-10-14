@@ -48,7 +48,8 @@ class ActivityStore {
    * turn failed, which keeps its tree open.
    */
   private reportVisible = new SvelteMap<string, boolean>()
-  private treeExpanded = new SvelteMap<string, boolean>()
+  /** With the record's failure count when chosen: a failure since then sets the choice aside. */
+  private treeExpanded = new SvelteMap<string, { expanded: boolean; failures: number }>()
   private reporting: ActivityReporting = 'off'
 
   private recorder = new ActivityRecorder(() => this.version++)
@@ -76,14 +77,14 @@ class ActivityStore {
   /** Whether the report is showing the full timeline rather than the line. */
   /**
    * Open by default in tree mode for the latest turn, and for a chapter record while it runs; and
-   * for any record in which a step failed.
+   * for any record in which a step failed or kept an error, the turn's work after its narration
+   * included. The reader's choice wins, until a failure arrives after it.
    */
   isTreeExpanded(turn: ActivityTurn): boolean {
     const open = turn.kind === 'chapter' ? !this.hasEnded(turn) : this.isLatest(turn)
-    return (
-      this.treeExpanded.get(turn.entryId) ??
-      ((open && this.reporting === 'tree') || this.hasFailure(turn))
-    )
+    const choice = this.treeExpanded.get(turn.entryId)
+    if (choice && choice.failures === (turn.failures ?? 0)) return choice.expanded
+    return (open && this.reporting === 'tree') || this.hasFailure(turn)
   }
 
   private hasFailure(turn: ActivityTurn): boolean {
@@ -97,7 +98,8 @@ class ActivityStore {
   }
 
   setTreeExpanded(entryId: string, expanded: boolean) {
-    this.treeExpanded.set(entryId, expanded)
+    const failures = this.recorder.find(entryId)?.failures ?? 0
+    this.treeExpanded.set(entryId, { expanded, failures })
   }
 
   private startClock() {
@@ -142,11 +144,15 @@ class ActivityStore {
   rebindTurn(fromEntryId: string, toEntryId: string) {
     this.guard(() => this.recorder.rebindTurn(fromEntryId, toEntryId), undefined)
     // The reader's choices go with the record.
-    for (const choices of [this.reportVisible, this.treeExpanded]) {
-      const choice = choices.get(fromEntryId)
-      if (choice === undefined) continue
-      choices.set(toEntryId, choice)
-      choices.delete(fromEntryId)
+    const visible = this.reportVisible.get(fromEntryId)
+    if (visible !== undefined) {
+      this.reportVisible.set(toEntryId, visible)
+      this.reportVisible.delete(fromEntryId)
+    }
+    const expanded = this.treeExpanded.get(fromEntryId)
+    if (expanded !== undefined) {
+      this.treeExpanded.set(toEntryId, expanded)
+      this.treeExpanded.delete(fromEntryId)
     }
   }
 

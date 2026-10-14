@@ -492,7 +492,9 @@ and the interface reset, so a stored `off` is a choice and is read back as one â
 absent keys only.
 
 A turn's timeline opens by default while it is the latest turn in `tree` mode, and in either
-mode for any turn in which a step failed, a recovered attempt included. A reader's own choice wins.
+mode for any turn in which a step failed, a recovered attempt included, or finished with an error it
+worked around, such as a salvaged classification. A reader's own choice wins until a step fails
+after it: each record counts its failures, and a choice is kept only while that count is unchanged.
 
 The recorder holds several records open at once. A step goes to the record of its parent, or to
 the record named by `recordId`, or else to the newest open turn, which is where every
@@ -504,12 +506,15 @@ chapter creation card and kept as long as the card.
 A turn's record stays open past its narration while its background work runs: **After the turn**
 holds the style review and the chapter check (`BackgroundTaskCoordinator`), and the record ends
 when both have settled. The input is free as soon as the narration is in. A check or review that
-is not due is not recorded, and an empty **After the turn** is dropped. When the check cuts a
-chapter it records a hand-off, and the summary and lore management go to the chapter creation
-card's own record instead: lore management's model calls, each named for why the loop makes it
-(`loreModelCallReason`), each followed by its tool calls at the same level, and **Saving changes**,
-one step per lorebook write, after the last call. The agent only approves
-changes into its ledger; `saveLoreSession` writes them once it has finished.
+is not due is not recorded, and an empty **After the turn** is dropped. Until a later turn starts,
+the spinner under the latest entry names them ("Checking for a new chapter...",
+`ui.chapterCheckActiveFor`, and the style review's own loading flag). When the check cuts a
+chapter it records a hand-off and the card starts at once, without waiting for the style
+review; the summary and lore management go to the chapter creation card's own record instead:
+lore management's model calls, each named for why the loop makes it (`loreModelCallReason`), each
+followed by its tool calls at the same level, and **Saving changes**, one step per lorebook write,
+after the last call. The agent only approves changes into its ledger; `saveLoreSession` writes
+them once it has finished.
 
 ### Chapter creation cards
 

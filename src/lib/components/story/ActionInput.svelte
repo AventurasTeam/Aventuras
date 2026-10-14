@@ -944,6 +944,7 @@
         else activity.discardStep(afterTurnId)
         activity.endRecord(recordId)
       }
+      input.onChapterCheck = (active) => ui.setChapterCheckActive(bgStoryId, bgBranchId, active)
       input.chapterCard = {
         cards: chapterCards.cards,
         anchorEntryId: narrationEntryId,

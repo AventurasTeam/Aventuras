@@ -129,6 +129,17 @@
     settings.uiSettings.showChapterBanners ? story.chapterBanners : null,
   )
 
+  const afterTurnStatus = $derived.by(() => {
+    const current = story.currentStory
+    if (!current) return ''
+    const checking = ui.chapterCheckActiveFor(current.id, current.currentBranchId ?? null)
+    const reviewing = ui.styleReviewLoading
+    if (checking && reviewing) return 'Checking for a new chapter and reviewing the prose style...'
+    if (checking) return 'Checking for a new chapter...'
+    if (reviewing) return 'Reviewing the prose style...'
+    return ''
+  })
+
   // Each card sits after the narration of the turn that cut its chapter, on that branch only.
   const cardsByAnchor = $derived.by(() => {
     const byAnchor: Record<string, ChapterCard[]> = {}
@@ -623,13 +634,21 @@
           <StreamingEntry />
         {/if}
 
-        <!-- Show post-generation status (e.g. Updating world...) -->
+        <!-- Show post-generation status (e.g. Updating world...), then the work that outlives
+             the turn until a chapter card, if any, takes over. -->
         {#if ui.isGenerating && !ui.isStreaming && ui.generationStatus}
           <div
             class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
           >
             <Loader2 class="h-4 w-4 animate-spin" />
             <span class="text-sm">{ui.generationStatus}</span>
+          </div>
+        {:else if !ui.isGenerating && afterTurnStatus}
+          <div
+            class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
+          >
+            <Loader2 class="h-4 w-4 animate-spin" />
+            <span class="text-sm">{afterTurnStatus}</span>
           </div>
         {/if}
 

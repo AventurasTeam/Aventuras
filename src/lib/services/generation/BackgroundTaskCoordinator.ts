@@ -95,8 +95,10 @@ export interface BackgroundTaskInput {
   activity?: ActivityReporter
   /** The turn's *After the turn* step, which the turn's own work nests under. */
   activityParentId?: string
-  /** Called once the turn's work has settled, before any chapter creation it hands off. */
+  /** Called once the turn's work has settled; a chapter creation it handed off may still run. */
   onTurnWorkEnded?: (recordedAnything: boolean) => void
+  /** Whether the chapter check is asking the model, for the story view to say so. */
+  onChapterCheck?: (active: boolean) => void
   chapterCard?: ChapterCardReporting
 }
 
@@ -126,25 +128,29 @@ export class BackgroundTaskCoordinator {
       loreManagement: null,
     }
 
-    let cut: ChapterCut | null = null
+    // Started the moment the check cuts, not once the style review is done too.
+    let creation: Promise<void> | null = null
     let recordedAnything = false
     try {
-      const turn = await this.runTurnWork(input)
+      const turn = await this.runTurnWork(input, (cut) => {
+        creation = this.createChapter(input, cut, result).catch((error) =>
+          log('Chapter creation failed (non-fatal)', error),
+        )
+      })
       result.styleReview = turn.styleReview
-      cut = turn.cut
       recordedAnything = turn.recordedAnything
     } finally {
       input.onTurnWorkEnded?.(recordedAnything)
     }
 
-    if (cut) await this.createChapter(input, cut, result)
+    if (creation) await creation
 
     log('Background tasks complete')
     return result
   }
 
   /** Style review and chapter check, independent of each other, in the turn's record. */
-  private async runTurnWork(input: BackgroundTaskInput) {
+  private async runTurnWork(input: BackgroundTaskInput, onCut: (cut: ChapterCut) => void) {
     // An empty parent would put the steps at the root of the newest turn.
     const parentId = input.activityParentId || undefined
     const activity = parentId && input.activity ? input.activity : NO_ACTIVITY
@@ -160,14 +166,23 @@ export class BackgroundTaskCoordinator {
       (async () => {
         if (!checkDue) return null
         checkStepId = activity.startStep('Chapter check', { parentId, isLLM: true })
-        const found = await this.chapterService.check(input.chapterCheck, checkStepId || undefined)
-        if (found) {
-          activity.recordStep(`Chapter ${found.number} handed off`, { parentId: checkStepId })
-          activity.endStep(checkStepId, 'done', `cut ${found.entries.length} entries`)
-        } else {
-          activity.endStep(checkStepId, 'done', 'not yet')
+        input.onChapterCheck?.(true)
+        try {
+          const found = await this.chapterService.check(
+            input.chapterCheck,
+            checkStepId || undefined,
+          )
+          if (found) {
+            activity.recordStep(`Chapter ${found.number} handed off`, { parentId: checkStepId })
+            activity.endStep(checkStepId, 'done', `cut ${found.entries.length} entries`)
+            onCut(found)
+          } else {
+            activity.endStep(checkStepId, 'done', 'not yet')
+          }
+          return found
+        } finally {
+          input.onChapterCheck?.(false)
         }
-        return found
       })(),
     ])
 
@@ -179,17 +194,15 @@ export class BackgroundTaskCoordinator {
       log('Style review failed (non-fatal)', styleSettled.reason)
     }
 
-    let cut: ChapterCut | null = null
     if (chapterSettled.status === 'fulfilled') {
-      cut = chapterSettled.value
-      log('Chapter check complete', { cut: !!cut })
+      log('Chapter check complete', { cut: !!chapterSettled.value })
     } else {
       failStep(activity, checkStepId, chapterSettled.reason)
       log('Chapter check failed (non-fatal)', chapterSettled.reason)
     }
 
     const recordedAnything = checkDue || styleReview.triggered || !!styleReview.failed
-    return { styleReview, cut, recordedAnything }
+    return { styleReview, recordedAnything }
   }
 
   /** The summary, then lore management, reported by the chapter creation card. */

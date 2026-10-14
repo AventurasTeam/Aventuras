@@ -323,4 +323,8 @@ describe('hasFailedStep', () => {
     ).toBe(true)
     expect(hasFailedStep([step({ id: 'a' }), step({ id: 'b', status: 'skipped' })])).toBe(false)
   })
+
+  it('counts a step that finished but kept an error', () => {
+    expect(hasFailedStep([step({ id: 'a', error: 'salvaged a broken response' })])).toBe(true)
+  })
 })
