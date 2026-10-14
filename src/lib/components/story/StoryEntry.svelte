@@ -12,22 +12,8 @@
 </script>
 
 <script lang="ts">
-  import type {
-    Character,
-    StoryEntry,
-    EmbeddedImage,
-    TimeTracker,
-    WorldStateChangeRecord,
-  } from '#lib/types/index.ts'
-  import { describeChange, gapMessage, loreLine } from '#lib/services/stateTracking/index.ts'
-  import {
-    story,
-    type AnchorLabel,
-    type PastCheckpointPreview,
-    type RevertKeep,
-    type RevertPreview,
-  } from '#lib/stores/story.svelte.ts'
-  import type { GapOverride } from '#lib/services/stateTracking/index.ts'
+  import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '#lib/types/index.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
@@ -52,9 +38,6 @@
     Metronome,
     MoreVertical,
     MilestoneIcon,
-    ChevronDown,
-    ChevronRight,
-    TriangleAlert,
     CornerLeftUp,
   } from '@lucide/svelte'
   import { aiService } from '#lib/services/ai/index.ts'
@@ -66,7 +49,7 @@
   } from '#lib/services/ai/utils/ttsText.ts'
   import { parseMarkdown, parseStoryMarkdown } from '#lib/utils/markdown.ts'
   import { findPrecedingUserAction, isGenerationErrorEntry } from '#lib/utils/storyEntries.ts'
-  import { entryNumber } from '#lib/utils/storyNavigation.ts'
+  import { canCreateCheckpointAt, entryNumber } from '#lib/utils/storyNavigation.ts'
   import { sanitizeTextForTTS } from '#lib/utils/htmlSanitize.ts'
   import {
     processStoryContent,
@@ -88,7 +71,6 @@
   import { database } from '#lib/services/database.ts'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
-  import CreateBranchModal from '#lib/components/branch/CreateBranchModal.svelte'
   import ActivitySummary from './ActivitySummary.svelte'
   import ActivityTimeline from './ActivityTimeline.svelte'
   import { activity } from '#lib/stores/activity.svelte.ts'
@@ -101,10 +83,6 @@
   import * as Popover from '#lib/components/ui/popover/index.ts'
   import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
-  import { Input } from '#lib/components/ui/input/index.ts'
-  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
-  import { Switch } from '#lib/components/ui/switch/index.ts'
-  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '#lib/utils/inlineImageParser.ts'
@@ -346,81 +324,6 @@
 
   let isEditing = $state(false)
   let editContent = $state('')
-  let isDeleting = $state(false)
-  // What a revert-on-delete (or a regenerate) from here would undo; null until known.
-  let revertPreview = $state<RevertPreview | null>(null)
-  const revertUndoesKept = $derived(
-    !!revertPreview && revertPreview.manual.length + revertPreview.tidy.length > 0,
-  )
-
-  let deletingEntry = $state(false)
-  // Kept unless the reader unticks them: undoing their own work is the choice to make, not avoid.
-  let keepManualOnDelete = $state(true)
-  let keepTidyOnDelete = $state(true)
-  let deleteOnlyThisEntry = $state(false)
-  const revertsOnDelete = $derived(
-    settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete,
-  )
-  const deleteRollsBack = $derived(revertsOnDelete && !deleteOnlyThisEntry)
-  const lastEntryNumber = $derived(
-    story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
-  )
-
-  // The deletion modal also confirms a regenerate whose rewind needs a decision.
-  let rewindMode = $state<'delete' | 'regenerate'>('delete')
-  let regenerateRetries = $state(false)
-  const regenerating = $derived(rewindMode === 'regenerate')
-  const rewinds = $derived(regenerating || deleteRollsBack)
-
-  function regenerate(retry: boolean, keep?: RevertKeep) {
-    if (retry) void ui.triggerRetryLastMessage(keep)
-    else void ui.triggerRegenerateNarration(entry.id, keep)
-  }
-
-  async function startRegenerate(retry: boolean) {
-    const position = retry ? ui.retryBackup?.entryCountBeforeAction : entry.position
-    let preview: RevertPreview | null = null
-    try {
-      if (position !== undefined) preview = await story.previewRegenerate(position)
-    } catch (error) {
-      console.error('[StoryEntry] Could not preview the regenerate:', error)
-      ui.showToast(`Could not check what regenerating undoes: ${errMessage(error)}`, 'error')
-      return
-    }
-    if (!preview || preview.manual.length + preview.tidy.length + preview.lore.length === 0) {
-      regenerate(retry)
-      return
-    }
-    rewindMode = 'regenerate'
-    regenerateRetries = retry
-    revertPreview = preview
-    keepManualOnDelete = true
-    keepTidyOnDelete = true
-    deleteOnlyThisEntry = false
-    isDeleting = true
-  }
-
-  async function startDelete() {
-    rewindMode = 'delete'
-    isDeleting = true
-    revertPreview = null
-    keepManualOnDelete = true
-    keepTidyOnDelete = true
-    deleteOnlyThisEntry = false
-    try {
-      revertPreview = await story.previewRevert(entry.id)
-    } catch (error) {
-      console.error('[StoryEntry] Could not preview the revert:', error)
-      isDeleting = false
-      ui.showToast(`Could not check what deleting undoes: ${errMessage(error)}`, 'error')
-    }
-  }
-
-  function cancelDelete() {
-    if (deletingEntry) return
-    isDeleting = false
-  }
-
   // Embedded images state
   let embeddedImages = $state<EmbeddedImage[]>([])
   let expandedImageId = $state<string | null>(null)
@@ -435,9 +338,6 @@
   )
   const ttsLabel = $derived(isPlayingTTS ? 'Stop narration' : 'Narrate')
   const copyLabel = $derived(isCopied ? 'Copied!' : 'Copy message text')
-
-  // Branching state
-  let isBranching = $state(false)
 
   // Inline image edit state
 
@@ -469,14 +369,9 @@
       : 'Main',
   )
 
-  // Checkpoint creation state
-  let isCreatingCheckpoint = $state(false)
-
-  // The activity report is rendered only while the entry shows its text: editing, deleting,
-  // branching and checkpointing take the content area, and the report gives way as the text does.
-  const showReport = $derived(
-    showActivityRecord && !isEditing && !isBranching && !isCreatingCheckpoint,
-  )
+  // The activity report is rendered only while the entry shows its text: editing takes the
+  // content area, and the report gives way as the text does.
+  const showReport = $derived(showActivityRecord && !isEditing)
 
   let adjustmentsOpen = $state(false)
   /** Outlives the submenu by one tap: the click that closed it must not land on a live item. */
@@ -499,8 +394,6 @@
     window.addEventListener('click', release, { capture: true, signal: gestureEnd.signal })
     window.addEventListener('pointercancel', release, { capture: true, signal: gestureEnd.signal })
   }
-  let checkpointName = $state('')
-
   const isLatestEntry = $derived(
     story.entries.length > 0 && story.entries[story.entries.length - 1].id === entry.id,
   )
@@ -508,95 +401,14 @@
     (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null),
   )
 
-  // At the latest entry always; at an earlier narration this branch owns while State Tracking
-  // is on — a fork after a player action would leave its answer to one branch only.
   const canCreateCheckpoint = $derived(
-    (isLatestEntry
-      ? entry.type !== 'system'
-      : settings.experimentalFeatures.stateTracking &&
-        isOwnedEntry &&
-        entry.type === 'narration') &&
-      !entryCheckpoint &&
-      !entriesLocked,
-  )
-
-  // For a past entry: whether it can be rebuilt, and the manual changes that would undo.
-  let pastCheckpoint = $state<PastCheckpointPreview | null>(null)
-  let keepManualInCheckpoint = $state(false)
-  let keepTidyInCheckpoint = $state(false)
-  let savingCheckpoint = $state(false)
-  // A refused past checkpoint can still be built from a full state the reader picks.
-  let advancedOpen = $state(false)
-  let overruleGaps = $state(false)
-  let gapOverride = $state<GapOverride>('undoRecorded')
-
-  async function openCheckpoint() {
-    isCreatingCheckpoint = true
-    pastCheckpoint = null
-    keepManualInCheckpoint = false
-    keepTidyInCheckpoint = false
-    advancedOpen = false
-    overruleGaps = false
-    if (!isLatestEntry) {
-      try {
-        pastCheckpoint = await story.previewCheckpointAt(entry.id)
-        gapOverride = pastCheckpoint.overrides?.next ? 'undoRecorded' : 'previousAsIs'
-      } catch (error) {
-        console.error('[StoryEntry] Could not preview the checkpoint:', error)
-        isCreatingCheckpoint = false
-        ui.showToast(errMessage(error), 'error')
-      }
-    }
-  }
-
-  function setOverruleGaps(checked: boolean) {
-    overruleGaps = checked
-    if (checked && !checkpointName.trim()) checkpointName = 'Approximate — '
-  }
-
-  function skippedSnapshotText(position: number): string {
-    const at = story.entries.find((e) => e.position === position)
-    return `The snapshot at entry ${at ? entryNumber(at) : position + 1} was saved without the lorebook, so it can't be used.`
-  }
-
-  function entryNumberOf(id: string): number | null {
-    const at = story.entries.find((e) => e.id === id)
-    return at ? entryNumber(at) : null
-  }
-
-  const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
-
-  function anchorText(label: AnchorLabel): string {
-    if (label.kind === 'live') return 'the last entry world state'
-    const at = story.entries.find((e) => e.position === label.position)
-    const number = at ? entryNumber(at) : label.position + 1
-    return label.kind === 'checkpoint'
-      ? `checkpoint “${label.name ?? ''}” at entry ${number}`
-      : `a snapshot at entry ${number}`
-  }
-
-  const overriding = $derived(!!pastCheckpoint?.refusal && overruleGaps)
-  const overrideAnchor = $derived(
-    gapOverride === 'previousAsIs'
-      ? (pastCheckpoint?.overrides?.previous ?? null)
-      : (pastCheckpoint?.overrides?.next ?? null),
-  )
-  // What the rebuild undoes is shown only for a rebuild that undoes: a clean one, or the override.
-  const showUndoneInCheckpoint = $derived(
-    !!pastCheckpoint && (!pastCheckpoint.refusal || (overriding && gapOverride === 'undoRecorded')),
-  )
-
-  $effect(() => {
-    if (ui.checkpointFormEntryId !== entry.id) return
-    ui.requestCheckpointForm(null)
-    if (canCreateCheckpoint) void openCheckpoint()
-    else ui.showToast('A checkpoint cannot be created at this entry', 'info')
-  })
-
-  const checkpointBlocked = $derived(
-    !isLatestEntry &&
-      (pastCheckpoint === null ||
-        (pastCheckpoint.refusal !== null && !(overriding && overrideAnchor))),
+    canCreateCheckpointAt(entry, {
+      entries: story.entries,
+      checkpoints: story.checkpoints,
+      currentBranchId: story.currentStory?.currentBranchId ?? null,
+      tracking: settings.experimentalFeatures.stateTracking,
+      locked: entriesLocked,
+    }),
   )
 
   // Is this the last user_action in the story? (used for the regeneration hint)
@@ -613,33 +425,6 @@
       !!story.currentScope &&
       sameBranchScope(ui.retryBackup, story.currentScope),
   )
-
-  async function handleCreateCheckpoint() {
-    if (!checkpointName.trim() || checkpointBlocked || savingCheckpoint) return
-    savingCheckpoint = true
-    try {
-      if (isLatestEntry) await story.createCheckpoint(checkpointName.trim())
-      else {
-        await story.createCheckpointAt(entry.id, checkpointName.trim(), {
-          keepManual: keepManualInCheckpoint,
-          keepTidy: keepTidyInCheckpoint,
-          override: overriding ? gapOverride : undefined,
-        })
-      }
-      isCreatingCheckpoint = false
-      checkpointName = ''
-    } catch (error) {
-      console.error('[StoryEntry] Failed to create checkpoint:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create checkpoint')
-    } finally {
-      savingCheckpoint = false
-    }
-  }
-
-  function cancelCheckpoint() {
-    isCreatingCheckpoint = false
-    checkpointName = ''
-  }
 
   // Reads of this entry's images race each other: five callers fire the full load without
   // awaiting it, and the single-row refreshes below run alongside them. Every read takes a
@@ -1553,28 +1338,6 @@
     editContent = ''
   }
 
-  async function confirmDelete() {
-    if (deletingEntry) return
-    if (regenerating) {
-      isDeleting = false
-      regenerate(regenerateRetries, { manual: keepManualOnDelete, tidy: keepTidyOnDelete })
-      return
-    }
-    deletingEntry = true
-    try {
-      await story.deleteEntry(entry.id, undefined, {
-        keep: { manual: keepManualOnDelete, tidy: keepTidyOnDelete },
-        rollback: !deleteOnlyThisEntry,
-      })
-    } catch (error) {
-      console.error('[StoryEntry] Failed to delete entry:', error)
-      alert(error instanceof Error ? error.message : 'Failed to delete entry')
-    } finally {
-      deletingEntry = false
-      isDeleting = false
-    }
-  }
-
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       cancelEdit()
@@ -1707,7 +1470,7 @@
     {/if}
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
-    {#if !isEditing && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
+    {#if !isEditing && entry.type !== 'system'}
       <!-- -ml-2 cancels the row's gap, so the leftmost icon keeps the same rhythm as its neighbours. -->
       <div class="-ml-2 flex shrink-0 items-center gap-0.5">
         {#snippet copyIcon()}
@@ -1826,7 +1589,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => startRegenerate(true)}
+            onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: true })}
             class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
@@ -1836,7 +1599,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => startRegenerate(false)}
+            onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: false })}
             class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
@@ -1847,7 +1610,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => (isBranching = true)}
+            onclick={() => ui.requestBranchFrom(entryCheckpoint?.id ?? null)}
             class="hidden h-7 w-7 text-amber-700 hover:text-amber-800 @min-[23rem]:flex dark:text-amber-500 dark:hover:text-amber-600"
             title="Branch from here"
           >
@@ -1858,7 +1621,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={openCheckpoint}
+            onclick={() => ui.requestCheckpointForm(entry.id)}
             class={cn(
               'hidden h-7 w-7 @min-[23rem]:flex',
               // Accent only where a checkpoint is the usual next step: at the latest entry.
@@ -1964,13 +1727,13 @@
             onpointerdown={closeAdjustmentsFromOutside}
           >
             {#if canBranch}
-              <DropdownMenu.Item onclick={() => (isBranching = true)}>
+              <DropdownMenu.Item onclick={() => ui.requestBranchFrom(entryCheckpoint?.id ?? null)}>
                 <GitBranch class="h-4 w-4" />
                 Branch from here
               </DropdownMenu.Item>
             {/if}
             {#if canCreateCheckpoint}
-              <DropdownMenu.Item onclick={openCheckpoint}>
+              <DropdownMenu.Item onclick={() => ui.requestCheckpointForm(entry.id)}>
                 <Bookmark class="h-4 w-4" />
                 Create checkpoint
               </DropdownMenu.Item>
@@ -2080,7 +1843,7 @@
       <Button
         variant="text"
         size="icon"
-        onclick={startDelete}
+        onclick={() => ui.requestEntryDelete(entry.id)}
         disabled={entriesLocked}
         class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
         title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
@@ -2348,409 +2111,6 @@
 {/snippet}
 
 <!-- View/Edit Image Modal -->
-{#snippet changeList(changes: WorldStateChangeRecord[], unkeepable: WorldStateChangeRecord[])}
-  {@const lost = new Set(unkeepable.map((r) => r.id))}
-  <ul class="text-muted-foreground list-disc pl-5 text-xs">
-    {#each changes as change (change.id)}
-      <li>
-        {describeChange(change, (type, id) => story.trackedName(type, id))}
-        {#if lost.has(change.id)}
-          <span class="text-amber-500">— cannot be kept: what it changed is gone</span>
-        {/if}
-      </li>
-    {/each}
-  </ul>
-{/snippet}
-
-<!-- Modal for the same reason as the checkpoint form: nothing may change while the revert it
-     describes is being decided and run. -->
-<ResponsiveModal.Root
-  bind:open={
-    () => isDeleting,
-    (open) => {
-      if (!open) cancelDelete()
-    }
-  }
-  dismissible={!deletingEntry}
->
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
-    interactOutsideBehavior="ignore"
-    escapeKeydownBehavior={deletingEntry ? 'ignore' : 'close'}
-  >
-    <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-      <ResponsiveModal.Title>
-        {regenerating ? 'Regenerate' : 'Delete'} entry {entryNumber(entry)}
-      </ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        {#if regenerating}
-          Regenerating this entry undoes the world state changes recorded for it.
-        {:else if revertsOnDelete && entryNumber(entry) === lastEntryNumber}
-          Revert on Delete is on: deleting this entry also undoes the world state changes associated
-          with it.
-        {:else if revertsOnDelete}
-          Revert on Delete is on: deleting an entry also deletes every entry after it and undoes the
-          world state changes recorded for them.
-        {:else}
-          Revert on Delete is off.
-        {/if}
-      </ResponsiveModal.Description>
-      <!-- Below the description, so what it overrules is read before it is switched. -->
-      {#if revertsOnDelete && !regenerating}
-        <label class="mt-2 flex items-center gap-2 text-sm">
-          <Switch bind:checked={deleteOnlyThisEntry} disabled={deletingEntry} />
-          Delete only this entry, without a rollback
-        </label>
-      {/if}
-    </ResponsiveModal.Header>
-    <!-- Buttons scroll with the content, so what they do is read before them. -->
-    <div class="min-h-0 flex-1 overflow-y-auto">
-      <div class="space-y-3 px-6 py-4">
-        <p class="text-muted-foreground text-sm" class:hidden={regenerating}>
-          {#if !deleteRollsBack}
-            Only entry {entryNumber(entry)} is deleted. The world state stays as it is.
-          {:else if entryNumber(entry) === lastEntryNumber}
-            Entry {entryNumber(entry)} is deleted.
-          {:else}
-            Entries {entryNumber(entry)} to {lastEntryNumber} are deleted.
-          {/if}
-        </p>
-        {#if rewinds && revertPreview === null}
-          <p class="text-muted-foreground text-xs italic">
-            Checking the recorded world state changes…
-          </p>
-        {:else if rewinds && revertPreview}
-          <p class="text-muted-foreground text-sm">{loreLine(revertPreview.lore)}</p>
-        {/if}
-        {#if rewinds && revertPreview && revertUndoesKept}
-          <p class="text-muted-foreground text-sm">
-            {regenerating ? 'Regenerating' : 'The revert'} would also undo these changes:
-          </p>
-          {#if revertPreview.manual.length > 0}
-            <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-            {@render changeList(revertPreview.manual, revertPreview.unkeepable)}
-            <label class="flex items-center gap-2 text-xs">
-              <Checkbox bind:checked={keepManualOnDelete} disabled={deletingEntry} />
-              Keep them
-            </label>
-          {/if}
-          {#if revertPreview.tidy.length > 0}
-            <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-            {@render changeList(revertPreview.tidy, revertPreview.unkeepable)}
-            <label class="flex items-center gap-2 text-xs">
-              <Checkbox bind:checked={keepTidyOnDelete} disabled={deletingEntry} />
-              Keep them
-            </label>
-          {/if}
-        {/if}
-      </div>
-      <ResponsiveModal.Footer class="border-t px-6 py-4">
-        <Button
-          variant="secondary"
-          size="sm"
-          onclick={cancelDelete}
-          disabled={deletingEntry}
-          class="h-9 px-3"
-        >
-          <X class="mr-1.5 h-4 w-4" />
-          Cancel
-        </Button>
-        <Button
-          variant={regenerating ? 'default' : 'destructive'}
-          size="sm"
-          onclick={confirmDelete}
-          class={regenerating ? 'h-9 px-3' : 'text-destructive can-hover:text-foreground h-9 px-3'}
-          disabled={(rewinds && revertPreview === null) || deletingEntry}
-        >
-          {#if deletingEntry}
-            <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-          {:else if regenerating}
-            <RotateCcw class="mr-1.5 h-4 w-4" />
-          {:else}
-            <Trash2 class="mr-1.5 h-4 w-4" />
-          {/if}
-          {regenerating ? 'Regenerate' : 'Delete'}
-        </Button>
-      </ResponsiveModal.Footer>
-    </div>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
-
-<CreateBranchModal bind:open={isBranching} checkpoint={entryCheckpoint ?? null} />
-
-<!-- Modal: the story must not change while the checkpoint is described and taken. -->
-<ResponsiveModal.Root
-  bind:open={
-    () => isCreatingCheckpoint,
-    (open) => {
-      if (!open && !savingCheckpoint) cancelCheckpoint()
-    }
-  }
-  dismissible={!savingCheckpoint}
->
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
-    interactOutsideBehavior="ignore"
-    escapeKeydownBehavior={savingCheckpoint ? 'ignore' : 'close'}
-  >
-    <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-      <ResponsiveModal.Title>Create checkpoint</ResponsiveModal.Title>
-      <ResponsiveModal.Description
-        >Create a new checkpoint at entry {entryNumber(entry)}</ResponsiveModal.Description
-      >
-    </ResponsiveModal.Header>
-    <!-- The one scroller: the refusal report and the change lists can run long. -->
-    <!-- Buttons scroll with the content, so what they do is read before them. -->
-    <div class="min-h-0 flex-1 overflow-y-auto">
-      <div class="space-y-3 px-6 py-4">
-        <Input
-          type="text"
-          class="h-9 text-sm"
-          placeholder="Checkpoint name..."
-          bind:value={checkpointName}
-          disabled={savingCheckpoint}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') handleCreateCheckpoint()
-          }}
-        />
-        <div class="text-muted-foreground space-y-1 text-xs">
-          <p>Checkpoints save the story state and allow branching.</p>
-          <button
-            type="button"
-            class="hover:text-foreground flex items-center gap-1 font-medium"
-            onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
-            aria-expanded={!ui.checkpointHelpFolded}
-            aria-controls="past-checkpoint-help"
-          >
-            {#if ui.checkpointHelpFolded}
-              <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-            {:else}
-              <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-            {/if}
-            How past checkpoints work
-          </button>
-          {#if !ui.checkpointHelpFolded}
-            <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
-              Historical checkpoints rely on the state diffs that are recorded alongside the tracked
-              entries, and calculate past state through the rollback from the nearest full-state
-              landmark: an automated snapshot, another checkpoint, or current state.
-            </p>
-          {/if}
-        </div>
-
-        {#if isLatestEntry}
-          <!-- The latest entry is checkpointed from the current state: nothing to check. -->
-        {:else if pastCheckpoint === null}
-          <p class="text-muted-foreground text-xs italic">
-            Checking the recorded world state changes…
-          </p>
-        {:else if pastCheckpoint.refusal}
-          <!-- The diagnosis below explains a refusal; the warning only heads it. -->
-          <p class="text-xs text-amber-500">
-            {pastCheckpoint.diagnosis
-              ? 'The world state at this entry cannot be guaranteed.'
-              : pastCheckpoint.refusal}
-          </p>
-          {#if pastCheckpoint.diagnosis}
-            {@const diagnosis = pastCheckpoint.diagnosis}
-            <ul class="text-muted-foreground space-y-1 text-xs">
-              <!-- An old record holds part of the history, so it warns rather than fails. -->
-              {#snippet finding(status: 'ok' | 'warn' | 'fail', text: string)}
-                <li class="flex items-start gap-1.5">
-                  {#if status === 'ok'}
-                    <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
-                  {:else if status === 'warn'}
-                    <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
-                  {:else}
-                    <X class="mt-px h-3.5 w-3.5 shrink-0 text-red-500" />
-                  {/if}
-                  <span>{text}</span>
-                </li>
-              {/snippet}
-              {@render finding(
-                diagnosis.target === 'recorded'
-                  ? 'ok'
-                  : diagnosis.target === 'classifierOnly'
-                    ? 'warn'
-                    : 'fail',
-                diagnosis.target === 'recorded'
-                  ? `World state changes were recorded for entry ${entryNumber(entry)}.`
-                  : diagnosis.target === 'classifierOnly'
-                    ? `Entry ${entryNumber(entry)} has an old world state record without the lorebook.`
-                    : `World state changes were not recorded for entry ${entryNumber(entry)}.`,
-              )}
-              {@render finding(
-                diagnosis.anchor ? 'ok' : 'fail',
-                diagnosis.anchor
-                  ? `The nearest full world state is ${anchorText(diagnosis.anchor)}.`
-                  : 'No full world state was saved after this entry.',
-              )}
-              {#each pastCheckpoint.skipped as position, i (i)}
-                {@render finding('warn', skippedSnapshotText(position))}
-              {/each}
-              {#if diagnosis.anchor}
-                {#each diagnosis.gaps as gap, i (i)}
-                  {@render finding(
-                    gap.cause === 'classifierOnly' ? 'warn' : 'fail',
-                    gapMessage(gap, entryNumberOf),
-                  )}
-                {:else}
-                  {@render finding(
-                    'ok',
-                    'World state changes were recorded for every entry in between.',
-                  )}
-                {/each}
-              {/if}
-            </ul>
-          {/if}
-          {#if pastCheckpoint.overrides}
-            {@const overrides = pastCheckpoint.overrides}
-            <div class="text-muted-foreground text-xs">
-              <button
-                type="button"
-                class="hover:text-foreground flex items-center gap-1 font-medium"
-                onclick={() => (advancedOpen = !advancedOpen)}
-                aria-expanded={advancedOpen}
-                aria-controls="past-checkpoint-advanced"
-              >
-                {#if advancedOpen}
-                  <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-                {:else}
-                  <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-                {/if}
-                Advanced
-              </button>
-              {#if advancedOpen}
-                <div id="past-checkpoint-advanced" class="mt-2 space-y-2 pl-[1.125rem]">
-                  <label class="flex items-center gap-2">
-                    <Checkbox
-                      checked={overruleGaps}
-                      onCheckedChange={(checked) => setOverruleGaps(checked === true)}
-                      disabled={savingCheckpoint}
-                    />
-                    Create it anyway:
-                  </label>
-                  {#snippet option(
-                    value: GapOverride,
-                    title: string,
-                    anchor: AnchorLabel | null,
-                    note?: string,
-                  )}
-                    <div class="flex items-start gap-2">
-                      <RadioGroupItem
-                        {value}
-                        id={`gap-${value}-${entry.id}`}
-                        disabled={!anchor}
-                        class="mt-0.5"
-                      />
-                      <label for={`gap-${value}-${entry.id}`} class:opacity-50={!anchor}>
-                        <span class="text-foreground">{title}</span>
-                        <span class="block">
-                          {anchor ? `Data origin: ${anchorText(anchor)}.` : 'None was saved.'}
-                        </span>
-                        {#if anchor && note}
-                          <span class="block">{note}</span>
-                        {/if}
-                      </label>
-                    </div>
-                  {/snippet}
-                  <RadioGroup
-                    value={gapOverride}
-                    onValueChange={(v) => (gapOverride = v as GapOverride)}
-                    disabled={!overruleGaps || savingCheckpoint}
-                    class="gap-2 pl-6"
-                  >
-                    {@render option(
-                      'undoRecorded',
-                      'Use a partial rollback from the next full state',
-                      overrides.next,
-                      'Changes that were not recorded stay in.',
-                    )}
-                    {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
-                    {@render option(
-                      'previousAsIs',
-                      'Copy the previous full state',
-                      overrides.previous,
-                    )}
-                  </RadioGroup>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {:else}
-          <div class="text-muted-foreground space-y-1 text-xs">
-            {#if pastCheckpoint.source}
-              <p>The world state at this entry is known:</p>
-              {#each pastCheckpoint.skipped as position, i (i)}
-                <p class="flex items-start gap-1.5">
-                  <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
-                  {skippedSnapshotText(position)}
-                </p>
-              {/each}
-              <p class="flex items-start gap-1.5">
-                <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
-                {pastCheckpoint.source.position === entry.position
-                  ? `${capitalize(anchorText(pastCheckpoint.source))} exists, so no rollback is needed.`
-                  : `Built by a rollback from ${anchorText(pastCheckpoint.source)}.`}
-              </p>
-            {/if}
-          </div>
-        {/if}
-        {#if pastCheckpoint && showUndoneInCheckpoint}
-          {#if pastCheckpoint.manual.length > 0}
-            <p class="text-muted-foreground text-xs">
-              Some changes were made by a user after this entry:
-            </p>
-            {@render changeList(pastCheckpoint.manual, pastCheckpoint.unkeepable)}
-            <label class="flex items-center gap-2 text-xs">
-              <Checkbox bind:checked={keepManualInCheckpoint} disabled={savingCheckpoint} />
-              Include them in the checkpoint
-            </label>
-          {/if}
-          {#if pastCheckpoint.tidy.length > 0}
-            <p class="text-muted-foreground text-xs">
-              Lore management you ran after this entry made these changes:
-            </p>
-            {@render changeList(pastCheckpoint.tidy, pastCheckpoint.unkeepable)}
-            <label class="flex items-center gap-2 text-xs">
-              <Checkbox bind:checked={keepTidyInCheckpoint} disabled={savingCheckpoint} />
-              Include them in the checkpoint
-            </label>
-          {/if}
-          {#if pastCheckpoint.source?.position !== entry.position}
-            <p class="text-muted-foreground text-xs">{loreLine(pastCheckpoint.lore)}</p>
-          {/if}
-        {/if}
-      </div>
-      <ResponsiveModal.Footer class="border-t px-6 py-4">
-        <Button
-          variant="secondary"
-          size="sm"
-          onclick={cancelCheckpoint}
-          disabled={savingCheckpoint}
-          class="h-9 px-3"
-        >
-          <X class="mr-1.5 h-4 w-4" />
-          Cancel
-        </Button>
-        <Button
-          size="sm"
-          onclick={handleCreateCheckpoint}
-          disabled={!checkpointName.trim() || checkpointBlocked || savingCheckpoint}
-          class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
-        >
-          {#if savingCheckpoint}
-            <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-          {:else}
-            <Bookmark class="mr-1.5 h-4 w-4" />
-          {/if}
-          Create Checkpoint
-        </Button>
-      </ResponsiveModal.Footer>
-    </div>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
-
 <ResponsiveModal.Root bind:open={isViewingImage}>
   <ResponsiveModal.Content class="gap-0 overflow-hidden p-0 sm:max-w-3xl">
     <!-- Image area -->

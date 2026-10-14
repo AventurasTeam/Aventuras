@@ -35,10 +35,15 @@ export interface ReversalInput {
    */
   late?: WorldStateChangeRecord[]
   /** Which of the reader's and Tidy's changes to apply again after the reversal. */
-  keep: { manual: boolean; tidy: boolean }
+  keep: RevertKeep
   /** The clock to leave: the end time of the last entry that remains. Omitted, it is untouched. */
   clock?: TimeTracker | null
 }
+
+/** Which of the reader's and Tidy's changes a revert applies again. */
+export type RevertKeep = { manual: boolean; tidy: boolean }
+
+export const KEEP_ALL: RevertKeep = { manual: true, tidy: true }
 
 export interface ReversalPlan {
   state: TrackedState
@@ -181,7 +186,9 @@ export function planReversal(input: ReversalInput): ReversalPlan {
   }
   // Classifier-only history recorded the current location apart from the location rows.
   const earliest = headers[0]
-  if (earliest?.coverage === 'classifier') restoreCurrentLocation(ws, earliest.locationBefore)
+  if (earliest?.coverage === 'classifier' && earliest.locationBefore !== undefined) {
+    restoreCurrentLocation(ws, earliest.locationBefore)
+  }
 
   const manual = changes.filter((r) => r.origin === 'manual')
   const tidy = changes.filter((r) => r.origin === 'tidy')

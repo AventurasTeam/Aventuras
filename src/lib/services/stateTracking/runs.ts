@@ -81,7 +81,10 @@ export type RunGap =
    * last thing recorded before it, if any.
    */
   | { cause: 'header'; entryId: string; sinceEntryId: string | null }
-  /** An export that could not vouch for tracking since the branch's last record. */
+  /**
+   * Records may be missing after it: an export could not vouch for tracking since the branch's
+   * last record, or an entry with records was deleted without a rollback.
+   */
   | { cause: 'break'; entryId: string }
   | { cause: 'trackingOff' }
   /**
@@ -116,8 +119,11 @@ export interface RunQuery {
   line: LineEntry[]
   /** Every record on the branch line, legacy deltas included. */
   records: WorldStateRecord[]
-  /** The automatic and closing snapshots on the branch: their entry and when each was taken. */
-  snapshots: { entryId: string; takenAt: number }[]
+  /**
+   * The automatic and closing snapshots on the branch: their entry, when each was taken, and
+   * whether it is a closing one, which only this build takes.
+   */
+  snapshots: { entryId: string; takenAt: number; closing: boolean }[]
   target: number
   candidates: AnchorCandidate[]
   tracking: { on: boolean; enabledSince: number | null }
@@ -148,10 +154,11 @@ function suspectIntervals(query: RunQuery): Interval[] {
     ...tracked
       .filter((r) => r.kind !== 'break')
       .map((r) => ({ at: r.createdAt, entryId: r.entryId })),
-    // A snapshot is taken right after its entry is classified, so one on an entry without a full
-    // header was taken before full recording began.
+    // An automatic snapshot is taken right after its entry is classified, so one on an entry
+    // without a full header was taken before full recording began. A closing snapshot can sit
+    // on any last entry, a stopped turn's included.
     ...query.snapshots
-      .filter((s) => fullyHeaded.has(s.entryId))
+      .filter((s) => s.closing || fullyHeaded.has(s.entryId))
       .map((s) => ({ at: s.takenAt, entryId: s.entryId })),
   ].sort((a, b) => a.at - b.at)
   const lastProofBefore = (t: number) => {

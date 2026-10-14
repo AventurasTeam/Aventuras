@@ -2,9 +2,8 @@
  * Turning a reconciliation into the writes that commit with it.
  *
  * Reconciling is not only entry times: chapter spans covering those entries are copies that go
- * stale, a delta's or header's recorded clock would otherwise restore an earlier value on
- * rollback, and a
- * range reaching the end of the branch moves the story clock. All of it lands together or
+ * stale, an old delta's recorded clock would otherwise be shown out of date, and a range
+ * reaching the end of the branch moves the story clock. All of it lands together or
  * not at all.
  */
 

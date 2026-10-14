@@ -8,6 +8,7 @@
     entryNumber,
     filterLandmarks,
     LANDMARK_FILTER_GROUPS,
+    canCreateCheckpointAt,
     jumpToEntry,
     resolveEntryByNumber,
     withSnapshotLandmarks,
@@ -149,9 +150,13 @@
     const entry = story.entries.find((e) => e.id === landmark.entryId)
     return (
       !!entry &&
-      entry.type === 'narration' &&
-      (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null) &&
-      !story.checkpoints.some((c) => c.lastEntryId === entry.id)
+      canCreateCheckpointAt(entry, {
+        entries: story.entries,
+        checkpoints: story.checkpoints,
+        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        tracking: settings.experimentalFeatures.stateTracking,
+        locked: ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
+      })
     )
   }
 

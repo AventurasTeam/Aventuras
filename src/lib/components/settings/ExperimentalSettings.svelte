@@ -401,8 +401,8 @@
           <Label>State Tracking</Label>
         </div>
         <p class="text-muted-foreground text-xs">
-          Record world state changes (deltas) on each story entry after AI classification. This is
-          the foundation for rollback and lightweight branches.
+          Record every change to the world and the lorebook, and which entry it belongs to. Rollback
+          on Delete, regenerate and checkpoints at past entries rebuild state from these records.
         </p>
         {#if closingTracking}
           <p class="text-muted-foreground pt-1 text-xs italic">Saving where tracking stops…</p>
@@ -495,8 +495,9 @@
       <Label>Auto-Snapshot Interval</Label>
     </div>
     <p class="text-muted-foreground text-xs">
-      Number of entries between automatic world state snapshots. Lower values allow faster rollback
-      but use more storage.
+      Number of entries between automatic world state snapshots. A checkpoint at a past entry is
+      rebuilt from the nearest snapshot after it, so lower values keep that closer but use more
+      storage.
     </p>
     <div class="flex items-center gap-4">
       <Slider

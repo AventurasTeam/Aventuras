@@ -14,7 +14,6 @@ import type {
   Item,
   StoryBeat,
   TimeTracker,
-  Entry,
   ActionInputType,
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
@@ -37,7 +36,8 @@ export interface RetryBackupData {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
-  lorebookEntries?: Entry[]
+  /** Taken while State Tracking was on: restored by rewinding the records, not from a copy. */
+  throughRecords?: boolean
   userActionContent: string
   rawInput: string
   actionType: ActionInputType
@@ -69,14 +69,10 @@ export interface RetryStoreCallbacks {
     locations: Location[]
     items: Item[]
     storyBeats: StoryBeat[]
-    lorebookEntries?: Entry[]
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }) => Promise<void>
-  /**
-   * Set while State Tracking is on: the restore then rewinds through the records from the
-   * position before the action, instead of from a copy.
-   */
+  /** Rewinds through the records from the position before the action, for a backup that holds them. */
   rewindThroughRecords?: (position: number) => Promise<void>
   deleteEntriesFromPosition: (position: number) => Promise<void>
   deleteEntitiesCreatedAfterBackup: (savedIds: {
@@ -143,7 +139,7 @@ export class RetryService {
     if (refusedForBranch) return refusedForBranch
 
     try {
-      if (callbacks.rewindThroughRecords) {
+      if (backup.throughRecords && callbacks.rewindThroughRecords) {
         await this.rewindThroughRecords(backup, callbacks, callbacks.rewindThroughRecords)
       } else if (backup.hasFullState) {
         // Full state restore path
@@ -229,7 +225,6 @@ export class RetryService {
       locations: backup.locations,
       items: backup.items,
       storyBeats: backup.storyBeats,
-      lorebookEntries: backup.lorebookEntries,
       timeTracker: backup.timeTracker,
       entryCountBeforeAction: backup.entryCountBeforeAction,
     })

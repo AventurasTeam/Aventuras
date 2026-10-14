@@ -39,9 +39,8 @@ Duplicates merge, lorebook file imports, and manual add, edit and delete in the 
 panels. Each change carries its origin and is attached to an entry:
 
 - `classifier` — the classifier, on its narration.
-- `image` — a portrait the story-image generator gave a character who had none, on the latest
-  entry. The generator runs during a turn and on demand from any narration, without the
-  classifier.
+- `image` — the story-image generator's writes to a character, on the last completed entry. The
+  generator runs during a turn and on demand from any narration, without the classifier.
 - `chapter` — lore management after a chapter, automatic, by hand or batch, on the chapter's last
   entry. A chapter exists from that entry on everywhere — a revert removes it with its entries, a
   branch inherits it when it ends before the fork — so its lore comes and goes with it. The session
@@ -54,14 +53,19 @@ panels. Each change carries its origin and is attached to an entry:
 A session overlapping a turn never lands on that turn's entries. Every change keeps its new values
 in `after` except the classifier's, which no saved state can predate (see below).
 
-Store writes commit the entity row and its record in one `database.transaction`. The classifier is
-the exception: it writes through many direct calls, so it clones the in-memory state at the start and
-records the difference at the end, header first, in one transaction. Translated fields are a derived
-cache and are not recorded. A regenerate writes no records of its own: it rewinds through them.
+A store write commits its rows, any copy-on-write override it needs, and their records in one
+`database.transaction`, and publishes to memory once that commits. The classifier is the
+exception: it writes through many direct calls, so it clones the in-memory state at the start and
+records the difference at the end, header first, in one transaction. Its diff leaves the lorebook
+out: it never writes there, and a lore write landing while it runs is not its change. Translated
+fields are a derived cache and are not recorded, and neither is a character's `portrait`: image
+data would ride into every export, sync and load of the records, so a revert leaves portraits as
+they are. A regenerate writes no records of its own: it rewinds through them.
 
 Entries recorded before this table existed keep their `story_entries.world_state_delta`.
 `fromWorldStateDelta` reads one as records with a header marked `coverage: 'classifier'`: the
-classifier was all it recorded.
+classifier was all it recorded. `withLegacyRecords` adds it only where the entry has no header of
+its own, for reverts and rebuilds alike, so a later manual record on an old entry does not hide it.
 
 ## Undoing
 
@@ -83,7 +87,12 @@ would undo the reader's or Tidy's changes, it lists each group under its own hea
 choice to keep them, ticked by default. Its description names the range a delete removes, and a
 switch deletes only that entry without a rollback, as with the feature off. A line from
 `loreLine` says whether lore management after a chapter is undone, naming the chapters by the
-`chapter` records in range; the past-checkpoint form shows the same line.
+`chapter` records in range, or that only the classifier's changes are when nothing else is listed;
+the past-checkpoint form shows the same line.
+
+An entry's records go with it. Deleting one that has them without a rollback (the switch, Revert on
+Delete off, an error entry dismissed) leaves its changes live with nothing to undo them, so the
+delete writes a break on the entry before it, in the same transaction.
 
 A regenerate removes entries, so it rewinds as a delete does, through the records whenever State
 Tracking is on, whatever Revert on Delete says: `rewindForRetry` for a retry with a backup,
@@ -117,8 +126,9 @@ narration in between has no header, or when the history in between is classifier
 refused when P itself has no header, or only an old classifier-only one: its own state was never
 fully recorded. What the entries show is checked before what is inferred from times, and old records
 prove nothing about tracking: they were written whatever the reader did by hand, so a story played
-before full recording began reports its old records, not a pause. Neither do snapshots on entries
-without a full header: the old build took them too.
+before full recording began reports its old records, not a pause. Neither do automatic snapshots
+on entries without a full header: the old build took them too. A closing snapshot always proves it,
+wherever it sits: only this build takes one.
 
 A saved state can predate changes that belong to it. Lore management and Tidy run in the background
 and can finish after the snapshot of an entry they attach to at or before it, and the reader can

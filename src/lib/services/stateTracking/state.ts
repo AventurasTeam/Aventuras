@@ -7,6 +7,7 @@ import type {
   TimeTracker,
   TrackedEntityType,
 } from '#lib/types/index.ts'
+export { canonicalId } from '#lib/utils/branchScope.ts'
 
 /** The visible world state of one branch, as the store holds it. */
 export interface TrackedState {
@@ -53,7 +54,10 @@ export function cloneState(state: TrackedState): TrackedState {
   }
 }
 
-/** The identity an override shares with the row it overrides. */
-export function canonicalId(row: { id: string; overridesId?: string | null }): string {
-  return row.overridesId ?? row.id
+/**
+ * The state the classifier diffs. It never writes the lorebook, so a lore write that lands while
+ * it runs is not its change.
+ */
+export function classifierView(state: TrackedState): TrackedState {
+  return { ...state, lorebookEntries: [] }
 }

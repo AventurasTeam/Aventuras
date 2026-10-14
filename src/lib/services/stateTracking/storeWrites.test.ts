@@ -107,23 +107,14 @@ describe('closing snapshots', () => {
 })
 
 describe('past checkpoints', () => {
-  it('leaves incomplete snapshots out of the candidates, so the next full state is used', () => {
-    expect(bodyOf('rebuildPastState')).toContain('.filter((s) => s.complete)')
+  it('resolves through the pure module, from the whole branch line', () => {
+    expect(bodyOf('rebuildPastState')).toContain('pastQuery(await this.pastSources()')
+    const sources = bodyOf('pastSources')
+    expect(sources).toContain('lineBranchIds: this.lineBranchIds()')
+    expect(sources).toContain('complete: !!cp.lorebookEntriesSnapshot')
   })
 
-  it('reports the incomplete snapshots it skipped, up to the state used', () => {
-    const body = bodyOf('previewCheckpointAt')
-    expect(body).toContain('!s.complete')
-    expect(body).toContain('s.entryPosition <= bound')
-  })
-
-  it('counts checkpoints on the whole branch line, the fork checkpoint included', () => {
-    const body = bodyOf('rebuildPastState')
-    expect(body).toContain('new Set(this.lineBranchIds())')
-    expect(body).toContain('lineBranches.has(cp.branchId ?? null)')
-  })
-
-  it.each(['rebuildPastState', 'anchorState', 'createCheckpointAt'])(
+  it.each(['rebuildPastState', 'anchorState', 'previewCheckpointAt', 'createCheckpointAt'])(
     '%s leaves the story and its world state untouched',
     (method) => {
       const body = bodyOf(method)
@@ -143,6 +134,15 @@ describe('past checkpoints', () => {
   )
 })
 
+describe('deleting one entry', () => {
+  it('breaks the run when the entry had records and no rollback is made', () => {
+    expect(bodyOf('deleteEntry')).toContain('records: await this.breakForUnrevertedDelete(')
+    const body = bodyOf('breakForUnrevertedDelete')
+    expect(body).toContain('database.entryHasWorldStateRecords(entry.id)')
+    expect(body).toContain('breakRecord(')
+  })
+})
+
 describe('regenerate', () => {
   it('rewinds a retry through the records, as a delete does', () => {
     const body = bodyOf('rewindForRetry')
@@ -153,7 +153,6 @@ describe('regenerate', () => {
   it('drops the chapters on removed entries when restoring from a copy', () => {
     const body = bodyOf('restoreFromRetryBackup')
     expect(body).toContain('this.deleteEntriesFromPosition(backup.entryCountBeforeAction')
-    expect(body).toContain('backup.lorebookEntries')
   })
 
   it('stops a regenerate whose revert fails while State Tracking is on', () => {

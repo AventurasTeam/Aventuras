@@ -11,10 +11,11 @@ import type { StoryEntry, TrackedEntityType, WorldStateRecord } from '#lib/types
 import { database, type DbStatement } from './database'
 import {
   clockAfter,
-  fromWorldStateDelta,
+  withLegacyRecords,
   planReversal,
   type ReversalOp,
   type ReversalPlan,
+  type RevertKeep,
   type TrackedRow,
   type TrackedState,
 } from './stateTracking'
@@ -34,7 +35,7 @@ export interface RollbackInput {
   /** Change records on the branch line. */
   records: WorldStateRecord[]
   /** Which of the reader's and Tidy's changes to apply again after the revert. */
-  keep: { manual: boolean; tidy: boolean }
+  keep: RevertKeep
 }
 
 export interface RollbackSummary {
@@ -50,14 +51,10 @@ export interface RollbackSummary {
 function recordsFrom(input: RollbackInput): WorldStateRecord[] {
   const reverted = input.entries.filter((e) => e.position >= input.fromPosition)
   const ids = new Set(reverted.map((e) => e.id))
-  const records = input.records.filter((r) => ids.has(r.entryId))
-  const recorded = new Set(records.map((r) => r.entryId))
-  for (const entry of reverted) {
-    if (entry.worldStateDelta && !recorded.has(entry.id)) {
-      records.push(...fromWorldStateDelta(entry, entry.worldStateDelta))
-    }
-  }
-  return records
+  return withLegacyRecords(
+    reverted,
+    input.records.filter((r) => ids.has(r.entryId)),
+  )
 }
 
 export function planRollback(input: RollbackInput): ReversalPlan & { records: WorldStateRecord[] } {
@@ -86,19 +83,19 @@ function statementsFor(storyId: string, op: ReversalOp): DbStatement[] {
   const t = op.entityType
   switch (op.kind) {
     case 'delete':
-      return [DELETE[t](op.id)]
+      return [DELETE_ROW[t](op.id)]
     case 'softDelete':
-      return [MARK_DELETED[t](op.id)]
+      return [MARK_ROW_DELETED[t](op.id)]
     case 'update': {
       const stmt = UPDATE[t](op.id, op.fields)
       return stmt ? [stmt] : []
     }
     case 'restore':
-      return [INSERT_OR_REPLACE[t]({ ...op.row, deleted: false } as TrackedRow)]
+      return [addRowStatement(t, { ...op.row, deleted: false } as TrackedRow, true)]
   }
 }
 
-const DELETE: Record<TrackedEntityType, (id: string) => DbStatement> = {
+export const DELETE_ROW: Record<TrackedEntityType, (id: string) => DbStatement> = {
   character: (id) => database.deleteCharacterStatement(id),
   location: (id) => database.deleteLocationStatement(id),
   item: (id) => database.deleteItemStatement(id),
@@ -106,7 +103,7 @@ const DELETE: Record<TrackedEntityType, (id: string) => DbStatement> = {
   lorebook_entry: (id) => database.deleteEntryStatement(id),
 }
 
-const MARK_DELETED: Record<TrackedEntityType, (id: string) => DbStatement> = {
+export const MARK_ROW_DELETED: Record<TrackedEntityType, (id: string) => DbStatement> = {
   character: (id) => database.markCharacterDeletedStatement(id),
   location: (id) => database.markLocationDeletedStatement(id),
   item: (id) => database.markItemDeletedStatement(id),
@@ -125,12 +122,24 @@ const UPDATE: Record<
   lorebook_entry: (id, f) => database.updateEntryStatement(id, f),
 }
 
-const INSERT_OR_REPLACE: Record<TrackedEntityType, (row: TrackedRow) => DbStatement> = {
-  character: (row) => database.addCharacterStatement(row as never, true),
-  location: (row) => database.addLocationStatement(row as never, true),
-  item: (row) => database.addItemStatement(row as never, true),
-  story_beat: (row) => database.addStoryBeatStatement(row as never, true),
-  lorebook_entry: (row) => database.addEntryStatement(row as never, true),
+/** Adds a row; with `replace`, overwrites one restored under its original id. */
+export function addRowStatement(
+  type: TrackedEntityType,
+  row: TrackedRow,
+  replace = false,
+): DbStatement {
+  switch (type) {
+    case 'character':
+      return database.addCharacterStatement(row as never, replace)
+    case 'location':
+      return database.addLocationStatement(row as never, replace)
+    case 'item':
+      return database.addItemStatement(row as never, replace)
+    case 'story_beat':
+      return database.addStoryBeatStatement(row as never, replace)
+    case 'lorebook_entry':
+      return database.addEntryStatement(row as never, replace)
+  }
 }
 
 class RollbackService {

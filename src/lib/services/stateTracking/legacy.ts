@@ -34,7 +34,8 @@ export function fromWorldStateDelta(entry: StoryEntry, delta: WorldStateDelta): 
     seq: seq++,
     kind: 'header',
     continuous: false,
-    locationBefore: delta.previousState.currentLocationId ?? null,
+    // Older deltas lack the field; undefined then leaves the current location alone.
+    locationBefore: delta.previousState.currentLocationId,
     coverage: 'classifier',
   }
 
@@ -67,5 +68,22 @@ export function fromWorldStateDelta(entry: StoryEntry, delta: WorldStateDelta): 
     ...created.locationIds.map((id) => change('location', id, 'create', null)),
     ...created.itemIds.map((id) => change('item', id, 'create', null)),
     ...created.storyBeatIds.map((id) => change('story_beat', id, 'create', null)),
+  ]
+}
+
+/**
+ * Records with each entry's old delta added where the entry has no header of its own. A record
+ * written since (a manual edit on an old entry) does not hide what the delta recorded.
+ */
+export function withLegacyRecords(
+  entries: StoryEntry[],
+  records: WorldStateRecord[],
+): WorldStateRecord[] {
+  const headed = new Set(records.filter((r) => r.kind === 'header').map((r) => r.entryId))
+  return [
+    ...records,
+    ...entries.flatMap((e) =>
+      e.worldStateDelta && !headed.has(e.id) ? fromWorldStateDelta(e, e.worldStateDelta) : [],
+    ),
   ]
 }

@@ -1,19 +1,22 @@
 export {
   TRACKED_ENTITY_TYPES,
   canonicalId,
+  classifierView,
   cloneState,
   rowsOf,
   type TrackedRow,
   type TrackedState,
 } from './state'
 export {
+  KEEP_ALL,
   clockAfter,
   planReversal,
+  type RevertKeep,
   type ReversalInput,
   type ReversalOp,
   type ReversalPlan,
 } from './reverse'
-export { fromWorldStateDelta } from './legacy'
+export { fromWorldStateDelta, withLegacyRecords } from './legacy'
 export {
   isContinuous,
   lastCompletedEntry,
@@ -31,5 +34,14 @@ export {
   type RunResult,
 } from './runs'
 export { RECORD_COLUMNS, recordToRow, rowToRecord } from './rows'
-export { changeRecord, changedFields, diffStates, type RecordContext } from './record'
+export {
+  breakRecord,
+  changeRecord,
+  changedFields,
+  diffStates,
+  headerRecord,
+  type RecordContext,
+  type RecordScope,
+} from './record'
 export { describeChange, gapMessage, loreLine, refusalMessage, type LoreChapter } from './describe'
+export { anchorCandidates, pastQuery, skippedSnapshots, type PastSources } from './past'

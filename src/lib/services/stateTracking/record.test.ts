@@ -58,9 +58,22 @@ describe('diffStates', () => {
     const parent = character('p', { status: 'active' })
     const override = character('o', { status: 'deceased', overridesId: 'p', branchId: 'b' })
     const records = diffStates(state([parent]), state([override]), ctx)
+    const { portrait: _portrait, ...recorded } = parent
     expect(records).toEqual([
-      expect.objectContaining({ op: 'create', entityId: 'o', before: parent, after: null }),
+      expect.objectContaining({ op: 'create', entityId: 'o', before: recorded, after: null }),
     ])
+  })
+
+  it('leaves portraits out of recorded rows and changes', () => {
+    const before = character('c', { portrait: 'data:image/png;base64,AAAA' })
+    const removed = diffStates(state([before]), state([]), ctx)
+    expect(removed[0].before).not.toHaveProperty('portrait')
+    const repainted = diffStates(
+      state([before]),
+      state([{ ...before, portrait: 'data:image/png;base64,BBBB' }]),
+      ctx,
+    )
+    expect(repainted).toEqual([])
   })
 
   it('records an in-place change with its previous values', () => {

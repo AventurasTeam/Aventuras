@@ -180,8 +180,6 @@ export function filterLandmarks(
 export interface Landmark {
   entryId: string
   checkpointId: string | null
-  /** Set on a snapshot row only. */
-  snapshotId?: string
   branchId: string | null
   /** Whether "Switch to checkpoint branch" applies. A chapter's start may lie in an ancestor's history. */
   switchesBranch: boolean
@@ -196,6 +194,31 @@ export interface Landmark {
  * take a branch from — and its `branchId` is null whatever branch it was made on, so counting one
  * would read it as Main's.
  */
+/**
+ * Whether a checkpoint can be created at `entry`: at the latest entry always, unless it is a
+ * system entry; at an earlier narration the open branch owns while State Tracking is on, since a
+ * fork after a player action would leave its answer to one branch only. Never where one exists,
+ * nor while a generation or retry holds the entries.
+ */
+export function canCreateCheckpointAt(
+  entry: Pick<StoryEntry, 'id' | 'type' | 'branchId'>,
+  context: {
+    entries: Pick<StoryEntry, 'id'>[]
+    checkpoints: Pick<Checkpoint, 'lastEntryId'>[]
+    currentBranchId: string | null
+    tracking: boolean
+    locked: boolean
+  },
+): boolean {
+  if (context.locked || context.checkpoints.some((cp) => cp.lastEntryId === entry.id)) return false
+  if (context.entries[context.entries.length - 1]?.id === entry.id) return entry.type !== 'system'
+  return (
+    context.tracking &&
+    entry.type === 'narration' &&
+    (entry.branchId ?? null) === context.currentBranchId
+  )
+}
+
 export function checkpointsOnBranch(
   checkpoints: Checkpoint[],
   branchId: string | null,
@@ -382,7 +405,6 @@ export function withSnapshotLandmarks(
     rows.push({
       entryId: entry.id,
       checkpointId: null,
-      snapshotId: snapshot.id,
       branchId,
       switchesBranch: false,
       number: entryNumber(entry),

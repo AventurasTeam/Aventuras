@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { Branch, Chapter, Checkpoint, StoryEntry } from '#lib/types/index.ts'
 import { buildChapterBanners } from './chapterBanners'
 import {
+  canCreateCheckpointAt,
   branchesUsingCheckpoint,
   buildLandmarks,
   checkpointsOnBranch,
@@ -719,12 +720,43 @@ describe('withSnapshotLandmarks', () => {
       null,
       'Main',
     )
-    expect(row).toMatchObject({ label: 'Snapshot (tracking stopped)', snapshotId: 'closing:x' })
+    expect(row).toMatchObject({ label: 'Snapshot (tracking stopped)', kind: 'snapshot' })
   })
 
   it('leaves out a snapshot whose entry is not on the branch', () => {
     expect(
       withSnapshotLandmarks([], [{ id: 's', entryId: 'gone' }], entries, null, 'Main'),
     ).toEqual([])
+  })
+})
+
+describe('canCreateCheckpointAt', () => {
+  const entry = (id: string, type: StoryEntry['type'], branchId: string | null = null) =>
+    ({ id, type, branchId }) as StoryEntry
+  const entries = [entry('a', 'narration'), entry('b', 'user_action'), entry('c', 'narration')]
+  const context = {
+    entries,
+    checkpoints: [],
+    currentBranchId: null,
+    tracking: true,
+    locked: false,
+  }
+
+  it('allows the latest entry whatever tracking says', () => {
+    expect(canCreateCheckpointAt(entries[2], { ...context, tracking: false })).toBe(true)
+  })
+
+  it('allows an earlier narration only while tracking is on and the branch owns it', () => {
+    expect(canCreateCheckpointAt(entries[0], context)).toBe(true)
+    expect(canCreateCheckpointAt(entries[0], { ...context, tracking: false })).toBe(false)
+    expect(canCreateCheckpointAt(entries[1], context)).toBe(false)
+    expect(canCreateCheckpointAt(entries[0], { ...context, currentBranchId: 'b' })).toBe(false)
+  })
+
+  it('refuses where a checkpoint exists or while entries are locked', () => {
+    expect(
+      canCreateCheckpointAt(entries[0], { ...context, checkpoints: [{ lastEntryId: 'a' }] }),
+    ).toBe(false)
+    expect(canCreateCheckpointAt(entries[2], { ...context, locked: true })).toBe(false)
   })
 })

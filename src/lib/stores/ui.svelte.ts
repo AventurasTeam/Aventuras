@@ -3,7 +3,6 @@ import type {
   SidebarTab,
   NavPanelTab,
   EntryType,
-  Entry,
   StoryEntry,
   Character,
   Location,
@@ -46,7 +45,7 @@ import { StreamingHtmlRenderer } from '#lib/utils/htmlStreaming.ts'
 import { countTokens } from '#lib/services/tokenizer.ts'
 import { branchScopeKey } from '#lib/utils/branchScope.ts'
 import type { LandmarkFilterGroup } from '#lib/utils/storyNavigation.ts'
-import type { RevertKeep } from '#lib/stores/story.svelte.ts'
+import type { RevertKeep } from '#lib/services/stateTracking/index.ts'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -65,8 +64,8 @@ export interface RetryBackup {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
-  // The branch's own lorebook rows, kept only when there are no records to rewind through
-  lorebookEntries?: Entry[]
+  // Taken while State Tracking was on: no world state is copied, a retry rewinds the records
+  throughRecords: boolean
   // The user's input to re-trigger
   userActionContent: string
   rawInput: string
@@ -132,8 +131,11 @@ class UIStore {
   // Held here rather than in the panel so it survives closing and reopening, as the sidebar's
   // does. It opens on Navigation until the reader leaves it somewhere else.
   navPanelTab = $state<NavPanelTab>('navigation')
-  /** An entry whose checkpoint form should open once it is on screen. */
+  // The story-level entry modals, each opened for one entry at a time.
   checkpointFormEntryId = $state<string | null>(null)
+  deleteEntryId = $state<string | null>(null)
+  regenerateRequest = $state<{ entryId: string; retry: boolean } | null>(null)
+  branchCheckpointId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
   // reader opts into, not an ambient reference the way the sidebar is.
@@ -420,6 +422,19 @@ class UIStore {
 
   requestCheckpointForm(entryId: string | null) {
     this.checkpointFormEntryId = entryId
+  }
+
+  requestEntryDelete(entryId: string | null) {
+    this.deleteEntryId = entryId
+  }
+
+  /** `retry` restores the backup taken before the last action; otherwise the narration alone. */
+  requestRegenerate(request: { entryId: string; retry: boolean } | null) {
+    this.regenerateRequest = request
+  }
+
+  requestBranchFrom(checkpointId: string | null) {
+    this.branchCheckpointId = checkpointId
   }
 
   setVaultTab(tab: VaultTab) {
@@ -777,11 +792,10 @@ class UIStore {
     actionType: ActionInputType,
     wasRawActionChoice: boolean,
     timeTracker: TimeTracker | null,
-    // Null when State Tracking is on: a retry then rewinds through the records, not a copy.
-    lorebookEntries: Entry[] | null,
+    throughRecords: boolean,
   ) {
     const timestamp = Date.now()
-    const copiesWorld = lorebookEntries !== null
+    const copiesWorld = !throughRecords
     const nextEntryPosition =
       entries.reduce((max, entry) => Math.max(max, entry.position ?? -1), -1) + 1
 
@@ -841,7 +855,7 @@ class UIStore {
       locations: copiesWorld ? copyLocations(locations) : [],
       items: copiesWorld ? shallowCopyArray(items) : [],
       storyBeats: copiesWorld ? shallowCopyArray(storyBeats) : [],
-      lorebookEntries: lorebookEntries ? shallowCopyArray(lorebookEntries) : undefined,
+      throughRecords,
       characterSnapshots,
       userActionContent,
       rawInput,
@@ -917,11 +931,13 @@ class UIStore {
           timeTracker: timeTracker ? { ...timeTracker } : null,
           activationData: Object.fromEntries(Object.entries(this.activationData)),
           storyPosition: this.currentStoryPosition,
+          throughRecords,
         }),
       'persist',
     )
 
-    console.log('[UI] *** IN-MEMORY BACKUP CREATED (hasFullState: true) ***', {
+    console.log('[UI] *** IN-MEMORY BACKUP CREATED ***', {
+      hasFullState: copiesWorld,
       storyId,
       entriesCount: entries.length,
       charactersCount: characters.length,
@@ -1006,6 +1022,7 @@ class UIStore {
       activationData?: Record<string, number>
       storyPosition?: number
       branchId?: string | null
+      throughRecords?: boolean
     },
   ) {
     // State written before the branch was recorded cannot be attributed to one, and a wrong
@@ -1076,6 +1093,7 @@ class UIStore {
       // Persistent retry fields
       entryCountBeforeAction: retryState.entryCountBeforeAction,
       hasFullState: false, // Indicates ID-based restore
+      throughRecords: retryState.throughRecords ?? false,
       hasEntityIds,
       // Entity IDs for restore - delete any entities not in these lists
       characterIds: retryState.characterIds ?? [],

@@ -2,16 +2,11 @@ import type {
   ChangeOp,
   ChangeOrigin,
   TrackedEntityType,
+  WorldStateBreakRecord,
   WorldStateChangeRecord,
+  WorldStateHeaderRecord,
 } from '#lib/types/index.ts'
 import { TRACKED_ENTITY_TYPES, canonicalId, rowsOf, type TrackedState } from './state'
-
-export interface RecordContext {
-  storyId: string
-  branchId: string | null
-  entryId: string
-  origin: ChangeOrigin
-}
 
 // Derived from other fields, or bookkeeping a revert should not bring back.
 const UNRECORDED_FIELDS = new Set([
@@ -23,7 +18,48 @@ const UNRECORDED_FIELDS = new Set([
   'translatedTitle',
   'translationLanguage',
   'updatedAt',
+  'portrait',
 ])
+
+// Image data would ride along into every export, sync and load of the records.
+const UNRECORDED_ROW_FIELDS = ['portrait']
+
+function recordedRow(row: object | null): Record<string, unknown> | null {
+  if (!row) return null
+  const copy: Record<string, unknown> = { ...row }
+  for (const key of UNRECORDED_ROW_FIELDS) delete copy[key]
+  return copy
+}
+
+/** Where a record is written: the story, the branch it was written on and the entry it is on. */
+export interface RecordScope {
+  storyId: string
+  branchId: string | null
+  entryId: string
+}
+
+export interface RecordContext extends RecordScope {
+  origin: ChangeOrigin
+}
+
+export function headerRecord(
+  scope: RecordScope,
+  fields: { continuous: boolean; locationBefore: string | null },
+): WorldStateHeaderRecord {
+  return {
+    id: crypto.randomUUID(),
+    ...scope,
+    seq: 0,
+    createdAt: Date.now(),
+    kind: 'header',
+    ...fields,
+    coverage: 'full',
+  }
+}
+
+export function breakRecord(scope: RecordScope): WorldStateBreakRecord {
+  return { id: crypto.randomUUID(), ...scope, seq: 0, createdAt: Date.now(), kind: 'break' }
+}
 
 const sameValue = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
@@ -65,8 +101,8 @@ export function changeRecord(
     entityType,
     entityId,
     op,
-    before: before ? { ...before } : null,
-    after: after ? { ...after } : null,
+    before: recordedRow(before),
+    after: recordedRow(after),
   }
 }
 

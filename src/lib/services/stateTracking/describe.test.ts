@@ -57,6 +57,12 @@ describe('gapMessage', () => {
     ).toBe('State Tracking was off after entry 3.')
   })
 
+  it('places an interruption at the entry it follows', () => {
+    expect(gapMessage({ cause: 'break', entryId: 'e3' }, number)).toBe(
+      'Recording was interrupted after entry 3.',
+    )
+  })
+
   it('names the whole stretch when every entry in it has an old record', () => {
     expect(
       gapMessage({ cause: 'classifierOnly', entryId: 'e3', throughEntryId: 'e5' }, number),
@@ -73,6 +79,13 @@ describe('gapMessage', () => {
 describe('loreLine', () => {
   it('says only the classifier is undone when no chapter lore is', () => {
     expect(loreLine([])).toBe("Only the classifier's changes are undone.")
+  })
+
+  it("says nothing then when the reader's or Tidy's changes are listed", () => {
+    expect(loreLine([], true)).toBeNull()
+    expect(loreLine([{ number: 4, first: 31, last: 45 }], true)).toBe(
+      'This also undoes the lore management of chapter 4 (entries 31–45).',
+    )
   })
 
   it('names one chapter with its entries', () => {

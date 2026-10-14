@@ -247,18 +247,18 @@ class DatabaseService {
     return this.db!
   }
 
-  /**
-   * Run statements atomically, on one connection, through the Rust side.
-   *
-   * Returns the rows affected by each, in order. The whole batch rolls back on the first
-   * error, and the rejection carries the failing statement's message.
-   */
   async runStatement(stmt: DbStatement | null): Promise<void> {
     if (!stmt) return
     const db = await this.getDb()
     await db.execute(stmt.sql, stmt.params)
   }
 
+  /**
+   * Run statements atomically, on one connection, through the Rust side.
+   *
+   * Returns the rows affected by each, in order. The whole batch rolls back on the first
+   * error, and the rejection carries the failing statement's message.
+   */
   async transaction(statements: { sql: string; params?: unknown[] }[]): Promise<number[]> {
     if (statements.length === 0) return []
     // The command opens the file itself with `create_if_missing(false)`, so the plugin has
@@ -949,16 +949,6 @@ class DatabaseService {
     }
   }
 
-  /**
-   * Delete multiple story entries by ID.
-   */
-  async deleteStoryEntries(ids: string[]): Promise<void> {
-    if (ids.length === 0) return
-    const db = await this.getDb()
-    const placeholders = ids.map(() => '?').join(',')
-    await db.execute(`DELETE FROM story_entries WHERE id IN (${placeholders})`, ids)
-  }
-
   // Character operations
   async getCharacters(storyId: string): Promise<Character[]> {
     const db = await this.getDb()
@@ -1153,10 +1143,17 @@ class DatabaseService {
     await this.runStatement(this.addLocationStatement(location))
   }
 
+  setCurrentLocationStatements(storyId: string, locationId: string): DbStatement[] {
+    return [
+      statement('UPDATE locations SET current = 0 WHERE story_id = ?', [storyId]),
+      statement('UPDATE locations SET current = 1, visited = 1 WHERE id = ?', [locationId]),
+    ]
+  }
+
   async setCurrentLocation(storyId: string, locationId: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE locations SET current = 0 WHERE story_id = ?', [storyId])
-    await db.execute('UPDATE locations SET current = 1, visited = 1 WHERE id = ?', [locationId])
+    for (const write of this.setCurrentLocationStatements(storyId, locationId)) {
+      await this.runStatement(write)
+    }
   }
 
   updateLocationStatement(id: string, updates: Partial<Location>): DbStatement | null {
@@ -1669,6 +1666,8 @@ class DatabaseService {
     storyId: string,
     branchIds: (string | null)[],
     kinds?: WorldStateRecord['kind'][],
+    /** Only records on entries at or after this position, on any branch. */
+    fromPosition?: number,
   ): Promise<WorldStateRecord[]> {
     const db = await this.getDb()
     const named = branchIds.filter((id): id is string => id !== null)
@@ -1678,10 +1677,19 @@ class DatabaseService {
     ]
     if (clauses.length === 0) return []
     const kindClause = kinds ? ` AND kind IN (${kinds.map(() => '?').join(', ')})` : ''
+    const positionClause =
+      fromPosition === undefined
+        ? ''
+        : ' AND entry_id IN (SELECT id FROM story_entries WHERE story_id = ? AND position >= ?)'
     const rows = await db.select<Record<string, unknown>[]>(
-      `SELECT * FROM world_state_changes WHERE story_id = ? AND (${clauses.join(' OR ')})${kindClause}
+      `SELECT * FROM world_state_changes WHERE story_id = ? AND (${clauses.join(' OR ')})${kindClause}${positionClause}
        ORDER BY seq ASC`,
-      [storyId, ...named, ...(kinds ?? [])],
+      [
+        storyId,
+        ...named,
+        ...(kinds ?? []),
+        ...(fromPosition === undefined ? [] : [storyId, fromPosition]),
+      ],
     )
     return rows.map(rowToRecord)
   }
@@ -1695,11 +1703,11 @@ class DatabaseService {
     return rows.map(rowToRecord)
   }
 
-  async hasWorldStateRecords(storyId: string): Promise<boolean> {
+  async entryHasWorldStateRecords(entryId: string): Promise<boolean> {
     const db = await this.getDb()
     const rows = await db.select<{ n: number }[]>(
-      'SELECT COUNT(*) AS n FROM world_state_changes WHERE story_id = ? LIMIT 1',
-      [storyId],
+      'SELECT COUNT(*) AS n FROM world_state_changes WHERE entry_id = ? LIMIT 1',
+      [entryId],
     )
     return (rows[0]?.n ?? 0) > 0
   }
@@ -1847,22 +1855,16 @@ class DatabaseService {
    * Does NOT touch chapters or lorebook entries (those are more permanent).
    */
   async restoreRetryBackup(
-    entryIdsToDelete: string[],
     storyId: string,
     branchId: string | null,
     characters: Character[],
     locations: Location[],
     items: Item[],
     storyBeats: StoryBeat[],
-    lorebookEntries?: Entry[],
   ): Promise<void> {
     const db = await this.getDb()
 
-    // Delete current state (the lorebook only when the backup holds it)
-    // Note: embedded_images will be cascade-deleted when story_entries are deleted
-    if (entryIdsToDelete.length > 0) {
-      await this.deleteStoryEntries(entryIdsToDelete)
-    }
+    // The entries are already gone; chapters and lorebook entries are left as they are.
     // Branch-aware delete: only remove world state for the current branch
     const branchFilter = branchId === null ? 'AND branch_id IS NULL' : 'AND branch_id = ?'
     const branchParams = branchId === null ? [storyId] : [storyId, branchId]
@@ -1870,11 +1872,6 @@ class DatabaseService {
     await db.execute(`DELETE FROM locations WHERE story_id = ? ${branchFilter}`, branchParams)
     await db.execute(`DELETE FROM items WHERE story_id = ? ${branchFilter}`, branchParams)
     await db.execute(`DELETE FROM story_beats WHERE story_id = ? ${branchFilter}`, branchParams)
-    if (lorebookEntries) {
-      await db.execute(`DELETE FROM entries WHERE story_id = ? ${branchFilter}`, branchParams)
-    }
-
-    // Restore entries not necessary as we are only deleting redundant entries since backup
 
     // The insert covers exactly what the delete covered — see the retry-backup bullet under
     // Data Model in docs/architecture/overview.md for what a wider one destroys.
@@ -1899,10 +1896,6 @@ class DatabaseService {
     // Restore story beats
     for (const beat of ownedByBranch(storyBeats)) {
       await this.addStoryBeat(beat)
-    }
-
-    for (const entry of ownedByBranch(lorebookEntries ?? [])) {
-      await this.addEntry(entry)
     }
 
     // Embedded images are intentionally not restored here: they are cascade-deleted with
@@ -2750,12 +2743,16 @@ class DatabaseService {
     entryIds,
     chapterIds = [],
     checkpointIds = [],
+    records = [],
   }: {
     entryIds: string[]
     chapterIds?: string[]
     checkpointIds?: string[]
+    /** Written in the same transaction, on entries that stay. */
+    records?: WorldStateRecord[]
   }): Promise<void> {
     await this.transaction([
+      ...records.map((r) => this.worldStateRecordStatement(r)),
       // Chapters first: `start_entry_id` and `end_entry_id` are foreign keys to story_entries.
       ...deleteInStatements('chapters', 'id', chapterIds),
       ...deleteInStatements('checkpoints', 'id', checkpointIds),

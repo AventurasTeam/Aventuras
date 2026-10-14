@@ -14,13 +14,13 @@ There is no calendar. Arithmetic goes through total minutes (`toMinutes` / `from
 
 `stories.time_tracker` is the register. Every other stored time is a copy of it, taken at some moment:
 
-| Copy                                        | Taken when                                  |
-| ------------------------------------------- | ------------------------------------------- |
-| `metadata.timeStart` on an entry            | the entry is added (`addEntry`)             |
-| `metadata.timeEnd` on a narration           | classification has advanced the clock       |
-| `worldStateDelta.previousState.timeTracker` | the entry's delta is recorded, for rollback |
-| `chapters.start_time` / `end_time`          | the chapter is written                      |
-| `checkpoints.time_tracker_snapshot`         | the checkpoint is taken                     |
+| Copy                                        | Taken when                            |
+| ------------------------------------------- | ------------------------------------- |
+| `metadata.timeStart` on an entry            | the entry is added (`addEntry`)       |
+| `metadata.timeEnd` on a narration           | classification has advanced the clock |
+| `worldStateDelta.previousState.timeTracker` | an old entry's delta was recorded     |
+| `chapters.start_time` / `end_time`          | the chapter is written                |
+| `checkpoints.time_tracker_snapshot`         | the checkpoint is taken               |
 
 Classification advances the clock by one of four buckets — none, 15 minutes, 2 hours, 1 day — and a
 failed classification counts as none. A player action is an instant: its start and end are the same

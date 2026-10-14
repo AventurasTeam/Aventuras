@@ -179,7 +179,11 @@ describe('resolveRun', () => {
     const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
     const records = [1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1 && n !== 4))
     const result = resolveRun(
-      query({ records, snapshots: [{ entryId: 'e5', takenAt: 52 }], candidates: [live, snap] }),
+      query({
+        records,
+        snapshots: [{ entryId: 'e5', takenAt: 52, closing: false }],
+        candidates: [live, snap],
+      }),
     )
     expect(!result.ok && result.diagnosis).toEqual({
       target: 'recorded',
@@ -208,7 +212,7 @@ describe('resolveRun', () => {
     const result = resolveRun(
       query({
         records,
-        snapshots: [{ entryId: 'e2', takenAt: 25 }],
+        snapshots: [{ entryId: 'e2', takenAt: 25, closing: false }],
         tracking: { on: true, enabledSince: 500 },
       }),
     )
@@ -251,7 +255,7 @@ describe('resolveRun', () => {
     const result = resolveRun(
       query({
         records,
-        snapshots: [{ entryId: 'e5', takenAt: 55 }],
+        snapshots: [{ entryId: 'e5', takenAt: 55, closing: true }],
         candidates: [live, closing],
         tracking: { on: true, enabledSince: 58 },
       }),
@@ -263,12 +267,34 @@ describe('resolveRun', () => {
     }
   })
 
+  it('takes a closing snapshot on an unrecorded last entry as proof', () => {
+    // A stopped turn left entry 6, a player action, last; tracking went off at 70.
+    const stopped = line.map((e) => (e.id === 'e6' ? { ...e, type: 'user_action' as const } : e))
+    const closing: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 6, takenAt: 70 }
+    const asked = (isClosing: boolean) =>
+      resolveRun(
+        query({
+          line: stopped,
+          records: [1, 2, 3, 4, 5].map((n) => header(n, n > 1)),
+          snapshots: [{ entryId: 'e6', takenAt: 70, closing: isClosing }],
+          candidates: [closing],
+          tracking: { on: false, enabledSince: 0 },
+        }),
+      )
+    expect(asked(true).ok).toBe(true)
+    expect(asked(false).ok).toBe(false)
+  })
+
   it('applies a change that belongs to the target but was written after the anchor', () => {
     const early: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 4, takenAt: 41 }
     const late = edit(3, 42)
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), late]
     const result = resolveRun(
-      query({ records, snapshots: [{ entryId: 'e4', takenAt: 41 }], candidates: [early, live] }),
+      query({
+        records,
+        snapshots: [{ entryId: 'e4', takenAt: 41, closing: false }],
+        candidates: [early, live],
+      }),
     )
     expect(result.ok && result.anchor).toBe(early)
     expect(result.ok && result.late).toEqual([late])
@@ -279,7 +305,11 @@ describe('resolveRun', () => {
     const snap: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
     const records = [...[1, 2, 3, 4, 5, 6].map((n) => header(n, n > 1)), edit(5, 53)]
     const result = resolveRun(
-      query({ records, snapshots: [{ entryId: 'e5', takenAt: 52 }], candidates: [snap] }),
+      query({
+        records,
+        snapshots: [{ entryId: 'e5', takenAt: 52, closing: false }],
+        candidates: [snap],
+      }),
     )
     expect(result.ok && result.records.some((r) => r.createdAt === 53)).toBe(false)
   })
@@ -292,7 +322,7 @@ describe('resolveOverride', () => {
   const after: AnchorCandidate = { kind: 'snapshot', id: 'snap', position: 5, takenAt: 52 }
   const gapped = query({
     records,
-    snapshots: [{ entryId: 'e5', takenAt: 52 }],
+    snapshots: [{ entryId: 'e5', takenAt: 52, closing: false }],
     candidates: [before, after, live],
   })
 

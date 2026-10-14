@@ -84,6 +84,8 @@ export interface PersistentRetryState {
   // The branch the generation was bound to. Absent in state written before it was recorded;
   // such state cannot be attributed to a branch and is discarded rather than guessed at.
   branchId?: string | null
+  // Taken while State Tracking was on: a retry rewinds through the records.
+  throughRecords?: boolean
 }
 
 export interface PersistentCharacterSnapshot {
@@ -1021,11 +1023,6 @@ export interface WorldStateDelta {
   }
 }
 
-/**
- * Periodic full snapshot of world state for fast rollback reconstruction.
- * Instead of replaying all deltas from the start, rollback can start from the
- * nearest snapshot and only replay/undo deltas from there.
- */
 export type TrackedEntityType = 'character' | 'location' | 'item' | 'story_beat' | 'lorebook_entry'
 
 /**
@@ -1083,6 +1080,10 @@ export interface WorldStateBreakRecord extends WorldStateRecordBase {
 export type WorldStateRecord =
   WorldStateChangeRecord | WorldStateHeaderRecord | WorldStateBreakRecord
 
+/**
+ * A full world state saved at an entry: every few entries while State Tracking is on, and on
+ * each written branch when it is turned off. A past state is rebuilt from the nearest one after it.
+ */
 export interface WorldStateSnapshot {
   id: string
   storyId: string

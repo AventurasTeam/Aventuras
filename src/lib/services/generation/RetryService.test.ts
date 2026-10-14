@@ -272,11 +272,11 @@ describe('RetryService branch enforcement', () => {
 describe('RetryService restore paths', () => {
   const scope = { storyId: 'story-1', branchId: 'branch-a' }
 
-  it('rewinds through the records when they are offered, touching no copy', async () => {
+  it('rewinds a backup taken with records through them, touching no copy', async () => {
     const callbacks = makeCallbacks()
     const rewind = vi.fn(async () => {})
     const result = await new RetryService().handleRetryLastMessage(
-      makeBackup(),
+      makeBackup({ throughRecords: true }),
       { ...callbacks, rewindThroughRecords: rewind },
       uiCleanup(),
       scope,
@@ -292,7 +292,7 @@ describe('RetryService restore paths', () => {
   it('reports a failed rewind and unlocks', async () => {
     const callbacks = makeCallbacks()
     const result = await new RetryService().handleRetryLastMessage(
-      makeBackup(),
+      makeBackup({ throughRecords: true }),
       {
         ...callbacks,
         rewindThroughRecords: vi.fn(async () => {
@@ -307,18 +307,17 @@ describe('RetryService restore paths', () => {
     expect(callbacks.unlockRetryInProgress).toHaveBeenCalled()
   })
 
-  it('hands the lorebook copy to the restore', async () => {
+  it('restores a backup taken without records from its copy', async () => {
     const callbacks = makeCallbacks()
-    const lorebookEntries = [{ id: 'l1' }] as RetryBackupData['lorebookEntries']
+    const rewind = vi.fn(async () => {})
     await new RetryService().handleRetryLastMessage(
-      makeBackup({ lorebookEntries }),
-      callbacks,
+      makeBackup({ throughRecords: false }),
+      { ...callbacks, rewindThroughRecords: rewind },
       uiCleanup(),
       scope,
     )
 
-    expect(callbacks.restoreFromRetryBackup).toHaveBeenCalledWith(
-      expect.objectContaining({ lorebookEntries }),
-    )
+    expect(rewind).not.toHaveBeenCalled()
+    expect(callbacks.restoreFromRetryBackup).toHaveBeenCalled()
   })
 })

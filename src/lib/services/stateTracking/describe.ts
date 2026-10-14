@@ -81,7 +81,7 @@ export function gapMessage(gap: RunGap, entryNumberOf: (entryId: string) => numb
         ? `World state changes before ${entry(gap.entryId)} were not fully recorded.`
         : `State Tracking was off between ${entry(gap.sinceEntryId)} and ${entry(gap.entryId)}.`
     case 'break':
-      return `State Tracking was off after ${entry(gap.entryId)}.`
+      return `Recording was interrupted after ${entry(gap.entryId)}.`
     case 'trackingOff':
       return 'State Tracking is off.'
     case 'enabledAfter':
@@ -103,12 +103,16 @@ export interface LoreChapter {
   last: number
 }
 
-/** Whether a revert undoes lore management, for the reader. */
-export function loreLine(chapters: LoreChapter[]): string {
+/**
+ * Whether a revert undoes lore management, for the reader. With none undone it says only the
+ * classifier's changes are, unless the reader's or Tidy's are listed too: then it says nothing.
+ */
+export function loreLine(chapters: LoreChapter[], othersListed = false): string | null {
   const named = chapters.filter((c) => c.number !== null).sort((a, b) => a.number! - b.number!)
   const orphaned = chapters.filter((c) => c.number === null).map((c) => c.last)
-  if (named.length === 0 && orphaned.length === 0)
-    return "Only the classifier's changes are undone."
+  if (named.length === 0 && orphaned.length === 0) {
+    return othersListed ? null : "Only the classifier's changes are undone."
+  }
 
   const sentences: string[] = []
   if (named.length > 0) {
