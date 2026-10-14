@@ -19,8 +19,14 @@
     TimeTracker,
     WorldStateChangeRecord,
   } from '#lib/types/index.ts'
-  import { describeChange, gapMessage } from '#lib/services/stateTracking/index.ts'
-  import { story, type AnchorLabel, type PastCheckpointPreview } from '#lib/stores/story.svelte.ts'
+  import { describeChange, gapMessage, loreLine } from '#lib/services/stateTracking/index.ts'
+  import {
+    story,
+    type AnchorLabel,
+    type PastCheckpointPreview,
+    type RevertKeep,
+    type RevertPreview,
+  } from '#lib/stores/story.svelte.ts'
   import type { GapOverride } from '#lib/services/stateTracking/index.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { cn } from '#lib/utils/cn.ts'
@@ -341,12 +347,8 @@
   let isEditing = $state(false)
   let editContent = $state('')
   let isDeleting = $state(false)
-  // The reader's and Tidy's changes a revert-on-delete from here would undo; null until known.
-  let revertPreview = $state<{
-    manual: WorldStateChangeRecord[]
-    tidy: WorldStateChangeRecord[]
-    unkeepable: WorldStateChangeRecord[]
-  } | null>(null)
+  // What a revert-on-delete (or a regenerate) from here would undo; null until known.
+  let revertPreview = $state<RevertPreview | null>(null)
   const revertUndoesKept = $derived(
     !!revertPreview && revertPreview.manual.length + revertPreview.tidy.length > 0,
   )
@@ -364,7 +366,40 @@
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
   )
 
+  // The deletion modal also confirms a regenerate whose rewind needs a decision.
+  let rewindMode = $state<'delete' | 'regenerate'>('delete')
+  let regenerateRetries = $state(false)
+  const regenerating = $derived(rewindMode === 'regenerate')
+  const rewinds = $derived(regenerating || deleteRollsBack)
+
+  function regenerate(retry: boolean, keep?: RevertKeep) {
+    if (retry) void ui.triggerRetryLastMessage(keep)
+    else void ui.triggerRegenerateNarration(entry.id, keep)
+  }
+
+  async function startRegenerate(retry: boolean) {
+    const position = retry ? ui.retryBackup?.entryCountBeforeAction : entry.position
+    let preview: RevertPreview | null = null
+    try {
+      if (position !== undefined) preview = await story.previewRegenerate(position)
+    } catch (error) {
+      console.error('[StoryEntry] Could not preview the regenerate:', error)
+    }
+    if (!preview || preview.manual.length + preview.tidy.length + preview.lore.length === 0) {
+      regenerate(retry)
+      return
+    }
+    rewindMode = 'regenerate'
+    regenerateRetries = retry
+    revertPreview = preview
+    keepManualOnDelete = true
+    keepTidyOnDelete = true
+    deleteOnlyThisEntry = false
+    isDeleting = true
+  }
+
   async function startDelete() {
+    rewindMode = 'delete'
     isDeleting = true
     revertPreview = null
     keepManualOnDelete = true
@@ -374,7 +409,7 @@
       revertPreview = await story.previewRevert(entry.id)
     } catch (error) {
       console.error('[StoryEntry] Could not preview the revert:', error)
-      revertPreview = { manual: [], tidy: [], unkeepable: [] }
+      revertPreview = { manual: [], tidy: [], unkeepable: [], lore: [] }
     }
   }
 
@@ -1511,6 +1546,11 @@
 
   async function confirmDelete() {
     if (deletingEntry) return
+    if (regenerating) {
+      isDeleting = false
+      regenerate(regenerateRetries, { manual: keepManualOnDelete, tidy: keepTidyOnDelete })
+      return
+    }
     deletingEntry = true
     try {
       await story.deleteEntry(entry.id, undefined, {
@@ -1777,7 +1817,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => ui.triggerRetryLastMessage()}
+            onclick={() => startRegenerate(true)}
             class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
@@ -1787,7 +1827,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => ui.triggerRegenerateNarration(entry.id)}
+            onclick={() => startRegenerate(false)}
             class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
@@ -2330,9 +2370,16 @@
     escapeKeydownBehavior={deletingEntry ? 'ignore' : 'close'}
   >
     <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-      <ResponsiveModal.Title>Delete entry {entryNumber(entry)}</ResponsiveModal.Title>
+      <ResponsiveModal.Title>
+        {regenerating ? 'Regenerate' : 'Delete'} entry {entryNumber(entry)}
+      </ResponsiveModal.Title>
       <ResponsiveModal.Description>
-        {#if revertsOnDelete}
+        {#if regenerating}
+          Regenerating this entry undoes the world state changes recorded for it.
+        {:else if revertsOnDelete && entryNumber(entry) === lastEntryNumber}
+          Revert on Delete is on: deleting this entry also undoes the world state changes associated
+          with it.
+        {:else if revertsOnDelete}
           Revert on Delete is on: deleting an entry also deletes every entry after it and undoes the
           world state changes recorded for them.
         {:else}
@@ -2340,7 +2387,7 @@
         {/if}
       </ResponsiveModal.Description>
       <!-- Below the description, so what it overrules is read before it is switched. -->
-      {#if revertsOnDelete}
+      {#if revertsOnDelete && !regenerating}
         <label class="mt-2 flex items-center gap-2 text-sm">
           <Switch bind:checked={deleteOnlyThisEntry} disabled={deletingEntry} />
           Delete only this entry, without a rollback
@@ -2348,7 +2395,7 @@
       {/if}
     </ResponsiveModal.Header>
     <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
-      <p class="text-muted-foreground text-sm">
+      <p class="text-muted-foreground text-sm" class:hidden={regenerating}>
         {#if !deleteRollsBack}
           Only entry {entryNumber(entry)} is deleted. The world state stays as it is.
         {:else if entryNumber(entry) === lastEntryNumber}
@@ -2357,12 +2404,17 @@
           Entries {entryNumber(entry)} to {lastEntryNumber} are deleted.
         {/if}
       </p>
-      {#if deleteRollsBack && revertPreview === null}
+      {#if rewinds && revertPreview === null}
         <p class="text-muted-foreground text-xs italic">
           Checking the recorded world state changes…
         </p>
-      {:else if deleteRollsBack && revertPreview && revertUndoesKept}
-        <p class="text-muted-foreground text-sm">The revert would also undo these changes:</p>
+      {:else if rewinds && revertPreview}
+        <p class="text-muted-foreground text-sm">{loreLine(revertPreview.lore)}</p>
+      {/if}
+      {#if rewinds && revertPreview && revertUndoesKept}
+        <p class="text-muted-foreground text-sm">
+          {regenerating ? 'Regenerating' : 'The revert'} would also undo these changes:
+        </p>
         {#if revertPreview.manual.length > 0}
           <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
           {@render changeList(revertPreview.manual, revertPreview.unkeepable)}
@@ -2393,18 +2445,20 @@
         Cancel
       </Button>
       <Button
-        variant="destructive"
+        variant={regenerating ? 'default' : 'destructive'}
         size="sm"
         onclick={confirmDelete}
-        disabled={(deleteRollsBack && revertPreview === null) || deletingEntry}
+        disabled={(rewinds && revertPreview === null) || deletingEntry}
         class="h-9 px-3"
       >
         {#if deletingEntry}
           <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+        {:else if regenerating}
+          <RotateCcw class="mr-1.5 h-4 w-4" />
         {:else}
           <Trash2 class="mr-1.5 h-4 w-4" />
         {/if}
-        Delete
+        {regenerating ? 'Regenerate' : 'Delete'}
       </Button>
     </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
@@ -2649,12 +2703,8 @@
             Include them in the checkpoint
           </label>
         {/if}
-        {#if pastCheckpoint.chapters > 0}
-          <p class="text-muted-foreground text-xs">
-            Lorebook updates from {pastCheckpoint.chapters === 1
-              ? 'a chapter'
-              : `${pastCheckpoint.chapters} chapters`} written after this entry are not included.
-          </p>
+        {#if pastCheckpoint.source?.position !== entry.position}
+          <p class="text-muted-foreground text-xs">{loreLine(pastCheckpoint.lore)}</p>
         {/if}
       {/if}
     </div>

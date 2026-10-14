@@ -32,4 +32,4 @@ export {
 } from './runs'
 export { RECORD_COLUMNS, recordToRow, rowToRecord } from './rows'
 export { changeRecord, changedFields, diffStates, type RecordContext } from './record'
-export { describeChange, gapMessage, refusalMessage } from './describe'
+export { describeChange, gapMessage, loreLine, refusalMessage, type LoreChapter } from './describe'

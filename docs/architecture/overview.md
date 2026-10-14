@@ -316,7 +316,11 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   lets a checkpoint be rebuilt at a past entry. Older entries keep a per-entry `worldStateDelta`.
   See [state-tracking.md](state-tracking.md).
 - **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
-  survive an app restart or a story switch. A checkpoint is anchored to its `lastEntryId` and is
+  survive an app restart or a story switch. With State Tracking on, a retry backup copies no world
+  state: the retry rewinds through the records, as a delete does (see
+  [state-tracking.md](state-tracking.md)). With it off, the copy includes the branch's own lorebook
+  rows. Either way the entries go through `deleteEntriesFromPosition`, so chapters on them are
+  dropped. A checkpoint is anchored to its `lastEntryId` and is
   deleted with that entry - in the same transaction, alongside the chapters and embedded images
   that reference it. It is the fork point a branch would be created from, so an orphaned one
   yields a branch pointing at an entry the database no longer holds. A reader may delete a

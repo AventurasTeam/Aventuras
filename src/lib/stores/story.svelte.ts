@@ -44,6 +44,7 @@ import {
   rowsOf,
   type AnchorCandidate,
   type GapOverride,
+  type LoreChapter,
   type RunQuery,
   type RunDiagnosis,
   type RunGap,
@@ -132,6 +133,7 @@ import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils
 import {
   CLOSING_SNAPSHOT_PREFIX,
   checkpointDeletionBlocker,
+  entryNumber,
   type SnapshotMark,
 } from '#lib/utils/storyNavigation.ts'
 import {
@@ -191,7 +193,10 @@ class RefusalError extends Error {
 }
 
 /** A preview keeps everything it can, so it reports which kept changes cannot be applied. */
-const KEEP_ALL = { manual: true, tidy: true }
+/** Which of the reader's and Tidy's changes a revert applies again. */
+export type RevertKeep = { manual: boolean; tidy: boolean }
+
+const KEEP_ALL: RevertKeep = { manual: true, tidy: true }
 
 /** A full state a past checkpoint can be built from, for the reader. */
 export interface AnchorLabel {
@@ -214,8 +219,8 @@ export interface PastCheckpointPreview {
   /** Changes from lore management the reader ran, likewise. */
   tidy: WorldStateChangeRecord[]
   unkeepable: WorldStateChangeRecord[]
-  /** How many chapters' lore management the rebuild undoes. */
-  chapters: number
+  /** The chapters whose lore management the rebuild undoes. */
+  lore: LoreChapter[]
   /** Without a refusal, the full state the rebuild starts from. */
   source: AnchorLabel | null
   /**
@@ -226,6 +231,16 @@ export interface PastCheckpointPreview {
   /** On a refusal, the full states the reader may build it from anyway. */
   overrides: { next: AnchorLabel | null; previous: AnchorLabel | null } | null
 }
+
+export interface RevertPreview {
+  manual: WorldStateChangeRecord[]
+  tidy: WorldStateChangeRecord[]
+  unkeepable: WorldStateChangeRecord[]
+  /** The chapters whose lore management the revert undoes. */
+  lore: LoreChapter[]
+}
+
+const NO_REVERT: RevertPreview = { manual: [], tidy: [], unkeepable: [], lore: [] }
 
 class StoryStore {
   /** Tail of the story-load queue — see loadStory. */
@@ -1211,15 +1226,6 @@ class StoryStore {
     log('Deleted checkpoints whose entry was removed:', removed.length)
   }
 
-  /** For the one caller whose entry delete cannot be joined into a single transaction. */
-  private async pruneCheckpointsForEntries(entryIds: Set<string>): Promise<void> {
-    const orphaned = this.checkpointsAnchoredTo(entryIds)
-    if (orphaned.length === 0) return
-
-    await database.deleteCheckpoints(orphaned.map((cp) => cp.id))
-    this.forgetCheckpoints(orphaned)
-  }
-
   /**
    * Common cleanup logic after an entry is deleted.
    * Restores suggested actions from the new last narration entry and invalidates the retry backup.
@@ -1310,25 +1316,55 @@ class StoryStore {
    * The reader's and Tidy's changes a revert-on-delete from this entry would undo, and those
    * that could not be kept. Empty when the delete would not revert anything.
    */
-  async previewRevert(entryId: string): Promise<{
-    manual: WorldStateChangeRecord[]
-    tidy: WorldStateChangeRecord[]
-    unkeepable: WorldStateChangeRecord[]
-  }> {
+  async previewRevert(entryId: string): Promise<RevertPreview> {
     const entry = this.entries.find((e) => e.id === entryId)
     const reverts =
       settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
-    if (!this.currentStory || !entry || !reverts) return { manual: [], tidy: [], unkeepable: [] }
+    if (!entry || !reverts) return NO_REVERT
+    return this.previewRewind(entry.position)
+  }
+
+  /**
+   * What a regenerate rewinding from `position` would undo. A regenerate rewinds through the
+   * records whenever State Tracking is on, whatever Revert on Delete says.
+   */
+  async previewRegenerate(position: number): Promise<RevertPreview> {
+    if (!settings.experimentalFeatures.stateTracking) return NO_REVERT
+    return this.previewRewind(position)
+  }
+
+  private async previewRewind(position: number): Promise<RevertPreview> {
+    if (!this.currentStory) return NO_REVERT
     const plan = planRollback({
       storyId: this.currentStory.id,
       branchId: this.currentStory.currentBranchId ?? null,
-      fromPosition: entry.position,
+      fromPosition: position,
       entries: this.entries,
       state: this.trackedState(),
       records: await this.lineRecords(),
       keep: { manual: true, tidy: true },
     })
-    return { manual: plan.manual, tidy: plan.tidy, unkeepable: plan.unkeepable }
+    return {
+      manual: plan.manual,
+      tidy: plan.tidy,
+      unkeepable: plan.unkeepable,
+      lore: this.loreChaptersFor(plan.chapterEntryIds),
+    }
+  }
+
+  /** The chapters ending at these entries, or the entry alone where its chapter was deleted. */
+  private loreChaptersFor(entryIds: string[]): LoreChapter[] {
+    const numberOf = (id: string) => {
+      const e = this.entries.find((x) => x.id === id)
+      return e ? entryNumber(e) : null
+    }
+    return entryIds.flatMap((id): LoreChapter[] => {
+      const chapter = this.chapters.find((ch) => ch.endEntryId === id)
+      const last = numberOf(id)
+      if (last === null) return []
+      if (!chapter) return [{ number: null, first: last, last }]
+      return [{ number: chapter.number, first: numberOf(chapter.startEntryId) ?? last, last }]
+    })
   }
 
   // Delete a story entry
@@ -1445,6 +1481,7 @@ class StoryStore {
   async undoNarrationForRegenerate(
     entryId: string,
     holder?: GenerationLease,
+    keep: RevertKeep = KEEP_ALL,
   ): Promise<{ entitiesUndone: boolean; timeUndone: boolean }> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNotBusy('regenerate', holder)
@@ -1478,12 +1515,13 @@ class StoryStore {
     let timeUndone = false
 
     try {
-      // The reader asked to redo the narration, not to lose their own edits since.
-      const summary = await this.rollbackFrom(entry.position, KEEP_ALL)
+      const summary = await this.rollbackFrom(entry.position, keep)
       log('Regenerate rollback summary:', summary)
       entitiesUndone = summary.entriesWithRecords > 0
       timeUndone = summary.restoredTimeTracker
     } catch (error) {
+      // With State Tracking on, the records are the whole rewind: without them, nothing moves.
+      if (settings.experimentalFeatures.stateTracking) throw error
       console.error('[StoryStore] Rollback failed before regenerate:', error)
     }
 
@@ -4516,7 +4554,7 @@ class StoryStore {
         manual: plan.manual,
         tidy: plan.tidy,
         unkeepable: plan.unkeepable,
-        chapters: plan.chapters,
+        lore: this.loreChaptersFor(plan.chapterEntryIds),
         source: this.anchorLabel(anchor),
         skipped: [],
         overrides: null,
@@ -4545,7 +4583,7 @@ class StoryStore {
           manual: [],
           tidy: [],
           unkeepable: [],
-          chapters: 0,
+          lore: [],
           source: null,
           skipped: [],
           overrides: null,
@@ -4558,7 +4596,7 @@ class StoryStore {
         manual: undo?.plan.manual ?? [],
         tidy: undo?.plan.tidy ?? [],
         unkeepable: undo?.plan.unkeepable ?? [],
-        chapters: undo?.plan.chapters ?? 0,
+        lore: undo ? this.loreChaptersFor(undo.plan.chapterEntryIds) : [],
         source: null,
         skipped: [],
         overrides: {
@@ -5542,6 +5580,23 @@ class StoryStore {
    * Used by the "retry last message" feature to restore state before a user action
    * and allow regeneration.
    */
+  /**
+   * A retry's rewind while State Tracking is on: the delete path, through the records, from the
+   * position before the retried action. A failed revert throws before any entry is removed.
+   */
+  async rewindForRetry(position: number, keep: RevertKeep = KEEP_ALL): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    this.assertNoBranchForkAtOrAfter(position)
+    const summary = await this.rollbackFrom(position, keep)
+    log('Retry rollback summary:', summary)
+    await this.deleteEntriesFromPosition(position, { skipRollback: true })
+    await this.reloadEntriesForCurrentBranch()
+    const freshStory = await database.getStory(this.currentStory.id)
+    if (freshStory) {
+      this.currentStory = { ...this.currentStory, timeTracker: freshStory.timeTracker }
+    }
+  }
+
   async restoreFromRetryBackup(backup: {
     storyId: string
     branchId: string | null
@@ -5550,7 +5605,8 @@ class StoryStore {
     locations: Location[]
     items: Item[]
     storyBeats: StoryBeat[]
-    lorebookEntries?: Entry[] // Optional - lorebook entries persist across retry operations
+    /** The branch's lorebook before the turn; omitted, the lorebook is left as it is. */
+    lorebookEntries?: Entry[]
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }): Promise<void> {
@@ -5598,18 +5654,20 @@ class StoryStore {
 
       this.assertNoBranchForkAtOrAfter(backup.entryCountBeforeAction)
 
+      // The delete path removes the entries, so the chapters and checkpoints on them go too.
+      await this.deleteEntriesFromPosition(backup.entryCountBeforeAction, { skipRollback: true })
+
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
-        entryIdsToDelete,
+        [],
         scope.storyId,
         scope.branchId,
         backup.characters,
         backup.locations,
         backup.items,
         backup.storyBeats,
+        backup.lorebookEntries,
       )
-
-      await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Reload from database using branch-aware method for clean state
       await this.reloadEntriesForCurrentBranch()

@@ -142,3 +142,29 @@ describe('past checkpoints', () => {
     },
   )
 })
+
+describe('regenerate', () => {
+  it('rewinds a retry through the records, as a delete does', () => {
+    const body = bodyOf('rewindForRetry')
+    expect(body).toContain('this.rollbackFrom(position, keep)')
+    expect(body).toContain('this.deleteEntriesFromPosition(position, { skipRollback: true })')
+  })
+
+  it('drops the chapters on removed entries when restoring from a copy', () => {
+    const body = bodyOf('restoreFromRetryBackup')
+    expect(body).toContain('this.deleteEntriesFromPosition(backup.entryCountBeforeAction')
+    expect(body).toContain('backup.lorebookEntries')
+  })
+
+  it('stops a regenerate whose revert fails while State Tracking is on', () => {
+    expect(bodyOf('undoNarrationForRegenerate')).toContain(
+      'if (settings.experimentalFeatures.stateTracking) throw error',
+    )
+  })
+
+  it('previews a regenerate whatever Revert on Delete says', () => {
+    const body = bodyOf('previewRegenerate')
+    expect(body).toContain('settings.experimentalFeatures.stateTracking')
+    expect(body).not.toContain('rollbackOnDelete')
+  })
+})

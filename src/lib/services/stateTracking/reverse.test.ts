@@ -291,18 +291,18 @@ describe('planReversal', () => {
     expect(plan.state.characters[0].relationship).toBe('T')
   })
 
-  it('counts the chapters whose lore it undoes', () => {
+  it('names the entries whose chapter lore it undoes, in story order', () => {
     const plan = planReversal({
       state: state([character('c')]),
       records: [
-        change('e2', 'update', 'c', {}, { origin: 'chapter' }),
-        change('e2', 'update', 'c', {}, { origin: 'chapter' }),
         change('e3', 'update', 'c', {}, { origin: 'chapter' }),
+        change('e2', 'update', 'c', {}, { origin: 'chapter' }),
+        change('e2', 'update', 'c', {}, { origin: 'chapter' }),
       ],
       entryPositions: positions,
       keep: { manual: false, tidy: false },
     })
-    expect(plan.chapters).toBe(2)
+    expect(plan.chapterEntryIds).toEqual(['e2', 'e3'])
   })
 })
 

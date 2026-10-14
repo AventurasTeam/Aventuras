@@ -254,4 +254,71 @@ describe('RetryService branch enforcement', () => {
 
     expect(result.error).toMatch(/another branch/i)
   })
+
+  it('reports a database error thrown as a string', async () => {
+    callbacks.restoreFromRetryBackup = vi.fn(async () => {
+      throw 'FOREIGN KEY constraint failed'
+    })
+
+    const result = await service.handleRetryLastMessage(makeBackup(), callbacks, uiCleanup(), {
+      storyId: 'story-1',
+      branchId: 'branch-a',
+    })
+
+    expect(result.error).toBe('FOREIGN KEY constraint failed')
+  })
+})
+
+describe('RetryService restore paths', () => {
+  const scope = { storyId: 'story-1', branchId: 'branch-a' }
+
+  it('rewinds through the records when they are offered, touching no copy', async () => {
+    const callbacks = makeCallbacks()
+    const rewind = vi.fn(async () => {})
+    const result = await new RetryService().handleRetryLastMessage(
+      makeBackup(),
+      { ...callbacks, rewindThroughRecords: rewind },
+      uiCleanup(),
+      scope,
+    )
+
+    expect(result.success).toBe(true)
+    expect(rewind).toHaveBeenCalledWith(12)
+    expect(callbacks.restoreFromRetryBackup).not.toHaveBeenCalled()
+    expect(callbacks.deleteEntitiesCreatedAfterBackup).not.toHaveBeenCalled()
+    expect(callbacks.unlockRetryInProgress).toHaveBeenCalled()
+  })
+
+  it('reports a failed rewind and unlocks', async () => {
+    const callbacks = makeCallbacks()
+    const result = await new RetryService().handleRetryLastMessage(
+      makeBackup(),
+      {
+        ...callbacks,
+        rewindThroughRecords: vi.fn(async () => {
+          throw new Error('A recorded change could not be undone')
+        }),
+      },
+      uiCleanup(),
+      scope,
+    )
+
+    expect(result.error).toBe('A recorded change could not be undone')
+    expect(callbacks.unlockRetryInProgress).toHaveBeenCalled()
+  })
+
+  it('hands the lorebook copy to the restore', async () => {
+    const callbacks = makeCallbacks()
+    const lorebookEntries = [{ id: 'l1' }] as RetryBackupData['lorebookEntries']
+    await new RetryService().handleRetryLastMessage(
+      makeBackup({ lorebookEntries }),
+      callbacks,
+      uiCleanup(),
+      scope,
+    )
+
+    expect(callbacks.restoreFromRetryBackup).toHaveBeenCalledWith(
+      expect.objectContaining({ lorebookEntries }),
+    )
+  })
 })

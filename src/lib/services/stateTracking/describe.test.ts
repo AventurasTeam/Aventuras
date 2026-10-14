@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorldStateChangeRecord } from '#lib/types/index.ts'
-import { describeChange, gapMessage } from '.'
+import { describeChange, gapMessage, loreLine } from '.'
 
 const base: WorldStateChangeRecord = {
   id: 'r',
@@ -66,6 +66,51 @@ describe('gapMessage', () => {
   it('says when the entry is on another branch', () => {
     expect(gapMessage({ cause: 'untracked', entryId: 'x', throughEntryId: null }, number)).toBe(
       'World state changes were not recorded for an entry on another branch.',
+    )
+  })
+})
+
+describe('loreLine', () => {
+  it('says only the classifier is undone when no chapter lore is', () => {
+    expect(loreLine([])).toBe("Only the classifier's changes are undone.")
+  })
+
+  it('names one chapter with its entries', () => {
+    expect(loreLine([{ number: 4, first: 31, last: 45 }])).toBe(
+      'This also undoes the lore management of chapter 4 (entries 31–45).',
+    )
+  })
+
+  it('spans consecutive chapters', () => {
+    expect(
+      loreLine([
+        { number: 5, first: 46, last: 60 },
+        { number: 4, first: 31, last: 45 },
+      ]),
+    ).toBe('This also undoes the lore management of chapters 4–5 (entries 31–60).')
+  })
+
+  it('lists chapters with a gap between them', () => {
+    expect(
+      loreLine([
+        { number: 2, first: 10, last: 20 },
+        { number: 4, first: 31, last: 45 },
+      ]),
+    ).toBe('This also undoes the lore management of chapters 2 and 4 (entries 10–45).')
+  })
+
+  it('places the lore of a deleted chapter by its entry', () => {
+    expect(loreLine([{ number: null, first: 13, last: 13 }])).toBe(
+      'This also undoes lore management recorded at entry 13, whose chapter was deleted.',
+    )
+    expect(
+      loreLine([
+        { number: 4, first: 31, last: 45 },
+        { number: null, first: 50, last: 50 },
+      ]),
+    ).toBe(
+      'This also undoes the lore management of chapter 4 (entries 31–45). ' +
+        'It also undoes lore management recorded at entry 50, whose chapter was deleted.',
     )
   })
 })

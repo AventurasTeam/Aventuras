@@ -12,7 +12,7 @@
   import { buildTimelineFillBlock } from '#lib/services/ai/generation/index.ts'
   import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
   import { countTokens } from '#lib/services/tokenizer.ts'
-  import { story } from '#lib/stores/story.svelte.ts'
+  import { story, type RevertKeep } from '#lib/stores/story.svelte.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import type { EntryMetadata, Story } from '#lib/types/index.ts'
   import { aiService } from '#lib/services/ai/index.ts'
@@ -1138,6 +1138,9 @@
       if (textareaRef) textareaRef.scrollTop = 0
 
       const embeddedImageIds = await database.getEmbeddedImageIdsForStory(currentStory.id)
+      const lorebookCopy = settings.experimentalFeatures.stateTracking
+        ? null
+        : await database.getEntriesForBranch(currentStory.id, lease.branchId)
       ui.createRetryBackup(
         currentStory.id,
         lease.branchId,
@@ -1152,6 +1155,7 @@
         actionType,
         wasRawActionChoice,
         currentStory.timeTracker,
+        lorebookCopy,
       )
 
       const {
@@ -1218,6 +1222,7 @@
           restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
           restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
           assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
+          rewindThroughRecords: rewindFor(),
           lockRetryInProgress: story.lockRetryInProgress.bind(story),
           unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
           restoreActivationData: ui.restoreActivationData.bind(ui),
@@ -1312,7 +1317,14 @@
    * classification stay applied while the replacement's was added on top: story time
    * advanced twice for one user action, and entities it invented outlived it.
    */
-  async function handleRegenerateNarration(entryId: string) {
+  /** With State Tracking on, a retry rewinds through the records, as a delete does. */
+  function rewindFor(keep?: RevertKeep) {
+    return settings.experimentalFeatures.stateTracking
+      ? (position: number) => story.rewindForRetry(position, keep)
+      : undefined
+  }
+
+  async function handleRegenerateNarration(entryId: string, keep?: RevertKeep) {
     if (ui.isGenerating) return
 
     const userActionEntry = findPrecedingUserAction(story.entries, entryId)
@@ -1323,7 +1335,7 @@
     await withGenerationLease(async (lease) => {
       let undo: { entitiesUndone: boolean; timeUndone: boolean }
       try {
-        undo = await story.undoNarrationForRegenerate(entryId, lease)
+        undo = await story.undoNarrationForRegenerate(entryId, lease, keep)
       } catch (error) {
         ui.showToast(errMessage(error), 'error')
         return
@@ -1352,7 +1364,7 @@
     })
   }
 
-  async function handleRetryLastMessage() {
+  async function handleRetryLastMessage(keep?: RevertKeep) {
     const backup = ui.retryBackup
     console.log('[handleRetryLastMessage] called', {
       hasBackup: !!backup,
@@ -1378,6 +1390,7 @@
           restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
           restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
           assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
+          rewindThroughRecords: rewindFor(keep),
           lockRetryInProgress: story.lockRetryInProgress.bind(story),
           unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
           restoreActivationData: ui.restoreActivationData.bind(ui),

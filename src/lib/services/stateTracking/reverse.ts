@@ -49,8 +49,8 @@ export interface ReversalPlan {
   tidy: WorldStateChangeRecord[]
   /** Kept changes that could not be applied again, because what they changed is gone. */
   unkeepable: WorldStateChangeRecord[]
-  /** How many chapters' lore management the range undoes. */
-  chapters: number
+  /** The entries carrying chapter lore the range undoes, in story order. */
+  chapterEntryIds: string[]
 }
 
 function byStoryOrder(positions: Map<string, number>) {
@@ -190,9 +190,16 @@ export function planReversal(input: ReversalInput): ReversalPlan {
   )
   const unkeepable: WorldStateChangeRecord[] = []
   for (const record of kept) if (!ws.redo(record)) unkeepable.push(record)
-  const chapters = new Set(changes.filter((r) => r.origin === 'chapter').map((r) => r.entryId)).size
+  const chapterEntryIds = [
+    ...new Set(
+      changes
+        .filter((r) => r.origin === 'chapter')
+        .sort(byStoryOrder(input.entryPositions))
+        .map((r) => r.entryId),
+    ),
+  ]
 
-  return { state: ws.state, ops: ws.ops, manual, tidy, unkeepable, chapters }
+  return { state: ws.state, ops: ws.ops, manual, tidy, unkeepable, chapterEntryIds }
 }
 
 function restoreCurrentLocation(ws: Workspace, locationId: string | null): void {

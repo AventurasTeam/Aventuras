@@ -1854,10 +1854,11 @@ class DatabaseService {
     locations: Location[],
     items: Item[],
     storyBeats: StoryBeat[],
+    lorebookEntries?: Entry[],
   ): Promise<void> {
     const db = await this.getDb()
 
-    // Delete current state (except chapters and lorebook entries which are more permanent)
+    // Delete current state (the lorebook only when the backup holds it)
     // Note: embedded_images will be cascade-deleted when story_entries are deleted
     if (entryIdsToDelete.length > 0) {
       await this.deleteStoryEntries(entryIdsToDelete)
@@ -1869,6 +1870,9 @@ class DatabaseService {
     await db.execute(`DELETE FROM locations WHERE story_id = ? ${branchFilter}`, branchParams)
     await db.execute(`DELETE FROM items WHERE story_id = ? ${branchFilter}`, branchParams)
     await db.execute(`DELETE FROM story_beats WHERE story_id = ? ${branchFilter}`, branchParams)
+    if (lorebookEntries) {
+      await db.execute(`DELETE FROM entries WHERE story_id = ? ${branchFilter}`, branchParams)
+    }
 
     // Restore entries not necessary as we are only deleting redundant entries since backup
 
@@ -1895,6 +1899,10 @@ class DatabaseService {
     // Restore story beats
     for (const beat of ownedByBranch(storyBeats)) {
       await this.addStoryBeat(beat)
+    }
+
+    for (const entry of ownedByBranch(lorebookEntries ?? [])) {
+      await this.addEntry(entry)
     }
 
     // Embedded images are intentionally not restored here: they are cascade-deleted with

@@ -57,8 +57,7 @@ in `after` except the classifier's, which no saved state can predate (see below)
 Store writes commit the entity row and its record in one `database.transaction`. The classifier is
 the exception: it writes through many direct calls, so it clones the in-memory state at the start and
 records the difference at the end, header first, in one transaction. Translated fields are a derived
-cache and are not recorded. The retry restore paths are not recorded either: they return the world to
-before the turn being retried, whose narration and records are deleted with it.
+cache and are not recorded. A regenerate writes no records of its own: it rewinds through them.
 
 Entries recorded before this table existed keep their `story_entries.world_state_delta`.
 `fromWorldStateDelta` reads one as records with a header marked `coverage: 'classifier'`: the
@@ -82,9 +81,16 @@ Revert on delete runs that plan over the live state and executes it in one trans
 whole or not at all. The delete is confirmed in a modal, like a checkpoint or a branch. When it
 would undo the reader's or Tidy's changes, it lists each group under its own heading with its own
 choice to keep them, ticked by default. Its description names the range a delete removes, and a
-switch deletes only that entry without a rollback, as with the feature off. Every revert the
-reader did not answer — dismissing an error entry, regenerating a narration, a retry restore —
-keeps them.
+switch deletes only that entry without a rollback, as with the feature off. A line from
+`loreLine` says whether lore management after a chapter is undone, naming the chapters by the
+`chapter` records in range; the past-checkpoint form shows the same line.
+
+A regenerate removes entries, so it rewinds as a delete does, through the records whenever State
+Tracking is on, whatever Revert on Delete says: `rewindForRetry` for a retry with a backup,
+`undoNarrationForRegenerate` without one. A revert that fails stops the regenerate before any entry
+is removed. When the range holds chapter, manual or Tidy records, the deletion modal asks first,
+titled for the regenerate; otherwise it does not ask. Dismissing an error entry and stopping a
+generation keep the reader's and Tidy's changes without asking.
 
 ## Tracked runs
 
@@ -138,6 +144,10 @@ from the nearest full state after P, undoing only what was recorded, or takes th
 state after or before P unchanged. Either way changes made in the gaps are wrong in it, so the form
 prefills the name with "Approximate — " for the reader to keep or clear; nothing else marks it.
 Such a checkpoint is never an anchor, like any other made after its entry had a successor.
+
+Export and import do not carry automatic or closing snapshots. An imported story's full states are
+its checkpoints and its live state until new snapshots are taken, so its rebuilds anchor farther
+from P. This is a known limitation.
 
 Closing snapshots make an interrupted run usable afterwards: turning the feature off snapshots every
 branch written to since it was turned on, before the setting changes, since lightweight branches

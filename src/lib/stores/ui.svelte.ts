@@ -3,6 +3,7 @@ import type {
   SidebarTab,
   NavPanelTab,
   EntryType,
+  Entry,
   StoryEntry,
   Character,
   Location,
@@ -45,6 +46,7 @@ import { StreamingHtmlRenderer } from '#lib/utils/htmlStreaming.ts'
 import { countTokens } from '#lib/services/tokenizer.ts'
 import { branchScopeKey } from '#lib/utils/branchScope.ts'
 import type { LandmarkFilterGroup } from '#lib/utils/storyNavigation.ts'
+import type { RevertKeep } from '#lib/stores/story.svelte.ts'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -63,6 +65,8 @@ export interface RetryBackup {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
+  // The branch's own lorebook rows, kept only when there are no records to rewind through
+  lorebookEntries?: Entry[]
   // The user's input to re-trigger
   userActionContent: string
   rawInput: string
@@ -346,12 +350,13 @@ class UIStore {
   private retryCallback: (() => Promise<void>) | null = null
 
   // Retry last message callback - set by ActionInput for edit-and-retry feature
-  private retryLastMessageCallback: (() => Promise<void>) | null = null
+  private retryLastMessageCallback: ((keep?: RevertKeep) => Promise<void>) | null = null
 
   // Regenerate narration callback - set by ActionInput. Lighter-weight fallback used when
   // no full retry backup is available (e.g. the latest narration survived a manual delete
   // of the entries that came after it).
-  private regenerateNarrationCallback: ((entryId: string) => Promise<void>) | null = null
+  private regenerateNarrationCallback:
+    ((entryId: string, keep?: RevertKeep) => Promise<void>) | null = null
 
   // Reasoning block state persistence
   streamingReasoningExpanded = $state(false)
@@ -772,8 +777,11 @@ class UIStore {
     actionType: ActionInputType,
     wasRawActionChoice: boolean,
     timeTracker: TimeTracker | null,
+    // Null when State Tracking is on: a retry then rewinds through the records, not a copy.
+    lorebookEntries: Entry[] | null,
   ) {
     const timestamp = Date.now()
+    const copiesWorld = lorebookEntries !== null
     const nextEntryPosition =
       entries.reduce((max, entry) => Math.max(max, entry.position ?? -1), -1) + 1
 
@@ -829,10 +837,11 @@ class UIStore {
       // Large data - shallow copy to break potential proxy chains
       entries: [...entries],
       // Smaller data - shallow copy to break proxy chains
-      characters: copyCharacters(characters),
-      locations: copyLocations(locations),
-      items: shallowCopyArray(items),
-      storyBeats: shallowCopyArray(storyBeats),
+      characters: copiesWorld ? copyCharacters(characters) : [],
+      locations: copiesWorld ? copyLocations(locations) : [],
+      items: copiesWorld ? shallowCopyArray(items) : [],
+      storyBeats: copiesWorld ? shallowCopyArray(storyBeats) : [],
+      lorebookEntries: lorebookEntries ? shallowCopyArray(lorebookEntries) : undefined,
       characterSnapshots,
       userActionContent,
       rawInput,
@@ -844,7 +853,7 @@ class UIStore {
       storyPosition: this.currentStoryPosition,
       // New fields for persistent retry
       entryCountBeforeAction: nextEntryPosition,
-      hasFullState: true,
+      hasFullState: copiesWorld,
       hasEntityIds: true,
       // Entity IDs for persistent restore
       characterIds,
@@ -1414,16 +1423,16 @@ class UIStore {
   }
 
   // Retry last message callback management (for edit-and-retry feature)
-  setRetryLastMessageCallback(callback: (() => Promise<void>) | null) {
+  setRetryLastMessageCallback(callback: ((keep?: RevertKeep) => Promise<void>) | null) {
     this.retryLastMessageCallback = callback
   }
 
-  async triggerRetryLastMessage() {
+  async triggerRetryLastMessage(keep?: RevertKeep) {
     console.log('[UI] triggerRetryLastMessage called', {
       hasCallback: !!this.retryLastMessageCallback,
     })
     if (this.retryLastMessageCallback) {
-      await this.retryLastMessageCallback()
+      await this.retryLastMessageCallback(keep)
       console.log('[UI] retryLastMessageCallback completed')
     } else {
       console.log('[UI] No retry last message callback registered!')
@@ -1431,13 +1440,15 @@ class UIStore {
   }
 
   // Regenerate narration callback management (fallback when no retry backup exists)
-  setRegenerateNarrationCallback(callback: ((entryId: string) => Promise<void>) | null) {
+  setRegenerateNarrationCallback(
+    callback: ((entryId: string, keep?: RevertKeep) => Promise<void>) | null,
+  ) {
     this.regenerateNarrationCallback = callback
   }
 
-  async triggerRegenerateNarration(entryId: string) {
+  async triggerRegenerateNarration(entryId: string, keep?: RevertKeep) {
     if (this.regenerateNarrationCallback) {
-      await this.regenerateNarrationCallback(entryId)
+      await this.regenerateNarrationCallback(entryId, keep)
     } else {
       console.log('[UI] No regenerate narration callback registered!')
     }
