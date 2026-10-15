@@ -33,7 +33,8 @@ for the placement rule.
   per-turn writer does, since nothing active may sit inside a retired
   place
   ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape));
-  the create handler refuses one that slips through. Open: which writer wins when the
+  the create handler refuses one that slips through, which fails the
+  whole pass. Open: which writer wins when the
   per-turn writer and a pass create the same new place in one window
   (leaning the pass, or the pair goes to collision review); and
   re-checking the parked
@@ -86,7 +87,12 @@ for the placement rule.
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;
   - the suggestion refresh's In scene list prints an empty line under
-    an entity with no description.
+    an entity with no description;
+  - a place name with a newline breaks the location map's tree: the
+    rest of the name lands at column 0, where it reads as a top-level
+    place (`lib/world/location-map.ts`). A retired reason is already
+    flattened to one line there; the name isn't (raised 2026-10-15 by
+    the retired and disabled places slice review).
 
 ## UX
 

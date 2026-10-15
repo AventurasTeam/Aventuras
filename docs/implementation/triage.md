@@ -380,7 +380,10 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/prompts/bundled/state-emission.ts`). A branch whose only places
   are retired is still told to use an ID from Places. A count of the
   rows with an id, or a flag the builder sets, fixes both; the prompt
-  content pass may reword the lines anyway. Raised 2026-10-12 by the
+  content pass may reword the lines anyway. A third, ungated line makes
+  the same assumption: "Use an existing place's ID whenever the scene
+  is somewhere already in Places" (`state-emission.ts` and
+  `piggyback-fallback-classifier.ts`). Raised 2026-10-12 by the
   retired and disabled places implementation.
 
 - **The fallback classifier's roster lists effectively disabled places
@@ -393,5 +396,21 @@ slice-planning gate forces its resolution before that slice is planned.
   name a place the prose walked into, but it gives a place disabled as
   a secret to the extraction call. Decide whether the roster follows
   the map's effective mode. Predates this change for a place disabled
-  by its own mode. Raised 2026-10-12 by the retired and disabled places
-  implementation.
+  by its own mode. The roster filters on status only
+  (`lib/prompts/filters.ts`), so every entity disabled by its own mode
+  reaches it with its id, characters, items and factions too. Raised
+  2026-10-12 by the retired and disabled places implementation.
+
+- **The scene editor can write a character into a retired place.**
+  Removing a character from the tail's scene sets their
+  `current_location_id` to the previous entry's location, as the
+  last place they were seen (`lib/piggyback/scene-tracking.ts`, the
+  `wasInScene` branch, ~line 93). For a character first seen at the
+  tail that is a place they were never seen in, and once that place
+  is retired it breaks "nothing enters a retired place"
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+  The scene-fields guard checks only the scene's own location. Fixes:
+  anchor a character first seen at the tail on the tail's original
+  location, or skip the write when the anchor is retired. Predates the
+  retired-place rule: the anchor choice is older. Raised 2026-10-15 by
+  the retired and disabled places slice review.
