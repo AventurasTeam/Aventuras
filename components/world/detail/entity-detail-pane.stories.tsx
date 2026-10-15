@@ -1559,6 +1559,43 @@ export const StoryInsideRefusalOnStatus: Story = {
   },
 }
 
+/** A refused disable shows its named reason on the mode field, and asks nothing first. */
+export const StoryInsideRefusalOnMode: Story = {
+  args: {
+    kind: 'location',
+    row: HOLLOW,
+    entities: PLACES,
+    story: storyAt('loc_market'),
+    saveResult: {
+      status: 'rejected',
+      reason: 'place rule: story-inside',
+      code: 'story-inside',
+      refusal: {
+        code: 'story-inside',
+        field: 'injectionMode',
+        place: { id: 'loc_hollow', name: 'Veil’s Hollow' },
+        story: { id: 'loc_market', name: 'The Drowned Market' },
+      },
+    },
+  },
+  play: async ({ args }) => {
+    await pickMode(t('world:fields.injection.disabled'))
+    await clickSave()
+    const text = t('world:placeRefusal.storyInside', {
+      story: 'The Drowned Market',
+      place: 'Veil’s Hollow',
+    })
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledTimes(1), WAIT)
+    await expect(screen.queryByRole('alertdialog')).toBeNull()
+    const error = await within(screen.getByRole('tabpanel')).findByText(text, {}, WAIT)
+    await expect(error).toBeVisible()
+    // In the mode's own row, which holds its radio group; the status row above doesn't.
+    const mode = screen.getByRole('radiogroup', { name: t('world:fields.injectionMode') })
+    await expect(error.parentElement).toContainElement(mode)
+    await expect(args.onRejected).toHaveBeenCalledWith(settingsNotice(text))
+  },
+}
+
 /** A place disabled through an ancestor says so under the mode explanation. */
 export const DisabledThroughAncestor: Story = {
   args: {
