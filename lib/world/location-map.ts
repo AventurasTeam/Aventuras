@@ -18,7 +18,6 @@ export type MapAnchor = { parentId: string | null; hidden: number }
 
 export type LocationMapView = {
   rows: LocationMapRow[]
-  isListed: (id: string) => boolean
   anchorOf: (id: string) => MapAnchor
   /**
    * Left-out places between a place and `parentId` (null: root), or null if the map wouldn't hang
@@ -100,7 +99,7 @@ export function locationMapView(
     }
     return null
   }
-  return { rows, isListed: (id) => listedIds.has(id), anchorOf, hiddenBetween }
+  return { rows, anchorOf, hiddenBetween }
 }
 
 export function buildLocationMap(
