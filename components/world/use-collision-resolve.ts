@@ -46,6 +46,9 @@ const CLOSED_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
   [COLLISION_REJECTION.parentCycle]: () => t('world:collision.closedRejection.parentCycle'),
   [COLLISION_REJECTION.parentChainBroken]: () =>
     collisionRejectionText(COLLISION_REJECTION.parentChainBroken),
+  [COLLISION_REJECTION.storyInside]: () => t('world:collision.closedRejection.storyInside'),
+  [COLLISION_REJECTION.placesInside]: () => t('world:collision.closedRejection.placesInside'),
+  [COLLISION_REJECTION.retiredParent]: () => t('world:collision.closedRejection.retiredParent'),
   [COLLISION_REJECTION.invalidRename]: () =>
     collisionRejectionText(COLLISION_REJECTION.invalidRename),
   [COLLISION_REJECTION.failed]: () => collisionRejectionText(COLLISION_REJECTION.failed),

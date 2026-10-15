@@ -400,6 +400,7 @@ export function passInputs(
     sceneCharacterIds,
     sceneEntityIds: sceneCharacterIds,
     currentLocationId: 'char_000000',
+    disabledPlaceIds: new Set<string>(),
     recentProse: prose(rand, 200),
     // The default one-entry surface: the matchTerms cost measured is what a turn actually pays.
     scanText: `${userAction}\n${recentNarrative}`,

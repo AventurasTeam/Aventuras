@@ -1808,6 +1808,21 @@ describe('narrative fold — creates', () => {
     ])
   })
 
+  // piggyback.md → Matching before creating: reuse goes by the map this prompt showed. Around
+  // Saltmere, disabled but the scene's, the market hangs under it, so a top-level namesake is new.
+  it('matches against the map built around the scene this prompt read', async () => {
+    const [hero, town, market] = baseWorld()
+    await seedTurn([hero!, { ...town!, injectionMode: 'disabled' }, market!])
+    const { events } = await foldTurn(
+      'Aria finds another market.\n<state><scene_entities>c1</scene_entities>' +
+        '<new_location handle="new:market" name="The Drowned Market">mud</new_location>' +
+        '<current_location>new:market</current_location><world_time_delta>30</world_time_delta></state>',
+    )
+    expect(createdEntities(events)).toEqual([
+      expect.objectContaining({ name: 'The Drowned Market', state: { parent_location_id: null } }),
+    ])
+  })
+
   it('promotes a staged sibling it reuses as the ancestor of a new current location', async () => {
     await seedTurn([
       worldRow({

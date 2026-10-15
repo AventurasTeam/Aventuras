@@ -4,6 +4,7 @@ export {
   checkParentChain,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  parentIdOf,
   parentOfLocations,
 } from './parent-chain'
 export {
@@ -82,7 +83,32 @@ export {
   buildLocationMap,
   heldItemLines,
   listedAncestorNames,
+  locationMapView,
   looseItemLines,
 } from './location-map'
-export type { HeldItemLine, LocationMapRow, LooseItemLine } from './location-map'
+export type {
+  HeldItemLine,
+  LocationMapRow,
+  LocationMapView,
+  LooseItemLine,
+  MapAnchor,
+} from './location-map'
+export { placeModes } from './place-modes'
+export type { PlaceModes } from './place-modes'
+export {
+  mergePlaceRefusal,
+  PLACE_REFUSAL,
+  placeSaveConfirm,
+  placeSaveRefusal,
+  retireCascade,
+  retiredPlaceEntered,
+  storyPlaceOf,
+} from './place-rules'
+export type {
+  MergePlaceRefusalCode,
+  NamedPlace,
+  PlaceSaveConfirm,
+  PlaceSaveRefusal,
+  StoryPlace,
+} from './place-rules'
 export { itemNamesakes, matchNewLocation } from './new-entity-match'

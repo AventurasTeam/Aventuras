@@ -1094,6 +1094,98 @@ describe('resolveCollision — merge seats the canonical in the tail scene', () 
   })
 })
 
+// world.md → Merge: a location merge runs the checks a Save does on the place it would leave. The
+// tail's scene is at loc_b, the loser.
+describe('resolveCollision — location merge place rules', () => {
+  const place = (id: string, parent: string | null, extra: Partial<NewEntity> = {}) =>
+    row(id, 'location', id, 3, {
+      state: { parent_location_id: parent } satisfies LocationState,
+      ...extra,
+    })
+  const LOC_MERGE = mergeInto('loc_a', 'loc_b')
+  const sceneAt = (currentLocationId: string | null) =>
+    setTail({ sceneEntities: [], currentLocationId, worldTime: 0 } as EntryMetadata)
+
+  it('refuses a retired result while the story is in either place, writing nothing', async () => {
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
+  // A user_action standing at the tail after a refused unwind: the reply before it, the scene
+  // source, names a deleted place, and the next turn inherits the tail's.
+  it("refuses a retired result while the tail's place is either, whatever the reply names", async () => {
+    await sceneAt('loc_gone')
+    await ctx.db.insert(storyEntries).values({
+      id: 'entry_3',
+      branchId: 'b1',
+      position: 3,
+      kind: 'user_action',
+      content: 'I wait.',
+      metadata: { sceneEntities: [], currentLocationId: 'loc_b', worldTime: 0 } as EntryMetadata,
+      createdAt: 3,
+    })
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
+  it('refuses a retired result while a place inside either is not retired', async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_c', 'loc_b'))
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'places-inside',
+    })
+  })
+
+  it('refuses a result that is not retired under a retired parent', async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_p', null, { status: 'retired' }))
+    await setState('loc_a', { parent_location_id: 'loc_p' })
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'retired-parent',
+    })
+  })
+
+  // The handler judges against the state before the group, so the re-parent of the loser's child
+  // under a canonical the same group brings back would misfire there; the builder checks it.
+  it("brings a retired canonical back with the loser's places moved inside it", async () => {
+    await sceneAt(null)
+    await ctx.db.insert(entities).values(place('loc_c', 'loc_b'))
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', { ...LOC_MERGE, fromLoser: ['status'] }, ctx)).toEqual({
+      status: 'ok',
+    })
+    expect(await entityRow('loc_a')).toMatchObject({ status: 'active' })
+    expect((await entityRow('loc_c'))?.state).toEqual({ parent_location_id: 'loc_a' })
+  })
+
+  it('refuses a merge that puts the story into a disabled place', async () => {
+    await ctx.db.update(entities).set({ injectionMode: 'disabled' }).where(eq(entities.id, 'loc_a'))
+    await hydrateStores()
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+  })
+
+  it('merges inside a disabled region the story walked into', async () => {
+    await ctx.db.insert(entities).values(place('loc_r', null, { injectionMode: 'disabled' }))
+    await setState('loc_a', { parent_location_id: 'loc_r' })
+    await setState('loc_b', { parent_location_id: 'loc_r' })
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toEqual({ status: 'ok' })
+  })
+})
+
 describe('resolveCollision — rename', () => {
   it('renames only B and clears its flag in that same delta', async () => {
     expect(await resolveCollision('b1', renameTo('Brannoc', ' Bran the Younger '), ctx)).toEqual({

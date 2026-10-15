@@ -4,6 +4,7 @@ import {
   type OverflowMenuEntry,
   type RemoveEntry,
 } from '@/components/compounds/overflow-menu-entry'
+import type { RowSaveConfirm } from '@/hooks/use-row-save-session'
 import {
   ENTITY_REJECTION,
   LEAD_REJECTION,
@@ -25,6 +26,8 @@ import {
   type ItemDraft,
   type LocationDraft,
   type LoreDraft,
+  type PlaceSaveConfirm,
+  type PlaceSaveRefusal,
   type WorldIssue,
 } from '@/lib/world'
 
@@ -53,13 +56,15 @@ const ISSUE_TAB: Partial<Record<WorldIssue, EntityTab>> = {
   priorityRange: 'settings',
 }
 
+function inTab(tab: EntityTab, issue: string): string {
+  return t('world:validation.inTab', { tab: t(`world:detail.tabs.${tab}`), issue })
+}
+
 /** The save bar's notice: an issue on another tab names it, or the user can't find the field. */
 export function entityIssueText(message: string): string {
   const text = validationText(message)
   const tab = isWorldIssue(message) ? ISSUE_TAB[message] : undefined
-  return tab == null
-    ? text
-    : t('world:validation.inTab', { tab: t(`world:detail.tabs.${tab}`), issue: text })
+  return tab == null ? text : inTab(tab, text)
 }
 
 // The title is the head's name slot, on every tab, so its issue names no tab.
@@ -82,6 +87,9 @@ const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
   [ENTITY_REJECTION.inFlight]: () => t('world:save.inFlight'),
   [ENTITY_REJECTION.parentCycle]: () => t('world:save.parentCycle'),
   [ENTITY_REJECTION.parentChainBroken]: () => t('world:save.parentChainBroken'),
+  [ENTITY_REJECTION.storyInside]: () => t('world:save.storyInside'),
+  [ENTITY_REJECTION.retiredParent]: () => t('world:save.retiredParent'),
+  [ENTITY_REJECTION.retiredPlace]: () => t('world:save.retiredPlace'),
   [ENTITY_REJECTION.notFound]: () => t('world:save.notFound'),
   [ENTITY_REJECTION.failed]: () => t('world:save.failed'),
 }
@@ -89,6 +97,84 @@ const SAVE_REJECTION_TEXT: Record<RowSaveRejectionCode, () => string> = {
 /** A refused save's user-facing text; the actions' own reasons are developer strings. */
 export function saveRejectionText(code: RowSaveRejectionCode): string {
   return SAVE_REJECTION_TEXT[code]()
+}
+
+/** A place rule's refusal, naming the places: shown on the field the rule guards. */
+export function placeRefusalText(refusal: PlaceSaveRefusal): string {
+  switch (refusal.code) {
+    case 'story-inside':
+      return refusal.story.id === refusal.place.id
+        ? t('world:placeRefusal.storyAt', { place: refusal.place.name })
+        : t('world:placeRefusal.storyInside', {
+            story: refusal.story.name,
+            place: refusal.place.name,
+          })
+    case 'retired-parent':
+      return t('world:placeRefusal.retiredParent', { parent: refusal.parent.name })
+    case 'retired-place':
+      return t('world:placeRefusal.retiredPlace', { place: refusal.place.name })
+  }
+}
+
+// Exhaustive: a new refused field fails typecheck until it names its tab.
+const REFUSAL_TAB: Record<PlaceSaveRefusal['field'], EntityTab> = {
+  status: 'settings',
+  injectionMode: 'settings',
+  parentLocationId: 'connections',
+  currentLocationId: 'connections',
+  atLocationId: 'connections',
+}
+
+/** A place refusal's save-bar notice: its field's text, naming the tab as entityIssueText does. */
+export function placeRefusalNotice(refusal: PlaceSaveRefusal): string {
+  return inTab(REFUSAL_TAB[refusal.field], placeRefusalText(refusal))
+}
+
+type PlaceMove = NonNullable<PlaceSaveConfirm['move']>
+
+// While the story is in the region, nothing under it is hidden, so the move costs nothing yet.
+function moveLine({ region, place, count, suspended }: PlaceMove): string {
+  const names = { region: region.name, place: place.name }
+  if (suspended)
+    return count === 0
+      ? t('world:placeConfirm.moveLineSuspended', names)
+      : t('world:placeConfirm.moveLineSuspendedInside', { ...names, count })
+  return count === 0
+    ? t('world:placeConfirm.moveLine', names)
+    : t('world:placeConfirm.moveLineInside', { ...names, count })
+}
+
+/** world.md → Settings: one confirm per Save, titled by its weightiest change, with every line. */
+export function placeConfirmCopy({ retire, disable, move }: PlaceSaveConfirm): RowSaveConfirm {
+  const lines: string[] = []
+  if (disable != null)
+    lines.push(
+      t('world:placeConfirm.disableLine', { place: disable.place.name, count: disable.count }),
+    )
+  if (move != null) lines.push(moveLine(move))
+  if (retire != null)
+    return {
+      title: t('world:placeConfirm.retireTitle', {
+        place: retire.place.name,
+        count: retire.inside.length,
+      }),
+      lines,
+      items: retire.inside.map((p) => p.name),
+      confirmLabel: t('world:placeConfirm.retire'),
+    }
+  if (disable != null)
+    return {
+      title: t('world:placeConfirm.disableTitle', { place: disable.place.name }),
+      lines,
+      items: [],
+      confirmLabel: t('world:placeConfirm.disable'),
+    }
+  return {
+    title: t('world:placeConfirm.moveTitle', { place: move.place.name }),
+    lines,
+    items: [],
+    confirmLabel: t('world:placeConfirm.move'),
+  }
 }
 
 export function saveFailureText(): string {

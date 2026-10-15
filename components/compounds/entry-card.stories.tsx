@@ -1581,6 +1581,30 @@ export const WorldStateSaveRefused: StoryT = {
   },
 }
 
+// The scene editor's copy for a `retired-place` refusal; the stubbed save refuses any change.
+export const WorldStateSaveRefusedRetiredPlace: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'retired-place' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(
+        screen.getByText("That place is retired, so the story can't move there."),
+      ).toBeVisible(),
+    )
+  },
+}
+
 /** The guard's Save writes the draft, and the guard closes with the overlay it guarded. */
 export const WorldStateEditGuardSaves: StoryT = {
   ...wrap,

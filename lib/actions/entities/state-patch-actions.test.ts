@@ -623,6 +623,24 @@ describe('retireEntity', () => {
     expect((await rowFor(db, 'char_1')).retiredReason).toBe('exiled')
   })
 
+  // classifier.md → What the classifier writes: checked again when the write lands.
+  it('no-ops on a location', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, {
+      ...CHAR,
+      kind: 'location',
+      name: 'The Rusty Anchor',
+      status: 'active',
+      state: { parent_location_id: null },
+    })
+    expect(await apply(ctx, retire('burned down'), 'act_r')).toEqual({
+      status: 'rejected',
+      reason: 'location',
+      code: 'noop',
+    })
+    expect((await rowFor(db, 'char_1')).status).toBe('active')
+  })
+
   it('no-ops on a staged row', async () => {
     const { ctx } = await setup()
     await create(ctx, CHAR)

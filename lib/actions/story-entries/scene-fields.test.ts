@@ -309,6 +309,44 @@ describe('updateEntrySceneFields', () => {
     if (result.status === 'rejected') expect(result.code).toBe('in-flight-gated')
   })
 
+  // data-model.md → LocationState shape: nothing enters a retired place.
+  it('refuses moving the scene into a retired place, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const sunk = { ...location('loc_sunk'), status: 'retired' as const }
+    await db.insert(entities).values(sunk)
+    entitiesStore.hydrate('b1', [...entitiesStore.getEntities().values(), sunk] as never)
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a'], currentLocationId: 'loc_sunk' },
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'rejected', code: 'retired-place' })
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
+  })
+
+  it('saves a scene already in a retired place when only its members change', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.update(entities).set({ status: 'retired' }).where(eq(entities.id, LOC_A))
+    entitiesStore.hydrate(
+      'b1',
+      (await db.select().from(entities).where(eq(entities.branchId, 'b1'))) as never,
+    )
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a'], currentLocationId: LOC_A },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+  })
+
   it('is a no-op when nothing changed', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

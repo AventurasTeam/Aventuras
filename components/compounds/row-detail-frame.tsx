@@ -18,7 +18,7 @@ import { DetailTabs } from './detail-tabs'
 import { JSONViewer } from './json-viewer'
 import { OverflowMenu } from './overflow-menu'
 import type { OverflowMenuEntry } from './overflow-menu-entry'
-import { RowLeaveDialog, RowSaveBar } from './row-save-session-chrome'
+import { RowConfirmDialog, RowLeaveDialog, RowSaveBar } from './row-save-session-chrome'
 
 export type RowDetailMenuActions = { onViewJson: () => void; onExport: () => void }
 
@@ -179,6 +179,7 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
         </DetailPane>
       </Tabs>
       <RowLeaveDialog session={session} blocked={blocked} blockedReason={blockedReason} />
+      <RowConfirmDialog session={session} />
       {committed != null ? (
         <JSONViewer
           open={jsonOpen}

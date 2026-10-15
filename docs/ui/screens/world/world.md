@@ -404,7 +404,9 @@ Same fields for every kind:
   ([`data-model.md → LocationState shape`](../../../data-model.md#locationstate-shape)):
   a Save that retires a place with places inside asks first ("Retire
   Port Vellis and the 3 places inside it?", listing them), and each
-  takes the `retired_reason` entered here. The Save refuses, with the
+  takes the `retired_reason` entered here. A place inside that is
+  already retired keeps its own reason, and the confirm neither lists
+  nor counts it. The Save refuses, with the
   reason on this field, while the story is in the place or inside it
   ("The story is in The Rusty Anchor, inside Port Vellis.",
   `story-inside`), and when it would bring back a place whose parent
@@ -423,7 +425,11 @@ Same fields for every kind:
   moving a place into a disabled one ("Port Vellis is disabled, so The
   Rusty Anchor and the 2 places inside it will stay out of the
   story."); both refuse while the story is in the place or inside it
-  (`story-inside`). A Save that would ask twice asks once, with both
+  (`story-inside`). While the story is somewhere in the disabled
+  region, the move still asks, saying what holds then ("Port Vellis is
+  disabled. The Rusty Anchor and the 2 places inside it stay in the
+  story only while the story is somewhere in Port Vellis."). A Save
+  that would ask twice asks once, with both
   lines. A place disabled through an ancestor adds a line under the
   explanation ("Disabled through Port Vellis: stays out of the story
   whatever its own mode, unless it's the current location."); its own
@@ -1200,8 +1206,10 @@ on the status, mode and parent it would leave: it refuses a retired
 result while the story is in either place (`story-inside`) or while
 either has a place inside that isn't retired (`places-inside`), a
 result that isn't retired under a retired parent (`retired-parent`),
-and a disabled result while the story is in either place
-(`story-inside`). A merge that changes which places are disabled adds
+and a result that puts the place the story is in inside a disabled
+place it wasn't inside, by that place's own mode or an ancestor's
+(`story-inside`): as with a Save, a disabled region the story walked
+into stays mergeable. A merge that changes which places are disabled adds
 no line to the confirm. A retired row comes back through a merge too:
 picking `active` for the status brings it back, and its retired
 children may sit inside the active result. The reason clears once the

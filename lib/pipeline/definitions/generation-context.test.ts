@@ -133,7 +133,7 @@ const seedEntries = (rows: StoryEntry[]) =>
  * is about, and everything it omits stays at the fixture default.
  * onConflictDoNothing because a case that builds twice seeds the same rows twice.
  */
-async function buildContext(args: {
+type BuildArgs = {
   entries?: StoryEntry[]
   entities?: unknown[]
   definition?: unknown
@@ -144,7 +144,9 @@ async function buildContext(args: {
   piggybackFires?: boolean
   suggestionsFire?: boolean
   refreshGuidance?: string
-}): Promise<Record<string, unknown>> {
+}
+
+async function buildLoad(args: BuildArgs) {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
@@ -171,7 +173,11 @@ async function buildContext(args: {
     refreshGuidance: args.refreshGuidance,
   })
   if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
-  return load.context
+  return load
+}
+
+async function buildContext(args: BuildArgs): Promise<Record<string, unknown>> {
+  return (await buildLoad(args)).context
 }
 
 describe('buildGenerationContext', () => {
@@ -1440,8 +1446,23 @@ describe('buildGenerationContext — location map and held items', () => {
       retrieval: undefined,
     })
     expect(ctx.locationMap).toEqual([
-      { id: 'l1', name: 'Eldra', depth: 0 },
-      { id: 'l2', name: 'Port Vellis', depth: 1 },
+      { retired: false, id: 'l1', name: 'Eldra', depth: 0, retiredReason: null },
+      { retired: false, id: 'l2', name: 'Port Vellis', depth: 1, retiredReason: null },
+    ])
+  })
+
+  it('lists a retired place without an id, with its reason', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(ELDRA),
+      entities: [
+        place(ELDRA, 'Eldra', null),
+        place(PORT, 'Port Vellis', ELDRA, { status: 'retired', retiredReason: 'burned' }),
+      ],
+      retrieval: undefined,
+    })
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'Eldra', depth: 0, retiredReason: null },
+      { retired: true, id: null, name: 'Port Vellis', depth: 1, retiredReason: 'burned' },
     ])
   })
 
@@ -1451,7 +1472,9 @@ describe('buildGenerationContext — location map and held items', () => {
       entities: [place(VAULT, 'The Vault', null, { injectionMode: 'disabled' })],
       entries: sceneAt(VAULT),
     })
-    expect(ctx.locationMap).toEqual([{ id: 'l1', name: 'The Vault', depth: 0 }])
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
+    ])
   })
 
   // Positive control for the case above: the same place leaves the map once the scene moves.
@@ -1464,7 +1487,9 @@ describe('buildGenerationContext — location map and held items', () => {
       ],
       entries: sceneAt(ELDRA),
     })
-    expect(ctx.locationMap).toEqual([{ id: 'l2', name: 'Eldra', depth: 0 }])
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l2', name: 'Eldra', depth: 0, retiredReason: null },
+    ])
   })
 
   // The fallback's reply row can already hold the failed fold's move while the floor, built
@@ -1480,9 +1505,27 @@ describe('buildGenerationContext — location map and held items', () => {
       retrieval: retrievalSuccess({ floor: { currentLocation: floorPlace(VAULT, 'The Vault') } }),
     })
     expect(ctx.locationMap).toEqual([
-      { id: 'l2', name: 'Eldra', depth: 0 },
-      { id: 'l1', name: 'The Vault', depth: 0 },
+      { retired: false, id: 'l2', name: 'Eldra', depth: 0, retiredReason: null },
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
     ])
+  })
+
+  // The per-turn planner rebuilds the map's left-out places around this id, unsubstituted.
+  it('returns the real id of the location it built the map around', async () => {
+    const entities = [
+      place(VAULT, 'The Vault', null, { injectionMode: 'disabled' }),
+      place(ELDRA, 'Eldra', null),
+    ]
+    const seated = await buildLoad({
+      idMap: seededIdMap(VAULT, ELDRA),
+      entities,
+      entries: sceneAt(ELDRA),
+      retrieval: retrievalSuccess({ floor: { currentLocation: floorPlace(VAULT, 'The Vault') } }),
+    })
+    expect(seated.mapCurrentLocationId).toBe(VAULT)
+    resetPhaseDb(testDb)
+    const sceneOnly = await buildLoad({ entities, entries: sceneAt(ELDRA), retrieval: undefined })
+    expect(sceneOnly.mapCurrentLocationId).toBe(ELDRA)
   })
 
   it("names the structural location's listed ancestors, nearest first", async () => {
@@ -1623,7 +1666,9 @@ describe('buildGenerationContext — location map and held items', () => {
       entities: [place(VAULT, 'The Vault', null, { injectionMode: 'disabled' })],
       entries: sceneAt(VAULT),
     })
-    expect(ctx.locationMap).toEqual([{ id: 'l1', name: 'The Vault', depth: 0 }])
+    expect(ctx.locationMap).toEqual([
+      { retired: false, id: 'l1', name: 'The Vault', depth: 0, retiredReason: null },
+    ])
   })
 
   it('reads the scene for a template that names only heldItems', async () => {

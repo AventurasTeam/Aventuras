@@ -373,6 +373,8 @@ export function buildClassifierActions(
     // hard-finality retirement only; retired->active is user-only in v1.
     if (flip.to === 'active' && current.status !== 'staged') continue
     if (flip.to === 'retired' && current.status !== 'active') continue
+    // A destroyed place stays active, its destruction a condition: only the user retires one.
+    if (flip.to === 'retired' && current.kind === 'location') continue
     index.set(id, { ...current, status: flip.to })
     const proseEntryId = proseSource(flip.sourceTurn)
     planned.push({

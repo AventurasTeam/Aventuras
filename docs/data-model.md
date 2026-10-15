@@ -796,9 +796,11 @@ the waves"), and a destroyed place stays active, since ruins can still
 be visited. Only the user retires a place; the periodic classifier
 never does
 ([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)).
-A World Save that retires a place retires every place inside it in the
-same action, after a confirm naming them, each with the same
-`retired_reason`, so one undo restores them all. That keeps an
+A World Save that retires a place retires every place inside it that
+isn't retired yet in the same action, after a confirm naming them, each
+with the same `retired_reason`, so one undo restores them all; a place
+inside that is already retired keeps its own reason and goes unnamed.
+That keeps an
 invariant: **no active or staged place sits inside a retired one.**
 Every write that could break it refuses, or redirects:
 
@@ -808,7 +810,9 @@ Every write that could break it refuses, or redirects:
   (`retired-parent`), so a cascade comes back top-down, or by undo;
 - a World create or re-parent into a retired place refuses
   (`retired-parent`); a retired place may still sit inside another
-  retired one;
+  retired one. The `createEntity` handler refuses such a create too, a
+  backstop behind the writers' own checks: a refusal there fails a
+  machine writer's whole run, so its planner redirects first;
 - a per-turn create naming a retired parent goes to the root, logged,
   as an unresolvable parent does
   ([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item));
@@ -842,6 +846,13 @@ moving one into a disabled region, refuses while the tail scene is in
 it or inside it (`story-inside`): a disabled region the story enters is
 one the model walked into through the prose, never one disabled around
 it.
+
+**The story's place.** The tail scene above is the location the next
+prompt's map is built around, read off the latest `ai_reply` or
+`opening`. A `user_action` standing at the tail, left by a regenerate
+whose unwind was refused, can name another place, which the next turn
+inherits. A `story-inside` refusal counts both places; the suspension
+follows the prompt's.
 
 #### `ItemState` shape
 

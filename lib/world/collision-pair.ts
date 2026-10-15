@@ -1,6 +1,7 @@
-import type { CollisionReason, Entity, LocationState } from '@/lib/db'
+import type { CollisionReason, Entity } from '@/lib/db'
 
 import { namesakeBasis, type NamesakeSide } from './namesakes'
+import { parentIdOf } from './parent-chain'
 
 /**
  * Two distinct rows of one branch and kind, one of whose flags names the other and holds, in the
@@ -32,10 +33,7 @@ export type FlaggedEntity = Entity & {
 export type PairSide = NamesakeSide & { parentId: string | null }
 
 export function pairSideOf(row: Entity): PairSide {
-  const parentId =
-    row.kind === 'location'
-      ? ((row.state as LocationState | null)?.parent_location_id ?? null)
-      : null
+  const parentId = row.kind === 'location' ? parentIdOf(row) : null
   return { name: row.name, keywords: row.keywords, parentId }
 }
 

@@ -17,24 +17,32 @@ export function SettingsTab({
   control,
   blocked,
   blockedReason,
-  isPlace = false,
+  place,
 }: Gate & {
   control: Control<EntityBaseDraft>
-  /** A location: the injection hint adds what each mode does to the location map. */
-  isPlace?: boolean
+  /** A location: hints add what retiring does to places inside it and each mode's map effect. */
+  place?: {
+    /** The ancestor whose `disabled` reaches this place, by name; null when none does. */
+    disabledThrough: string | null
+  }
 }) {
   const status = useWatch({ control, name: 'status' })
   const gate = { blocked, blockedReason }
-  const injectionHint = isPlace
-    ? `${t('world:fields.injectionOverride')} ${t('world:fields.injectionPlaceMap')}`
-    : t('world:fields.injectionOverride')
+  let injectionHint = t('world:fields.injectionOverride')
+  if (place != null) injectionHint += ` ${t('world:fields.injectionPlaceMap')}`
+  if (place?.disabledThrough != null)
+    injectionHint += `\n${t('world:fields.disabledThrough', { place: place.disabledThrough })}`
   return (
     <View className="gap-4">
       <Controller
         control={control}
         name="status"
-        render={({ field }) => (
-          <FormRow label={t('world:fields.status')}>
+        render={({ field, fieldState }) => (
+          <FormRow
+            label={t('world:fields.status')}
+            hint={place != null ? t('world:fields.statusPlace') : undefined}
+            error={issueLabel(fieldState.error?.message)}
+          >
             <Select
               label={t('world:fields.status')}
               value={field.value}
@@ -52,8 +60,12 @@ export function SettingsTab({
       <Controller
         control={control}
         name="injectionMode"
-        render={({ field }) => (
-          <FormRow label={t('world:fields.injectionMode')} hint={injectionHint}>
+        render={({ field, fieldState }) => (
+          <FormRow
+            label={t('world:fields.injectionMode')}
+            hint={injectionHint}
+            error={issueLabel(fieldState.error?.message)}
+          >
             {/* Options with help text make Select render radio. */}
             <Select
               label={t('world:fields.injectionMode')}

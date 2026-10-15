@@ -338,6 +338,8 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
       code: 'noop',
     }
   if (current.status !== 'active') return { status: 'rejected', reason: 'not-active', code: 'noop' }
+  // Only the user retires a place (classifier.md → What the classifier writes).
+  if (current.kind === 'location') return { status: 'rejected', reason: 'location', code: 'noop' }
   if (
     proseEntryId !== null &&
     wroteColumn(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId), 'status')

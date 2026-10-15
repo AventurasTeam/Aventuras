@@ -233,6 +233,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       ? await planTurnCreates({
           block: resolvedBlock,
           entities,
+          mapCurrentLocationId: load.mapCurrentLocationId,
           branchId,
           source: 'piggyback_tagged_block',
           embed: classifierEmbedder(),

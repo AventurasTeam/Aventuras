@@ -13,29 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement retired and disabled places.** Designed 2026-10-12
-  ([exploration record](./explorations/2026-10-12-retired-and-disabled-places.md));
-  the spec is canon:
-  [`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)
-  for what retired and disabled mean for a place, the cascades and the
-  refusals, with that file's injection-mode line and `stateReport`;
-  [`piggyback.md → What the writer sees`](./memory/piggyback.md#what-the-writer-sees)
-  and [`→ Matching before creating`](./memory/piggyback.md#matching-before-creating)
-  for the map and the matcher;
-  [`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes)
-  for the classifier never retiring a place;
-  [`retrieval.md → Pool exclusions`](./memory/retrieval.md#pool-exclusions)
-  for the effective mode in retrieval; and
-  [`world.md → Settings`](./ui/screens/world/world.md#settings--entity-management-chrome),
-  its Connections pickers and its Merge refusals, with the scene
-  editor's location list
-  ([`entry-card.md → Scene editor`](./ui/patterns/entry-card.md#scene-editor)).
-  Check first, unverified in the design: that CTRL-Z undoes newest-first
-  across World saves and turns, so undoing the Save that brought a
-  place back can't leave the tail scene in it once retired again. If a
-  Save can be undone past a later turn, that undo needs the
-  `story-inside` refusal too.
-
 - **The periodic classifier creates factions and mentioned places.**
   Factions follow the character path: a new-faction list in the
   extraction, reconciled by Layer B
@@ -52,7 +29,12 @@ for the placement rule.
   parent one it gets the places as a full tree, every place in any mode
   or status with its id, in place of the flat location lines in Known
   entities, not the narrator's map, which hides places it must still
-  name. Open: which writer wins when the
+  name. Its planner sends a retired parent to the root, logged, as the
+  per-turn writer does, since nothing active may sit inside a retired
+  place
+  ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape));
+  the create handler refuses one that slips through, which fails the
+  whole pass. Open: which writer wins when the
   per-turn writer and a pass create the same new place in one window
   (leaning the pass, or the pair goes to collision review); and
   re-checking the parked
@@ -105,7 +87,12 @@ for the placement rule.
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;
   - the suggestion refresh's In scene list prints an empty line under
-    an entity with no description.
+    an entity with no description;
+  - a place name with a newline breaks the location map's tree: the
+    rest of the name lands at column 0, where it reads as a top-level
+    place (`lib/world/location-map.ts`). A retired reason is already
+    flattened to one line there; the name isn't (raised 2026-10-15 by
+    the retired and disabled places slice review).
 
 ## UX
 

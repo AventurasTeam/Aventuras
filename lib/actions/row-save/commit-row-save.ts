@@ -1,7 +1,12 @@
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
-import { PARENT_CHAIN_BROKEN, PARENT_CYCLE } from '@/lib/world'
+import {
+  PARENT_CHAIN_BROKEN,
+  PARENT_CYCLE,
+  PLACE_REFUSAL,
+  type PlaceSaveRefusal,
+} from '@/lib/world'
 
 import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
@@ -11,31 +16,59 @@ export const ROW_SAVE_REJECTION = {
   inFlight: 'in-flight',
   parentCycle: PARENT_CYCLE,
   parentChainBroken: PARENT_CHAIN_BROKEN,
+  storyInside: PLACE_REFUSAL.storyInside,
+  retiredParent: PLACE_REFUSAL.retiredParent,
+  retiredPlace: PLACE_REFUSAL.retiredPlace,
   notFound: TARGET_NOT_FOUND,
   failed: 'failed',
 } as const
 
 export type RowSaveRejectionCode = (typeof ROW_SAVE_REJECTION)[keyof typeof ROW_SAVE_REJECTION]
 
+/** A place rule a World Save broke, under its own code: the field it shows on and the places. */
+type PlaceRuleRejection<R extends PlaceSaveRefusal = PlaceSaveRefusal> = R extends unknown
+  ? { status: 'rejected'; reason: string; code: R['code']; refusal: R }
+  : never
+
 export type RowSaveResult =
   | { status: 'ok'; id: string }
-  | { status: 'rejected'; reason: string; code: RowSaveRejectionCode }
+  | { status: 'rejected'; reason: string; code: RowSaveRejectionCode; refusal?: never }
+  | PlaceRuleRejection
+
+// TS can't pair a union's members across two properties, so the pairing is asserted here, once.
+function placeRuleRejection(refusal: PlaceSaveRefusal): PlaceRuleRejection {
+  const reason = `place rule: ${refusal.code}`
+  return { status: 'rejected', reason, code: refusal.code, refusal } as PlaceRuleRejection
+}
+
+// Codes only an entity save raises: the location parent chain and the place rules.
+const ENTITY_ONLY_CODES = [
+  PARENT_CYCLE,
+  PARENT_CHAIN_BROKEN,
+  PLACE_REFUSAL.storyInside,
+  PLACE_REFUSAL.retiredParent,
+  PLACE_REFUSAL.retiredPlace,
+] as const
 
 /** What a save of a row with no parent chain (thread, happening, lore) can report. */
 export type FlatRowSaveRejectionCode = Exclude<
   RowSaveRejectionCode,
-  typeof PARENT_CYCLE | typeof PARENT_CHAIN_BROKEN
+  (typeof ENTITY_ONLY_CODES)[number]
 >
 
 export type FlatRowSaveResult =
   | { status: 'ok'; id: string }
   | { status: 'rejected'; reason: string; code: FlatRowSaveRejectionCode }
 
-// Only a location's parent raises a parent code, so on any other row one is a failure.
+function isEntityOnlyCode(code: RowSaveRejectionCode): code is (typeof ENTITY_ONLY_CODES)[number] {
+  return ENTITY_ONLY_CODES.some((c) => c === code)
+}
+
+// Only an entity save raises an entity code, so on any other row one is a failure.
 export function flatRowSaveResult(result: RowSaveResult): FlatRowSaveResult {
   if (result.status === 'ok') return result
   const { reason, code } = result
-  return code === PARENT_CYCLE || code === PARENT_CHAIN_BROKEN
+  return isEntityOnlyCode(code)
     ? { status: 'rejected', reason, code: ROW_SAVE_REJECTION.failed }
     : { status: 'rejected', reason, code }
 }
@@ -49,6 +82,8 @@ function rejectionCode(code: string | undefined): RowSaveRejectionCode {
       return ROW_SAVE_REJECTION.parentCycle
     case PARENT_CHAIN_BROKEN:
       return ROW_SAVE_REJECTION.parentChainBroken
+    case PLACE_REFUSAL.retiredParent:
+      return ROW_SAVE_REJECTION.retiredParent
     case TARGET_NOT_FOUND:
       return ROW_SAVE_REJECTION.notFound
     default:
@@ -63,13 +98,18 @@ type CommitRowSaveArgs = {
   /** Null for a create; the id is generated before the actions are built. */
   rowId: string | null
   idPrefix: string
+  /**
+   * A World Save's place rules, judged after the gate. Synchronous: nothing may await between the
+   * gate and the dispatch, which a hard-gate run waits on once it is tracked.
+   */
+  refuse?: () => PlaceSaveRefusal | null
   build: (id: string) => PipelineAction[]
 }
 
 /** One Save = one `action_id`; refusals and failures log as `action_layer.<rowKind>_save_*`. */
 export async function commitRowSave(
   rowKind: RowSaveKind,
-  { branchId, rowId, idPrefix, build }: CommitRowSaveArgs,
+  { branchId, rowId, idPrefix, refuse, build }: CommitRowSaveArgs,
   ctx: DbCtx,
 ): Promise<RowSaveResult> {
   // generation-pipeline.md → Action rejection — defense in depth: the UI disables first, so
@@ -86,6 +126,11 @@ export async function commitRowSave(
   const context: Record<string, unknown> = { branchId, id, create: rowId == null }
   let result
   try {
+    const refusal = refuse?.() ?? null
+    if (refusal != null) {
+      logger.warn(`action_layer.${rowKind}_save_rejected`, { ...context, code: refusal.code })
+      return placeRuleRejection(refusal)
+    }
     const actions = build(id)
     if (actions.length === 0) {
       if (rowId == null) throw new Error('commitRowSave: a create built no actions')

@@ -827,3 +827,67 @@ describe('collision flags a re-parent breaks', () => {
     ])
   })
 })
+
+// data-model.md → LocationState shape: retiring a place retires the places inside it, in one group.
+describe('retiring a place', () => {
+  const place = (
+    id: string,
+    name: string,
+    parentId: string | null,
+    status: Entity['status'] = 'active',
+  ): Entity => ({
+    id,
+    branchId: 'br_1',
+    kind: 'location',
+    name,
+    description: null,
+    status,
+    retiredReason: null,
+    injectionMode: 'auto',
+    nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
+    state: { parent_location_id: parentId },
+    tags: [],
+    keywords: [],
+    priority: 0,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const VELLIS = place('loc_vellis', 'Port Vellis', null)
+  const ANCHOR = place('loc_anchor', 'The Rusty Anchor', 'loc_vellis')
+  const ROOM = place('loc_room', 'the back room', 'loc_anchor')
+  const QUAY = place('loc_quay', 'Old Quay', 'loc_vellis', 'retired')
+
+  it('retires every place inside not retired yet, with the same reason, after its own update', () => {
+    const actions = entityActions({
+      branchEntities: [VELLIS, ANCHOR, ROOM, QUAY],
+      kind: 'location',
+      row: VELLIS,
+      keywordsBase: [],
+      draft: { ...locationDraftFrom(VELLIS), status: 'retired', retiredReason: 'sank' },
+      branchId: 'br_1',
+      id: VELLIS.id,
+      now: 42,
+    })
+    const retire = { status: 'retired', retiredReason: 'sank' }
+    expect(actions).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'loc_vellis', patch: retire },
+      },
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'loc_anchor', patch: retire },
+      },
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'loc_room', patch: retire },
+      },
+    ])
+  })
+})

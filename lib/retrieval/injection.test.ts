@@ -33,6 +33,7 @@ const input = (over: Partial<KeywordInjectionInput> = {}): KeywordInjectionInput
   entities: [],
   lore: [],
   floorIds: new Set<string>(),
+  disabledPlaceIds: new Set<string>(),
   recentProse: '',
   scanText: '',
   budgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
@@ -126,6 +127,18 @@ describe('buildKeywordInjections — precedence and pool exclusions', () => {
 
     expect(out.entities).toEqual([])
     expect(out.lore).toEqual([])
+  })
+
+  it('leaves a place disabled through an ancestor alone however loudly it matches', () => {
+    const out = buildKeywordInjections(
+      input({
+        entities: [entity({ id: 'loc_vault', kind: 'location' })],
+        disabledPlaceIds: new Set(['loc_vault']),
+        scanText: 'Kael waits.',
+      }),
+    )
+
+    expect(out.entities).toEqual([])
   })
 
   it('skips a row the structural floor already seated, on either type', () => {

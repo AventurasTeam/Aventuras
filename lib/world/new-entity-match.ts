@@ -1,8 +1,9 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
-import { stateOf } from './entity-draft'
+import type { LocationMapView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
+import { parentIdOf } from './parent-chain'
 
 const SAME_PARENT = 'same-parent' satisfies CollisionReason
 
@@ -15,31 +16,34 @@ function byAge(a: Entity, b: Entity): number {
 }
 
 /**
- * piggyback.md → Matching before creating: a place compares only with its siblings, the active and
- * staged locations under `parentId` (null: the root), whatever their injection mode. An exact name
- * reuses the oldest; a partial one creates flagged, a contained name ranked before a keyword hit.
+ * piggyback.md → Matching before creating. Reuses a non-retired exact namesake the prompt's map
+ * (`view`) hangs under `parentId` (null: the root), places it left out included; otherwise flags
+ * against real siblings of any status.
  */
 export function matchNewLocation(
   candidate: { name: string; parentId: string | null },
-  entities: readonly Entity[],
+  view: LocationMapView,
 ): PlaceMatch {
-  const siblings = entities.filter(
-    (e) =>
-      e.kind === 'location' &&
-      e.status !== 'retired' &&
-      (stateOf(e, 'location').parent_location_id ?? null) === candidate.parentId,
-  )
-  const [exact] = siblings
-    .filter((e) => nameBasis(candidate.name, e.name) === 'same-name')
-    .sort(byAge)
-  if (exact !== undefined) return { kind: 'reuse', id: exact.id }
+  const { locations } = view
+
+  const [reused] = locations
+    .filter((e) => e.status !== 'retired' && nameBasis(candidate.name, e.name) === 'same-name')
+    .flatMap((entity) => {
+      const hidden = view.hiddenBetween(entity.id, candidate.parentId)
+      if (hidden === null) return []
+      return [{ entity, real: parentIdOf(entity) === candidate.parentId ? 0 : 1, hidden }]
+    })
+    .sort((a, b) => a.real - b.real || a.hidden - b.hidden || byAge(a.entity, b.entity))
+  if (reused !== undefined) return { kind: 'reuse', id: reused.entity.id }
 
   const side = { name: candidate.name, keywords: [] }
-  const [partner] = siblings
+  const [partner] = locations
+    .filter((e) => parentIdOf(e) === candidate.parentId)
     .flatMap((entity) => {
       const basis = namesakeBasis(side, entity)?.basis
-      if (basis === 'contained') return [{ entity, rank: 0 }]
-      if (basis === 'keyword') return [{ entity, rank: 1 }]
+      if (basis === 'same-name' && entity.status === 'retired') return [{ entity, rank: 0 }]
+      if (basis === 'contained') return [{ entity, rank: 1 }]
+      if (basis === 'keyword') return [{ entity, rank: 2 }]
       return []
     })
     .sort((a, b) => a.rank - b.rank || byAge(a.entity, b.entity))

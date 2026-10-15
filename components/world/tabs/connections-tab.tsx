@@ -1,4 +1,4 @@
-import type { Control, UseFormTrigger } from 'react-hook-form'
+import { useWatch, type Control, type UseFormTrigger } from 'react-hook-form'
 import { View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
@@ -27,6 +27,10 @@ type Shared = {
   selfId: string | null
   entities: readonly Entity[]
 }
+
+// world.md → Connections. The picker still shows an excluded stored value until it's changed.
+const retiredPlaceIds = (entities: readonly Entity[]): string[] =>
+  entities.filter((e) => e.kind === 'location' && e.status === 'retired').map((e) => e.id)
 
 function LinkList({
   entities,
@@ -78,6 +82,7 @@ export function CharacterConnections({
           placeholder={t('world:fields.locationPlaceholder')}
           entities={entities}
           kinds={LOCATION}
+          excludeIds={retiredPlaceIds(entities)}
           onOpenEntity={onOpenEntity}
           {...gate}
         />
@@ -125,6 +130,12 @@ export function LocationConnections({
     control: Control<LocationDraft>
     onOpenEntity: (id: string) => void
   }) {
+  // A retired place may sit inside another retired one, so only an unretired place loses them.
+  const status = useWatch({ control, name: 'status' })
+  const excluded = [
+    ...(selfId == null ? [] : [selfId]),
+    ...(status === 'retired' ? [] : retiredPlaceIds(entities)),
+  ]
   return (
     <View className="gap-6">
       <Section title={t('world:sections.compositional')}>
@@ -135,7 +146,7 @@ export function LocationConnections({
           placeholder={t('world:fields.parentPlaceholder')}
           entities={entities}
           kinds={LOCATION}
-          excludeIds={selfId == null ? [] : [selfId]}
+          excludeIds={excluded}
           testID="parent-location"
           onOpenEntity={onOpenEntity}
           blocked={blocked}
@@ -180,6 +191,7 @@ export function ItemConnections({
           placeholder={t('world:fields.locationPlaceholder')}
           entities={entities}
           kinds={LOCATION}
+          excludeIds={retiredPlaceIds(entities)}
           onOpenEntity={onOpenEntity}
           blocked={blocked}
           blockedReason={blockedReason}

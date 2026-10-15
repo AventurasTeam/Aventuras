@@ -312,6 +312,7 @@ export async function buildGenerationContext(
     ...(retrieval?.selectedLocationIds ?? []),
   ]
   const structuralLocationId = floor?.currentLocation?.id ?? null
+  const mapCurrentLocationId = structuralLocationId ?? scene.currentLocationId
 
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
@@ -349,7 +350,7 @@ export async function buildGenerationContext(
     locationIds: [...new Set(locationIds)],
     // piggyback.md → What the writer sees: the whole branch, never filtered through retrieval or
     // Layer A, so a move can name any known place.
-    locationMap: buildLocationMap(branchEntities, structuralLocationId ?? scene.currentLocationId),
+    locationMap: buildLocationMap(branchEntities, mapCurrentLocationId),
     currentLocationChain:
       structuralLocationId === null
         ? []
@@ -370,7 +371,8 @@ export async function buildGenerationContext(
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes
   // a placeholder; prose (entry.content, definition prose) has no IDs and passes through.
-  return { ok: true as const, context: substituteIds(context, idMap), idMap }
+  // The real id, not its placeholder: the per-turn planner rebuilds this map's left-out places.
+  return { ok: true as const, context: substituteIds(context, idMap), idMap, mapCurrentLocationId }
 }
 
 export type GenerationContextLoad = Awaited<ReturnType<typeof buildGenerationContext>>

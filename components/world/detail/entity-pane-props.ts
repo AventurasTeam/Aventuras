@@ -4,7 +4,7 @@ import type { CalendarSystem } from '@/lib/calendar'
 import type { Entity } from '@/lib/db'
 import type { EntryIndex } from '@/lib/entry-refs'
 import type { RecentlyClassified } from '@/lib/row-signals'
-import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
+import type { EntitySaveInput, RelationshipLink, StoryPlace } from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
 import type { EntityTab } from './entity-tabs'
@@ -23,6 +23,8 @@ export type EntityPaneData = {
   worldTime: number
   calendar: CalendarSystem
   leadId: string | null
+  /** Where the story is (`storyPlaceOf`), for the place rules. */
+  story: StoryPlace
 }
 
 export type EntityPaneProps = {

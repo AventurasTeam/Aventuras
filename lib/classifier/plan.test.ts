@@ -752,6 +752,17 @@ describe('buildClassifierActions', () => {
       expect(planned).toHaveLength(0)
     })
 
+    // classifier.md → What the classifier writes: never a location; only the user retires a place.
+    it('never retires a location', () => {
+      const { planned } = flip('loc_inn', 'retired', [nonCharacterRow('loc_inn', 'location')])
+      expect(planned).toHaveLength(0)
+    })
+
+    it('still retires a faction', () => {
+      const { planned } = flip('fac_guild', 'retired', [nonCharacterRow('fac_guild', 'faction')])
+      expect(planned.map((p) => p.action.kind)).toEqual(['retireEntity'])
+    })
+
     it('skips a retire flip when the snapshot status is staged, not active', () => {
       const { planned } = flip('char_s', 'retired', [entityRow('char_s', 'staged')])
       expect(planned).toHaveLength(0)

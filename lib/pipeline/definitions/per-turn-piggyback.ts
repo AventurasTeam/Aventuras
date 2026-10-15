@@ -391,6 +391,7 @@ export async function* piggybackFallbackClassifierPhase(
   const plan = await planTurnCreates({
     block: resolvedBlock,
     entities,
+    mapCurrentLocationId: load.mapCurrentLocationId,
     branchId: ctx.branchId,
     source: 'per_turn_classifier',
     embed: classifierEmbedder(),

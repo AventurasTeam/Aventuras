@@ -184,10 +184,12 @@ convention, and the expectation that subsystems route through
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected`
   (warn: the in-flight refusal, which the disabled UI should make
-  unreachable, or a rejected write), `thread_save_failed` /
+  unreachable, a location Save whose tail moved while it waited, or a
+  rejected write), `thread_save_failed` /
   `happening_save_failed` / `entity_save_failed` (error: a Save whose
   actions threw while building or writing, logged with its action kinds
-  once built, then rethrown), `parent_chain_cap_hit`
+  once built, then rethrown; a location Save's story read and place
+  rules log the same way, without action kinds), `parent_chain_cap_hit`
   (error: a `parent_location_id` walk hit the depth cap, meaning a loop
   already exists in the stored chain), `story_lead_rejected` (warn: the lead
   mutator refused, logged with its code), `entity_delete_rejected` /

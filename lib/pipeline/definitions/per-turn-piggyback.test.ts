@@ -2523,6 +2523,32 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
+    // piggyback.md → Matching before creating: reuse goes by the map this prompt showed. Around
+    // Saltmere, disabled but the scene's, the market hangs under it, so a top-level namesake is new.
+    it('matches against the map built around the scene this prompt read', async () => {
+      const disabledTown = worldRow({
+        id: TOWN,
+        kind: 'location',
+        name: 'Saltmere',
+        injectionMode: 'disabled',
+      })
+      seedFallbackTurn([fallbackWorld()[0]!, disabledTown, market('active')])
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [{ handle: 'new:market', name: 'The Drowned Market', description: 'mud' }],
+          currentLocation: 'new:market',
+          worldTimeDelta: 30,
+        }),
+      )
+      expect(createdEntries(events)).toEqual([
+        expect.objectContaining({
+          name: 'The Drowned Market',
+          state: { parent_location_id: null },
+        }),
+      ])
+    })
+
     it('flags a new place same-parent against a partial sibling, naming it', async () => {
       seedFallbackTurn([...fallbackWorld(), market('active')])
       const { events } = await runFallback(
@@ -2829,6 +2855,25 @@ describe('per-turn-piggyback', () => {
         entryId: 'entry-2',
         currentLocation: 'new:docks',
         kind: null,
+        status: null,
+      })
+    })
+
+    // piggyback.md → A bad ref in the two writers: a retired place's id resolves but is rejected.
+    it('rejects a retired place as the location and keeps the previous one', async () => {
+      seedFallbackTurn([...fallbackWorld(), market('retired')])
+      const { events } = await runFallback(
+        fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          currentLocation: 'l2',
+          worldTimeDelta: 30,
+        }),
+      )
+      const patch = metadataPatch(events)
+      expect(patch.currentLocationId).toBe(TOWN)
+      expect(patch.stateReport).toMatchObject({
+        currentLocation: MARKET,
+        currentLocationRejected: true,
       })
     })
 

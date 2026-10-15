@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { CollisionReason, Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
+import type { CollisionReason, Entity, EntityState, NewEntity } from '@/lib/db'
 import {
   branches,
   COLLISION_REASONS,
@@ -14,7 +14,14 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
-import { checkParentChain, PARENT_CHAIN_BROKEN, PARENT_CYCLE, parentOfLocations } from '@/lib/world'
+import {
+  checkParentChain,
+  PARENT_CHAIN_BROKEN,
+  PARENT_CYCLE,
+  parentIdOf,
+  parentOfLocations,
+  PLACE_REFUSAL,
+} from '@/lib/world'
 
 import { cascadedDelete } from '../delta/delete-cascade'
 import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
@@ -173,23 +180,39 @@ function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string
   return current.nameCollisionFlag === 1 ? null : 'only a flagged entity has a partner to re-point'
 }
 
-// data-model.md → LocationState: the pre-commit walk, on every entity-handler write.
-async function refuseParentCycle(
+// data-model.md → LocationState: the pre-commit walk. A create that isn't itself retired refuses a
+// retired parent: no group revives one beside a new child, so pre-group state counts. An update
+// can't be judged so (a merge revives a retired row while re-parenting), so its builders check it.
+async function refuseParent(
   branchId: string,
   id: string,
   proposed: string | null,
   ctx: DbCtx,
+  { refuseRetired }: { refuseRetired: boolean },
 ): Promise<HandlerOutcome | null> {
   if (proposed == null) return null
   const rows = await ctx.db
-    .select({ id: entities.id, kind: entities.kind, state: entities.state })
+    .select({
+      id: entities.id,
+      kind: entities.kind,
+      state: entities.state,
+      status: entities.status,
+    })
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.kind, 'location')))
   const check = checkParentChain(id, proposed, parentOfLocations(rows))
-  if (check === 'ok') return null
   if (check === 'cycle') return { status: 'rejected', reason: PARENT_CYCLE, code: PARENT_CYCLE }
-  logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
-  return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
+  if (check === 'cap-hit') {
+    logger.error('action_layer.parent_chain_cap_hit', { branchId, id, parentId: proposed })
+    return { status: 'rejected', reason: PARENT_CHAIN_BROKEN, code: PARENT_CHAIN_BROKEN }
+  }
+  if (refuseRetired && rows.find((r) => r.id === proposed)?.status === 'retired')
+    return {
+      status: 'rejected',
+      reason: PLACE_REFUSAL.retiredParent,
+      code: PLACE_REFUSAL.retiredParent,
+    }
+  return null
 }
 
 const createHandler: ActionHandler = async (action, branchId, ctx) => {
@@ -211,12 +234,9 @@ const createHandler: ActionHandler = async (action, branchId, ctx) => {
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid ${row.kind} state: ${parsed.error.message}` }
   if (row.kind === 'location') {
-    const refused = await refuseParentCycle(
-      branchId,
-      row.id,
-      (row.state as LocationState).parent_location_id,
-      ctx,
-    )
+    const refused = await refuseParent(branchId, row.id, parentIdOf(row), ctx, {
+      refuseRetired: row.status !== 'retired',
+    })
     if (refused) return refused
   }
   return {
@@ -266,10 +286,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 
   if (patch.state !== undefined && current.kind === 'location') {
-    const proposed = (patch.state as LocationState).parent_location_id
-    const prior = (current.state as LocationState | null)?.parent_location_id ?? null
-    if (proposed !== prior) {
-      const refused = await refuseParentCycle(bid, id, proposed, ctx)
+    const proposed = parentIdOf({ state: patch.state })
+    if (proposed !== parentIdOf(current)) {
+      const refused = await refuseParent(bid, id, proposed, ctx, { refuseRetired: false })
       if (refused) return refused
     }
   }

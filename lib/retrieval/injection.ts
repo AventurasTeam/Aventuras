@@ -36,6 +36,8 @@ export type KeywordInjectionInput = {
   floorIds: ReadonlySet<string>
   /** Un-classified buffer prose, for Layer-A same-name suppression. */
   recentProse: string
+  /** Places effectively disabled around the scene, which `disabled` keeps out like their own. */
+  disabledPlaceIds: ReadonlySet<string>
   /** The haystack (retrieval.md → Keyword scan surface). */
   scanText: string
   budgets: Record<RetrievalType, number>
@@ -91,6 +93,7 @@ function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]
   const entities = filterEntityPool(input.entities, {
     floorIds: input.floorIds,
     recentProse: input.recentProse,
+    disabledPlaceIds: input.disabledPlaceIds,
   })
   const lore = filterLorePool(input.lore, input.floorIds)
 
