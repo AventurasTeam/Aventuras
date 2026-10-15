@@ -12,6 +12,7 @@ import {
   entityMenuEntries,
   importFailureText,
   placeConfirmCopy,
+  placeRefusalNotice,
   placeRefusalText,
   importRejectionText,
   itemPositionHint,
@@ -190,6 +191,45 @@ describe('placeRefusalText', () => {
     expect(
       placeRefusalText({ code: 'retired-place', field: 'currentLocationId', place: VELLIS }),
     ).toBe('Port Vellis is retired, so nothing can enter it.')
+  })
+})
+
+describe('placeRefusalNotice', () => {
+  const VELLIS = { id: 'loc_vellis', name: 'Port Vellis' }
+  const ANCHOR = { id: 'loc_anchor', name: 'The Rusty Anchor' }
+
+  it('names the tab the refused field is on, as an issue on another tab does', () => {
+    expect(
+      placeRefusalNotice({ code: 'story-inside', field: 'status', place: VELLIS, story: ANCHOR }),
+    ).toBe('Settings: The story is in The Rusty Anchor, inside Port Vellis.')
+    expect(
+      placeRefusalNotice({
+        code: 'story-inside',
+        field: 'injectionMode',
+        place: VELLIS,
+        story: VELLIS,
+      }),
+    ).toBe('Settings: The story is in Port Vellis.')
+    expect(
+      placeRefusalNotice({
+        code: 'story-inside',
+        field: 'parentLocationId',
+        place: VELLIS,
+        story: ANCHOR,
+      }),
+    ).toBe('Connections: The story is in The Rusty Anchor, inside Port Vellis.')
+    expect(placeRefusalNotice({ code: 'retired-parent', field: 'status', parent: VELLIS })).toBe(
+      'Settings: Port Vellis is retired. Bring it back first.',
+    )
+    expect(
+      placeRefusalNotice({ code: 'retired-parent', field: 'parentLocationId', parent: VELLIS }),
+    ).toBe('Connections: Port Vellis is retired. Bring it back first.')
+    expect(
+      placeRefusalNotice({ code: 'retired-place', field: 'currentLocationId', place: VELLIS }),
+    ).toBe('Connections: Port Vellis is retired, so nothing can enter it.')
+    expect(
+      placeRefusalNotice({ code: 'retired-place', field: 'atLocationId', place: VELLIS }),
+    ).toBe('Connections: Port Vellis is retired, so nothing can enter it.')
   })
 })
 

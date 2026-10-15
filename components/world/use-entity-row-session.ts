@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FieldValues, Path, Resolver, UseFormReturn } from 'react-hook-form'
 
 import {
@@ -14,7 +14,12 @@ import { logger } from '@/lib/diagnostics'
 import type { EntityBaseDraft } from '@/lib/world'
 
 import { useDraftBase, type DraftBase } from './use-draft-base'
-import { placeRefusalText, saveFailureText, saveRejectionText } from './world-copy'
+import {
+  placeRefusalNotice,
+  placeRefusalText,
+  saveFailureText,
+  saveRejectionText,
+} from './world-copy'
 
 type RefusalFields<Draft extends FieldValues> = Readonly<
   Partial<Record<string, { field: Path<Draft>; message: string }>>
@@ -66,6 +71,13 @@ export function useEntityRowSession<Draft extends EntityDraft>({
   const formRef = useRef<UseFormReturn<Draft> | null>(null)
   const rowKeyRef = useRef(rowKey)
   const keywordsRef = useRef<DraftBase<readonly string[]> | null>(null)
+  // The refused field shows the rule's text; the bar's notice adds the tab the field is on.
+  const [placeNotice, setPlaceNotice] = useState<{ message: string; notice: string } | null>(null)
+  const sessionIssueText = useCallback(
+    (message: string) =>
+      message === placeNotice?.message ? placeNotice.notice : issueText(message),
+    [issueText, placeNotice],
+  )
   const commit = useCallback(
     async (draft: Draft): Promise<RowCommitResult> => {
       const startKey = rowKeyRef.current
@@ -77,13 +89,18 @@ export function useEntityRowSession<Draft extends EntityDraft>({
         const place =
           refusal == null
             ? null
-            : { field: refusal.field as Path<Draft>, message: placeRefusalText(refusal) }
+            : {
+                field: refusal.field as Path<Draft>,
+                message: placeRefusalText(refusal),
+                notice: placeRefusalNotice(refusal),
+              }
         const target = place ?? fieldErrors?.[result.code]
         // A row switch while the write was in flight: this refusal is no longer this row's to show.
         if (target != null && rowKeyRef.current === startKey) {
+          if (place != null) setPlaceNotice({ message: place.message, notice: place.notice })
           formRef.current?.setError(target.field, { type: 'server', message: target.message })
         }
-        return { status: 'rejected', reason: place?.message ?? saveRejectionText(result.code) }
+        return { status: 'rejected', reason: place?.notice ?? saveRejectionText(result.code) }
       }
       if (rowKeyRef.current === startKey) keywords?.markSaved(draft.keywords)
       // The write landed: a throwing onSaved must not read as failed, or a retry creates it twice.
@@ -105,7 +122,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
     values,
     resolver,
     fieldLabel,
-    issueText,
+    issueText: sessionIssueText,
     failureText: saveFailureText,
     commit,
     confirmBeforeCommit,

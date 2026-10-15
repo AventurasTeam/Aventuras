@@ -56,13 +56,15 @@ const ISSUE_TAB: Partial<Record<WorldIssue, EntityTab>> = {
   priorityRange: 'settings',
 }
 
+function inTab(tab: EntityTab, issue: string): string {
+  return t('world:validation.inTab', { tab: t(`world:detail.tabs.${tab}`), issue })
+}
+
 /** The save bar's notice: an issue on another tab names it, or the user can't find the field. */
 export function entityIssueText(message: string): string {
   const text = validationText(message)
   const tab = isWorldIssue(message) ? ISSUE_TAB[message] : undefined
-  return tab == null
-    ? text
-    : t('world:validation.inTab', { tab: t(`world:detail.tabs.${tab}`), issue: text })
+  return tab == null ? text : inTab(tab, text)
 }
 
 // The title is the head's name slot, on every tab, so its issue names no tab.
@@ -112,6 +114,20 @@ export function placeRefusalText(refusal: PlaceSaveRefusal): string {
     case 'retired-place':
       return t('world:placeRefusal.retiredPlace', { place: refusal.place.name })
   }
+}
+
+// Exhaustive: a new refused field fails typecheck until it names its tab.
+const REFUSAL_TAB: Record<PlaceSaveRefusal['field'], EntityTab> = {
+  status: 'settings',
+  injectionMode: 'settings',
+  parentLocationId: 'connections',
+  currentLocationId: 'connections',
+  atLocationId: 'connections',
+}
+
+/** A place refusal's save-bar notice: its field's text, naming the tab as entityIssueText does. */
+export function placeRefusalNotice(refusal: PlaceSaveRefusal): string {
+  return inTab(REFUSAL_TAB[refusal.field], placeRefusalText(refusal))
 }
 
 type PlaceMove = NonNullable<PlaceSaveConfirm['move']>

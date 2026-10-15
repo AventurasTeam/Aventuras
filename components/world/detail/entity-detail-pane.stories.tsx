@@ -1435,6 +1435,9 @@ async function expectInDialog(dialog: HTMLElement, text: string | RegExp) {
   await waitFor(() => expect(within(dialog).getByText(text)).toBeVisible(), WAIT)
 }
 
+const settingsNotice = (issue: string) =>
+  t('world:validation.inTab', { tab: t('world:detail.tabs.settings'), issue })
+
 async function clickSave() {
   const bar = await screen.findByTestId('save-bar', {}, WAIT)
   await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
@@ -1549,7 +1552,10 @@ export const StoryInsideRefusalOnStatus: Story = {
       () => expect(within(screen.getByRole('tabpanel')).getByText(text)).toBeVisible(),
       WAIT,
     )
-    await expect(args.onRejected).toHaveBeenCalledWith(text)
+    // The bar's notice names the tab, as an issue on another tab does.
+    const notice = settingsNotice(text)
+    await expect(within(saveBar()).getByRole('button', { name: notice })).toBeVisible()
+    await expect(args.onRejected).toHaveBeenCalledWith(notice)
   },
 }
 
