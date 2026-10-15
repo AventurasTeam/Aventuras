@@ -6,7 +6,7 @@ import { byName, itemsAt, locationAncestors } from './overview'
 import { parentChainIds, parentOfLocations } from './parent-chain'
 import { placeModes } from './place-modes'
 
-/** A retired place carries no id: the model can neither move the scene there nor nest under it. */
+/** A retired row carries no id: the map offers none to move the scene to or nest a place under. */
 export type LocationMapRow =
   | { retired: false; id: string; name: string; depth: number; retiredReason: null }
   | { retired: true; id: null; name: string; depth: number; retiredReason: string | null }
@@ -23,7 +23,8 @@ export type LocationMapView = {
   anchorOf: (id: string) => MapAnchor
   /**
    * Left-out places between a place and `parentId` (null: root), or null if the map wouldn't hang
-   * it there. A left-out `parentId` counts as listed: only a reused handle can reach one.
+   * it there. A left-out `parentId` counts as listed, since `# In scene`, the fallback's roster
+   * or a reused handle can name one.
    */
   hiddenBetween: (id: string, parentId: string | null) => number | null
 }

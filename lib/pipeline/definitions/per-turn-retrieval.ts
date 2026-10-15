@@ -70,8 +70,8 @@ export async function* retrievalPhase(
   // retrieval.md → POV-awareness scope queries `sceneEntities ∩ characters`;
   // sceneEntities itself is kind-mixed (data-model.md → Entry metadata shape).
   const sceneCharacterIds = scene.sceneEntities.filter((id) => characterIds.has(id))
-  // Around the same location the prompt's map is built from, so a place the map hides is never
-  // retrieved with an id the map doesn't show.
+  // Around the same location the prompt's map is built from, so a place the map hides stays out
+  // of the `always` seat, the pools and keyword injection.
   const modes = placeModes(entities, scene.currentLocationId)
   const disabledPlaceIds = new Set(
     entities.filter((e) => e.kind === 'location' && modes.isDisabled(e.id)).map((e) => e.id),

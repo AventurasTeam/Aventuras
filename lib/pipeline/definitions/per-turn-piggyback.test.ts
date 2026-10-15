@@ -2859,8 +2859,8 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    // piggyback.md → A bad ref in the two writers: the fallback substitutes with badRef 'drop', so
-    // a retired place's id reaches the fold, which keeps the previous location.
+    // piggyback.md → A bad ref in the two writers: a retired place's id resolves, and the fold
+    // rejects it and keeps the previous location.
     it('rejects a retired place as the location and keeps the previous one', async () => {
       seedFallbackTurn([...fallbackWorld(), market('retired')])
       const { events } = await runFallback(
