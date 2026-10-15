@@ -15,7 +15,7 @@ import { byName } from './overview'
 import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
 import { placeModes } from './place-modes'
 
-/** data-model.md → LocationState shape: the codes a write breaking a place rule refuses with. */
+/** data-model.md → LocationState shape and world.md → Merge: the codes a place rule refuses with. */
 export const PLACE_REFUSAL = {
   storyInside: 'story-inside',
   retiredParent: 'retired-parent',
