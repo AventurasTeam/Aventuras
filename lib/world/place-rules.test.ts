@@ -531,6 +531,21 @@ describe('placeSaveConfirm', () => {
     ).toEqual({ retire: null, disable: { place: named(VELLIS), count: 2 }, move: null })
   })
 
+  it("counts the places a disable takes from a region the story's presence suspends", () => {
+    const disabledVellis = { ...VELLIS, injectionMode: 'disabled' as const }
+    const stall = place('loc_stall', 'Fish Stall', 'loc_market')
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: MARKET,
+          draft: { injectionMode: 'disabled' },
+          entities: [ELDRA, disabledVellis, ANCHOR, MARKET, stall],
+          story: 'loc_anchor',
+        }),
+      ),
+    ).toEqual({ retire: null, disable: { place: named(MARKET), count: 1 }, move: null })
+  })
+
   it('asks nothing for a disable whose places inside are all disabled already', () => {
     const disabledBack = { ...BACK_ROOM, injectionMode: 'disabled' as const }
     expect(
@@ -797,6 +812,17 @@ describe('mergePlaceRefusal', () => {
     const retiredBack = { ...BACK_ROOM, status: 'retired' as const }
     expect(
       merge({ status: 'retired' }, { entities: [ELDRA, VELLIS, ANCHOR, retiredBack, DUPLICATE] }),
+    ).toBeNull()
+  })
+
+  it('lets a nested pair merge into a retired result: the loser inside is the merged place', () => {
+    const outer = place('loc_outer', 'Rusty Anchor', 'loc_vellis')
+    const inner = place('loc_inner', 'Rusty Anchor', 'loc_outer')
+    expect(
+      merge(
+        { status: 'retired' },
+        { canonical: outer, loser: inner, entities: [ELDRA, VELLIS, outer, inner] },
+      ),
     ).toBeNull()
   })
 
