@@ -13,6 +13,7 @@ import {
   type TrackedRow,
   type TrackedState,
 } from './state'
+import { UNRECORDED_FIELDS } from './record'
 
 /** A database write that carries the live state along with the plan. */
 export type ReversalOp =
@@ -21,6 +22,8 @@ export type ReversalOp =
   | { kind: 'update'; entityType: TrackedEntityType; id: string; fields: Record<string, unknown> }
   /** Insert the row, or overwrite it and clear its tombstone. */
   | { kind: 'restore'; entityType: TrackedEntityType; row: TrackedRow }
+  /** Clear a tombstone; the row kept every column, unrecorded ones included. */
+  | { kind: 'undelete'; entityType: TrackedEntityType; id: string }
   | { kind: 'clock'; timeTracker: TimeTracker | null }
 
 export interface ReversalInput {
@@ -68,9 +71,26 @@ class Workspace {
   ops: ReversalOp[] = []
   /** Rows an undone create was shadowing, by the removed row's id. */
   shadowed = new Map<string, TrackedRow>()
+  /** The rows as the plan found them, for the columns no record holds. */
+  private readonly original: TrackedState
 
   constructor(state: TrackedState) {
     this.state = cloneState(state)
+    this.original = state
+  }
+
+  /**
+   * A row written again from a record takes the columns records leave out (a portrait, the
+   * translations) from the row as it was, where it existed.
+   */
+  withUnrecorded(type: TrackedEntityType, row: TrackedRow): TrackedRow {
+    const was = rowsOf(this.original, type).find((r) => r.id === row.id) as
+      Record<string, unknown> | undefined
+    if (!was) return row
+    const kept = Object.fromEntries(
+      [...UNRECORDED_FIELDS].filter((key) => key in was).map((key) => [key, was[key]]),
+    )
+    return { ...row, ...kept } as TrackedRow
   }
 
   find(type: TrackedEntityType, id: string): TrackedRow | undefined {
@@ -116,9 +136,16 @@ class Workspace {
       case 'delete':
       case 'softDelete': {
         if (!record.before) return
-        const row = { ...(record.before as unknown as TrackedRow), deleted: false } as TrackedRow
+        const row = this.withUnrecorded(type, {
+          ...(record.before as unknown as TrackedRow),
+          deleted: false,
+        } as TrackedRow)
         this.put(type, row)
-        this.ops.push({ kind: 'restore', entityType: type, row })
+        this.ops.push(
+          record.op === 'softDelete'
+            ? { kind: 'undelete', entityType: type, id }
+            : { kind: 'restore', entityType: type, row },
+        )
         return
       }
     }
@@ -130,7 +157,7 @@ class Workspace {
     switch (record.op) {
       case 'create': {
         if (!record.after) return false
-        const row = record.after as unknown as TrackedRow
+        const row = this.withUnrecorded(type, record.after as unknown as TrackedRow)
         if (record.before) this.remove(type, (record.before as { id: string }).id)
         this.put(type, row)
         this.ops.push({ kind: 'restore', entityType: type, row })
@@ -143,14 +170,14 @@ class Workspace {
         const shadow = this.shadowed.get(id)
         const visible = shadow && this.find(type, shadow.id)
         if (!visible) return false
-        const override = {
+        const override = this.withUnrecorded(type, {
           ...visible,
           ...record.after,
           id,
           branchId: record.branchId,
           overridesId: canonicalId(visible),
           deleted: false,
-        } as TrackedRow
+        } as TrackedRow)
         this.remove(type, visible.id)
         this.put(type, override)
         this.ops.push({ kind: 'restore', entityType: type, row: override })

@@ -9,7 +9,7 @@ import type {
 import { TRACKED_ENTITY_TYPES, canonicalId, rowsOf, type TrackedState } from './state'
 
 // Derived from other fields, or bookkeeping a revert should not bring back.
-const UNRECORDED_FIELDS = new Set([
+export const UNRECORDED_FIELDS: ReadonlySet<string> = new Set([
   'translatedName',
   'translatedDescription',
   'translatedRelationship',

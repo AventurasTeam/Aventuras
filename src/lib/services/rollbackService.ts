@@ -7,7 +7,12 @@
  * their `world_state_delta`.
  */
 
-import type { StoryEntry, TrackedEntityType, WorldStateRecord } from '#lib/types/index.ts'
+import type {
+  StoryEntry,
+  TrackedEntityType,
+  WorldStateChangeRecord,
+  WorldStateRecord,
+} from '#lib/types/index.ts'
 import { database, type DbStatement } from './database'
 import {
   clockAfter,
@@ -57,7 +62,9 @@ function recordsFrom(input: RollbackInput): WorldStateRecord[] {
   )
 }
 
-export function planRollback(input: RollbackInput): ReversalPlan & { records: WorldStateRecord[] } {
+export function planRollback(
+  input: RollbackInput,
+): ReversalPlan & { records: WorldStateRecord[]; rerecorded: WorldStateChangeRecord[] } {
   const records = recordsFrom(input)
   const plan = planReversal({
     state: input.state,
@@ -69,7 +76,22 @@ export function planRollback(input: RollbackInput): ReversalPlan & { records: Wo
       ? clockAfter(input.entries, input.fromPosition)
       : undefined,
   })
-  return { ...plan, records }
+  return { ...plan, records, rerecorded: rerecordKept(input, plan) }
+}
+
+/**
+ * The kept changes, recorded again on the entry that now ends the branch: their own records go
+ * with the removed entries, and without new ones nothing could undo or list them later.
+ */
+function rerecordKept(input: RollbackInput, plan: ReversalPlan): WorldStateChangeRecord[] {
+  const last = input.entries
+    .filter((e) => e.position < input.fromPosition)
+    .reduce<StoryEntry | null>((a, e) => (!a || e.position > a.position ? e : a), null)
+  if (!last) return []
+  const lost = new Set(plan.unkeepable.map((r) => r.id))
+  return [...(input.keep.manual ? plan.manual : []), ...(input.keep.tidy ? plan.tidy : [])]
+    .filter((r) => !lost.has(r.id))
+    .map((r) => ({ ...r, id: crypto.randomUUID(), entryId: last.id }))
 }
 
 function statementsFor(storyId: string, op: ReversalOp): DbStatement[] {
@@ -92,8 +114,18 @@ function statementsFor(storyId: string, op: ReversalOp): DbStatement[] {
     }
     case 'restore':
       return [addRowStatement(t, { ...op.row, deleted: false } as TrackedRow, true)]
+    case 'undelete':
+      return [database.clearTombstoneStatement(TABLE[t], op.id)]
   }
 }
+
+const TABLE = {
+  character: 'characters',
+  location: 'locations',
+  item: 'items',
+  story_beat: 'story_beats',
+  lorebook_entry: 'entries',
+} as const satisfies Record<TrackedEntityType, string>
 
 export const DELETE_ROW: Record<TrackedEntityType, (id: string) => DbStatement> = {
   character: (id) => database.deleteCharacterStatement(id),
@@ -146,7 +178,10 @@ class RollbackService {
   /** Undoes the world state of entries at or after `fromPosition`. Throws without writing. */
   async rollbackFromPosition(input: RollbackInput): Promise<RollbackSummary> {
     const plan = planRollback(input)
-    const statements = plan.ops.flatMap((op) => statementsFor(input.storyId, op))
+    const statements = [
+      ...plan.ops.flatMap((op) => statementsFor(input.storyId, op)),
+      ...plan.rerecorded.map((r) => database.worldStateRecordStatement(r)),
+    ]
     await database.transaction(statements)
 
     try {

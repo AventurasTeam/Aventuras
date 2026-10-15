@@ -110,7 +110,7 @@ describe('planReversal', () => {
     expect(plan.state.characters).toEqual([])
   })
 
-  it('restores a deleted row under its id', () => {
+  it('clears a tombstone in place, so the stored row keeps what no record holds', () => {
     const gone = character('g', { description: 'kept' })
     const plan = planReversal({
       state: state([]),
@@ -119,10 +119,40 @@ describe('planReversal', () => {
       keep: { manual: false, tidy: false },
     })
     expect(plan.state.characters).toEqual([{ ...gone, deleted: false }])
+    expect(plan.ops).toEqual([{ kind: 'undelete', entityType: 'character', id: 'g' }])
+  })
+
+  it('restores a removed row under its id', () => {
+    const gone = character('g', { description: 'kept' })
+    const plan = planReversal({
+      state: state([]),
+      records: [change('e1', 'delete', 'g', { ...gone })],
+      entryPositions: positions,
+      keep: { manual: false, tidy: false },
+    })
     expect(plan.ops).toContainEqual({
       kind: 'restore',
       entityType: 'character',
       row: { ...gone, deleted: false },
+    })
+  })
+
+  it('keeps the portrait and translations of a kept create written again', () => {
+    const live = character('n', {
+      relationship: 'ally',
+      portrait: 'data:image/png;base64,AAAA',
+      translatedName: 'Ня',
+    })
+    const created = { ...live, portrait: undefined, translatedName: undefined }
+    const plan = planReversal({
+      state: state([live]),
+      records: [change('e2', 'create', 'n', null, { origin: 'manual', after: created })],
+      entryPositions: positions,
+      keep: { manual: true, tidy: false },
+    })
+    expect(plan.state.characters[0]).toMatchObject({
+      portrait: live.portrait,
+      translatedName: 'Ня',
     })
   })
 

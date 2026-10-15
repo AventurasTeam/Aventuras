@@ -34,6 +34,8 @@ vi.mock('./database', () => ({
     addItemStatement: tag('addItem'),
     addStoryBeatStatement: tag('addStoryBeat'),
     addEntryStatement: tag('addEntry'),
+    clearTombstoneStatement: tag('clearTombstone'),
+    worldStateRecordStatement: tag('record'),
   },
 }))
 
@@ -158,6 +160,40 @@ describe('RollbackService', () => {
       { sql: 'updateEntry', params: ['lore', { description: 'earlier' }] },
       { sql: 'saveTimeTracker', params: ['story-1', day(2)] },
     ])
+  })
+
+  it('records the kept changes again on the entry that now ends the branch', async () => {
+    const before = { ...legacyEntry, id: 'e4', position: 4, worldStateDelta: undefined }
+    const edit: WorldStateRecord = {
+      id: 'm1',
+      storyId: 'story-1',
+      branchId: null,
+      entryId: 'e5',
+      seq: 9,
+      createdAt: 9,
+      kind: 'change',
+      origin: 'manual',
+      entityType: 'lorebook_entry',
+      entityId: 'lore',
+      op: 'update',
+      before: { description: 'earlier' },
+      after: { description: 'later' },
+    }
+    await rollbackService.rollbackFromPosition(
+      input({
+        entries: [before, { ...legacyEntry, worldStateDelta: undefined }],
+        records: [edit],
+        keep: { manual: true, tidy: false },
+      }),
+    )
+    const recorded = statements().filter((s) => s.sql === 'record')
+    expect(recorded).toEqual([
+      {
+        sql: 'record',
+        params: [expect.objectContaining({ entryId: 'e4', origin: 'manual', entityId: 'lore' })],
+      },
+    ])
+    expect((recorded[0].params[0] as WorldStateRecord).id).not.toBe('m1')
   })
 
   it('writes nothing and cleans nothing up when the transaction fails', async () => {

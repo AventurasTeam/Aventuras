@@ -2260,6 +2260,14 @@ class DatabaseService {
     return statement('UPDATE entries SET deleted = 1 WHERE id = ?', [id])
   }
 
+  /** Clears a tombstone and nothing else, so columns no record holds survive a revert. */
+  clearTombstoneStatement(
+    table: 'characters' | 'locations' | 'items' | 'story_beats' | 'entries',
+    id: string,
+  ): DbStatement {
+    return statement(`UPDATE ${table} SET deleted = 0 WHERE id = ?`, [id])
+  }
+
   async markEntryDeleted(id: string): Promise<void> {
     await this.runStatement(this.markEntryDeletedStatement(id))
   }
