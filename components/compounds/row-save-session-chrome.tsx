@@ -64,7 +64,7 @@ export function RowLeaveDialog<Draft extends FieldValues>({
   const invalid = session.invalidReason ?? undefined
   return (
     <UnsavedChangesDialog
-      // A Save parked behind its own question owns the screen until that is answered.
+      // A Save's question owns the screen until it is answered and its write settles.
       open={session.pendingLeave && session.pendingConfirm == null}
       saving={session.saving}
       saveDisabled={blocked || invalid != null}
@@ -79,17 +79,19 @@ export function RowLeaveDialog<Draft extends FieldValues>({
 
 function ConfirmDialog({
   ask,
+  saving,
   onAnswer,
 }: {
   ask: RowSaveConfirm
+  saving: boolean
   onAnswer: (outcome: 'save' | 'cancel') => void
 }) {
   return (
     <AlertDialog
       open
       onOpenChange={(next) => {
-        // Escape and Android back land here too.
-        if (!next) onAnswer('cancel')
+        // Escape and Android back land here too; the confirmed write owns the outcome.
+        if (!next && !saving) onAnswer('cancel')
       }}
     >
       <AlertDialogContent>
@@ -108,12 +110,12 @@ function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="secondary">
+            <Button variant="secondary" disabled={saving}>
               <Text>{t('cancel')}</Text>
             </Button>
           </AlertDialogCancel>
           {/* Plain button: an AlertDialogAction would also request close, firing the cancel. */}
-          <Button variant="primary" onPress={() => onAnswer('save')}>
+          <Button variant="primary" onPress={() => onAnswer('save')} disabled={saving}>
             <Text>{ask.confirmLabel}</Text>
           </Button>
         </AlertDialogFooter>
@@ -122,12 +124,14 @@ function ConfirmDialog({
   )
 }
 
-/** The question a Save asks before it writes (alert-dialog.md), one per Save. */
+/** The question a Save asks before it writes (alert-dialog.md), up and inert through its write. */
 export function RowConfirmDialog<Draft extends FieldValues>({
   session,
 }: {
   session: RowSaveSession<Draft>
 }) {
   const ask = session.pendingConfirm
-  return ask == null ? null : <ConfirmDialog ask={ask} onAnswer={session.resolveConfirm} />
+  return ask == null ? null : (
+    <ConfirmDialog ask={ask} saving={session.saving} onAnswer={session.resolveConfirm} />
+  )
 }

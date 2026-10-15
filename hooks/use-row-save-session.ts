@@ -74,7 +74,7 @@ export type RowSaveSession<Draft extends FieldValues> = {
   dirtyFields: readonly string[]
   /** The first validation issue, translated; null while the draft is writable. */
   invalidReason: string | null
-  /** From validation until the commit settles; Discard and leave choices are ignored meanwhile. */
+  /** From validation until the commit settles; Discard and dialog answers are ignored meanwhile. */
   saving: boolean
   /** This row's last failed save; cleared as a retry starts writing, on discard, on row switch. */
   saveError: string | null
@@ -84,7 +84,7 @@ export type RowSaveSession<Draft extends FieldValues> = {
   requestLeave: (proceed: () => void) => void
   pendingLeave: boolean
   resolveLeave: (outcome: 'save' | 'discard' | 'cancel') => void
-  /** The question a parked Save asks; null when none is parked. */
+  /** The question a parked Save asks, held until its confirmed write settles; null when none. */
   pendingConfirm: RowSaveConfirm | null
   /** Writes the parked Save, or drops it with the leaves that were waiting on it. */
   resolveConfirm: (outcome: 'save' | 'cancel') => void
@@ -249,8 +249,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
     appliedRef.current = { rowKey, values }
     if (applied.rowKey !== rowKey) {
       setSaveError(null)
-      // A question about the previous row's draft has nothing left to answer.
-      setPendingConfirm(null)
+      // A question about the previous row's draft has nothing left to answer, unless its confirmed
+      // write is still running: that clears it once it settles.
+      if (!busyRef.current) setPendingConfirm(null)
       form.reset(values)
       return
     }
@@ -423,15 +424,16 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const resolveConfirm = useCallback(
     (outcome: 'save' | 'cancel') => {
       if (pendingConfirmRef.current == null || busyRef.current) return
-      setPendingConfirm(null)
       // The user did not consent, so a leave waiting on this Save must not fire later either. One
       // raised while the question hid the leave dialog was never declined, so it gets that dialog.
       if (outcome === 'cancel') {
+        setPendingConfirm(null)
         intentsRef.current = intentsRef.current.slice(parkedIntentsRef.current)
         setPendingLeave(intentsRef.current.length > 0)
         return
       }
-      void runSave(true)
+      // Held until the write settles, however it ends: a waiting leave's dialog can't open over it.
+      void runSave(true).finally(() => setPendingConfirm(null))
     },
     [runSave, setPendingConfirm],
   )

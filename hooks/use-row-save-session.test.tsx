@@ -1004,6 +1004,86 @@ describe('useRowSaveSession — confirm before commit', () => {
     expect(proceed).toHaveBeenCalledTimes(1)
   })
 
+  // RowLeaveDialog opens on `pendingLeave && pendingConfirm == null`.
+  it('holds the question until the confirmed write lands, keeping a waiting leave’s dialog shut', async () => {
+    const held = heldCommit()
+    const proceed = vi.fn()
+    const leaveDialogOpen: boolean[] = []
+    let recording = false
+    const hook = setup(held.commit, undefined, {
+      confirmBeforeCommit: asksAlways,
+      onRender: (session) => {
+        if (recording) leaveDialogOpen.push(session.pendingLeave && session.pendingConfirm == null)
+      },
+    })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    recording = true
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    expect(held.commit).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.saving).toBe(true)
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.pendingLeave).toBe(true)
+
+    // Escape on the question arrives as a cancel; the write owns the outcome.
+    act(() => hook.result.current.resolveConfirm('cancel'))
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.pendingLeave).toBe(true)
+
+    await act(async () => {
+      held.settle({ status: 'ok' })
+    })
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.pendingLeave).toBe(false)
+    expect(leaveDialogOpen.length).toBeGreaterThan(0)
+    expect(leaveDialogOpen).not.toContain(true)
+  })
+
+  it('hands a waiting leave back to its dialog when the confirmed write is rejected', async () => {
+    const held = heldCommit()
+    const proceed = vi.fn()
+    const hook = setup(held.commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    act(() => hook.result.current.requestLeave(proceed))
+    await act(async () => {
+      hook.result.current.resolveLeave('save')
+    })
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    await act(async () => {
+      held.settle({ status: 'rejected', reason: 'blocked' })
+    })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+    expect(hook.result.current.pendingLeave).toBe(true)
+    expect(hook.result.current.saveError).toBe('blocked')
+    expect(proceed).not.toHaveBeenCalled()
+  })
+
+  it('keeps the question through a row switch until the confirmed write lands', async () => {
+    const held = heldCommit()
+    const hook = setup(held.commit, undefined, { confirmBeforeCommit: asksAlways })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    await saveOutcome(hook)
+    await act(async () => {
+      hook.result.current.resolveConfirm('save')
+    })
+    hook.rerender({ rowKey: 'row_2', values: VALUES })
+    expect(hook.result.current.pendingConfirm).toEqual(ASK)
+    expect(hook.result.current.saving).toBe(true)
+
+    await act(async () => {
+      held.settle({ status: 'ok' })
+    })
+    expect(hook.result.current.pendingConfirm).toBeNull()
+  })
+
   it('answers another Save while parked with the same question, committing nothing', async () => {
     const commit = okCommit()
     const ask = vi.fn(() => ASK)
