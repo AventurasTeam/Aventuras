@@ -4,6 +4,7 @@ export {
   checkParentChain,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  parentIdOf,
   parentOfLocations,
 } from './parent-chain'
 export {

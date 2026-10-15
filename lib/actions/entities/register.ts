@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { CollisionReason, Entity, EntityState, LocationState, NewEntity } from '@/lib/db'
+import type { CollisionReason, Entity, EntityState, NewEntity } from '@/lib/db'
 import {
   branches,
   COLLISION_REASONS,
@@ -18,6 +18,7 @@ import {
   checkParentChain,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
+  parentIdOf,
   parentOfLocations,
   PLACE_REFUSAL,
 } from '@/lib/world'
@@ -233,13 +234,9 @@ const createHandler: ActionHandler = async (action, branchId, ctx) => {
   if (!parsed.success)
     return { status: 'rejected', reason: `invalid ${row.kind} state: ${parsed.error.message}` }
   if (row.kind === 'location') {
-    const refused = await refuseParent(
-      branchId,
-      row.id,
-      (row.state as LocationState).parent_location_id,
-      ctx,
-      { refuseRetired: row.status !== 'retired' },
-    )
+    const refused = await refuseParent(branchId, row.id, parentIdOf(row), ctx, {
+      refuseRetired: row.status !== 'retired',
+    })
     if (refused) return refused
   }
   return {
@@ -289,9 +286,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 
   if (patch.state !== undefined && current.kind === 'location') {
-    const proposed = (patch.state as LocationState).parent_location_id
-    const prior = (current.state as LocationState | null)?.parent_location_id ?? null
-    if (proposed !== prior) {
+    const proposed = parentIdOf({ state: patch.state })
+    if (proposed !== parentIdOf(current)) {
       const refused = await refuseParent(bid, id, proposed, ctx, { refuseRetired: false })
       if (refused) return refused
     }

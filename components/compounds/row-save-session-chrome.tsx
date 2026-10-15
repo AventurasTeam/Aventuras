@@ -86,6 +86,7 @@ function ConfirmDialog({
   saving: boolean
   onAnswer: (outcome: 'save' | 'cancel') => void
 }) {
+  const firstBullet = ask.lines.length > 0 ? '\n\n• ' : '• '
   return (
     <AlertDialog
       open
@@ -102,7 +103,7 @@ function ConfirmDialog({
             {ask.lines.join('\n\n')}
             {ask.items.map((item, index) => (
               <Text key={`${index}:${item}`} size="sm" variant="muted">
-                {index === 0 ? (ask.lines.length > 0 ? '\n\n• ' : '• ') : '\n• '}
+                {index === 0 ? firstBullet : '\n• '}
                 {item}
               </Text>
             ))}

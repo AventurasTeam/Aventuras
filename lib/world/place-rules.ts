@@ -1,10 +1,5 @@
 import type { PipelineAction } from '@/lib/actions'
-import {
-  inheritedEntryMetadata,
-  type Entity,
-  type EntryMetadata,
-  type LocationState,
-} from '@/lib/db'
+import { inheritedEntryMetadata, type Entity, type EntryMetadata } from '@/lib/db'
 import { blankToNull } from '@/lib/text'
 
 import type { EntitySaveInput } from './entity-actions'
@@ -293,9 +288,9 @@ function confirmOf({
  */
 export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
   if (args.kind !== 'location' || args.row == null) return null
-  if (placeSaveRefusal(args) != null) return null
   const row = args.row
   const save = locationSave(args)
+  if (locationRefusal(save, args.story) != null) return null
   const { draft, entities, byId, parentOf } = save
   const inside = descendantsOf(row.id, entities, parentOf)
 
@@ -356,10 +351,7 @@ export function mergedPlaceOf(actions: readonly PipelineAction[], canonical: Ent
     merged = {
       status: patch.status ?? merged.status,
       injectionMode: patch.injectionMode ?? merged.injectionMode,
-      parentId:
-        patch.state === undefined
-          ? merged.parentId
-          : ((patch.state as LocationState).parent_location_id ?? null),
+      parentId: patch.state === undefined ? merged.parentId : parentIdOf({ state: patch.state }),
     }
   }
   return merged

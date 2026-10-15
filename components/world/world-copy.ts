@@ -146,12 +146,12 @@ function moveLine({ region, place, count, suspended }: PlaceMove): string {
 
 /** world.md → Settings: one confirm per Save, titled by its weightiest change, with every line. */
 export function placeConfirmCopy({ retire, disable, move }: PlaceSaveConfirm): RowSaveConfirm {
-  const lines = [
-    ...(disable == null
-      ? []
-      : [t('world:placeConfirm.disableLine', { place: disable.place.name, count: disable.count })]),
-    ...(move == null ? [] : [moveLine(move)]),
-  ]
+  const lines: string[] = []
+  if (disable != null)
+    lines.push(
+      t('world:placeConfirm.disableLine', { place: disable.place.name, count: disable.count }),
+    )
+  if (move != null) lines.push(moveLine(move))
   if (retire != null)
     return {
       title: t('world:placeConfirm.retireTitle', {
