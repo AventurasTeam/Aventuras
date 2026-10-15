@@ -1,5 +1,6 @@
 import type { Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { readSceneSource } from '@/lib/pipeline'
 import { CAST_ID_PREFIX, entitiesStore } from '@/lib/stores'
 import {
   entityActions,
@@ -10,7 +11,6 @@ import {
 
 import { commitRowSave, ROW_SAVE_REJECTION, type RowSaveResult } from '../row-save/commit-row-save'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
-import { loadSceneSource } from '../story-entries/head-turn'
 import type { DbCtx } from '../types'
 
 export type EntitySaveResult = RowSaveResult
@@ -56,7 +56,7 @@ export async function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<Enti
       args.branchId,
       ctx,
       async () => {
-        const scene = await loadSceneSource(args.branchId, ctx)
+        const scene = await readSceneSource(ctx.db, args.branchId)
         committing = true
         return commitEntity(args, storyLocationIdOf(scene == null ? [] : [scene]), ctx)
       },

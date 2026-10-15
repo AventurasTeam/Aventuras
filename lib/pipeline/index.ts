@@ -13,6 +13,7 @@ export {
   __resetClassifierEmbedder,
   configureClassifierEmbedder,
 } from './definitions/description-embedder'
+export { readSceneSource } from './definitions/entry-reads'
 export { ensurePeriodicClassifierPipelineRegistered } from './definitions/periodic-classifier'
 export {
   ensureSuggestionRefreshPipelineRegistered,

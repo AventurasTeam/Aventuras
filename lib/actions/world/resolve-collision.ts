@@ -2,6 +2,7 @@ import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { HeadTurn } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
+import { readSceneSource } from '@/lib/pipeline'
 import {
   characterRelationshipsStore,
   entitiesStore,
@@ -37,7 +38,6 @@ import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
-import { loadSceneSource } from '../story-entries/head-turn'
 import type { DbCtx } from '../types'
 
 export const COLLISION_REJECTION = {
@@ -211,7 +211,7 @@ async function commitMerge(
     branchId,
     ctx,
     async (head) => {
-      const scene = await loadSceneSource(branchId, ctx)
+      const scene = await readSceneSource(ctx.db, branchId)
       const storyLocationId = storyLocationIdOf(scene == null ? [] : [scene])
       return commit(
         branchId,
