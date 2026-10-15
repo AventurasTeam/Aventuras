@@ -1948,4 +1948,31 @@ describe('runRetrieval — keyword injection', () => {
 
     expect(out.selectedLocationIds).toEqual(['loc_1'])
   })
+
+  // Vault Room's own mode is auto: only the ids the caller passes carry its ancestor's disabling.
+  it('does not seat a place disabled through an ancestor that the scan text names', async () => {
+    const queryAll = makeQueryAll({
+      entities: [
+        entityRow('loc_room', 'Vault Room', { kind: 'location' }),
+        entityRow('loc_hall', 'Vault Hall', { kind: 'location' }),
+      ],
+      knn: [],
+    })
+
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll }),
+        params({
+          keywordRetrieval: injecting,
+          sceneEntityIds: [],
+          sceneCharacterIds: [],
+          disabledPlaceIds: new Set(['loc_room']),
+          scanText: 'Rain over the Vault Room and the Vault Hall.',
+        }),
+      ),
+    )
+
+    expect(out.keywordInjections.map((i) => i.row.id)).toEqual(['loc_hall'])
+    expect(out.selectedLocationIds).toEqual(['loc_hall'])
+  })
 })
