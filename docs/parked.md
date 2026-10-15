@@ -1117,11 +1117,24 @@ so the reasons above hold for it, with a branch fork's reverse-apply
 also taking every later write and an aborted turn having nothing after
 it. The boot-recovery caveat above stands.
 
+Re-checked 2026-10-16 for the places a pass creates from mentions
+([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
+by reading the reversal canon and code: a prose edit's sweep spares
+entity creates of every kind (`isReversible` in
+`lib/actions/story-entries/classifier-facts.ts`), CTRL-Z skips
+classifier groups, rollback and regenerate take every later turn
+with the place, and a pass's abort runs inside its write lock, which
+it takes only when no turn is in flight. So only the boot-recovery
+window above can remove such a place while a later turn's writes name
+it in JSON: an entry's `currentLocationId`, a character's
+`current_location_id` or `lastSeenAt`, an item's `at_location_id`, or
+a new child place's `parent_location_id`. More fields than for
+characters, the same window.
+
 A fix is a JSON-path reference registry the closure queries through
-`json_each`. Parked 2026-10-05, re-checked 2026-10-10; the signal to
-revisit now is the periodic classifier creating entities other than
-characters (the factions and mentioned-places followup), since its
-passes are reversed by positional sweeps while later turns stay.
+`json_each`. Parked 2026-10-05, re-checked 2026-10-10 and 2026-10-16;
+the signal to revisit now is the factions design, whose membership
+facts put faction ids a pass creates into characters' `state`.
 
 The group runner's conflict check has the same blind spot and would be
 the registry's second consumer: `rowRefs` (`lib/actions/delta/live-refs.ts`)
@@ -1505,6 +1518,27 @@ obvious fix, writing `parsed.data`, would silently drop a stackable
 named `__proto__`, which the pane and piggyback store deliberately:
 zod's record skips that key. Parked 2026-10-09; the signal is a writer
 that can emit model-shaped state, such as an agentic classifier.
+
+#### Placing a mentioned place later
+
+A place the periodic classifier creates from a mention goes to the root
+when the turns don't say where it is, and stays there, since only the
+user moves a place after its first write
+([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)).
+When the story later places it ("Varn, in the Eastern Reach"), nothing
+moves it, and a turn that goes there under the Eastern Reach without
+using Varn's id creates a second Varn: places under different parents
+are never compared. World can't merge the two either, since merge
+exists only inside the collision dialog, so delete or rename is the
+only fix. Two ideas from the developer for when it bites: a step that
+re-parents a place from the root once the prose places it, in a pass
+or at chapter close, with user precedence and reversal handling for
+`parent_location_id`, which the authorship contract keeps user-only
+after the first write; and a kind of place that sits outside the tree,
+for mentioned places nobody can locate yet. A merge of any two rows of
+one kind would cover what both miss. Parked 2026-10-16 by the mentioned
+places design; the signal is duplicates of root-level mentioned places
+in real stories.
 
 ### UX (parked)
 

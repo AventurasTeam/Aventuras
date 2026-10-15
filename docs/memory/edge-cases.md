@@ -11,9 +11,11 @@ documents rather than chases.
 
 Two layers handle the case where the AI invents a character whose name
 matches an existing (often staged) entity's, exactly or in part. A
-place or an item the per-turn writer creates is matched when it is
-created instead
-([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating)).
+place or an item the per-turn writer creates, or a place the periodic
+classifier creates from a mention, is matched when it is created
+instead
+([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating),
+[`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
 
 ### Layer A — retrieval-time same-name suppression
 

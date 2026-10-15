@@ -580,8 +580,8 @@ stories.
 ### Memory
 
 Mirrors Story Settings · Memory's
-[Chapter close + Prompt context + Classifier (cadence + piggyback
-only) + Retrieval budgets + Embedder default](../story-settings/story-settings.md#memory-tab)
+[Chapter close + Prompt context + Classifier (cadence, piggyback and
+mentioned places only) + Retrieval budgets + Embedder default](../story-settings/story-settings.md#memory-tab)
 sections, bound to `app_settings.default_story_settings.*` instead
 of `stories.settings.*`. Form components literally reused; only
 data binding differs.

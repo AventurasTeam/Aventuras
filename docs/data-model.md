@@ -774,10 +774,12 @@ rejection that did reach the orchestrator would fail the whole run
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle)),
 and neither the phase nor the LLM retry tier can recover it — the retry
 finishes before any write is emitted, and a phase never sees a write's
-result. The one machine path that writes `parent_location_id` is the
-per-turn writer creating a location, which on a broken chain creates
-it at the root
-([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items));
+result. The machine paths that write `parent_location_id` are the
+per-turn writer creating a location and the periodic classifier
+creating a mentioned place, which on a broken chain create it at the
+root
+([`piggyback.md → New locations and items`](./memory/piggyback.md#new-locations-and-items),
+[`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places));
 re-parenting an existing location stays user-only. User edits surface as a form-validation error in the World
 panel — user fixes or leaves it.
 
@@ -813,9 +815,10 @@ Every write that could break it refuses, or redirects:
   retired one. The `createEntity` handler refuses such a create too, a
   backstop behind the writers' own checks: a refusal there fails a
   machine writer's whole run, so its planner redirects first;
-- a per-turn create naming a retired parent goes to the root, logged,
-  as an unresolvable parent does
-  ([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item));
+- a per-turn create or a pass's mentioned place naming a retired
+  parent goes to the root, logged, as an unresolvable parent does
+  ([`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item),
+  [`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places));
 - a location merge refuses a result that breaks it
   ([`world.md → Merge`](./ui/screens/world/world.md#merge)).
 
@@ -1144,21 +1147,21 @@ via dotted paths. The split:
 
 Per-field "who writes / when":
 
-| Field group                                                 | First write                                            | Subsequent writes                                                                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `description` (top-level)                                   | Whoever spawns the entity                              | User-only in v1                                                                                                                                    |
-| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier (Layer B) or the per-turn writer, at create | User-only: clearing, or a merge re-pointing the partner (with the deleted row's reason when it takes over the deleted row's partner); delta-logged |
-| `visual.*`                                                  | Classifier from prose, or user via form                | Both — classifier evolves on observed prose change                                                                                                 |
-| `traits`, `drives`                                          | Classifier from prose, or user via form                | Classifier (chapter-close lore-mgmt only) + user via form                                                                                          |
-| `voice`                                                     | Classifier from prose, or user via form                | Both                                                                                                                                               |
-| `current_location_id`                                       | Classifier per-turn                                    | Classifier per-turn primary; user can edit                                                                                                         |
-| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                                    | Classifier per-turn primary; user can edit                                                                                                         |
-| `faction_id`                                                | Classifier or user                                     | Both                                                                                                                                               |
-| `lastSeenAt`                                                | Classifier-only                                        | Classifier-only                                                                                                                                    |
-| `parent_location_id`                                        | User, or the per-turn writer creating the location     | User-only in v1                                                                                                                                    |
-| `condition` (Location/Item)                                 | Classifier or user                                     | Both                                                                                                                                               |
-| `standing`, `agenda` (Faction)                              | Classifier or user                                     | Classifier (chapter-close) + user                                                                                                                  |
-| `at_location_id` (Item)                                     | Classifier per-turn                                    | Classifier per-turn primary; user can edit                                                                                                         |
+| Field group                                                 | First write                                                                                            | Subsequent writes                                                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `description` (top-level)                                   | Whoever spawns the entity                                                                              | User-only in v1                                                                                                                                    |
+| `name_collision_flag`, `_partner_id`, `_reason` (top-level) | Classifier (Layer B, or a mentioned place's sibling rule) or the per-turn writer, at create            | User-only: clearing, or a merge re-pointing the partner (with the deleted row's reason when it takes over the deleted row's partner); delta-logged |
+| `visual.*`                                                  | Classifier from prose, or user via form                                                                | Both — classifier evolves on observed prose change                                                                                                 |
+| `traits`, `drives`                                          | Classifier from prose, or user via form                                                                | Classifier (chapter-close lore-mgmt only) + user via form                                                                                          |
+| `voice`                                                     | Classifier from prose, or user via form                                                                | Both                                                                                                                                               |
+| `current_location_id`                                       | Classifier per-turn                                                                                    | Classifier per-turn primary; user can edit                                                                                                         |
+| `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                                                                                    | Classifier per-turn primary; user can edit                                                                                                         |
+| `faction_id`                                                | Classifier or user                                                                                     | Both                                                                                                                                               |
+| `lastSeenAt`                                                | Classifier-only                                                                                        | Classifier-only                                                                                                                                    |
+| `parent_location_id`                                        | User, the per-turn writer creating the location, or the periodic classifier creating a mentioned place | User-only in v1                                                                                                                                    |
+| `condition` (Location/Item)                                 | Classifier or user                                                                                     | Both                                                                                                                                               |
+| `standing`, `agenda` (Faction)                              | Classifier or user                                                                                     | Classifier (chapter-close) + user                                                                                                                  |
+| `at_location_id` (Item)                                     | Classifier per-turn                                                                                    | Classifier per-turn primary; user can edit                                                                                                         |
 
 Manual user edit vs classifier overwrite policy is parked as an
 architecture concern. v1 lean: classifier writes from prose-evidenced
@@ -1324,6 +1327,7 @@ stories.settings: {
   classifierCadence: number          // entries between periodic classifier runs in the background; checked after each completed turn, so a run can fire up to one entry past it. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
   classifierContextEntries: number   // default 4, MINIMUM 2; trailing entries the per-turn fallback classifier sees. The floor is the fixed action-plus-reply pair it extracts from — see docs/memory/cadence.md → User-tunable knobs
   piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
+  classifierMentionedPlaces: boolean // default false; the periodic classifier also creates places the prose mentions but the scene doesn't enter. Read once per pass. See docs/memory/classifier.md → Mentioned places
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
   embedding_swap_target?: string    // model id of the in-flight re-index target. Non-null while a stage-then-flip swap is in progress; cleared atomically with the swap's Phase 2 commit. Crash recovery on story open surfaces a resume/cancel prompt when this is set. See docs/memory/retrieval.md → Model swap UX

@@ -381,7 +381,10 @@ create only places and items, with handles that start with `new:`,
 and accept a handle only where
 [`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item)
 allows; characters are the periodic classifier's
-([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)).
+([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)),
+which also creates places the prose mentions without entering, with
+the same `new:` handles
+([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)).
 
 #### Failure modes
 
@@ -1786,8 +1789,8 @@ const translationRetryPipeline: Pipeline = {
 | Running               | Wants to start          | Resolution                                                                                                                                                                                                                                                       |
 | --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | (idle)                | per-turn                | starts                                                                                                                                                                                                                                                           |
-| per-turn              | periodic-classifier     | classifier's blockedBy lacks per-turn → starts                                                                                                                                                                                                                   |
-| periodic-classifier   | per-turn                | per-turn's blockedBy lacks classifier → starts; both run                                                                                                                                                                                                         |
+| per-turn              | periodic-classifier     | classifier's blockedBy lacks per-turn → starts; its writes wait for the turn ([No-gate write phase](#no-gate-write-phase))                                                                                                                                       |
+| periodic-classifier   | per-turn                | per-turn's blockedBy lacks classifier → starts; both run, and the classifier's writes wait for the turn                                                                                                                                                          |
 | per-turn              | chapter-close (manual)  | chapter-close's blockedBy includes per-turn → blocked                                                                                                                                                                                                            |
 | per-turn (committing) | chapter-close (chained) | chained path bypasses concurrencyPolicy → starts                                                                                                                                                                                                                 |
 | chapter-close         | periodic-classifier     | classifier's blockedBy includes chapter-close → blocked                                                                                                                                                                                                          |
@@ -1811,7 +1814,10 @@ The architectural premise (`memory/cadence.md → Concurrency`) is that
 the periodic classifier and the per-turn pipeline write disjoint
 field sets at SQLite row granularity (with the documented
 `entities.status` monotonic-overlap caveat), so concurrent runs don't
-clobber each other. The classifier + chapter-close case is not
+clobber each other. Creating places is the one overlap disjointness
+can't cover, so it is sequenced instead: a pass writes only when no
+turn is in flight on its branch
+([No-gate write phase](#no-gate-write-phase)). The classifier + chapter-close case is not
 covered by field disjointness — chapter-close phase 0 instead drains
 the in-flight classifier explicitly before doing its own classifier
 work.
@@ -1972,10 +1978,10 @@ and opens only after the detail pane's dirty guard has awaited its
 Save, and Reader undo needs the Reader's focus. The build is
 synchronous, writes nothing and takes no lock, since the hold isn't
 reentrant. A `no-gate` run takes
-the lock exclusive at its first emitted write — after its model
+the lock exclusive before its first write — after its model
 call, embedding and reconciliation, so World stays editable through
-those — and waits for every shared holder, so a write already in
-flight lands first. The run's own writes go through
+those, and after the wait for a turn below — and waits for every
+shared holder, so a write already in flight lands first. The run's own writes go through
 inside the hold, which ends when the run settles: after the watermark
 write on success, after the abort's reversal on failure, whether it
 commits or leaves the run to boot recovery. Ending it on an
@@ -1996,6 +2002,27 @@ never asks for the metadata lock: only the scene-field, world-time,
 entity-delete and collision-merge actions take it, and the
 orchestrator commits a pass's writes through `applyDeltaAction`
 directly.
+
+**A pass writes only when no turn is in flight on its branch.** Both
+writers create places
+([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
+and the per-turn writer matches its creates against the entities it
+read when its narrative phase started, so a place a pass created
+mid-stream would be one the turn never saw, and the turn would create
+it again. Before taking the lock exclusive, a pass waits until no
+`per-turn` run is in flight on its branch, then plans its places inside
+the hold, against the rows as they stand. A turn that would start
+between that check and the end of the burst starts after it, a few
+milliseconds later, and is never refused. A `'cancel'` during the wait
+discards the run, which has committed nothing. The wait is on
+`per-turn` runs only: chapter close's phase 0 drains the pass with
+`'finish'`, and a chained close starts once the turn has left
+`txState`, so waiting on chapter close too would deadlock. While a turn
+is in flight, nothing but the turn writes its branch's entities: its
+hard gate holds off user writes, every other kind is blocked by
+`per-turn` or chained after it, and a pass waits. The cost is a pass's
+writes landing up to one turn late, a bound that holds while turns
+leave a gap between them, as the user's next action always does.
 
 ### Chained start bypasses concurrencyPolicy
 
@@ -2043,8 +2070,10 @@ to any of these alongside whatever causes the relaxation.
   the kind-keyed `generationContext` getter.
 - **Disjoint write sets between concurrent pipelines.** Per-turn
   (and its piggyback / fallback-classifier variants) writes a
-  different field set from the periodic classifier, and creates
-  different entity kinds. Prose-enforced
+  different field set from the periodic classifier. Both create
+  places, but never at once: a pass writes only when no turn is in
+  flight on its branch
+  ([No-gate write phase](#no-gate-write-phase)). Prose-enforced
   via narrow action functions named for their field-set scope. Any
   new action function should be reviewed for write-set overlap
   with concurrent pipelines.

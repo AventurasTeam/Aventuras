@@ -97,7 +97,12 @@ receives. Both are per-turn state, so a missing row makes that turn's
 location or inventory wrong at once. Characters are narrative
 introductions the periodic classifier makes
 ([`classifier.md → Disambiguation on new-character mentions`](./classifier.md#disambiguation-on-new-character-mentions)),
-so the two write sets stay disjoint by kind.
+as are, with the story's setting on, the places the prose mentions
+without entering
+([`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
+A pass never writes while a turn is in flight on its branch, so the
+entities this writer read at the turn's start are still the branch's
+when it creates.
 
 ### What the writer sees
 
@@ -202,7 +207,9 @@ tags still parses clean in a block that declares no creates.
 the last transfer in the block naming its handle gives it to a
 character, so an item taken and then put down in the same block stays
 prose. Anything else is dropped and logged, so a place the prose
-merely mentions, or an item only seen or put down, stays prose. A
+merely mentions, or an item only seen or put down, stays prose; the
+periodic classifier may create the place later
+([`classifier.md → Mentioned places`](./classifier.md#mentioned-places)). A
 block holding nothing but creates can keep none of them, so it counts
 as empty: it fails `state`, the fallback fires, and its creates report
 `dropped`. The prompt adds the significance rules the model applies:
@@ -341,8 +348,8 @@ turn, in the same pipeline run as the narrative call that produced
 the malformed block (same `action_id`, same hard gate — never a
 separate background pass). This replaces an earlier draft of this
 doc's claim that "the periodic classifier eventually picks up the
-prose mention": the periodic classifier never writes any of
-piggyback's fields (disjoint write-set, see
+prose mention": the periodic classifier covers none of piggyback's
+fields (see
 [`cadence.md → Concurrency`](./cadence.md#concurrency)), so it could
 never have recovered them — a parse failure needs the per-turn
 classifier, not the periodic one, exactly like a `piggybackMode='off'`

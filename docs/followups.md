@@ -13,41 +13,49 @@ for the placement rule.
 
 ## Data-model
 
-- **The periodic classifier creates factions and mentioned places.**
-  Factions follow the character path: a new-faction list in the
-  extraction, reconciled by Layer B
+- **Implement mentioned places.** Designed 2026-10-16
+  ([exploration record](./explorations/2026-10-16-mentioned-places.md));
+  the spec is canon:
+  [`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)
+  for the setting, the pass's place tree, its `newPlaces` list, the
+  row, its parent and the matcher;
+  [`generation-pipeline.md → No-gate write phase`](./generation-pipeline.md#no-gate-write-phase)
+  for a pass writing only when no turn is in flight on its branch; and
+  [`story-settings.md → Classifier`](./ui/screens/story-settings/story-settings.md#classifier)
+  for the toggle. Three things the code must make sure of: a turn can't
+  start between a pass's check and the end of its burst, and waits
+  rather than being refused; the pass's planning inside its lock
+  checks the stores still hold its branch, since nothing found cancels
+  a pass when its story closes (triage carries the older character
+  path); and the embedding sync stage and the background embed worker
+  write only vectors and `embedding_stale` during a turn, which the
+  canon's "nothing but the turn writes its branch's entities" assumes
+  and the design didn't check.
+
+- **The periodic classifier creates factions.** Factions follow the
+  character path: a new-faction list in the extraction, reconciled by
+  Layer B
   ([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions))
   with the same matcher, flag, partner and reason, plus membership
   facts writing characters' `faction_id`, which the authorship contract
-  gives the classifier and nothing machine-writes yet. Mentioned places
-  are places the prose establishes but the scene doesn't enter: the
-  periodic classifier creates them behind a story setting that defaults
-  to off, matched by the per-turn writer's sibling rule
-  ([`piggyback.md → Matching before creating`](./memory/piggyback.md#matching-before-creating))
-  and parented from the window. The classifier sees every place, flat,
-  so its matcher compares a new place with its real siblings; to
-  parent one it gets the places as a full tree, every place in any mode
-  or status with its id, in place of the flat location lines in Known
-  entities, not the narrator's map, which hides places it must still
-  name. Its planner sends a retired parent to the root, logged, as the
-  per-turn writer does, since nothing active may sit inside a retired
-  place
-  ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape));
-  the create handler refuses one that slips through, which fails the
-  whole pass. Open: which writer wins when the
-  per-turn writer and a pass create the same new place in one window
-  (leaning the pass, or the pair goes to collision review); and
-  re-checking the parked
-  [closure gap](./parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns),
-  since a pass is reversed by positional sweeps while later turns stay.
-  Raised 2026-10-10.
+  gives the classifier and nothing machine-writes yet. Membership facts
+  make a pass write `entities.state`, which a World Save writes whole
+  from the row as the pane rendered it, so a Save can overwrite a
+  pass's membership
+  ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes));
+  the design settles how the two merge. Open: re-checking the parked
+  [closure gap](./parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns)
+  for the faction ids a pass writes into `state`. Raised 2026-10-10;
+  mentioned places split off and were designed 2026-10-16.
 
 - **Chapter-close agent design.** Chapter close is designed in
   [`memory/chapter-close.md`](./memory/chapter-close.md), but not
   concretely enough to implement. Promoted from the developer's notes
   2026-10-10, with an addition: upkeep of the locations and items the
   per-turn writer creates with only a name, a short description and a
-  parent, meaning their state (`condition`), keywords and a
+  parent, and of the places a pass creates from mentions
+  ([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
+  meaning their state (`condition`), keywords and a
   description refresh. A refresh reverses the authorship contract's
   user-only description
   ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)),

@@ -492,11 +492,19 @@ this section captures what the screen renders.
   In that state the toggle reads as off, a one-line hint explains
   the gate (`Requires a narrative model with structured-output
 capability`), and the **per-turn fallback classifier** covers the
-  work on every turn — not the periodic classifier, whose write set is
-  disjoint from piggyback's and could never supply those fields (see
+  work on every turn — not the periodic classifier, whose write set
+  covers none of piggyback's fields and could never supply them (see
   [`memory/piggyback.md → Capability gate`](../../../memory/piggyback.md#capability-gate)).
   Swapping the narrative model to a capable profile re-enables the
   toggle automatically.
+- **Create mentioned places** — a SwitchRow bound to
+  `stories.settings.classifierMentionedPlaces`, off by default. On,
+  the periodic classifier also creates the places the story mentions
+  without entering
+  ([`memory/classifier.md → Mentioned places`](../../../memory/classifier.md#mentioned-places)).
+  Its hint says what it costs: the place map grows with every place
+  the story mentions, not only the ones it visits. A change applies
+  from the next pass; prose already classified isn't revisited.
 - **Status block** — current state for the active branch, one of
   _idle / running / retrying / failed-persistent_. Each state
   carries its own copy and inline actions; failed-persistent

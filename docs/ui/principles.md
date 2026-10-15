@@ -820,6 +820,12 @@ For a place, `disabled` covers every place inside it too, with the
 places around the story exempt while the story is inside
 ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 
+The mode governs what the narrator sees. The periodic classifier,
+which extracts from prose rather than writing it, sees every row
+whatever its mode, so it can attribute a fact to a disabled row
+rather than create it again as new
+([`memory/classifier.md → What the classifier reads`](../memory/classifier.md#what-the-classifier-reads)).
+
 **Default: `auto`.** `happenings` deliberately don't expose this —
 the `happening_awareness` graph IS their structural injection rule.
 

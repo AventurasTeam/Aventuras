@@ -605,11 +605,11 @@ shape for templates to consume.
 Memory-state writes split across three time scales per the cadence
 stratification in [`memory/cadence.md`](./memory/cadence.md):
 
-| Layer                      | Trigger                                                                 | Scope                                                                                                                                                            |
-| -------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)         | Scene-local fast-mutating state — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, item transfers, and the new locations and items they name |
-| **Periodic classifier**    | Background, configurable cadence (`stories.settings.classifierCadence`) | Multi-turn batch extractions — happenings, involvements, awareness, new characters, entity status flips, keyword appends, character relationships                |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                               | 5-phase pipeline: catch-up classifier, boundary, metadata, lore-mgmt (5 sub-jobs), lifecycle review                                                              |
+| Layer                      | Trigger                                                                 | Scope                                                                                                                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)         | Scene-local fast-mutating state — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, item transfers, and the new locations and items they name                          |
+| **Periodic classifier**    | Background, configurable cadence (`stories.settings.classifierCadence`) | Multi-turn batch extractions — happenings, involvements, awareness, new characters and (by story setting) mentioned places, entity status flips, keyword appends, character relationships |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                               | 5-phase pipeline: catch-up classifier, boundary, metadata, lore-mgmt (5 sub-jobs), lifecycle review                                                                                       |
 
 The periodic classifier is itself a Pipeline (per
 [`generation-pipeline.md`](./generation-pipeline.md)) — same
@@ -634,8 +634,8 @@ Two agents from the prior design were collapsed:
   reliable at tagged blocks), its per-turn fallback classifier, and the
   periodic classifier (background; handles the larger multi-turn
   batch). Parity holds between **piggyback and its per-turn fallback**,
-  which cover the same write set — the periodic classifier's set is
-  disjoint from both and could never recover their fields, which is why
+  which cover the same write set — the periodic classifier's set
+  covers none of their fields and could never recover them, which is why
   a failed parse falls back to a per-turn pass rather than waiting for
   the background one (see
   [`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).

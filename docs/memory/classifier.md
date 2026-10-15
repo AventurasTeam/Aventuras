@@ -18,12 +18,15 @@ refer to rather than pointing above. Its user half carries the
 branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 
-- **Known entities** — every entity on the branch, of any kind and
-  status, with its description and keywords. The classifier sees the
-  whole roster, so the
+- **Known entities** — every character, item and faction on the
+  branch, of any status, with its description and keywords. The
+  classifier sees the whole roster, so the
   [reconciliation](#disambiguation-on-new-character-mentions)
   below is a backstop for a row the model missed, not a lookup the
   model can't do.
+- **Places** — every place on the branch, of any status and mode, as
+  a tree with the same details per line
+  ([Mentioned places](#mentioned-places)).
 - **Known relationships** — the stored views, as the relationships
   bullet below describes.
 - **Known happenings** — the branch's happenings by title.
@@ -67,11 +70,14 @@ alias list (the keywords bullet below).
   prose stands too, even when written before the pass started (see
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
+- **Mentioned places** — with the story's setting on, the places the
+  turns mention but the scene doesn't enter
+  ([Mentioned places](#mentioned-places)).
 - **First-introduction descriptions** — when the classifier creates
   a character, one the
   [reconciliation](#disambiguation-on-new-character-mentions) didn't
-  absorb into an existing row, it authors the initial `description`
-  from prose. After
+  absorb into an existing row, or a mentioned place, it authors the
+  initial `description` from prose. After
   first introduction, the classifier never amends `description` (the
   authorship contract in
   [`data-model.md → World-state storage`](../data-model.md#world-state-storage)
@@ -210,10 +216,11 @@ are not compared with each other.
   keywords hold "the innkeeper", against a row named "the Innkeeper").
 
 The rule pairs rows of one kind, works for any kind, and lives in
-`lib/world` beside World's pairing. The classifier reconciles
-characters, the only kind it creates; the per-turn writer's locations
-and items match under their own rules
-([`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)). A name in a script written without spaces never
+`lib/world` beside World's pairing. The classifier reconciles the
+characters it creates; the places it creates, and the per-turn
+writer's locations and items, match under their own rules
+([Mentioned places](#mentioned-places),
+[`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)). A name in a script written without spaces never
 contains another, so it matches only exactly or through a keyword.
 
 **Signals.**
@@ -264,9 +271,10 @@ from that partner:
 | `in-scene`  | Partial, `sim < τ_low`, in the scene |
 | `no-signal` | No score                             |
 
-The per-turn writer adds one more reason, `same-parent`, for a
-location it creates beside a similarly named sibling, and gives an
-item's exact namesake `alike` or `ambiguous` by the same bands. World pairs a
+The per-turn writer and a pass creating a mentioned place add one more
+reason, `same-parent`, for a location created beside a similarly named
+sibling, and the per-turn writer gives an item's exact namesake `alike`
+or `ambiguous` by the same bands. World pairs a
 flagged row with its partner and states the reason in the resolve
 dialog
 ([`world.md → Collision review and entity merge`](../ui/screens/world/world.md#collision-review-and-entity-merge)).
@@ -275,19 +283,103 @@ Thresholds (`τ_high`, `τ_low`) are tunable. Defaults TBD empirically
 once real story data exists; sensible starting ranges (e.g. 0.75 /
 0.50 cosine) until tuning lands.
 
+## Mentioned places
+
+With `stories.settings.classifierMentionedPlaces` on, off by default,
+a pass also creates the places the turns mention but the scene doesn't
+enter, which the per-turn writer leaves as prose
+([`piggyback.md → Creating a place or an item`](./piggyback.md#creating-a-place-or-an-item)).
+They keep the narrator consistent: a place the story established stays
+on the `# Places` map, under its parent, with the description it was
+first given, and World shows which places exist. The cost is a map that
+grows with every place the story mentions, not only the ones it visits.
+The pass reads the setting once, when it builds its prompt, so a reply
+carrying new places creates them even if the setting was turned off
+while the model ran. Turning it on doesn't revisit prose an earlier
+pass read.
+
+**What the pass sees.** Places aren't in Known entities. A `Places`
+list nests every place on the branch by `parent_location_id`, children
+sorted by name, whatever its status or mode, each with its placeholder
+id, a status note when it isn't active, its description and keywords.
+Unlike the narrator's map
+([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees))
+it hides nothing, and a retired place keeps its id, since a happening
+can still name it as where something happened. The tree renders
+whether or not the setting is on: its nesting tells one back room from
+another when the pass names a happening's site.
+
+**What it emits.** With the setting on, the reply's schema carries a
+`newPlaces` list and the system half carries the rule below; with it
+off, neither appears. An entry has a handle starting `new:`, in one
+namespace with the `newCharacters` handles, a name, a description,
+keywords, a `sourceTurn` and an optional `parent`: a place's id from the
+tree or another new place's handle. The handle stands wherever a
+listed place's id would: in a happening's involvements and as another
+new place's parent. The rule:
+
+> Add a place the turns mention but the scene doesn't enter when the
+> prose establishes it exists in the story's world with its own
+> identity: a named place (a town, a keep, a region, an inn), or an
+> unnamed one the story could come back to ("the old mill on the
+> ridge"). Not a generic kind of place ("a tavern", "the road north"),
+> not one that exists only in a hypothetical, a dream or a figure of
+> speech, and not a place already in the Places list, even under
+> another name: use its ID and add the name form as an alias.
+
+**The row.** `active`, mode `auto`, the entry's keywords and its
+description, clamped to a new character's bounds (the first
+introduction above), landing `embedding_stale = 1` with `sourceTurn` as
+its survival anchor. Not `staged`, though the story hasn't been there:
+Layer A would keep a staged place out of retrieval on exactly the turns
+that name it
+([`edge-cases.md → Layer A`](./edge-cases.md#layer-a--retrieval-time-same-name-suppression)).
+
+**Parent.** Parents resolve top-down, so the child of a new place hangs
+under whatever row that place resolved to. A place whose parent the
+turns don't give goes to the root and stays there, since only the user
+moves a place after its first write
+([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+A retired parent, a parent that names nothing, or one whose chain is
+already broken above it puts the place at the root too, logged, as it
+does for the per-turn writer
+([`piggyback.md → Creating a place or an item`](./piggyback.md#creating-a-place-or-an-item)).
+The create handler refuses a place under a retired parent that slips
+through, which fails the whole pass.
+
+**Matching.** Each new place is matched by the per-turn writer's
+sibling rule
+([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating)),
+with its parent's real children as the candidates, since the pass saw
+every place. An exact name reuses an active or staged sibling, never a
+retired one; an exact retired namesake or a partial match creates the
+row with `name_collision_flag = 1`, reason `same-parent`, the partner
+picked in that rule's order; places under different parents are never
+compared. A reused sibling keeps its description and its status, since
+a mention doesn't enter a staged place, gains the entry's new keywords,
+and stands for the handle in the rest of the reply. Two new places with
+one name and parent map to the first.
+
+**When it writes.** The pass plans its places inside its write lock,
+against the rows as they stand, and takes that lock only once no turn
+is in flight on its branch
+([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)).
+So when a turn and a pass both create a place, the turn, which wrote
+from the newer prose, commits first, and the pass reuses its row.
+
 ## Background-task framing
 
 The periodic classifier runs as a background pipeline — a Pipeline
 declaration in the framework's registry, same shape as per-turn and
 chapter-close but with different concurrency / gating values:
 
-| Field                           | Value                                                                                                                                                                                                                                                                                               |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                             |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                                                                                |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                                                                                            |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                                                                                     |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities (first-introduction description, keywords, collision flag with its partner and reason), entity status flips with retired reasons, entity keyword appends (aliases and absorbed candidates), character relationships |
+| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                         |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                                                                                                                                                            |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                                                                                                                                                                        |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                                                                                                                                                                 |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent, collision flag with its partner and reason), entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates and reused places), character relationships |
 
 Write-set boundaries between the classifier and the piggyback / per-turn
 pipeline are enforced via narrow action functions named for field-set
@@ -296,11 +388,16 @@ scope (see
 not a typed declaration. The single-writer invariant relaxes to
 **single-writer-per-write-set** in v1; piggyback's write-set and the
 classifier's write-set are disjoint at the row-and-field granularity,
-apart from the monotonic `entities.status` overlap (see
+apart from the monotonic `entities.status` overlap, and both create
+places, the classifier only with the mentioned-places setting on. They
+never write at once: a pass writes only when no turn is in flight on
+its branch (see
 [`cadence.md → Concurrency`](./cadence.md#concurrency)).
 
 If the user starts a new turn while the classifier is mid-run, both
-proceed. The classifier holds its own `actionId` for its writes; the
+run, and the pass's writes wait for the turn to finish
+([no-gate write phase](../generation-pipeline.md#no-gate-write-phase)).
+The classifier holds its own `actionId` for its writes; the
 user-turn pipeline holds its own. That `actionId` is stamped
 `source = periodic_classifier` (distinct from per-turn piggyback's
 `piggyback_tagged_block`) and is **never an undo target** — CTRL-Z's
@@ -311,8 +408,8 @@ It survives only for crash recovery.
 The classifier's `concurrencyPolicy.yieldsTo` stays empty — it does
 NOT abort itself when a foreground _forward_ pipeline starts.
 Discarding in-flight classifier work that doesn't conflict with the
-new turn's writes is wasteful; the disjoint-write-set property makes
-coexistence safe.
+new turn's writes is wasteful; the pass's model call runs alongside
+the turn and its writes wait for it, so coexistence is safe.
 
 A _reversal_ is the exception, handled outside `yieldsTo`. Regenerate,
 entry-delete rollback, swipe-switch, and CTRL-Z of a turn reverse prose
@@ -322,9 +419,10 @@ sweep with `await awaitRunTerminal('periodic-classifier', 'cancel')` plus a
 [`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)).
 The classifier's part of that contract is one **abort-free critical
 section**: its commit burst — one LLM response, one burst of deltas —
-ignores `signal.aborted` once parsing begins and never returns
+ignores `signal.aborted` once it holds its write lock and never returns
 `aborted` holding committed deltas. So `'cancel'` either discards a
-not-yet-committed run (the LLM stream is cancelled, keeping the
+not-yet-committed run (the LLM stream is cancelled, or the
+reconciliation or the wait for a turn is cut short, keeping the
 reversal near-instant) or lets a committed burst stand for the
 positional sweep to reverse; the standard abort path needs no special
 disposition.
@@ -346,8 +444,9 @@ state for the active branch in a compact panel.
 
 ### Cadence config
 
-In-place edit of `stories.settings.classifierCadence` and
-`piggybackMode`. The buffer-aware indicator from
+In-place edit of `stories.settings.classifierCadence`,
+`piggybackMode` and `classifierMentionedPlaces`
+([Mentioned places](#mentioned-places)). The buffer-aware indicator from
 [`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs)
 renders inline so the user sees the cadence-vs-recent-buffer
 overlap.

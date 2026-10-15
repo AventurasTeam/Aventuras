@@ -159,25 +159,30 @@ bias prompts more rigorously.
 
 The piggyback agent and the periodic classifier write to disjoint
 field sets, with one documented overlap on `entities.status`. Both
-create entities, but of disjoint kinds: piggyback the locations and
-items its state names
+create entities: piggyback the locations and items its state names
 ([`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)),
-the classifier characters.
+the classifier characters and, with the story's setting on, the places
+the prose mentions without entering
+([`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
+Places are the one kind both create, so the two never write at once: a
+pass writes only when no turn is in flight on its branch
+([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)),
+and the turn's read of the entities stays current for its whole run.
 
-| Field                                                                    | Piggyback                                                                                               | Classifier                                           |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `story_entries.metadata` (current entry)                                 | ✓                                                                                                       | —                                                    |
-| `entities.state.visual.*`                                                | ✓                                                                                                       | —                                                    |
-| `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓                                                                                                       | —                                                    |
-| `entities.status`                                                        | ✓ (staged → active only, on a `sceneEntities` or `<current_location>` ID hit, or a reused staged place) | ✓ (staged → active slow path; active → retired)      |
-| `entities` creates (name, description, collision flag, partner, reason)  | ✓ (locations and items)                                                                                 | ✓ (characters)                                       |
-| `entities.description`                                                   | ✓ (its own creates only)                                                                                | ✓ (first introduction only; see authorship contract) |
-| `entities.keywords`                                                      | —                                                                                                       | ✓ (append-only; new characters and later passes)     |
-| `entities.retired_reason`                                                | —                                                                                                       | ✓ (with active → retired)                            |
-| `happenings`                                                             | —                                                                                                       | ✓                                                    |
-| `happening_involvements`                                                 | —                                                                                                       | ✓                                                    |
-| `happening_awareness`                                                    | —                                                                                                       | ✓                                                    |
-| `character_relationships`                                                | —                                                                                                       | ✓                                                    |
+| Field                                                                                     | Piggyback                                                                                               | Classifier                                               |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `story_entries.metadata` (current entry)                                                  | ✓                                                                                                       | —                                                        |
+| `entities.state.visual.*`                                                                 | ✓                                                                                                       | —                                                        |
+| `entities.state` (location, equipped, inventory, stackables, lastSeenAt)                  | ✓                                                                                                       | —                                                        |
+| `entities.status`                                                                         | ✓ (staged → active only, on a `sceneEntities` or `<current_location>` ID hit, or a reused staged place) | ✓ (staged → active slow path; active → retired)          |
+| `entities` creates (name, description, a place's parent, collision flag, partner, reason) | ✓ (locations and items)                                                                                 | ✓ (characters; mentioned places, never during a turn)    |
+| `entities.description`                                                                    | ✓ (its own creates only)                                                                                | ✓ (first introduction only; see authorship contract)     |
+| `entities.keywords`                                                                       | —                                                                                                       | ✓ (append-only; new characters and places, later passes) |
+| `entities.retired_reason`                                                                 | —                                                                                                       | ✓ (with active → retired)                                |
+| `happenings`                                                                              | —                                                                                                       | ✓                                                        |
+| `happening_involvements`                                                                  | —                                                                                                       | ✓                                                        |
+| `happening_awareness`                                                                     | —                                                                                                       | ✓                                                        |
+| `character_relationships`                                                                 | —                                                                                                       | ✓                                                        |
 
 **Field-overlap invariant.** `entities.status` is the only field
 both writers touch. They never collide on the same entity at the

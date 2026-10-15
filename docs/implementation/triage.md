@@ -400,6 +400,24 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/prompts/filters.ts`), so every entity disabled by its own mode
   reaches it with its id, characters, items and factions too. Raised
   2026-10-12 by the retired and disabled places implementation.
+  Since 2026-10-16, `principles.md` says the mode governs what the
+  narrator sees and the periodic classifier sees every row whatever its
+  mode, which the 2026-10-12 design decided for the periodic classifier;
+  the fallback, which extracts but can also move the scene, is the case
+  that rule doesn't settle.
+
+- **A periodic pass isn't cancelled when its story closes.** After its
+  model call the pass re-reads the global entity stores
+  (`lib/pipeline/definitions/periodic-classifier.ts`, the re-read before
+  reconciliation) and filters them by its branch, with no check that the
+  stores still hold that branch, as `loadPerTurnWorkingSet` makes for a
+  turn. Nothing found in `lib/stores/generation` or the story actions
+  cancels a pass when the user closes the story or switches branch, so a
+  pass finishing then could reconcile its new characters against an
+  empty roster and create them unmatched. Unverified: not traced through
+  story close, and not reproduced. The mentioned-places implementation
+  makes the same check for places; this item is the character path,
+  which predates it. Raised 2026-10-16 by the mentioned places design.
 
 - **The scene editor can write a character into a retired place.**
   Removing a character from the tail's scene sets their
