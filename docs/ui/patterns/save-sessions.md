@@ -211,6 +211,19 @@ row-click intent; a settings surface wires route changes; both
 wire the window-close intent), but the user-visible UX is
 identical. No surface gets to skip the guard while dirty.
 
+**A Save may ask one question before it writes.** A row session whose
+Save has a consequence the user must agree to (a place's retire or
+disable cascade,
+[`world.md → Settings`](../screens/world/world.md#settings--entity-management-chrome))
+parks the Save behind one dialog, however many lines it carries. While
+the question is up the guard's modal stays shut. Cancel keeps the
+draft and drops the leave intents that were waiting on that Save; one
+raised while the question was up gets the guard's modal afterwards.
+Confirming writes the draft as it stands, and the question stays up,
+both buttons disabled and Escape or back ignored, until the write
+settles: a write that lands clean releases the waiting intents, and a
+failed one hands them back to the guard's modal with its reason.
+
 **Window-close is the one intent that cannot always show this
 modal.** On desktop it can: Electron's main process holds the
 close, the renderer raises the normal Save / Discard / Cancel
