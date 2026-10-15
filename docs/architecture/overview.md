@@ -535,8 +535,9 @@ card on the branch is pending, as it does during a turn's background tasks. Lore
 leaves a chapter without its lore, so the card offers **Restart lore management**, recorded as a
 further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Delete, here and
 in the Memory view, is offered only for the branch's last chapter, and `story.deleteChapter`
-refuses any other: the next chapter starts where the last ends, so an earlier one's entries would
-stay uncut. A card whose narration a retry or a delete removed is shown after the last entry. Both kinds of
+refuses any other, and any while `chapterCards.busy`: the next chapter starts where the last ends,
+so an earlier one's entries, or the one a running cut started after, would stay uncut. Deleting a
+chapter, from anywhere, removes its card. A card whose narration a retry or a delete removed is shown after the last entry. Both kinds of
 failure also raise a toast, since the reader may already be on the next turn or another branch.
 
 While a chapter check on a branch is asking the model, a card on it is summarizing or running lore

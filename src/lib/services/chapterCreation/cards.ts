@@ -167,6 +167,11 @@ export class ChapterCards {
     if (this.cards.length !== before) this.onChange()
   }
 
+  /** The cards reporting this chapter. */
+  withChapter(chapterId: string): ChapterCard[] {
+    return this.cards.filter((card) => card.chapterId === chapterId)
+  }
+
   get(id: string): ChapterCard | undefined {
     return this.cards.find((card) => card.id === id)
   }

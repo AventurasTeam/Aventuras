@@ -7,6 +7,7 @@
 
 import { ChapterCards, type ChapterCard } from '#lib/services/chapterCreation/index.ts'
 import { ui } from '#lib/stores/ui.svelte.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
 import { isLoreManagementRunning } from '#lib/services/generation/index.ts'
 
 class ChapterCardsStore {
@@ -34,6 +35,14 @@ class ChapterCardsStore {
   pending(storyId: string, branchId: string | null): boolean {
     void this.version
     return this.cards.pending(storyId, branchId)
+  }
+
+  /** A card reports its chapter: once the chapter is deleted, by the card or elsewhere, so is it. */
+  chapterDeleted(chapterId: string): void {
+    for (const card of this.cards.withChapter(chapterId)) {
+      this.cards.remove(card.id)
+      activity.discardRecord(card.recordKey)
+    }
   }
 
   /**

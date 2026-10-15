@@ -105,7 +105,8 @@
     if (!confirmed) return
     busy = true
     try {
-      if (await story.deleteChapter(card.chapterId)) dismiss()
+      // A successful delete removes the card with its chapter.
+      await story.deleteChapter(card.chapterId)
     } finally {
       busy = false
     }

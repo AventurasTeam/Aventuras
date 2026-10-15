@@ -3681,9 +3681,21 @@ class StoryStore {
     return last?.id === chapterId
   }
 
-  /** Refuses, with a toast, any chapter but the open branch's last. */
+  /**
+   * Refuses, with a toast, any chapter but the open branch's last, and any while chapter work on
+   * the branch runs: a chapter being cut starts where the last one ends, and would leave the
+   * deleted one's entries uncut.
+   */
   async deleteChapter(chapterId: string): Promise<boolean> {
     if (!this.currentStory) throw new Error('No story loaded')
+    if (chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null)) {
+      log('Chapter work in flight, refusing to delete a chapter:', chapterId)
+      ui.showToast(
+        'A chapter is being written on this branch. Try again once it is done.',
+        'warning',
+      )
+      return false
+    }
     if (!this.isLastChapter(chapterId)) {
       log('Refusing to delete a chapter that is not the last:', chapterId)
       ui.showToast('Only the last chapter can be deleted.', 'warning')
@@ -3697,6 +3709,7 @@ class StoryStore {
     this.invalidateChapterCache()
 
     log('Chapter deleted:', chapterId)
+    chapterCards.chapterDeleted(chapterId)
     return true
   }
 

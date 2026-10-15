@@ -89,6 +89,13 @@ describe('ChapterCards', () => {
     expect(store.get(card.id)?.loreChangeCount).toBe(3)
   })
 
+  it('finds the cards reporting a chapter', () => {
+    const { store, card } = cards()
+    expect(store.withChapter('ch7')).toEqual([])
+    store.summarized(card.id, chapter)
+    expect(store.withChapter('ch7').map((c) => c.id)).toEqual([card.id])
+  })
+
   it('is gone once removed', () => {
     const { store, card } = cards()
     store.remove(card.id)
