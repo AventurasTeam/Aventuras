@@ -371,16 +371,17 @@ export function mergePlaceRefusal(args: {
   }
 
   if (!inLoser && !inCanonical) return null
-  // The story's side, read before and after: the loser's own place becomes the canonical's. A
-  // nested pair holds the story under both, and its chain runs through the inner row.
+  // The story's side, read before and after; the pair is one place after, so the loser counts as
+  // the canonical. A nested pair holds the story under both, and its chain runs through the inner.
   const canonicalInsideLoser = parentChainIds(canonical.id, parentOf).includes(loser.id)
   const side = inCanonical && (!inLoser || canonicalInsideLoser) ? canonical : loser
-  const before = ownDisabledChain(
+  const sideChain = ownDisabledChain(
     { id: canonical.id, injectionMode: side.injectionMode },
     parentIdOf(side),
     byId,
     parentOf,
   )
+  const before = new Set([...sideChain].map((id) => (id === loser.id ? canonical.id : id)))
   const after = ownDisabledChain(
     { id: canonical.id, injectionMode: merged.injectionMode },
     merged.parentId,

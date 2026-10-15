@@ -903,6 +903,23 @@ describe('mergePlaceRefusal', () => {
     ).toBeNull()
   })
 
+  // The mirror of the case above: the prompt is the same before and after.
+  it('lets a canonical inside a disabled loser take its mode around the story', () => {
+    const outer = place('loc_outer', 'Rusty Anchor', 'loc_vellis', { injectionMode: 'disabled' })
+    const inner = place('loc_inner', 'Rusty Anchor', 'loc_outer')
+    expect(
+      merge(
+        { injectionMode: 'disabled' },
+        {
+          canonical: inner,
+          loser: outer,
+          entities: [ELDRA, VELLIS, outer, inner],
+          story: 'loc_inner',
+        },
+      ),
+    ).toBeNull()
+  })
+
   it("still refuses a nested merge that turns the story's place disabled", () => {
     const outer = place('loc_outer', 'Rusty Anchor', 'loc_vellis')
     const inner = place('loc_inner', 'Rusty Anchor', 'loc_outer')
