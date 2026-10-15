@@ -425,7 +425,11 @@ Same fields for every kind:
   moving a place into a disabled one ("Port Vellis is disabled, so The
   Rusty Anchor and the 2 places inside it will stay out of the
   story."); both refuse while the story is in the place or inside it
-  (`story-inside`). A Save that would ask twice asks once, with both
+  (`story-inside`). While the story is somewhere in the disabled
+  region, the move still asks, saying what holds then ("Port Vellis is
+  disabled. The Rusty Anchor and the 2 places inside it stay in the
+  story only while the story is somewhere in Port Vellis."). A Save
+  that would ask twice asks once, with both
   lines. A place disabled through an ancestor adds a line under the
   explanation ("Disabled through Port Vellis: stays out of the story
   whatever its own mode, unless it's the current location."); its own
