@@ -1581,7 +1581,7 @@ export const WorldStateSaveRefused: StoryT = {
   },
 }
 
-// data-model.md → LocationState shape: nothing enters a retired place, and the refusal says so.
+// The scene editor's copy for a `retired-place` refusal; the stubbed save refuses any change.
 export const WorldStateSaveRefusedRetiredPlace: StoryT = {
   ...wrap,
   args: {
