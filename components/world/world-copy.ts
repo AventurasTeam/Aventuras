@@ -136,7 +136,6 @@ export function placeConfirmCopy({ retire, disable, move }: PlaceSaveConfirm): R
       : [t('world:placeConfirm.disableLine', { place: disable.place.name, count: disable.count })]),
     ...(move == null ? [] : [moveLine(move)]),
   ]
-  const items = retire?.inside.map((p) => p.name) ?? []
   if (retire != null)
     return {
       title: t('world:placeConfirm.retireTitle', {
@@ -144,20 +143,20 @@ export function placeConfirmCopy({ retire, disable, move }: PlaceSaveConfirm): R
         count: retire.inside.length,
       }),
       lines,
-      items,
+      items: retire.inside.map((p) => p.name),
       confirmLabel: t('world:placeConfirm.retire'),
     }
   if (disable != null)
     return {
       title: t('world:placeConfirm.disableTitle', { place: disable.place.name }),
       lines,
-      items,
+      items: [],
       confirmLabel: t('world:placeConfirm.disable'),
     }
   return {
-    title: t('world:placeConfirm.moveTitle', { place: move?.place.name ?? '' }),
+    title: t('world:placeConfirm.moveTitle', { place: move.place.name }),
     lines,
-    items,
+    items: [],
     confirmLabel: t('world:placeConfirm.move'),
   }
 }
