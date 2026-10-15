@@ -298,7 +298,8 @@ refuses it, so the host offers no control rather than one that fails.
 **A refusal says which one it was.** `SceneSaveResult` carries the
 action layer's rejection code back across the bridge, and the overlay
 maps it to copy. Only `deltaFailed` is worth retrying; `notTailEntry`,
-`noMetadata` and `notFound` are terminal, and a generic "try again"
+`noMetadata`, `notFound` and `retiredPlace` (the edit moves the scene
+into a retired place) are terminal, and a generic "try again"
 sends the user round a loop the action layer refuses identically every
 time. The overlay stays open on failure so the edit is never silently
 discarded.

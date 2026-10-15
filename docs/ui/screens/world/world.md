@@ -404,7 +404,9 @@ Same fields for every kind:
   ([`data-model.md → LocationState shape`](../../../data-model.md#locationstate-shape)):
   a Save that retires a place with places inside asks first ("Retire
   Port Vellis and the 3 places inside it?", listing them), and each
-  takes the `retired_reason` entered here. The Save refuses, with the
+  takes the `retired_reason` entered here. A place inside that is
+  already retired keeps its own reason, and the confirm neither lists
+  nor counts it. The Save refuses, with the
   reason on this field, while the story is in the place or inside it
   ("The story is in The Rusty Anchor, inside Port Vellis.",
   `story-inside`), and when it would bring back a place whose parent
