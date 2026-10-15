@@ -17,24 +17,27 @@ export function SettingsTab({
   control,
   blocked,
   blockedReason,
-  isPlace = false,
-  disabledThrough = null,
+  place,
 }: Gate & {
   control: Control<EntityBaseDraft>
-  /** A location: the hints add what retiring and each mode do to the places inside it. */
-  isPlace?: boolean
-  /** The ancestor whose `disabled` reaches this place, by name; null when none does. */
-  disabledThrough?: string | null
+  /**
+   * A location: the hints add what retiring does to the places inside it, and what each mode does
+   * on the location map.
+   */
+  place?: {
+    /** The ancestor whose `disabled` reaches this place, by name; null when none does. */
+    disabledThrough: string | null
+  }
 }) {
   const status = useWatch({ control, name: 'status' })
   const gate = { blocked, blockedReason }
   const injectionHint = [
     [
       t('world:fields.injectionOverride'),
-      ...(isPlace ? [t('world:fields.injectionPlaceMap')] : []),
+      ...(place != null ? [t('world:fields.injectionPlaceMap')] : []),
     ].join(' '),
-    ...(isPlace && disabledThrough != null
-      ? [t('world:fields.disabledThrough', { place: disabledThrough })]
+    ...(place?.disabledThrough != null
+      ? [t('world:fields.disabledThrough', { place: place.disabledThrough })]
       : []),
   ].join('\n')
   return (
@@ -45,7 +48,7 @@ export function SettingsTab({
         render={({ field, fieldState }) => (
           <FormRow
             label={t('world:fields.status')}
-            hint={isPlace ? t('world:fields.statusPlace') : undefined}
+            hint={place != null ? t('world:fields.statusPlace') : undefined}
             error={issueLabel(fieldState.error?.message)}
           >
             <Select

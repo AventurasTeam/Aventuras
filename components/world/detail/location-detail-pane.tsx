@@ -111,12 +111,7 @@ export function LocationDetailPane({
         />
       </TabsContent>
       <TabsContent value="settings">
-        <SettingsTab
-          control={asBaseControl(control)}
-          isPlace
-          disabledThrough={disabledThrough}
-          {...gate}
-        />
+        <SettingsTab control={asBaseControl(control)} place={{ disabledThrough }} {...gate} />
       </TabsContent>
       <TrailingTabs row={row} data={data} onOpenHappening={onOpenHappening} />
     </EntityDetailFrame>
