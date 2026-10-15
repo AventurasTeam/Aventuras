@@ -326,7 +326,10 @@
     "disableLine_other": "Disabling {{place}} also keeps the {{count}} places inside it out of the story.",
     "moveLine": "{{region}} is disabled, so {{place}} will stay out of the story.",
     "moveLineInside_one": "{{region}} is disabled, so {{place}} and the place inside it will stay out of the story.",
-    "moveLineInside_other": "{{region}} is disabled, so {{place}} and the {{count}} places inside it will stay out of the story."
+    "moveLineInside_other": "{{region}} is disabled, so {{place}} and the {{count}} places inside it will stay out of the story.",
+    "moveLineSuspended": "{{region}} is disabled. {{place}} stays in the story only while the story is somewhere in {{region}}.",
+    "moveLineSuspendedInside_one": "{{region}} is disabled. {{place}} and the place inside it stay in the story only while the story is somewhere in {{region}}.",
+    "moveLineSuspendedInside_other": "{{region}} is disabled. {{place}} and the {{count}} places inside it stay in the story only while the story is somewhere in {{region}}."
   },
   "overview": {
     "notDescribed": "— not yet described —",

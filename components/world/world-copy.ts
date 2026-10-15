@@ -114,23 +114,27 @@ export function placeRefusalText(refusal: PlaceSaveRefusal): string {
   }
 }
 
+type PlaceMove = NonNullable<PlaceSaveConfirm['move']>
+
+// While the story is in the region, the region hides nothing under it, so the move costs nothing yet.
+function moveLine({ region, place, count, suspended }: PlaceMove): string {
+  const names = { region: region.name, place: place.name }
+  if (suspended)
+    return count === 0
+      ? t('world:placeConfirm.moveLineSuspended', names)
+      : t('world:placeConfirm.moveLineSuspendedInside', { ...names, count })
+  return count === 0
+    ? t('world:placeConfirm.moveLine', names)
+    : t('world:placeConfirm.moveLineInside', { ...names, count })
+}
+
 /** world.md → Settings: one confirm per Save, titled by its weightiest change, with every line. */
 export function placeConfirmCopy({ retire, disable, move }: PlaceSaveConfirm): RowSaveConfirm {
   const lines = [
     ...(disable == null
       ? []
       : [t('world:placeConfirm.disableLine', { place: disable.place.name, count: disable.count })]),
-    ...(move == null
-      ? []
-      : [
-          move.count === 0
-            ? t('world:placeConfirm.moveLine', { region: move.region.name, place: move.place.name })
-            : t('world:placeConfirm.moveLineInside', {
-                region: move.region.name,
-                place: move.place.name,
-                count: move.count,
-              }),
-        ]),
+    ...(move == null ? [] : [moveLine(move)]),
   ]
   const items = retire?.inside.map((p) => p.name) ?? []
   if (retire != null)

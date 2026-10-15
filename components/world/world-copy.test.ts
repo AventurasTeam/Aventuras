@@ -284,6 +284,24 @@ describe('placeConfirmCopy', () => {
       confirmLabel: 'Move',
     })
   })
+
+  it("says a move stays in the story only while the story is in the region it's suspended by", () => {
+    const lines = (count: number) =>
+      placeConfirmCopy({
+        retire: null,
+        disable: null,
+        move: { region: VELLIS, place: ANCHOR, count, suspended: true },
+      }).lines
+    expect(lines(0)).toEqual([
+      'Port Vellis is disabled. The Rusty Anchor stays in the story only while the story is somewhere in Port Vellis.',
+    ])
+    expect(lines(1)).toEqual([
+      'Port Vellis is disabled. The Rusty Anchor and the place inside it stay in the story only while the story is somewhere in Port Vellis.',
+    ])
+    expect(lines(2)).toEqual([
+      'Port Vellis is disabled. The Rusty Anchor and the 2 places inside it stay in the story only while the story is somewhere in Port Vellis.',
+    ])
+  })
 })
 
 describe('ISSUE_TAB', () => {
