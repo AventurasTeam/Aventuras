@@ -22,7 +22,7 @@ describe('collisionRejectionText', () => {
       'A parent chain this merge touches loops back or runs too deep. Fix that chain first.',
     )
     expect(collisionRejectionText(COLLISION_REJECTION.storyInside)).toBe(
-      'The story is in one of these places, and the merge would retire it or move it into a disabled place. Change the status or mode the merge keeps.',
+      'The story is in one of these places, and the merge would retire it or move it into a disabled place. Change the status or mode the merge keeps, or pick the other row to survive.',
     )
     expect(collisionRejectionText(COLLISION_REJECTION.placesInside)).toBe(
       "A place inside one of these isn't retired, so the merged place can't be retired. Retire those places first, or keep the merged place active.",
