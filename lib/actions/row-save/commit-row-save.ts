@@ -25,15 +25,21 @@ export const ROW_SAVE_REJECTION = {
 
 export type RowSaveRejectionCode = (typeof ROW_SAVE_REJECTION)[keyof typeof ROW_SAVE_REJECTION]
 
+/** A place rule a World Save broke, under its own code: the field it shows on and the places. */
+type PlaceRuleRejection<R extends PlaceSaveRefusal = PlaceSaveRefusal> = R extends unknown
+  ? { status: 'rejected'; reason: string; code: R['code']; refusal: R }
+  : never
+
 export type RowSaveResult =
   | { status: 'ok'; id: string }
-  | {
-      status: 'rejected'
-      reason: string
-      code: RowSaveRejectionCode
-      /** The place rule a World Save broke: the field it shows on and the places it names. */
-      refusal?: PlaceSaveRefusal
-    }
+  | { status: 'rejected'; reason: string; code: RowSaveRejectionCode; refusal?: never }
+  | PlaceRuleRejection
+
+// TS can't pair a union's members across two properties, so the pairing is asserted here, once.
+function placeRuleRejection(refusal: PlaceSaveRefusal): PlaceRuleRejection {
+  const reason = `place rule: ${refusal.code}`
+  return { status: 'rejected', reason, code: refusal.code, refusal } as PlaceRuleRejection
+}
 
 // Codes only an entity save raises: the location parent chain and the place rules.
 const ENTITY_ONLY_CODES = [
@@ -123,12 +129,7 @@ export async function commitRowSave(
     const refusal = refuse?.() ?? null
     if (refusal != null) {
       logger.warn(`action_layer.${rowKind}_save_rejected`, { ...context, code: refusal.code })
-      return {
-        status: 'rejected',
-        reason: `place rule: ${refusal.code}`,
-        code: refusal.code,
-        refusal,
-      }
+      return placeRuleRejection(refusal)
     }
     const actions = build(id)
     if (actions.length === 0) {

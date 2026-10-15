@@ -6,7 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { generationStore, resetAllStores } from '@/lib/stores'
 import type { PlaceSaveRefusal } from '@/lib/world'
 
-import { commitRowSave, flatRowSaveResult } from './commit-row-save'
+import { commitRowSave, flatRowSaveResult, type RowSaveResult } from './commit-row-save'
 import { withKeyLock } from '../delta/key-lock'
 import { rowLock } from '../delta/row-locks'
 import type { PipelineAction } from '../types'
@@ -136,6 +136,18 @@ describe('commitRowSave — place rules', () => {
       create: false,
       error: 'broken rule',
     })
+  })
+
+  it("types a refusal's code as the result's, and lets a handler's code arrive without one", () => {
+    const mismatched: RowSaveResult = {
+      status: 'rejected',
+      reason: 'r',
+      code: 'failed',
+      // @ts-expect-error a place refusal whose code isn't the result's
+      refusal: REFUSAL,
+    }
+    const backstop: RowSaveResult = { status: 'rejected', reason: 'r', code: 'retired-parent' }
+    expect([mismatched.status, backstop.status]).toEqual(['rejected', 'rejected'])
   })
 
   it('checks the gate before the place rules', async () => {
