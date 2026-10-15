@@ -239,13 +239,26 @@ export function retireCascade(args: {
     }))
 }
 
-export type PlaceSaveConfirm = {
+type ConfirmParts = {
   /** The places a retire takes with it, by name. */
-  retire: { place: NamedPlace; inside: NamedPlace[] } | null
+  retire: { place: NamedPlace; inside: readonly NamedPlace[] } | null
   /** How many places inside a disable takes out of the story that weren't out already. */
   disable: { place: NamedPlace; count: number } | null
   /** The disabled place a move puts the place inside, and how many places inside it go too. */
   move: { region: NamedPlace; place: NamedPlace; count: number } | null
+}
+
+/** What a Save asks: at least one part is set. */
+export type PlaceSaveConfirm =
+  | (ConfirmParts & { retire: NonNullable<ConfirmParts['retire']> })
+  | (ConfirmParts & { disable: NonNullable<ConfirmParts['disable']> })
+  | (ConfirmParts & { move: NonNullable<ConfirmParts['move']> })
+
+function confirmOf(parts: ConfirmParts): PlaceSaveConfirm | null {
+  if (parts.retire != null) return { ...parts, retire: parts.retire }
+  if (parts.disable != null) return { ...parts, disable: parts.disable }
+  if (parts.move != null) return { ...parts, move: parts.move }
+  return null
 }
 
 /**
@@ -264,14 +277,14 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
   const taken = retiring ? inside.filter((e) => e.status !== 'retired').sort(byName) : []
   const retire = taken.length > 0 ? { place: save.self, inside: taken.map(namedOf) } : null
 
-  let disable: PlaceSaveConfirm['disable'] = null
+  let disable: ConfirmParts['disable'] = null
   if (row.injectionMode !== 'disabled' && draft.injectionMode === 'disabled') {
     const modes = placeModes(entities, args.storyLocationId)
     const count = inside.filter((e) => !modes.isDisabled(e.id)).length
     if (count > 0) disable = { place: save.self, count }
   }
 
-  let move: PlaceSaveConfirm['move'] = null
+  let move: ConfirmParts['move'] = null
   const parentId = draft.parentLocationId
   const gained = save.loops ? [] : gainedDisabled(parentIdOf(row), parentId, byId, parentOf)
   if (parentId != null && gained.length > 0) {
@@ -289,7 +302,7 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
       }
   }
 
-  return retire == null && disable == null && move == null ? null : { retire, disable, move }
+  return confirmOf({ retire, disable, move })
 }
 
 export type MergedPlace = {

@@ -18,6 +18,7 @@ import {
   retireCascade,
   retiredPlaceEntered,
   storyLocationIdOf,
+  type PlaceSaveConfirm,
 } from './place-rules'
 
 const place = (
@@ -631,6 +632,19 @@ describe('placeSaveConfirm', () => {
         locationSave({ row: VELLIS, draft: { status: 'retired' }, story: 'loc_anchor' }),
       ),
     ).toBeNull()
+  })
+
+  it('types a confirm as asking at least one thing, and its retire list as read-only', () => {
+    // @ts-expect-error a confirm with no part is no confirm: placeSaveConfirm answers null
+    const empty: PlaceSaveConfirm = { retire: null, disable: null, move: null }
+    const confirm: PlaceSaveConfirm = {
+      retire: { place: named(VELLIS), inside: [named(ANCHOR)] },
+      disable: null,
+      move: null,
+    }
+    // @ts-expect-error the places a retire takes are read-only
+    confirm.retire?.inside.push(named(MARKET))
+    expect(empty.retire).toBeNull()
   })
 
   it('asks nothing for a create', () => {
