@@ -8,7 +8,7 @@ import { byName } from './overview'
 import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
 import { placeModes } from './place-modes'
 
-/** data-model.md → LocationState shape and world.md → Merge: the codes a place rule refuses with. */
+/** data-model.md → LocationState shape, world.md → Merge: the codes a place rule refuses with. */
 export const PLACE_REFUSAL = {
   storyInside: 'story-inside',
   retiredParent: 'retired-parent',
@@ -56,9 +56,8 @@ type PlaceSaveArgs = EntitySaveInput & {
 }
 
 /**
- * data-model.md → LocationState shape: where the story is. `tail` is the narrative tail's location,
- * which the next turn inherits; `scene` the scene source's, which the next prompt's map is built
- * around. They differ only while a `user_action` stands at the tail. Minted only by storyPlaceOf.
+ * data-model.md → LocationState shape. `tail` is the place the next turn inherits, `scene` the one
+ * the next prompt's map is built around. Minted only by storyPlaceOf.
  */
 export type StoryPlace = {
   readonly tail: string | null

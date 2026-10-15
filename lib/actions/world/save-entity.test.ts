@@ -39,7 +39,6 @@ vi.mock('../story-entries/head-turn', async (importOriginal) => {
   }
 })
 
-// A scene read that throws `fail` while it is set.
 const sceneHook = vi.hoisted(() => ({ fail: null as Error | null }))
 vi.mock('@/lib/pipeline', async (importOriginal) => {
   const real = (await importOriginal()) as { readSceneSource: typeof ReadSceneSource }

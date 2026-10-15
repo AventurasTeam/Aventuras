@@ -132,7 +132,7 @@ export function placeRefusalNotice(refusal: PlaceSaveRefusal): string {
 
 type PlaceMove = NonNullable<PlaceSaveConfirm['move']>
 
-// While the story is in the region, the region hides nothing under it, so the move costs nothing yet.
+// While the story is in the region, nothing under it is hidden, so the move costs nothing yet.
 function moveLine({ region, place, count, suspended }: PlaceMove): string {
   const names = { region: region.name, place: place.name }
   if (suspended)

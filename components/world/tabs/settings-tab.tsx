@@ -20,10 +20,7 @@ export function SettingsTab({
   place,
 }: Gate & {
   control: Control<EntityBaseDraft>
-  /**
-   * A location: the hints add what retiring does to the places inside it, and what each mode does
-   * on the location map.
-   */
+  /** A location: hints add what retiring does to places inside it and each mode's map effect. */
   place?: {
     /** The ancestor whose `disabled` reaches this place, by name; null when none does. */
     disabledThrough: string | null

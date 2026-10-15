@@ -176,7 +176,6 @@ const ENTRY_INDEX: EntryIndex = new Map(
     { id: `e_${position}`, position, kind: 'ai_reply', chapterId: null, excerpt: 'Entry 47' },
   ]),
 )
-// The story at one place, in both the narrative tail and the scene source.
 const storyAt = (id: string | null): StoryPlace =>
   storyPlaceOf({
     tail: { metadata: { currentLocationId: id } },

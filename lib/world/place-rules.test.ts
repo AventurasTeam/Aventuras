@@ -41,7 +41,6 @@ const WORLD = [ELDRA, VELLIS, ANCHOR, BACK_ROOM, MARKET, THORNWOOD]
 
 const named = (e: Entity) => ({ id: e.id, name: e.name })
 
-// The story at `scene` in the scene source and at `tail` in the narrative tail, `scene` unless given.
 const storyAt = (scene: string | null, tail: string | null = scene) =>
   storyPlaceOf({
     tail: { metadata: { currentLocationId: tail } },
