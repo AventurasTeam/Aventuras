@@ -26,7 +26,10 @@ export type RowSaveOutcome =
   | { status: 'busy' }
   /** The draft cannot be written; nothing was attempted. */
   | { status: 'invalid'; reason: string }
-  /** Parked behind `pendingConfirm`; `resolveConfirm` writes or drops it. */
+  /**
+   * Parked behind `pendingConfirm`; `resolveConfirm` writes or drops it. Nothing parks when the
+   * row switched while the Save validated.
+   */
   | { status: 'confirm' }
   /** The write landed. The session may still be dirty with an edit typed while it ran. */
   | { status: 'committed' }
@@ -83,7 +86,7 @@ export type RowSaveSession<Draft extends FieldValues> = {
   resolveLeave: (outcome: 'save' | 'discard' | 'cancel') => void
   /** The question a parked Save asks; null when none is parked. */
   pendingConfirm: RowSaveConfirm | null
-  /** Writes the parked Save, or drops it with any leave queued behind it. */
+  /** Writes the parked Save, or drops it with the leaves that were waiting on it. */
   resolveConfirm: (outcome: 'save' | 'cancel') => void
 }
 
