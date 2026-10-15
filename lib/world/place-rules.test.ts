@@ -573,7 +573,7 @@ describe('placeSaveConfirm', () => {
     ).toEqual({
       retire: null,
       disable: null,
-      move: { region: named(disabledThorn), place: named(ANCHOR), count: 1 },
+      move: { region: named(disabledThorn), place: named(ANCHOR), count: 1, suspended: false },
     })
   })
 
@@ -589,7 +589,48 @@ describe('placeSaveConfirm', () => {
         story: 'loc_shrine',
       }),
     )
-    expect(confirm?.move).toEqual({ region: named(disabledThorn), place: named(MARKET), count: 0 })
+    expect(confirm?.move).toEqual({
+      region: named(disabledThorn),
+      place: named(MARKET),
+      count: 0,
+      suspended: true,
+    })
+  })
+
+  it("asks for a move out of a region the story's presence suspends into one it doesn't", () => {
+    const disabledVellis = { ...VELLIS, injectionMode: 'disabled' as const }
+    const disabledThorn = { ...THORNWOOD, injectionMode: 'disabled' as const }
+    const stall = place('loc_stall', 'Fish Stall', 'loc_market')
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: MARKET,
+          draft: { parentLocationId: 'loc_thorn' },
+          entities: [ELDRA, disabledVellis, ANCHOR, MARKET, stall, disabledThorn],
+          story: 'loc_anchor',
+        }),
+      )?.move,
+    ).toEqual({ region: named(disabledThorn), place: named(MARKET), count: 1, suspended: false })
+  })
+
+  it("judges a move by the draft's own mode: one Save turning a place auto asks", () => {
+    const disabledMarket = { ...MARKET, injectionMode: 'disabled' as const }
+    const disabledThorn = { ...THORNWOOD, injectionMode: 'disabled' as const }
+    const stall = place('loc_stall', 'Fish Stall', 'loc_market')
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: disabledMarket,
+          draft: { injectionMode: 'auto', parentLocationId: 'loc_thorn' },
+          entities: [ELDRA, VELLIS, disabledMarket, stall, disabledThorn],
+        }),
+      )?.move,
+    ).toEqual({
+      region: named(disabledThorn),
+      place: named(disabledMarket),
+      count: 1,
+      suspended: false,
+    })
   })
 
   it('asks nothing for a move of a place already out of the story', () => {

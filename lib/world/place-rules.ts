@@ -244,8 +244,11 @@ type ConfirmParts = {
   retire: { place: NamedPlace; inside: readonly NamedPlace[] } | null
   /** How many places inside a disable takes out of the story that weren't out already. */
   disable: { place: NamedPlace; count: number } | null
-  /** The disabled place a move puts the place inside, and how many places inside it go too. */
-  move: { region: NamedPlace; place: NamedPlace; count: number } | null
+  /**
+   * The disabled place a move puts the place inside, and how many places inside it go too.
+   * `suspended`: the story is in the region or inside it, so the place stays in until it leaves.
+   */
+  move: { region: NamedPlace; place: NamedPlace; count: number; suspended: boolean } | null
 }
 
 /** What a Save asks: at least one part is set. */
@@ -292,13 +295,17 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
       gained.includes(id),
     )
     const region = regionId == null ? undefined : byId.get(regionId)
-    const plain = placeModes(entities, null)
-    // A place already out of the story, by its own mode or its old chain, loses nothing more.
-    if (region !== undefined && !plain.isDisabled(row.id))
+    // Before the move, with the draft's own mode: a place already out of the story loses nothing.
+    const withMode = entities.map((e) =>
+      e.id === row.id ? { ...e, injectionMode: draft.injectionMode } : e,
+    )
+    const before = placeModes(withMode, args.storyLocationId)
+    if (region !== undefined && !before.isDisabled(row.id))
       move = {
         region: namedOf(region),
         place: save.self,
-        count: inside.filter((e) => !plain.isDisabled(e.id)).length,
+        count: inside.filter((e) => !before.isDisabled(e.id)).length,
+        suspended: holdsStory(region.id, args.storyLocationId, parentOf),
       }
   }
 

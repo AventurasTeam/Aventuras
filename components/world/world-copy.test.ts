@@ -228,7 +228,7 @@ describe('placeConfirmCopy', () => {
       placeConfirmCopy({
         retire: null,
         disable: { place: VELLIS, count: 3 },
-        move: { region: VELLIS, place: ANCHOR, count: 2 },
+        move: { region: VELLIS, place: ANCHOR, count: 2, suspended: false },
       }),
     ).toEqual({
       title: 'Disable Port Vellis?',
@@ -246,7 +246,7 @@ describe('placeConfirmCopy', () => {
       placeConfirmCopy({
         retire: null,
         disable: null,
-        move: { region: VELLIS, place: ANCHOR, count: 0 },
+        move: { region: VELLIS, place: ANCHOR, count: 0, suspended: false },
       }),
     ).toEqual({
       title: 'Move The Rusty Anchor?',
