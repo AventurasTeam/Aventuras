@@ -17,7 +17,6 @@ import {
   entityKeepActions,
   entityMergeActions,
   entityRenameActions,
-  mergedPlaceOf,
   mergePlaceRefusal,
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
@@ -175,7 +174,7 @@ function buildResolution(
         const code = mergePlaceRefusal({
           canonical,
           loser,
-          merged: mergedPlaceOf(actions, canonical),
+          actions,
           branchEntities,
           storyLocationId,
         })

@@ -343,11 +343,13 @@ export function mergedPlaceOf(actions: readonly PipelineAction[], canonical: Ent
 export function mergePlaceRefusal(args: {
   canonical: Entity
   loser: Entity
-  merged: MergedPlace
+  /** The built merge, which the canonical's merged status, mode and parent are read off. */
+  actions: readonly PipelineAction[]
   branchEntities: readonly Entity[]
   storyLocationId: string | null
 }): MergePlaceRefusalCode | null {
-  const { canonical, loser, merged, branchEntities, storyLocationId } = args
+  const { canonical, loser, branchEntities, storyLocationId } = args
+  const merged = mergedPlaceOf(args.actions, canonical)
   const parentOf = parentOfLocations(branchEntities)
   const byId = new Map(branchEntities.map((e) => [e.id, e]))
   const inLoser = holdsStory(loser.id, storyLocationId, parentOf)

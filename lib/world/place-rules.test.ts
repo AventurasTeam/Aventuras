@@ -18,6 +18,7 @@ import {
   retireCascade,
   retiredPlaceEntered,
   storyLocationIdOf,
+  type MergedPlace,
   type PlaceSaveConfirm,
 } from './place-rules'
 
@@ -739,26 +740,41 @@ describe('mergedPlaceOf', () => {
 describe('mergePlaceRefusal', () => {
   const DUPLICATE = place('loc_dup', 'Rusty Anchor', 'loc_vellis')
   const world = [...WORLD, DUPLICATE]
+  // The merge's patch on the canonical, which mergedPlaceOf reads the merged place off.
   const merge = (
-    merged: Partial<{
-      status: Entity['status']
-      injectionMode: Entity['injectionMode']
-      parentId: string | null
-    }>,
+    merged: Partial<MergedPlace>,
     opts: {
       entities?: readonly Entity[]
       story?: string | null
       canonical?: Entity
       loser?: Entity
     } = {},
-  ) =>
-    mergePlaceRefusal({
-      canonical: opts.canonical ?? ANCHOR,
+  ) => {
+    const canonical = opts.canonical ?? ANCHOR
+    const { status, injectionMode, parentId } = {
+      status: 'active',
+      injectionMode: 'auto',
+      parentId: 'loc_vellis',
+      ...merged,
+    } satisfies MergedPlace
+    return mergePlaceRefusal({
+      canonical,
       loser: opts.loser ?? DUPLICATE,
-      merged: { status: 'active', injectionMode: 'auto', parentId: 'loc_vellis', ...merged },
+      actions: [
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: canonical.id,
+            patch: { status, injectionMode, state: { parent_location_id: parentId } },
+          },
+        },
+      ],
       branchEntities: opts.entities ?? world,
       storyLocationId: opts.story ?? null,
     })
+  }
 
   it('refuses a retired result while the story is in either place', () => {
     expect(merge({ status: 'retired' }, { story: 'loc_dup' })).toBe('story-inside')

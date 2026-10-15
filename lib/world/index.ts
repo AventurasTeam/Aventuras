@@ -95,7 +95,6 @@ export type {
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
 export {
-  mergedPlaceOf,
   mergePlaceRefusal,
   PLACE_REFUSAL,
   placeSaveConfirm,
@@ -105,7 +104,6 @@ export {
   storyLocationIdOf,
 } from './place-rules'
 export type {
-  MergedPlace,
   MergePlaceRefusalCode,
   NamedPlace,
   PlaceSaveConfirm,
