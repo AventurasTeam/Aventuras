@@ -104,7 +104,7 @@ describe('useEntityRowSession', () => {
     await waitFor(() => expect(hook.result.current.invalidReason).toBeNull())
   })
 
-  // data-model.md → LocationState shape: a place rule names its own field and places.
+  // world.md → Settings: a place rule names its own field and places.
   it('lands a place refusal on the field it names, with the places in the text', async () => {
     const { hook, onRejected } = setup({
       status: 'rejected',

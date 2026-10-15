@@ -72,7 +72,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
       const keywords = keywordsRef.current
       const result = await onSave(draft, keywords?.base ?? values.keywords)
       if (result.status === 'rejected') {
-        // A place rule names its own field and places (data-model.md → LocationState shape).
+        // A place rule names its own field and places (world.md → Settings).
         const { refusal } = result
         const place =
           refusal == null
