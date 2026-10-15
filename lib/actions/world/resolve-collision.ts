@@ -22,10 +22,11 @@ import {
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
   PLACE_REFUSAL,
-  storyLocationIdOf,
+  storyPlaceOf,
   type CollisionPairMiss,
   type EntityRename,
   type MergeScalar,
+  type StoryPlace,
 } from '@/lib/world'
 
 import {
@@ -141,7 +142,7 @@ function buildResolution(
   branchId: string,
   resolution: CollisionResolution,
   head: HeadTurn<StoryEntry> | null,
-  storyLocationId: string | null,
+  story: StoryPlace,
 ): Built {
   const gated = gateRefusal()
   if (gated) return gated
@@ -176,7 +177,7 @@ function buildResolution(
           loser,
           actions,
           branchEntities,
-          storyLocationId,
+          story,
         })
         if (code != null) return refusal(code, `the merged place breaks a place rule: ${code}`)
       }
@@ -211,13 +212,9 @@ async function commitMerge(
     branchId,
     ctx,
     async (head) => {
-      const scene = await readSceneSource(ctx.db, branchId)
-      const storyLocationId = storyLocationIdOf(scene == null ? [] : [scene])
-      return commit(
-        branchId,
-        () => buildResolution(branchId, resolution, head, storyLocationId),
-        ctx,
-      )
+      const sceneSource = await readSceneSource(ctx.db, branchId)
+      const story = storyPlaceOf({ tail: head?.tail, sceneSource })
+      return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
     },
     () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
   )
@@ -229,7 +226,8 @@ function dispatch(
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   if (resolution.mode === 'merge') return commitMerge(branchId, resolution, ctx)
-  return commit(branchId, () => buildResolution(branchId, resolution, null, null), ctx)
+  const nowhere = storyPlaceOf({ tail: null, sceneSource: null })
+  return commit(branchId, () => buildResolution(branchId, resolution, null, nowhere), ctx)
 }
 
 function rejected(

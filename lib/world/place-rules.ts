@@ -4,9 +4,7 @@ import {
   type Entity,
   type EntryMetadata,
   type LocationState,
-  type StoryEntry,
 } from '@/lib/db'
-import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { blankToNull } from '@/lib/text'
 
 import type { EntitySaveInput } from './entity-actions'
@@ -58,19 +56,36 @@ type PlaceSaveArgs = EntitySaveInput & {
   /** The store's row at Save; null in create mode. */
   row: Entity | null
   branchEntities: readonly Entity[]
-  /** The story's location (storyLocationIdOf); only a location update reads it. */
-  storyLocationId: string | null
+  /** Where the story is; only a location update reads it. */
+  story: StoryPlace
 }
 
-type SceneEntry = { kind: StoryEntry['kind']; metadata: Partial<EntryMetadata> | null }
-
 /**
- * The story's location: the latest narrative entry's, the scene the next turn's prompt reads
- * (generation-context's readSceneSource). `entries` ascending by position.
+ * data-model.md → LocationState shape: where the story is. `tail` is the narrative tail's location,
+ * which the next turn inherits; `scene` the scene source's, which the next prompt's map is built
+ * around. They differ only while a `user_action` stands at the tail. Minted only by storyPlaceOf.
  */
-export function storyLocationIdOf(entries: readonly SceneEntry[]): string | null {
-  const source = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
-  return inheritedEntryMetadata(source?.metadata).currentLocationId
+export type StoryPlace = {
+  readonly tail: string | null
+  readonly scene: string | null
+  readonly __brand: 'StoryPlace'
+}
+
+type SceneRow = { metadata: Partial<EntryMetadata> | null }
+
+/** From the branch's narrative tail (resolveHeadTurn) and its scene source (readSceneSource). */
+export function storyPlaceOf(rows: {
+  tail: SceneRow | null | undefined
+  sceneSource: SceneRow | null | undefined
+}): StoryPlace {
+  const locationOf = (row: SceneRow | null | undefined) =>
+    inheritedEntryMetadata(row?.metadata).currentLocationId
+  return { tail: locationOf(rows.tail), scene: locationOf(rows.sceneSource) } as StoryPlace
+}
+
+/** The story's locations a `story-inside` rule reads, the tail's first. */
+function storyLocations(story: StoryPlace): string[] {
+  return [...new Set([story.tail, story.scene])].filter((id) => id != null)
 }
 
 const namedOf = (e: Pick<Entity, 'id' | 'name'>): NamedPlace => ({ id: e.id, name: e.name })
@@ -157,14 +172,16 @@ function locationSave(args: PlaceSaveArgs & { kind: 'location' }): LocationSave 
   }
 }
 
-function locationRefusal(
-  save: LocationSave,
-  storyLocationId: string | null,
-): PlaceSaveRefusal | null {
+function locationRefusal(save: LocationSave, storyPlace: StoryPlace): PlaceSaveRefusal | null {
   const { self, draft, row, byId, parentOf, parentChanged, loops } = save
   const wasStatus = row?.status ?? null
-  const story = storyLocationId == null ? undefined : byId.get(storyLocationId)
-  const inside = row != null && story !== undefined && holdsStory(row.id, story.id, parentOf)
+  const story =
+    row == null
+      ? undefined
+      : storyLocations(storyPlace)
+          .map((id) => byId.get(id))
+          .find((at) => at !== undefined && holdsStory(row.id, at.id, parentOf))
+  const inside = row != null && story !== undefined
   const storyRefusal = (field: StoryInsideRefusal['field']) =>
     inside
       ? ({ code: PLACE_REFUSAL.storyInside, field, place: self, story: namedOf(story) } as const)
@@ -211,7 +228,7 @@ export function placeSaveRefusal(args: PlaceSaveArgs): PlaceSaveRefusal | null {
         : { code: PLACE_REFUSAL.retiredPlace, field: 'atLocationId', place: namedOf(place) }
     }
     case 'location':
-      return locationRefusal(locationSave(args), args.storyLocationId)
+      return locationRefusal(locationSave(args), args.story)
     case 'faction':
       return null
   }
@@ -282,7 +299,7 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
 
   let disable: ConfirmParts['disable'] = null
   if (row.injectionMode !== 'disabled' && draft.injectionMode === 'disabled') {
-    const modes = placeModes(entities, args.storyLocationId)
+    const modes = placeModes(entities, args.story.scene)
     const count = inside.filter((e) => !modes.isDisabled(e.id)).length
     if (count > 0) disable = { place: save.self, count }
   }
@@ -299,13 +316,13 @@ export function placeSaveConfirm(args: PlaceSaveArgs): PlaceSaveConfirm | null {
     const withMode = entities.map((e) =>
       e.id === row.id ? { ...e, injectionMode: draft.injectionMode } : e,
     )
-    const before = placeModes(withMode, args.storyLocationId)
+    const before = placeModes(withMode, args.story.scene)
     if (region !== undefined && !before.isDisabled(row.id))
       move = {
         region: namedOf(region),
         place: save.self,
         count: inside.filter((e) => !before.isDisabled(e.id)).length,
-        suspended: holdsStory(region.id, args.storyLocationId, parentOf),
+        suspended: holdsStory(region.id, args.story.scene, parentOf),
       }
   }
 
@@ -342,42 +359,19 @@ export function mergedPlaceOf(actions: readonly PipelineAction[], canonical: Ent
   return merged
 }
 
-/**
- * world.md → Merge, on the place the merge would leave: retired with the story in either place, or
- * with a place inside either that isn't retired; not retired under a retired parent, moved or not;
- * or the story's place gaining a disabled place.
- */
-export function mergePlaceRefusal(args: {
-  canonical: Entity
-  loser: Entity
-  /** The built merge, which the canonical's merged status, mode and parent are read off. */
-  actions: readonly PipelineAction[]
-  branchEntities: readonly Entity[]
-  storyLocationId: string | null
-}): MergePlaceRefusalCode | null {
-  const { canonical, loser, branchEntities, storyLocationId } = args
-  const merged = mergedPlaceOf(args.actions, canonical)
-  const parentOf = parentOfLocations(branchEntities)
-  const byId = new Map(branchEntities.map((e) => [e.id, e]))
-  const inLoser = holdsStory(loser.id, storyLocationId, parentOf)
-  const inCanonical = holdsStory(canonical.id, storyLocationId, parentOf)
+type MergePair = { canonical: Entity; loser: Entity }
 
-  if (merged.status === 'retired') {
-    if (inLoser || inCanonical) return PLACE_REFUSAL.storyInside
-    const pair = new Set([canonical.id, loser.id])
-    const inside = [
-      ...descendantsOf(canonical.id, branchEntities, parentOf),
-      ...descendantsOf(loser.id, branchEntities, parentOf),
-    ]
-    if (inside.some((e) => !pair.has(e.id) && e.status !== 'retired'))
-      return PLACE_REFUSAL.placesInside
-  } else {
-    const parent = merged.parentId == null ? undefined : byId.get(merged.parentId)
-    if (parent?.kind === 'location' && parent.status === 'retired')
-      return PLACE_REFUSAL.retiredParent
-  }
-
-  if (!inLoser && !inCanonical) return null
+/** Whether the merge puts the story's place at `at` inside a disabled place it wasn't inside. */
+function storyGainsDisabled(
+  at: string,
+  { canonical, loser }: MergePair,
+  merged: MergedPlace,
+  byId: ReadonlyMap<string, Entity>,
+  parentOf: ParentOf,
+): boolean {
+  const inLoser = holdsStory(loser.id, at, parentOf)
+  const inCanonical = holdsStory(canonical.id, at, parentOf)
+  if (!inLoser && !inCanonical) return false
   // The story's side, read before and after; the pair is one place after, so the loser counts as
   // the canonical. A nested pair holds the story under both, and its chain runs through the inner.
   const canonicalInsideLoser = parentChainIds(canonical.id, parentOf).includes(loser.id)
@@ -395,5 +389,44 @@ export function mergePlaceRefusal(args: {
     byId,
     parentOf,
   )
-  return [...after].some((id) => !before.has(id)) ? PLACE_REFUSAL.storyInside : null
+  return [...after].some((id) => !before.has(id))
+}
+
+/**
+ * world.md → Merge, on the place the merge would leave: retired with the story in either place, or
+ * with a place inside either that isn't retired; not retired under a retired parent, moved or not;
+ * or the story's place gaining a disabled place.
+ */
+export function mergePlaceRefusal(args: {
+  canonical: Entity
+  loser: Entity
+  /** The built merge, which the canonical's merged status, mode and parent are read off. */
+  actions: readonly PipelineAction[]
+  branchEntities: readonly Entity[]
+  story: StoryPlace
+}): MergePlaceRefusalCode | null {
+  const { canonical, loser, branchEntities } = args
+  const merged = mergedPlaceOf(args.actions, canonical)
+  const parentOf = parentOfLocations(branchEntities)
+  const byId = new Map(branchEntities.map((e) => [e.id, e]))
+  const storyAt = storyLocations(args.story)
+
+  if (merged.status === 'retired') {
+    const holds = (id: string) => storyAt.some((at) => holdsStory(id, at, parentOf))
+    if (holds(loser.id) || holds(canonical.id)) return PLACE_REFUSAL.storyInside
+    const pair = new Set([canonical.id, loser.id])
+    const inside = [
+      ...descendantsOf(canonical.id, branchEntities, parentOf),
+      ...descendantsOf(loser.id, branchEntities, parentOf),
+    ]
+    if (inside.some((e) => !pair.has(e.id) && e.status !== 'retired'))
+      return PLACE_REFUSAL.placesInside
+  } else {
+    const parent = merged.parentId == null ? undefined : byId.get(merged.parentId)
+    if (parent?.kind === 'location' && parent.status === 'retired')
+      return PLACE_REFUSAL.retiredParent
+  }
+
+  const gains = (at: string) => storyGainsDisabled(at, { canonical, loser }, merged, byId, parentOf)
+  return storyAt.some(gains) ? PLACE_REFUSAL.storyInside : null
 }

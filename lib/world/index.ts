@@ -101,12 +101,13 @@ export {
   placeSaveRefusal,
   retireCascade,
   retiredPlaceEntered,
-  storyLocationIdOf,
+  storyPlaceOf,
 } from './place-rules'
 export type {
   MergePlaceRefusalCode,
   NamedPlace,
   PlaceSaveConfirm,
   PlaceSaveRefusal,
+  StoryPlace,
 } from './place-rules'
 export { itemNamesakes, matchNewLocation } from './new-entity-match'

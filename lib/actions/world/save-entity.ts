@@ -5,8 +5,9 @@ import { CAST_ID_PREFIX, entitiesStore } from '@/lib/stores'
 import {
   entityActions,
   placeSaveRefusal,
-  storyLocationIdOf,
+  storyPlaceOf,
   type EntitySaveInput,
+  type StoryPlace,
 } from '@/lib/world'
 
 import { commitRowSave, ROW_SAVE_REJECTION, type RowSaveResult } from '../row-save/commit-row-save'
@@ -21,7 +22,7 @@ type SaveEntityArgs = EntitySaveInput & { branchId: string; row: Entity | null }
 
 function commitEntity(
   args: SaveEntityArgs,
-  storyLocationId: string | null,
+  story: StoryPlace,
   ctx: DbCtx,
 ): Promise<EntitySaveResult> {
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
@@ -33,7 +34,7 @@ function commitEntity(
       branchId: args.branchId,
       rowId: args.row?.id ?? null,
       idPrefix: CAST_ID_PREFIX[args.kind],
-      refuse: () => placeSaveRefusal({ ...args, branchEntities, storyLocationId }),
+      refuse: () => placeSaveRefusal({ ...args, branchEntities, story }),
       build: (id) => entityActions({ ...args, id, now: Date.now(), branchEntities }),
     },
     ctx,
@@ -47,7 +48,8 @@ function commitEntity(
 export async function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySaveResult> {
   // Only a location update can hold the story. It reads the story's scene under the tail's lock,
   // as a merge does, so a scene edit can't move the story into the place between read and write.
-  if (args.kind !== 'location' || args.row == null) return commitEntity(args, null, ctx)
+  if (args.kind !== 'location' || args.row == null)
+    return commitEntity(args, storyPlaceOf({ tail: null, sceneSource: null }), ctx)
   const context = { branchId: args.branchId, id: args.row.id, kind: args.kind }
   // commitRowSave logs its own throws; the reads before it run outside its log.
   let committing = false
@@ -55,10 +57,10 @@ export async function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<Enti
     return await withTailMetadataLock<EntitySaveResult>(
       args.branchId,
       ctx,
-      async () => {
-        const scene = await readSceneSource(ctx.db, args.branchId)
+      async (head) => {
+        const sceneSource = await readSceneSource(ctx.db, args.branchId)
         committing = true
-        return commitEntity(args, storyLocationIdOf(scene == null ? [] : [scene]), ctx)
+        return commitEntity(args, storyPlaceOf({ tail: head?.tail, sceneSource }), ctx)
       },
       () => {
         const code = ROW_SAVE_REJECTION.inFlight

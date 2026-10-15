@@ -62,7 +62,7 @@ import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
-import { useStoryLocationId } from '@/hooks/use-story-location-id'
+import { useStoryPlace } from '@/hooks/use-story-place'
 import { useTier } from '@/hooks/use-tier'
 import {
   importEntity,
@@ -156,7 +156,7 @@ export default function WorldRoute() {
   const involvementRows = happeningInvolvementsStore.useInvolvements((m) => m)
   const happeningRows = happeningsStore.useHappenings((m) => m)
   const worldTime = useBranchWorldTime(branchId)
-  const storyLocationId = useStoryLocationId(branchId)
+  const story = useStoryPlace(branchId)
   const entryIndex = useEntryIndex(branchId)
   const calendarId = open?.definition.calendarSystemId ?? DEFAULT_CALENDAR_ID
   const calendar = useMemo(() => resolveCalendar(calendarId), [calendarId])
@@ -204,7 +204,7 @@ export default function WorldRoute() {
       worldTime,
       calendar,
       leadId,
-      storyLocationId,
+      story,
     }),
     [
       branchId,
@@ -215,7 +215,7 @@ export default function WorldRoute() {
       worldTime,
       calendar,
       leadId,
-      storyLocationId,
+      story,
     ],
   )
 

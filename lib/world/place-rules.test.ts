@@ -17,9 +17,10 @@ import {
   placeSaveRefusal,
   retireCascade,
   retiredPlaceEntered,
-  storyLocationIdOf,
+  storyPlaceOf,
   type MergedPlace,
   type PlaceSaveConfirm,
+  type StoryPlace,
 } from './place-rules'
 
 const place = (
@@ -40,20 +41,35 @@ const WORLD = [ELDRA, VELLIS, ANCHOR, BACK_ROOM, MARKET, THORNWOOD]
 
 const named = (e: Entity) => ({ id: e.id, name: e.name })
 
+// The story at `scene` in the scene source and at `tail` in the narrative tail, `scene` unless given.
+const storyAt = (scene: string | null, tail: string | null = scene) =>
+  storyPlaceOf({
+    tail: { metadata: { currentLocationId: tail } },
+    sceneSource: { metadata: { currentLocationId: scene } },
+  })
+
 type LocationArgs = {
   row: Entity | null
   draft: Partial<LocationDraft>
   entities?: readonly Entity[]
   story?: string | null
+  /** The narrative tail's location, when it isn't the scene source's. */
+  tail?: string | null
 }
 
-const locationSave = ({ row, draft, entities = WORLD, story = null }: LocationArgs) => ({
+const locationSave = ({
+  row,
+  draft,
+  entities = WORLD,
+  story = null,
+  tail = story,
+}: LocationArgs) => ({
   kind: 'location' as const,
   draft: { ...locationDraftFrom(row), ...draft },
   keywordsBase: [],
   row,
   branchEntities: entities,
-  storyLocationId: story,
+  story: storyAt(story, tail),
 })
 
 describe('placeSaveRefusal — retiring a place', () => {
@@ -98,6 +114,52 @@ describe('placeSaveRefusal — retiring a place', () => {
         }),
       ),
     ).toBeNull()
+  })
+})
+
+// A regenerate whose unwind was refused leaves a user_action at the tail; a merge then rewrites
+// only the tail's scene, so the scene source can name another place, or a deleted one.
+describe('placeSaveRefusal — the tail and the scene source disagree', () => {
+  it("refuses while the tail's place is inside, naming it, whatever the scene source names", () => {
+    for (const scene of ['loc_gone', 'loc_thorn'])
+      expect(
+        placeSaveRefusal(
+          locationSave({
+            row: VELLIS,
+            draft: { status: 'retired' },
+            story: scene,
+            tail: 'loc_anchor',
+          }),
+        ),
+      ).toEqual({
+        code: 'story-inside',
+        field: 'status',
+        place: named(VELLIS),
+        story: named(ANCHOR),
+      })
+    expect(
+      placeSaveRefusal(
+        locationSave({
+          row: VELLIS,
+          draft: { injectionMode: 'disabled' },
+          story: 'loc_gone',
+          tail: 'loc_back',
+        }),
+      ),
+    ).toMatchObject({ code: 'story-inside', field: 'injectionMode', story: named(BACK_ROOM) })
+  })
+
+  it("refuses while the scene source's place is inside, naming it, when the tail's is not", () => {
+    expect(
+      placeSaveRefusal(
+        locationSave({
+          row: VELLIS,
+          draft: { status: 'retired' },
+          story: 'loc_market',
+          tail: 'loc_thorn',
+        }),
+      ),
+    ).toMatchObject({ code: 'story-inside', story: named(MARKET) })
   })
 })
 
@@ -350,7 +412,7 @@ describe('placeSaveRefusal — entering a retired place', () => {
     keywordsBase: [],
     row,
     branchEntities: world,
-    storyLocationId: null,
+    story: storyAt(null),
   })
 
   it("refuses a character's move into a retired place, on its location field", () => {
@@ -381,7 +443,7 @@ describe('placeSaveRefusal — entering a retired place', () => {
       keywordsBase: [],
       row: lamp,
       branchEntities: world,
-      storyLocationId: null,
+      story: storyAt(null),
     } satisfies EntitySaveInput & Record<string, unknown>
     expect(placeSaveRefusal(itemSave)).toEqual({
       code: 'retired-place',
@@ -683,6 +745,48 @@ describe('placeSaveConfirm', () => {
     expect(confirm?.move).toMatchObject({ region: named(disabledThorn) })
   })
 
+  // The prompt's map is built around the scene source, so its suspension is the one that counts.
+  it("reads the story's suspension from the scene source, not the tail", () => {
+    const disabledVellis = { ...VELLIS, injectionMode: 'disabled' as const }
+    const stall = place('loc_stall', 'Fish Stall', 'loc_market')
+    const entities = [ELDRA, disabledVellis, ANCHOR, MARKET, stall, THORNWOOD]
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: MARKET,
+          draft: { injectionMode: 'disabled' },
+          entities,
+          story: 'loc_anchor',
+          tail: 'loc_thorn',
+        }),
+      )?.disable,
+    ).toEqual({ place: named(MARKET), count: 1 })
+    const disabledThorn = { ...THORNWOOD, injectionMode: 'disabled' as const }
+    const shrine = place('loc_shrine', 'Shrine', 'loc_thorn')
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: MARKET,
+          draft: { parentLocationId: 'loc_thorn' },
+          entities: [ELDRA, VELLIS, MARKET, disabledThorn, shrine],
+          story: 'loc_shrine',
+          tail: 'loc_eldra',
+        }),
+      )?.move,
+    ).toMatchObject({ suspended: true })
+    expect(
+      placeSaveConfirm(
+        locationSave({
+          row: MARKET,
+          draft: { parentLocationId: 'loc_thorn' },
+          entities: [...entities, disabledThorn],
+          story: 'loc_anchor',
+          tail: 'loc_eldra',
+        }),
+      )?.move,
+    ).toMatchObject({ count: 1, suspended: false })
+  })
+
   it('asks nothing before a Save that will be refused', () => {
     expect(
       placeSaveConfirm(
@@ -718,33 +822,33 @@ describe('placeSaveConfirm', () => {
   })
 })
 
-describe('storyLocationIdOf', () => {
+describe('storyPlaceOf', () => {
   const meta = (currentLocationId: string | null) => ({
     sceneEntities: [],
     currentLocationId,
     worldTime: 0,
   })
 
-  // generation-context's readSceneSource: the latest ai_reply or opening, whatever sits after it.
-  it("reads the latest narrative entry's location, past actions with no scene", () => {
+  it("reads the tail's location and the scene source's", () => {
     expect(
-      storyLocationIdOf([
-        { kind: 'opening', metadata: meta('loc_a') },
-        { kind: 'ai_reply', metadata: meta('loc_b') },
-        { kind: 'user_action', metadata: null },
-        { kind: 'user_action', metadata: null },
-      ]),
-    ).toBe('loc_b')
+      storyPlaceOf({
+        tail: { metadata: meta('loc_a') },
+        sceneSource: { metadata: meta('loc_b') },
+      }),
+    ).toEqual({ tail: 'loc_a', scene: 'loc_b' })
   })
 
-  it('reads no location from a narrative entry with no scene, or from no entries', () => {
-    expect(
-      storyLocationIdOf([
-        { kind: 'opening', metadata: meta('loc_a') },
-        { kind: 'ai_reply', metadata: null },
-      ]),
-    ).toBeNull()
-    expect(storyLocationIdOf([])).toBeNull()
+  it('reads no location from a row with no scene, or from no row', () => {
+    expect(storyPlaceOf({ tail: { metadata: null }, sceneSource: undefined })).toEqual({
+      tail: null,
+      scene: null,
+    })
+  })
+
+  it('is minted only by storyPlaceOf', () => {
+    // @ts-expect-error a hand-built pair of ids is not a story place
+    const handBuilt: StoryPlace = { tail: 'loc_a', scene: 'loc_b' }
+    expect(handBuilt.tail).toBe('loc_a')
   })
 })
 
@@ -802,6 +906,7 @@ describe('mergePlaceRefusal', () => {
     opts: {
       entities?: readonly Entity[]
       story?: string | null
+      tail?: string | null
       canonical?: Entity
       loser?: Entity
     } = {},
@@ -828,7 +933,7 @@ describe('mergePlaceRefusal', () => {
         },
       ],
       branchEntities: opts.entities ?? world,
-      storyLocationId: opts.story ?? null,
+      story: storyAt(opts.story ?? null, opts.tail === undefined ? opts.story : opts.tail),
     })
   }
 
@@ -1001,6 +1106,24 @@ describe('mergePlaceRefusal', () => {
         },
       ),
     ).toBe('story-inside')
+  })
+
+  it("refuses on the tail's place whatever the scene source names", () => {
+    expect(merge({ status: 'retired' }, { story: 'loc_gone', tail: 'loc_back' })).toBe(
+      'story-inside',
+    )
+    expect(merge({ injectionMode: 'disabled' }, { story: 'loc_gone', tail: 'loc_dup' })).toBe(
+      'story-inside',
+    )
+  })
+
+  it("refuses on the scene source's place when the tail's is outside", () => {
+    expect(merge({ status: 'retired' }, { story: 'loc_dup', tail: 'loc_thorn' })).toBe(
+      'story-inside',
+    )
+    expect(merge({ injectionMode: 'disabled' }, { story: 'loc_back', tail: 'loc_thorn' })).toBe(
+      'story-inside',
+    )
   })
 
   it('lets a merge the story is outside through', () => {

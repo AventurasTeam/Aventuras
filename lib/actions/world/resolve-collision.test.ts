@@ -1115,6 +1115,27 @@ describe('resolveCollision — location merge place rules', () => {
     expect(await deltaRows()).toEqual([])
   })
 
+  // A user_action standing at the tail after a refused unwind: the reply before it, the scene
+  // source, names a deleted place, and the next turn inherits the tail's.
+  it("refuses a retired result while the tail's place is either, whatever the reply names", async () => {
+    await sceneAt('loc_gone')
+    await ctx.db.insert(storyEntries).values({
+      id: 'entry_3',
+      branchId: 'b1',
+      position: 3,
+      kind: 'user_action',
+      content: 'I wait.',
+      metadata: { sceneEntities: [], currentLocationId: 'loc_b', worldTime: 0 } as EntryMetadata,
+      createdAt: 3,
+    })
+    await setStatus('loc_a', 'retired')
+    expect(await resolveCollision('b1', LOC_MERGE, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
   it('refuses a retired result while a place inside either is not retired', async () => {
     await sceneAt(null)
     await ctx.db.insert(entities).values(place('loc_c', 'loc_b'))

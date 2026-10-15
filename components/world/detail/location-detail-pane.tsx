@@ -69,7 +69,7 @@ export function LocationDetailPane({
         keywordsBase: values.keywords,
         row,
         branchEntities: data.entities,
-        storyLocationId: data.storyLocationId,
+        story: data.story,
       })
       return confirm == null ? null : placeConfirmCopy(confirm)
     },
@@ -77,7 +77,7 @@ export function LocationDetailPane({
   const disabledThrough =
     row == null
       ? null
-      : (placeModes(data.entities, data.storyLocationId).disabledThrough(row.id)?.name ?? null)
+      : (placeModes(data.entities, data.story.scene).disabledThrough(row.id)?.name ?? null)
   const { control } = session.form
   const [tab, setTab] = useEntityTab(row == null, createSeq, initialTab)
   const gate = { blocked, blockedReason }

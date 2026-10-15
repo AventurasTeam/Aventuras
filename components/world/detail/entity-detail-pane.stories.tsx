@@ -14,7 +14,12 @@ import type { EntryIndex, EntryRef } from '@/lib/entry-refs'
 import type { HistoryChunk } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { toastStore } from '@/lib/toast'
-import type { EntitySaveInput, RelationshipLink } from '@/lib/world'
+import {
+  storyPlaceOf,
+  type EntitySaveInput,
+  type RelationshipLink,
+  type StoryPlace,
+} from '@/lib/world'
 
 import type { EntityInvolvement } from '../world-route-data'
 import { EntityDetailPane } from './entity-detail-pane'
@@ -171,6 +176,13 @@ const ENTRY_INDEX: EntryIndex = new Map(
     { id: `e_${position}`, position, kind: 'ai_reply', chapterId: null, excerpt: 'Entry 47' },
   ]),
 )
+// The story at one place, in both the narrative tail and the scene source.
+const storyAt = (id: string | null): StoryPlace =>
+  storyPlaceOf({
+    tail: { metadata: { currentLocationId: id } },
+    sceneSource: { metadata: { currentLocationId: id } },
+  })
+const NOWHERE = storyAt(null)
 
 type HarnessProps = {
   kind: EntityKind
@@ -190,8 +202,8 @@ type HarnessProps = {
   holdSave?: boolean
   /** The branch's entities; the shared cast by default. */
   entities?: readonly Entity[]
-  /** The tail scene's location, which the place rules read as the story. */
-  storyLocationId?: string | null
+  /** Where the story is, which the place rules read. */
+  story?: StoryPlace
   onSave: (input: EntitySaveInput) => void
   onSaved: (id: string) => void
   onRejected: (reason: string) => void
@@ -214,7 +226,7 @@ function Harness({
   commitLinks = false,
   holdSave = false,
   entities = ENTITIES,
-  storyLocationId = null,
+  story = NOWHERE,
   onSave,
   onSaved,
   onRejected,
@@ -250,9 +262,9 @@ function Harness({
       worldTime: 1000 + 2 * DAY,
       calendar: EARTH_GREGORIAN,
       leadId,
-      storyLocationId,
+      story,
     }),
-    [row, links, leadId, entities, storyLocationId],
+    [row, links, leadId, entities, story],
   )
   const save = useCallback(
     async (input: EntitySaveInput): Promise<EntitySaveResult> => {
@@ -1510,7 +1522,7 @@ export const StoryInsideRefusalOnStatus: Story = {
     kind: 'location',
     row: HOLLOW,
     entities: PLACES,
-    storyLocationId: 'loc_market',
+    story: storyAt('loc_market'),
     saveResult: {
       status: 'rejected',
       reason: 'place rule: story-inside',
@@ -1566,7 +1578,7 @@ export const DisabledThroughSuspendedAroundTheStory: Story = {
   args: {
     kind: 'location',
     row: MARKET,
-    storyLocationId: 'loc_market',
+    story: storyAt('loc_market'),
     entities: [
       ...ENTITIES.filter((e) => e.id !== 'loc_hollow'),
       { ...HOLLOW, injectionMode: 'disabled' },

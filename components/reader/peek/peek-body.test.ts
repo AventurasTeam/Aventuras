@@ -7,6 +7,7 @@ import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { Happening, Thread } from '@/lib/db'
 import type { EntryIndex } from '@/lib/entry-refs'
 import { makeEntity, makeLore } from '@/lib/list-modules/__tests__/fixtures'
+import { storyPlaceOf } from '@/lib/world'
 
 import { HappeningPeekBody } from './happening-peek-body'
 import { LorePeekBody } from './lore-peek-body'
@@ -44,7 +45,7 @@ const PANE_DATA: EntityPaneData = {
   worldTime: 120,
   calendar: EARTH_GREGORIAN,
   leadId: null,
-  storyLocationId: null,
+  story: storyPlaceOf({ tail: null, sceneSource: null }),
 }
 
 function props(model: PeekBodyProps['model'], entryIndex: PeekEntryIndex = READ) {

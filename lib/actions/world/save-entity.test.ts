@@ -555,6 +555,31 @@ describe('saveEntity — places', () => {
     })
   })
 
+  // A user_action standing at the tail after a refused unwind, its scene rewritten by a merge: the
+  // reply before it still names the deleted loser, and the next turn inherits the tail's place.
+  it("refuses retiring the tail's place while the scene source names a deleted one", async () => {
+    const { db, ctx } = await seed(REGION, 'loc_gone')
+    await db.insert(storyEntries).values({
+      id: 'entry_2',
+      branchId: 'br_1',
+      position: 2,
+      kind: 'user_action',
+      content: 'I wait.',
+      metadata: { sceneEntities: [], currentLocationId: 'loc_anchor', worldTime: 0 },
+      createdAt: 2,
+    })
+    const result = await saveEntity(
+      await locationSave(db, 'loc_vellis', { status: 'retired' }),
+      ctx,
+    )
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'story-inside',
+      refusal: { field: 'status', story: { id: 'loc_anchor', name: 'The Rusty Anchor' } },
+    })
+    expect(await deltaRows(db)).toHaveLength(0)
+  })
+
   // The same scene the next turn's prompt reads.
   it('reads the story from the latest narrative entry, past actions with no scene', async () => {
     const { db, ctx } = await seed(REGION, 'loc_back')
