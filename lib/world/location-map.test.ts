@@ -110,6 +110,17 @@ describe('buildLocationMap', () => {
     ])
   })
 
+  // A reason that breaks a line would start a row at depth 0 and read as a top-level place.
+  it("folds a retired reason's line breaks and runs of space into single spaces", () => {
+    const retired: Entity = { ...RETIRED_VELLIS, retiredReason: ' swallowed\nby  the\r\n\trift\n' }
+    const map = buildLocationMap([ELDRA, retired, ANCHOR], null)
+    expect(outline(map).join('\n')).toBe(
+      ['Eldra', '  Port Vellis (retired: swallowed by the rift)', '    The Rusty Anchor'].join(
+        '\n',
+      ),
+    )
+  })
+
   it('gives a retired location with a blank reason no reason', () => {
     const retired: Entity = { ...RETIRED_VELLIS, retiredReason: '  ' }
     expect(buildLocationMap([retired], null)[0]).toMatchObject({

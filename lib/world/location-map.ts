@@ -35,7 +35,8 @@ function mapRow(location: Entity, depth: number): LocationMapRow {
         id: null,
         name,
         depth,
-        retiredReason: blankToNull(location.retiredReason ?? ''),
+        // Each row is one line of the tree: a stored reason may span several.
+        retiredReason: blankToNull((location.retiredReason ?? '').replace(/\s+/g, ' ')),
       }
     : { retired: false, id, name, depth, retiredReason: null }
 }
