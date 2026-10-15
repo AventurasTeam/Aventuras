@@ -118,18 +118,18 @@ export async function commitRowSave(
   }
   const id = rowId ?? generateId(idPrefix)
   const context: Record<string, unknown> = { branchId, id, create: rowId == null }
-  const refusal = refuse?.() ?? null
-  if (refusal != null) {
-    logger.warn(`action_layer.${rowKind}_save_rejected`, { ...context, code: refusal.code })
-    return {
-      status: 'rejected',
-      reason: `place rule: ${refusal.code}`,
-      code: refusal.code,
-      refusal,
-    }
-  }
   let result
   try {
+    const refusal = refuse?.() ?? null
+    if (refusal != null) {
+      logger.warn(`action_layer.${rowKind}_save_rejected`, { ...context, code: refusal.code })
+      return {
+        status: 'rejected',
+        reason: `place rule: ${refusal.code}`,
+        code: refusal.code,
+        refusal,
+      }
+    }
     const actions = build(id)
     if (actions.length === 0) {
       if (rowId == null) throw new Error('commitRowSave: a create built no actions')

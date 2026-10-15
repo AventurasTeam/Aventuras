@@ -610,6 +610,46 @@ describe('saveEntity — places', () => {
     })
   })
 
+  it('logs a read under the tail lock that throws, and rethrows', async () => {
+    const { db, ctx } = await seed(REGION, 'loc_eldra')
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    headTurnHook.onCall = async () => {
+      throw new Error('SQLITE_BUSY')
+    }
+    await expect(
+      saveEntity(await locationSave(db, 'loc_vellis', { status: 'retired' }), ctx),
+    ).rejects.toThrow('SQLITE_BUSY')
+    expect(error).toHaveBeenCalledWith('action_layer.entity_save_failed', {
+      branchId: 'br_1',
+      id: 'loc_vellis',
+      kind: 'location',
+      error: 'SQLITE_BUSY',
+    })
+  })
+
+  it('logs a location Save whose actions fail to build once, and rethrows', async () => {
+    const { db, ctx } = await seed([...REGION, character('char_kael', 'Kael')], 'loc_eldra')
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const row = await rowOf(db, 'char_kael')
+    await expect(
+      saveEntity(
+        {
+          kind: 'location',
+          branchId: 'br_1',
+          row,
+          keywordsBase: [],
+          draft: locationDraftFrom(null),
+        },
+        ctx,
+      ),
+    ).rejects.toThrow('character row saved as location')
+    expect(error).toHaveBeenCalledOnce()
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.entity_save_failed',
+      expect.objectContaining({ id: 'char_kael' }),
+    )
+  })
+
   it('refuses bringing back a place whose parent is retired', async () => {
     const { db, ctx } = await seed(
       [

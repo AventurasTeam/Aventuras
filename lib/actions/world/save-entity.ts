@@ -44,22 +44,34 @@ function commitEntity(
  * One World pane Save: a create or the changed columns and state paths, plus relationships and a
  * retire's cascade; refused when it breaks a place rule (data-model.md → LocationState shape).
  */
-export function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySaveResult> {
+export async function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySaveResult> {
   // Only a location update can hold the story. It reads the story's scene under the tail's lock,
   // as a merge does, so a scene edit can't move the story into the place between read and write.
   if (args.kind !== 'location' || args.row == null) return commitEntity(args, null, ctx)
   const context = { branchId: args.branchId, id: args.row.id, kind: args.kind }
-  return withTailMetadataLock<EntitySaveResult>(
-    args.branchId,
-    ctx,
-    async () => {
-      const scene = await loadSceneSource(args.branchId, ctx)
-      return commitEntity(args, storyLocationIdOf(scene == null ? [] : [scene]), ctx)
-    },
-    () => {
-      const code = ROW_SAVE_REJECTION.inFlight
-      logger.warn('action_layer.entity_save_rejected', { ...context, code, reason: 'tail moved' })
-      return { status: 'rejected', reason: 'tail moved', code }
-    },
-  )
+  // commitRowSave logs its own throws; the reads before it run outside its log.
+  let committing = false
+  try {
+    return await withTailMetadataLock<EntitySaveResult>(
+      args.branchId,
+      ctx,
+      async () => {
+        const scene = await loadSceneSource(args.branchId, ctx)
+        committing = true
+        return commitEntity(args, storyLocationIdOf(scene == null ? [] : [scene]), ctx)
+      },
+      () => {
+        const code = ROW_SAVE_REJECTION.inFlight
+        logger.warn('action_layer.entity_save_rejected', { ...context, code, reason: 'tail moved' })
+        return { status: 'rejected', reason: 'tail moved', code }
+      },
+    )
+  } catch (error) {
+    if (!committing)
+      logger.error('action_layer.entity_save_failed', {
+        ...context,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    throw error
+  }
 }

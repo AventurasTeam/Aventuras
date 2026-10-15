@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, entities, stories, type EntityState, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { generationStore, resetAllStores } from '@/lib/stores'
 import type { PlaceSaveRefusal } from '@/lib/world'
 
@@ -114,6 +115,27 @@ describe('commitRowSave — place rules', () => {
       refusal: REFUSAL,
     })
     expect(build).not.toHaveBeenCalled()
+  })
+
+  it('logs a place rule that throws as a failed Save, and rethrows', async () => {
+    const { ctx } = await setup()
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const refuse = () => {
+      throw new Error('broken rule')
+    }
+    await expect(
+      commitRowSave(
+        'entity',
+        { branchId: 'b1', rowId: 'char_1', idPrefix: 'char', refuse, build: () => [] },
+        ctx,
+      ),
+    ).rejects.toThrow('broken rule')
+    expect(error).toHaveBeenCalledWith('action_layer.entity_save_failed', {
+      branchId: 'b1',
+      id: 'char_1',
+      create: false,
+      error: 'broken rule',
+    })
   })
 
   it('checks the gate before the place rules', async () => {
