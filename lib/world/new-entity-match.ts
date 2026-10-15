@@ -22,10 +22,9 @@ function byAge(a: Entity, b: Entity): number {
  */
 export function matchNewLocation(
   candidate: { name: string; parentId: string | null },
-  entities: readonly Entity[],
   view: LocationMapView,
 ): PlaceMatch {
-  const locations = entities.filter((e) => e.kind === 'location')
+  const { locations } = view
 
   const [reused] = locations
     .filter((e) => e.status !== 'retired' && nameBasis(candidate.name, e.name) === 'same-name')

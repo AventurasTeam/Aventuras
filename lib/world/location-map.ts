@@ -18,6 +18,8 @@ export type MapAnchor = { parentId: string | null; hidden: number }
 
 export type LocationMapView = {
   rows: LocationMapRow[]
+  /** Every location the view was built from, of any status, listed or not. */
+  locations: readonly Entity[]
   anchorOf: (id: string) => MapAnchor
   /**
    * Left-out places between a place and `parentId` (null: root), or null if the map wouldn't hang
@@ -99,7 +101,7 @@ export function locationMapView(
     }
     return null
   }
-  return { rows, anchorOf, hiddenBetween }
+  return { rows, locations, anchorOf, hiddenBetween }
 }
 
 export function buildLocationMap(

@@ -29,7 +29,7 @@ const matchNewLocation = (
   candidate: { name: string; parentId: string | null },
   entities: readonly Entity[],
   currentLocationId: string | null = null,
-) => matchAgainst(candidate, entities, locationMapView(entities, currentLocationId))
+) => matchAgainst(candidate, locationMapView(entities, currentLocationId))
 
 describe('matchNewLocation', () => {
   it('reuses an exact sibling across case and spacing', () => {

@@ -229,7 +229,7 @@ function planLocations(args: {
     if (twin !== undefined) {
       fate = { outcome: 'reused', id: twin.id, parentId, parentDropped }
     } else {
-      const match = matchNewLocation({ name: text.name, parentId }, entities, view)
+      const match = matchNewLocation({ name: text.name, parentId }, view)
       if (match.kind === 'reuse') {
         if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
         fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
