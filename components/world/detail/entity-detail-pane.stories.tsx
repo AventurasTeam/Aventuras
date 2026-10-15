@@ -1596,7 +1596,7 @@ export const StoryInsideRefusalOnMode: Story = {
   },
 }
 
-/** A place disabled through an ancestor says so under the mode explanation. */
+/** Disabled through an ancestor: a line under the mode explanation; its own mode stays editable. */
 export const DisabledThroughAncestor: Story = {
   args: {
     kind: 'location',
@@ -1613,10 +1613,16 @@ export const DisabledThroughAncestor: Story = {
     await expect(hint).toBeVisible()
     // Its own line under the explanation, not run into it.
     await expect(hint.textContent).toContain(`\n${line}`)
+    await pickMode(t('world:fields.injection.always'))
+    const mode = screen.getByRole('radiogroup', { name: t('world:fields.injectionMode') })
+    const always = within(mode).getByRole('radio', {
+      name: new RegExp(`^${t('world:fields.injection.always')}`),
+    })
+    await waitFor(() => expect(always).toHaveAttribute('aria-checked', 'true'), WAIT)
   },
 }
 
-/** Its own mode stays editable, and the line leaves while the story is inside the region. */
+/** The line leaves while the story is inside the region. */
 export const DisabledThroughSuspendedAroundTheStory: Story = {
   args: {
     kind: 'location',
@@ -1630,16 +1636,32 @@ export const DisabledThroughSuspendedAroundTheStory: Story = {
   play: async () => {
     await userEvent.click(tab(/^Settings/))
     await screen.findByRole('radiogroup', { name: t('world:fields.injectionMode') }, WAIT)
-    await expect(screen.queryByText(/Disabled through/)).toBeNull()
+    const line = t('world:fields.disabledThrough', { place: 'Veil’s Hollow' })
+    // It shares a text node with the mode explanation, so the match is by substring.
+    await expect(screen.queryByText(line, { exact: false })).toBeNull()
   },
 }
 
-/** A place's status explains that retiring takes the places inside it; a character's doesn't. */
+/** A place's status explains that retiring takes the places inside it. */
 export const PlaceStatusHint: Story = {
   args: { kind: 'location', row: HOLLOW },
   play: async () => {
     await userEvent.click(tab(/^Settings/))
     await expect(await screen.findByText(t('world:fields.statusPlace'), {}, WAIT)).toBeVisible()
+  },
+}
+
+/** A character's Settings carries none of a place's hints. */
+export const CharacterHasNoPlaceHints: Story = {
+  args: { kind: 'character', row: KAEL },
+  play: async () => {
+    await userEvent.click(tab(/^Settings/))
+    await screen.findByRole('radiogroup', { name: t('world:fields.injectionMode') }, WAIT)
+    await expect(screen.queryByText(t('world:fields.statusPlace'))).toBeNull()
+    await expect(
+      screen.queryByText(t('world:fields.injectionPlaceMap'), { exact: false }),
+    ).toBeNull()
+    await expect(screen.getByText(t('world:fields.injectionOverride'))).toBeVisible()
   },
 }
 
