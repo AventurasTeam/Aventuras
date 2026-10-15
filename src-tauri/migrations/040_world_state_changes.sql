@@ -1,8 +1,8 @@
 -- Everything State Tracking records, appended in write order and never rewritten.
 --
 -- kind 'header': one per narration classified while tracking is on, even when nothing
---   changed; carries the current location from before the classification, and whether
---   tracking ran uninterrupted since the previous header on the branch line.
+--   changed; carries whether tracking ran uninterrupted since the previous header on the
+--   branch line.
 -- kind 'change': one write to one entity. `entity_id` is the row actually written, which on a
 --   lightweight branch can be an override or a tombstone. `before` holds the changed fields
 --   (update) or the full row (delete); `after` is kept for every origin but the classifier.
@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS world_state_changes (
     before TEXT,
     after TEXT,
     continuous INTEGER,
-    location_before TEXT,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE,
     FOREIGN KEY (entry_id) REFERENCES story_entries(id) ON DELETE CASCADE

@@ -32,7 +32,6 @@ describe('record rows', () => {
       id: 'h1',
       kind: 'header',
       continuous: true,
-      locationBefore: 'loc',
       coverage: 'full',
     }
     expect(roundTrip(record)).toEqual(record)
@@ -49,7 +48,6 @@ describe('record rows', () => {
       id: 'h2',
       kind: 'header',
       continuous: false,
-      locationBefore: null,
       coverage: 'full',
     })
     expect(values[RECORD_COLUMNS.indexOf('continuous')]).toBe(0)

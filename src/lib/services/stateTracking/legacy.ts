@@ -35,7 +35,7 @@ export function fromWorldStateDelta(entry: StoryEntry, delta: WorldStateDelta): 
     kind: 'header',
     continuous: false,
     // Older deltas lack the field; undefined then leaves the current location alone.
-    locationBefore: delta.previousState.currentLocationId,
+    legacyLocationBefore: delta.previousState.currentLocationId,
     coverage: 'classifier',
   }
 

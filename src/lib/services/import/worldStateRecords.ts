@@ -2,7 +2,6 @@ import type { TrackedEntityType, WorldStateRecord } from '#lib/types/index.ts'
 
 /** Every entity id a record names, including the ids inside the rows it carries. */
 export function recordEntityIds(record: WorldStateRecord): string[] {
-  if (record.kind === 'header') return record.locationBefore ? [record.locationBefore] : []
   if (record.kind !== 'change') return []
   const ids = [record.entityId]
   for (const row of [record.before, record.after]) {
@@ -56,10 +55,6 @@ export function remapRecord(record: WorldStateRecord, m: RecordMappers): WorldSt
   }
   switch (base.kind) {
     case 'header':
-      return {
-        ...base,
-        locationBefore: base.locationBefore ? m.mapEntityId(base.locationBefore) : null,
-      }
     case 'break':
       return base
     case 'change':

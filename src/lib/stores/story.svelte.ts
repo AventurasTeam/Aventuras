@@ -991,11 +991,7 @@ class StoryStore {
     // choice, batch chapterization — belongs to the last imported entry's state.
     const last = this.entries[this.entries.length - 1]
     if (last && settings.experimentalFeatures.stateTracking) {
-      const header = this.startHeader(
-        storyId,
-        last.id,
-        this.locations.find((l) => l.current)?.id ?? null,
-      )
+      const header = this.startHeader(storyId, last.id)
       await database.transaction([database.worldStateRecordStatement(header)])
     }
   }
@@ -2225,12 +2221,8 @@ class StoryStore {
    * The header of an entry the story starts from — a wizard's opening, or the last entry of an
    * imported chat. It has nothing to undo, and nothing tracked precedes it to interrupt.
    */
-  private startHeader(
-    storyId: string,
-    entryId: string,
-    locationBefore: string | null,
-  ): WorldStateHeaderRecord {
-    return headerRecord({ storyId, branchId: null, entryId }, { continuous: true, locationBefore })
+  private startHeader(storyId: string, entryId: string): WorldStateHeaderRecord {
+    return headerRecord({ storyId, branchId: null, entryId }, { continuous: true })
   }
 
   /**
@@ -3071,7 +3063,6 @@ class StoryStore {
     const createdLocationIds: string[] = []
     const recordCtx = entryId ? this.recordContext({ origin: 'classifier', entryId }) : null
     const stateBefore = recordCtx ? cloneState(classifierView(this.trackedState())) : null
-    const locationBefore = this.locations.find((l) => l.current)?.id ?? null
 
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
@@ -3645,7 +3636,6 @@ class StoryStore {
             breakSince,
             this.currentStory.createdAt,
           ),
-          locationBefore,
         })
         const records = diffStates(stateBefore, classifierView(this.trackedState()), recordCtx)
         await this.commit([], [header, ...records])
@@ -5810,7 +5800,6 @@ class StoryStore {
     }
 
     // Add starting location
-    let startingLocationId: string | null = null
     if (data.startingLocation.name) {
       const locationTranslation = data.translations?.startingLocation
       log('Starting location translation data:', {
@@ -5840,7 +5829,6 @@ class StoryStore {
         translationLanguage: location.translationLanguage,
       })
       await database.addLocation(location)
-      startingLocationId = location.id
       log(
         'Added starting location:',
         location.name,
@@ -5920,7 +5908,7 @@ class StoryStore {
       log('Added opening scene')
 
       if (settings.experimentalFeatures.stateTracking) {
-        const header = this.startHeader(storyId, openingEntry.id, startingLocationId)
+        const header = this.startHeader(storyId, openingEntry.id)
         await database.transaction([database.worldStateRecordStatement(header)])
       }
     }

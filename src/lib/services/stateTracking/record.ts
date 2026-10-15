@@ -44,7 +44,7 @@ export interface RecordContext extends RecordScope {
 
 export function headerRecord(
   scope: RecordScope,
-  fields: { continuous: boolean; locationBefore: string | null },
+  fields: { continuous: boolean },
 ): WorldStateHeaderRecord {
   return {
     id: crypto.randomUUID(),

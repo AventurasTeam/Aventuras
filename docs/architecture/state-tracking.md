@@ -21,12 +21,13 @@ the insert itself. Three kinds of row:
   shadows (a copy-on-write override shadows its parent). `after` holds the new values, except on
   the classifier's records.
 - **header** — one per narration classified while tracking is on, even when nothing changed, so
-  "recorded, nothing changed" is not mistaken for "not recorded". It carries `continuous`, and the
-  current location from before the classification for history recorded in the older form. An entry a story starts
-  from gets an empty, continuous one while tracking is on: a wizard's opening, and the last entry
-  of an imported SillyTavern chat.
-- **break** — no reconstruction crosses it. Only an export writes one, into the file, where it
-  cannot vouch for tracking since a branch's last record.
+  "recorded, nothing changed" is not mistaken for "not recorded". It carries `continuous`. An entry
+  a story starts from gets an empty, continuous one while tracking is on: a wizard's opening, and
+  the last entry of an imported SillyTavern chat. The scene needs no field of its own: moving it
+  changes the `current` flags of location rows, which the classifier records like any field.
+- **break** — no reconstruction crosses it. An export writes one into the file where it cannot
+  vouch for tracking since a branch's last record, and deleting an entry that has records without
+  a rollback writes one on the entry before it.
 
 A SillyTavern chat import replaces the whole main branch, its records included, so nothing tracked
 comes before it. The world-state choice and batch chapterization that follow it change the world

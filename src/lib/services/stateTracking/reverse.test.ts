@@ -74,7 +74,6 @@ function header(entryId: string): WorldStateHeaderRecord {
     createdAt: seq,
     kind: 'header',
     continuous: true,
-    locationBefore: null,
     coverage: 'full',
   }
 }

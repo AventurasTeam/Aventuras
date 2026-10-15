@@ -234,7 +234,6 @@ describe('exportStoryToJson — state tracking records', () => {
     createdAt: 50,
     kind: 'header' as const,
     continuous: true,
-    locationBefore: null,
     coverage: 'full' as const,
   }
 

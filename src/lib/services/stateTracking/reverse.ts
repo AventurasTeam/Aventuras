@@ -213,8 +213,8 @@ export function planReversal(input: ReversalInput): ReversalPlan {
   }
   // Classifier-only history recorded the current location apart from the location rows.
   const earliest = headers[0]
-  if (earliest?.coverage === 'classifier' && earliest.locationBefore !== undefined) {
-    restoreCurrentLocation(ws, earliest.locationBefore)
+  if (earliest?.coverage === 'classifier' && earliest.legacyLocationBefore !== undefined) {
+    restoreCurrentLocation(ws, earliest.legacyLocationBefore)
   }
 
   const manual = changes.filter((r) => r.origin === 'manual')

@@ -18,7 +18,6 @@ export const RECORD_COLUMNS = [
   'before',
   'after',
   'continuous',
-  'location_before',
   'created_at',
 ] as const
 
@@ -42,7 +41,6 @@ export function recordToRow(record: WorldStateRecord): unknown[] {
     json(change?.before),
     json(change?.after),
     header ? (header.continuous ? 1 : 0) : null,
-    header?.locationBefore ?? null,
     record.createdAt,
   ]
 }
@@ -62,7 +60,6 @@ export function rowToRecord(row: Record<string, unknown>): WorldStateRecord {
         ...base,
         kind: 'header',
         continuous: row.continuous === 1,
-        locationBefore: (row.location_before as string | null) ?? null,
         coverage: 'full',
       }
     case 'break':

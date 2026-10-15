@@ -1068,7 +1068,11 @@ export interface WorldStateChangeRecord extends WorldStateRecordBase {
 export interface WorldStateHeaderRecord extends WorldStateRecordBase {
   kind: 'header'
   continuous: boolean
-  locationBefore: string | null
+  /**
+   * Only on a header read from an old delta: the scene before it, which that format kept apart
+   * from the location rows. A stored header has none; the classifier records the flags it moves.
+   */
+  legacyLocationBefore?: string | null
   /** `classifier` marks history recorded before lorebook and manual changes were tracked. */
   coverage: 'full' | 'classifier'
 }
