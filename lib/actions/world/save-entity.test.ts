@@ -6,6 +6,7 @@ import { branches, characterRelationships, deltas, entities, stories, storyEntri
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
+import type { readSceneSource as ReadSceneSource } from '@/lib/pipeline'
 import {
   characterRelationshipsStore,
   entitiesStore,
@@ -34,6 +35,19 @@ vi.mock('../story-entries/head-turn', async (importOriginal) => {
       headTurnHook.calls += 1
       await headTurnHook.onCall?.(headTurnHook.calls)
       return real.loadHeadTurn(...args)
+    },
+  }
+})
+
+// A scene read that throws `fail` while it is set.
+const sceneHook = vi.hoisted(() => ({ fail: null as Error | null }))
+vi.mock('@/lib/pipeline', async (importOriginal) => {
+  const real = (await importOriginal()) as { readSceneSource: typeof ReadSceneSource }
+  return {
+    ...real,
+    readSceneSource: async (...args: Parameters<typeof ReadSceneSource>) => {
+      if (sceneHook.fail) throw sceneHook.fail
+      return real.readSceneSource(...args)
     },
   }
 })
@@ -98,6 +112,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   headTurnHook.calls = 0
   headTurnHook.onCall = null
+  sceneHook.fail = null
 })
 
 describe('saveEntity', () => {
@@ -641,6 +656,21 @@ describe('saveEntity — places', () => {
     headTurnHook.onCall = async () => {
       throw new Error('SQLITE_BUSY')
     }
+    await expect(
+      saveEntity(await locationSave(db, 'loc_vellis', { status: 'retired' }), ctx),
+    ).rejects.toThrow('SQLITE_BUSY')
+    expect(error).toHaveBeenCalledWith('action_layer.entity_save_failed', {
+      branchId: 'br_1',
+      id: 'loc_vellis',
+      kind: 'location',
+      error: 'SQLITE_BUSY',
+    })
+  })
+
+  it('logs a scene read that throws, and rethrows', async () => {
+    const { db, ctx } = await seed(REGION, 'loc_eldra')
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    sceneHook.fail = new Error('SQLITE_BUSY')
     await expect(
       saveEntity(await locationSave(db, 'loc_vellis', { status: 'retired' }), ctx),
     ).rejects.toThrow('SQLITE_BUSY')
