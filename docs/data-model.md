@@ -847,6 +847,13 @@ it or inside it (`story-inside`): a disabled region the story enters is
 one the model walked into through the prose, never one disabled around
 it.
 
+**The story's place.** The tail scene above is the location the next
+prompt's map is built around, read off the latest `ai_reply` or
+`opening`. A `user_action` standing at the tail, left by a regenerate
+whose unwind was refused, can name another place, which the next turn
+inherits. A `story-inside` refusal counts both places; the suspension
+follows the prompt's.
+
 #### `ItemState` shape
 
 ```ts
