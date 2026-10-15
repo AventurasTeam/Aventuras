@@ -10,7 +10,7 @@ import { NARRATIVE_KINDS } from '@/lib/piggyback'
 import { blankToNull } from '@/lib/text'
 
 import type { EntitySaveInput } from './entity-actions'
-import { stateOf, type LocationDraft } from './entity-draft'
+import { stateOf, type CharacterDraft, type ItemDraft, type LocationDraft } from './entity-draft'
 import { byName } from './overview'
 import { parentChainIds, parentIdOf, parentOfLocations, type ParentOf } from './parent-chain'
 import { placeModes } from './place-modes'
@@ -25,24 +25,29 @@ export const PLACE_REFUSAL = {
 
 export type NamedPlace = { id: string; name: string }
 
+// A draft key by name, so renaming the key breaks the refusal that points at it.
+type FieldOf<Draft, K extends keyof Draft & string> = K
+
 /** A refused World Save: the draft field the reason shows on, and the places it names. */
 export type PlaceSaveRefusal =
   | {
       code: typeof PLACE_REFUSAL.storyInside
-      field: 'status' | 'injectionMode' | 'parentLocationId'
+      field: FieldOf<LocationDraft, 'status' | 'injectionMode' | 'parentLocationId'>
       place: NamedPlace
       story: NamedPlace
     }
   | {
       code: typeof PLACE_REFUSAL.retiredParent
-      field: 'status' | 'parentLocationId'
+      field: FieldOf<LocationDraft, 'status' | 'parentLocationId'>
       parent: NamedPlace
     }
   | {
       code: typeof PLACE_REFUSAL.retiredPlace
-      field: 'currentLocationId' | 'atLocationId'
+      field: FieldOf<CharacterDraft, 'currentLocationId'> | FieldOf<ItemDraft, 'atLocationId'>
       place: NamedPlace
     }
+
+type StoryInsideRefusal = Extract<PlaceSaveRefusal, { code: typeof PLACE_REFUSAL.storyInside }>
 
 export type MergePlaceRefusalCode =
   | typeof PLACE_REFUSAL.storyInside
@@ -160,7 +165,7 @@ function locationRefusal(
   const wasStatus = row?.status ?? null
   const story = storyLocationId == null ? undefined : byId.get(storyLocationId)
   const inside = row != null && story !== undefined && holdsStory(row.id, story.id, parentOf)
-  const storyRefusal = (field: 'status' | 'injectionMode' | 'parentLocationId') =>
+  const storyRefusal = (field: StoryInsideRefusal['field']) =>
     inside
       ? ({ code: PLACE_REFUSAL.storyInside, field, place: self, story: namedOf(story) } as const)
       : null
