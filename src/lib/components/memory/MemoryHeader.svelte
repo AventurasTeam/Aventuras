@@ -25,7 +25,7 @@
   const chapterWorkInFlight = $derived(
     story.currentStory
       ? ui.backgroundTasksActiveFor(story.currentStory.id, story.currentStory.currentBranchId) ||
-          chapterCards.pending(story.currentStory.id, story.currentStory.currentBranchId ?? null)
+          chapterCards.busy(story.currentStory.id, story.currentStory.currentBranchId ?? null)
       : false,
   )
   const bufferSize = $derived(story.memoryConfig.chapterBuffer)

@@ -141,14 +141,19 @@
   })
 
   // Each card sits after the narration of the turn that cut its chapter, on that branch only.
-  const cardsByAnchor = $derived.by(() => {
+  // A card whose narration is gone, by a retry or a delete, goes after the last entry instead,
+  // so its controls and the toast pointing at it still lead somewhere.
+  const placedCards = $derived.by(() => {
     const byAnchor: Record<string, ChapterCard[]> = {}
+    const unanchored: ChapterCard[] = []
     const current = story.currentStory
-    if (!current) return byAnchor
+    if (!current) return { byAnchor, unanchored }
+    const present = new Set(story.entries.map((entry) => entry.id))
     for (const card of chapterCards.forScope(current.id, current.currentBranchId ?? null)) {
-      ;(byAnchor[card.anchorEntryId] ??= []).push(card)
+      if (present.has(card.anchorEntryId)) (byAnchor[card.anchorEntryId] ??= []).push(card)
+      else unanchored.push(card)
     }
-    return byAnchor
+    return { byAnchor, unanchored }
   })
 
   // Load earlier entries above, compensate scroll, then trim the bottom if it's
@@ -624,10 +629,16 @@
             {/if}
             <StoryEntry {entry} />
           </div>
-          {#each cardsByAnchor[entry.id] ?? [] as card (card.id)}
+          {#each placedCards.byAnchor[entry.id] ?? [] as card (card.id)}
             <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
           {/each}
         {/each}
+
+        {#if displayedEntries.hiddenAtBottom === 0}
+          {#each placedCards.unanchored as card (card.id)}
+            <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
+          {/each}
+        {/if}
 
         <!-- Show streaming entry while generating -->
         {#if showStreamingEntry}

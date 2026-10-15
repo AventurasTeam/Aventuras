@@ -80,6 +80,15 @@ describe('ChapterCards', () => {
     expect(notify).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps counting the lore changes of every incomplete run', () => {
+    const { store, card } = cards()
+    store.summarized(card.id, chapter)
+    store.loreIncomplete(card.id, 'down', 3)
+    store.loreRestarted(card.id)
+    store.loreIncomplete(card.id, 'refused', 0)
+    expect(store.get(card.id)?.loreChangeCount).toBe(3)
+  })
+
   it('is gone once removed', () => {
     const { store, card } = cards()
     store.remove(card.id)

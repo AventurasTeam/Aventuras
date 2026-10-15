@@ -289,7 +289,7 @@ describe('a cut chapter', () => {
     fail = false
     await t.cards.retrySummary(t.card().id)
 
-    expect(t.card()).toMatchObject({ phase: 'finished', summaryRuns: 2, retryable: false })
+    expect(t.card()).toMatchObject({ phase: 'finished', retryable: false })
     expect(t.cardSteps().map((s) => [s.label, s.status])).toEqual([
       ['Chapter summary', 'failed'],
       ['Chapter summary (run 2)', 'done'],

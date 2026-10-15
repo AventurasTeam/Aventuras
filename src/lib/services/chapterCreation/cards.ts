@@ -32,12 +32,10 @@ export interface ChapterCard {
   phase: ChapterCardPhase
   /** Why the card stopped short, as the reader is shown it. */
   reason: string | null
-  /** Lore changes the incomplete run wrote before it stopped. */
+  /** Lore changes the incomplete runs wrote before they stopped, all of them. */
   loreChangeCount: number
   /** Lore management runs started, the first included. */
   loreRuns: number
-  /** Summary runs started, the first included. */
-  summaryRuns: number
   /** A failed summary can be tried again from the card. */
   retryable: boolean
 }
@@ -77,7 +75,6 @@ export class ChapterCards {
       reason: null,
       loreChangeCount: 0,
       loreRuns: 0,
-      summaryRuns: 1,
       retryable: false,
     }
     this.cards.push(card)
@@ -129,7 +126,6 @@ export class ChapterCards {
       card.phase = 'summarizing'
       card.reason = null
       card.retryable = false
-      card.summaryRuns++
     })
   }
 
@@ -138,7 +134,6 @@ export class ChapterCards {
     this.update(id, (card) => {
       card.phase = 'lore'
       card.reason = null
-      card.loreChangeCount = 0
       card.loreRuns++
     })
   }
@@ -154,7 +149,7 @@ export class ChapterCards {
     const card = this.update(id, (card) => {
       card.phase = 'lore-incomplete'
       card.reason = reason
-      card.loreChangeCount = changeCount
+      card.loreChangeCount += changeCount
     })
     if (card) {
       this.notify(

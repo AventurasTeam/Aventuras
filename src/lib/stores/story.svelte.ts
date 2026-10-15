@@ -3668,8 +3668,27 @@ class StoryStore {
   }
 
   // Delete a chapter
-  async deleteChapter(chapterId: string): Promise<void> {
+  /**
+   * Whether this is the open branch's last chapter, the only one that can be deleted: the next
+   * chapter starts where the last one ends, so deleting an earlier one leaves its entries uncut.
+   */
+  isLastChapter(chapterId: string): boolean {
+    const chapters = this.currentBranchChapters
+    const last = chapters.reduce<Chapter | null>(
+      (best, ch) => (!best || ch.number > best.number ? ch : best),
+      null,
+    )
+    return last?.id === chapterId
+  }
+
+  /** Refuses, with a toast, any chapter but the open branch's last. */
+  async deleteChapter(chapterId: string): Promise<boolean> {
     if (!this.currentStory) throw new Error('No story loaded')
+    if (!this.isLastChapter(chapterId)) {
+      log('Refusing to delete a chapter that is not the last:', chapterId)
+      ui.showToast('Only the last chapter can be deleted.', 'warning')
+      return false
+    }
 
     await database.deleteChapter(chapterId)
     this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
@@ -3678,6 +3697,7 @@ class StoryStore {
     this.invalidateChapterCache()
 
     log('Chapter deleted:', chapterId)
+    return true
   }
 
   // Update memory configuration (partial updates)
@@ -3942,7 +3962,7 @@ class StoryStore {
     // A card's retried summary runs outside the turn's background tasks, so it is checked too.
     if (
       ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId) ||
-      chapterCards.pending(this.currentStory.id, this.currentStory.currentBranchId ?? null)
+      chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null)
     ) {
       log('Background chapter work in flight, refusing manual chapter creation')
       // Said out loud as well as returned: the caller closes the modal either way, so a

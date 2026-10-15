@@ -226,7 +226,14 @@ export class BackgroundTaskCoordinator {
       number: cut.number,
     })
     const recordId = card && reporting ? reporting.openRecord(card.recordKey) : ''
-    await this.runCreation(input, cut, result, card?.id, recordId, 1)
+    // A failed summary's retry holds this until the card goes: the cut carries its own entries,
+    // so the turn's whole entry list is not kept with it.
+    const retained: BackgroundTaskInput = {
+      ...input,
+      chapterCheck: { ...chapterCheck, entries: [] },
+      styleReview: { ...input.styleReview, entries: [] },
+    }
+    await this.runCreation(retained, cut, result, card?.id, recordId, 1)
   }
 
   /** One summary run and, when it succeeds, lore management. A failed summary can call it again. */

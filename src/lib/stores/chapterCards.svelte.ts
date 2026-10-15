@@ -7,6 +7,7 @@
 
 import { ChapterCards, type ChapterCard } from '#lib/services/chapterCreation/index.ts'
 import { ui } from '#lib/stores/ui.svelte.ts'
+import { isLoreManagementRunning } from '#lib/services/generation/index.ts'
 
 class ChapterCardsStore {
   /** Increments on every change. Read it to make a derivation reactive. */
@@ -33,6 +34,19 @@ class ChapterCardsStore {
   pending(storyId: string, branchId: string | null): boolean {
     void this.version
     return this.cards.pending(storyId, branchId)
+  }
+
+  /**
+   * Whether chapter work on this branch could cut, or lock out, a new chapter: a chapter check
+   * asking the model, a card still working, or a lore management run holding the branch.
+   * Not the turn's background tasks as a whole, which include the style review.
+   */
+  busy(storyId: string, branchId: string | null): boolean {
+    return (
+      ui.chapterCheckActiveFor(storyId, branchId) ||
+      this.pending(storyId, branchId) ||
+      isLoreManagementRunning(storyId, branchId)
+    )
   }
 }
 

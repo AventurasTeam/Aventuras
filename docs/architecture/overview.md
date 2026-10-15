@@ -533,12 +533,15 @@ again. A retry runs outside the turn's background tasks, so it is put off while 
 check, card or lore management run on the branch is in progress (`cutState`), and `createManualChapter` refuses while a
 card on the branch is pending, as it does during a turn's background tasks. Lore management that fails, or is refused by the branch lock,
 leaves a chapter without its lore, so the card offers **Restart lore management**, recorded as a
-further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Both kinds of
+further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Delete, here and
+in the Memory view, is offered only for the branch's last chapter, and `story.deleteChapter`
+refuses any other: the next chapter starts where the last ends, so an earlier one's entries would
+stay uncut. A card whose narration a retry or a delete removed is shown after the last entry. Both kinds of
 failure also raise a toast, since the reader may already be on the next turn or another branch.
 
-While a card on a branch is summarizing or running lore management, or any lore management run
-holds that branch, a turn on it starts no chapter check (`chapterCards.pending`,
-`isLoreManagementRunning`): a second chapter cut meanwhile would cover the same entries, or have
+While a chapter check on a branch is asking the model, a card on it is summarizing or running lore
+management, or any lore management run holds it, a turn on it starts no chapter check
+(`chapterCards.busy`): a second chapter cut meanwhile would cover the same entries, or have
 its own lore management refused.
 
 ## Images

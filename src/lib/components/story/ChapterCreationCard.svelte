@@ -45,6 +45,8 @@
     }
   })
   let busy = $state(false)
+  // Deleting any but the last chapter would leave its entries uncut for good.
+  const isLast = $derived(!!card.chapterId && story.isLastChapter(card.chapterId))
 
   function dismiss() {
     chapterCards.cards.remove(card.id)
@@ -90,12 +92,12 @@
   }
 
   async function deleteChapter() {
-    if (!card.chapterId || busy) return
+    if (!card.chapterId || !isLast || busy) return
     const changes = card.loreChangeCount
     const kept =
       changes === 0
-        ? 'The incomplete run wrote no lore changes.'
-        : `The ${changes === 1 ? 'lore change' : `${changes} lore changes`} the incomplete run wrote ${changes === 1 ? 'stays' : 'stay'} in the lorebook.`
+        ? 'The incomplete runs wrote no lore changes.'
+        : `The ${changes === 1 ? 'lore change' : `${changes} lore changes`} the incomplete runs wrote ${changes === 1 ? 'stays' : 'stay'} in the lorebook.`
     const confirmed = await ask(
       `Delete ${label}${card.title ? `: ${card.title}` : ''}? Its entries remain, and a later turn can cut them into a chapter again. ${kept}`,
       { title: 'Delete incomplete chapter', kind: 'warning' },
@@ -103,8 +105,7 @@
     if (!confirmed) return
     busy = true
     try {
-      await story.deleteChapter(card.chapterId)
-      dismiss()
+      if (await story.deleteChapter(card.chapterId)) dismiss()
     } finally {
       busy = false
     }
@@ -182,7 +183,10 @@
           variant="text"
           size="sm"
           class="h-7 gap-1 px-2 text-xs"
-          disabled={busy}
+          disabled={busy || !isLast}
+          title={isLast
+            ? undefined
+            : 'A later chapter exists; only the last chapter can be deleted'}
           onclick={deleteChapter}
         >
           <Trash2 />

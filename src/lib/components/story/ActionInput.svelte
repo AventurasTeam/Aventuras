@@ -45,7 +45,6 @@
     SuggestionsRefreshService,
     buildLoreManagementCallbacks,
     buildLoreManagementUICallbacks,
-    isLoreManagementRunning,
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
@@ -928,21 +927,16 @@
       const bgBranchId = leasedBranchId
       // Another chapter still being created, or another lore run holding the branch, would
       // have this turn cut a second chapter whose own lore management is then refused.
-      if (
-        !story.memoryConfig.autoSummarize ||
-        chapterCards.pending(bgStoryId, bgBranchId) ||
-        isLoreManagementRunning(bgStoryId, bgBranchId)
-      ) {
+      if (!story.memoryConfig.autoSummarize || chapterCards.busy(bgStoryId, bgBranchId)) {
         input.chapterCheck.tokensOutsideBuffer = 0
       }
       const afterTurnId = activity.startStep('After the turn', { recordId: turnRecordId })
-      const recordId = turnRecordId
       input.activity = activity
       input.activityParentId = afterTurnId
       input.onTurnWorkEnded = (recordedAnything) => {
         if (recordedAnything) activity.endStep(afterTurnId)
         else activity.discardStep(afterTurnId)
-        activity.endRecord(recordId)
+        activity.endRecord(turnRecordId)
       }
       input.onChapterCheck = (active) => ui.setChapterCheckActive(bgStoryId, bgBranchId, active)
       input.chapterCard = {
@@ -956,13 +950,7 @@
           if (!open || !sameBranchScope(open, { storyId: bgStoryId, branchId: bgBranchId })) {
             return 'closed'
           }
-          if (
-            ui.chapterCheckActiveFor(bgStoryId, bgBranchId) ||
-            chapterCards.pending(bgStoryId, bgBranchId) ||
-            isLoreManagementRunning(bgStoryId, bgBranchId)
-          ) {
-            return 'busy'
-          }
+          if (chapterCards.busy(bgStoryId, bgBranchId)) return 'busy'
           const start = story.lastChapterEndIndex
           const uncut = cut.entries.every((entry, i) => story.entries[start + i]?.id === entry.id)
           return uncut ? 'open' : 'closed'
