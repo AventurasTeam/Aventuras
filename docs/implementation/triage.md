@@ -414,3 +414,18 @@ slice-planning gate forces its resolution before that slice is planned.
   location, or skip the write when the anchor is retired. Predates the
   retired-place rule: the anchor choice is older. Raised 2026-10-15 by
   the retired and disabled places slice review.
+
+- **Two save-confirm dialogs repeat one shell.** `RowConfirmDialog`
+  (`components/compounds/row-save-session-chrome.tsx`) and Story
+  Settings' `DefinitionalChangeDialog`
+  (`components/story-settings/definitional-change-dialog.tsx`) build
+  the same AlertDialog: a dismiss that cancels unless the write is
+  running, Cancel disabled while saving, a plain confirm button rather
+  than `AlertDialogAction` so it doesn't also fire a cancel, and the
+  bullets inside the description so screen readers announce them. A
+  compound in `components/compounds/` taking the title, lines, items
+  as `ReactNode`, confirm label, `saving` and `onAnswer` would serve
+  both; it simplifies anything only once Story Settings adopts it.
+  `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
+  2026-10-15 by the retired and disabled places slice review's
+  simplifier pass.
