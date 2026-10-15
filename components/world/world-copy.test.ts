@@ -223,6 +223,35 @@ describe('placeConfirmCopy', () => {
     ).toBe('Retire Port Vellis and the place inside it?')
   })
 
+  it("keeps a disable's or a move's line under a retire's title", () => {
+    expect(
+      placeConfirmCopy({
+        retire: { place: VELLIS, inside: [named('Harbor Market')] },
+        disable: { place: VELLIS, count: 1 },
+        move: null,
+      }),
+    ).toEqual({
+      title: 'Retire Port Vellis and the place inside it?',
+      lines: ['Disabling Port Vellis also keeps the place inside it out of the story.'],
+      items: ['Harbor Market'],
+      confirmLabel: 'Retire',
+    })
+    expect(
+      placeConfirmCopy({
+        retire: { place: ANCHOR, inside: [named('the back room')] },
+        disable: null,
+        move: { region: VELLIS, place: ANCHOR, count: 1, suspended: false },
+      }),
+    ).toEqual({
+      title: 'Retire The Rusty Anchor and the place inside it?',
+      lines: [
+        'Port Vellis is disabled, so The Rusty Anchor and the place inside it will stay out of the story.',
+      ],
+      items: ['the back room'],
+      confirmLabel: 'Retire',
+    })
+  })
+
   it('counts a disable and names a move, as one confirm with both lines', () => {
     expect(
       placeConfirmCopy({
