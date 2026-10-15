@@ -1,4 +1,5 @@
 import type { Entity } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { CAST_ID_PREFIX, entitiesStore } from '@/lib/stores'
 import {
   entityActions,
@@ -47,6 +48,7 @@ export function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySave
   // Only a location update can hold the story. It reads the story's scene under the tail's lock,
   // as a merge does, so a scene edit can't move the story into the place between read and write.
   if (args.kind !== 'location' || args.row == null) return commitEntity(args, null, ctx)
+  const context = { branchId: args.branchId, id: args.row.id, kind: args.kind }
   return withTailMetadataLock<EntitySaveResult>(
     args.branchId,
     ctx,
@@ -54,6 +56,10 @@ export function saveEntity(args: SaveEntityArgs, ctx: DbCtx): Promise<EntitySave
       const scene = await loadSceneSource(args.branchId, ctx)
       return commitEntity(args, storyLocationIdOf(scene == null ? [] : [scene]), ctx)
     },
-    () => ({ status: 'rejected', reason: 'tail moved', code: ROW_SAVE_REJECTION.inFlight }),
+    () => {
+      const code = ROW_SAVE_REJECTION.inFlight
+      logger.warn('action_layer.entity_save_rejected', { ...context, code, reason: 'tail moved' })
+      return { status: 'rejected', reason: 'tail moved', code }
+    },
   )
 }

@@ -19,6 +19,24 @@ import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { registerEntities } from '../entities/register'
 import { registerCharacterRelationships } from '../relationships/register'
+import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
+
+// Runs `onCall` before each `loadHeadTurn` read; the second is the tail lock's in-lock re-read.
+const headTurnHook = vi.hoisted(() => ({
+  calls: 0,
+  onCall: null as ((call: number) => Promise<void>) | null,
+}))
+vi.mock('../story-entries/head-turn', async (importOriginal) => {
+  const real = (await importOriginal()) as { loadHeadTurn: typeof LoadHeadTurn }
+  return {
+    ...real,
+    loadHeadTurn: async (...args: Parameters<typeof LoadHeadTurn>) => {
+      headTurnHook.calls += 1
+      await headTurnHook.onCall?.(headTurnHook.calls)
+      return real.loadHeadTurn(...args)
+    },
+  }
+})
 
 async function setup() {
   __resetRegistry()
@@ -78,6 +96,8 @@ async function deltaRows(db: Db): Promise<Delta[]> {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  headTurnHook.calls = 0
+  headTurnHook.onCall = null
 })
 
 describe('saveEntity', () => {
@@ -557,6 +577,36 @@ describe('saveEntity — places', () => {
       status: 'rejected',
       code: 'story-inside',
       refusal: { field: 'injectionMode' },
+    })
+  })
+
+  it('refuses in-flight, logged, when the story moves into the place while it takes the tail lock', async () => {
+    const { db, ctx } = await seed(REGION, 'loc_eldra')
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    headTurnHook.onCall = async (call) => {
+      if (call !== 2) return
+      await db.insert(storyEntries).values({
+        id: 'entry_2',
+        branchId: 'br_1',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'Inside.',
+        metadata: { sceneEntities: [], currentLocationId: 'loc_back', worldTime: 0 },
+        createdAt: 2,
+      })
+    }
+    const result = await saveEntity(
+      await locationSave(db, 'loc_vellis', { status: 'retired' }),
+      ctx,
+    )
+    expect(result).toEqual({ status: 'rejected', reason: 'tail moved', code: 'in-flight' })
+    expect(await deltaRows(db)).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith('action_layer.entity_save_rejected', {
+      branchId: 'br_1',
+      id: 'loc_vellis',
+      kind: 'location',
+      code: 'in-flight',
+      reason: 'tail moved',
     })
   })
 
