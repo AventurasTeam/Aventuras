@@ -601,6 +601,21 @@ describe('useCollisionResolve → outcomes', () => {
       'Merging these would make a location part of itself. Pick the other row to survive.',
       "Couldn't merge: it would make a location part of itself.",
     ],
+    [
+      COLLISION_REJECTION.storyInside,
+      'The story is in one of these places, and the merge would retire it or move it into a disabled place. Change the status or mode the merge keeps, or pick the other row to survive.',
+      "Couldn't merge: the story is in one of those places.",
+    ],
+    [
+      COLLISION_REJECTION.placesInside,
+      "A place inside one of these isn't retired, so the merged place can't be retired. Retire those places first, or keep the merged place active.",
+      "Couldn't merge: a place inside one of them isn't retired.",
+    ],
+    [
+      COLLISION_REJECTION.retiredParent,
+      "The merged place's parent is retired, so the merged place can't be active or staged. Bring the parent back first, or keep it retired.",
+      "Couldn't merge: the merged place's parent is retired.",
+    ],
   ])(
     "toasts a %s refusal after close without the dialog's instruction",
     async (code, dialogText, toastText) => {
