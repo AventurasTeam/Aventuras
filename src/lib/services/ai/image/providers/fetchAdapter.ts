@@ -14,10 +14,6 @@ import { httpFetch } from '#lib/utils/http.ts'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
-function normalizeHeaders(headers?: Record<string, string>): Record<string, string> {
-  return headers ?? {}
-}
-
 async function logImageResponse(
   response: Response,
   debugId: string,
@@ -88,7 +84,7 @@ export async function imageFetch(options: {
       // For FormData, use Request object so Tauri handles multipart encoding
       const request = new Request(url, {
         method,
-        headers: normalizeHeaders(headers),
+        headers,
         body,
         signal: guard.signal,
       })
@@ -97,14 +93,14 @@ export async function imageFetch(options: {
       const contentType = request.headers.get('content-type') ?? ''
       response = await httpFetch(url, {
         method,
-        headers: { ...normalizeHeaders(headers), 'content-type': contentType },
+        headers: { ...headers, 'content-type': contentType },
         body: arrayBuf,
         signal: guard.signal,
       })
     } else {
       response = await httpFetch(url, {
         method,
-        headers: normalizeHeaders(headers),
+        headers,
         body: body as string | undefined,
         signal: guard.signal,
       })
@@ -215,7 +211,7 @@ export async function imageGetFetch(
   try {
     const response = await httpFetch(url, {
       method: 'GET',
-      headers: normalizeHeaders(headers),
+      headers,
       signal: guard.signal,
       ...(followRedirects ? {} : { maxRedirections: 0 }),
     })

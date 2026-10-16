@@ -352,7 +352,7 @@ function getApi(baseUrl: string): ComfyApi {
   // servers"); headers are replaced, not merged, as in the SDK.
   const internal = api as unknown as ComfyApiFetchInternals
   internal.fetchApi = (path, options = {}) => {
-    options.headers = { ...internal.getCredentialHeaders() }
+    options.headers = internal.getCredentialHeaders()
     options.mode = 'cors'
     return httpFetch(internal.apiURL(path), options)
   }

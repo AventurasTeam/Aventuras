@@ -22,7 +22,7 @@ function normalizeHeaders(headers: RequestInit['headers']): Record<string, strin
 async function tauriFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return httpFetch(typeof input === 'string' ? input : input.toString(), {
     method: init?.method ?? 'GET',
-    headers: normalizeHeaders(init?.headers),
+    headers: init?.headers,
     body: init?.body as string | undefined,
     signal: init?.signal,
   })
