@@ -259,6 +259,24 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   }
 }
 
+// Story Settings → Classifier's "Create mentioned places" switch. Runs before launch.
+export function setClassifierMentionedPlaces(dbPath: string, storyId: string, on: boolean): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
+      settings: string
+    }
+    const settings = JSON.parse(row.settings) as Record<string, unknown>
+    settings.classifierMentionedPlaces = on
+    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
+      JSON.stringify(settings),
+      storyId,
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // The fixture seeds 'on'; 'off' is what story-settings-defaults.ts gives a real story — and
 // unlike disablePiggybackCapability it doesn't lie about the model. Runs before launch.
 export function setPiggybackMode(dbPath: string, storyId: string, mode: 'on' | 'off'): void {
