@@ -406,19 +406,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the fallback, which extracts but can also move the scene, is the case
   that rule doesn't settle.
 
-- **A periodic pass isn't cancelled when its story closes.** After its
-  model call the pass re-reads the global entity stores
-  (`lib/pipeline/definitions/periodic-classifier.ts`, the re-read before
-  reconciliation) and filters them by its branch, with no check that the
-  stores still hold that branch, as `loadPerTurnWorkingSet` makes for a
-  turn. Nothing found in `lib/stores/generation` or the story actions
-  cancels a pass when the user closes the story or switches branch, so a
-  pass finishing then could reconcile its new characters against an
-  empty roster and create them unmatched. Unverified: not traced through
-  story close, and not reproduced. The mentioned-places implementation
-  makes the same check for places; this item is the character path,
-  which predates it. Raised 2026-10-16 by the mentioned places design.
-
 - **The scene editor can write a character into a retired place.**
   Removing a character from the tail's scene sets their
   `current_location_id` to the previous entry's location, as the

@@ -13,25 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement mentioned places.** Designed 2026-10-16
-  ([exploration record](./explorations/2026-10-16-mentioned-places.md));
-  the spec is canon:
-  [`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)
-  for the setting, the pass's place tree, its `newPlaces` list, the
-  row, its parent and the matcher;
-  [`generation-pipeline.md → No-gate write phase`](./generation-pipeline.md#no-gate-write-phase)
-  for a pass writing only when no turn is in flight on its branch; and
-  [`story-settings.md → Classifier`](./ui/screens/story-settings/story-settings.md#classifier)
-  for the toggle. Three things the code must make sure of: a turn can't
-  start between a pass's check and the end of its burst, and waits
-  rather than being refused; the pass's planning inside its lock
-  checks the stores still hold its branch, since nothing found cancels
-  a pass when its story closes (triage carries the older character
-  path); and the embedding sync stage and the background embed worker
-  write only vectors and `embedding_stale` during a turn, which the
-  canon's "nothing but the turn writes its branch's entities" assumes
-  and the design didn't check.
-
 - **The periodic classifier creates factions.** Factions follow the
   character path: a new-faction list in the extraction, reconciled by
   Layer B
