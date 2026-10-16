@@ -51,8 +51,7 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 futures-util = "0.3"
 
 # OS trust store on top of the bundled roots, Windows and Linux only. Android and iOS have no store
-# rustls-native-certs can read; on macOS every request would walk the keychain, at a cost not yet
-# measured.
+# rustls-native-certs can read; on macOS every request would walk the keychain.
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 # default-features = false, or Cargo merges the defaults (cookies included) back in on these targets.
 tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls-native-roots"] }
