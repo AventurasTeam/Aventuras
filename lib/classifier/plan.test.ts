@@ -1812,40 +1812,4 @@ describe('mentioned places', () => {
       )
     })
   })
-
-  describe('stale decisions', () => {
-    const candidate = {
-      handle: 'new:k',
-      name: 'Kael',
-      description: 'x',
-      keywords: [],
-      sourceTurn: 't1',
-    }
-
-    it.each([
-      ['a promote target', { kind: 'promote', entityId: 'char_gone', similarity: 0.9 }],
-      ['a known target', { kind: 'known', entityId: 'char_gone', similarity: 0.9 }],
-      ['a flag partner', { kind: 'create', flag: { partnerId: 'char_gone', reason: 'distinct' } }],
-    ] as const)('reports %s the planning read no longer holds', (_label, decision) => {
-      const { staleDecisions } = buildClassifierActions(
-        reply([], { newCharacters: [candidate] }),
-        deps([entityRow('char_kael')], {
-          decisions: new Map<string, ReconcileDecision>([['new:k', decision as ReconcileDecision]]),
-        }),
-      )
-      expect(staleDecisions).toEqual(['new:k'])
-    })
-
-    it('reports nothing when every decision names a row it holds', () => {
-      const { staleDecisions } = buildClassifierActions(
-        reply([], { newCharacters: [candidate] }),
-        deps([entityRow('char_kael')], {
-          decisions: new Map<string, ReconcileDecision>([
-            ['new:k', { kind: 'known', entityId: 'char_kael', similarity: 0.9 }],
-          ]),
-        }),
-      )
-      expect(staleDecisions).toEqual([])
-    })
-  })
 })

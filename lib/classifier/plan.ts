@@ -32,11 +32,6 @@ export type PlanResult = {
   unresolvedRefs: readonly string[]
   droppedPlaces: readonly DroppedPlace[]
   parentDrops: readonly ParentDrop[]
-  /**
-   * newCharacters handles whose reconcile decision names a row `entities` lacks: a row deleted
-   * between reconciliation and planning. The pass discards rather than write against it.
-   */
-  staleDecisions: readonly string[]
 }
 
 export type PlanDeps = {
@@ -123,13 +118,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     string,
     { kind: Entity['kind']; status: Entity['status']; keywords: string[] }
   >(entities.map((e) => [e.id, { kind: e.kind, status: e.status, keywords: e.keywords }]))
-
-  const staleDecisions = [...decisions]
-    .filter(([, decision]) => {
-      const rowId = decision.kind === 'create' ? decision.flag?.partnerId : decision.entityId
-      return rowId != null && !index.has(rowId)
-    })
-    .map(([handle]) => handle)
 
   const resolveRef = (ref: string, expectedKind?: Entity['kind']): string | null => {
     const id = handleMap.get(ref) ?? (index.has(ref) ? ref : null)
@@ -522,6 +510,5 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     unresolvedRefs,
     droppedPlaces,
     parentDrops,
-    staleDecisions,
   }
 }

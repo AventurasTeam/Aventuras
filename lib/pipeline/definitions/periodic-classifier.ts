@@ -295,9 +295,6 @@ export async function* periodicClassifierPhase(
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
   })
-  // A row a decision names was deleted while the pass waited: writing against it would fail the
-  // pass and reverse it, so leave the window to the next one.
-  if (plan.staleDecisions.length > 0) return discard('stale-decision')
   if (plan.fellBackCount > 0)
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
   if (plan.unresolvedRefs.length > 0)

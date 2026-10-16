@@ -7,13 +7,24 @@ import {
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { deleteEntityRow } from '@/lib/actions/row-delete/delete-entity'
 import { openStory, WORKING_CONFIG } from '@/lib/actions/turns/__tests__/fixtures'
 import { regenerateTurn } from '@/lib/actions/turns/regenerate-turn'
 import { submitTurn } from '@/lib/actions/turns/submit-turn'
 import { generateStructured } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { deltas, entities, storyEntries, type ClassifierStatus, type Entity } from '@/lib/db'
 import {
+  deltas,
+  entities,
+  happeningInvolvements,
+  happenings,
+  storyEntries,
+  type ClassifierStatus,
+  type Entity,
+} from '@/lib/db'
+import {
+  __resetClassifierEmbedder,
+  configureClassifierEmbedder,
   configureDeltaActionPort,
   definePipeline,
   PER_TURN_KIND,
@@ -161,7 +172,10 @@ describe('a periodic pass and a turn on one branch', () => {
     ensurePeriodicClassifierPipelineRegistered()
   })
 
-  afterEach(() => resetSingletons())
+  afterEach(() => {
+    resetSingletons()
+    __resetClassifierEmbedder()
+  })
 
   const pass = () => runPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
   const send = (content = 'I follow the fleet.', turnCtx: RunCtx = ctx) =>
@@ -434,5 +448,73 @@ describe('a periodic pass and a turn on one branch', () => {
     expect(rows.map((row) => row.id)).toEqual([VARN])
     const [branch] = await ctx.db.query.branches.findMany({ where: (b) => eq(b.id, 'b1') })
     expect((branch.classifierStatus as ClassifierStatus).retryCount).toBe(1)
+  })
+
+  // cadence.md → User edits and classifier writes: only the character goes; the pass commits.
+  it('drops a new character whose matched row the user deletes mid-reconciliation', async () => {
+    const KAEL = 'char_11111111-1111-1111-1111-111111111111'
+    const kael = {
+      id: KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      description: 'A courier.',
+      status: 'staged',
+      retiredReason: null,
+      injectionMode: 'auto',
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+      state: null,
+      tags: [],
+      keywords: [],
+      priority: 0,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    } as Entity
+    await ctx.db.insert(entities).values(kael)
+    entitiesStore.hydrate('b1', [kael])
+    // The delete rewrites the tail's scene fields, which this file's entry leaves out.
+    await ctx.db
+      .update(storyEntries)
+      .set({ metadata: { sceneEntities: [] } } as never)
+      .where(eq(storyEntries.id, 'entry_1'))
+    const embedding = gate()
+    const embedCalled = gate()
+    configureClassifierEmbedder(async () => {
+      embedCalled.open()
+      await embedding.opened
+      const vector = Float32Array.from([1, 0, 0])
+      return { vectors: [vector, vector], dim: 3 }
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: reply({
+        newCharacters: [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        happenings: [{ ...happening('The fleet sails'), involvements: [{ ref: 'new:k' }] }],
+      }),
+    })
+
+    const run = pass()
+    await within(embedCalled.opened)
+    expect(await deleteEntityRow('b1', KAEL, ctx)).toEqual({ status: 'ok' })
+    embedding.open()
+
+    expect(await within(run)).toMatchObject({ outcome: 'completed' })
+    expect(await ctx.db.select({ id: entities.id }).from(entities)).toEqual([])
+    const titles = await ctx.db.select({ title: happenings.title }).from(happenings)
+    expect(titles).toEqual([{ title: 'The fleet sails' }])
+    expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
+    const [branch] = await ctx.db.query.branches.findMany({ where: (b) => eq(b.id, 'b1') })
+    expect((branch.classifierStatus as ClassifierStatus).processedThrough).toBe(1)
   })
 })

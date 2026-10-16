@@ -1670,36 +1670,6 @@ describe('periodicClassifierPhase — the write phase', () => {
     )
     expect(log?.fields).toEqual({ reason: 'branch-unloaded' })
   })
-
-  it('discards when a row a reconcile decision names is deleted while it waits', async () => {
-    const vector = Float32Array.from([1, 0, 0])
-    configureClassifierEmbedder(vi.fn(async () => ({ vectors: [vector, vector], dim: 3 })))
-    const staged = {
-      id: CHAR_KAEL,
-      branchId: 'b1',
-      kind: 'character',
-      name: 'Kael',
-      status: 'staged',
-      description: 'A courier.',
-      keywords: [],
-    } as unknown as Entity
-    vi.mocked(generateStructured).mockResolvedValue({
-      status: 'ok',
-      value: extraction({
-        newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
-      }),
-    })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
-    generationStore.startRun(turnRun())
-    const pass = start(h.ctx)
-    await flush()
-    entitiesStore.hydrate('b1', [])
-    generationStore.finishRun('run_turn')
-    const { events, result } = await pass.done
-    expect(events).toEqual([])
-    expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
-  })
 })
 
 // classifier.md → Mentioned places: the setting is read once, when the pass builds its prompt.
