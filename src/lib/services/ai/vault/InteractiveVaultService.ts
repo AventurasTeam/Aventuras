@@ -45,7 +45,12 @@ import {
 import type { VaultPendingChange } from '../sdk/schemas/vault'
 import { database } from '#lib/services/database.ts'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
-import { mergeIntent, scenarioToRecord, characterToRecord } from '#lib/utils/vaultMerge.ts'
+import {
+  mergeIntent,
+  scenarioToRecord,
+  characterToRecord,
+  withEntryUpdate,
+} from '#lib/utils/vaultMerge.ts'
 
 const log = createLogger('InteractiveVault')
 
@@ -932,12 +937,7 @@ export class InteractiveVaultService extends BaseAIService {
         break
       case 'update':
         if (change.entryIndex >= 0 && change.entryIndex < entries.length) {
-          // Strip empty strings from update data to avoid accidentally
-          // overwriting existing content (e.g. AI sending description: '')
-          const safeData = Object.fromEntries(
-            Object.entries(change.data ?? {}).filter(([_, v]) => v !== ''),
-          ) as Partial<VaultLorebookEntry>
-          entries[change.entryIndex] = { ...entries[change.entryIndex], ...safeData }
+          entries[change.entryIndex] = withEntryUpdate(entries[change.entryIndex], change.data)
         } else {
           const error = `Update failed: index ${change.entryIndex} out of bounds (0-${entries.length - 1})`
           log('Update entry index out of bounds', {

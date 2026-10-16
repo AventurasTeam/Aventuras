@@ -1,4 +1,5 @@
-import type { VaultCharacter, VaultScenario } from '#lib/types/index.ts'
+import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+import type { VaultCharacter, VaultLorebookEntry, VaultScenario } from '#lib/types/index.ts'
 
 /**
  * Merge array changes from `prevArr` → `dataArr` onto `baseArr`.
@@ -270,4 +271,34 @@ export function characterToRecord(c: VaultCharacter): Record<string, unknown> {
     tags: c.tags,
     favorite: c.favorite,
   }
+}
+
+type WithPrevious<T> = T extends { previous?: infer P } ? T & { previous: NonNullable<P> } : never
+
+export type EntityUpdate<K extends 'character' | 'scenario'> = WithPrevious<
+  Extract<VaultPendingChange, { entityType: K; action: 'update' }>
+>
+
+/** The pending character / scenario updates that compose onto one entity, in proposal order. */
+export function entityUpdates<K extends 'character' | 'scenario'>(
+  pending: VaultPendingChange[],
+  entityType: K,
+  entityId: string,
+): EntityUpdate<K>[] {
+  return pending.filter(
+    (c): c is EntityUpdate<K> =>
+      c.action === 'update' &&
+      'entityId' in c &&
+      c.entityType === entityType &&
+      c.entityId === entityId &&
+      c.previous !== undefined,
+  )
+}
+
+/** An entry with an update laid over it; empty strings are dropped so they cannot blank a field. */
+export function withEntryUpdate(
+  entry: VaultLorebookEntry,
+  data: Partial<VaultLorebookEntry>,
+): VaultLorebookEntry {
+  return { ...entry, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== '')) }
 }

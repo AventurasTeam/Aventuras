@@ -9,13 +9,19 @@
  */
 
 import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/index.ts'
-import type { VaultLorebook, VaultLorebookEntry } from '#lib/types/index.ts'
+import type { VaultLorebook } from '#lib/types/index.ts'
 import type { InteractiveVaultService } from '#lib/services/ai/vault/InteractiveVaultService.ts'
 import { lorebookVault } from './lorebookVault.svelte'
 import { characterVault } from './characterVault.svelte'
 import { scenarioVault } from './scenarioVault.svelte'
 import { SvelteMap } from 'svelte/reactivity'
-import { composePendingOnto, scenarioToRecord, characterToRecord } from '#lib/utils/vaultMerge.ts'
+import {
+  composePendingOnto,
+  entityUpdates,
+  scenarioToRecord,
+  characterToRecord,
+  withEntryUpdate,
+} from '#lib/utils/vaultMerge.ts'
 
 class VaultEditorStore {
   // ── Core state ────────────────────────────────────────────────────────
@@ -65,13 +71,9 @@ class VaultEditorStore {
     if (change.action !== 'update') return null
     if (!('previous' in change) || !change.previous) return null
 
-    const entityId =
-      change.entityType === 'scenario' || change.entityType === 'character' ? change.entityId : null
-    if (!entityId) return null
+    const pending = this._pendingChangesWithEditOverlay(change.entityType, change.entityId)
 
-    const pending = this._pendingChangesWithEditOverlay(change.entityType, entityId)
-
-    const base = this._getVaultBase(change.entityType, entityId, change.previous)
+    const base = this._getVaultBase(change.entityType, change.entityId, change.previous)
     return composePendingOnto(base, pending)
   }
 
@@ -95,32 +97,19 @@ class VaultEditorStore {
     return JSON.parse(JSON.stringify(previous))
   }
 
-  /**
-   * Collect pending changes for an entity, applying any user edits
-   * on top of the original change data/previous.
-   */
+  /** Changes still awaiting a decision, with the user's edits applied over the originals. */
+  get effectivePendingChanges(): VaultPendingChange[] {
+    return this.pendingChanges
+      .filter((c) => c.status === 'pending')
+      .map((c) => this._editedChanges.get(c.id) ?? c)
+  }
+
+  /** The pending updates that compose onto one character or scenario */
   private _pendingChangesWithEditOverlay(
-    entityType: string,
+    entityType: 'character' | 'scenario',
     entityId: string,
   ): Array<{ data: Record<string, unknown>; previous: Record<string, unknown> }> {
-    return this.pendingChanges
-      .filter(
-        (c) =>
-          c.status === 'pending' &&
-          c.entityType === entityType &&
-          'entityId' in c &&
-          c.entityId === entityId &&
-          'data' in c &&
-          'previous' in c,
-      )
-      .map((c) => {
-        const effective = this._editedChanges.get(c.id) ?? c
-        return {
-          data: (effective as { data: Record<string, unknown> }).data,
-          previous: (effective as { previous: Record<string, unknown> }).previous,
-        }
-      })
-      .filter((c) => c.data && c.previous)
+    return entityUpdates(this.effectivePendingChanges, entityType, entityId)
   }
 
   /**
@@ -246,13 +235,10 @@ class VaultEditorStore {
           entryChange.entryIndex >= 0 &&
           entryChange.entryIndex < copy.entries.length
         ) {
-          const safeData = Object.fromEntries(
-            Object.entries(entryChange.data ?? {}).filter(([_, v]) => v !== ''),
-          ) as Partial<VaultLorebookEntry>
-          copy.entries[entryChange.entryIndex] = {
-            ...copy.entries[entryChange.entryIndex],
-            ...safeData,
-          }
+          copy.entries[entryChange.entryIndex] = withEntryUpdate(
+            copy.entries[entryChange.entryIndex],
+            entryChange.data,
+          )
         }
       }
 
