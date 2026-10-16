@@ -540,7 +540,10 @@ What the plugin changes for the server on the other end:
 - Every request carries `Origin` set to the webview origin: `http://tauri.localhost` on Windows and
   Android, `tauri://localhost` elsewhere, the dev-server URL in dev. It cannot be dropped without
   the `unsafe-headers` feature.
-- Certificates are checked against bundled webpki roots, not the OS trust store.
+- Certificates are checked against the bundled webpki roots and, on Windows and Linux, the OS trust
+  store. macOS, Android and iOS use the bundled roots only. The OS roots are only added as extra
+  anchors, so a CA the OS distrusts or revokes is still accepted if the bundled set has it;
+  plugin-http 3's platform verifier replaces this.
 - `Accept-Encoding: gzip, br, zstd` is sent and responses are decoded in Rust before the WebView
   sees them.
 
