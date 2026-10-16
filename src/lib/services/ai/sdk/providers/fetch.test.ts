@@ -208,3 +208,25 @@ describe('createTimeoutFetch body handling', () => {
     expect(add).not.toHaveBeenCalled()
   })
 })
+
+describe('createTimeoutFetch request headers', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+  })
+
+  it('sends an empty Origin alongside the caller headers', async () => {
+    mockFetch.mockResolvedValue(
+      new Response('{}', { headers: { 'content-type': 'application/json' } }),
+    )
+
+    await createTimeoutFetch(60_000, 'test')('https://api.test/v1', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer key' },
+      body: '{}',
+    })
+
+    const headers = new Headers(mockFetch.mock.calls[0][1]?.headers)
+    expect(headers.get('origin')).toBe('')
+    expect(headers.get('authorization')).toBe('Bearer key')
+  })
+})

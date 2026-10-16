@@ -12,7 +12,9 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 
-const { extractQuotaPercent, normalizeBaseUrl, getEffectiveBaseUrl } = await import('./modelPing')
+const { extractQuotaPercent, normalizeBaseUrl, getEffectiveBaseUrl, pingModel } =
+  await import('./modelPing')
+const { fetch: tauriHttpFetch } = await import('@tauri-apps/plugin-http')
 
 /**
  * The health dots in the model picker are read as fact -- a green one means "this key works
@@ -173,5 +175,17 @@ describe('extractQuotaPercent', () => {
       }),
     )
     expect(result).toBe(50)
+  })
+})
+
+describe('pingModel', () => {
+  it('sends an empty Origin alongside the caller headers', async () => {
+    vi.mocked(tauriHttpFetch).mockResolvedValue(new Response('{}', { status: 200 }))
+
+    await pingModel('http://127.0.0.1:11434/v1', 'key', 'llama')
+
+    const headers = new Headers(vi.mocked(tauriHttpFetch).mock.calls[0][1]?.headers)
+    expect(headers.get('origin')).toBe('')
+    expect(headers.get('authorization')).toBe('Bearer key')
   })
 })

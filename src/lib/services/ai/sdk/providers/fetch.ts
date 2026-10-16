@@ -1,15 +1,15 @@
 /**
  * Tauri Fetch Adapter
  *
- * Wraps @tauri-apps/plugin-http's fetch for Vercel AI SDK providers.
+ * Wraps httpFetch for Vercel AI SDK providers.
  * Patches common provider response issues before SDK validation.
  */
 
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { LLM_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { parseManualBody } from './manualBody'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
+import { httpFetch } from '#lib/utils/http.ts'
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -20,7 +20,7 @@ function normalizeHeaders(headers: RequestInit['headers']): Record<string, strin
 }
 
 async function tauriFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return tauriHttpFetch(typeof input === 'string' ? input : input.toString(), {
+  return httpFetch(typeof input === 'string' ? input : input.toString(), {
     method: init?.method ?? 'GET',
     headers: normalizeHeaders(init?.headers),
     body: init?.body as string | undefined,

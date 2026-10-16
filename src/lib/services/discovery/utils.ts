@@ -1,10 +1,10 @@
-import { fetch } from '@tauri-apps/plugin-http'
+import { httpFetch } from '#lib/utils/http.ts'
 
 export async function corsFetch(url: string, options?: RequestInit): Promise<Response> {
   // Tauri's fetch implementation automatically bypasses CORS
   // We wrap it just in case we need to add global headers or error handling later
   try {
-    const response = await fetch(url, {
+    const response = await httpFetch(url, {
       ...options,
       headers: {
         'User-Agent':

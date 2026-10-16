@@ -6,11 +6,11 @@
  * Longer default timeout (5 min) since image generation is slow.
  */
 
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
+import { httpFetch } from '#lib/utils/http.ts'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
@@ -95,14 +95,14 @@ export async function imageFetch(options: {
       // Convert to arrayBuffer for Tauri compatibility
       const arrayBuf = await request.arrayBuffer()
       const contentType = request.headers.get('content-type') ?? ''
-      response = await tauriHttpFetch(url, {
+      response = await httpFetch(url, {
         method,
         headers: { ...normalizeHeaders(headers), 'content-type': contentType },
         body: arrayBuf,
         signal: guard.signal,
       })
     } else {
-      response = await tauriHttpFetch(url, {
+      response = await httpFetch(url, {
         method,
         headers: normalizeHeaders(headers),
         body: body as string | undefined,
@@ -213,7 +213,7 @@ export async function imageGetFetch(
   const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
 
   try {
-    const response = await tauriHttpFetch(url, {
+    const response = await httpFetch(url, {
       method: 'GET',
       headers: normalizeHeaders(headers),
       signal: guard.signal,

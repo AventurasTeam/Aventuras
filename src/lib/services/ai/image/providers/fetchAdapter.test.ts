@@ -197,3 +197,45 @@ describe.each([
     expect(error).toMatchObject({ message: `${what} timed out after 5s` })
   })
 })
+
+describe('request headers', () => {
+  const expectNoOriginWithAuth = () => {
+    const headers = new Headers(mockFetch.mock.calls[0][1]?.headers)
+    expect(headers.get('origin')).toBe('')
+    expect(headers.get('authorization')).toBe('Bearer key')
+  }
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
+  })
+
+  it('imageFetch sends an empty Origin with a JSON body', async () => {
+    await imageFetch({
+      url: 'https://img.test/gen',
+      body: '{}',
+      headers: { Authorization: 'Bearer key' },
+    })
+
+    expectNoOriginWithAuth()
+  })
+
+  it('imageFetch sends an empty Origin with a FormData body', async () => {
+    const form = new FormData()
+    form.append('prompt', 'a cat')
+
+    await imageFetch({
+      url: 'https://img.test/gen',
+      body: form,
+      headers: { Authorization: 'Bearer key' },
+    })
+
+    expectNoOriginWithAuth()
+  })
+
+  it('imageGetFetch sends an empty Origin', async () => {
+    await imageGetFetch('https://img.test/a.png', { Authorization: 'Bearer key' })
+
+    expectNoOriginWithAuth()
+  })
+})
