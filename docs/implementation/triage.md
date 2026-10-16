@@ -434,3 +434,71 @@ slice-planning gate forces its resolution before that slice is planned.
   `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
   2026-10-15 by the retired and disabled places slice review's
   simplifier pass.
+
+- **A pass keeps a failed turn's user_action in its window.** A
+  periodic pass reads its window when it starts. If a turn is streaming
+  then, the window holds that turn's user_action. The pass waits the
+  turn out, then plans and writes against that window. If the turn
+  fails or is cancelled, it reverses its own user_action. A fact the pass
+  anchored on that entry then names a deleted row, and `processedThrough`
+  stays past positions the next Send reuses, so that prose is never
+  classified (`lib/pipeline/definitions/periodic-classifier.ts`, the
+  window read and the watermark write). The prose-reversal barrier
+  doesn't cover a failed turn's own reversal
+  ([`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)).
+  Trigger: the scheduler's retry timer, or the gap in `noteTurnCommitted`,
+  starts a pass while a turn streams, and the turn then fails or the
+  user presses Cancel. Probed with a scratch test: the end state is the
+  same on `main`, so this predates the mentioned-places write-phase
+  wait. Raised 2026-10-16 by the mentioned places slice review.
+
+- **Regenerate checks the edit gate, then awaits before raising it.**
+  `regenerateTurn` (`lib/actions/turns/regenerate-turn.ts`) checks
+  `isUserEditBlocked`, runs two awaited selects, then raises its
+  pending-turn mark and opens its prose-reversal bracket. The CTRL-Z
+  hotkey (`runUndoRedo` in `app/reader-composer/[branchId].tsx`) isn't
+  held back by the reader's dispatch ref, so an undo can open its
+  bracket in that gap. Regenerate then throws "bracketProseReversal is
+  not re-entrant", and the reader toasts the regenerate failure and
+  reloads. The window is milliseconds, and the check, reads, bracket
+  order is unchanged from `main`. `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts`) already re-checks the
+  gate after its read, which would close it here too. Read, not probed.
+  Raised 2026-10-16 by the mentioned places slice review.
+
+- **A pass whose story closed holds the classifier slot until it
+  ends.** The mentioned-places branch check discards a pass once the
+  entity stores leave its branch, but only when the pass wakes: nothing
+  cancels it on a story or branch switch. Until its model call returns
+  or times out (up to 300 s), it holds the only periodic-classifier
+  slot, since `blockedBy` covers every branch
+  (`lib/pipeline/runtime/concurrency.ts`). Meanwhile the newly opened
+  story's cadence passes are rejected as busy and wait for the next
+  tick. Read, not probed. Residual of the removed item "A periodic
+  pass isn't cancelled when its story closes". Raised 2026-10-16 by the
+  mentioned places slice review.
+
+- **Two new characters with one handle share a reconcile decision.**
+  The periodic phase stores each `newCharacters` candidate's
+  reconcile decision in a map keyed by handle
+  (`lib/pipeline/definitions/periodic-classifier.ts`, the
+  reconciliation loop). With two candidates on one handle, the second
+  decision overwrites the first, and the planner applies it to the
+  first candidate, binding it to the wrong row with no log. Canon
+  doesn't say what a duplicate handle does in the pass; `piggyback.md`
+  keeps the first declaration for the per-turn writer. Read, not
+  probed. Predates the mentioned-places work. Raised 2026-10-16 by the
+  mentioned places slice review.
+
+- **The generation store's run mutators are public.**
+  `generationStore.startRun`, `finishRun`, `abortRun` and
+  `setReversalInProgress` (`lib/stores/generation/generation.ts`) are
+  exported to every module. Only the orchestrator and the
+  prose-reversal bracket should call them, and a stray caller can leave
+  the hard gate or the reversal barrier stuck. The mentioned-places
+  slice review closed the same gap for the pending-turn mark by
+  exposing it only as a bracket. A `boundaries` lint rule limiting
+  these to `lib/pipeline/runtime` and `lib/actions` is the route
+  [`code-conventions.md → Syncing a store after a write`](../code-conventions.md#syncing-a-store-after-a-write)
+  names for a package-private mutator. Raised 2026-10-16 by the
+  mentioned places slice review.
