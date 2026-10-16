@@ -1747,7 +1747,7 @@ describe('mentioned places', () => {
     })
 
     it('keeps a handle bound to the newCharacters entry that claimed it, and the first place', () => {
-      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
+      const { planned, handleMap, unresolvedRefs, droppedPlaces } = buildClassifierActions(
         reply(
           [
             newPlace('new:x', 'Ashwater'),
@@ -1770,16 +1770,21 @@ describe('mentioned places', () => {
       )
       expect(createdPlaces(planned).map((e) => e.name)).toEqual(['Birchmoor'])
       expect(handleMap.get('new:x')).toMatch(/^char_/)
-      expect(unresolvedRefs).toEqual(['new:x', 'new:y'])
+      expect(droppedPlaces).toEqual([
+        { handle: 'new:x', name: 'Ashwater', cause: 'handle-taken' },
+        { handle: 'new:y', name: 'Coldharbour', cause: 'handle-taken' },
+      ])
+      expect(unresolvedRefs).toEqual([])
     })
 
-    it('drops a blank-named place as unresolved', () => {
-      const { planned, unresolvedRefs } = buildClassifierActions(
+    it('drops a blank-named place and reports it', () => {
+      const { planned, unresolvedRefs, droppedPlaces } = buildClassifierActions(
         reply([newPlace('new:x', '   ')]),
         deps([]),
       )
       expect(planned).toEqual([])
-      expect(unresolvedRefs).toEqual(['new:x'])
+      expect(droppedPlaces).toEqual([{ handle: 'new:x', name: '   ', cause: 'blank-name' }])
+      expect(unresolvedRefs).toEqual([])
     })
 
     it("resolves a new place's handle as a site, never as a character", () => {

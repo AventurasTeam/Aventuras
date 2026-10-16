@@ -1785,6 +1785,28 @@ describe('periodicClassifierPhase — mentioned places', () => {
     expect(sent?.user).toContain('- [l1] The Ford (retired: washed away)')
   })
 
+  it("logs a place dropped for a taken handle under the per-turn writer's key", async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    const place = (name: string) => ({ handle: 'new:inn', name, description: '', keywords: [] })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({ newPlaces: [place('the Gull Inn'), place('the Drowned Inn')] }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
+    const { events } = await drain(h.ctx)
+    expect(createdEntry(events)).toMatchObject({ name: 'the Gull Inn' })
+    const logs = getDiagnosticsSnapshot().logEntries.filter(
+      (e) => e.kind === 'classifier.create_dropped',
+    )
+    expect(logs.map((e) => [e.level, e.fields])).toEqual([
+      [
+        'warn',
+        { kind: 'location', handle: 'new:inn', name: 'the Drowned Inn', cause: 'handle-taken' },
+      ],
+    ])
+  })
+
   it("logs a place sent to the root under the per-turn writer's key and cause", async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })

@@ -304,7 +304,9 @@ export async function* periodicClassifierPhase(
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
   if (plan.unresolvedRefs.length > 0)
     ctx.log.warn('classifier.unresolved_refs', { refs: plan.unresolvedRefs })
-  // The per-turn writer's key and causes (per-turn-creates.ts).
+  // The per-turn writer's keys (per-turn-creates.ts).
+  for (const drop of plan.droppedPlaces)
+    ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
 
   for (const write of plan.planned) {

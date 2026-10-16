@@ -21,12 +21,16 @@ export type PlannedWrite = { action: PipelineAction; entryId: string }
 /** A new place sent to the root although it named a parent. */
 export type ParentDrop = { handle: string; parent: string; cause: ParentDropCause }
 
+/** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
+export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
+
 export type PlanResult = {
   planned: readonly PlannedWrite[]
   /** Temp handle -> allocated or matched entity id, for refs later in the same reply. */
   handleMap: Map<string, string>
   fellBackCount: number
   unresolvedRefs: readonly string[]
+  droppedPlaces: readonly DroppedPlace[]
   parentDrops: readonly ParentDrop[]
   /**
    * newCharacters handles whose reconcile decision names a row `entities` lacks: a row deleted
@@ -159,22 +163,25 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   // classifier.md → Mentioned places. After the characters, so the handle namespace they share
   // keeps a character's binding; before anything that names a place by its handle.
-  const planNewPlaces = (): ParentDrop[] => {
-    const drops: ParentDrop[] = []
+  const planNewPlaces = (): { droppedPlaces: DroppedPlace[]; parentDrops: ParentDrop[] } => {
+    const droppedPlaces: DroppedPlace[] = []
+    const parentDrops: ParentDrop[] = []
     const byId = new Map(entities.map((e) => [e.id, e]))
     // The pass saw every place, so matching is over real children: nothing is hidden.
     const view = unhiddenLocationView(entities)
     const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
     const placed: SettledNewPlace[] = []
 
-    const declared = newPlacesOf(extraction).filter((place) => {
-      const usable = nonBlank(place.name) != null && !handleMap.has(place.handle)
-      if (!usable) unresolvedRefs.push(place.handle)
-      return usable
+    const declared = newPlacesOf(extraction).filter(({ handle, name }) => {
+      const cause =
+        nonBlank(name) == null ? 'blank-name' : handleMap.has(handle) ? 'handle-taken' : null
+      if (cause !== null) droppedPlaces.push({ handle, name, cause })
+      return cause === null
     })
 
     const { order, duplicates } = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
-    for (const duplicate of duplicates) unresolvedRefs.push(duplicate.handle)
+    for (const { handle, name } of duplicates)
+      droppedPlaces.push({ handle, name, cause: 'handle-taken' })
     for (const settling of order) {
       const place = settling.emission
       const placement = placeNewLocation({
@@ -184,7 +191,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         parentOf: parentOfLocations([...entities, ...created]),
       })
       if (placement.kind === 'dropped')
-        drops.push({ handle: place.handle, parent: placement.parent, cause: placement.cause })
+        parentDrops.push({ handle: place.handle, parent: placement.parent, cause: placement.cause })
       const parentId = placement.kind === 'kept' ? placement.parentId : null
 
       const stored = clampEmbeddedCharacter({
@@ -239,7 +246,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       handleMap.set(place.handle, id)
       placed.push({ name: stored.name, parentId, id })
     }
-    return drops
+    return { droppedPlaces, parentDrops }
   }
 
   // New characters first: later refs in the same reply resolve through handleMap,
@@ -346,7 +353,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  const parentDrops = planNewPlaces()
+  const { droppedPlaces, parentDrops } = planNewPlaces()
 
   // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
@@ -507,5 +514,13 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  return { planned, handleMap, fellBackCount, unresolvedRefs, parentDrops, staleDecisions }
+  return {
+    planned,
+    handleMap,
+    fellBackCount,
+    unresolvedRefs,
+    droppedPlaces,
+    parentDrops,
+    staleDecisions,
+  }
 }
