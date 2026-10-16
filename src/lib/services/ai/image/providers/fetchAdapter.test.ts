@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
@@ -8,7 +8,9 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
 }))
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
-import { fetchPublicImageBase64 } from './fetchAdapter'
+import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { RequestTimeoutError } from '#lib/utils/error.ts'
+import { fetchPublicImageBase64, imageFetch, imageGetFetch } from './fetchAdapter'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 
@@ -100,5 +102,59 @@ describe('fetchPublicImageBase64', () => {
     await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
       'Image API error 404',
     )
+  })
+})
+
+/** Like the plugin: stays pending, then rejects with a bare string when its signal aborts. */
+function pendingUntilAborted(_url: unknown, init?: { signal?: AbortSignal | null }) {
+  return new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject('Request canceled'))
+  })
+}
+
+describe.each([
+  [
+    'imageFetch',
+    'Image generation',
+    (signal: AbortSignal | undefined, timeoutMs: number) =>
+      imageFetch({ url: 'https://img.test/gen', body: '{}', signal, timeoutMs }),
+  ],
+  [
+    'imageGetFetch',
+    'Image fetch',
+    (signal: AbortSignal | undefined, timeoutMs: number) =>
+      imageGetFetch('https://img.test/a.png', undefined, { signal, timeoutMs }),
+  ],
+])('%s abort handling', (_name, what, run) => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(pendingUntilAborted)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('rejects a caller abort as an AbortError', async () => {
+    const caller = new AbortController()
+    const request = run(caller.signal, 60_000).catch((e: unknown) => e)
+
+    caller.abort()
+
+    const error = await request
+    expect(error).toMatchObject({ name: 'AbortError' })
+    expect(isAbortError(error)).toBe(true)
+  })
+
+  it('rejects a timeout as a RequestTimeoutError, not an abort', async () => {
+    vi.useFakeTimers()
+    const request = run(new AbortController().signal, 5_000).catch((e: unknown) => e)
+
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const error = await request
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: `${what} timed out after 5s` })
+    expect(isAbortError(error)).toBe(false)
   })
 })

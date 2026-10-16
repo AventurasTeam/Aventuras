@@ -8,6 +8,7 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '#lib/stores/debug.svelte.ts'
+import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
 
@@ -15,6 +16,26 @@ const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
 function normalizeHeaders(headers?: Record<string, string>): Record<string, string> {
   return headers ?? {}
+}
+
+async function logImageResponse(
+  response: Response,
+  debugId: string,
+  serviceId: string,
+  startTime: number,
+): Promise<void> {
+  try {
+    const text = await response.text()
+    let responsePayload: unknown
+    try {
+      responsePayload = JSON.parse(text)
+    } catch {
+      responsePayload = { size: text.length }
+    }
+    debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
+  } catch {
+    // Debug logging is best-effort.
+  }
 }
 
 /**
@@ -58,9 +79,7 @@ export async function imageFetch(options: {
       debugBody = { raw: body.slice(0, 200) }
     }
   } else if (body instanceof FormData) {
-    const keys: string[] = []
-    body.forEach((_val, key) => keys.push(key))
-    debugBody = { formData: keys }
+    debugBody = { formData: [...body.keys()] }
   }
 
   const debugId = debug.addDebugRequest(serviceId, { url, method, body: debugBody })
@@ -78,11 +97,11 @@ export async function imageFetch(options: {
       })
       // Convert to arrayBuffer for Tauri compatibility
       const arrayBuf = await request.arrayBuffer()
-      const contentType = request.headers.get('content-type') || ''
+      const contentType = request.headers.get('content-type') ?? ''
       response = await tauriHttpFetch(url, {
         method,
         headers: { ...normalizeHeaders(headers), 'content-type': contentType },
-        body: arrayBuf as unknown as BodyInit,
+        body: arrayBuf,
         signal: controller.signal,
       })
     } else {
@@ -124,27 +143,14 @@ export async function imageFetch(options: {
     // text() on every response — which would also corrupt binary image bodies — and skips a
     // redundant full-body copy + double parse.
     if (debug.isActive) {
-      response
-        .clone()
-        .text()
-        .then((text) => {
-          let responsePayload: unknown
-          try {
-            responsePayload = JSON.parse(text)
-          } catch {
-            responsePayload = { size: text.length }
-          }
-          debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
-        })
-        .catch(() => {})
+      void logImageResponse(response.clone(), debugId, serviceId, startTime)
     }
 
     return response
   } catch (error) {
-    // Tauri HTTP rejects an aborted request with a plain Error, not an AbortError.
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
-      throw new Error(`Image generation timed out after ${timeoutMs / 1000}s`)
-    }
+    // The plugin rejects an abort with a plain Error or a bare string.
+    if (timedOut) throw new RequestTimeoutError(timeoutMs, 'Image generation')
+    if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError')
     throw error
   } finally {
     clearTimeout(timeoutId)
@@ -242,10 +248,9 @@ export async function imageGetFetch(
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
     return response
   } catch (error) {
-    // Tauri HTTP rejects an aborted request with a plain Error, not an AbortError.
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
-      throw new Error(`Image fetch timed out after ${timeoutMs / 1000}s`)
-    }
+    // The plugin rejects an abort with a plain Error or a bare string.
+    if (timedOut) throw new RequestTimeoutError(timeoutMs, 'Image fetch')
+    if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError')
     throw error
   } finally {
     clearTimeout(timeoutId)
