@@ -115,7 +115,7 @@ export type {
   PlaceSaveRefusal,
   StoryPlace,
 } from './place-rules'
-export { itemNamesakes, matchNewLocation, matchNewPlace } from './new-entity-match'
+export { itemNamesakes, matchNewPlace } from './new-entity-match'
 export type { SettledNewPlace } from './new-entity-match'
 export { placeNewLocation, settlingOrder } from './new-place-order'
 export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'
