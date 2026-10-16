@@ -502,3 +502,15 @@ slice-planning gate forces its resolution before that slice is planned.
   [`code-conventions.md → Syncing a store after a write`](../code-conventions.md#syncing-a-store-after-a-write)
   names for a package-private mutator. Raised 2026-10-16 by the
   mentioned places slice review.
+
+- **The classifier's Known entities lines print stored text raw.** The
+  periodic classifier's prompt
+  (`lib/prompts/bundled/periodic-classifier.ts`) prints each Known
+  entities row's name, description and keywords as stored, so a
+  newline in any of them starts a line that isn't an entity, and the
+  model may read it as one. The Places tree collapses the same fields
+  onto one line (`oneLine` in
+  `lib/pipeline/definitions/classifier-context.ts`). Doing the same
+  for the roster would close this. Read, not probed; predates the
+  mentioned-places work. Raised 2026-10-16 by the mentioned places
+  slice review.
