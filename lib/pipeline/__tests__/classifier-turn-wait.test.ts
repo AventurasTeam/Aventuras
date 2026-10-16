@@ -8,6 +8,7 @@ import {
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { openStory, WORKING_CONFIG } from '@/lib/actions/turns/__tests__/fixtures'
+import { regenerateTurn } from '@/lib/actions/turns/regenerate-turn'
 import { submitTurn } from '@/lib/actions/turns/submit-turn'
 import { generateStructured } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -26,6 +27,7 @@ import {
   awaitRunTerminal,
   currentStoryStore,
   entitiesStore,
+  entriesStore,
   generationStore,
   hydrateAppSettings,
 } from '@/lib/stores'
@@ -104,6 +106,28 @@ function defineTurn(opts: { phase?: () => Promise<void>; chainsTo?: string } = {
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
   })
+}
+
+/** A chapter close whose phase 0 drains the pass with 'finish', as the real one does. */
+function defineDrainingClose(): { drained: () => boolean } {
+  let drained = false
+  definePipeline({
+    kind: 'chapter-close',
+    phases: [
+      {
+        name: 'phase-0',
+        run: async function* (): AsyncGenerator<never, PhaseResult> {
+          await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, 'b1', 'finish')
+          drained = true
+          return { status: 'completed' }
+        },
+      },
+    ],
+    concurrencyPolicy: { blockedBy: [PER_TURN_KIND, 'chapter-close'] },
+    affordance: 'pill-and-banner',
+    gateBehavior: 'hard-gate',
+  })
+  return { drained: () => drained }
 }
 
 async function sourcesInLogOrder(db: RunCtx['db']): Promise<string[]> {
@@ -283,23 +307,7 @@ describe('a periodic pass and a turn on one branch', () => {
   it('waits on per-turn runs only, so a chained close that drains it completes', async () => {
     const turnGate = gate()
     defineTurn({ phase: () => turnGate.opened, chainsTo: 'chapter-close' })
-    let drained = false
-    definePipeline({
-      kind: 'chapter-close',
-      phases: [
-        {
-          name: 'phase-0',
-          run: async function* (): AsyncGenerator<never, PhaseResult> {
-            await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, 'b1', 'finish')
-            drained = true
-            return { status: 'completed' }
-          },
-        },
-      ],
-      concurrencyPolicy: { blockedBy: [PER_TURN_KIND, 'chapter-close'] },
-      affordance: 'pill-and-banner',
-      gateBehavior: 'hard-gate',
-    })
+    const close = defineDrainingClose()
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: reply({ happenings: [happening('The fleet sails')] }),
@@ -315,7 +323,59 @@ describe('a periodic pass and a turn on one branch', () => {
     expect(await within(run)).toMatchObject({ outcome: 'completed' })
     await within(first)
     await within(second)
-    expect(drained).toBe(true)
+    expect(close.drained()).toBe(true)
+  })
+
+  // Its mark must end when the run registers, not when regenerateTurn returns after the chain.
+  it("ends a regenerate's mark at its run, so a chained close that drains the pass completes", async () => {
+    const turn = [
+      { id: 'entry_u', position: 2, kind: 'user_action', content: 'I board.' },
+      { id: 'entry_r', position: 3, kind: 'ai_reply', content: 'The deck rolls.' },
+    ].map((row) => ({ ...row, branchId: 'b1', chapterId: null, metadata: {}, createdAt: 2 }))
+    await ctx.db.insert(storyEntries).values(turn as never)
+    // The sweep finds the reply by its create delta.
+    await ctx.db.insert(deltas).values(
+      turn.map((row, i) => ({
+        id: `d_${row.id}`,
+        branchId: 'b1',
+        actionId: 'act_turn',
+        op: 'create' as const,
+        targetTable: 'story_entries',
+        targetId: row.id,
+        entryId: null,
+        source: i === 0 ? ('user_edit' as const) : ('ai_classifier' as const),
+        undoPayload: null,
+        logPosition: i + 1,
+        encodingVersion: 1,
+        createdAt: 2,
+      })),
+    )
+    entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
+    const runStarted = gate()
+    const turnGate = gate()
+    defineTurn({
+      phase: async () => {
+        runStarted.open()
+        await turnGate.opened
+      },
+      chainsTo: 'chapter-close',
+    })
+    const close = defineDrainingClose()
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: reply({ happenings: [happening('The fleet sails')] }),
+    })
+
+    const regen = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'entry_r', ctx)
+    await within(runStarted.opened)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    const run = pass()
+    await flush()
+
+    turnGate.open()
+    expect(await within(run)).toMatchObject({ outcome: 'completed' })
+    expect(await within(regen)).toMatchObject({ status: 'ran', result: { outcome: 'completed' } })
+    expect(close.drained()).toBe(true)
   })
 
   // classifier.md → Mentioned places: the create handler's backstop fails the whole pass.
