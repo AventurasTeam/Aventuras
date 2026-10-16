@@ -2,13 +2,13 @@ import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 import {
-  matchNewLocation,
-  nameBasis,
+  matchNewPlace,
   parentOfLocations,
   placeNewLocation,
   settlingOrder,
   unhiddenLocationView,
   type ParentDropCause,
+  type SettledNewPlace,
 } from '@/lib/world'
 
 import type { ReconcileDecision } from './reconcile'
@@ -140,12 +140,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // New terms only: resending a held one would restore an alias the user removed mid-pass.
-  const appendNewTerms = (
-    id: string,
-    terms: readonly string[],
-    entryId: string,
-    proseEntryId: string,
-  ): void => {
+  // Anchored only when it writes, so a no-op never counts as a window-head fallback.
+  const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void => {
     const row = index.get(id)
     if (row == null) return
     const added = newTerms(row.keywords, terms)
@@ -155,9 +151,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       action: {
         kind: 'appendEntityKeywords',
         source: SOURCE,
-        payload: { branchId, id, keywords: added, proseEntryId },
+        payload: { branchId, id, keywords: added, proseEntryId: proseSource(sourceTurn) },
       },
-      entryId,
+      entryId: anchor(sourceTurn),
     })
   }
 
@@ -169,7 +165,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     // The pass saw every place, so matching is over real children: nothing is hidden.
     const view = unhiddenLocationView(entities)
     const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
-    const placed: { name: string; parentId: string | null; id: string }[] = []
+    const placed: SettledNewPlace[] = []
 
     const seen = new Set<string>()
     const declared = newPlacesOf(extraction).filter((place) => {
@@ -195,29 +191,24 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         drops.push({ handle: place.handle, parent, cause: placement.dropped })
       const { parentId } = placement
 
-      const entryId = anchor(place.sourceTurn)
-      const proseEntryId = proseSource(place.sourceTurn)
       const stored = clampEmbeddedCharacter({
         name: place.name,
         description: place.description.trim(),
       })
-      const twin = placed.find(
-        (p) => p.parentId === parentId && nameBasis(p.name, stored.name) === 'same-name',
+      const match = matchNewPlace(
+        { name: stored.name, parentId, keywords: place.keywords },
+        placed,
+        view,
       )
-      const match =
-        twin === undefined
-          ? matchNewLocation({ name: stored.name, parentId, keywords: place.keywords }, view)
-          : null
 
-      const reusedId = twin?.id ?? (match?.kind === 'reuse' ? match.id : undefined)
       let id: string
-      if (reusedId !== undefined) {
+      if (match.kind !== 'create') {
         // A reused place keeps its description and its status: a mention doesn't enter it.
-        id = reusedId
-        appendNewTerms(id, place.keywords, entryId, proseEntryId)
+        id = match.id
+        appendNewTerms(id, place.keywords, place.sourceTurn)
       } else {
         id = newId('loc')
-        const flag = match?.kind === 'create' ? match.flag : null
+        const { flag } = match
         const keywords = dedupeTerms(place.keywords)
         const timestamp = now()
         index.set(id, { kind: 'location', status: 'active', keywords })
@@ -246,7 +237,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
               },
             },
           },
-          entryId,
+          entryId: anchor(place.sourceTurn),
         })
       }
       handleMap.set(place.handle, id)
@@ -364,27 +355,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
   for (const alias of extraction.aliases) {
-    const current = index.get(alias.ref)
-    if (current == null) {
-      unresolvedRefs.push(alias.ref)
-      continue
-    }
-    const added = newTerms(current.keywords, alias.terms)
-    if (added.length === 0) continue
-    index.set(alias.ref, { ...current, keywords: [...current.keywords, ...added] })
-    planned.push({
-      action: {
-        kind: 'appendEntityKeywords',
-        source: SOURCE,
-        payload: {
-          branchId,
-          id: alias.ref,
-          keywords: added,
-          proseEntryId: proseSource(alias.sourceTurn),
-        },
-      },
-      entryId: anchor(alias.sourceTurn),
-    })
+    if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
+    else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
   }
 
   for (const happening of extraction.happenings) {

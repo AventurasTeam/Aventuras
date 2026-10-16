@@ -4,7 +4,7 @@ import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
 import { locationMapView, unhiddenLocationView } from './location-map'
-import { itemNamesakes, matchNewLocation as matchAgainst } from './new-entity-match'
+import { itemNamesakes, matchNewLocation as matchAgainst, matchNewPlace } from './new-entity-match'
 
 const place = (
   id: string,
@@ -319,6 +319,29 @@ describe('matchNewLocation — over an unhidden view, with the candidate keyword
         ford,
       ]),
     ).toEqual(flaggedWith('loc_ford'))
+  })
+})
+
+describe('matchNewPlace', () => {
+  const settled = [{ name: 'the Gull Inn', parentId: 'loc_town', id: 'loc_new1' }]
+  const view = unhiddenLocationView([
+    place('loc_town', 'Varn', null),
+    place('loc_inn', 'The Gull Inn', 'loc_town'),
+  ])
+
+  it('maps a place to an earlier one in the reply with its name and parent, before any row', () => {
+    expect(matchNewPlace({ name: 'The Gull Inn', parentId: 'loc_town' }, settled, view)).toEqual({
+      kind: 'twin',
+      id: 'loc_new1',
+    })
+  })
+
+  it('matches the existing rows when no earlier place shares its parent', () => {
+    expect(matchNewPlace({ name: 'The Gull Inn', parentId: 'loc_town' }, [], view)).toEqual({
+      kind: 'reuse',
+      id: 'loc_inn',
+    })
+    expect(matchNewPlace({ name: 'the Gull Inn', parentId: null }, settled, view)).toEqual(PLAIN)
   })
 })
 

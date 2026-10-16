@@ -12,6 +12,10 @@ type RelationshipFact = {
   kind: string
 }
 
+// Each place is one line of the tree: stored text spanning several would break its nesting.
+const oneLine = (text: string | null): string | null =>
+  text == null ? null : blankToNull(text.replace(/\s+/g, ' '))
+
 // One row can emit two facts, one per non-null perspective; a row whose character
 // has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
 function projectRelationships(
@@ -80,10 +84,8 @@ export function buildClassifierContext(args: {
       name: e.name,
       depth,
       status: e.status,
-      // Each place is one line of the tree: a stored reason may span several.
-      retiredReason:
-        e.status === 'retired' ? blankToNull((e.retiredReason ?? '').replace(/\s+/g, ' ')) : null,
-      description: e.description,
+      retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
+      description: oneLine(e.description),
       keywords: e.keywords,
     })),
     // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.

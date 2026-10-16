@@ -267,7 +267,7 @@ describe('buildClassifierContext', () => {
         }),
         place(HALL, 'Great Hall', KEEP, { status: 'staged', keywords: ['the hall'] }),
         place(KEEP, 'Ashen Keep', null, { injectionMode: 'disabled' }),
-        place(MARSH, 'The Marsh', null, { description: null }),
+        place(MARSH, 'The Marsh', null, { description: 'Reeds.\n\nAnd   black water. ' }),
       ])
       expect(context.entities).toEqual([expect.objectContaining({ id: 'c1', kind: 'character' })])
       expect(context.places).toEqual([
@@ -304,7 +304,7 @@ describe('buildClassifierContext', () => {
           depth: 0,
           status: 'active',
           retiredReason: null,
-          description: null,
+          description: 'Reeds. And black water.',
           keywords: [],
         },
       ])

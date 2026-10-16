@@ -53,6 +53,24 @@ export function matchNewLocation(
   }
 }
 
+/** A new place this reply already settled, under the parent it resolved to. */
+export type SettledNewPlace = { name: string; parentId: string | null; id: string }
+
+/**
+ * piggyback.md → Matching before creating, within one reply: a second new place with the same name
+ * and parent maps to the first; otherwise the place is matched against the existing rows.
+ */
+export function matchNewPlace(
+  candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+  settled: readonly SettledNewPlace[],
+  view: LocationMatchView,
+): PlaceMatch | { kind: 'twin'; id: string } {
+  const twin = settled.find(
+    (p) => p.parentId === candidate.parentId && nameBasis(p.name, candidate.name) === 'same-name',
+  )
+  return twin === undefined ? matchNewLocation(candidate, view) : { kind: 'twin', id: twin.id }
+}
+
 /** An item's exact namesakes anywhere on the branch, any status, oldest first. */
 export function itemNamesakes(name: string, entities: readonly Entity[]): Entity[] {
   return entities

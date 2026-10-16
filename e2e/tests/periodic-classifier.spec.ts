@@ -248,24 +248,23 @@ test.describe('periodic classifier — mentioned places', () => {
         )
       )[0]
 
-    await expect
-      .poll(async () => (await placeRow('the East Dock')) != null, { timeout: 20_000 })
-      .toBe(true)
+    // The involvement is the burst's last write, and each write commits on its own.
+    const site = async () =>
+      queryApp(
+        app.window,
+        `SELECT entity_id FROM happening_involvements
+         WHERE branch_id = ? AND happening_id IN
+           (SELECT id FROM happenings WHERE branch_id = ? AND title = 'The fleet sails from Varn')`,
+        [branchId, branchId],
+      )
+    await expect.poll(async () => (await site()).length, { timeout: 20_000 }).toBe(1)
     const varn = await placeRow('Varn')
     const dock = await placeRow('the East Dock')
     expect(varn.slice(1, 4)).toEqual(['active', 'auto', null])
     expect(JSON.parse(varn[4] as string)).toEqual(['the salt town'])
     expect(varn[5]).toBe('A salt town on the far coast.')
     expect(dock[3]).toBe(varn[0])
-
-    const site = await queryApp(
-      app.window,
-      `SELECT entity_id FROM happening_involvements
-       WHERE branch_id = ? AND happening_id IN
-         (SELECT id FROM happenings WHERE branch_id = ? AND title = 'The fleet sails from Varn')`,
-      [branchId, branchId],
-    )
-    expect(site).toEqual([[dock[0]]])
+    expect(await site()).toEqual([[dock[0]]])
 
     // Both creates are the pass's, anchored on the turn that mentioned them.
     const anchored = await queryApp(

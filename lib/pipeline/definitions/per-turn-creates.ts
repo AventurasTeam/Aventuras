@@ -22,12 +22,12 @@ import {
 import {
   itemNamesakes,
   locationMapView,
-  matchNewLocation,
-  nameBasis,
+  matchNewPlace,
   parentOfLocations,
   placeNewLocation,
   settlingOrder,
   type ParentDropCause,
+  type SettledNewPlace,
 } from '@/lib/world'
 
 type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
@@ -146,7 +146,7 @@ function planLocations(args: {
   const fates = new Map<string, LocationFate>()
   const rows: Entity[] = []
   const reused = new Set<string>()
-  const placed: { name: string; parentId: string | null; id: string }[] = []
+  const placed: SettledNewPlace[] = []
 
   const order = settlingOrder(
     args.emissions.filter((e) => args.kept.has(e.handle)),
@@ -166,29 +166,24 @@ function planLocations(args: {
     if (placement.dropped !== null) logParentDropped(args.log, emission, placement.dropped)
 
     const text = storedText(emission)
-    const twin = placed.find(
-      (p) => p.parentId === parentId && nameBasis(p.name, text.name) === 'same-name',
-    )
+    const match = matchNewPlace({ name: text.name, parentId }, placed, view)
     let fate: LocationFate
-    if (twin !== undefined) {
-      fate = { outcome: 'reused', id: twin.id, parentId, parentDropped }
+    if (match.kind === 'twin') {
+      fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
+    } else if (match.kind === 'reuse') {
+      if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
+      fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
     } else {
-      const match = matchNewLocation({ name: text.name, parentId }, view)
-      if (match.kind === 'reuse') {
-        if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
-        fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
-      } else {
-        const row = newRow({
-          id: args.newId('loc'),
-          branchId: args.branchId,
-          shape: { kind: 'location', state: { parent_location_id: parentId } },
-          text,
-          flag: match.flag,
-          at: args.now(),
-        })
-        rows.push(row)
-        fate = { outcome: 'created', id: row.id, parentId, parentDropped }
-      }
+      const row = newRow({
+        id: args.newId('loc'),
+        branchId: args.branchId,
+        shape: { kind: 'location', state: { parent_location_id: parentId } },
+        text,
+        flag: match.flag,
+        at: args.now(),
+      })
+      rows.push(row)
+      fate = { outcome: 'created', id: row.id, parentId, parentDropped }
     }
     fates.set(emission.handle, fate)
     placed.push({ name: text.name, parentId, id: fate.id })
