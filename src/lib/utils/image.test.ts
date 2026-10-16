@@ -8,6 +8,7 @@ import {
   expectedPixels,
   normalizeImageDataUrl,
   base64ImageMime,
+  sniffImageMime,
   bytesToBase64,
   base64ToBytes,
   storyImageMode,
@@ -217,6 +218,77 @@ describe('base64ImageMime', () => {
     ['AAAA', 'image/png'],
   ])('sniffs %s as %s', (b64, mime) => {
     expect(base64ImageMime(b64)).toBe(mime)
+  })
+})
+
+describe('sniffImageMime', () => {
+  const text = (s: string) => Array.from(s, (c) => c.charCodeAt(0))
+  const u32 = (n: number) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]
+  const b64 = (...parts: number[][]) => bytesToBase64(Uint8Array.from(parts.flat()))
+
+  const PNG_SIGNATURE = [0x89, ...text('PNG'), 0x0d, 0x0a, 0x1a, 0x0a]
+  const pngChunk = (type: string, dataLength: number) => [
+    ...u32(dataLength),
+    ...text(type),
+    ...new Array<number>(dataLength).fill(0),
+    ...u32(0),
+  ]
+  const ftyp = (major: string, ...compatible: string[]) => [
+    ...u32(16 + compatible.length * 4),
+    ...text('ftyp'),
+    ...text(major),
+    ...u32(0),
+    ...compatible.flatMap(text),
+  ]
+
+  it.each([
+    ['PNG', b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('IDAT', 4)), 'image/png'],
+    [
+      'PNG with a pHYs chunk',
+      b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('pHYs', 9), pngChunk('IDAT', 4)),
+      'image/png',
+    ],
+    ['truncated PNG', b64(PNG_SIGNATURE, pngChunk('IHDR', 13)), 'image/png'],
+    [
+      'APNG',
+      b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('acTL', 8), pngChunk('IDAT', 4)),
+      'image/apng',
+    ],
+    [
+      'APNG behind a large iCCP profile',
+      b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('iCCP', 40_000), pngChunk('acTL', 8)),
+      'image/apng',
+    ],
+    ['JPEG', b64([0xff, 0xd8, 0xff, 0xe0], text('JFIF')), 'image/jpeg'],
+    ['GIF87a', b64(text('GIF87a'), [1, 0, 1, 0]), 'image/gif'],
+    ['GIF89a', b64(text('GIF89a'), [1, 0, 1, 0]), 'image/gif'],
+    ['WebP', b64(text('RIFF'), [0x24, 0, 0, 0], text('WEBPVP8 ')), 'image/webp'],
+    ['AVIF', b64(ftyp('avif', 'mif1', 'miaf')), 'image/avif'],
+    ['AVIF sequence', b64(ftyp('avis', 'msf1', 'iso8')), 'image/avif'],
+    ['AVIF behind a mif1 major brand', b64(ftyp('mif1', 'miaf', 'avif')), 'image/avif'],
+    [
+      'AVIF in an ftyp box of size 0',
+      b64(u32(0), text('ftyp'), text('mif1'), u32(0), text('miaf'), text('avif')),
+      'image/avif',
+    ],
+    ['HEIC', b64(ftyp('heic', 'mif1')), 'image/heic'],
+    ['HEIC (heix)', b64(ftyp('heix')), 'image/heic'],
+    ['HEIC sequence', b64(ftyp('hevc', 'msf1')), 'image/heic-sequence'],
+    ['HEIF', b64(ftyp('mif1', 'miaf')), 'image/heif'],
+    ['HEIF sequence', b64(ftyp('msf1', 'iso8')), 'image/heif-sequence'],
+  ])('recognises %s', (_, data, mime) => {
+    expect(sniffImageMime(data)).toBe(mime)
+  })
+
+  it.each([
+    ['zero bytes', 'AAAA'],
+    ['HTML', 'PGh0bWw+'],
+    ['text that is not base64', '<html><body>Not found</body></html>'],
+    ['a RIFF WAV header', b64(text('RIFF'), [0x24, 0, 0, 0], text('WAVEfmt '))],
+    ['an empty string', ''],
+    ['an ISO-BMFF file of an unknown brand', b64(ftyp('mp42', 'isom'))],
+  ])('returns null for %s', (_, data) => {
+    expect(sniffImageMime(data)).toBeNull()
   })
 })
 
