@@ -13,7 +13,7 @@ import {
   type TrackedRow,
   type TrackedState,
 } from './state'
-import { UNRECORDED_FIELDS } from './record'
+import { UNRECORDED_FIELDS, recordedRow } from './record'
 
 /** A database write that carries the live state along with the plan. */
 export type ReversalOp =
@@ -57,6 +57,11 @@ export interface ReversalPlan {
   tidy: WorldStateChangeRecord[]
   /** Kept changes that could not be applied again, because what they changed is gone. */
   unkeepable: WorldStateChangeRecord[]
+  /**
+   * The kept changes as they were applied again, in that order, each `before` read from the
+   * state it landed on rather than copied from a record this reversal undid.
+   */
+  reapplied: WorldStateChangeRecord[]
   /** The entries carrying chapter lore the range undoes, in story order. */
   chapterEntryIds: string[]
 }
@@ -151,25 +156,47 @@ class Workspace {
     }
   }
 
-  /** Applies a change again from its `after`. False when what it changed no longer exists. */
-  redo(record: WorldStateChangeRecord): boolean {
+  /**
+   * Applies a change again from its `after`, and returns it as it now applies: `before` read
+   * from the state it lands on. Null when what it changed no longer exists.
+   */
+  redo(record: WorldStateChangeRecord): WorldStateChangeRecord | null {
     const { entityType: type, entityId: id } = record
+    const applied = (
+      op: WorldStateChangeRecord['op'],
+      before: object | null,
+      after: object | null,
+    ): WorldStateChangeRecord => ({
+      ...record,
+      op,
+      before: recordedRow(before),
+      after: recordedRow(after),
+    })
     switch (record.op) {
       case 'create': {
-        if (!record.after) return false
+        if (!record.after) return null
         const row = this.withUnrecorded(type, record.after as unknown as TrackedRow)
-        if (record.before) this.remove(type, (record.before as { id: string }).id)
+        const shadowedId = record.before && (record.before as { id: string }).id
+        const shadow = shadowedId ? (this.find(type, shadowedId) ?? null) : null
+        if (shadowedId) this.remove(type, shadowedId)
         this.put(type, row)
         this.ops.push({ kind: 'restore', entityType: type, row })
-        return true
+        return applied('create', shadow, row)
       }
       case 'update': {
-        if (!record.after) return false
-        if (this.patch(type, id, record.after)) return true
+        if (!record.after) return null
+        const current = this.find(type, id) as Record<string, unknown> | undefined
+        if (current) {
+          const before = Object.fromEntries(
+            Object.keys(record.after).map((key) => [key, current[key] ?? null]),
+          )
+          this.patch(type, id, record.after)
+          return applied('update', before, record.after)
+        }
         // An override undone by the reversal: write it again over the row it shadowed.
         const shadow = this.shadowed.get(id)
         const visible = shadow && this.find(type, shadow.id)
-        if (!visible) return false
+        if (!visible) return null
         const override = this.withUnrecorded(type, {
           ...visible,
           ...record.after,
@@ -181,14 +208,16 @@ class Workspace {
         this.remove(type, visible.id)
         this.put(type, override)
         this.ops.push({ kind: 'restore', entityType: type, row: override })
-        return true
+        return applied('create', visible, override)
       }
       case 'delete':
-      case 'softDelete':
-        if (!this.find(type, id)) return false
+      case 'softDelete': {
+        const current = this.find(type, id)
+        if (!current) return null
         this.remove(type, id)
         this.ops.push({ kind: record.op, entityType: type, id })
-        return true
+        return applied(record.op, current, null)
+      }
     }
   }
 }
@@ -223,7 +252,12 @@ export function planReversal(input: ReversalInput): ReversalPlan {
     (r) => (input.keep.manual && r.origin === 'manual') || (input.keep.tidy && r.origin === 'tidy'),
   )
   const unkeepable: WorldStateChangeRecord[] = []
-  for (const record of kept) if (!ws.redo(record)) unkeepable.push(record)
+  const reapplied: WorldStateChangeRecord[] = []
+  for (const record of kept) {
+    const applied = ws.redo(record)
+    if (applied) reapplied.push(applied)
+    else unkeepable.push(record)
+  }
   const chapterEntryIds = [
     ...new Set(
       changes
@@ -233,7 +267,7 @@ export function planReversal(input: ReversalInput): ReversalPlan {
     ),
   ]
 
-  return { state: ws.state, ops: ws.ops, manual, tidy, unkeepable, chapterEntryIds }
+  return { state: ws.state, ops: ws.ops, manual, tidy, unkeepable, reapplied, chapterEntryIds }
 }
 
 function restoreCurrentLocation(ws: Workspace, locationId: string | null): void {

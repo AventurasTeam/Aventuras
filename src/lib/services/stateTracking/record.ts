@@ -24,7 +24,7 @@ export const UNRECORDED_FIELDS: ReadonlySet<string> = new Set([
 // Image data would ride along into every export, sync and load of the records.
 const UNRECORDED_ROW_FIELDS = ['portrait']
 
-function recordedRow(row: object | null): Record<string, unknown> | null {
+export function recordedRow(row: object | null): Record<string, unknown> | null {
   if (!row) return null
   const copy: Record<string, unknown> = { ...row }
   for (const key of UNRECORDED_ROW_FIELDS) delete copy[key]

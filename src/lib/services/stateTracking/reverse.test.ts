@@ -320,6 +320,55 @@ describe('planReversal', () => {
     expect(plan.state.characters[0].relationship).toBe('T')
   })
 
+  it('reports kept changes in the order it applies them, Tidy and manual alike', () => {
+    const plan = planReversal({
+      state: state([character('x', { relationship: 'c' })]),
+      records: [
+        change(
+          'e2',
+          'update',
+          'x',
+          { relationship: 'a' },
+          { origin: 'tidy', after: { relationship: 'b' } },
+        ),
+        change(
+          'e2',
+          'update',
+          'x',
+          { relationship: 'b' },
+          { origin: 'manual', after: { relationship: 'c' } },
+        ),
+      ],
+      entryPositions: positions,
+      keep: { manual: true, tidy: true },
+    })
+    expect(plan.reapplied.map((r) => [r.origin, r.before, r.after])).toEqual([
+      ['tidy', { relationship: 'a' }, { relationship: 'b' }],
+      ['manual', { relationship: 'b' }, { relationship: 'c' }],
+    ])
+  })
+
+  it("reads a kept change's before from the state it lands on, not from an undone change", () => {
+    const plan = planReversal({
+      state: state([character('f', { relationship: 'c' })]),
+      records: [
+        change('e2', 'update', 'f', { relationship: 'a' }),
+        change(
+          'e2',
+          'update',
+          'f',
+          { relationship: 'b' },
+          { origin: 'manual', after: { relationship: 'c' } },
+        ),
+      ],
+      entryPositions: positions,
+      keep: { manual: true, tidy: false },
+    })
+    expect(plan.reapplied).toEqual([
+      expect.objectContaining({ before: { relationship: 'a' }, after: { relationship: 'c' } }),
+    ])
+  })
+
   it('names the entries whose chapter lore it undoes, in story order', () => {
     const plan = planReversal({
       state: state([character('c')]),

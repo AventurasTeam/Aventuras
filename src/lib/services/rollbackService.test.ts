@@ -194,6 +194,8 @@ describe('RollbackService', () => {
       },
     ])
     expect((recorded[0].params[0] as WorldStateRecord).id).not.toBe('m1')
+    // A new write: it takes the revert's time, so no older full state counts it as included.
+    expect((recorded[0].params[0] as WorldStateRecord).createdAt).toBeGreaterThan(9)
   })
 
   it('writes nothing and cleans nothing up when the transaction fails', async () => {

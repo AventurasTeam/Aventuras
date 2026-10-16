@@ -77,9 +77,7 @@ can each be kept: they are applied again afterwards from their `after` values, a
 no longer exists (an automatic change in the range created it) is reported as unkeepable rather than
 dropped silently. A tombstoned row comes back by clearing its tombstone, and a row written again from
 a record takes the columns no record holds (a portrait, the translations) from the row as it was,
-so a revert never strips them. A revert that removes entries records the kept changes again on the
-entry that now ends the branch, in the same transaction: their own records go with the removed
-entries, and a later revert must still be able to undo and list them.
+so a revert never strips them. A revert that removes entries records the kept changes again on the entry that now ends the branch, in the same transaction: their own records go with the removed entries, and a later revert must still be able to undo and list them. They are recorded as the plan applied them, in that order, with each `before` read from the state it landed on, and with the revert's time, since they are new writes.
 
 The clock is not recorded at all. After a revert, and in a past checkpoint, it is the end time of
 the last entry that remains (`clockAfter`): a gap before the removed entries goes with them, and

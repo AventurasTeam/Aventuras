@@ -81,17 +81,21 @@ export function planRollback(
 
 /**
  * The kept changes, recorded again on the entry that now ends the branch: their own records go
- * with the removed entries, and without new ones nothing could undo or list them later.
+ * with the removed entries, and without new ones nothing could undo or list them later. They are
+ * new writes, so they take the revert's time; their order and `before` are as the plan applied them.
  */
 function rerecordKept(input: RollbackInput, plan: ReversalPlan): WorldStateChangeRecord[] {
   const last = input.entries
     .filter((e) => e.position < input.fromPosition)
     .reduce<StoryEntry | null>((a, e) => (!a || e.position > a.position ? e : a), null)
   if (!last) return []
-  const lost = new Set(plan.unkeepable.map((r) => r.id))
-  return [...(input.keep.manual ? plan.manual : []), ...(input.keep.tidy ? plan.tidy : [])]
-    .filter((r) => !lost.has(r.id))
-    .map((r) => ({ ...r, id: crypto.randomUUID(), entryId: last.id }))
+  const now = Date.now()
+  return plan.reapplied.map((r) => ({
+    ...r,
+    id: crypto.randomUUID(),
+    entryId: last.id,
+    createdAt: now,
+  }))
 }
 
 function statementsFor(storyId: string, op: ReversalOp): DbStatement[] {
