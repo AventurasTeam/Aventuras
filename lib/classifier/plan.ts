@@ -12,7 +12,7 @@ import {
 } from '@/lib/world'
 
 import type { ReconcileDecision } from './reconcile'
-import { newPlacesOf, type ClassifierReply } from './schema'
+import { newPlacesOf, type ClassifierReply, type NewPlace } from './schema'
 import type { ClassifierWindow } from './window'
 
 /** A delta the phase will emit, with its own survival anchor. */
@@ -172,12 +172,13 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
     const placed: SettledNewPlace[] = []
 
-    const declared = newPlacesOf(extraction).filter(({ handle, name }) => {
-      const cause =
-        nonBlank(name) == null ? 'blank-name' : handleMap.has(handle) ? 'handle-taken' : null
-      if (cause !== null) droppedPlaces.push({ handle, name, cause })
-      return cause === null
-    })
+    const declared: NewPlace[] = []
+    for (const place of newPlacesOf(extraction)) {
+      const { handle, name } = place
+      if (nonBlank(name) == null) droppedPlaces.push({ handle, name, cause: 'blank-name' })
+      else if (handleMap.has(handle)) droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+      else declared.push(place)
+    }
 
     const { order, duplicates } = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
     for (const { handle, name } of duplicates)

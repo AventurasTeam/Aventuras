@@ -167,9 +167,7 @@ export async function* periodicClassifierPhase(
     return { status: 'completed' }
   }
 
-  const entities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === ctx.branchId,
-  )
+  const entities = branchEntities(ctx.branchId)
   const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
     (r) => r.branchId === ctx.branchId,
   )
