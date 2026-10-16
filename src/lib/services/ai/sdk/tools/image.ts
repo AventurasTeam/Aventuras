@@ -122,7 +122,7 @@ async function resolveEditSource(
 
   const character = characters().find((c) => c.id === characterId)
   if (!character) return { error: `Character with ID "${characterId}" not found` }
-  if (!character.portrait) return { error: `Character "${character.name}" has no saved portrait.` }
+  if (!character.portrait) return { error: `Character "${character.name}" has no portrait.` }
   try {
     // generateImage silently drops a reference it cannot fetch; fetch here so that fails loudly.
     return { source: await toRawBase64(character.portrait) }
@@ -289,14 +289,14 @@ export function createImageTools(context: ImageToolContext) {
 
     edit_image: tool({
       description:
-        "Edit an existing image with the Reference (Img2Img) profile, keeping its likeness. Give `instruction` and exactly one source: `imageId` (an image generated this session) or `characterId` (that character's saved portrait). The edit is a new image; the source is never overwritten. A success result means the user can see the image; on failure, tell the user and do not retry. Use set_portrait with the new imageId to assign it.",
+        "Edit an existing image with the Reference (Img2Img) profile, keeping its likeness. Give `instruction` and exactly one source: `imageId` (an image generated this session) or `characterId` (that character's current portrait, including a pending or unsaved one). The edit is a new image; the source is never overwritten. A success result means the user can see the image; on failure, tell the user and do not retry. Use set_portrait with the new imageId to assign it.",
       inputSchema: z.object({
         instruction: z.string().describe('The change to make to the image'),
         imageId: z.string().optional().describe('ID of an image generated this session'),
         characterId: z
           .string()
           .optional()
-          .describe('ID of the character whose saved portrait to edit'),
+          .describe('ID of the character whose current portrait to edit'),
       }),
       execute: async ({ instruction, imageId, characterId }) => {
         if (!imageId === !characterId) {

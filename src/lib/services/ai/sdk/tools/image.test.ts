@@ -106,7 +106,7 @@ describe('edit_image', () => {
     expect(await edit({ instruction: 'x', characterId: 'zz' })).toMatchObject({ success: false })
     const result = await edit({ instruction: 'x', characterId: 'c1' })
     expect(result.success).toBe(false)
-    expect(result.error).toContain('no saved portrait')
+    expect(result.error).toContain('no portrait')
   })
 
   it('tells apart an unset standard profile and an unset reference profile', async () => {
