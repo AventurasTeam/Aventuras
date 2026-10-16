@@ -532,7 +532,8 @@ socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
 
 Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
 user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
-them. `httpFetch` (`utils/http.ts`) is the only way into the plugin. Prefer the existing helpers built on it: `createTimeoutFetch` for
+them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
+any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
 AI SDK providers, `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64` for images,
 `corsFetch` for discovery.
 
