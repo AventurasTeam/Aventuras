@@ -25,8 +25,7 @@ const flaggedWith = (partnerId: string) => ({
 const HOLLOW = place('loc_hollow', 'Hollow', null)
 const MARKET = place('loc_market', 'The Drowned Market', 'loc_hollow')
 
-// The map the prompt showed: built from the same entities around the scene's location. The Hollow
-// is always there, as a candidate's parent always names a place that exists.
+// The map the prompt showed; it always holds the Hollow, as a candidate's parent always exists.
 const matchNewLocation = (
   candidate: { name: string; parentId: string | null },
   entities: readonly Entity[],

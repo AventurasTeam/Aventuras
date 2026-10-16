@@ -58,7 +58,6 @@ describe('pending turns', () => {
 
   const pending = () => [...generationStore.getTxState().pendingTurns].map((t) => t.branchId)
 
-  // Holds the bracket's body open, so a test can end the mark early or settle the body.
   function holdTurn(branchId: string) {
     let endEarly!: () => void
     let settleBody!: (outcome: 'resolve' | 'reject') => void

@@ -854,8 +854,7 @@ describe('entity keywords', () => {
     ])
   })
 
-  // The payload carries only the terms the row lacks; the handler merges into the live list, so a
-  // term the user added survives.
+  // The handler merges the sent terms into the live list, so a term the user added survives.
   it('sends a known entity only the terms its snapshot lacks', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
       ...base,

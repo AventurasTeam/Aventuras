@@ -92,9 +92,8 @@ export async function submitTurn(
         if (result.status === 'rejected')
           throw new Error(`submitTurn: user_action write rejected: ${result.reason}`)
 
-        // Held for the whole run, not just the user_action insert above:
-        // narrativePhase (per-turn.ts) does its own MAX(position)+1 read for the
-        // ai_reply, which needs the same per-branch exclusion.
+        // The branch queue spans the run, not just the insert above: narrativePhase (per-turn.ts)
+        // does its own MAX(position)+1 read for the ai_reply.
         const runResult = await startTurn({
           storyId: ids.storyId,
           actionId: turnActionId,
