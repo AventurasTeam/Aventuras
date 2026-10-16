@@ -514,3 +514,21 @@ slice-planning gate forces its resolution before that slice is planned.
   for the roster would close this. Read, not probed; predates the
   mentioned-places work. Raised 2026-10-16 by the mentioned places
   slice review.
+
+- **Nine migration tests carry their own copy of two helpers.**
+  `migrationTags` and `applyMigration` are copied byte for byte into the
+  seven migration tests under `lib/db/__tests__/`, plus
+  `lib/db/embeddings/stale.test.ts` and `lib/embedder/service.test.ts`.
+  They belong in `lib/db/__tests__/test-db.ts`, which tests in other
+  modules already import. One `refactor(test):` commit would move them
+  and replace the copies with an import. Raised 2026-10-16 by the
+  mentioned places slice review's simplifier pass, which skipped it as
+  outside that slice.
+
+- **`clampEmbeddedCharacter` clamps places and items too.** The helper
+  in `lib/classifier/plan.ts` bounds the embedded name and description
+  of any new row: the per-turn writer already used it for places and
+  items, and the periodic classifier now uses it for mentioned places.
+  A neutral name such as `clampEmbeddedText` would stop it misleading.
+  Rename only. Raised 2026-10-16 by the mentioned places slice review's
+  simplifier pass.
