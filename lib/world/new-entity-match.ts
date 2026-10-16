@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
-import type { LocationMatchView } from './location-map'
+import { realParentOf, type LocationMatchView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
 import { parentIdOf } from './parent-chain'
 
@@ -37,8 +37,9 @@ export function matchNewLocation(
   if (reused !== undefined) return { kind: 'reuse', id: reused.entity.id }
 
   const side = { name: candidate.name, keywords: candidate.keywords ?? [] }
+  const parentOf = realParentOf(locations)
   const [partner] = locations
-    .filter((e) => parentIdOf(e) === candidate.parentId)
+    .filter((e) => parentOf(e.id) === candidate.parentId)
     .flatMap((entity) => {
       const basis = namesakeBasis(side, entity)?.basis
       if (basis === 'same-name' && entity.status === 'retired') return [{ entity, rank: 0 }]

@@ -22,14 +22,16 @@ const flaggedWith = (partnerId: string) => ({
   flag: { partnerId, reason: 'same-parent' },
 })
 
+const HOLLOW = place('loc_hollow', 'Hollow', null)
 const MARKET = place('loc_market', 'The Drowned Market', 'loc_hollow')
 
-// The map the prompt showed: built from the same entities around the scene's location.
+// The map the prompt showed: built from the same entities around the scene's location. The Hollow
+// is always there, as a candidate's parent always names a place that exists.
 const matchNewLocation = (
   candidate: { name: string; parentId: string | null },
   entities: readonly Entity[],
   currentLocationId: string | null = null,
-) => matchAgainst(candidate, locationMapView(entities, currentLocationId))
+) => matchAgainst(candidate, locationMapView([HOLLOW, ...entities], currentLocationId))
 
 describe('matchNewLocation', () => {
   it('reuses an exact sibling across case and spacing', () => {
@@ -246,6 +248,13 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     })
   })
 
+  it('flags a place the map roots through a missing parent as a root sibling', () => {
+    const orphan = place('loc_orphan', 'Quay', 'loc_gone')
+    expect(matchNewLocation({ name: 'Quay Street', parentId: null }, [orphan])).toEqual(
+      flaggedWith('loc_orphan'),
+    )
+  })
+
   it('stops at a listed place: what hangs under it is not under the parent above', () => {
     const listedVellis = { ...VELLIS, injectionMode: 'auto' as const }
     expect(
@@ -298,6 +307,14 @@ describe('matchNewLocation — over an unhidden view, with the candidate keyword
 
   it('never reaches through a disabled place: a grandchild is not a child', () => {
     expect(unhidden({ name: 'The Vault', parentId: 'loc_eldra' }, REGION)).toEqual(PLAIN)
+  })
+
+  it('flags a place whose parent row is gone as a root sibling, where the tree shows it', () => {
+    const orphan = place('loc_orphan', 'Quay', 'loc_gone')
+    expect(unhidden({ name: 'Quay Street', parentId: null }, [orphan])).toEqual(
+      flaggedWith('loc_orphan'),
+    )
+    expect(unhidden({ name: 'Quay Street', parentId: 'loc_eldra' }, [ELDRA, orphan])).toEqual(PLAIN)
   })
 
   it("flags a sibling named among the candidate's keywords", () => {

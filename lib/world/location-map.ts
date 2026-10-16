@@ -62,7 +62,8 @@ function nest(
   return { tree, atRoot: new Set(unreached.map((e) => e.id)) }
 }
 
-function realParentOf(locations: readonly Entity[]): (id: string) => string | null {
+/** A place's stored parent when that is a place; else the root, where every view hangs it. */
+export function realParentOf(locations: readonly Entity[]): (id: string) => string | null {
   const byId = new Map(locations.map((e) => [e.id, e]))
   return (id) => {
     const row = byId.get(id)
