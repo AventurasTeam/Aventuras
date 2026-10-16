@@ -23,6 +23,8 @@
     onApprove: (change?: VaultPendingChange) => void
     onReject?: (change: VaultPendingChange) => void
     onApproveAllAsync?: () => Promise<string | null>
+    /** Called after a view-mode Save, with the pending proposals the saved form already held */
+    onViewModeSaved?: (changeIds: string[]) => void
     onClose: () => void
     hideHeader?: boolean
   }
@@ -32,6 +34,7 @@
     onApprove,
     onReject,
     onApproveAllAsync,
+    onViewModeSaved,
     onClose,
     hideHeader = false,
   }: Props = $props()
@@ -41,8 +44,10 @@
   let entryData = $state<VaultLorebookEntry | null>(null)
   let formDirty = $state(false)
 
-  // The record the view-mode form was last synced from. A plain variable: only handlers read it.
+  // The record the view-mode form was last synced from, and the pending updates folded into it.
+  // Plain variables: only handlers read them.
   let viewBase: Record<string, unknown> = {}
+  let viewPendingIds: string[] = []
 
   const composedData = $derived(vaultEditor.composedData)
 
@@ -117,9 +122,11 @@
       if (viewCharData && entityId) {
         charData = { ...viewCharData }
         viewBase = $state.snapshot(viewCharData)
+        viewPendingIds = vaultEditor.pendingChangeIdsFor('character', entityId)
       } else if (viewScenarioData && entityId) {
         scenarioData = { ...viewScenarioData }
         viewBase = $state.snapshot(viewScenarioData)
+        viewPendingIds = vaultEditor.pendingChangeIdsFor('scenario', entityId)
       }
     } else if (formDirty) {
       return
@@ -347,6 +354,7 @@
       })
     }
 
+    onViewModeSaved?.(viewPendingIds)
     vaultEditor.viewDraft = null
     formDirty = false
     ui.showToast('Changes saved', 'info')

@@ -750,6 +750,12 @@
     await queueSave()
   }
 
+  function handleViewModeSaved(changeIds: string[]) {
+    if (!service) return
+    vaultEditor.markSaved(changeIds, service)
+    queueSave()
+  }
+
   function handleEdit(change: VaultPendingChange) {
     if (change.status !== 'pending') return
     vaultEditor.openEditor(change)
@@ -885,6 +891,7 @@
               handleApprove(specificChange ?? vaultEditor.activeChange!)}
             onReject={(change) => handleReject(change)}
             onApproveAllAsync={handleApproveAll}
+            onViewModeSaved={handleViewModeSaved}
             onClose={() => vaultEditor.closeEditor()}
           />
         </div>
@@ -1418,6 +1425,7 @@
                   handleApprove(specificChange ?? vaultEditor.activeChange!)}
                 onReject={(change) => handleReject(change)}
                 onApproveAllAsync={handleApproveAll}
+                onViewModeSaved={handleViewModeSaved}
                 onClose={() => vaultEditor.closeEditor()}
               />
             </div>

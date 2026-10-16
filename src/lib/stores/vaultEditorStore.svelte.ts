@@ -116,6 +116,11 @@ class VaultEditorStore {
     return entityUpdates(this.effectivePendingChanges, entityType, entityId)
   }
 
+  /** Ids of the pending updates that `composePendingChanges` folds into one entity */
+  pendingChangeIdsFor(entityType: 'character' | 'scenario', entityId: string): string[] {
+    return entityUpdates(this.effectivePendingChanges, entityType, entityId).map((c) => c.id)
+  }
+
   /**
    * Compose pending changes for an entity onto a base state.
    * Unlike `composedData` (which requires `activeChange`), this works
@@ -439,6 +444,22 @@ class VaultEditorStore {
     this._autoCloseAfterAction(change)
 
     // Trigger reactivity
+    this.pendingChanges = [...this.pendingChanges]
+  }
+
+  /**
+   * Mark pending updates approved after a view-mode Save wrote the values they proposed.
+   * Nothing is applied: the Save already holds those values.
+   */
+  markSaved(changeIds: string[], service: InteractiveVaultService): void {
+    const ids = new Set(changeIds)
+    const edits = new SvelteMap(this._editedChanges)
+    for (const c of this.pendingChanges) {
+      if (!ids.has(c.id) || c.status !== 'pending') continue
+      service.handleApproval(c, true)
+      edits.delete(c.id)
+    }
+    this._editedChanges = edits
     this.pendingChanges = [...this.pendingChanges]
   }
 

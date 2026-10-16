@@ -82,7 +82,8 @@ where it changed, or a note once it is gone from the vault, so the history the p
 never rewritten. That record and the assistant's tools see the vault with unapproved changes and
 unsaved editor edits laid over the saved state (`effectiveVault.ts`), so a follow-up builds on the
 earlier proposal; `unsavedFields` names what is not saved yet. A lorebook's `entryCount` is the
-entries it has now, and proposed new ones are listed under `pendingCreates`.
+entries it has now, and proposed new ones are listed under `pendingCreates`. A view-mode Save
+approves the pending proposals its form already held.
 
 `PackService.initialize()` does two distinct things on startup, and they are not interchangeable:
 
