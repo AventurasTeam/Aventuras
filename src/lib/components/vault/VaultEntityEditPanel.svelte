@@ -50,6 +50,17 @@
   let viewPendingIds: string[] = []
 
   const composedData = $derived(vaultEditor.composedData)
+  const isViewMode = $derived(vaultEditor.viewMode)
+
+  // Edits never carry across targets: edit mode has already pushed them (emitUpdate), and
+  // openViewer/openEditor drop the view draft.
+  const editTarget = $derived(
+    isViewMode ? `${vaultEditor.viewEntityType}:${vaultEditor.viewEntityId}` : change.id,
+  )
+  $effect.pre(() => {
+    void editTarget
+    formDirty = false
+  })
 
   // In view mode, the source of truth is the vault store + remaining pending
   // changes, composed reactively. In edit mode, the source is the change data
@@ -295,8 +306,6 @@
           ? 'Lorebook'
           : 'Scenario',
   )
-
-  const isViewMode = $derived(vaultEditor.viewMode)
 
   const actionLabel = $derived(
     isViewMode
