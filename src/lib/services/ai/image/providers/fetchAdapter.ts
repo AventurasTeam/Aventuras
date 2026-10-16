@@ -9,6 +9,7 @@
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
+import { withIdleTimeout } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
 
@@ -66,7 +67,11 @@ export async function imageFetch(options: {
     timedOut = true
     controller.abort()
   }, timeoutMs)
-  signal?.addEventListener('abort', () => controller.abort())
+  const onCallerAbort = () => controller.abort()
+  signal?.addEventListener('abort', onCallerAbort, { once: true })
+  const removeCallerListener = () => signal?.removeEventListener('abort', onCallerAbort)
+  // The wrapped body outlives this call and removes the listener when it settles.
+  let bodyWrapped = false
 
   const startTime = Date.now()
 
@@ -138,6 +143,14 @@ export async function imageFetch(options: {
       )
     }
 
+    response = withIdleTimeout(response, {
+      timeoutMs,
+      what: 'Image generation',
+      callerSignal: signal,
+      abort: () => controller.abort(),
+      onSettled: removeCallerListener,
+    })
+    bodyWrapped = true
     // Only buffer the body for the debug panel when debug is active. Otherwise hand the
     // response straight to the caller (which chooses .json()/.blob()): this avoids forcing
     // text() on every response — which would also corrupt binary image bodies — and skips a
@@ -154,6 +167,7 @@ export async function imageFetch(options: {
     throw error
   } finally {
     clearTimeout(timeoutId)
+    if (!bodyWrapped) removeCallerListener()
   }
 }
 
@@ -219,7 +233,11 @@ export async function imageGetFetch(
     timedOut = true
     controller.abort()
   }, timeoutMs)
-  signal?.addEventListener('abort', () => controller.abort())
+  const onCallerAbort = () => controller.abort()
+  signal?.addEventListener('abort', onCallerAbort, { once: true })
+  const removeCallerListener = () => signal?.removeEventListener('abort', onCallerAbort)
+  // The wrapped body outlives this call and removes the listener when it settles.
+  let bodyWrapped = false
 
   const startTime = Date.now()
   const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
@@ -246,7 +264,14 @@ export async function imageGetFetch(
     }
 
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
-    return response
+    bodyWrapped = true
+    return withIdleTimeout(response, {
+      timeoutMs,
+      what: 'Image fetch',
+      callerSignal: signal,
+      abort: () => controller.abort(),
+      onSettled: removeCallerListener,
+    })
   } catch (error) {
     // The plugin rejects an abort with a plain Error or a bare string.
     if (timedOut) throw new RequestTimeoutError(timeoutMs, 'Image fetch')
@@ -254,5 +279,6 @@ export async function imageGetFetch(
     throw error
   } finally {
     clearTimeout(timeoutId)
+    if (!bodyWrapped) removeCallerListener()
   }
 }

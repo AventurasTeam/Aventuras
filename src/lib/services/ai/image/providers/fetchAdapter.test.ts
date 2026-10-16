@@ -88,8 +88,11 @@ describe('fetchPublicImageBase64', () => {
   })
 
   it('cancels the body of a redirect it follows', async () => {
-    const hop = new Response('moved', { status: 302, headers: { location: 'https://cdn.test/a' } })
-    const cancel = vi.spyOn(hop.body!, 'cancel')
+    const cancel = vi.fn()
+    const hop = new Response(new ReadableStream({ cancel }), {
+      status: 302,
+      headers: { location: 'https://cdn.test/a' },
+    })
     mockFetch.mockResolvedValueOnce(hop).mockResolvedValueOnce(image([0x68, 0x69]))
 
     await fetchPublicImageBase64('https://img.test/a.png')
@@ -156,5 +159,41 @@ describe.each([
     expect(error).toBeInstanceOf(RequestTimeoutError)
     expect(error).toMatchObject({ message: `${what} timed out after 5s` })
     expect(isAbortError(error)).toBe(false)
+  })
+})
+
+describe.each([
+  [
+    'imageFetch',
+    'Image generation',
+    (timeoutMs: number) => imageFetch({ url: 'https://img.test/gen', body: '{}', timeoutMs }),
+  ],
+  [
+    'imageGetFetch',
+    'Image fetch',
+    (timeoutMs: number) => imageGetFetch('https://img.test/a.png', undefined, { timeoutMs }),
+  ],
+])('%s body timeout', (_name, what, run) => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('errors a body that stalls after the headers with a RequestTimeoutError', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start: (c) => init?.signal?.addEventListener('abort', () => c.error('Request cancelled')),
+      })
+      return new Response(body, { status: 200 })
+    })
+
+    const response = await run(5_000)
+    const read = response.arrayBuffer().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const error = await read
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: `${what} timed out after 5s` })
   })
 })

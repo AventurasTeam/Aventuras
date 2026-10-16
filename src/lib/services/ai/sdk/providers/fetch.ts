@@ -10,6 +10,7 @@ import { LLM_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { parseManualBody } from './manualBody'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
+import { withIdleTimeout } from '#lib/utils/idleTimeout.ts'
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -192,14 +193,6 @@ export function createTimeoutFetch(
   debugIdExternal?: string,
 ) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const controller = new AbortController()
-    let timedOut = false
-    const timeoutId = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, timeoutMs)
-
-    init?.signal?.addEventListener('abort', () => controller.abort())
     const startTime = Date.now()
     let parsedBody: any = {}
     if (typeof init?.body === 'string') {
@@ -247,12 +240,38 @@ export function createTimeoutFetch(
       },
       debugIdExternal,
     )
+
+    const controller = new AbortController()
+    let timedOut = false
+    const timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+    const onCallerAbort = () => controller.abort()
+    init?.signal?.addEventListener('abort', onCallerAbort, { once: true })
+    const removeCallerListener = () => init?.signal?.removeEventListener('abort', onCallerAbort)
+    // The wrapped body outlives this call and removes the listener when it settles.
+    let bodyWrapped = false
+
     try {
-      const response = await tauriFetch(input, {
+      let response = await tauriFetch(input, {
         ...init,
         signal: controller.signal,
         body: parsedBody ? JSON.stringify(parsedBody) : undefined,
       })
+
+      // Paths A and B hand the body to the caller unread, so it needs its own idle timer.
+      // Path C buffers below, which the header timer bounds: `finally` runs after `response.text()`.
+      const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
+      if (!response.ok || !isJson) {
+        response = withIdleTimeout(response, {
+          timeoutMs,
+          callerSignal: init?.signal,
+          abort: () => controller.abort(),
+          onSettled: removeCallerListener,
+        })
+        bodyWrapped = true
+      }
 
       // Path A: Error Response (Non-2xx)
       // We log the error asynchronously and return the original response immediately.
@@ -267,7 +286,7 @@ export function createTimeoutFetch(
       }
 
       // Path B: Non-JSON Success Response (mostly Streams)
-      if (!response.headers.get('content-type')?.includes('application/json')) {
+      if (!isJson) {
         // Stream/non-JSON success — only buffer the full body for the debug panel when active.
         if (debug.isActive) {
           void logStreamResponse(response.clone(), debugId, serviceId, startTime)
@@ -329,6 +348,7 @@ export function createTimeoutFetch(
       throw error
     } finally {
       clearTimeout(timeoutId)
+      if (!bodyWrapped) removeCallerListener()
     }
   }
 }
