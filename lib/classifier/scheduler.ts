@@ -20,7 +20,7 @@ export type ClassifierSchedulerDeps = {
   clearTimer: (handle: unknown) => void
 }
 
-type BranchState = { inFlight: boolean; timer: unknown }
+type BranchState = { inFlight: boolean; timer: unknown; tickDeferred: boolean }
 
 export function createClassifierScheduler(deps: ClassifierSchedulerDeps) {
   let stopped = false
@@ -32,7 +32,7 @@ export function createClassifierScheduler(deps: ClassifierSchedulerDeps) {
   function stateFor(branchId: string): BranchState {
     let state = branches.get(branchId)
     if (!state) {
-      state = { inFlight: false, timer: null }
+      state = { inFlight: false, timer: null, tickDeferred: false }
       branches.set(branchId, state)
     }
     return state
@@ -68,19 +68,31 @@ export function createClassifierScheduler(deps: ClassifierSchedulerDeps) {
       return result
     } finally {
       state.inFlight = false
+      if (state.tickDeferred) {
+        state.tickDeferred = false
+        void cadenceTick(branchId)
+      }
     }
+  }
+
+  async function cadenceTick(branchId: string): Promise<void> {
+    const state = stateFor(branchId)
+    if (stopped) return
+    // Re-checked on settle: dropped, the count would wait a turn, past cadence.md's cadence + 1.
+    if (state.inFlight) {
+      state.tickDeferred = true
+      return
+    }
+    const status = await deps.statusFor(branchId)
+    const unprocessedEntries = await deps.unprocessedEntriesFor(branchId, status.processedThrough)
+    if (!shouldCadenceFire({ status, unprocessedEntries, cadence: deps.cadenceFor(branchId) }))
+      return
+    await start(branchId)
   }
 
   return {
     /** Cadence tick: a turn landed, so the unprocessed count changed. */
-    noteTurnCommitted: async (branchId: string): Promise<void> => {
-      if (stopped || stateFor(branchId).inFlight) return
-      const status = await deps.statusFor(branchId)
-      const unprocessedEntries = await deps.unprocessedEntriesFor(branchId, status.processedThrough)
-      if (!shouldCadenceFire({ status, unprocessedEntries, cadence: deps.cadenceFor(branchId) }))
-        return
-      await start(branchId)
-    },
+    noteTurnCommitted: cadenceTick,
     /** `[Run classifier now]` — bypasses the count and the suspension. */
     runNow: async (branchId: string): Promise<RunNowOutcome> => {
       if (stopped) return { outcome: 'stopped' }
