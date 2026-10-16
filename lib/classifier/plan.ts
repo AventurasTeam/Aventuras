@@ -19,7 +19,7 @@ import type { ClassifierWindow } from './window'
 export type PlannedWrite = { action: PipelineAction; entryId: string }
 
 /** A new place sent to the root although it named a parent. */
-export type ParentDrop = { handle: string; parent: string | undefined; cause: ParentDropCause }
+export type ParentDrop = { handle: string; parent: string; cause: ParentDropCause }
 
 export type PlanResult = {
   planned: readonly PlannedWrite[]
@@ -167,29 +167,25 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
     const placed: SettledNewPlace[] = []
 
-    const seen = new Set<string>()
     const declared = newPlacesOf(extraction).filter((place) => {
-      const usable =
-        nonBlank(place.name) != null && !handleMap.has(place.handle) && !seen.has(place.handle)
-      if (usable) seen.add(place.handle)
-      else unresolvedRefs.push(place.handle)
+      const usable = nonBlank(place.name) != null && !handleMap.has(place.handle)
+      if (!usable) unresolvedRefs.push(place.handle)
       return usable
     })
 
-    const order = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
-    for (const { emission: place, parentUnresolved } of order) {
-      const { parent } = place
+    const { order, duplicates } = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
+    for (const duplicate of duplicates) unresolvedRefs.push(duplicate.handle)
+    for (const settling of order) {
+      const place = settling.emission
       const placement = placeNewLocation({
-        handle: place.handle,
-        parentId:
-          parentUnresolved || parent === undefined ? null : (handleMap.get(parent) ?? parent),
-        parentUnresolved,
+        place: settling,
+        resolve: (parent) => handleMap.get(parent) ?? parent,
         statusOf: (id) => index.get(id)?.status,
         parentOf: parentOfLocations([...entities, ...created]),
       })
-      if (placement.dropped !== null)
-        drops.push({ handle: place.handle, parent, cause: placement.dropped })
-      const { parentId } = placement
+      if (placement.kind === 'dropped')
+        drops.push({ handle: place.handle, parent: placement.parent, cause: placement.cause })
+      const parentId = placement.kind === 'kept' ? placement.parentId : null
 
       const stored = clampEmbeddedCharacter({
         name: place.name,

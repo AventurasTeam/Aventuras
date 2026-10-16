@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { placeNewLocation, settlingOrder } from './new-place-order'
+import { placeNewLocation, settlingOrder, type SettlingPlace } from './new-place-order'
 
 const order = (creates: { handle: string; parent?: string }[], ids: readonly string[] = []) =>
-  settlingOrder(creates, (id) => ids.includes(id)).map(
+  settlingOrder(creates, (id) => ids.includes(id)).order.map(
     ({ emission, parentUnresolved }) => `${emission.handle}${parentUnresolved ? '!' : ''}`,
   )
 
@@ -34,6 +34,15 @@ describe('settlingOrder', () => {
     ).toEqual(['a!', 'b!', 'c'])
   })
 
+  it('keeps the first of two creates declaring one handle, and returns the other', () => {
+    const first = { handle: 'new:a', parent: 'loc_missing' }
+    const second = { handle: 'new:a' }
+    expect(settlingOrder([first, second], () => false)).toEqual({
+      order: [{ emission: first, parentUnresolved: true }],
+      duplicates: [second],
+    })
+  })
+
   it('waits for a declared handle even when its string is also a location id', () => {
     expect(order([{ handle: 'b', parent: 'loc_1' }, { handle: 'loc_1' }], ['loc_1'])).toEqual([
       'loc_1',
@@ -44,28 +53,47 @@ describe('settlingOrder', () => {
 
 describe('placeNewLocation', () => {
   const base = {
-    handle: 'new:inn',
-    parentUnresolved: false,
+    resolve: (parent: string) =>
+      parent.startsWith('new:') ? parent.replace('new:', 'loc_') : parent,
     statusOf: (id: string) => (id === 'loc_ruin' ? ('retired' as const) : ('active' as const)),
     parentOf: (id: string) => (id === 'loc_a' ? 'loc_b' : id === 'loc_b' ? 'loc_a' : null),
   }
+  const settled = (parent?: string): SettlingPlace<{ handle: string; parent?: string }> => ({
+    emission: { handle: 'new:inn', ...(parent === undefined ? {} : { parent }) },
+    parentUnresolved: false,
+  })
 
-  it('keeps a live parent', () => {
-    expect(placeNewLocation({ ...base, parentId: 'loc_town' })).toEqual({
+  it('keeps a live parent, a declared handle under the row it resolved to', () => {
+    expect(placeNewLocation({ ...base, place: settled('loc_town') })).toEqual({
+      kind: 'kept',
       parentId: 'loc_town',
-      dropped: null,
+    })
+    expect(placeNewLocation({ ...base, place: settled('new:town') })).toEqual({
+      kind: 'kept',
+      parentId: 'loc_town',
     })
   })
 
   it('leaves a create that names no parent at the root, unlogged', () => {
-    expect(placeNewLocation({ ...base, parentId: null })).toEqual({ parentId: null, dropped: null })
+    expect(placeNewLocation({ ...base, place: settled() })).toEqual({
+      kind: 'kept',
+      parentId: null,
+    })
   })
 
   it.each([
-    ['unresolved', { parentId: null, parentUnresolved: true }],
-    ['retired', { parentId: 'loc_ruin' }],
-    ['chain-broken', { parentId: 'loc_a' }],
-  ])('roots a %s parent', (cause, over) => {
-    expect(placeNewLocation({ ...base, ...over })).toEqual({ parentId: null, dropped: cause })
+    [
+      'unresolved',
+      { emission: { handle: 'new:inn', parent: 'loc_gone' }, parentUnresolved: true } as const,
+    ],
+    ['retired', settled('loc_ruin')],
+    ['retired', settled('new:ruin')],
+    ['chain-broken', settled('loc_a')],
+  ])('roots a %s parent, naming it as declared', (cause, place) => {
+    expect(placeNewLocation({ ...base, place })).toEqual({
+      kind: 'dropped',
+      cause,
+      parent: place.emission.parent,
+    })
   })
 })

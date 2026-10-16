@@ -96,14 +96,10 @@ function logDropped(
 
 function logParentDropped(
   log: Logger,
-  emission: NewLocationEmission,
-  cause: ParentDropCause,
+  handle: string,
+  drop: { parent: string; cause: ParentDropCause },
 ): void {
-  log.warn('classifier.create_parent_dropped', {
-    handle: emission.handle,
-    parent: emission.parent,
-    cause,
-  })
+  log.warn('classifier.create_parent_dropped', { handle, parent: drop.parent, cause: drop.cause })
 }
 
 /** piggyback.md → Kept only if used. */
@@ -148,22 +144,22 @@ function planLocations(args: {
   const reused = new Set<string>()
   const placed: SettledNewPlace[] = []
 
-  const order = settlingOrder(
+  // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
+  const { order } = settlingOrder(
     args.emissions.filter((e) => args.kept.has(e.handle)),
     (id) => byId.get(id)?.kind === 'location',
   )
-  for (const { emission, parentUnresolved } of order) {
-    const { parent } = emission
+  for (const place of order) {
+    const { emission } = place
     const placement = placeNewLocation({
-      handle: emission.handle,
-      parentId: parentUnresolved || parent === undefined ? null : (fates.get(parent)?.id ?? parent),
-      parentUnresolved,
+      place,
+      resolve: (parent) => fates.get(parent)?.id ?? parent,
       statusOf: (id) => byId.get(id)?.status,
       parentOf: parentOfLocations([...entities, ...rows]),
     })
-    const { parentId } = placement
-    const parentDropped = placement.dropped !== null
-    if (placement.dropped !== null) logParentDropped(args.log, emission, placement.dropped)
+    const parentId = placement.kind === 'kept' ? placement.parentId : null
+    const parentDropped = placement.kind === 'dropped'
+    if (placement.kind === 'dropped') logParentDropped(args.log, emission.handle, placement)
 
     const text = storedText(emission)
     const match = matchNewPlace({ name: text.name, parentId }, placed, view)
