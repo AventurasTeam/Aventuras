@@ -854,8 +854,8 @@ describe('entity keywords', () => {
     ])
   })
 
-  // The payload carries only terms new against the pass's snapshot, so an alias the user removed
-  // mid-pass isn't re-sent; the handler merges into the live list, so one they added survives.
+  // The payload carries only the terms the row lacks; the handler merges into the live list, so a
+  // term the user added survives.
   it('sends a known entity only the terms its snapshot lacks', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
       ...base,

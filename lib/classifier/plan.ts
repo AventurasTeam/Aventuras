@@ -143,7 +143,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return id
   }
 
-  // New terms only: resending a held one would restore an alias the user removed mid-pass.
+  // New terms only, so a term the row already holds plans no write.
   // Anchored only when it writes, so a no-op never counts as a window-head fallback.
   const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void => {
     const row = index.get(id)
@@ -269,7 +269,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     }
     const entryId = anchor(candidate.sourceTurn)
     const proseEntryId = proseSource(candidate.sourceTurn)
-    // New terms only: resending a held one would restore an alias the user removed mid-pass.
+    // New terms only, so a term the row already holds plans no write.
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
