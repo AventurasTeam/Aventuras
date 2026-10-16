@@ -35,11 +35,67 @@ describe('isUserEditBlocked', () => {
     const tx = (runs: ReturnType<typeof mk>[], reversalInProgress = false): TxState => ({
       runs: new Map(runs.map((r) => [r.runId, r])),
       reversalInProgress,
+      pendingTurns: new Set(),
     })
     expect(isUserEditBlocked(tx([]))).toBe(false)
     expect(isUserEditBlocked(tx([mk('bg', 'no-gate')]))).toBe(false)
     expect(isUserEditBlocked(tx([mk('bg', 'no-gate'), mk('fg', 'hard-gate')]))).toBe(true)
     expect(isUserEditBlocked(tx([], true))).toBe(true)
+  })
+
+  // generation-pipeline.md → No-gate write phase: a reversal opened between a Send and its run's
+  // registration would have the turn's queued user_action refused.
+  it('blocks while a turn is pending, on any branch', () => {
+    const blocked = (pendingTurns: TxState['pendingTurns']) =>
+      isUserEditBlocked({ runs: new Map(), reversalInProgress: false, pendingTurns })
+    expect(blocked(new Set([{ branchId: 'b2' }]))).toBe(true)
+    expect(blocked(new Set())).toBe(false)
+  })
+})
+
+describe('pending turns', () => {
+  beforeEach(() => generationStore.__reset())
+
+  const pending = () => [...generationStore.getTxState().pendingTurns].map((t) => t.branchId)
+
+  it('holds a turn from begin to end, once, beside another on the same branch', () => {
+    const endFirst = generationStore.beginPendingTurn('b1')
+    const endSecond = generationStore.beginPendingTurn('b1')
+    expect(pending()).toEqual(['b1', 'b1'])
+    expect(generationStore.isUserEditBlocked()).toBe(true)
+    endFirst()
+    endFirst()
+    expect(pending()).toEqual(['b1'])
+    endSecond()
+    expect(pending()).toEqual([])
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+  })
+
+  it('notifies subscribers when a turn ends, so a waiter wakes on a refused Send', () => {
+    const end = generationStore.beginPendingTurn('b1')
+    let calls = 0
+    const unsubscribe = generationStore.subscribe(() => calls++)
+    end()
+    expect(calls).toBe(1)
+    end()
+    expect(calls).toBe(1)
+    unsubscribe()
+  })
+
+  it('ignores a late end after a reset, leaving a newer turn marked', () => {
+    const stale = generationStore.beginPendingTurn('b1')
+    generationStore.__reset()
+    generationStore.beginPendingTurn('b1')
+    stale()
+    expect(pending()).toEqual(['b1'])
+  })
+
+  it('keeps pending turns through run and reversal transitions', () => {
+    generationStore.beginPendingTurn('b1')
+    generationStore.startRun(run('run_1'))
+    generationStore.finishRun('run_1')
+    generationStore.setReversalInProgress(true)
+    expect(pending()).toEqual(['b1'])
   })
 })
 

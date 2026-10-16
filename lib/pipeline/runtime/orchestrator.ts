@@ -53,6 +53,8 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
+  /** Called synchronously once the run is in txState, before any await; not for a chain's successor. */
+  onReserved?: () => void
 } & DbCtx
 
 // RunCtx with `inputs` narrowed to whatever the kind declares in
@@ -88,6 +90,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
 function reserveRun(kind: string, ctx: RunCtx): RunState {
   const run = newRunState(kind, ctx)
   generationStore.startRun(run)
+  ctx.onReserved?.()
   return run
 }
 

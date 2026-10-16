@@ -36,7 +36,11 @@ function run(
 }
 
 function tx(...runs: RunState[]): TxState {
-  return { runs: new Map(runs.map((item) => [item.runId, item])), reversalInProgress: false }
+  return {
+    runs: new Map(runs.map((item) => [item.runId, item])),
+    reversalInProgress: false,
+    pendingTurns: new Set(),
+  }
 }
 
 function Probe() {

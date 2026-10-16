@@ -1,3 +1,5 @@
+import { generationStore } from '@/lib/stores'
+
 // This app is local-first, single-process (no BaaS/backend serving concurrent
 // writers — data-model.md), so an in-process per-branch queue is a complete
 // fix, not a partial mitigation: it's the only place two turn dispatches for
@@ -23,4 +25,20 @@ export function withBranchQueue<T>(branchId: string, fn: () => Promise<T>): Prom
     ),
   )
   return result
+}
+
+/**
+ * Marks a turn pending until its run is in txState (generation-pipeline.md → No-gate write phase).
+ * Every `per-turn` start runs inside it, within the branch queue, passing `onReserved` to runPipeline.
+ */
+export async function withPendingTurn<T>(
+  branchId: string,
+  fn: (onReserved: () => void) => Promise<T>,
+): Promise<T> {
+  const end = generationStore.beginPendingTurn(branchId)
+  try {
+    return await fn(end)
+  } finally {
+    end()
+  }
 }

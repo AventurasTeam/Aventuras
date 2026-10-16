@@ -7,7 +7,13 @@ import { startStorySwap } from '@/lib/embedder-swap'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
 import { runRetrieval } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
-import { currentStoryStore, entriesStore, hydrateAppSettings, undoRedoStore } from '@/lib/stores'
+import {
+  currentStoryStore,
+  entriesStore,
+  generationStore,
+  hydrateAppSettings,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import {
   branchEntries,
@@ -370,6 +376,9 @@ describe('submitTurn', () => {
   // Self-blocking policy + a gated phase: b1's turn stays reserved and in-flight until
   // `release`, so a b2 submit's admission is rejected — the path runPipeline can take
   // before any run reserves, which abortRun's usual delta-reversal never sees.
+  const pendingOn = (branchId: string) =>
+    [...generationStore.getTxState().pendingTurns].filter((t) => t.branchId === branchId).length
+
   async function holdAdmissionOnB1() {
     const { ctx, db } = await makeHarness()
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
@@ -419,9 +428,72 @@ describe('submitTurn', () => {
     )
     expect(second).toEqual({ outcome: 'rejected', blockedBy: PER_TURN_KIND, converged: true })
     expect(branchEntries('b2')).toHaveLength(0)
+    // No run ever registered, so only the turn's own exit ends its mark.
+    expect(pendingOn('b2')).toBe(0)
 
     release()
     expectRan(await first)
+  })
+
+  // generation-pipeline.md → No-gate write phase: a periodic pass must see the turn before the
+  // turn's first write, and its run must be visible before the mark drops.
+  describe('pending turn mark', () => {
+    it('marks the turn from before its user_action write until its run registers', async () => {
+      const { ctx, release, first } = await holdAdmissionOnB1()
+      release()
+      expectRan(await first)
+
+      const seen: { pending: number; running: boolean; blocked: boolean }[] = []
+      const look = () =>
+        seen.push({
+          pending: pendingOn('b1'),
+          running: [...generationStore.getTxState().runs.values()].some(
+            (r) => r.kind === PER_TURN_KIND,
+          ),
+          blocked: generationStore.isUserEditBlocked(),
+        })
+      let watched = false
+      const turnCtx = {
+        ...ctx,
+        runInTransaction: async (ops: Parameters<typeof ctx.runInTransaction>[0]) => {
+          if (!watched) {
+            watched = true
+            look()
+          }
+          return ctx.runInTransaction(ops)
+        },
+      }
+      const unsubscribe = generationStore.subscribe(() => {
+        if (pendingOn('b1') === 0) look()
+      })
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'third', composerMode: 'do' },
+          turnCtx,
+        ),
+      )
+      unsubscribe()
+      // At the user_action write: marked, gate up, no run yet. Once the mark drops: the run is in.
+      expect(seen[0]).toEqual({ pending: 1, running: false, blocked: true })
+      expect(seen[1]).toEqual({ pending: 0, running: true, blocked: true })
+    })
+
+    it('leaves a second Send queued behind the first unmarked until the first has run', async () => {
+      const { ctx, release, first } = await holdAdmissionOnB1()
+      expect(pendingOn('b1')).toBe(0)
+      const second = submitTurn(
+        { storyId: 's1', branchId: 'b1' },
+        { content: 'second', composerMode: 'do' },
+        ctx,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(pendingOn('b1')).toBe(0)
+      release()
+      expectRan(await first)
+      expectRan(await second)
+      expect(pendingOn('b1')).toBe(0)
+    })
   })
 
   // A refused turn reserved no run, so boot recovery has no marker to retry: an uncommitted

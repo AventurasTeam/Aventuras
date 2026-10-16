@@ -26,7 +26,7 @@ import {
 } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
-import { withBranchQueue } from './branch-queue'
+import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 /**
  * Why a regenerate refused. Distinct from `reason` (a diagnostic string): the
@@ -129,70 +129,74 @@ export async function regenerateTurn(
         if (origin == null || origin.kind !== 'user_action')
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
-        let swept: { status: 'ok' } | StoryEntryRejection
-        try {
-          swept = await bracketProseReversal(ids.branchId, () =>
-            sweepFrom(ids.branchId, replyEntryId, ctx),
-          )
-        } catch (error) {
-          if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
-          throw error
-        }
-        if (swept.status === 'rejected')
-          return { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
-        // A regenerate is a new unrelated action (data-model.md); the discarded
-        // take is not redo-restorable.
-        undoRedoStore.clear()
-
-        const runCtx: RunCtx = {
-          storyId: ids.storyId,
-          branchId: ids.branchId,
-          actionId: generateId('act'),
-          db: ctx.db,
-          runInTransaction: ctx.runInTransaction,
-        }
-        // No input threading: narrativePhase (per-turn.ts) reads its prompt from
-        // the branch tail and its insert position from MAX(position). Post-sweep the
-        // surviving user_action is that tail — provided the caller cleared any
-        // system tail first, which MAX(position) would otherwise insert after.
-        const result = await runPipeline(PER_TURN_KIND, runCtx)
-
-        // Non-success converges to the M2 failed-turn state: the standing
-        // user_action unwinds too, so Retry / draft-restore re-enter through
-        // the normal submit path without duplicating the action.
-        let converged = true
-        if (result.outcome !== 'completed') {
+        // After this action's own gate check above, which a pending turn would fail.
+        return withPendingTurn(ids.branchId, async (onReserved) => {
+          let swept: { status: 'ok' } | StoryEntryRejection
           try {
-            const followUp = await bracketProseReversal(ids.branchId, () =>
-              sweepFrom(ids.branchId, origin.id, ctx),
+            swept = await bracketProseReversal(ids.branchId, () =>
+              sweepFrom(ids.branchId, replyEntryId, ctx),
             )
-            if (followUp.status === 'rejected') {
-              // A refused sweep reverses nothing, so the user_action stands.
-              converged = false
-              logger.warn('action_layer.regenerate_follow_up_sweep_rejected', {
+          } catch (error) {
+            if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
+            throw error
+          }
+          if (swept.status === 'rejected')
+            return { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
+          // A regenerate is a new unrelated action (data-model.md); the discarded
+          // take is not redo-restorable.
+          undoRedoStore.clear()
+
+          const runCtx: RunCtx = {
+            storyId: ids.storyId,
+            branchId: ids.branchId,
+            actionId: generateId('act'),
+            db: ctx.db,
+            runInTransaction: ctx.runInTransaction,
+            onReserved,
+          }
+          // No input threading: narrativePhase (per-turn.ts) reads its prompt from
+          // the branch tail and its insert position from MAX(position). Post-sweep the
+          // surviving user_action is that tail — provided the caller cleared any
+          // system tail first, which MAX(position) would otherwise insert after.
+          const result = await runPipeline(PER_TURN_KIND, runCtx)
+
+          // Non-success converges to the M2 failed-turn state: the standing
+          // user_action unwinds too, so Retry / draft-restore re-enter through
+          // the normal submit path without duplicating the action.
+          let converged = true
+          if (result.outcome !== 'completed') {
+            try {
+              const followUp = await bracketProseReversal(ids.branchId, () =>
+                sweepFrom(ids.branchId, origin.id, ctx),
+              )
+              if (followUp.status === 'rejected') {
+                // A refused sweep reverses nothing, so the user_action stands.
+                converged = false
+                logger.warn('action_layer.regenerate_follow_up_sweep_rejected', {
+                  branchId: ids.branchId,
+                  entryId: origin.id,
+                  reason: followUp.reason,
+                })
+              }
+            } catch (e) {
+              // A failed unwind must not cost the caller the run result and the
+              // user's text: without them the host has no Retry content and no
+              // draft to restore, the very state this convergence exists to avoid.
+              if (!(e instanceof DeltaReplayError)) throw e
+              // committed separates the two opposite recovery states: false leaves
+              // the user_action standing, true leaves entriesStore stale instead —
+              // and only the latter actually reached the converged state.
+              converged = e.committed
+              logger.warn('action_layer.regenerate_follow_up_sweep_failed', {
                 branchId: ids.branchId,
                 entryId: origin.id,
-                reason: followUp.reason,
+                committed: e.committed,
+                error: String(e),
               })
             }
-          } catch (e) {
-            // A failed unwind must not cost the caller the run result and the
-            // user's text: without them the host has no Retry content and no
-            // draft to restore, the very state this convergence exists to avoid.
-            if (!(e instanceof DeltaReplayError)) throw e
-            // committed separates the two opposite recovery states: false leaves
-            // the user_action standing, true leaves entriesStore stale instead —
-            // and only the latter actually reached the converged state.
-            converged = e.committed
-            logger.warn('action_layer.regenerate_follow_up_sweep_failed', {
-              branchId: ids.branchId,
-              entryId: origin.id,
-              committed: e.committed,
-              error: String(e),
-            })
           }
-        }
-        return { status: 'ran', result, userActionContent: origin.content, converged }
+          return { status: 'ran', result, userActionContent: origin.content, converged }
+        })
       },
     )
     return admission.admitted ? admission.value : SWAP_REJECTION
