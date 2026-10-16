@@ -286,6 +286,9 @@ describe('periodic classifier template — places', () => {
     const on = render({ mentionedPlaces: true })
     expect(on.system).toContain(`- New places. ${RULE}`)
     expect(on.system).toMatch(/newPlaces with a handle that starts with "new:"/)
+    expect(on.system).toContain(
+      "A new place's handle must differ from every newCharacters handle and from every other new place's, even when a character shares its name.",
+    )
     expect(on.system).toMatch(/leave parent out when the turns don't say/)
     expect(on.user).not.toContain('newPlaces')
 
