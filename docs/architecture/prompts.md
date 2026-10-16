@@ -83,7 +83,10 @@ never rewritten. That record and the assistant's tools see the vault with unappr
 unsaved editor edits laid over the saved state (`effectiveVault.ts`), so a follow-up builds on the
 earlier proposal; `unsavedFields` names what is not saved yet. A lorebook's `entryCount` is the
 entries it has now, and proposed new ones are listed under `pendingCreates`. A view-mode Save
-approves the pending proposals its form already held.
+approves the pending proposals its form already held. Approving a proposal likewise resolves the
+values of earlier pending ones that it replaces, since it was built on them: an earlier proposal left
+with nothing is marked approved, one with other fields keeps only those. Array fields stay independent,
+because their additions and removals merge.
 
 `PackService.initialize()` does two distinct things on startup, and they are not interchangeable:
 

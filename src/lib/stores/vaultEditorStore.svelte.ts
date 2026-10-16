@@ -18,6 +18,7 @@ import { SvelteMap } from 'svelte/reactivity'
 import {
   composePendingOnto,
   entityUpdates,
+  supersededBy,
   scenarioToRecord,
   characterToRecord,
   withEntryUpdate,
@@ -426,6 +427,7 @@ class VaultEditorStore {
     const effectiveChange = this._editedChanges.get(change.id) ?? change
     await service.applyChange(effectiveChange)
     service.handleApproval(change, true)
+    this._supersedeEarlier(effectiveChange, service)
 
     // Clean up edited version
     const edits = new SvelteMap(this._editedChanges)
@@ -445,6 +447,33 @@ class VaultEditorStore {
 
     // Trigger reactivity
     this.pendingChanges = [...this.pendingChanges]
+  }
+
+  /**
+   * Resolve the earlier pending updates that `approved` overrides: a later proposal is built on
+   * the state the earlier one left, so its value for a shared field stands in for theirs.
+   */
+  private _supersedeEarlier(approved: VaultPendingChange, service: InteractiveVaultService): void {
+    const index = this.pendingChanges.findIndex((c) => c.id === approved.id)
+    if (index < 0) return
+    const earlier = this.pendingChanges
+      .slice(0, index)
+      .filter((c) => c.status === 'pending')
+      .map((c) => this._editedChanges.get(c.id) ?? c)
+    const superseded = supersededBy(approved, earlier)
+    if (superseded.length === 0) return
+
+    const edits = new SvelteMap(this._editedChanges)
+    for (const { change, narrowed } of superseded) {
+      if (narrowed) {
+        edits.set(change.id, narrowed)
+        continue
+      }
+      const original = this.pendingChanges.find((c) => c.id === change.id)
+      if (original) service.handleApproval(original, true)
+      edits.delete(change.id)
+    }
+    this._editedChanges = edits
   }
 
   /**

@@ -303,6 +303,73 @@ export function entityUpdates<K extends 'character' | 'scenario'>(
   )
 }
 
+type FieldUpdate = Extract<VaultPendingChange, { action: 'update' }>
+
+function sameTarget(a: FieldUpdate, b: FieldUpdate): boolean {
+  if (a.entityType === 'lorebook-entry') {
+    return (
+      b.entityType === 'lorebook-entry' &&
+      a.lorebookId === b.lorebookId &&
+      a.entryIndex === b.entryIndex
+    )
+  }
+  return b.entityType === a.entityType && a.entityId === b.entityId
+}
+
+/** Fields an update changes. Array fields are left out of a character, scenario or lorebook update: they merge by intent instead of overwriting. */
+function replacedFields(c: FieldUpdate): string[] {
+  const data = c.data as Record<string, unknown>
+  const changed = Object.keys(computeDelta(data, (c.previous ?? {}) as Record<string, unknown>))
+  return c.entityType === 'lorebook-entry'
+    ? changed
+    : changed.filter((k) => !Array.isArray(data[k]))
+}
+
+/**
+ * The earlier pending updates that an approval of `approved` overrides, each with its
+ * remaining fields (`narrowed`), or `null` when nothing is left to approve.
+ */
+export function supersededBy(
+  approved: VaultPendingChange,
+  earlier: VaultPendingChange[],
+): Array<{ change: VaultPendingChange; narrowed: VaultPendingChange | null }> {
+  if (approved.action !== 'update') return []
+  const replaced = new Set(replacedFields(approved))
+  if (replaced.size === 0) return []
+
+  const result: Array<{ change: VaultPendingChange; narrowed: VaultPendingChange | null }> = []
+  for (const change of earlier) {
+    if (change.action !== 'update' || change.id === approved.id || !sameTarget(approved, change)) {
+      continue
+    }
+    const changed = Object.keys(
+      computeDelta(
+        change.data as Record<string, unknown>,
+        (change.previous ?? {}) as Record<string, unknown>,
+      ),
+    )
+    const overlap = changed.filter((k) => replaced.has(k))
+    if (overlap.length === 0) continue
+
+    if (overlap.length === changed.length) {
+      result.push({ change, narrowed: null })
+      continue
+    }
+    // A character or scenario update carries the whole record; the others only what changed.
+    const data = { ...(change.data as Record<string, unknown>) }
+    const previous = (change.previous ?? {}) as Record<string, unknown>
+    for (const k of overlap) {
+      if (change.entityType === 'character' || change.entityType === 'scenario') {
+        data[k] = previous[k]
+      } else {
+        delete data[k]
+      }
+    }
+    result.push({ change, narrowed: { ...change, data } as VaultPendingChange })
+  }
+  return result
+}
+
 /** An entry with an update laid over it; empty strings are dropped so they cannot blank a field. */
 export function withEntryUpdate(
   entry: VaultLorebookEntry,
