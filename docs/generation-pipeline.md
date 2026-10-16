@@ -509,7 +509,10 @@ export const pipelineEventBus: PipelineEventBus
 type TxState = {
   runs: ReadonlyMap<string /* runId */, RunState>
   reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates classifier starts + user edits + user-originated delta dispatch
+  pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see No-gate write phase
 }
+
+type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
 
 type RunState = {
   runId: string // generated per run start (UUID / nanoid)
@@ -531,12 +534,17 @@ type RunState = {
 ```ts
 const isUserEditBlocked = (s: TxState): boolean =>
   s.reversalInProgress ||
+  s.pendingTurns.size > 0 ||
   [...s.runs.values()].some((r) => pipelines.get(r.kind)!.gateBehavior === 'hard-gate')
 ```
 
 Per-turn / chapter-close declare `hard-gate`; periodic classifier
 declares `no-gate`. Classifier alone → gate open. Per-turn running
-→ gate closed. A prose reversal also closes the gate for its brief
+→ gate closed. A turn closes the gate earlier still, from its
+admission inside the branch queue until its run registers (its
+pending mark, see [No-gate write phase](#no-gate-write-phase)), so a
+reversal opened in that gap can't get a Send's queued user_action
+refused. A prose reversal also closes the gate for its brief
 duration via `reversalInProgress` (see
 [Prose reversals and the classifier barrier](#prose-reversals-and-the-classifier-barrier)).
 
@@ -2009,20 +2017,43 @@ writers create places
 and the per-turn writer matches its creates against the entities it
 read when its narrative phase started, so a place a pass created
 mid-stream would be one the turn never saw, and the turn would create
-it again. Before taking the lock exclusive, a pass waits until no
-`per-turn` run is in flight on its branch, then plans its places inside
-the hold, against the rows as they stand. A turn that would start
-between that check and the end of the burst starts after it, a few
-milliseconds later, and is never refused. A `'cancel'` during the wait
-discards the run, which has committed nothing. The wait is on
-`per-turn` runs only: chapter close's phase 0 drains the pass with
-`'finish'`, and a chained close starts once the turn has left
-`txState`, so waiting on chapter close too would deadlock. While a turn
-is in flight, nothing but the turn writes its branch's entities: its
-hard gate holds off user writes, every other kind is blocked by
-`per-turn` or chained after it, and a pass waits. The cost is a pass's
-writes landing up to one turn late, a bound that holds while turns
-leave a gap between them, as the user's next action always does.
+it again. Before taking the lock exclusive, a pass waits until its
+branch has no `per-turn` run in flight and no turn admitted but not
+yet running, then plans its places inside the hold, against the rows
+as they stand. The check and the lock request share one tick, so a
+turn admitted after the check queues behind the hold and starts after
+the burst, a few milliseconds later; it is never refused.
+
+The admitted turn needs a marker of its own. A Send's user_action
+commits under the shared branch lock before its run registers, so a
+check of runs alone would find none in that gap, take the hold once
+the user_action landed, and plan while the turn read its entities.
+Submit and regenerate therefore raise a **pending mark** in
+`txState.pendingTurns` when they admit a turn inside the branch queue
+(regenerate after its own gate check, which the mark would fail). The
+mark ends the moment the turn's run is in `txState`, or when the turn
+returns without one, refused or thrown. It closes the user-edit gate
+too ([Gate derivation as a selector](#gate-derivation-as-a-selector)).
+
+A `'cancel'` during the wait discards the run, which has committed
+nothing. So does a story or branch switch: the entity stores hold one
+branch, and when they no longer hold the pass's, checked before
+reconciliation and again inside the hold, the pass discards rather
+than reconcile and plan against another roster. It restores its
+pre-run status, uses no retry and leaves the watermark where it was.
+The wait is on turns only: chapter close's phase 0 drains the pass
+with `'finish'`, and a chained close starts once the turn has left
+`txState`, so waiting on chapter close too would deadlock. For the
+same reason a Send queued behind a turn raises no mark until the
+branch queue reaches it, after that turn's chained close. While a turn
+is in flight, nothing but the turn writes a column a pass plans from
+on its branch's entities: its hard gate holds off user writes, every
+other kind is blocked by `per-turn` or chained after it, and a pass
+waits. The background embed drain still clears `embedding_stale` and
+writes vector rows without the lock, but a pass plans from neither.
+The cost is a pass's writes landing up to one turn late, a bound that
+holds while turns leave a gap between them, as the user's next action
+always does.
 
 ### Chained start bypasses concurrencyPolicy
 

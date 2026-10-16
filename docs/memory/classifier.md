@@ -425,7 +425,11 @@ not-yet-committed run (the LLM stream is cancelled, or the
 reconciliation or the wait for a turn is cut short, keeping the
 reversal near-instant) or lets a committed burst stand for the
 positional sweep to reverse; the standard abort path needs no special
-disposition.
+disposition. A story or branch switch also discards a not-yet-committed
+run, caught before reconciliation or inside the hold before planning:
+its pre-run status is restored, no retry is used and the watermark
+stays put
+([no-gate write phase](../generation-pipeline.md#no-gate-write-phase)).
 
 **Pill priority.** The classifier surfaces on the existing
 generation indicator pill with low priority — user-initiated
