@@ -79,11 +79,12 @@ export function effectiveVault(
           lorebookUpdates.set(c.entityId, group)
         }
         break
-      case 'lorebook-entry':
+      case 'lorebook-entry': {
         const group = entryChanges.get(c.lorebookId) ?? []
         group.push(c)
         entryChanges.set(c.lorebookId, group)
         break
+      }
       default:
         c satisfies never
     }
