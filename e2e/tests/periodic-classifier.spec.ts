@@ -217,7 +217,7 @@ test.describe('periodic classifier — mentioned places', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('a pass creates the places the turns mention, nested, and names them as sites', async () => {
+  test('a pass creates the places it names, nested, and ties its happening to the dock', async () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
     await reader.composer(app.window).fill('E2E-PLACES I ask where the fleet sails from.')
@@ -265,7 +265,7 @@ test.describe('periodic classifier — mentioned places', () => {
     expect(dock[3]).toBe(varn[0])
     expect(await site()).toEqual([[dock[0]]])
 
-    // Both creates are the pass's, anchored on the turn that mentioned them.
+    // Both creates are the pass's, on an entry anchor; plan.test.ts pins which entry.
     const anchored = await queryApp(
       app.window,
       `SELECT COUNT(*) FROM deltas
