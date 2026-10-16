@@ -42,17 +42,26 @@ const LEGACY_SETTINGS = {
   packVariables: { tone: 'wry' },
 }
 
-function settingsOf(db: DatabaseSync, storyId: string): Record<string, unknown> | null {
+function rawSettingsOf(db: DatabaseSync, storyId: string): string | null {
   const row = db.prepare('select settings from stories where id = ?').get(storyId) as
     | { settings: string | null }
     | undefined
-  return row?.settings == null ? null : (JSON.parse(row.settings) as Record<string, unknown>)
+  return row?.settings ?? null
+}
+
+function settingsOf(db: DatabaseSync, storyId: string): Record<string, unknown> | null {
+  const raw = rawSettingsOf(db, storyId)
+  return raw == null ? null : (JSON.parse(raw) as Record<string, unknown>)
+}
+
+function insertRawStory(db: DatabaseSync, id: string, settings: string | null): void {
+  db.prepare(
+    'insert into stories (id, title, settings, created_at, updated_at) values (?,?,?,?,?)',
+  ).run(id, id, settings, 1, 1)
 }
 
 function insertStory(db: DatabaseSync, id: string, settings: unknown): void {
-  db.prepare(
-    'insert into stories (id, title, settings, created_at, updated_at) values (?,?,?,?,?)',
-  ).run(id, id, settings === null ? null : JSON.stringify(settings), 1, 1)
+  insertRawStory(db, id, settings === null ? null : JSON.stringify(settings))
 }
 
 describe(TAG, () => {
@@ -115,10 +124,7 @@ describe(TAG, () => {
 
     applyMigration(db, TAG)
 
-    const raw = db.prepare('select settings from stories where id = ?').get('s1') as {
-      settings: string
-    }
-    expect(raw.settings).toContain('"classifierMentionedPlaces":false')
+    expect(rawSettingsOf(db, 's1')).toContain('"classifierMentionedPlaces":false')
   })
 
   // Deliberate — the schema's default fills only an absent key, so a stored null fails story open
@@ -142,19 +148,14 @@ describe(TAG, () => {
     ['a top-level scalar', '42'],
   ])('migrates good rows beside %s', (_label, raw) => {
     insertStory(db, 's_good', LEGACY_SETTINGS)
-    db.prepare(
-      'insert into stories (id, title, settings, created_at, updated_at) values (?,?,?,?,?)',
-    ).run('s_bad', 's_bad', raw, 1, 1)
+    insertRawStory(db, 's_bad', raw)
 
     expect(() => applyMigration(db, TAG)).not.toThrow()
 
     expect(settingsOf(db, 's_good')?.classifierMentionedPlaces).toBe(
       STORY_SETTINGS_DEFAULTS.classifierMentionedPlaces,
     )
-    const bad = db.prepare('select settings from stories where id = ?').get('s_bad') as {
-      settings: string
-    }
-    expect(bad.settings).toBe(raw)
+    expect(rawSettingsOf(db, 's_bad')).toBe(raw)
   })
 
   // json_valid alone admits these, and json_set would rewrite the column
@@ -163,16 +164,11 @@ describe(TAG, () => {
     ['a spaced top-level array', '[1, 2]'],
     ['a quoted scalar', '"already gone"'],
   ])('does not rewrite %s', (_label, raw) => {
-    db.prepare(
-      'insert into stories (id, title, settings, created_at, updated_at) values (?,?,?,?,?)',
-    ).run('s_odd', 's_odd', raw, 1, 1)
+    insertRawStory(db, 's_odd', raw)
 
     applyMigration(db, TAG)
 
-    const after = db.prepare('select settings from stories where id = ?').get('s_odd') as {
-      settings: string
-    }
-    expect(after.settings).toBe(raw)
+    expect(rawSettingsOf(db, 's_odd')).toBe(raw)
   })
 
   it('leaves a wizard draft with no settings blob null rather than writing one', () => {
