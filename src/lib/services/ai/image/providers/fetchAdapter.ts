@@ -167,7 +167,7 @@ const MAX_REDIRECTS = 3
 /** Like `fetchImageBase64`, for a URL that came from outside: the URL and every redirect must be public. */
 export async function fetchPublicImageBase64(
   url: string,
-  options?: { signal?: AbortSignal; serviceId?: string },
+  options?: { signal?: AbortSignal; serviceId?: string; timeoutMs?: number },
 ): Promise<string> {
   let target = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
