@@ -13,6 +13,7 @@
   import { characterVault } from '#lib/stores/characterVault.svelte.ts'
   import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
   import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
+  import { characterToRecord, scenarioToRecord } from '#lib/utils/vaultMerge.ts'
   import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import {
@@ -237,29 +238,39 @@
 
     // Auto-open focused entity if provided
     if (focusedEntity) {
-      let entityData: any = null
-      if (focusedEntity.entityType === 'character') {
-        entityData = characterVault.getById(focusedEntity.entityId)
-      } else if (focusedEntity.entityType === 'lorebook') {
-        entityData = lorebookVault.getById(focusedEntity.entityId)
-      } else if (focusedEntity.entityType === 'scenario') {
-        entityData = scenarioVault.getById(focusedEntity.entityId)
+      const { entityId, entityType } = focusedEntity
+      // A dummy change to satisfy the viewer store requirement
+      const base = { id: `view-${entityId}`, toolCallId: 'init', status: 'pending' } as const
+      let dummyChange: VaultPendingChange | null = null
+      if (entityType === 'character') {
+        const character = characterVault.getById(entityId)
+        if (character) {
+          dummyChange = {
+            ...base,
+            entityType,
+            action: 'create',
+            data: characterToRecord(character),
+          }
+        }
+      } else if (entityType === 'scenario') {
+        const scenario = scenarioVault.getById(entityId)
+        if (scenario) {
+          dummyChange = { ...base, entityType, action: 'create', data: scenarioToRecord(scenario) }
+        }
+      } else if (entityType === 'lorebook') {
+        const lorebook = lorebookVault.getById(entityId)
+        if (lorebook) {
+          dummyChange = {
+            ...base,
+            entityType,
+            action: 'update',
+            entityId,
+            data: { name: lorebook.name, description: lorebook.description, tags: lorebook.tags },
+          }
+        }
       }
 
-      if (entityData) {
-        // Construct a dummy change to satisfy the viewer store requirement
-        const dummyChange = {
-          id: `view-${focusedEntity.entityId}`,
-          toolCallId: 'init',
-          entityType: focusedEntity.entityType,
-          action: 'update',
-          status: 'pending',
-          entityId: focusedEntity.entityId,
-          data: JSON.parse(JSON.stringify(entityData)),
-        } as unknown as VaultPendingChange
-
-        vaultEditor.openViewer(dummyChange, focusedEntity.entityId, focusedEntity.entityType)
-      }
+      if (dummyChange) vaultEditor.openViewer(dummyChange, entityId, entityType)
     }
   })
 
