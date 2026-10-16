@@ -494,15 +494,10 @@
         characters: () => characterVault.items,
         lorebooks: () => lorebookVault.items,
         scenarios: () => scenarioVault.items,
+        pendingChanges: () => vaultEditor.effectivePendingChanges,
         get activeLorebookId() {
           if (focus?.entityType === 'lorebook') return focus.entityId
           return vaultEditor.currentLorebookId ?? undefined
-        },
-        get activeEntries() {
-          const id =
-            focus?.entityType === 'lorebook' ? focus.entityId : vaultEditor.currentLorebookId
-          if (!id) return undefined
-          return lorebookVault.getById(id)?.entries
         },
       }
 

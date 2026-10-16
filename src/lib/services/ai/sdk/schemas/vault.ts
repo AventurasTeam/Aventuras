@@ -223,3 +223,11 @@ export const vaultPendingChangeSchema = z.union([
 ])
 
 export type VaultPendingChange = z.infer<typeof vaultPendingChangeSchema>
+
+export type PendingEntryAction = 'update' | 'delete' | 'merge'
+
+/** What unapproved changes will do to a lorebook's entries, by index in the saved list. */
+export interface PendingEntryStatus {
+  byIndex: Map<number, PendingEntryAction>
+  creates: { name: string; type: string }[]
+}

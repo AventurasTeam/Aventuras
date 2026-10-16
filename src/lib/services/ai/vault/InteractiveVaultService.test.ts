@@ -14,6 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { VaultPendingChange } from '../sdk/schemas/vault'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
@@ -125,6 +126,7 @@ function emptyVaultState(): VaultState {
     characters: () => [],
     lorebooks: () => [],
     scenarios: () => [],
+    pendingChanges: () => [],
   }
 }
 
@@ -351,6 +353,34 @@ describe('focused entity context', () => {
     expect(first).toContain('"entryCount": 2')
     expect(first).toContain('"realm"')
     expect(first).not.toContain('Secret Entry')
+  })
+
+  it('lists proposed entries of a focused lorebook without counting them', async () => {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, {
+      entityType: 'lorebook',
+      entityId: 'lb-1',
+      entityName: 'Realm',
+    })
+    const lorebook = { id: 'lb-1', name: 'Realm', tags: [], entries: [{ name: 'Old' }] }
+    const create = {
+      id: 'p1',
+      toolCallId: 'p1',
+      entityType: 'lorebook-entry',
+      action: 'create',
+      lorebookId: 'lb-1',
+      status: 'pending',
+      data: { name: 'Brin', type: 'character' },
+    } as never as VaultPendingChange
+    await send(
+      service,
+      stateWith({ lorebooks: () => [lorebook as never], pendingChanges: () => [create] }),
+    )
+
+    const [first] = userMessages(service)
+    expect(first).toContain('"entryCount": 1')
+    expect(first).toContain('"pendingCreates"')
+    expect(first).toContain('"Brin"')
   })
 
   it('drops the focus when a saved conversation is loaded', async () => {
@@ -750,7 +780,6 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     ...emptyVaultState(),
     lorebooks: () => [{ id: 'lb1', name: 'Book', entries } as never],
     activeLorebookId: 'lb1',
-    activeEntries: entries,
   })
   const characterState = (): VaultState => ({
     ...emptyVaultState(),
@@ -990,5 +1019,189 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
     expect(result.pendingChanges).toHaveLength(1)
     expect(result.unlinkedChangeIds).toEqual([result.pendingChanges[0].id])
     expect(pendingChangesOf(events)).toEqual([undefined])
+  })
+})
+
+describe('pending and unsaved state', () => {
+  const alice = {
+    id: 'char-1',
+    name: 'Alice',
+    description: 'A thief',
+    traits: ['sly'],
+    visualDescriptors: {},
+    portrait: null,
+    tags: [],
+    favorite: false,
+    source: 'manual',
+  }
+  const aliceRecord = {
+    name: 'Alice',
+    description: 'A thief',
+    traits: ['sly'],
+    visualDescriptors: {},
+    portrait: null,
+    tags: [],
+    favorite: false,
+  }
+  const focusOnAlice = {
+    entityType: 'character' as const,
+    entityId: 'char-1',
+    entityName: 'Alice',
+  }
+
+  const proposal = (id: string, data: Record<string, unknown>, status = 'pending') =>
+    ({
+      id,
+      toolCallId: id,
+      entityType: 'character',
+      action: 'update',
+      entityId: 'char-1',
+      status,
+      data: { ...aliceRecord, ...data },
+      previous: aliceRecord,
+    }) as never as VaultPendingChange
+
+  function state(over: Partial<VaultState> = {}): VaultState {
+    return { ...emptyVaultState(), characters: () => [alice as never], ...over }
+  }
+
+  async function drain(service: Service, vaultState: VaultState) {
+    for await (const _ of service.sendMessageStreaming(vaultState, 'go')) {
+      // drain
+    }
+  }
+
+  /** Runs the tools of one turn, handing back what each returned. */
+  async function runTools(
+    service: Service,
+    vaultState: VaultState,
+    script: (tools: Record<string, any>) => Promise<void>,
+  ) {
+    nextStreamEvents = async (tools) => {
+      await script(tools)
+      return [{ type: 'start-step' }, { type: 'finish-step' }]
+    }
+    await drain(service, vaultState)
+  }
+
+  async function newService(focus: typeof focusOnAlice | null = null) {
+    const service = new InteractiveVaultService('interactiveVault')
+    await service.initialize(emptySummary, focus)
+    return service
+  }
+
+  const userMessages = (service: Service) =>
+    service
+      .getConversationHistory()
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content as string)
+
+  it('has read_character return the proposed values and name what is unsaved', async () => {
+    let result: any
+    await runTools(
+      await newService(),
+      state({ pendingChanges: () => [proposal('p1', { description: 'A fence' })] }),
+      async (tools) => {
+        result = await tools.read_character.execute({ characterId: 'char-1' }, {})
+      },
+    )
+
+    expect(result.character.description).toBe('A fence')
+    expect(result.unsavedFields).toEqual(['description'])
+  })
+
+  it('has read_character leave unsavedFields out when nothing is pending', async () => {
+    let result: any
+    await runTools(await newService(), state(), async (tools) => {
+      result = await tools.read_character.execute({ characterId: 'char-1' }, {})
+    })
+
+    expect(result.character.description).toBe('A thief')
+    expect(result).not.toHaveProperty('unsavedFields')
+  })
+
+  it("builds a second update in a turn on the first one's values", async () => {
+    let second: any
+    await runTools(await newService(), state(), async (tools) => {
+      await tools.update_character.execute({ characterId: 'char-1', description: 'A fence' }, {})
+      second = await tools.update_character.execute(
+        { characterId: 'char-1', addTraits: ['tall'] },
+        {},
+      )
+    })
+
+    expect(second.pendingChange.previous).toMatchObject({
+      description: 'A fence',
+      traits: ['sly'],
+    })
+    expect(second.pendingChange.data).toMatchObject({
+      description: 'A fence',
+      traits: ['sly', 'tall'],
+    })
+  })
+
+  it("prefers the store's edited copy of a change proposed this turn", async () => {
+    let storeChanges: VaultPendingChange[] = []
+    let second: any
+    await runTools(
+      await newService(),
+      state({ pendingChanges: () => storeChanges }),
+      async (tools) => {
+        const first = await tools.update_character.execute(
+          { characterId: 'char-1', description: 'A fence' },
+          {},
+        )
+        const { pendingChange } = first
+        storeChanges = [
+          { ...pendingChange, data: { ...pendingChange.data, description: 'Edited' } },
+        ]
+        second = await tools.update_character.execute({ characterId: 'char-1', name: 'Al' }, {})
+      },
+    )
+
+    expect(second.pendingChange.previous.description).toBe('Edited')
+  })
+
+  it('does not compose a turn change again once the store has approved it', async () => {
+    let current = alice
+    let second: any
+    await runTools(
+      await newService(),
+      state({ characters: () => [current as never] }),
+      async (tools) => {
+        const first = await tools.update_character.execute(
+          { characterId: 'char-1', description: 'A fence' },
+          {},
+        )
+        // Approving writes the vault and flips the status on the object the turn also holds.
+        first.pendingChange.status = 'approved'
+        current = { ...alice, description: 'Saved later' }
+        second = await tools.update_character.execute({ characterId: 'char-1', name: 'Al' }, {})
+      },
+    )
+
+    expect(second.pendingChange.previous.description).toBe('Saved later')
+  })
+
+  it('shows the focused record with pending values and resends it when they change', async () => {
+    const service = await newService(focusOnAlice)
+    let pending: VaultPendingChange[] = []
+    const vaultState = state({ pendingChanges: () => pending })
+    const send = () => drain(service, vaultState)
+
+    await send()
+    pending = [proposal('p1', { description: 'A fence' })]
+    await send()
+    await send()
+    pending = []
+    await send()
+
+    const [first, afterProposal, unchanged, afterRejection] = userMessages(service)
+    expect(first).toContain('"A thief"')
+    expect(first).not.toContain('"unsavedFields"')
+    expect(afterProposal).toContain('"A fence"')
+    expect(afterProposal).toContain('"unsavedFields"')
+    expect(unchanged).toBe('go')
+    expect(afterRejection).toContain('"A thief"')
   })
 })
