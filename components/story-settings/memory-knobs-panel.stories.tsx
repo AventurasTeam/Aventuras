@@ -96,6 +96,17 @@ function chip(name: string): HTMLElement {
   return screen.getByRole('button', { name })
 }
 
+// Smallest common ancestor of a heading and a field; a lone heading inside proves it the section.
+function sectionOf(title: string, fieldTestID: string): HTMLElement {
+  const heading = screen.getByRole('heading', { name: title })
+  const field = screen.getByTestId(fieldTestID)
+  let section: HTMLElement | null = heading
+  while (section && !section.contains(field)) section = section.parentElement
+  if (!section) throw new Error(`No element holds both "${title}" and ${fieldTestID}`)
+  expect(within(section).getByRole('heading')).toBe(heading)
+  return section
+}
+
 function modeRadio(label: string): HTMLElement {
   return screen.getByRole('radio', { name: (name) => name.startsWith(label) })
 }
@@ -198,6 +209,9 @@ export const MentionedPlacesToggleSaves: Story = {
     await screen.findByTestId('memory-knobs-panel')
     const toggle = screen.getByRole('switch', { name: COPY.mentionedPlaces })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(
+      sectionOf(t('storySettings:memory.knobs.classifier'), 'memory-cadence'),
+    ).toContainElement(toggle)
     expect(
       screen.getByTestId('memory-cadence').compareDocumentPosition(toggle) &
         Node.DOCUMENT_POSITION_FOLLOWING,
