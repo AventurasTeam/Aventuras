@@ -2,8 +2,9 @@
  * Image Generation Tools
  *
  * Tool definitions for generating images within the interactive vault assistant.
- * Supports standard image generation and character portrait generation.
- * Generated images are tracked by ID so they can be referenced in follow-up actions.
+ * Supports standard image generation, character portrait generation, and editing an existing
+ * image through the Reference profile. Generated images are tracked by ID so they can be
+ * referenced in follow-up actions.
  */
 
 import { tool } from 'ai'
@@ -12,6 +13,8 @@ import type { VaultCharacter } from '#lib/types/index.ts'
 import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
 import {
   generateImage,
+  supportsReferenceImages,
+  toRawBase64,
   generatePortrait as sdkGeneratePortrait,
   isImageGenerationEnabled,
   hasRequiredCredentials,
@@ -67,35 +70,67 @@ function missingCredentialsError(slot: string): string {
 
 const NO_IMAGE = { success: false, error: 'The image provider returned no image.' }
 
-/** Resolve the profile and model for standard generation, or the reason it cannot be used. */
-function resolveImageProfile(): { profileId: string; model: string } | { error: string } {
-  const profileId = settings.systemServicesSettings.imageGeneration.profileId
-  if (!profileId) {
+/** Resolve the profile and model for an image slot, or the reason it cannot be used. */
+function resolveImageProfile(
+  slot: 'standard' | 'reference',
+): { profileId: string; model: string } | { error: string } {
+  const imageSettings = settings.systemServicesSettings.imageGeneration
+  if (!imageSettings.profileId) {
     return {
       error:
         'Image generation is currently disabled in user settings. Please inform the user that no image can be made.',
     }
   }
 
-  if (!isImageGenerationEnabled()) {
+  const profileId =
+    slot === 'reference' ? imageSettings.referenceProfileId : imageSettings.profileId
+  if (!profileId) {
     return {
       error:
-        'The configured image profile is missing or its provider is unsupported. Please tell the user to check Settings → Images.',
+        'No Reference (Img2Img) profile is configured. Please tell the user to set one under Settings → Images → "Reference (Img2Img) Profile" to edit images.',
     }
   }
-  if (!hasRequiredCredentials()) {
-    return { error: missingCredentialsError('standard') }
+
+  if (!isImageGenerationEnabled(undefined, slot)) {
+    return {
+      error: `The configured ${slot} image profile is missing or its provider is unsupported. Please tell the user to check Settings → Images.`,
+    }
+  }
+  if (!hasRequiredCredentials(slot)) {
+    return { error: missingCredentialsError(slot) }
   }
 
   const model = settings.getImageProfile(profileId)?.model
   if (!model) {
     return {
-      error:
-        'The image profile has no model configured. Please tell the user to choose a model in Settings → Images.',
+      error: `The ${slot} image profile has no model configured. Please tell the user to choose a model in Settings → Images.`,
     }
   }
 
   return { profileId, model }
+}
+
+async function resolveEditSource(
+  { characters, generatedImages }: ImageToolContext,
+  { imageId, characterId }: { imageId?: string; characterId?: string },
+): Promise<{ source: string } | { error: string }> {
+  if (imageId) {
+    const dataUrl = generatedImages.get(imageId)
+    if (dataUrl) return { source: dataUrl }
+    return { error: unknownImageError(generatedImages, imageId) }
+  }
+
+  const character = characters().find((c) => c.id === characterId)
+  if (!character) return { error: `Character with ID "${characterId}" not found` }
+  if (!character.portrait) return { error: `Character "${character.name}" has no saved portrait.` }
+  try {
+    // generateImage silently drops a reference it cannot fetch; fetch here so that fails loudly.
+    return { source: await toRawBase64(character.portrait) }
+  } catch (error) {
+    return {
+      error: `Could not load the portrait of "${character.name}": ${errMessage(error)}. Please tell the user.`,
+    }
+  }
 }
 
 /**
@@ -120,7 +155,7 @@ export function createImageTools(context: ImageToolContext) {
         prompt: z.string().describe('Detailed description of the image to generate'),
       }),
       execute: async ({ prompt }: { prompt: string }) => {
-        const resolved = resolveImageProfile()
+        const resolved = resolveImageProfile('standard')
         if ('error' in resolved) return { success: false, error: resolved.error }
 
         try {
@@ -252,12 +287,67 @@ export function createImageTools(context: ImageToolContext) {
       },
     }),
 
+    edit_image: tool({
+      description:
+        "Edit an existing image with the Reference (Img2Img) profile, keeping its likeness. Give `instruction` and exactly one source: `imageId` (an image generated this session) or `characterId` (that character's saved portrait). The edit is a new image; the source is never overwritten. A success result means the user can see the image; on failure, tell the user and do not retry. Use set_portrait with the new imageId to assign it.",
+      inputSchema: z.object({
+        instruction: z.string().describe('The change to make to the image'),
+        imageId: z.string().optional().describe('ID of an image generated this session'),
+        characterId: z
+          .string()
+          .optional()
+          .describe('ID of the character whose saved portrait to edit'),
+      }),
+      execute: async ({ instruction, imageId, characterId }) => {
+        if (!imageId === !characterId) {
+          return { success: false, error: 'Provide exactly one of imageId or characterId.' }
+        }
+
+        const resolved = resolveImageProfile('reference')
+        if ('error' in resolved) return { success: false, error: resolved.error }
+
+        if (!(await supportsReferenceImages(resolved.profileId, resolved.model))) {
+          return {
+            success: false,
+            error: `The Reference profile's provider or model "${resolved.model}" cannot take a reference image. Please tell the user to pick an img2img-capable model in Settings → Images.`,
+          }
+        }
+
+        const edit = await resolveEditSource(context, { imageId, characterId })
+        if ('error' in edit) return { success: false, error: edit.error }
+
+        try {
+          const result = await generateImage({
+            profileId: resolved.profileId,
+            model: resolved.model,
+            prompt: instruction,
+            size: settings.systemServicesSettings.imageGeneration.referenceSize,
+            referenceImages: [edit.source],
+          })
+
+          if (!result.base64) return NO_IMAGE
+
+          const newImageId = registerImage(result.base64)
+          return {
+            success: true,
+            imageId: newImageId,
+            message: `Edited image created (imageId: ${newImageId}). The image is displayed in the chat and the original is unchanged. Use imageId with set_portrait to assign it as a character portrait.`,
+          }
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to edit the image: ${errMessage(error)}. Please tell the user.`,
+          }
+        }
+      },
+    }),
+
     /**
      * Set a previously generated image as a character's portrait.
      */
     set_portrait: tool({
       description:
-        "Set a previously generated image as a character's portrait. Requires an imageId from a prior generate_standard_image or generate_portrait call. The change will be pending until approved.",
+        "Set a previously generated image as a character's portrait. Requires an imageId from a prior generate_standard_image, generate_portrait or edit_image call. The change will be pending until approved.",
       inputSchema: z.object({
         characterId: z.string().describe('ID of the character to set the portrait for'),
         imageId: z.string().describe('ID of the previously generated image to use as portrait'),

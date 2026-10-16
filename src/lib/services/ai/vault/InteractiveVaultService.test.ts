@@ -960,6 +960,7 @@ describe('sendMessageStreaming pending changes from parallel tool calls', () => 
   ]
 
   const NO_CHANGE_TOOLS = [
+    'edit_image',
     'fetch_fandom_section',
     'generate_portrait',
     'generate_standard_image',

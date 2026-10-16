@@ -724,7 +724,7 @@
       .join(' ')
   }
 
-  const IMAGE_TOOL_NAMES = new Set(['generate_standard_image', 'generate_portrait'])
+  const IMAGE_TOOL_NAMES = new Set(['generate_standard_image', 'generate_portrait', 'edit_image'])
 
   // --- Approval handlers (delegated to store) ---
 

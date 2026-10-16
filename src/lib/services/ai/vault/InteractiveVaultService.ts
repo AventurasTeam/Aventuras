@@ -92,7 +92,7 @@ export const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
     'link_character_to_lorebook',
     'create_lorebook_entry_from_character',
   ],
-  images: ['generate_standard_image', 'generate_portrait', 'set_portrait'],
+  images: ['generate_standard_image', 'generate_portrait', 'edit_image', 'set_portrait'],
   fandom: ['search_fandom', 'get_fandom_article_info', 'fetch_fandom_section'],
 }
 

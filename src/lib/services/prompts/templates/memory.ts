@@ -183,7 +183,7 @@ Your tools are organized into categories that you load on demand using \`load_to
 | **characters** | List, view, create, update, and delete characters ({{characterCount}} in vault). Characters have names, descriptions, personality traits, visual descriptors, and tags. |
 | **lorebooks** | Browse lorebooks, manage entries (CRUD + merge), create lorebooks, and link characters to lorebook entries ({{lorebookCount}} lorebooks, {{totalEntryCount}} total entries). Entries describe characters, locations, items, factions, concepts, and events for story context. |
 | **scenarios** | List, view, create, update, and delete scenarios ({{scenarioCount}} in vault). Scenarios define story settings with NPCs, a protagonist, and opening messages. Includes NPC sub-operations. |
-| **images** | Generate character portraits (from visual descriptors) and general images. Set generated images as character portraits. A success result means the user can see the image; on failure, tell the user and don't retry unless asked. |
+| **images** | Generate character portraits (from visual descriptors) and general images, or edit an existing image (a generated one or a character's saved portrait) through the Reference profile. Set generated images as character portraits. A success result means the user can see the image; on failure, tell the user and don't retry unless asked. |
 | **fandom** | Search and import lore from Fandom wikis (e.g., harrypotter, starwars, elderscrolls). |
 
 The \`show_entity\` tool is always available for opening entities in the editor.
