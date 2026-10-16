@@ -13,8 +13,9 @@ type RelationshipFact = {
 }
 
 // Each place is one line of the tree: stored text spanning several would break its nesting.
+const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
 const oneLine = (text: string | null): string | null =>
-  text == null ? null : blankToNull(text.replace(/\s+/g, ' '))
+  text == null ? null : blankToNull(flat(text))
 
 // One row can emit two facts, one per non-null perspective; a row whose character
 // has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
@@ -80,12 +81,12 @@ export function buildClassifierContext(args: {
     // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
     places: placeTree(entities).map(({ entity: e, depth }) => ({
       id: e.id,
-      name: e.name,
+      name: flat(e.name),
       depth,
       status: e.status,
       retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
       description: oneLine(e.description),
-      keywords: e.keywords,
+      keywords: e.keywords.map(flat),
     })),
     // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
     // Scene/location ids are filtered to known: a deleted row would get a placeholder.

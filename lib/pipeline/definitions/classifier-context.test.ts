@@ -173,7 +173,14 @@ describe('buildClassifierContext', () => {
     const GONE = 'char_99999999-9999-9999-9999-999999999999'
     const GONE_LOC = 'loc_99999999-9999-9999-9999-999999999999'
     const location = (id: string, name: string) =>
-      ({ id, kind: 'location', name, description: null, status: 'active' }) as unknown as Entity
+      ({
+        id,
+        kind: 'location',
+        name,
+        description: null,
+        status: 'active',
+        keywords: [],
+      }) as unknown as Entity
 
     // Entities walk first, so a scene listing BAEL before AEFRE still numbers the
     // roster in roster order.
@@ -309,6 +316,26 @@ describe('buildClassifierContext', () => {
         },
       ])
     })
+
+    it('puts a multi-line name or keyword on one line', () => {
+      const context = build([
+        place(HALL, 'Great\n  Hall', null, { keywords: ['the\nhall', 'the  great\r\nroom'] }),
+      ])
+      expect(context.places).toEqual([
+        expect.objectContaining({ name: 'Great Hall', keywords: ['the hall', 'the great room'] }),
+      ])
+    })
+
+    // Un-retiring a place keeps its stored reason.
+    it.each(['active', 'staged'] as const)(
+      'shows no retired reason for a place now %s',
+      (status) => {
+        const context = build([
+          place(HALL, 'Great Hall', null, { status, retiredReason: 'burned' }),
+        ])
+        expect(context.places).toEqual([expect.objectContaining({ status, retiredReason: null })])
+      },
+    )
 
     it('numbers the roster before the places, and a scene names a place by its tree id', () => {
       const idMap = new IdBiMap()
