@@ -47,6 +47,25 @@ function track(promise: Promise<boolean>): { result: () => boolean | undefined }
   return { result: () => result }
 }
 
+// A turn's mark, held until its run's reservation ends it early or the turn settles.
+function pendingTurn(branchId: string): { endEarly: () => void; settle: () => Promise<void> } {
+  let endEarly!: () => void
+  let settle!: () => void
+  const bracket = generationStore.bracketPendingTurn(branchId, (end) => {
+    endEarly = end
+    return new Promise<void>((resolve) => {
+      settle = resolve
+    })
+  })
+  return {
+    endEarly: () => endEarly(),
+    settle: () => {
+      settle()
+      return bracket
+    },
+  }
+}
+
 const PASS = { branchId: 'b1', actionId: 'act_pass' }
 
 describe('enterWritePhase', () => {
@@ -89,21 +108,21 @@ describe('enterWritePhase', () => {
   })
 
   it('waits out a pending turn, waking when it ends without ever registering a run', async () => {
-    const end = generationStore.beginPendingTurn('b1')
+    const turn = pendingTurn('b1')
     const pass = enter()
     await flush()
     expect(pass.result()).toBeUndefined()
-    end()
+    await turn.settle()
     await flush()
     expect(pass.result()).toBe(true)
   })
 
   it("stays waiting across a pending turn's hand-off to its registered run", async () => {
-    const end = generationStore.beginPendingTurn('b1')
+    const turn = pendingTurn('b1')
     const pass = enter()
     await flush()
     generationStore.startRun(runOf(PER_TURN_KIND))
-    end()
+    turn.endEarly()
     await flush()
     expect(pass.result()).toBeUndefined()
     generationStore.finishRun(runOf(PER_TURN_KIND).runId)
@@ -116,7 +135,7 @@ describe('enterWritePhase', () => {
     generationStore.startRun(runOf('chapter-close'))
     generationStore.startRun(runOf('suggestion-refresh'))
     generationStore.startRun(runOf(PER_TURN_KIND, 'b2'))
-    generationStore.beginPendingTurn('b2')
+    pendingTurn('b2')
     const pass = enter()
     await flush()
     expect(pass.result()).toBe(true)

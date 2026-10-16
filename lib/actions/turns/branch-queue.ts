@@ -31,14 +31,9 @@ export function withBranchQueue<T>(branchId: string, fn: () => Promise<T>): Prom
  * Marks a turn pending until its run is in txState (generation-pipeline.md → No-gate write phase).
  * Every `per-turn` start runs in it, within the branch queue, passing `onReserved` to runPipeline.
  */
-export async function withPendingTurn<T>(
+export function withPendingTurn<T>(
   branchId: string,
   fn: (onReserved: () => void) => Promise<T>,
 ): Promise<T> {
-  const end = generationStore.beginPendingTurn(branchId)
-  try {
-    return await fn(end)
-  } finally {
-    end()
-  }
+  return generationStore.bracketPendingTurn(branchId, fn)
 }
