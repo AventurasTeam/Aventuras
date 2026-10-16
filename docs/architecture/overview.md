@@ -541,7 +541,8 @@ What the plugin changes for the server on the other end:
   Android, `tauri://localhost` elsewhere, the dev-server URL in dev. It cannot be dropped without
   the `unsafe-headers` feature.
 - Certificates are checked against bundled webpki roots, not the OS trust store.
-- Responses arrive uncompressed; reqwest's decompression features are off.
+- `Accept-Encoding: gzip, br, zstd` is sent and responses are decoded in Rust before the WebView
+  sees them.
 
 Known limitation: stock Ollama allows `tauri://*` and `http://localhost:*` origins but not
 `http://tauri.localhost`, so it may reject Windows and Android requests until the user sets
