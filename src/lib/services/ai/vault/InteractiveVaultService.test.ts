@@ -14,7 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { VaultPendingChange } from '../sdk/schemas/vault'
+import type { VaultCharacterInput, VaultPendingChange } from '../sdk/schemas/vault'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
@@ -371,8 +371,16 @@ describe('focused entity context', () => {
       action: 'create',
       lorebookId: 'lb-1',
       status: 'pending',
-      data: { name: 'Brin', type: 'character' },
-    } as never as VaultPendingChange
+      data: {
+        name: 'Brin',
+        type: 'character',
+        description: 'A ranger',
+        keywords: ['brin'],
+        aliases: [],
+        injectionMode: 'keyword',
+        priority: 50,
+      },
+    } satisfies VaultPendingChange
     await send(
       service,
       stateWith({ lorebooks: () => [lorebook as never], pendingChanges: () => [create] }),
@@ -1051,7 +1059,11 @@ describe('pending and unsaved state', () => {
     entityName: 'Alice',
   }
 
-  const proposal = (id: string, data: Record<string, unknown>, status = 'pending') =>
+  const proposal = (
+    id: string,
+    data: Partial<VaultCharacterInput>,
+    status: VaultPendingChange['status'] = 'pending',
+  ) =>
     ({
       id,
       toolCallId: id,
@@ -1061,7 +1073,7 @@ describe('pending and unsaved state', () => {
       status,
       data: { ...aliceRecord, ...data },
       previous: aliceRecord,
-    }) as never as VaultPendingChange
+    }) satisfies VaultPendingChange
 
   function state(over: Partial<VaultState> = {}): VaultState {
     return { ...emptyVaultState(), characters: () => [alice as never], ...over }

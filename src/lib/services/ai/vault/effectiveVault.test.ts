@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+import type {
+  VaultCharacterInput,
+  VaultPendingChange,
+  VaultScenarioInput,
+} from '#lib/services/ai/sdk/schemas/vault.ts'
 import type {
   VaultCharacter,
   VaultLorebook,
@@ -7,7 +11,7 @@ import type {
   VaultScenario,
 } from '#lib/types/index.ts'
 import { effectiveVault } from '#lib/services/ai/vault/effectiveVault.ts'
-import type { ViewDraft } from '#lib/utils/vaultMerge.ts'
+import type { EntityKind, EntityRecord, ViewDraft } from '#lib/utils/vaultMerge.ts'
 
 const characterRecord = {
   name: 'Ann',
@@ -63,10 +67,10 @@ const lorebook = (): VaultLorebook =>
     entries: [entry('Ann'), entry('Bob'), entry('Cy')],
   }) as never
 
-const update = (
-  entityType: 'character' | 'scenario',
+const update = <K extends EntityKind>(
+  entityType: K,
   id: string,
-  data: Record<string, unknown>,
+  data: Partial<EntityRecord[K]>,
   status: VaultPendingChange['status'] = 'pending',
 ): VaultPendingChange => {
   const record = entityType === 'character' ? characterRecord : scenarioRecord
@@ -84,11 +88,12 @@ const update = (
 
 const characterUpdate = (
   id: string,
-  data: Record<string, unknown>,
+  data: Partial<VaultCharacterInput>,
   status?: VaultPendingChange['status'],
 ) => update('character', id, data, status)
 
-const scenarioUpdate = (id: string, data: Record<string, unknown>) => update('scenario', id, data)
+const scenarioUpdate = (id: string, data: Partial<VaultScenarioInput>) =>
+  update('scenario', id, data)
 
 const entryChange = (id: string, fields: Record<string, unknown>): VaultPendingChange =>
   ({
@@ -178,7 +183,7 @@ describe('effectiveVault characters', () => {
 })
 
 describe('effectiveVault view draft', () => {
-  const draft = (data: Record<string, unknown>): ViewDraft => ({
+  const draft = (data: Partial<VaultCharacterInput>): ViewDraft => ({
     entityType: 'character',
     entityId: 'c1',
     data: { ...characterRecord, ...data },

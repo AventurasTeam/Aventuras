@@ -86,7 +86,7 @@ const characterUpdateSchema = z.object({
   action: z.literal('update'),
   entityId: z.string().describe('ID of the character to update'),
   data: vaultCharacterInputSchema.partial().describe('Partial character updates'),
-  previous: vaultCharacterInputSchema.optional().describe('Previous character state (for undo)'),
+  previous: vaultCharacterInputSchema.describe('Previous character state (for undo)'),
 })
 
 const characterDeleteSchema = z.object({
@@ -189,7 +189,7 @@ const scenarioUpdateSchema = z.object({
   action: z.literal('update'),
   entityId: z.string().describe('ID of the scenario to update'),
   data: vaultScenarioInputSchema.partial().describe('Partial scenario updates'),
-  previous: vaultScenarioInputSchema.optional().describe('Previous scenario state (for undo)'),
+  previous: vaultScenarioInputSchema.describe('Previous scenario state (for undo)'),
 })
 
 const scenarioDeleteSchema = z.object({

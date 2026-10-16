@@ -1,16 +1,21 @@
 import type {
   PendingEntryAction,
   PendingEntryStatus,
+  VaultLorebookInput,
   VaultPendingChange,
 } from '#lib/services/ai/sdk/schemas/vault.ts'
 import type { VaultCharacter, VaultLorebook, VaultScenario } from '#lib/types/index.ts'
 import {
-  characterToRecord,
   composePendingOnto,
   computeDelta,
   entityUpdates,
-  scenarioToRecord,
+  filterFields,
+  isDraftFor,
+  toEntityRecord,
   withEntryUpdate,
+  type EntityKind,
+  type EntityRecord,
+  type VaultEntity,
   type ViewDraft,
 } from '#lib/utils/vaultMerge.ts'
 
@@ -45,19 +50,18 @@ export function effectiveVault(
   const unsaved = new Map<string, string[]>()
   const live = pending.filter((c) => c.status === 'pending')
 
-  function compose<T extends { id: string }>(
-    entity: T,
-    entityType: 'character' | 'scenario',
-    toRecord: (e: T) => Record<string, unknown>,
-  ): T {
-    const intents: { data: Record<string, unknown>; previous: Record<string, unknown> }[] =
-      entityUpdates(live, entityType, entity.id)
-    if (draft && draft.entityType === entityType && draft.entityId === entity.id) {
+  function compose<K extends EntityKind>(entity: VaultEntity[K], entityType: K): VaultEntity[K] {
+    const intents: { data: Partial<EntityRecord[K]>; previous: EntityRecord[K] }[] = entityUpdates(
+      live,
+      entityType,
+      entity.id,
+    )
+    if (isDraftFor(draft, entityType, entity.id)) {
       intents.push({ data: draft.data, previous: draft.previous })
     }
     if (intents.length === 0) return entity
 
-    const saved = toRecord(entity)
+    const saved = toEntityRecord[entityType](entity)
     const composed = composePendingOnto(saved, intents)
     const fields = Object.keys(computeDelta(composed, saved))
     if (fields.length === 0) return entity
@@ -97,11 +101,12 @@ export function effectiveVault(
     )
     if (updates.length === 0 && entryUpdates.length === 0) return lorebook
 
-    const overlay: Record<string, unknown> = {}
+    const overlay: Partial<VaultLorebookInput> = {}
     for (const u of updates) {
-      for (const [k, v] of Object.entries(u.data)) {
-        if (v !== undefined) overlay[k] = v
-      }
+      Object.assign(
+        overlay,
+        filterFields(u.data, (_, v) => v !== undefined),
+      )
     }
     let entries = lorebook.entries
     for (const c of entryUpdates) {
@@ -121,8 +126,8 @@ export function effectiveVault(
   }
 
   return {
-    characters: raw.characters.map((c) => compose(c, 'character', characterToRecord)),
-    scenarios: raw.scenarios.map((s) => compose(s, 'scenario', scenarioToRecord)),
+    characters: raw.characters.map((c) => compose(c, 'character')),
+    scenarios: raw.scenarios.map((s) => compose(s, 'scenario')),
     lorebooks: raw.lorebooks.map(composeLorebook),
     unsavedFields: (entityType, id) => unsaved.get(`${entityType}:${id}`) ?? [],
     entryStatus(lorebookId) {

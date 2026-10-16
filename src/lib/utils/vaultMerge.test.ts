@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mergeArrayLists, composePendingOnto, mergeIntent, supersededBy } from './vaultMerge'
-import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+import type { VaultCharacterInput, VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+import type { VaultLorebookEntry } from '#lib/types/index.ts'
 
 describe('mergeArrayLists', () => {
   it('appends genuinely new items', () => {
@@ -43,7 +44,7 @@ describe('composePendingOnto — duplicate tag regression', () => {
     const change1 = { data: { tags: ['protagonist', 'flirt'] }, previous: { tags: [] } }
     const change2 = { data: { tags: ['protagonist', 'flirt'] }, previous: { tags: [] } }
 
-    const composed = composePendingOnto({ tags: [] }, [change1, change2])
+    const composed = composePendingOnto<{ tags: string[] }>({ tags: [] }, [change1, change2])
 
     expect(composed.tags).toEqual(['protagonist', 'flirt'])
   })
@@ -89,7 +90,7 @@ describe('supersededBy', () => {
 
   const characterUpdate = (
     id: string,
-    data: Record<string, unknown>,
+    data: Partial<VaultCharacterInput>,
     entityId = 'c1',
   ): VaultPendingChange =>
     ({
@@ -105,7 +106,7 @@ describe('supersededBy', () => {
 
   const entryUpdate = (
     id: string,
-    data: Record<string, unknown>,
+    data: Partial<VaultLorebookEntry>,
     entryIndex = 0,
   ): VaultPendingChange =>
     ({

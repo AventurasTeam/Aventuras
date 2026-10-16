@@ -22,6 +22,9 @@ import {
   scenarioToRecord,
   characterToRecord,
   withEntryUpdate,
+  type ComposedEntity,
+  type EntityKind,
+  type EntityRecord,
   type ViewDraft,
 } from '#lib/utils/vaultMerge.ts'
 
@@ -69,37 +72,34 @@ class VaultEditorStore {
    * lorebook-related entities (they use previewLorebook) or when there's no
    * active change.
    */
-  get composedData(): Record<string, unknown> | null {
+  get composedData(): ComposedEntity | null {
     const change = this.activeChange
     if (!change) return null
-    if (change.entityType === 'lorebook' || change.entityType === 'lorebook-entry') return null
     if (change.action !== 'update') return null
-    if (!('previous' in change) || !change.previous) return null
 
-    const pending = this._pendingChangesWithEditOverlay(change.entityType, change.entityId)
-
-    const base = this._getVaultBase(change.entityType, change.entityId, change.previous)
-    return composePendingOnto(base, pending)
-  }
-
-  /**
-   * Build a base record from the current vault state for the given entity
-   * type and ID. Falls back to `previous` when the entity isn't found
-   * (e.g. create actions where the entity doesn't exist in the vault yet).
-   */
-  private _getVaultBase(
-    entityType: string,
-    entityId: string,
-    previous: Record<string, unknown>,
-  ): Record<string, unknown> {
-    if (entityType === 'scenario') {
-      const live = scenarioVault.getById(entityId)
-      if (live) return scenarioToRecord(live)
-    } else if (entityType === 'character') {
-      const live = characterVault.getById(entityId)
-      if (live) return characterToRecord(live)
+    switch (change.entityType) {
+      case 'character': {
+        const live = characterVault.getById(change.entityId)
+        const base = live ? characterToRecord(live) : $state.snapshot(change.previous)
+        return {
+          entityType: 'character',
+          data: this.composePendingChanges(base, 'character', change.entityId),
+        }
+      }
+      case 'scenario': {
+        const live = scenarioVault.getById(change.entityId)
+        const base = live ? scenarioToRecord(live) : $state.snapshot(change.previous)
+        return {
+          entityType: 'scenario',
+          data: this.composePendingChanges(base, 'scenario', change.entityId),
+        }
+      }
+      case 'lorebook':
+      case 'lorebook-entry':
+        return null
+      default:
+        return change satisfies never
     }
-    return JSON.parse(JSON.stringify(previous))
   }
 
   /** Changes still awaiting a decision, with the user's edits applied over the originals. */
@@ -109,16 +109,8 @@ class VaultEditorStore {
       .map((c) => this._editedChanges.get(c.id) ?? c)
   }
 
-  /** The pending updates that compose onto one character or scenario */
-  private _pendingChangesWithEditOverlay(
-    entityType: 'character' | 'scenario',
-    entityId: string,
-  ): Array<{ data: Record<string, unknown>; previous: Record<string, unknown> }> {
-    return entityUpdates(this.effectivePendingChanges, entityType, entityId)
-  }
-
   /** Ids of the pending updates that `composePendingChanges` folds into one entity */
-  pendingChangeIdsFor(entityType: 'character' | 'scenario', entityId: string): string[] {
+  pendingChangeIdsFor(entityType: EntityKind, entityId: string): string[] {
     return entityUpdates(this.effectivePendingChanges, entityType, entityId).map((c) => c.id)
   }
 
@@ -128,12 +120,12 @@ class VaultEditorStore {
    * from any base state and entity ID — used by view mode to overlay
    * unapproved changes onto the current vault entity.
    */
-  composePendingChanges(
-    base: Record<string, unknown>,
-    entityType: 'character' | 'scenario',
+  composePendingChanges<K extends EntityKind>(
+    base: EntityRecord[K],
+    entityType: K,
     entityId: string,
-  ): Record<string, unknown> {
-    const pending = this._pendingChangesWithEditOverlay(entityType, entityId)
+  ): EntityRecord[K] {
+    const pending = entityUpdates(this.effectivePendingChanges, entityType, entityId)
     if (pending.length === 0) return base
     return composePendingOnto(base, pending)
   }
