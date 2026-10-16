@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
-import { classifierExtractionSchema } from '@/lib/classifier'
+import { classifierExtractionSchema, classifierExtractionWithPlacesSchema } from '@/lib/classifier'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -70,6 +70,7 @@ export const STRUCTURED_SHAPES: readonly StructuredShape[] = [
   storyShape('per-turn-classifier', fallbackClassifierSchema),
   storyShape('per-turn-classifier-suggestions', fallbackClassifierWithSuggestionsSchema),
   storyShape('periodic-classifier', classifierExtractionSchema),
+  storyShape('periodic-classifier-places', classifierExtractionWithPlacesSchema),
   storyShape('suggestion-refresh', suggestionRefreshSchema),
 
   wizardShape('wizard-genre', labeledPromptOutputSchema, TEMPLATE_IDS.wizardGenre),

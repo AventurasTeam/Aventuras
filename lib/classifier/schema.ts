@@ -84,4 +84,42 @@ export const classifierExtractionSchema = z.object({
     .default([]),
 })
 
+const newPlace = z.object({
+  /** Temporary handle in the newCharacters namespace; later refs in the same reply use it. */
+  handle: z.string(),
+  name: z.string(),
+  description: z.string(),
+  keywords: z
+    .array(z.string())
+    .default([])
+    .describe(
+      'Other names, titles or epithets the prose used for this place alongside its name. Not the name itself.',
+    ),
+  sourceTurn: z.string().optional(),
+  parent: z
+    .string()
+    .optional()
+    .describe(
+      "ID of the place it is part of, from Places, or another new place's handle. Omit when the turns don't say.",
+    ),
+})
+
+/** classifier.md → Mentioned places: the reply's schema when the story's setting is on. */
+export const classifierExtractionWithPlacesSchema = classifierExtractionSchema.extend({
+  newPlaces: z.array(newPlace).default([]),
+})
+
 export type ClassifierExtraction = z.infer<typeof classifierExtractionSchema>
+export type ClassifierPlacesExtraction = z.infer<typeof classifierExtractionWithPlacesSchema>
+export type NewPlace = ClassifierPlacesExtraction['newPlaces'][number]
+/** A reply under either schema: newPlaces only when the pass read the setting on. */
+export type ClassifierReply = ClassifierExtraction | ClassifierPlacesExtraction
+
+/** The pass reads the setting once, when it builds its prompt; that value picks the schema. */
+export function classifierReplySchema(mentionedPlaces: boolean): z.ZodType<ClassifierReply> {
+  return mentionedPlaces ? classifierExtractionWithPlacesSchema : classifierExtractionSchema
+}
+
+export function newPlacesOf(reply: ClassifierReply): readonly NewPlace[] {
+  return 'newPlaces' in reply ? reply.newPlaces : []
+}

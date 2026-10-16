@@ -3,7 +3,7 @@ import type { Entity } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 
 import type { ReconcileDecision } from './reconcile'
-import type { ClassifierExtraction } from './schema'
+import type { ClassifierReply } from './schema'
 import type { ClassifierWindow } from './window'
 
 /** A delta the phase will emit, with its own survival anchor. */
@@ -73,10 +73,7 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
   }
 }
 
-export function buildClassifierActions(
-  extraction: ClassifierExtraction,
-  deps: PlanDeps,
-): PlanResult {
+export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDeps): PlanResult {
   const { branchId, window, entities, decisions, now, newId } = deps
   const planned: PlannedWrite[] = []
   const handleMap = new Map<string, string>()

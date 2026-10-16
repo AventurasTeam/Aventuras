@@ -1,6 +1,8 @@
 import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { blankToNull } from '@/lib/text'
+import { placeTree } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -52,19 +54,36 @@ export function buildClassifierContext(args: {
   entities: readonly Entity[]
   happenings: readonly Happening[]
   relationships: readonly CharacterRelationship[]
+  /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
+  mentionedPlaces: boolean
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, relationships, idMap } = args
+  const { window, entities, happenings, relationships, mentionedPlaces, idMap } = args
   const known = new Set(entities.map((e) => e.id))
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
     // Narrower than generationContext's on purpose: no injectionMode, a retrieval-time knob.
-    entities: entities.map((e) => ({
+    entities: entities
+      .filter((e) => e.kind !== 'location')
+      .map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        name: e.name,
+        description: e.description,
+        status: e.status,
+        keywords: e.keywords,
+      })),
+    // classifier.md → Mentioned places: every place, any status or mode, nested; a retired one
+    // keeps its id, since a happening can still name it as where something happened.
+    places: placeTree(entities).map(({ entity: e, depth }) => ({
       id: e.id,
-      kind: e.kind,
       name: e.name,
-      description: e.description,
+      depth,
       status: e.status,
+      // Each place is one line of the tree: a stored reason may span several.
+      retiredReason:
+        e.status === 'retired' ? blankToNull((e.retiredReason ?? '').replace(/\s+/g, ' ')) : null,
+      description: e.description,
       keywords: e.keywords,
     })),
     // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
@@ -78,6 +97,7 @@ export function buildClassifierContext(args: {
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
     relationships: projectRelationships(relationships, entities),
+    mentionedPlaces,
   }
   return substituteIds(context, idMap) as Record<string, unknown>
 }

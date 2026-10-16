@@ -273,7 +273,23 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entity[]',
       category: 'Entities',
       description:
-        'Branch entities (id/kind/name/description/status/keywords) — the placeholder universe.',
+        'Branch entities other than places (id/kind/name/description/status/keywords), any status.',
+      required: true,
+    },
+    {
+      name: 'places',
+      type: '{ id, name, depth, status, retiredReason, description, keywords }[]',
+      category: 'Entities',
+      description:
+        "Every place on the branch, whatever its status or injection mode, in tree order: each nested under its parent (`depth` levels deep), children by name. `retiredReason` is set only on a retired place. Unlike the narrator's `locationMap` it hides nothing.",
+      required: true,
+    },
+    {
+      name: 'mentionedPlaces',
+      type: 'boolean',
+      category: 'Story Config',
+      description:
+        'stories.settings.classifierMentionedPlaces, read once per pass: true when the reply may create the places the turns mention but the scene does not enter (newPlaces).',
       required: true,
     },
     {
@@ -398,6 +414,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'sceneEntities',
     'currentLocationId',
     'locationMap',
+    'places',
     'currentLocationChain',
     'heldItems',
     'looseItems',
@@ -428,6 +445,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'userSettings',
     'suggestionSlots',
     'suggestionCount',
+    'mentionedPlaces',
   ],
   'Generation Results': [
     'intermediates',

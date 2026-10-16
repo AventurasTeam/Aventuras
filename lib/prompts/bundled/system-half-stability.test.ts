@@ -9,6 +9,7 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'definition',
   'calendarVocabulary',
   'piggybackFires',
+  'mentionedPlaces',
 ]
 
 const { engine } = loadPack(bundledPack)
@@ -161,6 +162,17 @@ const PASS_A: Record<string, unknown> = {
       keywords: ['the courier'],
     },
   ],
+  places: [
+    {
+      id: 'l1',
+      name: 'The ford',
+      depth: 0,
+      status: 'active',
+      retiredReason: null,
+      description: null,
+      keywords: [],
+    },
+  ],
   relationships: [
     { subject: 'c1', subjectName: 'Kael', object: 'c2', objectName: 'Aria', kind: 'sister' },
   ],
@@ -182,6 +194,7 @@ const PASS_B: Record<string, unknown> = {
       keywords: [],
     },
   ],
+  places: [],
   relationships: [],
   happenings: [],
 }
@@ -215,6 +228,12 @@ const RENDER_CASES: RenderCase[] = [
     first: PASS_A,
     second: PASS_B,
     systemShows: ['Rules:'],
+  },
+  {
+    templateId: TEMPLATE_IDS.periodicClassifier,
+    first: { ...PASS_A, mentionedPlaces: true },
+    second: { ...PASS_B, mentionedPlaces: true },
+    systemShows: ['Rules:', '- New places. Add a place the turns mention'],
   },
   {
     templateId: TEMPLATE_IDS.suggestionRefresh,

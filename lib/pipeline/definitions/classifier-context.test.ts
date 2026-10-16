@@ -24,6 +24,7 @@ describe('buildClassifierContext', () => {
       entities: [],
       happenings: [],
       relationships: [],
+      mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     const declared = VARIABLES.classifierContext.map((v) => v.name)
@@ -58,6 +59,7 @@ describe('buildClassifierContext', () => {
       ],
       happenings: [],
       relationships: [],
+      mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     const [entity] = context.entities as Record<string, unknown>[]
@@ -85,6 +87,7 @@ describe('buildClassifierContext', () => {
         { id: 'hap_22222222-2222-2222-2222-222222222222', title: 'The ford ambush' } as never,
       ],
       relationships: [],
+      mentionedPlaces: false,
       idMap,
     })
     expect((context.entities as { id: string }[])[0].id).toBe('c1')
@@ -99,6 +102,7 @@ describe('buildClassifierContext', () => {
       entities: [],
       happenings: [],
       relationships: [],
+      mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     // A raw entry id in the prompt would be an id the model can neither use nor
@@ -139,6 +143,7 @@ describe('buildClassifierContext', () => {
         relationship('rel_11111111-1111-1111-1111-111111111111', AEFRE, BAEL, 'sister', null),
         relationship('rel_22222222-2222-2222-2222-222222222222', CORA, DEZ, 'ally', 'rival'),
       ],
+      mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([
@@ -157,6 +162,7 @@ describe('buildClassifierContext', () => {
       relationships: [
         relationship('rel_11111111-1111-1111-1111-111111111111', AEFRE, BAEL, 'sister', null),
       ],
+      mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     expect(context.relationships).toEqual([])
@@ -179,9 +185,11 @@ describe('buildClassifierContext', () => {
         entities: [character(AEFRE, 'Aefre'), character(BAEL, 'Bael'), location(FORD, 'The ford')],
         happenings: [],
         relationships: [],
+        mentionedPlaces: false,
         idMap: new IdBiMap(),
       })
-      expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2', 'l1'])
+      expect((context.entities as { id: string }[]).map((e) => e.id)).toEqual(['c1', 'c2'])
+      expect((context.places as { id: string }[]).map((e) => e.id)).toEqual(['l1'])
       expect(context.turns).toEqual([
         { handle: 't1', content: 'prose', scene: ['c2', 'c1'], location: 'l1' },
       ])
@@ -196,6 +204,7 @@ describe('buildClassifierContext', () => {
         entities: [character(AEFRE, 'Aefre')],
         happenings: [],
         relationships: [],
+        mentionedPlaces: false,
         idMap,
       })
       expect(context.turns).toEqual([
@@ -212,8 +221,117 @@ describe('buildClassifierContext', () => {
       entities: [{ ...character(AEFRE, 'Aefre'), keywords: ['the Grey Wolf'] } as Entity],
       happenings: [],
       relationships: [],
+      mentionedPlaces: false,
       idMap: new IdBiMap(),
     })
     expect((context.entities as { keywords: string[] }[])[0].keywords).toEqual(['the Grey Wolf'])
+  })
+
+  // classifier.md → Mentioned places: places leave Known entities for a tree that hides nothing.
+  describe('places', () => {
+    const KEEP = 'loc_11111111-1111-1111-1111-111111111111'
+    const HALL = 'loc_22222222-2222-2222-2222-222222222222'
+    const CRYPT = 'loc_33333333-3333-3333-3333-333333333333'
+    const MARSH = 'loc_44444444-4444-4444-4444-444444444444'
+    const place = (id: string, name: string, parent: string | null, over: Partial<Entity> = {}) =>
+      ({
+        id,
+        kind: 'location',
+        name,
+        description: `${name}, described.`,
+        status: 'active',
+        retiredReason: null,
+        injectionMode: 'auto',
+        keywords: [],
+        state: { parent_location_id: parent },
+        createdAt: 1,
+        ...over,
+      }) as unknown as Entity
+
+    const build = (entities: Entity[], idMap = new IdBiMap(), mentionedPlaces = false) =>
+      buildClassifierContext({
+        window: { turns: [] } as never,
+        entities,
+        happenings: [],
+        relationships: [],
+        mentionedPlaces,
+        idMap,
+      })
+
+    it('lists every place as a tree, by name under its parent, whatever its status or mode', () => {
+      const context = build([
+        character(AEFRE, 'Aefre'),
+        place(CRYPT, 'The Crypt', KEEP, {
+          status: 'retired',
+          retiredReason: 'sealed\n  by the abbot',
+        }),
+        place(HALL, 'Great Hall', KEEP, { status: 'staged', keywords: ['the hall'] }),
+        place(KEEP, 'Ashen Keep', null, { injectionMode: 'disabled' }),
+        place(MARSH, 'The Marsh', null, { description: null }),
+      ])
+      expect(context.entities).toEqual([expect.objectContaining({ id: 'c1', kind: 'character' })])
+      expect(context.places).toEqual([
+        {
+          id: 'l1',
+          name: 'Ashen Keep',
+          depth: 0,
+          status: 'active',
+          retiredReason: null,
+          description: 'Ashen Keep, described.',
+          keywords: [],
+        },
+        {
+          id: 'l2',
+          name: 'Great Hall',
+          depth: 1,
+          status: 'staged',
+          retiredReason: null,
+          description: 'Great Hall, described.',
+          keywords: ['the hall'],
+        },
+        {
+          id: 'l3',
+          name: 'The Crypt',
+          depth: 1,
+          status: 'retired',
+          retiredReason: 'sealed by the abbot',
+          description: 'The Crypt, described.',
+          keywords: [],
+        },
+        {
+          id: 'l4',
+          name: 'The Marsh',
+          depth: 0,
+          status: 'active',
+          retiredReason: null,
+          description: null,
+          keywords: [],
+        },
+      ])
+    })
+
+    it('numbers the roster before the places, and a scene names a place by its tree id', () => {
+      const idMap = new IdBiMap()
+      const context = buildClassifierContext({
+        window: {
+          turns: [turn({ sceneEntities: [HALL, AEFRE], currentLocationId: HALL })],
+        } as never,
+        entities: [place(HALL, 'Great Hall', null), character(AEFRE, 'Aefre')],
+        happenings: [],
+        relationships: [],
+        mentionedPlaces: false,
+        idMap,
+      })
+      expect(idMap.getPlaceholderFor(AEFRE)).toBe('c1')
+      expect(idMap.getPlaceholderFor(HALL)).toBe('l1')
+      expect(context.turns).toEqual([
+        { handle: 't1', content: 'prose', scene: ['l1', 'c1'], location: 'l1' },
+      ])
+    })
+
+    it('carries the setting the pass read', () => {
+      expect(build([], new IdBiMap(), true).mentionedPlaces).toBe(true)
+      expect(build([]).mentionedPlaces).toBe(false)
+    })
   })
 })

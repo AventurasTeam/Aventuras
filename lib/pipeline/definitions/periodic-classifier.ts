@@ -5,13 +5,14 @@ import { generateStructured } from '@/lib/ai'
 import {
   buildClassifierActions,
   buildClassifierWindow,
-  classifierExtractionSchema,
+  classifierReplySchema,
   clampEmbeddedCharacter,
   IDLE_STATUS_JSON,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
+  newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
   reconcileNewCharacter,
   substituteClassifierIds,
@@ -150,6 +151,9 @@ export async function* periodicClassifierPhase(
   const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
     (r) => r.branchId === ctx.branchId,
   )
+  // classifier.md → Mentioned places: read once, so a reply is never judged by a setting its
+  // prompt didn't follow.
+  const mentionedPlaces = open.settings.classifierMentionedPlaces
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
     TEMPLATE_IDS.periodicClassifier,
@@ -160,6 +164,7 @@ export async function* periodicClassifierPhase(
         (h) => h.branchId === ctx.branchId,
       ),
       relationships,
+      mentionedPlaces,
       idMap,
     }),
   )
@@ -173,7 +178,7 @@ export async function* periodicClassifierPhase(
     result = await generateStructured(
       'classifier',
       prompt,
-      classifierExtractionSchema,
+      classifierReplySchema(mentionedPlaces),
       {
         providers: cfg.providers,
         profiles: cfg.profiles,
@@ -221,7 +226,10 @@ export async function* periodicClassifierPhase(
   const substituted = substituteClassifierIds(
     extraction,
     idMap,
-    new Set(extraction.newCharacters.map((c) => c.handle)),
+    new Set([
+      ...extraction.newCharacters.map((c) => c.handle),
+      ...newPlacesOf(extraction).map((p) => p.handle),
+    ]),
   )
 
   // Re-read after the model call: World edits run under a no-gate pass, so the prompt's

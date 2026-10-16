@@ -45,6 +45,15 @@ export const EXAMPLES: Record<string, unknown> = {
     statusFlips: [],
     newCharacters: [],
   },
+  // The same agent with the story's classifierMentionedPlaces on: the schema grows `newPlaces`,
+  // so the injected TS block no longer matches the base entry. Inert for the same reason.
+  'periodic-classifier-places': {
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters: [],
+    newPlaces: [],
+  },
   // Same logical agent as per-turn-classifier, second reply shape: the
   // classifier's schema grows a `suggestions` field whenever the run asks for
   // chips (suggestionsEnabled AND at least one enabled category, and no chips

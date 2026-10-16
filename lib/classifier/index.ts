@@ -1,8 +1,18 @@
 export { PERIODIC_CLASSIFIER_KIND } from './kind'
 export { buildClassifierWindow } from './window'
 export type { ClassifierWindow, WindowTurn } from './window'
-export { classifierExtractionSchema } from './schema'
-export type { ClassifierExtraction } from './schema'
+export {
+  classifierExtractionSchema,
+  classifierExtractionWithPlacesSchema,
+  classifierReplySchema,
+  newPlacesOf,
+} from './schema'
+export type {
+  ClassifierExtraction,
+  ClassifierPlacesExtraction,
+  ClassifierReply,
+  NewPlace,
+} from './schema'
 export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
 export {
   cosine,
