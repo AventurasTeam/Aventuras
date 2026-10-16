@@ -39,7 +39,12 @@ import { createOpenAIProvider } from './openai'
 import { createComfyProvider } from './comfy'
 import { createGoogleProvider } from './google'
 import type { ImageModelInfo } from './types'
-import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
+import {
+  supportsImageGeneration,
+  requiresApiKey,
+  generateImage,
+  supportsReferenceImages,
+} from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageProviderType } from '#lib/types/index.ts'
 
@@ -271,6 +276,49 @@ describe('Image Provider Registry', () => {
       await generateImage({ profileId: 'p', model: 'gpt-image-1', prompt: 'x' })
 
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
+    })
+  })
+
+  describe('supportsReferenceImages', () => {
+    let keyCounter = 0
+    function setup(providerType: 'openai' | 'comfyui', models: ImageModelInfo[]) {
+      const provider = {
+        id: providerType,
+        name: providerType,
+        generate: vi.fn(),
+        listModels: vi.fn(async () => models),
+      }
+      vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        providerType,
+        apiKey: `sk-ref-${keyCounter++}`,
+      } as ReturnType<typeof settings.getImageProfile>)
+    }
+
+    it('is false for a provider that does not read references', async () => {
+      setup('comfyui', [])
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it('is false for a model marked as lacking img2img', async () => {
+      setup('openai', [{ id: 'm', name: 'm', supportsImg2Img: false }])
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it('is true for a model that supports img2img', async () => {
+      setup('openai', [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    })
+
+    it('passes a model absent from the list', async () => {
+      setup('openai', [{ id: 'other', name: 'other', supportsImg2Img: false }])
+      expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    })
+
+    it('is false for an unknown profile', async () => {
+      vi.mocked(settings.getImageProfile).mockReturnValue(undefined)
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
     })
   })
 })

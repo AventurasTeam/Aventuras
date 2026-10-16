@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { mergeArrayLists, composePendingOnto, mergeIntent } from './vaultMerge'
+import { mergeArrayLists, composePendingOnto, mergeIntent, supersededBy } from './vaultMerge'
+import type { VaultCharacterInput, VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
+import type { VaultLorebookEntry } from '#lib/types/index.ts'
 
 describe('mergeArrayLists', () => {
   it('appends genuinely new items', () => {
@@ -42,7 +44,7 @@ describe('composePendingOnto — duplicate tag regression', () => {
     const change1 = { data: { tags: ['protagonist', 'flirt'] }, previous: { tags: [] } }
     const change2 = { data: { tags: ['protagonist', 'flirt'] }, previous: { tags: [] } }
 
-    const composed = composePendingOnto({ tags: [] }, [change1, change2])
+    const composed = composePendingOnto<{ tags: string[] }>({ tags: [] }, [change1, change2])
 
     expect(composed.tags).toEqual(['protagonist', 'flirt'])
   })
@@ -80,5 +82,90 @@ describe('mergeIntent', () => {
     const data = { name: 'Bob', tags: ['a'] }
     const live = { name: 'Alice', tags: ['a'] }
     expect(mergeIntent(data, previous, live)).toEqual({ name: 'Bob' })
+  })
+})
+
+describe('supersededBy', () => {
+  const record = { name: 'Ann', description: 'old', traits: ['a'], favorite: false }
+
+  const characterUpdate = (
+    id: string,
+    data: Partial<VaultCharacterInput>,
+    entityId = 'c1',
+  ): VaultPendingChange =>
+    ({
+      id,
+      toolCallId: id,
+      entityType: 'character',
+      action: 'update',
+      entityId,
+      data: { ...record, ...data },
+      previous: record,
+      status: 'pending',
+    }) as VaultPendingChange
+
+  const entryUpdate = (
+    id: string,
+    data: Partial<VaultLorebookEntry>,
+    entryIndex = 0,
+  ): VaultPendingChange =>
+    ({
+      id,
+      toolCallId: id,
+      entityType: 'lorebook-entry',
+      action: 'update',
+      lorebookId: 'lb',
+      entryIndex,
+      data,
+      previous: { name: 'Gate', description: 'old', keywords: ['gate'] },
+      status: 'pending',
+    }) as VaultPendingChange
+
+  it('resolves an earlier update whose only change is overridden', () => {
+    const a = characterUpdate('a', { description: 'first' })
+    const b = characterUpdate('b', { description: 'second' })
+    expect(supersededBy(b, [a])).toEqual([{ change: a, narrowed: null }])
+  })
+
+  it('keeps the fields of an earlier update that the approval does not override', () => {
+    const a = characterUpdate('a', { description: 'first', name: 'Anna' })
+    const b = characterUpdate('b', { description: 'second' })
+    const [{ narrowed }] = supersededBy(b, [a])
+    expect(narrowed).toMatchObject({ data: { description: 'old', name: 'Anna' } })
+  })
+
+  it('leaves array fields independent', () => {
+    const a = characterUpdate('a', { traits: ['a', 'x'] })
+    const b = characterUpdate('b', { traits: ['a', 'y'] })
+    expect(supersededBy(b, [a])).toEqual([])
+  })
+
+  it('ignores another entity', () => {
+    const a = characterUpdate('a', { description: 'first' }, 'c2')
+    const b = characterUpdate('b', { description: 'second' })
+    expect(supersededBy(b, [a])).toEqual([])
+  })
+
+  it('drops overridden keys from an entry update and resolves it when none are left', () => {
+    const a = entryUpdate('a', { description: 'first', keywords: ['gate', 'door'] })
+    const b = entryUpdate('b', { description: 'second' })
+    const [{ narrowed }] = supersededBy(b, [a])
+    expect(narrowed).toMatchObject({ data: { keywords: ['gate', 'door'] } })
+    expect(narrowed).not.toHaveProperty('data.description')
+
+    const c = entryUpdate('c', { keywords: ['gate', 'door'], description: 'third' })
+    expect(supersededBy(c, [a])).toEqual([{ change: a, narrowed: null }])
+  })
+
+  it('ignores an update to another entry', () => {
+    const a = entryUpdate('a', { description: 'first' }, 1)
+    const b = entryUpdate('b', { description: 'second' })
+    expect(supersededBy(b, [a])).toEqual([])
+  })
+
+  it('does not alter the change it narrows', () => {
+    const a = characterUpdate('a', { description: 'first', name: 'Anna' })
+    supersededBy(characterUpdate('b', { description: 'second' }), [a])
+    expect(a).toMatchObject({ data: { description: 'first' } })
   })
 })

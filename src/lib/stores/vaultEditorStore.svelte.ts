@@ -9,13 +9,24 @@
  */
 
 import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/index.ts'
-import type { VaultLorebook, VaultLorebookEntry } from '#lib/types/index.ts'
+import type { VaultLorebook } from '#lib/types/index.ts'
 import type { InteractiveVaultService } from '#lib/services/ai/vault/InteractiveVaultService.ts'
 import { lorebookVault } from './lorebookVault.svelte'
 import { characterVault } from './characterVault.svelte'
 import { scenarioVault } from './scenarioVault.svelte'
 import { SvelteMap } from 'svelte/reactivity'
-import { composePendingOnto, scenarioToRecord, characterToRecord } from '#lib/utils/vaultMerge.ts'
+import {
+  composePendingOnto,
+  entityUpdates,
+  supersededBy,
+  scenarioToRecord,
+  characterToRecord,
+  withEntryUpdate,
+  type ComposedEntity,
+  type EntityKind,
+  type EntityRecord,
+  type ViewDraft,
+} from '#lib/utils/vaultMerge.ts'
 
 class VaultEditorStore {
   // ── Core state ────────────────────────────────────────────────────────
@@ -41,6 +52,9 @@ class VaultEditorStore {
   /** Entity type being viewed (for routing saves in view mode) */
   viewEntityType = $state<string | null>(null)
 
+  /** Edits typed into the view-mode panel and not saved yet */
+  viewDraft = $state.raw<ViewDraft | null>(null)
+
   /** Edited versions of pending changes (user modifications before approval) */
   private _editedChanges = $state<SvelteMap<string, VaultPendingChange>>(new SvelteMap())
 
@@ -58,69 +72,46 @@ class VaultEditorStore {
    * lorebook-related entities (they use previewLorebook) or when there's no
    * active change.
    */
-  get composedData(): Record<string, unknown> | null {
+  get composedData(): ComposedEntity | null {
     const change = this.activeChange
     if (!change) return null
-    if (change.entityType === 'lorebook' || change.entityType === 'lorebook-entry') return null
     if (change.action !== 'update') return null
-    if (!('previous' in change) || !change.previous) return null
 
-    const entityId =
-      change.entityType === 'scenario' || change.entityType === 'character' ? change.entityId : null
-    if (!entityId) return null
-
-    const pending = this._pendingChangesWithEditOverlay(change.entityType, entityId)
-
-    const base = this._getVaultBase(change.entityType, entityId, change.previous)
-    return composePendingOnto(base, pending)
-  }
-
-  /**
-   * Build a base record from the current vault state for the given entity
-   * type and ID. Falls back to `previous` when the entity isn't found
-   * (e.g. create actions where the entity doesn't exist in the vault yet).
-   */
-  private _getVaultBase(
-    entityType: string,
-    entityId: string,
-    previous: Record<string, unknown>,
-  ): Record<string, unknown> {
-    if (entityType === 'scenario') {
-      const live = scenarioVault.getById(entityId)
-      if (live) return scenarioToRecord(live)
-    } else if (entityType === 'character') {
-      const live = characterVault.getById(entityId)
-      if (live) return characterToRecord(live)
-    }
-    return JSON.parse(JSON.stringify(previous))
-  }
-
-  /**
-   * Collect pending changes for an entity, applying any user edits
-   * on top of the original change data/previous.
-   */
-  private _pendingChangesWithEditOverlay(
-    entityType: string,
-    entityId: string,
-  ): Array<{ data: Record<string, unknown>; previous: Record<string, unknown> }> {
-    return this.pendingChanges
-      .filter(
-        (c) =>
-          c.status === 'pending' &&
-          c.entityType === entityType &&
-          'entityId' in c &&
-          c.entityId === entityId &&
-          'data' in c &&
-          'previous' in c,
-      )
-      .map((c) => {
-        const effective = this._editedChanges.get(c.id) ?? c
+    switch (change.entityType) {
+      case 'character': {
+        const live = characterVault.getById(change.entityId)
+        const base = live ? characterToRecord(live) : $state.snapshot(change.previous)
         return {
-          data: (effective as { data: Record<string, unknown> }).data,
-          previous: (effective as { previous: Record<string, unknown> }).previous,
+          entityType: 'character',
+          data: this.composePendingChanges(base, 'character', change.entityId),
         }
-      })
-      .filter((c) => c.data && c.previous)
+      }
+      case 'scenario': {
+        const live = scenarioVault.getById(change.entityId)
+        const base = live ? scenarioToRecord(live) : $state.snapshot(change.previous)
+        return {
+          entityType: 'scenario',
+          data: this.composePendingChanges(base, 'scenario', change.entityId),
+        }
+      }
+      case 'lorebook':
+      case 'lorebook-entry':
+        return null
+      default:
+        return change satisfies never
+    }
+  }
+
+  /** Changes still awaiting a decision, with the user's edits applied over the originals. */
+  get effectivePendingChanges(): VaultPendingChange[] {
+    return this.pendingChanges
+      .filter((c) => c.status === 'pending')
+      .map((c) => this._editedChanges.get(c.id) ?? c)
+  }
+
+  /** Ids of the pending updates that `composePendingChanges` folds into one entity */
+  pendingChangeIdsFor(entityType: EntityKind, entityId: string): string[] {
+    return entityUpdates(this.effectivePendingChanges, entityType, entityId).map((c) => c.id)
   }
 
   /**
@@ -129,12 +120,12 @@ class VaultEditorStore {
    * from any base state and entity ID — used by view mode to overlay
    * unapproved changes onto the current vault entity.
    */
-  composePendingChanges(
-    base: Record<string, unknown>,
-    entityType: 'character' | 'scenario',
+  composePendingChanges<K extends EntityKind>(
+    base: EntityRecord[K],
+    entityType: K,
     entityId: string,
-  ): Record<string, unknown> {
-    const pending = this._pendingChangesWithEditOverlay(entityType, entityId)
+  ): EntityRecord[K] {
+    const pending = entityUpdates(this.effectivePendingChanges, entityType, entityId)
     if (pending.length === 0) return base
     return composePendingOnto(base, pending)
   }
@@ -246,13 +237,10 @@ class VaultEditorStore {
           entryChange.entryIndex >= 0 &&
           entryChange.entryIndex < copy.entries.length
         ) {
-          const safeData = Object.fromEntries(
-            Object.entries(entryChange.data ?? {}).filter(([_, v]) => v !== ''),
-          ) as Partial<VaultLorebookEntry>
-          copy.entries[entryChange.entryIndex] = {
-            ...copy.entries[entryChange.entryIndex],
-            ...safeData,
-          }
+          copy.entries[entryChange.entryIndex] = withEntryUpdate(
+            copy.entries[entryChange.entryIndex],
+            entryChange.data,
+          )
         }
       }
 
@@ -368,6 +356,7 @@ class VaultEditorStore {
    */
   openEditorSmart(change: VaultPendingChange): void {
     if (this.isShowingSameLorebook(change)) return
+    this.viewDraft = null
     this.viewMode = false
     this.viewEntityId = null
     this.viewEntityType = null
@@ -377,6 +366,7 @@ class VaultEditorStore {
 
   /** Force-open the editor for a specific change */
   openEditor(change: VaultPendingChange): void {
+    this.viewDraft = null
     this.viewMode = false
     this.viewEntityId = null
     this.viewEntityType = null
@@ -386,6 +376,7 @@ class VaultEditorStore {
 
   /** Open the editor in view mode for direct editing (no approval workflow) */
   openViewer(change: VaultPendingChange, entityId: string, entityType: string): void {
+    this.viewDraft = null
     this.activeChange = change
     this.editorOpen = true
     this.viewMode = true
@@ -395,6 +386,7 @@ class VaultEditorStore {
 
   /** Close the editor panel */
   closeEditor(): void {
+    this.viewDraft = null
     this.activeChange = null
     this.editorOpen = false
     this.viewMode = false
@@ -427,6 +419,7 @@ class VaultEditorStore {
     const effectiveChange = this._editedChanges.get(change.id) ?? change
     await service.applyChange(effectiveChange)
     service.handleApproval(change, true)
+    this._supersedeEarlier(effectiveChange, service)
 
     // Clean up edited version
     const edits = new SvelteMap(this._editedChanges)
@@ -445,6 +438,49 @@ class VaultEditorStore {
     this._autoCloseAfterAction(change)
 
     // Trigger reactivity
+    this.pendingChanges = [...this.pendingChanges]
+  }
+
+  /**
+   * Resolve the earlier pending updates that `approved` overrides: a later proposal is built on
+   * the state the earlier one left, so its value for a shared field stands in for theirs.
+   */
+  private _supersedeEarlier(approved: VaultPendingChange, service: InteractiveVaultService): void {
+    const index = this.pendingChanges.findIndex((c) => c.id === approved.id)
+    if (index < 0) return
+    const earlier = this.pendingChanges
+      .slice(0, index)
+      .filter((c) => c.status === 'pending')
+      .map((c) => this._editedChanges.get(c.id) ?? c)
+    const superseded = supersededBy(approved, earlier)
+    if (superseded.length === 0) return
+
+    const edits = new SvelteMap(this._editedChanges)
+    for (const { change, narrowed } of superseded) {
+      if (narrowed) {
+        edits.set(change.id, narrowed)
+        continue
+      }
+      const original = this.pendingChanges.find((c) => c.id === change.id)
+      if (original) service.handleApproval(original, true)
+      edits.delete(change.id)
+    }
+    this._editedChanges = edits
+  }
+
+  /**
+   * Mark pending updates approved after a view-mode Save wrote the values they proposed.
+   * Nothing is applied: the Save already holds those values.
+   */
+  markSaved(changeIds: string[], service: InteractiveVaultService): void {
+    const ids = new Set(changeIds)
+    const edits = new SvelteMap(this._editedChanges)
+    for (const c of this.pendingChanges) {
+      if (!ids.has(c.id) || c.status !== 'pending') continue
+      service.handleApproval(c, true)
+      edits.delete(c.id)
+    }
+    this._editedChanges = edits
     this.pendingChanges = [...this.pendingChanges]
   }
 
@@ -578,6 +614,7 @@ class VaultEditorStore {
 
   /** Reset all editor state (for new conversations) */
   reset(): void {
+    this.viewDraft = null
     this.pendingChanges = []
     this.activeChange = null
     this.editorOpen = false

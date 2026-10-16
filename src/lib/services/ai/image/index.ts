@@ -19,6 +19,8 @@ export { ImageAnalysisService, type ImageAnalysisContext } from './ImageAnalysis
 // Provider registry (replaces modelListing.ts)
 export {
   generateImage,
+  supportsReferenceImages,
+  toRawBase64,
   listImageModelsByProvider,
   getProviderSamplerInfo,
   listLoras,
