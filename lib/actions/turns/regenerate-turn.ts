@@ -4,14 +4,7 @@ import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
-import {
-  ensurePerTurnPipelineRegistered,
-  PER_TURN_KIND,
-  runPipeline,
-  type RejectedStart,
-  type RunCtx,
-  type TxResult,
-} from '@/lib/pipeline'
+import { ensurePerTurnPipelineRegistered, type RejectedStart, type TxResult } from '@/lib/pipeline'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import {
@@ -130,7 +123,7 @@ export async function regenerateTurn(
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
         // After this action's own gate check above, which a pending turn would fail.
-        return withPendingTurn(ids.branchId, async (onReserved) => {
+        return withPendingTurn(ids.branchId, async (startTurn) => {
           let swept: { status: 'ok' } | StoryEntryRejection
           try {
             swept = await bracketProseReversal(ids.branchId, () =>
@@ -146,19 +139,16 @@ export async function regenerateTurn(
           // take is not redo-restorable.
           undoRedoStore.clear()
 
-          const runCtx: RunCtx = {
-            storyId: ids.storyId,
-            branchId: ids.branchId,
-            actionId: generateId('act'),
-            db: ctx.db,
-            runInTransaction: ctx.runInTransaction,
-            onReserved,
-          }
           // No input threading: narrativePhase (per-turn.ts) reads its prompt from
           // the branch tail and its insert position from MAX(position). Post-sweep the
           // surviving user_action is that tail — provided the caller cleared any
           // system tail first, which MAX(position) would otherwise insert after.
-          const result = await runPipeline(PER_TURN_KIND, runCtx)
+          const result = await startTurn({
+            storyId: ids.storyId,
+            actionId: generateId('act'),
+            db: ctx.db,
+            runInTransaction: ctx.runInTransaction,
+          })
 
           // Non-success converges to the M2 failed-turn state: the standing
           // user_action unwinds too, so Retry / draft-restore re-enter through

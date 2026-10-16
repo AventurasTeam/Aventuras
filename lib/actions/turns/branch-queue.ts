@@ -1,3 +1,10 @@
+import {
+  PER_TURN_KIND,
+  runPipeline,
+  type RejectedStart,
+  type RunCtxFor,
+  type TxResult,
+} from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
 // This app is local-first, single-process (no BaaS/backend serving concurrent
@@ -27,13 +34,20 @@ export function withBranchQueue<T>(branchId: string, fn: () => Promise<T>): Prom
   return result
 }
 
+/** Starts the `per-turn` run on the marked branch; the mark ends once the run is in txState. */
+type StartTurn = (
+  ctx: Omit<RunCtxFor<typeof PER_TURN_KIND>, 'branchId' | 'onReserved'>,
+) => Promise<TxResult | RejectedStart>
+
 /**
  * Marks a turn pending until its run is in txState (generation-pipeline.md → No-gate write phase).
- * Every `per-turn` start runs in it, within the branch queue, passing `onReserved` to runPipeline.
+ * Every `per-turn` start runs in it, within the branch queue, through `startTurn`.
  */
 export function withPendingTurn<T>(
   branchId: string,
-  fn: (onReserved: () => void) => Promise<T>,
+  fn: (startTurn: StartTurn) => Promise<T>,
 ): Promise<T> {
-  return generationStore.bracketPendingTurn(branchId, fn)
+  return generationStore.bracketPendingTurn(branchId, (endMark) =>
+    fn((ctx) => runPipeline(PER_TURN_KIND, { ...ctx, branchId, onReserved: endMark })),
+  )
 }

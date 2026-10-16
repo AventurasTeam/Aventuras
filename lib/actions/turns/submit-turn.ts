@@ -4,14 +4,7 @@ import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
-import {
-  ensurePerTurnPipelineRegistered,
-  PER_TURN_KIND,
-  runPipeline,
-  type RejectedStart,
-  type RunCtx,
-  type TxResult,
-} from '@/lib/pipeline'
+import { ensurePerTurnPipelineRegistered, type RejectedStart, type TxResult } from '@/lib/pipeline'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
@@ -41,7 +34,7 @@ export async function submitTurn(
       // this process; the marker still covers a swap recovered from an earlier one.
       if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
-      return withPendingTurn(ids.branchId, async (onReserved) => {
+      return withPendingTurn(ids.branchId, async (startTurn) => {
         // Shared across the user_action's delta and the pipeline run it kicks off,
         // so CTRL-Z reverses the whole turn as one group (milestone.md C6).
         const turnActionId = generateId('act')
@@ -99,18 +92,15 @@ export async function submitTurn(
         if (result.status === 'rejected')
           throw new Error(`submitTurn: user_action write rejected: ${result.reason}`)
 
-        const runCtx: RunCtx = {
-          storyId: ids.storyId,
-          branchId: ids.branchId,
-          actionId: turnActionId,
-          db: ctx.db,
-          runInTransaction: ctx.runInTransaction,
-          onReserved,
-        }
         // Held for the whole run, not just the user_action insert above:
         // narrativePhase (per-turn.ts) does its own MAX(position)+1 read for the
         // ai_reply, which needs the same per-branch exclusion.
-        const runResult = await runPipeline(PER_TURN_KIND, runCtx)
+        const runResult = await startTurn({
+          storyId: ids.storyId,
+          actionId: turnActionId,
+          db: ctx.db,
+          runInTransaction: ctx.runInTransaction,
+        })
         if (runResult.outcome !== 'rejected') return runResult
         // A rejected admission never reaches abortRun (orchestrator.ts) — no run
         // was ever reserved — so the user_action committed above is never
