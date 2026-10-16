@@ -28,6 +28,7 @@ const TUNED: StorySettings = {
   protectedBuffer: 6,
   classifierContextEntries: 3,
   classifierCadence: 7,
+  classifierMentionedPlaces: true,
   retrievalBudgets: { entities: 100, lore: 200, happenings: 300, threads: 400, chapters: 500 },
   keywordRetrieval: {
     mode: 'inject',
@@ -51,6 +52,7 @@ describe('memory knobs draft', () => {
       protectedBuffer: 10,
       classifierContextEntries: 4,
       classifierCadence: 5,
+      classifierMentionedPlaces: false,
       retrievalBudgets: SETTINGS.retrievalBudgets,
       keywordRetrieval: SETTINGS.keywordRetrieval,
     })
@@ -67,6 +69,7 @@ describe('memory knobs draft', () => {
       protectedBuffer: 6,
       classifierContextEntries: 3,
       classifierCadence: 7,
+      classifierMentionedPlaces: true,
       retrievalBudgets: { entities: 100, lore: 200, happenings: 300, threads: 400, chapters: 500 },
       keywordRetrieval: {
         mode: 'inject',
@@ -94,7 +97,7 @@ describe('memory knobs draft', () => {
     expect(memoryKnobsDirtyKeys(draft, SETTINGS)).toEqual(['classifierCadence', 'retrievalBudgets'])
   })
 
-  it('lists all nine keys in tab order when every knob changes', () => {
+  it('lists all ten keys in tab order when every knob changes', () => {
     expect(memoryKnobsDirtyKeys(toMemoryKnobsDraft(TUNED), SETTINGS)).toEqual([
       'chapterTokenThreshold',
       'chapterAutoClose',
@@ -103,6 +106,7 @@ describe('memory knobs draft', () => {
       'protectedBuffer',
       'classifierContextEntries',
       'classifierCadence',
+      'classifierMentionedPlaces',
       'retrievalBudgets',
       'keywordRetrieval',
     ])

@@ -62,6 +62,7 @@ const COPY = {
   contextIncrement: t('storySettings:memory.knobs.contextIncrement'),
   cadenceWarningChip: t('storySettings:memory.knobs.cadenceWarningChip'),
   cadenceWarning: t('storySettings:memory.knobs.cadenceWarning'),
+  mentionedPlaces: t('storySettings:memory.knobs.mentionedPlaces'),
   boost: t('storySettings:memory.knobs.keywordModeOption.boost'),
   inject: t('storySettings:memory.knobs.keywordModeOption.inject'),
   cascade: t('storySettings:memory.knobs.cascade'),
@@ -82,6 +83,7 @@ const FIELD = {
   chapterAutoClose: t('storySettings:memory.knobs.field.chapterAutoClose'),
   classifierContextEntries: t('storySettings:memory.knobs.field.classifierContextEntries'),
   classifierCadence: t('storySettings:memory.knobs.field.classifierCadence'),
+  classifierMentionedPlaces: t('storySettings:memory.knobs.field.classifierMentionedPlaces'),
   retrievalBudgets: t('storySettings:memory.knobs.field.retrievalBudgets'),
   keywordRetrieval: t('storySettings:memory.knobs.field.keywordRetrieval'),
 }
@@ -170,6 +172,7 @@ export const ThresholdPresetChipWritesTokens: Story = {
         protectedBuffer: 10,
         classifierContextEntries: 4,
         classifierCadence: 5,
+        classifierMentionedPlaces: false,
         retrievalBudgets: {
           entities: 1200,
           lore: 1800,
@@ -185,6 +188,30 @@ export const ThresholdPresetChipWritesTokens: Story = {
           cascadeMaxDepth: 2,
         },
       },
+    })
+  },
+}
+
+// classifier.md → Mentioned places: off by default, and the switch sits under Classifier.
+export const MentionedPlacesToggleSaves: Story = {
+  play: async ({ args }) => {
+    await screen.findByTestId('memory-knobs-panel')
+    const toggle = screen.getByRole('switch', { name: COPY.mentionedPlaces })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(
+      screen.getByTestId('memory-cadence').compareDocumentPosition(toggle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+
+    await userEvent.click(toggle)
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'))
+    const bar = await screen.findByTestId('save-bar')
+    await waitFor(() => expect(bar).toHaveTextContent(FIELD.classifierMentionedPlaces))
+    await save()
+
+    await waitFor(() => expect(args.onCommit).toHaveBeenCalledTimes(1))
+    expect(args.onCommit).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ classifierMentionedPlaces: true }),
     })
   },
 }
@@ -433,6 +460,7 @@ export const DiscardRevertsEveryKnob: Story = {
     await userEvent.click(screen.getByRole('switch', { name: COPY.autoClose }))
     await userEvent.click(screen.getByRole('button', { name: COPY.contextIncrement }))
     await replaceText('memory-cadence', '7')
+    await userEvent.click(screen.getByRole('switch', { name: COPY.mentionedPlaces }))
     await replaceText('memory-budget-lore', '2000')
     await userEvent.click(modeRadio(COPY.inject))
 
@@ -442,6 +470,7 @@ export const DiscardRevertsEveryKnob: Story = {
       FIELD.chapterAutoClose,
       FIELD.classifierContextEntries,
       FIELD.classifierCadence,
+      FIELD.classifierMentionedPlaces,
       FIELD.retrievalBudgets,
       FIELD.keywordRetrieval,
     ].join(', ')
@@ -460,6 +489,10 @@ export const DiscardRevertsEveryKnob: Story = {
       within(screen.getByTestId('memory-classifier-context')).getByText('4'),
     ).toBeInTheDocument()
     expect(screen.getByTestId('memory-cadence')).toHaveValue('5')
+    expect(screen.getByRole('switch', { name: COPY.mentionedPlaces })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
     expect(screen.getByTestId('memory-budget-lore')).toHaveValue('1800')
     expect(screen.queryByTestId('memory-keyword-inject-controls')).not.toBeInTheDocument()
     expect(args.onCommit).not.toHaveBeenCalled()
@@ -516,7 +549,7 @@ export const Disabled: Story = {
     expect(chip(COPY.short)).toHaveAttribute('aria-disabled', 'true')
     expect(chip(COPY.custom)).toHaveAttribute('aria-disabled', 'true')
     expect(chip(COPY.short).closest('[title]')).toHaveAttribute('title', COPY.inFlight)
-    for (const name of [COPY.autoClose, COPY.fullChapter]) {
+    for (const name of [COPY.autoClose, COPY.fullChapter, COPY.mentionedPlaces]) {
       expect(screen.getByRole('switch', { name })).toHaveAttribute('aria-disabled', 'true')
     }
     // A disabled Stepper names both of its buttons by the reason.

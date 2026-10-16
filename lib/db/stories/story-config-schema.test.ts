@@ -145,7 +145,7 @@ describe('storyDefinitionSchema field requirements', () => {
 })
 
 describe('storySettingsSchema spec-pinned defaults', () => {
-  it('fills the 7 spec-pinned defaults when absent', () => {
+  it('fills the 8 spec-pinned defaults when absent', () => {
     const { chapterTokenThreshold: _a, ...rest } = VALID_SETTINGS
     const r = storySettingsSchema.safeParse({
       ...rest,
@@ -156,6 +156,7 @@ describe('storySettingsSchema spec-pinned defaults', () => {
       protectedBuffer: undefined,
       probe_mode_active: undefined,
       suggestionCount: undefined,
+      classifierMentionedPlaces: undefined,
     })
     expect(r.success).toBe(true)
     if (r.success) {
@@ -166,6 +167,7 @@ describe('storySettingsSchema spec-pinned defaults', () => {
       expect(r.data.protectedBuffer).toBe(10)
       expect(r.data.probe_mode_active).toBe(false)
       expect(r.data.suggestionCount).toBe(3)
+      expect(r.data.classifierMentionedPlaces).toBe(false)
     }
   })
 
