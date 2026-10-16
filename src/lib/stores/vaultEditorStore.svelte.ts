@@ -21,6 +21,7 @@ import {
   scenarioToRecord,
   characterToRecord,
   withEntryUpdate,
+  type ViewDraft,
 } from '#lib/utils/vaultMerge.ts'
 
 class VaultEditorStore {
@@ -46,6 +47,9 @@ class VaultEditorStore {
 
   /** Entity type being viewed (for routing saves in view mode) */
   viewEntityType = $state<string | null>(null)
+
+  /** Edits typed into the view-mode panel and not saved yet */
+  viewDraft = $state.raw<ViewDraft | null>(null)
 
   /** Edited versions of pending changes (user modifications before approval) */
   private _editedChanges = $state<SvelteMap<string, VaultPendingChange>>(new SvelteMap())
@@ -354,6 +358,7 @@ class VaultEditorStore {
    */
   openEditorSmart(change: VaultPendingChange): void {
     if (this.isShowingSameLorebook(change)) return
+    this.viewDraft = null
     this.viewMode = false
     this.viewEntityId = null
     this.viewEntityType = null
@@ -363,6 +368,7 @@ class VaultEditorStore {
 
   /** Force-open the editor for a specific change */
   openEditor(change: VaultPendingChange): void {
+    this.viewDraft = null
     this.viewMode = false
     this.viewEntityId = null
     this.viewEntityType = null
@@ -372,6 +378,7 @@ class VaultEditorStore {
 
   /** Open the editor in view mode for direct editing (no approval workflow) */
   openViewer(change: VaultPendingChange, entityId: string, entityType: string): void {
+    this.viewDraft = null
     this.activeChange = change
     this.editorOpen = true
     this.viewMode = true
@@ -381,6 +388,7 @@ class VaultEditorStore {
 
   /** Close the editor panel */
   closeEditor(): void {
+    this.viewDraft = null
     this.activeChange = null
     this.editorOpen = false
     this.viewMode = false
@@ -564,6 +572,7 @@ class VaultEditorStore {
 
   /** Reset all editor state (for new conversations) */
   reset(): void {
+    this.viewDraft = null
     this.pendingChanges = []
     this.activeChange = null
     this.editorOpen = false

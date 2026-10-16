@@ -45,6 +45,7 @@ import {
   scenarioToRecord,
   characterToRecord,
   withEntryUpdate,
+  type ViewDraft,
 } from '#lib/utils/vaultMerge.ts'
 import {
   effectiveVault,
@@ -114,6 +115,8 @@ export interface VaultState {
   scenarios: () => VaultScenario[]
   /** Proposals awaiting a decision, with the user's edits to them applied */
   pendingChanges: () => VaultPendingChange[]
+  /** Edits typed into the view-mode panel and not saved yet */
+  viewDraft: () => ViewDraft | null
   /** Lorebook that entry-level tools act on when they are not given an id */
   activeLorebookId?: string
 }
@@ -276,7 +279,7 @@ export class InteractiveVaultService extends BaseAIService {
     return ctx.renderTemplate('interactive-lorebook')
   }
 
-  /** Saved vault with pending proposals laid over it; the store's copy of a change wins over `turnChanges`. */
+  /** Saved vault with pending proposals and unsaved edits laid over it; the store's copy of a change wins over `turnChanges`. */
   private effectiveState(vaultState: VaultState, turnChanges: VaultPendingChange[] = []) {
     const stored = vaultState.pendingChanges()
     const storedIds = new Set(stored.map((c) => c.id))
@@ -287,12 +290,13 @@ export class InteractiveVaultService extends BaseAIService {
         lorebooks: vaultState.lorebooks(),
       },
       [...stored, ...turnChanges.filter((c) => !storedIds.has(c.id))],
+      vaultState.viewDraft(),
     )
   }
 
   /**
-   * The focused entity as it stands in the vault now, with pending changes laid over it, or ''
-   * when there is none. Lorebooks are summarised only: `list_entries` /
+   * The focused entity as it stands in the vault now, with pending and unsaved changes laid
+   * over it, or '' when there is none. Lorebooks are summarised only: `list_entries` /
    * `read_entry` cover their entries.
    */
   private focusedEntityRecord(vaultState: VaultState): string {

@@ -127,6 +127,7 @@ function emptyVaultState(): VaultState {
     lorebooks: () => [],
     scenarios: () => [],
     pendingChanges: () => [],
+    viewDraft: () => null,
   }
 }
 
@@ -1203,5 +1204,21 @@ describe('pending and unsaved state', () => {
     expect(afterProposal).toContain('"unsavedFields"')
     expect(unchanged).toBe('go')
     expect(afterRejection).toContain('"A thief"')
+  })
+
+  it('shows unsaved view-mode edits in the focused record', async () => {
+    const service = await newService(focusOnAlice)
+    const draft = {
+      entityType: 'character' as const,
+      entityId: 'char-1',
+      data: { ...aliceRecord, description: 'Typed' },
+      previous: aliceRecord,
+    }
+    await drain(service, state({ viewDraft: () => draft }))
+
+    const [first] = userMessages(service)
+    expect(first).toContain('"Typed"')
+    expect(first).toContain('"description"')
+    expect(first).toContain('"unsavedFields"')
   })
 })

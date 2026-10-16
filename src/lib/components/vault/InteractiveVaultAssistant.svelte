@@ -495,6 +495,7 @@
         lorebooks: () => lorebookVault.items,
         scenarios: () => scenarioVault.items,
         pendingChanges: () => vaultEditor.effectivePendingChanges,
+        viewDraft: () => vaultEditor.viewDraft,
         get activeLorebookId() {
           if (focus?.entityType === 'lorebook') return focus.entityId
           return vaultEditor.currentLorebookId ?? undefined

@@ -14,7 +14,7 @@
   import { characterVault } from '#lib/stores/characterVault.svelte.ts'
   import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
   import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
-  import { characterToRecord, scenarioToRecord } from '#lib/utils/vaultMerge.ts'
+  import { characterToRecord, scenarioToRecord, type ViewDraft } from '#lib/utils/vaultMerge.ts'
   import { SvelteMap } from 'svelte/reactivity'
   import { ui } from '#lib/stores/ui.svelte.ts'
 
@@ -41,6 +41,9 @@
   let entryData = $state<VaultLorebookEntry | null>(null)
   let formDirty = $state(false)
 
+  // The record the view-mode form was last synced from. A plain variable: only handlers read it.
+  let viewBase: Record<string, unknown> = {}
+
   const composedData = $derived(vaultEditor.composedData)
 
   // In view mode, the source of truth is the vault store + remaining pending
@@ -63,7 +66,9 @@
       name: composed.name as string,
       description: composed.description as string | null,
       traits: [...(composed.traits as string[])],
-      visualDescriptors: JSON.parse(JSON.stringify(composed.visualDescriptors)),
+      visualDescriptors: $state.snapshot(
+        composed.visualDescriptors,
+      ) as VaultCharacterInput['visualDescriptors'],
       portrait: (composed.portrait as string | null) ?? null,
       tags: [...(composed.tags as string[])],
       favorite: composed.favorite as boolean,
@@ -81,7 +86,7 @@
       name: composed.name as string,
       description: composed.description as string | null,
       settingSeed: composed.settingSeed as string,
-      npcs: JSON.parse(JSON.stringify(composed.npcs)),
+      npcs: $state.snapshot(composed.npcs) as VaultScenarioInput['npcs'],
       primaryCharacterName: composed.primaryCharacterName as string,
       firstMessage: composed.firstMessage as string | null,
       alternateGreetings: (composed.alternateGreetings as string[]) ?? [],
@@ -108,10 +113,13 @@
       if (formDirty) return
       // In view mode, local state is not the source of truth but we keep
       // it in sync so that handleViewModeSave can use it after user edits.
-      if (viewCharData) {
+      const entityId = vaultEditor.viewEntityId
+      if (viewCharData && entityId) {
         charData = { ...viewCharData }
-      } else if (viewScenarioData) {
+        viewBase = $state.snapshot(viewCharData)
+      } else if (viewScenarioData && entityId) {
         scenarioData = { ...viewScenarioData }
+        viewBase = $state.snapshot(viewScenarioData)
       }
     } else if (formDirty) {
       return
@@ -124,9 +132,9 @@
               ...(change.data as Record<string, unknown>),
             }
           : change.data)
-      charData = JSON.parse(JSON.stringify(source))
+      charData = $state.snapshot(source) as VaultCharacterInput
     } else if (change.entityType === 'lorebook-entry' && 'data' in change) {
-      entryData = JSON.parse(JSON.stringify(change.data))
+      entryData = $state.snapshot(change.data) as VaultLorebookEntry
     } else if (change.entityType === 'scenario' && 'data' in change && change.data) {
       const source =
         composedData ??
@@ -136,8 +144,15 @@
               ...(change.data as Record<string, unknown>),
             }
           : change.data)
-      scenarioData = JSON.parse(JSON.stringify(source))
+      scenarioData = $state.snapshot(source) as VaultScenarioInput
     }
+  })
+
+  // A panel that is torn down late (the fade-out, or a layout switch) must not clear a draft a
+  // newer instance published.
+  let publishedDraft: ViewDraft | null = null
+  $effect(() => () => {
+    if (vaultEditor.viewDraft === publishedDraft) vaultEditor.viewDraft = null
   })
 
   /** Inject a portrait data URL into the local form state (called externally) */
@@ -146,6 +161,28 @@
       charData = { ...charData, portrait: dataUrl }
       formDirty = true
       emitUpdate()
+      trackViewDraft()
+    }
+  }
+
+  /** Publish unsaved view-mode edits so the assistant can see them */
+  function trackViewDraft() {
+    const entityId = vaultEditor.viewEntityId
+    if (!isViewMode || !entityId) return
+    if (vaultEditor.viewEntityType === 'character' && charData) {
+      publishedDraft = vaultEditor.viewDraft = {
+        entityType: 'character',
+        entityId,
+        data: $state.snapshot(charData),
+        previous: viewBase,
+      }
+    } else if (vaultEditor.viewEntityType === 'scenario' && scenarioData) {
+      publishedDraft = vaultEditor.viewDraft = {
+        entityType: 'scenario',
+        entityId,
+        data: $state.snapshot(scenarioData),
+        previous: viewBase,
+      }
     }
   }
 
@@ -310,6 +347,7 @@
       })
     }
 
+    vaultEditor.viewDraft = null
     formDirty = false
     ui.showToast('Changes saved', 'info')
   }
@@ -429,6 +467,7 @@
               charData = newData
               formDirty = true
               emitUpdate()
+              trackViewDraft()
             }}
           />
         </div>
@@ -440,6 +479,7 @@
             scenarioData = newData
             formDirty = true
             emitUpdate()
+            trackViewDraft()
           }}
         />
       {:else if !('data' in change)}

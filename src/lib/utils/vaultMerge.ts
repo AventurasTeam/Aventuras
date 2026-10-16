@@ -273,6 +273,14 @@ export function characterToRecord(c: VaultCharacter): Record<string, unknown> {
   }
 }
 
+/** Edits typed into a view-mode panel and not saved yet. */
+export type ViewDraft = {
+  entityType: 'character' | 'scenario'
+  entityId: string
+  data: Record<string, unknown>
+  previous: Record<string, unknown>
+}
+
 type WithPrevious<T> = T extends { previous?: infer P } ? T & { previous: NonNullable<P> } : never
 
 export type EntityUpdate<K extends 'character' | 'scenario'> = WithPrevious<

@@ -11,6 +11,7 @@ import {
   entityUpdates,
   scenarioToRecord,
   withEntryUpdate,
+  type ViewDraft,
 } from '#lib/utils/vaultMerge.ts'
 
 type LorebookUpdate = Extract<VaultPendingChange, { entityType: 'lorebook'; action: 'update' }>
@@ -33,12 +34,13 @@ export function withUnsaved<T extends object>(details: T, fields: string[]) {
 }
 
 /**
- * The vault as the editor panel shows it: saved state with pending proposals laid over it.
- * Entities nothing touches come back by reference.
+ * The vault as the editor panel shows it: saved state, then pending proposals, then unsaved
+ * view-mode edits. Entities nothing touches come back by reference.
  */
 export function effectiveVault(
   raw: { characters: VaultCharacter[]; scenarios: VaultScenario[]; lorebooks: VaultLorebook[] },
   pending: VaultPendingChange[],
+  draft: ViewDraft | null,
 ): EffectiveVault {
   const unsaved = new Map<string, string[]>()
   const live = pending.filter((c) => c.status === 'pending')
@@ -48,7 +50,11 @@ export function effectiveVault(
     entityType: 'character' | 'scenario',
     toRecord: (e: T) => Record<string, unknown>,
   ): T {
-    const intents = entityUpdates(live, entityType, entity.id)
+    const intents: { data: Record<string, unknown>; previous: Record<string, unknown> }[] =
+      entityUpdates(live, entityType, entity.id)
+    if (draft && draft.entityType === entityType && draft.entityId === entity.id) {
+      intents.push({ data: draft.data, previous: draft.previous })
+    }
     if (intents.length === 0) return entity
 
     const saved = toRecord(entity)
