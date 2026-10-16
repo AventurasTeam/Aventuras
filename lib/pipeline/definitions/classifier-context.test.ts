@@ -184,7 +184,7 @@ describe('buildClassifierContext', () => {
 
     // Entities walk first, so a scene listing BAEL before AEFRE still numbers the
     // roster in roster order.
-    it("substitutes each turn's scene and location to the roster's placeholders", () => {
+    it("substitutes each turn's scene and location to the roster's and the tree's placeholders", () => {
       const context = buildClassifierContext({
         window: {
           turns: [turn({ sceneEntities: [BAEL, AEFRE], currentLocationId: FORD })],
@@ -337,22 +337,26 @@ describe('buildClassifierContext', () => {
       },
     )
 
-    it('numbers the roster before the places, and a scene names a place by its tree id', () => {
+    // The Keep sorts first in the tree, so the Hall the scene names first is still l2.
+    it('a scene names a place by its Places-tree placeholder', () => {
       const idMap = new IdBiMap()
       const context = buildClassifierContext({
         window: {
           turns: [turn({ sceneEntities: [HALL, AEFRE], currentLocationId: HALL })],
         } as never,
-        entities: [place(HALL, 'Great Hall', null), character(AEFRE, 'Aefre')],
+        entities: [
+          place(HALL, 'Great Hall', null),
+          place(KEEP, 'Ashen Keep', null),
+          character(AEFRE, 'Aefre'),
+        ],
         happenings: [],
         relationships: [],
         mentionedPlaces: false,
         idMap,
       })
-      expect(idMap.getPlaceholderFor(AEFRE)).toBe('c1')
-      expect(idMap.getPlaceholderFor(HALL)).toBe('l1')
+      expect(idMap.getPlaceholderFor(HALL)).toBe('l2')
       expect(context.turns).toEqual([
-        { handle: 't1', content: 'prose', scene: ['l1', 'c1'], location: 'l1' },
+        { handle: 't1', content: 'prose', scene: ['l2', 'c1'], location: 'l2' },
       ])
     })
 

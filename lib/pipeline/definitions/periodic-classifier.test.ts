@@ -1785,6 +1785,54 @@ describe('periodicClassifierPhase — mentioned places', () => {
     expect(sent?.user).toContain('- [l1] The Ford (retired: washed away)')
   })
 
+  // As for a new character: a model that names a new place 'l1' keeps refs to it on the new row.
+  it('binds refs to the new place when its handle collides with a live placeholder', async () => {
+    const harbor = { ...ford, name: 'The Harbor', status: 'active', retiredReason: null } as Entity
+    const place = (handle: string, name: string, over: Record<string, unknown> = {}) => ({
+      handle,
+      name,
+      description: '',
+      keywords: [],
+      sourceTurn: 't1',
+      ...over,
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newPlaces: [
+          place('l1', 'the Drowned Inn'),
+          place('new:cellar', 'the Cellar', { parent: 'l1' }),
+        ],
+        happenings: [
+          { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'l1' }], awareness: [] },
+        ],
+      }),
+    })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [harbor],
+      mentionedPlaces: true,
+    })
+    const { events } = await drain(h.ctx)
+
+    const entries = (kind: string) =>
+      events
+        .map((e) => e as { action: { kind: string; payload: { entry: Record<string, unknown> } } })
+        .filter(({ action }) => action.kind === kind)
+        .map(({ action }) => action.payload.entry)
+    const created = entries('createEntity')
+    const inn = created.find((e) => e.name === 'the Drowned Inn')
+    expect(inn?.id).toMatch(/^loc_/)
+    expect(inn?.id).not.toBe(harbor.id)
+    expect(created.find((e) => e.name === 'the Cellar')?.state).toEqual({
+      parent_location_id: inn?.id,
+    })
+    expect(entries('createHappeningInvolvement')).toEqual([
+      expect.objectContaining({ entityId: inn?.id }),
+    ])
+  })
+
   it("logs a place dropped for a taken handle under the per-turn writer's key", async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
