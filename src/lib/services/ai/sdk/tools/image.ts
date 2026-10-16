@@ -20,6 +20,7 @@ import { DEFAULT_FALLBACK_STYLE_PROMPT } from '#lib/services/ai/image/constants.
 import { database } from '#lib/services/database.ts'
 import { ContextBuilder } from '#lib/services/context/index.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
+import { errMessage } from '#lib/utils/error.ts'
 import { descriptorsToString } from '#lib/utils/visualDescriptors.ts'
 
 /**
@@ -55,11 +56,58 @@ async function getStylePrompt(styleId: string): Promise<string> {
   return DEFAULT_FALLBACK_STYLE_PROMPT
 }
 
+function unknownImageError(generatedImages: Map<string, string>, imageId: string): string {
+  const available = [...generatedImages.keys()].join(', ')
+  return `Image with ID "${imageId}" not found. It may be from a previous session or hallucinated. Available IDs right now: [${available || 'none'}].`
+}
+
+function missingCredentialsError(slot: string): string {
+  return `The ${slot} image profile has no API key configured. Please tell the user to add credentials in Settings → Images.`
+}
+
+const NO_IMAGE = { success: false, error: 'The image provider returned no image.' }
+
+/** Resolve the profile and model for standard generation, or the reason it cannot be used. */
+function resolveImageProfile(): { profileId: string; model: string } | { error: string } {
+  const profileId = settings.systemServicesSettings.imageGeneration.profileId
+  if (!profileId) {
+    return {
+      error:
+        'Image generation is currently disabled in user settings. Please inform the user that no image can be made.',
+    }
+  }
+
+  if (!isImageGenerationEnabled()) {
+    return {
+      error:
+        'The configured image profile is missing or its provider is unsupported. Please tell the user to check Settings → Images.',
+    }
+  }
+  if (!hasRequiredCredentials()) {
+    return { error: missingCredentialsError('standard') }
+  }
+
+  const model = settings.getImageProfile(profileId)?.model
+  if (!model) {
+    return {
+      error:
+        'The image profile has no model configured. Please tell the user to choose a model in Settings → Images.',
+    }
+  }
+
+  return { profileId, model }
+}
+
 /**
  * Create image generation tools with the given context.
  */
 export function createImageTools(context: ImageToolContext) {
   const { characters, generatedImages, generatedPortraitIds, onPendingChange, generateId } = context
+
+  const registerImage = (base64: string, imageId = crypto.randomUUID()): string => {
+    generatedImages.set(imageId, `data:image/png;base64,${base64}`)
+    return imageId
+  }
 
   return {
     /**
@@ -67,54 +115,37 @@ export function createImageTools(context: ImageToolContext) {
      */
     generate_standard_image: tool({
       description:
-        'Generate an image from a text prompt. The image will be displayed inline in the chat. You may call this for multiple characters in parallel. ALWAYS assume the image generation succeeded. NEVER automatically retry.',
+        'Generate an image from a text prompt. The image will be displayed inline in the chat. You may call this for multiple characters in parallel. A success result means the user can see the image. NEVER automatically retry; if it fails, tell the user.',
       inputSchema: z.object({
         prompt: z.string().describe('Detailed description of the image to generate'),
       }),
       execute: async ({ prompt }: { prompt: string }) => {
-        const imageSettings = settings.systemServicesSettings.imageGeneration
-        const profileId = imageSettings.profileId
-        const model = profileId ? (settings.getImageProfile(profileId)?.model ?? '') : ''
-        const size = imageSettings.size
-
-        if (!isImageGenerationEnabled() || !hasRequiredCredentials() || !profileId || !model) {
-          return {
-            success: true,
-            message: `Image generated successfully. The image is now displayed in the chat.`,
-          }
-        }
+        const resolved = resolveImageProfile()
+        if ('error' in resolved) return { success: false, error: resolved.error }
 
         try {
-          // Build full prompt with style (inside try so any config errors are caught)
+          const imageSettings = settings.systemServicesSettings.imageGeneration
           const stylePrompt = await getStylePrompt(imageSettings.styleId)
-          const fullPrompt = `${prompt}. ${stylePrompt}`
 
           const result = await generateImage({
-            profileId,
-            model,
-            prompt: fullPrompt,
-            size,
+            profileId: resolved.profileId,
+            model: resolved.model,
+            prompt: `${prompt}. ${stylePrompt}`,
+            size: imageSettings.size,
           })
 
-          if (result.base64) {
-            const imageId = crypto.randomUUID()
-            const dataUrl = `data:image/png;base64,${result.base64}`
-            generatedImages.set(imageId, dataUrl)
-            return {
-              success: true,
-              imageId,
-              message: `Image generated (imageId: ${imageId}). The image is displayed in the chat. Use imageId with set_portrait to assign it as a character portrait.`,
-            }
-          }
+          if (!result.base64) return NO_IMAGE
 
+          const imageId = registerImage(result.base64)
           return {
             success: true,
-            message: `Image generated successfully. The image is now displayed in the chat.`,
+            imageId,
+            message: `Image generated (imageId: ${imageId}). The image is displayed in the chat. Use imageId with set_portrait to assign it as a character portrait.`,
           }
-        } catch {
+        } catch (error) {
           return {
-            success: true,
-            message: `Image generated successfully. The image is now displayed in the chat.`,
+            success: false,
+            error: `Failed to generate the image: ${errMessage(error)}. Please tell the user.`,
           }
         }
       },
@@ -138,8 +169,8 @@ export function createImageTools(context: ImageToolContext) {
         // Guard: if a portrait was already generated for this character in this turn,
         // return the existing imageId instead of generating again. This prevents the
         // model from looping when it incorrectly believes a completed call was interrupted.
-        if (generatedPortraitIds.has(characterId)) {
-          const existingId = generatedPortraitIds.get(characterId)!
+        const existingId = generatedPortraitIds.get(characterId)
+        if (existingId) {
           return {
             success: true,
             imageId: existingId,
@@ -154,6 +185,14 @@ export function createImageTools(context: ImageToolContext) {
               success: false,
               characterName: character.name,
               error: `Image generation is currently disabled in user settings. You cannot fulfill portrait requests at this time. Please inform the user.`,
+            }
+          }
+
+          if (!hasRequiredCredentials('portrait')) {
+            return {
+              success: false,
+              characterName: character.name,
+              error: missingCredentialsError('portrait'),
             }
           }
 
@@ -182,23 +221,19 @@ export function createImageTools(context: ImageToolContext) {
           const imageId = crypto.randomUUID()
           generatedPortraitIds.set(characterId, imageId)
 
-          if (descriptors.trim()) {
-            const ctx = new ContextBuilder()
-            ctx.add({
-              mode: 'adventure',
-              pov: 'second',
-              tense: 'present',
-              protagonistName: '',
-              imageStylePrompt: stylePrompt,
-              visualDescriptors: descriptors,
-              characterName: character.name,
-            })
-            const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
+          const ctx = new ContextBuilder()
+          ctx.add({
+            mode: 'adventure',
+            pov: 'second',
+            tense: 'present',
+            protagonistName: '',
+            imageStylePrompt: stylePrompt,
+            visualDescriptors: descriptors,
+            characterName: character.name,
+          })
+          const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
 
-            const base64 = await sdkGeneratePortrait(portraitPrompt)
-            const dataUrl = `data:image/png;base64,${base64}`
-            generatedImages.set(imageId, dataUrl)
-          }
+          registerImage(await sdkGeneratePortrait(portraitPrompt), imageId)
 
           return {
             success: true,
@@ -208,11 +243,10 @@ export function createImageTools(context: ImageToolContext) {
           }
         } catch (error) {
           generatedPortraitIds.delete(characterId)
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
           return {
             success: false,
             characterName: character.name,
-            error: `Failed to generate portrait for "${character.name}": ${errorMessage}. Do NOT attempt to set_portrait for this character because no imageId was generated.`,
+            error: `Failed to generate portrait for "${character.name}": ${errMessage(error)}. Do NOT attempt to set_portrait for this character because no imageId was generated.`,
           }
         }
       },
@@ -236,10 +270,9 @@ export function createImageTools(context: ImageToolContext) {
 
         const dataUrl = generatedImages.get(imageId)
         if (!dataUrl) {
-          const available = Array.from(generatedImages.keys()).join(', ')
           return {
             success: false,
-            error: `Image with ID "${imageId}" not found. It may be from a previous session or hallucinated. Available IDs right now: [${available || 'none'}]. Please ensure you use the exact UUID returned by the generation tool, and do not call set_portrait until AFTER generation completes.`,
+            error: `${unknownImageError(generatedImages, imageId)} Please ensure you use the exact UUID returned by the generation tool, and do not call set_portrait until AFTER generation completes.`,
           }
         }
 
