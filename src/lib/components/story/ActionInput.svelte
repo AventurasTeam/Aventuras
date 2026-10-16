@@ -952,8 +952,12 @@
           }
           if (chapterCards.busy(bgStoryId, bgBranchId)) return 'busy'
           const start = story.lastChapterEndIndex
-          const uncut = cut.entries.every((entry, i) => story.entries[start + i]?.id === entry.id)
-          return uncut ? 'open' : 'closed'
+          // The same text too, not only the same entries: an edit would leave the summary stale.
+          const unchanged = cut.entries.every((entry, i) => {
+            const live = story.entries[start + i]
+            return live?.id === entry.id && live.content === entry.content
+          })
+          return unchanged ? 'open' : 'closed'
         },
       }
       turnEndsLater = true

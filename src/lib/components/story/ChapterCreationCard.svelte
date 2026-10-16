@@ -193,6 +193,13 @@
           <Trash2 />
           Delete incomplete chapter
         </Button>
+        <!-- Without Delete, a card whose restarts keep failing would have no way out. -->
+        {#if !isLast}
+          <Button variant="text" size="sm" class="h-7 gap-1 px-2 text-xs" onclick={dismiss}>
+            <X />
+            Dismiss
+          </Button>
+        {/if}
       {:else}
         {#if card.phase === 'finished' && bannersOn && card.chapterStartEntryId}
           <Button

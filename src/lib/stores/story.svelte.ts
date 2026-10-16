@@ -543,6 +543,7 @@ class StoryStore {
 
     if (chaptersToDelete.length > 0) {
       this.chapters = this.chapters.filter((ch) => !chaptersToDelete.includes(ch.id))
+      for (const id of chaptersToDelete) chapterCards.chapterDeleted(id)
       // Invalidate chapter cache after deletions
       this.invalidateChapterCache()
     }
@@ -1876,6 +1877,7 @@ class StoryStore {
     this.forgetAnchors(entryIdsToDelete)
 
     this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
+    for (const chapter of chaptersToDelete) chapterCards.chapterDeleted(chapter.id)
     this.forgetCheckpoints(droppedCheckpoints)
 
     // Update in-memory state
