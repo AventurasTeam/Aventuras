@@ -149,6 +149,22 @@ describe('createTimeoutFetch body handling', () => {
     expect(isAbortError(await read)).toBe(true)
   })
 
+  it('aborts the plugin request at once for an already-aborted caller signal', async () => {
+    const caller = new AbortController()
+    caller.abort()
+    let pluginSignal: AbortSignal | null | undefined
+    mockFetch.mockImplementation(async (_url, init) => {
+      pluginSignal = init?.signal
+      throw new Error('Request cancelled')
+    })
+
+    await createTimeoutFetch(60_000, 'test')('https://api.test/v1', {
+      signal: caller.signal,
+    }).catch(() => {})
+
+    expect(pluginSignal?.aborted).toBe(true)
+  })
+
   it('removes the caller listener once a JSON response is buffered', async () => {
     mockFetch.mockResolvedValue(
       new Response('{"id":"x"}', { status: 200, headers: { 'content-type': 'application/json' } }),

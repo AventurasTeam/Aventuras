@@ -8,8 +8,7 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '#lib/stores/debug.svelte.ts'
-import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { withIdleTimeout } from '#lib/utils/idleTimeout.ts'
+import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
 
@@ -61,18 +60,11 @@ export async function imageFetch(options: {
     serviceId = 'image-gen',
   } = options
 
-  const controller = new AbortController()
-  let timedOut = false
-  const timeoutId = setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, timeoutMs)
-  const onCallerAbort = () => controller.abort()
-  signal?.addEventListener('abort', onCallerAbort, { once: true })
-  const removeCallerListener = () => signal?.removeEventListener('abort', onCallerAbort)
-  // The wrapped body outlives this call and removes the listener when it settles.
-  let bodyWrapped = false
-
+  const guard = createRequestGuard({
+    timeoutMs,
+    what: 'Image generation',
+    callerSignal: signal,
+  })
   const startTime = Date.now()
 
   // Safe debug logging - don't parse FormData as JSON
@@ -98,7 +90,7 @@ export async function imageFetch(options: {
         method,
         headers: normalizeHeaders(headers),
         body,
-        signal: controller.signal,
+        signal: guard.signal,
       })
       // Convert to arrayBuffer for Tauri compatibility
       const arrayBuf = await request.arrayBuffer()
@@ -107,14 +99,14 @@ export async function imageFetch(options: {
         method,
         headers: { ...normalizeHeaders(headers), 'content-type': contentType },
         body: arrayBuf,
-        signal: controller.signal,
+        signal: guard.signal,
       })
     } else {
       response = await tauriHttpFetch(url, {
         method,
         headers: normalizeHeaders(headers),
         body: body as string | undefined,
-        signal: controller.signal,
+        signal: guard.signal,
       })
     }
 
@@ -143,14 +135,7 @@ export async function imageFetch(options: {
       )
     }
 
-    response = withIdleTimeout(response, {
-      timeoutMs,
-      what: 'Image generation',
-      callerSignal: signal,
-      abort: () => controller.abort(),
-      onSettled: removeCallerListener,
-    })
-    bodyWrapped = true
+    response = guard.wrapBody(response)
     // Only buffer the body for the debug panel when debug is active. Otherwise hand the
     // response straight to the caller (which chooses .json()/.blob()): this avoids forcing
     // text() on every response — which would also corrupt binary image bodies — and skips a
@@ -161,13 +146,9 @@ export async function imageFetch(options: {
 
     return response
   } catch (error) {
-    // The plugin rejects an abort with a plain Error or a bare string.
-    if (timedOut) throw new RequestTimeoutError(timeoutMs, 'Image generation')
-    if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError')
-    throw error
+    throw guard.mapError(error)
   } finally {
-    clearTimeout(timeoutId)
-    if (!bodyWrapped) removeCallerListener()
+    guard.dispose()
   }
 }
 
@@ -227,18 +208,7 @@ export async function imageGetFetch(
     followRedirects = true,
   } = options ?? {}
 
-  const controller = new AbortController()
-  let timedOut = false
-  const timeoutId = setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, timeoutMs)
-  const onCallerAbort = () => controller.abort()
-  signal?.addEventListener('abort', onCallerAbort, { once: true })
-  const removeCallerListener = () => signal?.removeEventListener('abort', onCallerAbort)
-  // The wrapped body outlives this call and removes the listener when it settles.
-  let bodyWrapped = false
-
+  const guard = createRequestGuard({ timeoutMs, what: 'Image fetch', callerSignal: signal })
   const startTime = Date.now()
   const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
 
@@ -246,7 +216,7 @@ export async function imageGetFetch(
     const response = await tauriHttpFetch(url, {
       method: 'GET',
       headers: normalizeHeaders(headers),
-      signal: controller.signal,
+      signal: guard.signal,
       ...(followRedirects ? {} : { maxRedirections: 0 }),
     })
 
@@ -264,21 +234,10 @@ export async function imageGetFetch(
     }
 
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
-    bodyWrapped = true
-    return withIdleTimeout(response, {
-      timeoutMs,
-      what: 'Image fetch',
-      callerSignal: signal,
-      abort: () => controller.abort(),
-      onSettled: removeCallerListener,
-    })
+    return guard.wrapBody(response)
   } catch (error) {
-    // The plugin rejects an abort with a plain Error or a bare string.
-    if (timedOut) throw new RequestTimeoutError(timeoutMs, 'Image fetch')
-    if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError')
-    throw error
+    throw guard.mapError(error)
   } finally {
-    clearTimeout(timeoutId)
-    if (!bodyWrapped) removeCallerListener()
+    guard.dispose()
   }
 }

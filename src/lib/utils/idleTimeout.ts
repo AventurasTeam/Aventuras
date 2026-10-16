@@ -79,3 +79,54 @@ export function withIdleTimeout(response: Response, options: IdleTimeoutOptions)
     headers: response.headers,
   })
 }
+
+interface RequestGuardOptions {
+  timeoutMs: number
+  what?: string
+  callerSignal?: AbortSignal | null
+}
+
+/**
+ * One request's timeout and abort plumbing: a header timer, the caller's signal, and an idle
+ * timer on the body. Call `dispose()` in a `finally`; a wrapped body takes over the caller
+ * listener and releases it when the body settles.
+ */
+export function createRequestGuard(options: RequestGuardOptions) {
+  const { timeoutMs, what, callerSignal } = options
+  const controller = new AbortController()
+  let timedOut = false
+  let bodyWrapped = false
+
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  const onCallerAbort = () => controller.abort()
+  const removeCallerListener = () => callerSignal?.removeEventListener('abort', onCallerAbort)
+  if (callerSignal?.aborted) controller.abort()
+  else callerSignal?.addEventListener('abort', onCallerAbort, { once: true })
+
+  return {
+    signal: controller.signal,
+    wrapBody(response: Response): Response {
+      bodyWrapped = true
+      return withIdleTimeout(response, {
+        timeoutMs,
+        what,
+        callerSignal,
+        abort: () => controller.abort(),
+        onSettled: removeCallerListener,
+      })
+    },
+    /** The plugin rejects an abort with a plain Error or a bare string; say which kind it was. */
+    mapError(error: unknown): unknown {
+      if (timedOut) return new RequestTimeoutError(timeoutMs, what)
+      if (callerSignal?.aborted) return new DOMException('Request aborted', 'AbortError')
+      return error
+    },
+    dispose() {
+      clearTimeout(timer)
+      if (!bodyWrapped) removeCallerListener()
+    },
+  }
+}

@@ -9,8 +9,7 @@ import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { LLM_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { parseManualBody } from './manualBody'
 import { debug } from '#lib/stores/debug.svelte.ts'
-import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { withIdleTimeout } from '#lib/utils/idleTimeout.ts'
+import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -241,37 +240,19 @@ export function createTimeoutFetch(
       debugIdExternal,
     )
 
-    const controller = new AbortController()
-    let timedOut = false
-    const timeoutId = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, timeoutMs)
-    const onCallerAbort = () => controller.abort()
-    init?.signal?.addEventListener('abort', onCallerAbort, { once: true })
-    const removeCallerListener = () => init?.signal?.removeEventListener('abort', onCallerAbort)
-    // The wrapped body outlives this call and removes the listener when it settles.
-    let bodyWrapped = false
+    const guard = createRequestGuard({ timeoutMs, callerSignal: init?.signal })
 
     try {
       let response = await tauriFetch(input, {
         ...init,
-        signal: controller.signal,
+        signal: guard.signal,
         body: parsedBody ? JSON.stringify(parsedBody) : undefined,
       })
 
       // Paths A and B hand the body to the caller unread, so it needs its own idle timer.
-      // Path C buffers below, which the header timer bounds: `finally` runs after `response.text()`.
+      // Path C buffers below, which the header timer bounds: `dispose()` runs after `response.text()`.
       const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
-      if (!response.ok || !isJson) {
-        response = withIdleTimeout(response, {
-          timeoutMs,
-          callerSignal: init?.signal,
-          abort: () => controller.abort(),
-          onSettled: removeCallerListener,
-        })
-        bodyWrapped = true
-      }
+      if (!response.ok || !isJson) response = guard.wrapBody(response)
 
       // Path A: Error Response (Non-2xx)
       // We log the error asynchronously and return the original response immediately.
@@ -342,13 +323,9 @@ export function createTimeoutFetch(
         headers: response.headers,
       })
     } catch (error) {
-      // The plugin rejects an abort with a plain Error or a bare string.
-      if (timedOut) throw new RequestTimeoutError(timeoutMs)
-      if (init?.signal?.aborted) throw new DOMException('Request aborted', 'AbortError')
-      throw error
+      throw guard.mapError(error)
     } finally {
-      clearTimeout(timeoutId)
-      if (!bodyWrapped) removeCallerListener()
+      guard.dispose()
     }
   }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { withIdleTimeout } from './idleTimeout'
+import { createRequestGuard, withIdleTimeout } from './idleTimeout'
 import { firstReadError } from './idleTimeout.testing'
 
 const bytes = (text: string) => new TextEncoder().encode(text)
@@ -145,5 +145,87 @@ describe('withIdleTimeout', () => {
 
     expect(wrapped).toBe(response)
     expect(onSettled).toHaveBeenCalledOnce()
+  })
+})
+
+describe('createRequestGuard', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('removes the caller listener on dispose when the body was never wrapped', () => {
+    const caller = new AbortController()
+    const remove = vi.spyOn(caller.signal, 'removeEventListener')
+    const guard = createRequestGuard({ timeoutMs: 1_000, callerSignal: caller.signal })
+
+    guard.dispose()
+
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('keeps the caller listener while a wrapped body is live and drops it once it closes', async () => {
+    const caller = new AbortController()
+    const remove = vi.spyOn(caller.signal, 'removeEventListener')
+    const guard = createRequestGuard({ timeoutMs: 1_000, callerSignal: caller.signal })
+    const { response, controller } = source()
+
+    const wrapped = guard.wrapBody(response)
+    guard.dispose()
+    expect(remove).not.toHaveBeenCalled()
+
+    controller.close()
+    await wrapped.text()
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('clears the header timer on dispose', () => {
+    vi.useFakeTimers()
+    const guard = createRequestGuard({ timeoutMs: 1_000 })
+
+    guard.dispose()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('aborts at once for a caller signal that is already aborted', () => {
+    const caller = new AbortController()
+    caller.abort()
+    const guard = createRequestGuard({ timeoutMs: 1_000, callerSignal: caller.signal })
+
+    expect(guard.signal.aborted).toBe(true)
+    expect(guard.mapError('Request cancelled')).toMatchObject({ name: 'AbortError' })
+    guard.dispose()
+  })
+
+  it('maps a header timeout to a RequestTimeoutError', async () => {
+    vi.useFakeTimers()
+    const guard = createRequestGuard({ timeoutMs: 5_000, what: 'Image fetch' })
+
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(guard.signal.aborted).toBe(true)
+    const error = guard.mapError('Request canceled')
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: 'Image fetch timed out after 5s' })
+    guard.dispose()
+  })
+
+  it('maps a caller abort to an AbortError and aborts the request', () => {
+    const caller = new AbortController()
+    const guard = createRequestGuard({ timeoutMs: 1_000, callerSignal: caller.signal })
+
+    caller.abort()
+
+    expect(guard.signal.aborted).toBe(true)
+    expect(guard.mapError('Request canceled')).toMatchObject({ name: 'AbortError' })
+    guard.dispose()
+  })
+
+  it('passes any other error through unchanged', () => {
+    const guard = createRequestGuard({ timeoutMs: 1_000 })
+    const failure = new Error('connection refused')
+
+    expect(guard.mapError(failure)).toBe(failure)
+    guard.dispose()
   })
 })
