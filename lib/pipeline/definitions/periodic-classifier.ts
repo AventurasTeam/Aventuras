@@ -18,7 +18,13 @@ import {
   substituteClassifierIds,
   type ReconcileDecision,
 } from '@/lib/classifier'
-import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  storyEntries,
+  type ClassifierStatus,
+  type Entity,
+  type StoryEntry,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -34,6 +40,7 @@ import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
+import { enterWritePhase } from '../runtime/write-phase'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from '../types'
 
 export { PERIODIC_CLASSIFIER_KIND }
@@ -108,6 +115,21 @@ function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
 
 function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> {
   return patchStatus(ctx, watermarkKey(coversThrough))
+}
+
+// The entity stores are global, hydrated for one branch: a switch away mid-pass leaves them on
+// another, and filtering them by ours would reconcile and plan against an empty roster.
+function storesHoldBranch(ctx: Pick<PhaseContext, 'storyId' | 'branchId'>): boolean {
+  const open = currentStoryStore.getCurrentStory()
+  return (
+    open?.branchId === ctx.branchId &&
+    open.storyId === ctx.storyId &&
+    entitiesStore.getLoadedBranch() === ctx.branchId
+  )
+}
+
+function branchEntities(branchId: string): Entity[] {
+  return [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId)
 }
 
 async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
@@ -219,9 +241,6 @@ export async function* periodicClassifierPhase(
     }
   }
 
-  // Abort-free from here: a reversal's 'cancel' either discarded the run above,
-  // or lets this burst land for the positional sweep to reverse. Never return
-  // aborted while holding deltas.
   const extraction = result.value
   const substituted = substituteClassifierIds(
     extraction,
@@ -232,14 +251,22 @@ export async function* periodicClassifierPhase(
     ]),
   )
 
+  // Nothing is committed before the hold, so a discard only restores the pre-run status, as
+  // the abort arm above does: no retry is burned and the watermark stays.
+  const discard = async (reason: string | null): Promise<PhaseResult> => {
+    if (reason !== null) ctx.log.warn('classifier.pass_discarded', { reason })
+    await writeStatus(ctx, status)
+    return { status: 'aborted' }
+  }
+
+  if (!storesHoldBranch(ctx)) return discard('branch-unloaded')
   // Re-read after the model call: World edits run under a no-gate pass, so the prompt's
   // snapshot misses a character the user created mid-call and still holds one deleted.
-  const current = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === ctx.branchId,
-  )
+  const current = branchEntities(ctx.branchId)
   const embedDescriptions = classifierEmbedder()
   const decisions = new Map<string, ReconcileDecision>()
   for (const candidate of substituted.newCharacters) {
+    if (ctx.abortSignal.aborted) return discard(null)
     // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
     // fields, so a key built from an unbounded one measures text no row holds.
     const stored = clampEmbeddedCharacter(candidate)
@@ -255,18 +282,32 @@ export async function* periodicClassifierPhase(
     )
   }
 
+  // generation-pipeline.md → No-gate write phase: wait out any turn on the branch, then hold.
+  if (!(await enterWritePhase(ctx))) return discard(null)
+
+  // Abort-free from here: the run holds its write lock. A reversal's 'cancel' either discarded
+  // the run above or lets this burst land for the positional sweep to reverse. Never return
+  // aborted while holding deltas; the discards below hold none.
+  if (!storesHoldBranch(ctx)) return discard('branch-unloaded')
+  // classifier.md → Mentioned places: planned inside the hold, against the rows as they stand,
+  // so a place a turn created during the model call is reused rather than made again.
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
     window,
-    entities: current,
+    entities: branchEntities(ctx.branchId),
     decisions,
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
   })
+  // A row a decision names was deleted while the pass waited: writing against it would fail the
+  // pass and reverse it, so leave the window to the next one.
+  if (plan.staleDecisions.length > 0) return discard('stale-decision')
   if (plan.fellBackCount > 0)
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
   if (plan.unresolvedRefs.length > 0)
     ctx.log.warn('classifier.unresolved_refs', { refs: plan.unresolvedRefs })
+  // The per-turn writer's key and causes (per-turn-creates.ts).
+  for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
 
   for (const write of plan.planned) {
     yield { type: 'delta_emitted', action: write.action, entryId: write.entryId }

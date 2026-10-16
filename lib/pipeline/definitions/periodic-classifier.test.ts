@@ -13,7 +13,12 @@ import {
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { generateStructured } from '@/lib/ai'
-import { shouldCadenceFire, type EmbedDescriptions } from '@/lib/classifier'
+import {
+  classifierExtractionSchema,
+  classifierExtractionWithPlacesSchema,
+  shouldCadenceFire,
+  type EmbedDescriptions,
+} from '@/lib/classifier'
 import {
   branches,
   deltas,
@@ -27,18 +32,26 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { makeLogger } from '@/lib/diagnostics'
+import {
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+  makeLogger,
+} from '@/lib/diagnostics'
 import {
   characterRelationshipsStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  generationStore,
   happeningsStore,
   hydrateAppSettings,
   resetAllStores,
+  type RunState,
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
+import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
   PERIODIC_CLASSIFIER_KIND,
@@ -101,6 +114,7 @@ async function ctxWith(opts: {
   /** Saved metadata per entry position; the other entries get `{}`. */
   entryMetadata?: Record<number, StoryEntry['metadata']>
   onWatermark?: (n: number) => void
+  mentionedPlaces?: boolean
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -152,7 +166,7 @@ async function ctxWith(opts: {
     storyId: 's1',
     branchId: 'b1',
     definition: {} as never,
-    settings: { models: {} } as never,
+    settings: { models: {}, classifierMentionedPlaces: opts.mentionedPlaces ?? false } as never,
   })
   entriesStore.hydrate('b1', entries)
   entitiesStore.hydrate('b1', opts.entities ?? [])
@@ -232,6 +246,8 @@ describe('periodicClassifierPhase', () => {
     vi.resetAllMocks()
     __resetRegistry()
     __resetClassifierEmbedder()
+    // The phase driven directly takes its hold through the global port and nothing ends it.
+    __resetBranchWriteLocks()
   })
 
   it('completes without emitting when the window is empty', async () => {
@@ -483,7 +499,38 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('is abort-free once parsing begins: an abort mid-burst still commits and returns completed', async () => {
+  it('is abort-free once it holds its write lock: an abort mid-burst still commits', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [
+          { title: 'A', sourceTurn: 't1', involvements: [], awareness: [] },
+          { title: 'B', sourceTurn: 't2', involvements: [], awareness: [] },
+        ],
+      }),
+    })
+    const controller = new AbortController()
+    h.ctx.abortSignal = controller.signal
+    const gen = periodicClassifierPhase(h.ctx)
+    const first = await gen.next()
+    expect(first.done).toBe(false)
+    controller.abort()
+    const events = [first.value]
+    for (let next = await gen.next(); ; next = await gen.next()) {
+      if (next.done) {
+        expect(next.value).toEqual({ status: 'completed' })
+        break
+      }
+      events.push(next.value)
+    }
+    expect(events).toHaveLength(2)
+    expect(h.status()?.processedThrough).toBe(2)
+  })
+
+  // classifier.md → Background-task framing: abort-free starts at the write lock, so a cancel
+  // landing after the model call still discards the run.
+  it('discards on a cancel after the model call, before the hold', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     vi.mocked(generateStructured).mockImplementation(async () => {
       h.ctx.abortSignal = AbortSignal.abort()
@@ -495,9 +542,9 @@ describe('periodicClassifierPhase', () => {
       }
     })
     const { events, result } = await drain(h.ctx)
-    expect(events).toHaveLength(1)
-    expect(result).toEqual({ status: 'completed' })
-    expect(h.status()?.processedThrough).toBe(2)
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
   })
 
   it('returns aborted with no deltas when the abort lands before parsing', async () => {
@@ -1431,5 +1478,343 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       retryCount: 0,
       lastError: null,
     })
+  })
+})
+
+describe('periodicClassifierPhase — the write phase', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    __resetRegistry()
+    __resetClassifierEmbedder()
+    __resetBranchWriteLocks()
+  })
+
+  const turnRun = (): RunState => ({
+    runId: 'run_turn',
+    kind: PER_TURN_KIND,
+    gateBehavior: 'hard-gate',
+    actionId: 'act_turn',
+    storyId: 's1',
+    branchId: 'b1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+
+  const place = (id: string, name: string, parent: string | null = null) =>
+    ({
+      id,
+      branchId: 'b1',
+      kind: 'location',
+      name,
+      status: 'active',
+      description: `${name}, described.`,
+      keywords: [],
+      state: { parent_location_id: parent },
+      createdAt: 1,
+    }) as unknown as Entity
+
+  const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  // Drives the phase in the background, so a test can act while it waits.
+  function start(ctx: PhaseContext) {
+    let settled: Awaited<ReturnType<typeof drain>> | undefined
+    const done = drain(ctx).then((value) => (settled = value))
+    return { done, settled: () => settled }
+  }
+
+  const varnReply = () =>
+    extraction({
+      newPlaces: [
+        {
+          handle: 'new:varn',
+          name: 'Varn',
+          description: 'A salt town.',
+          keywords: [],
+          sourceTurn: 't1',
+        },
+      ],
+      happenings: [
+        {
+          title: 'The fleet sails',
+          sourceTurn: 't1',
+          involvements: [{ ref: 'new:varn', role: 'site' }],
+          awareness: [],
+        },
+      ],
+    })
+
+  // generation-pipeline.md → No-gate write phase; the race the setting's places would lose.
+  it('waits out a turn on its branch, then reuses the place the turn created meanwhile', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: varnReply() })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
+    generationStore.startRun(turnRun())
+    const pass = start(h.ctx)
+    await flush()
+    expect(pass.settled()).toBeUndefined()
+
+    // The turn creates the place the pass's reply names, then leaves txState.
+    entitiesStore.hydrate('b1', [place('loc_varn', 'Varn')])
+    generationStore.finishRun('run_turn')
+    const { events, result } = await pass.done
+
+    expect(result).toEqual({ status: 'completed' })
+    const actions = events.map((e) => (e as { action: PipelineAction }).action)
+    expect(actions.map((a) => a.kind)).toEqual(['createHappening', 'createHappeningInvolvement'])
+    expect(actions[1].payload).toMatchObject({ entry: { entityId: 'loc_varn' } })
+  })
+
+  it('discards on a cancel while it waits for a turn', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: varnReply() })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
+    const controller = new AbortController()
+    h.ctx.abortSignal = controller.signal
+    generationStore.startRun(turnRun())
+    const pass = start(h.ctx)
+    await flush()
+    controller.abort()
+    const { events, result } = await pass.done
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+  })
+
+  it('discards on a cancel during the character reconciliation, cutting it short', async () => {
+    const controller = new AbortController()
+    const embedder = vi.fn(async () => {
+      controller.abort()
+      const v = Float32Array.from([1, 0, 0])
+      return { vectors: [v, v], dim: 3 }
+    })
+    configureClassifierEmbedder(embedder)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [
+          { handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] },
+          { handle: 'nc2', name: 'kael', description: 'The courier.', keywords: [] },
+        ],
+      }),
+    })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [
+        { ...place(CHAR_KAEL, 'Kael'), kind: 'character', state: null } as unknown as Entity,
+      ],
+    })
+    h.ctx.abortSignal = controller.signal
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 0 })
+    expect(embedder).toHaveBeenCalledTimes(1)
+  })
+
+  // Back on the branch by planning, but the reconciliation ran against another branch's roster.
+  it('discards when the stores were away at the reconciliation read, even once back', async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockImplementation(async () => {
+      entitiesStore.hydrate('b2', [])
+      return {
+        status: 'ok',
+        value: extraction({
+          newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
+        }),
+      }
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    generationStore.startRun(turnRun())
+    const pass = start(h.ctx)
+    await flush()
+    entitiesStore.hydrate('b1', [kael])
+    generationStore.finishRun('run_turn')
+    const { events, result } = await pass.done
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+  })
+
+  it.each([
+    ['during the model call', 'call'],
+    ['while it waits for a turn', 'wait'],
+  ] as const)('discards when the stores moved to another branch %s', async (_label, when) => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockImplementation(async () => {
+      if (when === 'call') entitiesStore.hydrate('b2', [])
+      return { status: 'ok', value: varnReply() }
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
+    if (when === 'wait') generationStore.startRun(turnRun())
+    const pass = start(h.ctx)
+    await flush()
+    if (when === 'wait') {
+      entitiesStore.hydrate('b2', [])
+      generationStore.finishRun('run_turn')
+    }
+    const { events, result } = await pass.done
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+    const log = getDiagnosticsSnapshot().logEntries.find(
+      (e) => e.kind === 'classifier.pass_discarded',
+    )
+    expect(log?.fields).toEqual({ reason: 'branch-unloaded' })
+  })
+
+  it('discards when a row a reconcile decision names is deleted while it waits', async () => {
+    const vector = Float32Array.from([1, 0, 0])
+    configureClassifierEmbedder(vi.fn(async () => ({ vectors: [vector, vector], dim: 3 })))
+    const staged = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'staged',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
+    generationStore.startRun(turnRun())
+    const pass = start(h.ctx)
+    await flush()
+    entitiesStore.hydrate('b1', [])
+    generationStore.finishRun('run_turn')
+    const { events, result } = await pass.done
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+  })
+})
+
+// classifier.md → Mentioned places: the setting is read once, when the pass builds its prompt.
+describe('periodicClassifierPhase — mentioned places', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    __resetRegistry()
+    __resetClassifierEmbedder()
+    __resetBranchWriteLocks()
+  })
+
+  const ford = {
+    id: 'loc_11111111-1111-1111-1111-111111111111',
+    branchId: 'b1',
+    kind: 'location',
+    name: 'The Ford',
+    status: 'retired',
+    retiredReason: 'washed away',
+    description: 'Shallow and cold.',
+    keywords: [],
+    state: { parent_location_id: null },
+    createdAt: 1,
+  } as unknown as Entity
+
+  it('with the setting on, asks for places by schema and rule, and creates them', async () => {
+    let sent: { schema: unknown; system: string; user: string } | undefined
+    vi.mocked(generateStructured).mockImplementation(async (_target, prompt, schema) => {
+      sent = { schema, system: prompt.system, user: prompt.user }
+      // Turned off mid-call: the reply still follows the prompt it answered.
+      const open = currentStoryStore.getCurrentStory()
+      if (open != null)
+        currentStoryStore.set({
+          ...open,
+          settings: { ...open.settings, classifierMentionedPlaces: false },
+        })
+      return {
+        status: 'ok',
+        value: extraction({
+          newPlaces: [
+            {
+              handle: 'new:inn',
+              name: 'the Drowned Inn',
+              description: 'An inn by the ford.',
+              keywords: ['the inn'],
+              sourceTurn: 't2',
+              parent: 'l1',
+            },
+          ],
+        }),
+      }
+    })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [ford],
+      mentionedPlaces: true,
+    })
+    const { events } = await drain(h.ctx)
+
+    expect(sent?.schema).toBe(classifierExtractionWithPlacesSchema)
+    expect(sent?.system).toContain('- New places. Add a place the turns mention')
+    expect(sent?.user).toContain('- [l1] The Ford (retired: washed away) — Shallow and cold.')
+    expect(createdEntry(events)).toMatchObject({
+      kind: 'location',
+      name: 'the Drowned Inn',
+      keywords: ['the inn'],
+      // Retired parent: the place goes to the root.
+      state: { parent_location_id: null },
+    })
+    expect((events[0] as { entryId: string }).entryId).toBe('e2')
+  })
+
+  it('with the setting off, sends the base schema and no rule, but still the Places tree', async () => {
+    let sent: { schema: unknown; system: string; user: string } | undefined
+    vi.mocked(generateStructured).mockImplementation(async (_target, prompt, schema) => {
+      sent = { schema, system: prompt.system, user: prompt.user }
+      return { status: 'ok', value: extraction() }
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [ford] })
+    await drain(h.ctx)
+    expect(sent?.schema).toBe(classifierExtractionSchema)
+    expect(sent?.system).not.toContain('New places')
+    expect(sent?.user).toContain('- [l1] The Ford (retired: washed away)')
+  })
+
+  it("logs a place sent to the root under the per-turn writer's key and cause", async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newPlaces: [
+          {
+            handle: 'new:inn',
+            name: 'Inn',
+            description: '',
+            keywords: [],
+            sourceTurn: 't1',
+            parent: 'l1',
+          },
+        ],
+      }),
+    })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [ford],
+      mentionedPlaces: true,
+    })
+    await drain(h.ctx)
+    const log = getDiagnosticsSnapshot().logEntries.find(
+      (e) => e.kind === 'classifier.create_parent_dropped',
+    )
+    expect(log?.level).toBe('warn')
+    expect(log?.fields).toEqual({ handle: 'new:inn', parent: ford.id, cause: 'retired' })
   })
 })
