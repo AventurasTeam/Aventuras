@@ -173,8 +173,7 @@ export async function* periodicClassifierPhase(
   const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
     (r) => r.branchId === ctx.branchId,
   )
-  // classifier.md → Mentioned places: read once, so a reply is never judged by a setting its
-  // prompt didn't follow.
+  // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
   const idMap = new IdBiMap()
   const prompt = renderTemplate(
@@ -282,12 +281,11 @@ export async function* periodicClassifierPhase(
     )
   }
 
-  // generation-pipeline.md → No-gate write phase: wait out any turn on the branch, then hold.
+  // generation-pipeline.md → No-gate write phase.
   if (!(await enterWritePhase(ctx))) return discard(null)
 
-  // Abort-free from here: the run holds its write lock. A reversal's 'cancel' either discarded
-  // the run above or lets this burst land for the positional sweep to reverse. Never return
-  // aborted while holding deltas; the discards below hold none.
+  // Abort-free under the write lock: a reversal's cancel lets this burst land for the positional
+  // sweep to reverse. Never return aborted holding deltas; the discards below hold none.
   if (!storesHoldBranch(ctx)) return discard('branch-unloaded')
   // classifier.md → Mentioned places: planned inside the hold, against the rows as they stand,
   // so a place a turn created during the model call is reused rather than made again.

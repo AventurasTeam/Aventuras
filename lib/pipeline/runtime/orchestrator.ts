@@ -53,7 +53,7 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
-  /** Called synchronously once the run is in txState, before any await; not for a chain's successor. */
+  /** Called once the run is in txState, before any await; not for a chain's successor. */
   onReserved?: () => void
 } & DbCtx
 

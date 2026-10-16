@@ -528,8 +528,7 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()?.processedThrough).toBe(2)
   })
 
-  // classifier.md → Background-task framing: abort-free starts at the write lock, so a cancel
-  // landing after the model call still discards the run.
+  // classifier.md → Background-task framing: abort-free starts at the write lock, not the call.
   it('discards on a cancel after the model call, before the hold', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     vi.mocked(generateStructured).mockImplementation(async () => {

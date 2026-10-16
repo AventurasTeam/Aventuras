@@ -77,8 +77,7 @@ export function buildClassifierContext(args: {
         status: e.status,
         keywords: e.keywords,
       })),
-    // classifier.md → Mentioned places: every place, any status or mode, nested; a retired one
-    // keeps its id, since a happening can still name it as where something happened.
+    // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
     places: placeTree(entities).map(({ entity: e, depth }) => ({
       id: e.id,
       name: e.name,

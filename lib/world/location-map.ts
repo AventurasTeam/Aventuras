@@ -13,7 +13,6 @@ export type LocationMapRow =
 export type HeldItemLine = { id: string; name: string; equipped: boolean }
 export type LooseItemLine = { id: string; name: string }
 
-/** A place and how deep it sits in the tree. */
 export type PlaceTreeRow = { entity: Entity; depth: number }
 
 /** Where the map hangs a place, listed or not, and how many left-out places lie in between. */
@@ -35,8 +34,7 @@ export type LocationMapView = {
 /** The place-matching half of a view: which places exist, and where a place hangs. */
 export type LocationMatchView = Pick<LocationMapView, 'locations' | 'hiddenBetween'>
 
-// A chain looping through the given places never reaches the root: those places are listed there,
-// flat, and returned in `atRoot`.
+// Places on a parent loop never reach the root: they're listed there, flat, and in `atRoot`.
 function nest(
   places: readonly Entity[],
   parentOf: (id: string) => string | null,

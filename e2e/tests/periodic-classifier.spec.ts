@@ -162,9 +162,8 @@ test.describe('periodic classifier — graph population', () => {
   })
 })
 
-// classifier.md → Mentioned places: the stored setting picks the reply's schema at prompt build,
-// and only a running app reaches that through the mock's shape routing to the commit. The race
-// with a turn and the matcher rules are unit-tested (classifier-turn-wait.test.ts, plan.test.ts).
+// classifier.md → Mentioned places: only a running app takes the stored setting's schema pick to
+// the commit. Turn race and matcher are unit-tested (classifier-turn-wait.test.ts, plan.test.ts).
 test.describe('periodic classifier — mentioned places', () => {
   let app: LaunchedApp
   let mock: MockLlm

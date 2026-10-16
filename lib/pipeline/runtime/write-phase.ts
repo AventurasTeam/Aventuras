@@ -36,10 +36,9 @@ function grantedBeforeAbort(grant: Promise<void>, signal: AbortSignal): Promise<
 }
 
 /**
- * generation-pipeline.md → No-gate write phase: waits until no `per-turn` run is in flight on the
- * branch, then takes the branch write lock exclusive. True once it holds; false on an abort, with
- * nothing held or queued. The check and the request share one tick, so a turn admitted after
- * the check queues its first write behind this hold and cannot register until the run settles.
+ * generation-pipeline.md → No-gate write phase. Waits out any `per-turn` run on the branch, then
+ * takes its write lock exclusive: true once held, false on abort with nothing held or queued.
+ * Check and request share one tick: a turn admitted after the check queues behind the hold.
  */
 export async function enterWritePhase(
   ctx: Pick<PhaseContext, 'branchId' | 'actionId' | 'abortSignal'>,

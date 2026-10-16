@@ -373,12 +373,12 @@ describe('submitTurn', () => {
     ).toEqual(['first'])
   })
 
-  // Self-blocking policy + a gated phase: b1's turn stays reserved and in-flight until
-  // `release`, so a b2 submit's admission is rejected — the path runPipeline can take
-  // before any run reserves, which abortRun's usual delta-reversal never sees.
   const pendingOn = (branchId: string) =>
     [...generationStore.getTxState().pendingTurns].filter((t) => t.branchId === branchId).length
 
+  // Self-blocking policy + a gated phase: b1's turn stays reserved and in-flight until
+  // `release`, so a b2 submit's admission is rejected — the path runPipeline can take
+  // before any run reserves, which abortRun's usual delta-reversal never sees.
   async function holdAdmissionOnB1() {
     const { ctx, db } = await makeHarness()
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
@@ -435,8 +435,7 @@ describe('submitTurn', () => {
     expectRan(await first)
   })
 
-  // generation-pipeline.md → No-gate write phase: a periodic pass must see the turn before the
-  // turn's first write, and its run must be visible before the mark drops.
+  // generation-pipeline.md → No-gate write phase: no window where a periodic pass misses the turn.
   describe('pending turn mark', () => {
     it('marks the turn from before its user_action write until its run registers', async () => {
       const { ctx, release, first } = await holdAdmissionOnB1()

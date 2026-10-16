@@ -26,11 +26,9 @@ export type RunState = {
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
 
-// reversalInProgress brackets a prose-reversal's wait->sweep window: while set it blocks
-// REVERSAL_BLOCKED scheduling (concurrency.ts) and makes applyDeltaAction reject user
-// dispatch. pendingTurns holds a turn from its admission to its run's registration
-// (generation-pipeline.md → No-gate write phase). ReadonlyMap keeps consumers off the
-// mutators; intermediates stays mutable.
+// reversalInProgress brackets a prose-reversal's wait->sweep window, blocking REVERSAL_BLOCKED
+// scheduling (concurrency.ts) and user dispatch. pendingTurns: generation-pipeline.md → No-gate
+// write phase. ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
 export type TxState = {
   runs: ReadonlyMap<string, RunState>
   reversalInProgress: boolean

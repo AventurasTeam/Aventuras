@@ -37,8 +37,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
   generateStructured: vi.fn(),
 }))
 
-// generation-pipeline.md → No-gate write phase: a pass writes only when no turn is in flight
-// on its branch, and a turn sent meanwhile waits rather than being refused.
+// generation-pipeline.md → No-gate write phase.
 
 type Gate = { opened: Promise<void>; open: () => void }
 function gate(): Gate {
@@ -227,9 +226,8 @@ describe('a periodic pass and a turn on one branch', () => {
     ])
   })
 
-  // The window the pending mark closes: the turn's user_action has committed but its run is not
-  // yet in txState. A pass that saw no turn there would plan, and the turn would read its
-  // entities mid-burst.
+  // The pending mark's window: the turn's user_action committed, its run not yet in txState. A
+  // pass that saw no turn there would plan, and the turn would read its entities mid-burst.
   it("doesn't plan while a turn is between its user_action and its run", async () => {
     const order: string[] = []
     const writeStarted = gate()
