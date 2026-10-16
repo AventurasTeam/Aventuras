@@ -3688,7 +3688,12 @@ class StoryStore {
    */
   async deleteChapter(chapterId: string): Promise<boolean> {
     if (!this.currentStory) throw new Error('No story loaded')
-    if (chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null)) {
+    // The chapter's own branch too: a child branch shows a parent's chapter as its own.
+    const owner = this.chapters.find((ch) => ch.id === chapterId)?.branchId ?? null
+    if (
+      chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null) ||
+      chapterCards.busy(this.currentStory.id, owner)
+    ) {
       log('Chapter work in flight, refusing to delete a chapter:', chapterId)
       ui.showToast(
         'A chapter is being written on this branch. Try again once it is done.',
