@@ -20,12 +20,14 @@ import {
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import {
-  checkParentChain,
   itemNamesakes,
   locationMapView,
   matchNewLocation,
   nameBasis,
   parentOfLocations,
+  placeNewLocation,
+  settlingOrder,
+  type ParentDropCause,
 } from '@/lib/world'
 
 type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
@@ -42,8 +44,6 @@ type LocationFate = {
   parentId: string | null
   parentDropped: boolean
 }
-
-type Settling = { emission: NewLocationEmission; parentUnresolved: boolean }
 
 type StoredText = { name: string; description: string }
 
@@ -97,7 +97,7 @@ function logDropped(
 function logParentDropped(
   log: Logger,
   emission: NewLocationEmission,
-  cause: 'unresolved' | 'retired' | 'chain-broken',
+  cause: ParentDropCause,
 ): void {
   log.warn('classifier.create_parent_dropped', {
     handle: emission.handle,
@@ -130,52 +130,6 @@ function keptItemHandles(block: ParsedStateBlock, byId: ReadonlyMap<string, Enti
   return kept
 }
 
-function inHandleCycle(
-  create: NewLocationEmission,
-  waiting: readonly NewLocationEmission[],
-): boolean {
-  const parentOf = new Map(waiting.map((e) => [e.handle, e.parent]))
-  const seen = new Set<string>()
-  let at = create.parent
-  while (at !== undefined && !seen.has(at)) {
-    if (at === create.handle) return true
-    seen.add(at)
-    at = parentOf.get(at)
-  }
-  return false
-}
-
-// Top-down passes: a child listed before its parent settles on a later pass. A parent that never
-// resolves (undeclared handle, non-location id, handle cycle) roots its create; children follow it.
-function settlingOrder(
-  creates: readonly NewLocationEmission[],
-  isLocationId: (id: string) => boolean,
-): Settling[] {
-  const order: Settling[] = []
-  const settled = new Set<string>()
-  const settle = (emission: NewLocationEmission, parentUnresolved: boolean) => {
-    order.push({ emission, parentUnresolved })
-    settled.add(emission.handle)
-  }
-  const resolvable = (parent: string | undefined) =>
-    parent === undefined || settled.has(parent) || (!isCreateHandle(parent) && isLocationId(parent))
-
-  let waiting = [...creates]
-  while (waiting.length > 0) {
-    const before = order.length
-    for (const emission of waiting) if (resolvable(emission.parent)) settle(emission, false)
-    if (order.length === before) {
-      const handles = new Set(waiting.map((e) => e.handle))
-      const orphans = waiting.filter((e) => e.parent === undefined || !handles.has(e.parent))
-      // No orphan: every waiting create is in a handle cycle or hangs off one.
-      const stuck = orphans.length > 0 ? orphans : waiting.filter((e) => inHandleCycle(e, waiting))
-      for (const emission of stuck) settle(emission, true)
-    }
-    waiting = waiting.filter((e) => !settled.has(e.handle))
-  }
-  return order
-}
-
 function planLocations(args: {
   emissions: readonly NewLocationEmission[]
   kept: ReadonlySet<string>
@@ -200,26 +154,16 @@ function planLocations(args: {
   )
   for (const { emission, parentUnresolved } of order) {
     const { parent } = emission
-    let parentId =
-      parentUnresolved || parent === undefined ? null : (fates.get(parent)?.id ?? parent)
-    let parentDropped = parentUnresolved
-    if (parentUnresolved) {
-      logParentDropped(args.log, emission, 'unresolved')
-    } else if (parentId !== null && byId.get(parentId)?.status === 'retired') {
-      // Nothing active may sit inside a retired place (data-model.md → LocationState shape).
-      logParentDropped(args.log, emission, 'retired')
-      parentId = null
-      parentDropped = true
-    } else if (
-      parentId !== null &&
-      // The new row has no children, so only a loop already stored above its parent fails.
-      checkParentChain(emission.handle, parentId, parentOfLocations([...entities, ...rows])) !==
-        'ok'
-    ) {
-      logParentDropped(args.log, emission, 'chain-broken')
-      parentId = null
-      parentDropped = true
-    }
+    const placement = placeNewLocation({
+      handle: emission.handle,
+      parentId: parentUnresolved || parent === undefined ? null : (fates.get(parent)?.id ?? parent),
+      parentUnresolved,
+      statusOf: (id) => byId.get(id)?.status,
+      parentOf: parentOfLocations([...entities, ...rows]),
+    })
+    const { parentId } = placement
+    const parentDropped = placement.dropped !== null
+    if (placement.dropped !== null) logParentDropped(args.log, emission, placement.dropped)
 
     const text = storedText(emission)
     const twin = placed.find(

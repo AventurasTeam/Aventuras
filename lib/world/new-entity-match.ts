@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
-import type { LocationMapView } from './location-map'
+import type { LocationMatchView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
 import { parentIdOf } from './parent-chain'
 
@@ -18,11 +18,11 @@ function byAge(a: Entity, b: Entity): number {
 /**
  * piggyback.md → Matching before creating. Reuses a non-retired exact namesake the prompt's map
  * (`view`) hangs under `parentId` (null: the root), places it left out included; otherwise flags
- * against real siblings of any status.
+ * against real siblings of any status, the candidate's `keywords` counting for a keyword hit.
  */
 export function matchNewLocation(
-  candidate: { name: string; parentId: string | null },
-  view: LocationMapView,
+  candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+  view: LocationMatchView,
 ): PlaceMatch {
   const { locations } = view
 
@@ -36,7 +36,7 @@ export function matchNewLocation(
     .sort((a, b) => a.real - b.real || a.hidden - b.hidden || byAge(a.entity, b.entity))
   if (reused !== undefined) return { kind: 'reuse', id: reused.entity.id }
 
-  const side = { name: candidate.name, keywords: [] }
+  const side = { name: candidate.name, keywords: candidate.keywords ?? [] }
   const [partner] = locations
     .filter((e) => parentIdOf(e) === candidate.parentId)
     .flatMap((entity) => {

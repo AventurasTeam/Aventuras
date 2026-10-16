@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
-import { locationMapView } from './location-map'
+import { locationMapView, unhiddenLocationView } from './location-map'
 import { itemNamesakes, matchNewLocation as matchAgainst } from './new-entity-match'
 
 const place = (
@@ -275,6 +275,50 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     expect(matchNewLocation({ name: 'The Vault Door', parentId: 'loc_eldra' }, REGION)).toEqual(
       PLAIN,
     )
+  })
+})
+
+// classifier.md → Mentioned places: the pass saw every place, so its real children are the set.
+describe('matchNewLocation — over an unhidden view, with the candidate keywords', () => {
+  const ELDRA = place('loc_eldra', 'Eldra', null)
+  const VELLIS = place('loc_vellis', 'Port Vellis', 'loc_eldra', { injectionMode: 'disabled' })
+  const VAULT = place('loc_vault', 'The Vault', 'loc_vellis')
+  const REGION = [ELDRA, VELLIS, VAULT]
+  const unhidden = (
+    candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+    entities: readonly Entity[],
+  ) => matchAgainst(candidate, unhiddenLocationView(entities))
+
+  it('reuses a disabled real child', () => {
+    expect(unhidden({ name: 'Port Vellis', parentId: 'loc_eldra' }, REGION)).toEqual({
+      kind: 'reuse',
+      id: 'loc_vellis',
+    })
+  })
+
+  it('never reaches through a disabled place: a grandchild is not a child', () => {
+    expect(unhidden({ name: 'The Vault', parentId: 'loc_eldra' }, REGION)).toEqual(PLAIN)
+  })
+
+  it("flags a sibling named among the candidate's keywords", () => {
+    const mill = place('loc_mill', 'The Old Mill', 'loc_eldra')
+    const candidate = { name: 'Varn Mill', parentId: 'loc_eldra' }
+    expect(unhidden({ ...candidate, keywords: ['the old mill'] }, [ELDRA, mill])).toEqual(
+      flaggedWith('loc_mill'),
+    )
+    expect(unhidden(candidate, [ELDRA, mill])).toEqual(PLAIN)
+  })
+
+  it("pairs with a contained name before an older hit through the candidate's keywords", () => {
+    const mill = place('loc_mill', 'The Old Mill', 'loc_eldra', { createdAt: 1 })
+    const ford = place('loc_ford', 'Ford', 'loc_eldra', { createdAt: 9 })
+    expect(
+      unhidden({ name: 'Varn Ford', parentId: 'loc_eldra', keywords: ['the old mill'] }, [
+        ELDRA,
+        mill,
+        ford,
+      ]),
+    ).toEqual(flaggedWith('loc_ford'))
   })
 })
 

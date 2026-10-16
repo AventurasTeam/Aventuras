@@ -85,13 +85,17 @@ export {
   listedAncestorNames,
   locationMapView,
   looseItemLines,
+  placeTree,
+  unhiddenLocationView,
 } from './location-map'
 export type {
   HeldItemLine,
   LocationMapRow,
   LocationMapView,
+  LocationMatchView,
   LooseItemLine,
   MapAnchor,
+  PlaceTreeRow,
 } from './location-map'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
@@ -112,3 +116,5 @@ export type {
   StoryPlace,
 } from './place-rules'
 export { itemNamesakes, matchNewLocation } from './new-entity-match'
+export { placeNewLocation, settlingOrder } from './new-place-order'
+export type { NewPlaceDeclaration, ParentDropCause, SettlingPlace } from './new-place-order'
