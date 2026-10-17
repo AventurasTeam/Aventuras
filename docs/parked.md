@@ -976,11 +976,10 @@ it in World, the delete's tail-scene update still names it. Recovery
 would prune that delete with the create it holds, so it refuses as
 `write-back`
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
-writes nothing, and leaves the marker open. Moving a place the
-wizard, a seed or an import made under a place the pass created
-refuses the same way, as `no-create`: the closure follows the moved
-place's parent to the pass's place and finds no `create` to reverse.
-Every boot refuses again while that delete or move stays in the log: the "Recovery incomplete" modal
+writes nothing, and leaves the marker open. Moving another place
+under a place the pass created refuses the same way, as
+`moved-outside`: taking the moved place would delete it, with every
+place inside it. Every boot refuses again while that delete or move stays in the log: the "Recovery incomplete" modal
 shows at each startup, without promising a retry, and boot keeps the
 branch off the classifier cadence (`resetStuckClassifierRunState`).
 Nothing else is lost, but v1 has no "drop orphan" affordance to clear
@@ -1145,9 +1144,11 @@ runs inside its write lock, which it takes only when no turn is in
 flight. In the boot-recovery window above, an entry's
 `currentLocationId`, a character's `current_location_id` or
 `lastSeenAt` and an item's `at_location_id` can still name a place
-recovery removes. A user's move of another place under it is followed
-instead: recovery takes the moved place with every write to it, or
-refuses as `no-create` when a writer outside the log made it.
+recovery removes. A user's move of another place under it is refused
+instead, as `moved-outside`
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+since taking the moved place would delete it and every place inside
+it.
 
 A fix adds these fields to the registry's JSON-path references, which
 the closure reads through `json_extract`; the arrays need `json_each`.
