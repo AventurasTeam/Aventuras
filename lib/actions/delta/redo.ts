@@ -5,7 +5,7 @@ import type { DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
 import { heldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
-import type { RefPath } from './live-refs'
+import { pathRefIds, type RefPath } from './live-refs'
 import { resolveByTable, whereForDelta } from './registry'
 import {
   DeltaReplayError,
@@ -23,12 +23,12 @@ export type RedoSnapshot = {
   rowBeforeUndo: Record<string, unknown> | null
 }
 
-/** The column of a row whose ref the undo cleared, as it stood before the undo. */
+/** A ref the undo cleared, with the id it held before the undo. */
 export type RefRestore = {
   readonly branchId: string
   readonly row: RowRef
-  readonly column: RefPath['column']
-  readonly valueBeforeUndo: unknown
+  readonly ref: RefPath
+  readonly idBeforeUndo: string | null
 }
 
 /**
@@ -95,12 +95,18 @@ async function currentRow(
   return found[0] ?? null
 }
 
-// A clear through a row only a sweep removes stays: redo leaves that row to re-derive.
+// A clear through a row only a sweep removes stays: redo leaves that row to re-derive. A row a
+// snapshot restores whole gets its ref back with it.
 function clearsRedoRestores(set: ReversalSet): RefClear[] {
   const recreated = new Set(
     set.redoRows.filter((d) => d.op === 'create').map((d) => heldKey(d.targetTable, d.targetId)),
   )
-  return set.refClears.filter((c) => recreated.has(heldKey(c.ref.refTable, c.removedId)))
+  const snapshotted = new Set(set.redoRows.map((d) => heldKey(d.targetTable, d.targetId)))
+  return set.refClears.filter(
+    (c) =>
+      recreated.has(heldKey(c.ref.refTable, c.removedId)) &&
+      !snapshotted.has(heldKey(c.row.table, c.row.id)),
+  )
 }
 
 async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoGroup> {
@@ -125,14 +131,11 @@ async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoGroup>
   const refRestores: RefRestore[] = []
   for (const { row, ref } of restored) {
     const before = await currentRow(ctx, row.table, { branchId: set.branchId, targetId: row.id })
-    // The planner clears no row it finds absent, so there is nothing to put back.
-    if (before)
-      refRestores.push({
-        branchId: set.branchId,
-        row,
-        column: ref.column,
-        valueBeforeUndo: before[ref.column],
-      })
+    // Neither live nor held: the planner clears nothing there, so nothing goes back.
+    if (before) {
+      const id = pathRefIds(row.table, before).find((p) => p.ref.path === ref.path)?.id ?? null
+      refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id })
+    }
   }
   return new RedoGroup(snapshots, refRestores)
 }
@@ -219,16 +222,24 @@ async function applyRedoLocked(
   // logged into the slot the undo freed, and log order stays write order
   // (data-model.md -> Entry mutability & rollback).
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
-  for (const { branchId, row, column, valueBeforeUndo } of refRestores) {
+  // Read under the key locks: only the ref goes back, over the column as the undo left it.
+  const refPatches: { row: RowRef; branchId: string; columns: Record<string, unknown> }[] = []
+  for (const { branchId, row, ref, idBeforeUndo } of refRestores) {
     const entry = resolveByTable(row.table)
     if (!entry) throw new Error(`redo apply: unknown target_table ${row.table}`)
+    const current = await currentRow(ctx, row.table, { branchId, targetId: row.id })
+    if (!current) continue
+    const columns = {
+      [ref.column]: { ...(current[ref.column] as object), [ref.path]: idBeforeUndo },
+    }
     ops.push(
       ctx.db
         .update(entry.descriptor.table)
-        .set({ [column]: valueBeforeUndo })
+        .set(columns)
         .where(whereForDelta(entry.descriptor, { branchId, targetId: row.id }))
         .toSQL(),
     )
+    refPatches.push({ row, branchId, columns })
   }
   await ctx.runInTransaction([...ops, ...deltaOps, ...extraOps])
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
@@ -256,12 +267,8 @@ async function applyRedoLocked(
       // create/update with no rowBeforeUndo wrote nothing to the DB above; skip
       // the patcher too so the store never gains a phantom row.
     }
-    for (const { branchId, row, column, valueBeforeUndo } of refRestores)
-      resolveByTable(row.table)?.patcher?.(branchId, {
-        op: 'update',
-        id: row.id,
-        columns: { [column]: valueBeforeUndo },
-      })
+    for (const { row, branchId, columns } of refPatches)
+      resolveByTable(row.table)?.patcher?.(branchId, { op: 'update', id: row.id, columns })
   } catch (e) {
     throw new DeltaReplayError('Post-commit redo patch sync failed', {
       cause: e,

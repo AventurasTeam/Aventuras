@@ -432,6 +432,66 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     expect(await parentOf('loc_docks')).toBe('loc_varn')
   })
 
+  const flood = (source: DeltaSource): PipelineAction => ({
+    kind: 'updateEntity',
+    source,
+    payload: {
+      branchId: 'b1',
+      id: 'loc_docks',
+      patch: { state: { parent_location_id: 'loc_varn', condition: 'flooded' } },
+    },
+  })
+
+  it('redoes a child the target also changed whole, under the parent it restores', async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
+    await act('act_flood', flood('user_edit'))
+    await hydrateEntities()
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_varn', 'act_flood'),
+    })
+    const { group, reverse: undo } = await prepareUndo(set, ctx)
+
+    await undo()
+    expect((await entityRow('loc_docks')).state).toEqual({ parent_location_id: null })
+    await applyRedo(group, ctx)
+
+    const restored = { parent_location_id: 'loc_varn', condition: 'flooded' }
+    expect((await entityRow('loc_docks')).state).toEqual(restored)
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual(restored)
+  })
+
+  // A sweep's rows stay out of redo, so redo puts back the parent alone.
+  it("leaves a sweep's change to a cleared child out of its redo", async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', {
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: {
+        entry: {
+          ...place('loc_docks', 'loc_varn'),
+          state: { parent_location_id: 'loc_varn', condition: 'dry' },
+        },
+      },
+    })
+    await act('act_flood', flood('periodic_classifier'))
+    await hydrateEntities()
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_varn'),
+      sweep: await deltasOf('act_flood'),
+    })
+    const { group, reverse: undo } = await prepareUndo(set, ctx)
+
+    await undo()
+    await applyRedo(group, ctx)
+
+    const redone = { parent_location_id: 'loc_varn', condition: 'dry' }
+    expect((await entityRow('loc_docks')).state).toEqual(redone)
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual(redone)
+  })
+
   it('keeps a child cleared through a parent only a sweep removed', async () => {
     await act('act_varn', create('loc_varn', null, 'periodic_classifier'))
     await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
