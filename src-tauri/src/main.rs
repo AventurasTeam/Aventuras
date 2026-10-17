@@ -2,15 +2,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    // Workaround for "Failed to create GBM buffer" on NVIDIA/Wayland.
-    // Only applied when an NVIDIA GPU is detected, so AMD/Intel users get full GPU acceleration.
     #[cfg(target_os = "linux")]
     if is_nvidia_wayland() {
-        // SAFETY: nothing else has started a thread yet.
-        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+        // Explicit sync on NVIDIA's Wayland driver kills the WebView with "Error 71".
+        set_default("__NV_DISABLE_EXPLICIT_SYNC", "1");
+        // The AppImage's bundled WebKitGTK/libgbm cannot allocate GBM buffers on NVIDIA.
+        if std::env::var_os("APPIMAGE").is_some() {
+            set_default("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
     }
 
     aventura_lib::run()
+}
+
+/// Leaves a variable the user already set alone, so either workaround can be overridden.
+#[cfg(target_os = "linux")]
+fn set_default(key: &str, value: &str) {
+    if std::env::var_os(key).is_none() {
+        // SAFETY: nothing else has started a thread yet.
+        unsafe { std::env::set_var(key, value) };
+    }
 }
 
 #[cfg(target_os = "linux")]
