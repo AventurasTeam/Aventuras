@@ -1146,6 +1146,10 @@ flight. In the boot-recovery window above, an entry's
 recovery removes. A user's move of another place under it is cleared
 too, putting that place at the root
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A move under it and back off it is not: the place stays where the user
+left it, but the later move's undo still names the removed place, so
+a later CTRL-Z of that move writes the dead id back. The `write-back`
+refusal checks only the groups of the deletes recovery prunes.
 
 A fix adds these fields to the registry's JSON-path references, which
 the closure reads through `json_extract`; the arrays need `json_each`.

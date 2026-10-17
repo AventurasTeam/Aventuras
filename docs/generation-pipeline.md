@@ -1536,11 +1536,13 @@ reaches only from one. CTRL-Z's redo snapshot covers the first two, so
 redo restores the links the closure removed with the group; a sweep's
 rows stay out, since the clamped watermark re-derives them. A delta
 reached both ways counts as the closure's. The snapshot also takes,
-before the undo, the `state` of each place whose parent the reversal
-clears when the parent's `create` is among the first two, and redo
-writes it back with the parent's row, logging nothing, as the clear
-did. A place whose parent only a sweep's row removes stays at the
-root. Every
+before the undo, the parent of each place whose parent the reversal
+clears when the parent's `create` is among the first two, and redo puts
+that parent alone back with the parent's row, over the place's `state`
+as the undo left it, logging nothing, as the clear did. A place the
+snapshot restores whole gets its parent back with its row. A place
+whose parent only a sweep's row removes would stay at the root; that
+is a guard, since no sweep holds an entity create today. Every
 delta-logged write clears the redo stack, so redo always meets the
 state its undo left.
 

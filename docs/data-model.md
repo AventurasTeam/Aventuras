@@ -2522,6 +2522,8 @@ arbitrary editing.
   since a fact anchored to a surviving turn can name a row the suffix
   removes
   ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+  A place naming a removed parent is the exception: it stays, and the
+  reversal clears its parent to the root.
 - **A first-introduction entity survives the edit that removed its prose.**
   It is not a fact about that turn but a row the rest of the branch now
   references — `sceneEntities` arrays, later happenings' involvements,
@@ -2813,7 +2815,9 @@ anchors by construction. The one exception runs the other way: a
 background delta naming a row the reversal removes goes with it
 whatever its anchor, so a fact about a surviving turn cannot name a
 row that exists nowhere
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)). The same predicate drives the
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A place's create naming a removed parent stays instead, and the
+reversal clears that parent to the root. The same predicate drives the
 [fork reverse-apply partition](#branch-model), and is orthogonal to the
 in-flight
 [classifier barrier](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier),
