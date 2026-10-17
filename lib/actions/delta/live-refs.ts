@@ -33,7 +33,7 @@ type RefColumnOf<Row> = {
   readonly when?: { readonly column: keyof Row & string; readonly value: Translation['targetKind'] }
 }
 
-// Distributes over the kinds' state shapes: a field holding exactly one entity id or null.
+// Distributes over the kinds' state shapes. EntityId aliases string: any nullable string field.
 type IdField<S> = S extends unknown
   ? {
       [K in keyof S]-?: [S[K], EntityId | null] extends [EntityId | null, S[K]] ? K : never
@@ -44,7 +44,7 @@ type IdField<S> = S extends unknown
 export type RefPath = {
   readonly column: 'state'
   readonly path: IdField<EntityState>
-  readonly refTable: RefTable
+  readonly refTable: 'entities'
   readonly when?: never
 }
 

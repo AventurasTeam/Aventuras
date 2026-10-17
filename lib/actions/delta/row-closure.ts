@@ -295,9 +295,9 @@ async function closeOver(
     const isRemoved = (ref: LiveRef) => removed.has(heldKey(ref.table, ref.id))
     const restoresRemoved = ({ ref, id }: RestoredRef) =>
       id !== null && isRemoved({ table: ref.refTable, id })
+    // A row the set moved is judged by the last loop, by where its undos leave it.
     for (const hit of await liveReferrers(ctx, branchId, round)) {
-      const after = hit.ref.path === undefined ? undefined : restored.get(restoredKey(hit, hit.ref))
-      if (after === undefined || restoresRemoved(after)) remove(hit, true)
+      if (hit.ref.path === undefined || !restored.has(restoredKey(hit, hit.ref))) remove(hit, true)
     }
     for (const { table, id } of round) {
       if (!isRefTable(table)) continue
