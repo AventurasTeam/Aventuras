@@ -61,10 +61,15 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
 - **Audio session.** A playback session with `mixWithOthers`, re-activated after an interruption.
   The page's own audio plays in WebKit's separate session, so this one is not what keeps the page
   alive.
-- **Expiry.** The expiration handler posts an "interrupted" notification itself, because the page
-  may be suspended before JS can react, then tells JS to abort. It skips the notification while the
-  app is active: `tauri-plugin-notification`'s `willPresent` force-unwraps its own lookup and
-  crashes on a notification it did not create.
+- **Expiry.** The expiration handler posts a notification itself, because the page may be suspended
+  before JS can react, then tells JS to abort. In the last stage ("finishing") the story is already
+  saved and only the background updates were cut short, so both the notification and the Island's
+  final message say "Story ready"; in any earlier stage they say "interrupted". It skips the
+  notification while the app is active.
+- **Notification delegate.** `tauri-plugin-notification` force-unwraps its own lookup
+  (`notificationsMap[id]!`) for every notification it is handed, so showing or tapping the one this
+  plugin posts crashes the app. `ExpiryNoticeFilter` wraps that plugin's delegate at the first
+  generation, handles this one notification itself, and forwards the rest.
 
 ### Page side
 
@@ -74,10 +79,12 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   run.
 - **Outcome.** Each release can report `failed` or `stopped`; the worst one is the Island's final
   message.
-- **Completion notification.** It is sent through `afterBackgroundKeepAlive`, once nothing holds
-  the keep-alive and before the task stops, so it arrives with the Island's "Story ready". It is
-  skipped when the OS ended the keep-alive (the Island's Stop button): the native side has already
-  posted "interrupted", and the generation may still run to its end.
+- **Completion notification.** On iOS it is sent through `afterBackgroundKeepAlive`, once nothing
+  holds the keep-alive and before the task stops, so it arrives with the Island's "Story ready".
+  Android has no such display and notifies as soon as the pipeline ends. It is skipped when the OS
+  ended the keep-alive (the Island's Stop button): the native side has already posted its own
+  notice, and the generation may still run to its end. The page's "failed" notification is
+  skipped the same way, so one interruption gives one notification.
 - **Audio loop.** `silentAudio.ts` plays one second of 16-bit audio at ±1 LSB, looped. An
   `<audio>` element is required: a Web Audio context is interrupted when the app is hidden. The
   element must stay unmuted at full volume, or WebKit does not count the page as playing audio. A

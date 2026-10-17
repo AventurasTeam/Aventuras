@@ -33,6 +33,7 @@
     type ClassificationCompleteEvent,
   } from '#lib/services/events.ts'
   import { isTouchDevice } from '#lib/utils/swipe.ts'
+  import { isIos } from '#lib/utils/platform.ts'
   import {
     afterBackgroundKeepAlive,
     holdBackgroundKeepAlive,
@@ -460,8 +461,10 @@
   }
 
   /** Send a failure notification if the user was backgrounded during this generation. */
-  async function notifyFailureIfBackgrounded() {
+  async function notifyFailureIfBackgrounded(keepAliveEnded = false) {
+    // After the OS ended the keep-alive, the native side has already posted its own notice.
     if (
+      !keepAliveEnded &&
       ui.wasBackgroundedDuringGeneration &&
       ui.isAppBackgrounded &&
       settings.experimentalFeatures.generationNotifications
@@ -915,7 +918,7 @@
           timestamp: Date.now(),
         })
 
-        await notifyFailureIfBackgrounded()
+        await notifyFailureIfBackgrounded(keepAliveEnded)
         return
       }
 
@@ -947,9 +950,9 @@
           releaseBackgroundTasks()
         })
 
-      // Notify the user that generation completed while the app is still backgrounded, once the
-      // keep-alive has gone idle, so it lands with the Dynamic Island's "complete" and the
-      // service is not torn down first.
+      // Notify the user that generation completed while the app is still backgrounded. On iOS it
+      // waits for the keep-alive to go idle, so it lands with the Dynamic Island's "complete" and
+      // the task is not torn down first; Android has no such display and notifies at once.
       const notifyCompletion = async () => {
         if (
           !keepAliveEnded &&
@@ -960,7 +963,7 @@
           await sendGenerationNotification(fullResponse, true)
         }
       }
-      if (useBackgroundService) afterBackgroundKeepAlive(notifyCompletion)
+      if (useBackgroundService && isIos()) afterBackgroundKeepAlive(notifyCompletion)
       else await notifyCompletion()
     } catch (error) {
       // Only suppress handling when the user explicitly requested a stop.
@@ -999,7 +1002,7 @@
         ui.showToast(errorMessage, 'error')
       }
 
-      await notifyFailureIfBackgrounded()
+      await notifyFailureIfBackgrounded(keepAliveEnded)
     } finally {
       ui.endStreaming()
       ui.setGenerating(false)
