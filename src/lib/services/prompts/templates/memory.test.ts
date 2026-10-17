@@ -174,6 +174,10 @@ describe('interactive-lorebook', () => {
     })
 
     expect(character).toContain("so you don't need to read it first")
+    expect(character).toContain('not approved yet')
+    expect(character).toContain('`unsavedFields`')
+    expect(character).not.toContain('pendingCreates')
+    expect(lorebook).toContain('`pendingCreates`')
     expect(lorebook).not.toContain("you don't need to read it")
     expect(lorebook).toContain('`list_entries` and `read_entry`')
   })

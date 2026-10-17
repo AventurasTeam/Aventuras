@@ -116,8 +116,19 @@ export function requiresApiKey(providerType: string): boolean {
   return PROVIDER_REQUIRES_API_KEY[providerType as ImageProviderType] ?? true
 }
 
+/**
+ * Whether edits through this profile and model can carry a reference image. A model the list
+ * does not know passes: only an explicit `supportsImg2Img: false` rules out.
+ */
+export async function supportsReferenceImages(profileId: string, model: string): Promise<boolean> {
+  const profile = settings.getImageProfile(profileId)
+  if (!profile || !PROVIDER_READS_REFERENCES[profile.providerType]) return false
+  const modelInfo = (await listImageModels(profileId)).find((m) => m.id === model)
+  return modelInfo?.supportsImg2Img !== false
+}
+
 /** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
-async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
+export async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
   if (/^https?:\/\//i.test(image)) {
     return fetchPublicImageBase64(image, { signal, serviceId: 'image-reference' })
   }

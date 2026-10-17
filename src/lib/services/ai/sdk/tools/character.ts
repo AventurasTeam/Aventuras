@@ -9,6 +9,7 @@ import { tool } from 'ai'
 import * as z from 'zod'
 import type { VaultCharacter } from '#lib/types/index.ts'
 import type { VaultPendingChange } from '../schemas/vault'
+import { withUnsaved } from '#lib/services/ai/vault/effectiveVault.ts'
 import { applyTermChanges, uniqueTerms } from '#lib/utils/text.ts'
 import { vaultCharacterInputSchema, visualDescriptorsSchema } from '../schemas'
 
@@ -18,6 +19,8 @@ import { vaultCharacterInputSchema, visualDescriptorsSchema } from '../schemas'
 export interface CharacterToolContext {
   /** Getter for current vault characters (live, not snapshot) */
   characters: () => VaultCharacter[]
+  /** Fields of a character that differ from the saved vault, when `characters` includes unsaved state */
+  unsavedFields?: (id: string) => string[]
   /** Callback to register a pending change */
   onPendingChange: (change: VaultPendingChange) => void
   /** Generate unique ID for pending changes */
@@ -42,7 +45,7 @@ export function toCharacterDetails(character: VaultCharacter) {
  * Create character CRUD tools with the given context.
  */
 export function createCharacterTools(context: CharacterToolContext) {
-  const { characters, onPendingChange, generateId } = context
+  const { characters, unsavedFields, onPendingChange, generateId } = context
 
   return {
     /**
@@ -116,7 +119,10 @@ export function createCharacterTools(context: CharacterToolContext) {
           return { found: false, error: `Character with ID "${characterId}" not found` }
         }
 
-        return { found: true, character: toCharacterDetails(character) }
+        return withUnsaved(
+          { found: true, character: toCharacterDetails(character) },
+          unsavedFields?.(characterId) ?? [],
+        )
       },
     }),
 

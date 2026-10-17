@@ -36,6 +36,7 @@
   import { Separator } from '#lib/components/ui/separator/index.ts'
   import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { database } from '#lib/services/database.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
   import { isAndroid, isIos } from '#lib/utils/platform.ts'
   import { autosize } from '#lib/utils/autosize.ts'
   import { ask, open } from '@tauri-apps/plugin-dialog'
@@ -44,6 +45,7 @@
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
   let stateTrackingChecked = $state(settings.experimentalFeatures.stateTracking)
+  let closingTracking = $state(false)
 
   let isBackingUp = $state(false)
   let backupResult = $state<{ success: boolean; message: string } | null>(null)
@@ -214,7 +216,34 @@
         return
       }
     }
+    if (!checked && !(await closeTracking())) {
+      stateTrackingChecked = true
+      return
+    }
     await settings.updateExperimentalFeatures({ stateTracking: checked })
+  }
+
+  /**
+   * Before tracking goes off: branches must still resolve as they did while tracked. False when
+   * the snapshots failed and the reader chose to keep tracking on, since a later attempt
+   * can only run while it still is.
+   */
+  async function closeTracking(): Promise<boolean> {
+    closingTracking = true
+    try {
+      await story.takeClosingSnapshots()
+      return true
+    } catch (error) {
+      console.error('[ExperimentalSettings] Closing snapshots failed:', error)
+      return await ask(
+        `The closing snapshots could not be saved: ${errMessage(error)}\n\n` +
+          'Without them, past checkpoints in what was tracked may be refused. ' +
+          'Turn State Tracking off anyway?',
+        { title: 'Turn off State Tracking', kind: 'warning' },
+      )
+    } finally {
+      closingTracking = false
+    }
   }
 
   async function handleRollbackToggle(checked: boolean) {
@@ -281,6 +310,7 @@
   }
 
   async function handleResetAll() {
+    if (settings.experimentalFeatures.stateTracking && !(await closeTracking())) return
     await settings.resetExperimentalFeatures()
     stateTrackingChecked = settings.experimentalFeatures.stateTracking
   }
@@ -371,16 +401,22 @@
           <Label>State Tracking</Label>
         </div>
         <p class="text-muted-foreground text-xs">
-          Record world state changes (deltas) on each story entry after AI classification. This is
-          the foundation for rollback and lightweight branches.
+          Record every change to the world and the lorebook, and which entry it belongs to. Rollback
+          on Delete, regenerate and checkpoints at past entries rebuild state from these records.
         </p>
-        {#if settings.experimentalFeatures.stateTracking}
+        {#if closingTracking}
+          <p class="text-muted-foreground pt-1 text-xs italic">Saving where tracking stops…</p>
+        {:else if settings.experimentalFeatures.stateTracking}
           <p class="pt-1 text-xs font-medium text-amber-500">
-            Active — deltas will be recorded on new entries.
+            Active — every change to the world and the lorebook is recorded.
           </p>
         {/if}
       </div>
-      <Switch bind:checked={stateTrackingChecked} onCheckedChange={handleStateTrackingToggle} />
+      <Switch
+        bind:checked={stateTrackingChecked}
+        onCheckedChange={handleStateTrackingToggle}
+        disabled={closingTracking}
+      />
     </div>
 
     <!-- Rollback on Delete -->
@@ -459,8 +495,9 @@
       <Label>Auto-Snapshot Interval</Label>
     </div>
     <p class="text-muted-foreground text-xs">
-      Number of entries between automatic world state snapshots. Lower values allow faster rollback
-      but use more storage.
+      Number of entries between automatic world state snapshots. A checkpoint at a past entry is
+      rebuilt from the nearest snapshot after it, so lower values keep that closer but use more
+      storage.
     </p>
     <div class="flex items-center gap-4">
       <Slider
@@ -586,7 +623,13 @@
         Disable all experimental features and reset to defaults.
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={handleResetAll} class="gap-2">
+    <Button
+      variant="outline"
+      size="sm"
+      onclick={handleResetAll}
+      disabled={closingTracking}
+      class="gap-2"
+    >
       <RotateCcw class="h-4 w-4" />
       Reset
     </Button>

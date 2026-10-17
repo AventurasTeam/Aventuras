@@ -8,6 +8,7 @@
  */
 
 import type { AventuraExport, IdMaps } from './types'
+import { recordEntityIds } from './worldStateRecords'
 
 /**
  * Build every id table the import needs, in one pass over the export.
@@ -41,6 +42,15 @@ export function buildIdMaps(data: AventuraExport): IdMaps {
   ]) {
     for (const entity of collection ?? []) {
       oldToNewId.set(entity.id, crypto.randomUUID())
+    }
+  }
+
+  // A record can name a row that no longer exists (a deleted one, kept for restoring). It still
+  // needs an id of its own here, or a restore would overwrite the row of whichever story holds
+  // the old one.
+  for (const record of data.worldStateRecords ?? []) {
+    for (const id of recordEntityIds(record)) {
+      if (!oldToNewId.has(id)) oldToNewId.set(id, crypto.randomUUID())
     }
   }
 

@@ -10,27 +10,28 @@ comments stay short and say only what the next reader cannot infer — see
 
 ## Architecture
 
-| Document                                                  | Read it before touching                                                                                                                 |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| [overview.md](architecture/overview.md)                   | the repository layout, `StoryEntry`/branches/chapters/world state, the generation pipeline, or the side panels and their swipe gestures |
-| [context-injection.md](architecture/context-injection.md) | `services/ai/retrieval/`, `WorldStateInjector`, the three tiers, stickiness, agentic or static memory retrieval                         |
-| [lore-management.md](architecture/lore-management.md)     | `services/ai/lorebook/`, `services/duplicates/`, `LoreManagementCoordinator`, the duplicates window                                     |
-| [prompts.md](architecture/prompts.md)                     | anything under `services/prompts/templates/`, prompt packs, or the order blocks are assembled in                                        |
-| [ai-services.md](architecture/ai-services.md)             | adding a `ServiceId`, agent profiles, reasoning effort, or a default in `ai/core/defaults.ts`                                           |
-| [persistence.md](architecture/persistence.md)             | SQLite, a new migration, `src-tauri/src/`, or the shape of the settings blob                                                            |
-| [dialogue-and-tts.md](architecture/dialogue-and-tts.md)   | `utils/dialogue.ts`, dialogue highlighting, or the TTS pipeline                                                                         |
-| [story-time.md](architecture/story-time.md)               | `services/storyTime/`, time anchors, timeline anomalies, reconciliation, or a new story's starting time                                 |
-| [exchange-format.md](architecture/exchange-format.md)     | `services/exchange/`, exporting or importing a vault character, scenario or lorebook, the Aventura JSON format                          |
-| [narration-cleaning.md](architecture/narration-cleaning.md) | `utils/narrationClean.ts`, or sending story entries to a model that should not read `<pic>` tags, HTML or layout markup              |
+| Document                                                    | Read it before touching                                                                                                                 |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [overview.md](architecture/overview.md)                     | the repository layout, `StoryEntry`/branches/chapters/world state, the generation pipeline, or the side panels and their swipe gestures |
+| [context-injection.md](architecture/context-injection.md)   | `services/ai/retrieval/`, `WorldStateInjector`, the three tiers, stickiness, agentic or static memory retrieval                         |
+| [lore-management.md](architecture/lore-management.md)       | `services/ai/lorebook/`, `services/duplicates/`, `LoreManagementCoordinator`, the duplicates window                                     |
+| [prompts.md](architecture/prompts.md)                       | anything under `services/prompts/templates/`, prompt packs, or the order blocks are assembled in                                        |
+| [ai-services.md](architecture/ai-services.md)               | adding a `ServiceId`, agent profiles, reasoning effort, or a default in `ai/core/defaults.ts`                                           |
+| [persistence.md](architecture/persistence.md)               | SQLite, a new migration, `src-tauri/src/`, or the shape of the settings blob                                                            |
+| [dialogue-and-tts.md](architecture/dialogue-and-tts.md)     | `utils/dialogue.ts`, dialogue highlighting, or the TTS pipeline                                                                         |
+| [story-time.md](architecture/story-time.md)                 | `services/storyTime/`, time anchors, timeline anomalies, reconciliation, or a new story's starting time                                 |
+| [exchange-format.md](architecture/exchange-format.md)       | `services/exchange/`, exporting or importing a vault character, scenario or lorebook, the Aventura JSON format                          |
+| [state-tracking.md](architecture/state-tracking.md)         | `services/stateTracking/`, `rollbackService`, the store's write methods, checkpoints at past entries, the Labs State Tracking switch    |
+| [narration-cleaning.md](architecture/narration-cleaning.md) | `utils/narrationClean.ts`, or sending story entries to a model that should not read `<pic>` tags, HTML or layout markup                 |
 
 ## Development
 
-| Document                                              | Read it before                                                        |
-| ----------------------------------------------------- | --------------------------------------------------------------------- |
-| [testing.md](development/testing.md)                  | writing a test — the suite has real constraints on what it can import |
-| [release.md](development/release.md)                  | cutting a release, or changing the updater, CI or the build scripts   |
-| [ci-caching.md](development/ci-caching.md)            | changing a CI cache key, what a cache stores, or the Android targets  |
-| [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`    |
+| Document                                               | Read it before                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [testing.md](development/testing.md)                   | writing a test — the suite has real constraints on what it can import                 |
+| [release.md](development/release.md)                   | cutting a release, or changing the updater, CI or the build scripts                   |
+| [ci-caching.md](development/ci-caching.md)             | changing a CI cache key, what a cache stores, or the Android targets                  |
+| [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`                    |
 | [platform-support.md](development/platform-support.md) | using a new JS, CSS or Web API, or changing the bundle targets or minimum OS versions |
 | [shadcn-svelte.md](development/shadcn-svelte.md)       | regenerating `components/ui/` or bringing back the shadcn-svelte generator |
 

@@ -20,6 +20,7 @@
   import { supportsHover } from '#lib/utils/platform.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { checkpointsOnBranch, jumpToEntry } from '#lib/utils/storyNavigation.ts'
+  import CreateBranchModal from './CreateBranchModal.svelte'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -156,7 +157,6 @@
 
   // Track if creating new branch
   let showCreateForm = $state(false)
-  let newBranchName = $state('')
 
   let entryCounts = $state<Record<string, number>>({})
   let entryCountsRun = 0
@@ -255,30 +255,6 @@
       ? "This branch's checkpoints aren't usable - their entries aren't loaded yet, or were deleted"
       : 'No checkpoints available - checkpoints are created at chapter boundaries'
   })
-
-  async function handleCreateBranch() {
-    if (!newBranchName.trim()) return
-    if (!latestCheckpoint) {
-      alert(
-        'Cannot create a branch without a checkpoint. Checkpoints are created at chapter boundaries.',
-      )
-      return
-    }
-
-    try {
-      // Create branch from the most recent checkpoint
-      await story.createBranchFromCheckpoint(
-        newBranchName.trim(),
-        latestCheckpoint.lastEntryId,
-        latestCheckpoint.id,
-      )
-      newBranchName = ''
-      showCreateForm = false
-    } catch (error) {
-      console.error('Failed to create branch:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create branch')
-    }
-  }
 
   // Get children of a branch (or main branch if null)
   function getChildBranches(parentId: string | null): Branch[] {
@@ -387,7 +363,7 @@
           class="btn-ghost can-hover:min-h-0 can-hover:min-w-0 can-hover:p-1.5 flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 {canCreateBranch
             ? 'text-surface-400 hover:text-surface-200'
             : 'text-surface-600 cursor-not-allowed'}"
-          onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
+          onclick={() => canCreateBranch && (showCreateForm = true)}
           disabled={!canCreateBranch}
           title={createBranchTitle}
         >
@@ -395,40 +371,6 @@
         </button>
       </div>
     </div>
-
-    <!-- Create Branch Form -->
-    {#if showCreateForm && latestCheckpoint}
-      <div class="card space-y-2 p-3">
-        <p class="text-surface-400 text-xs">
-          Branch from: <span class="text-surface-300">{latestCheckpoint.name}</span>
-        </p>
-        <input
-          type="text"
-          class="input w-full"
-          placeholder="Branch name..."
-          bind:value={newBranchName}
-          onkeydown={(e) => e.key === 'Enter' && handleCreateBranch()}
-        />
-        <div class="flex justify-end gap-2">
-          <button
-            class="btn-ghost can-hover:min-h-0 can-hover:px-2 can-hover:py-1 can-hover:text-xs min-h-[40px] rounded px-3 py-2 text-sm"
-            onclick={() => {
-              showCreateForm = false
-              newBranchName = ''
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            class="btn-primary can-hover:min-h-0 can-hover:px-2 can-hover:py-1 can-hover:text-xs min-h-[40px] rounded px-3 py-2 text-sm"
-            onclick={handleCreateBranch}
-            disabled={!newBranchName.trim()}
-          >
-            Create
-          </button>
-        </div>
-      </div>
-    {/if}
 
     <!-- Recursive branch item snippet -->
     {#snippet branchItem(branch: Branch)}
@@ -622,3 +564,5 @@
     </div>
   {/if}
 </div>
+
+<CreateBranchModal bind:open={showCreateForm} checkpoint={latestCheckpoint ?? null} />

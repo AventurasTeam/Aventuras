@@ -925,6 +925,7 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     rollbackOnDelete: false,
     lightweightBranches: false,
     autoSnapshotInterval: 20,
+    trackingEnabledSince: null,
     backgroundGeneration: false,
     generationNotifications: false,
     notificationPreview: false,
@@ -1654,6 +1655,9 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
+      const checkpointHelpFolded = await database.getSetting('checkpoint_help_folded')
+      if (checkpointHelpFolded !== null) ui.checkpointHelpFolded = checkpointHelpFolded === 'true'
+
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
 
@@ -1789,6 +1793,13 @@ class SettingsStore {
           this.experimentalFeatures = {
             ...getDefaultExperimentalFeatures(),
             ...loaded,
+          }
+          if (
+            this.experimentalFeatures.stateTracking &&
+            this.experimentalFeatures.trackingEnabledSince === null
+          ) {
+            this.experimentalFeatures.trackingEnabledSince = Date.now()
+            await this.saveExperimentalFeatures()
           }
         } catch {
           // Keep defaults
@@ -2910,6 +2921,9 @@ class SettingsStore {
       !updates.stateTracking
     ) {
       updates.lightweightBranches = false
+    }
+    if (updates.stateTracking === true && !this.experimentalFeatures.stateTracking) {
+      updates.trackingEnabledSince = Date.now()
     }
     // Disabling stateTracking cascades
     if (updates.stateTracking === false) {

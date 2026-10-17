@@ -26,6 +26,10 @@ The database, the native layer that moves bytes around it, and the settings blob
   rows affected by each statement back. Values travel as bound parameters — never interpolate into the
   SQL. Keep the SQL in `database.ts` rather than in components, as
   `deleteRuntimeVariableEverywhere` and its neighbours do.
+- **Entity writes exist as statements too.** Each write method for characters, locations, items,
+  story beats and lorebook entries has a `…Statement` builder beside it, so a write and the State
+  Tracking record describing it can share one `database.transaction()`; `world_state_changes` takes
+  its `seq` from a subquery in the same insert. See [state-tracking.md](state-tracking.md).
 - **A read the batch depends on belongs inside it**, as a subquery. The runtime-variable writes reach
   their rows through `SELECT id FROM stories WHERE pack_id = ?` rather than resolving the ids first:
   the batch is atomic, the round trip that fed it was not, and a story assigned to the pack in

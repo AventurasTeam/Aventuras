@@ -6,12 +6,7 @@
  * Uses the Vercel AI SDK streamText with tools for real-time responses.
  */
 
-import type {
-  VaultCharacter,
-  VaultLorebook,
-  VaultLorebookEntry,
-  VaultScenario,
-} from '#lib/types/index.ts'
+import type { VaultCharacter, VaultLorebook, VaultScenario } from '#lib/types/index.ts'
 import { tool, type ModelMessage } from 'ai'
 import * as z from 'zod'
 import { settings, type ServiceId } from '#lib/stores/settings.svelte.ts'
@@ -45,7 +40,18 @@ import {
 import type { VaultPendingChange } from '../sdk/schemas/vault'
 import { database } from '#lib/services/database.ts'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
-import { mergeIntent, scenarioToRecord, characterToRecord } from '#lib/utils/vaultMerge.ts'
+import {
+  mergeIntent,
+  scenarioToRecord,
+  characterToRecord,
+  withEntryUpdate,
+  type ViewDraft,
+} from '#lib/utils/vaultMerge.ts'
+import {
+  effectiveVault,
+  withUnsaved,
+  type EffectiveVault,
+} from '#lib/services/ai/vault/effectiveVault.ts'
 
 const log = createLogger('InteractiveVault')
 
@@ -86,7 +92,7 @@ export const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
     'link_character_to_lorebook',
     'create_lorebook_entry_from_character',
   ],
-  images: ['generate_standard_image', 'generate_portrait', 'set_portrait'],
+  images: ['generate_standard_image', 'generate_portrait', 'edit_image', 'set_portrait'],
   fandom: ['search_fandom', 'get_fandom_article_info', 'fetch_fandom_section'],
 }
 
@@ -107,9 +113,12 @@ export interface VaultState {
   characters: () => VaultCharacter[]
   lorebooks: () => VaultLorebook[]
   scenarios: () => VaultScenario[]
-  /** Current lorebook entries for entry-level tools (optional, scoped to active lorebook) */
+  /** Proposals awaiting a decision, with the user's edits to them applied */
+  pendingChanges: () => VaultPendingChange[]
+  /** Edits typed into the view-mode panel and not saved yet */
+  viewDraft: () => ViewDraft | null
+  /** Lorebook that entry-level tools act on when they are not given an id */
   activeLorebookId?: string
-  activeEntries?: VaultLorebookEntry[]
 }
 
 /** Entity context passed when the assistant is opened from an edit interface */
@@ -270,26 +279,49 @@ export class InteractiveVaultService extends BaseAIService {
     return ctx.renderTemplate('interactive-lorebook')
   }
 
+  /** Saved vault with pending proposals and unsaved edits laid over it; the store's copy of a change wins over `turnChanges`. */
+  private effectiveState(vaultState: VaultState, turnChanges: VaultPendingChange[] = []) {
+    const stored = vaultState.pendingChanges()
+    const storedIds = new Set(stored.map((c) => c.id))
+    return effectiveVault(
+      {
+        characters: vaultState.characters(),
+        scenarios: vaultState.scenarios(),
+        lorebooks: vaultState.lorebooks(),
+      },
+      [...stored, ...turnChanges.filter((c) => !storedIds.has(c.id))],
+      vaultState.viewDraft(),
+    )
+  }
+
   /**
-   * The focused entity as it stands in the vault now, or '' when there is none. Lorebooks are
-   * summarised only: `list_entries` / `read_entry` cover their entries.
+   * The focused entity as it stands in the vault now, with pending and unsaved changes laid
+   * over it, or '' when there is none. Lorebooks are summarised only: `list_entries` /
+   * `read_entry` cover their entries.
    */
   private focusedEntityRecord(vaultState: VaultState): string {
     const focus = this.focusedEntity
     if (!focus) return ''
 
+    const effective = this.effectiveState(vaultState)
+    const unsaved = effective.unsavedFields(focus.entityType, focus.entityId)
+    const render = <T extends object>(details: T) =>
+      JSON.stringify(withUnsaved(details, unsaved), null, 2)
+
     switch (focus.entityType) {
       case 'character': {
-        const character = vaultState.characters().find((c) => c.id === focus.entityId)
-        return character ? JSON.stringify(toCharacterDetails(character), null, 2) : ''
+        const character = effective.characters.find((c) => c.id === focus.entityId)
+        return character ? render(toCharacterDetails(character)) : ''
       }
       case 'scenario': {
-        const scenario = vaultState.scenarios().find((s) => s.id === focus.entityId)
-        return scenario ? JSON.stringify(toScenarioDetails(scenario), null, 2) : ''
+        const scenario = effective.scenarios.find((s) => s.id === focus.entityId)
+        return scenario ? render(toScenarioDetails(scenario)) : ''
       }
       case 'lorebook': {
-        const lorebook = vaultState.lorebooks().find((lb) => lb.id === focus.entityId)
-        return lorebook ? JSON.stringify(toLorebookSummary(lorebook), null, 2) : ''
+        const lorebook = effective.lorebooks.find((lb) => lb.id === focus.entityId)
+        return lorebook
+          ? render(toLorebookSummary(lorebook, effective.entryStatus(lorebook.id)))
+          : ''
       }
     }
   }
@@ -354,11 +386,15 @@ export class InteractiveVaultService extends BaseAIService {
     // Event queues for deferred stream events (from tool callbacks)
     const deferredEvents: StreamEvent[] = []
 
+    // What the tools see: the saved vault plus this turn's and the store's unapproved changes.
+    const effective = (): EffectiveVault => this.effectiveState(vaultState, pendingChanges)
+
     // --- Compose all tool sets ---
 
     // Character tools
     const characterContext: CharacterToolContext = {
-      characters: vaultState.characters,
+      characters: () => effective().characters,
+      unsavedFields: (id) => effective().unsavedFields('character', id),
       onPendingChange,
       generateId,
     }
@@ -366,14 +402,17 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Scenario tools
     const scenarioContext: ScenarioToolContext = {
-      scenarios: vaultState.scenarios,
+      scenarios: () => effective().scenarios,
+      unsavedFields: (id) => effective().unsavedFields('scenario', id),
       onPendingChange,
       generateId,
     }
     const scenarioTools = createScenarioTools(scenarioContext)
 
     const vaultLorebookContext: VaultLorebookToolContext = {
-      lorebooks: vaultState.lorebooks,
+      lorebooks: () => effective().lorebooks,
+      unsavedFields: (id) => effective().unsavedFields('lorebook', id),
+      pendingEntryStatus: (id) => effective().entryStatus(id),
       onPendingChange: (change) => {
         const vaultChange: VaultPendingChange = (() => {
           switch (change.type) {
@@ -422,12 +461,10 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     const lorebookEntryContext: LorebookEntryToolContext = {
-      entries: vaultState.activeEntries ?? [], // Default to empty if no active lorebook, relying on getLorebookEntries for global access
+      entries: [], // every lookup goes through getLorebookEntries
       activeLorebookId: vaultState.activeLorebookId,
-      getLorebookEntries: (id: string) => {
-        const lb = vaultState.lorebooks().find((b) => b.id === id)
-        return lb ? lb.entries : undefined
-      },
+      getLorebookEntries: (id: string) => effective().lorebooks.find((b) => b.id === id)?.entries,
+      pendingEntryStatus: (id) => effective().entryStatus(id),
       onPendingChange: (change) => {
         // Wrap legacy PendingChangeSchema into VaultPendingChange
         // Use the ID from the change if present (global edit), otherwise fallback to active context
@@ -499,8 +536,8 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Vault linking tools
     const vaultLinkingTools = createVaultLinkingTools({
-      characters: vaultState.characters,
-      lorebooks: vaultState.lorebooks,
+      characters: () => effective().characters,
+      lorebooks: () => effective().lorebooks,
       onPendingChange,
       generateId,
     })
@@ -513,9 +550,9 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Viewer tools
     const viewerContext: ViewerToolContext = {
-      characters: vaultState.characters,
-      scenarios: vaultState.scenarios,
-      lorebooks: vaultState.lorebooks,
+      characters: () => effective().characters,
+      scenarios: () => effective().scenarios,
+      lorebooks: () => effective().lorebooks,
       onShowEntity: (change, entityId, entityType) => {
         deferredEvents.push({ type: 'show_entity', change, entityId, entityType })
       },
@@ -527,7 +564,7 @@ export class InteractiveVaultService extends BaseAIService {
     // generatedPortraitIds is scoped to the service instance: if the model calls generate_portrait
     // for the same character again, the tool returns the already-generated imageId immediately.
     const imageContext: ImageToolContext = {
-      characters: vaultState.characters,
+      characters: () => effective().characters,
       generatedImages: this.generatedImages,
       generatedPortraitIds: this.generatedPortraitIds,
       onPendingChange,
@@ -932,12 +969,7 @@ export class InteractiveVaultService extends BaseAIService {
         break
       case 'update':
         if (change.entryIndex >= 0 && change.entryIndex < entries.length) {
-          // Strip empty strings from update data to avoid accidentally
-          // overwriting existing content (e.g. AI sending description: '')
-          const safeData = Object.fromEntries(
-            Object.entries(change.data ?? {}).filter(([_, v]) => v !== ''),
-          ) as Partial<VaultLorebookEntry>
-          entries[change.entryIndex] = { ...entries[change.entryIndex], ...safeData }
+          entries[change.entryIndex] = withEntryUpdate(entries[change.entryIndex], change.data)
         } else {
           const error = `Update failed: index ${change.entryIndex} out of bounds (0-${entries.length - 1})`
           log('Update entry index out of bounds', {
