@@ -6,6 +6,12 @@
 import type { StoryEntry, StoryMode, POV, Tense } from '#lib/types/index.ts'
 import type { StyleReviewResult } from '#lib/services/ai/generation/StyleReviewerService.ts'
 import { createLogger } from '#lib/log.ts'
+import {
+  closeStep,
+  failStep,
+  NO_ACTIVITY,
+  type ActivityReporter,
+} from '#lib/services/activity/index.ts'
 
 const log = createLogger('StyleReviewScheduler')
 
@@ -30,7 +36,14 @@ export interface StyleReviewDependencies {
     pov: POV,
     tense: Tense,
     recentEntriesCount: number,
+    activityParentId?: string,
   ) => Promise<StyleReviewResult>
+}
+
+/** Where a due review records itself: a *Style review* step under `parentId`. */
+export interface StyleReviewActivity {
+  activity: ActivityReporter
+  parentId: string
 }
 
 export interface StyleReviewUICallbacks {
@@ -42,6 +55,8 @@ export interface StyleReviewUICallbacks {
 export interface StyleReviewCheckResult {
   triggered: boolean
   result?: StyleReviewResult
+  /** The review was due and threw. */
+  failed?: boolean
 }
 
 export class StyleReviewScheduler {
@@ -57,6 +72,7 @@ export class StyleReviewScheduler {
   async checkAndTrigger(
     input: StyleReviewCheckInput,
     uiCallbacks?: StyleReviewUICallbacks,
+    reporting?: StyleReviewActivity,
   ): Promise<StyleReviewCheckResult> {
     const {
       storyId,
@@ -93,15 +109,30 @@ export class StyleReviewScheduler {
 
     log('Triggering style review...')
     uiCallbacks?.setLoading(true, storyId)
+    // An empty parent would put the step at the root of the newest turn.
+    const activity = reporting?.parentId ? reporting.activity : NO_ACTIVITY
+    const stepId = activity.startStep('Style review', {
+      parentId: reporting?.parentId,
+      isLLM: true,
+    })
 
     try {
-      const result = await this.deps.analyzeStyle(entries, mode, pov, tense, recentEntriesCount)
+      const result = await this.deps.analyzeStyle(
+        entries,
+        mode,
+        pov,
+        tense,
+        recentEntriesCount,
+        stepId || undefined,
+      )
+      closeStep(activity, stepId, result.failure)
       uiCallbacks?.setResult(result, storyId)
       log('Style review complete', { phrasesFound: result.phrases.length })
       return { triggered: true, result }
     } catch (error) {
+      failStep(activity, stepId, error)
       log('Style review failed (non-fatal)', error)
-      return { triggered: false }
+      return { triggered: false, failed: true }
     } finally {
       uiCallbacks?.setLoading(false, storyId)
     }

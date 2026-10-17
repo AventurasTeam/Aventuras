@@ -419,9 +419,11 @@ is when a rewind deferred by Stop has run too, and only then is the branch given
 
 The lease does **not** cover the post-turn background tasks — chapter creation and lore
 management are started un-awaited and outlive it. Lore management refuses a write whose branch
-has moved (`loreCallbacks.assertScope`); chapter creation does not, so a chapter finished after
-a switch takes its number from the branch now loaded. The row still carries the right branch,
-so this is a numbering fault rather than a misplaced chapter. Analyzed images outlive it too; a
+has moved (`loreCallbacks.assertScope`), and does not start at all once its branch is no longer
+open: the session's input thunk checks first, so it never reasons over another branch's lorebook.
+Chapter creation numbers the chapter from the chapters captured with the turn and passes its
+scope to `story.addChapter`, which always writes the row but adds it to the loaded list only while
+that branch is open. Analyzed images outlive it too; a
 generated portrait is saved only if its story and branch are still open and the character has no
 portrait yet (`story.saveGeneratedPortrait`), and the write — including any copy-on-write
 override — lands on the captured branch and reaches the in-memory list only while that branch is
@@ -478,7 +480,8 @@ Each request is its own step, opened by the caller that knows what it is for and
 `retryOn429Middleware`: a request that needs a second attempt gets one step per attempt (the first
 backfilled) and one per wait the retry middleware schedules. The SDK's own retries re-enter the
 chain and show as attempts; the waits between them are the library's and are not reported. The
-retrieval agent builds its model elsewhere (`sdk/agents/factory.ts`) and has no attempt rows.
+agents, retrieval and lore management, build their model elsewhere (`sdk/agents/factory.ts`) and
+have no attempt rows.
 
 A failed step carries its reason, worded once by `describeActivityError` (status and provider
 message for an API error). Services that absorb a failure into a fallback — translation,
@@ -510,7 +513,58 @@ and the interface reset, so a stored `off` is a choice and is read back as one �
 absent keys only.
 
 A turn's timeline opens by default while it is the latest turn in `tree` mode, and in either
-mode for any turn in which a step failed, a recovered attempt included. A reader's own choice wins.
+mode for any turn in which a step failed, a recovered attempt included, or finished with an error it
+worked around, such as a salvaged classification. A reader's own choice wins until a step fails
+after it: each record counts its failures, and a choice is kept only while that count is unchanged.
+
+The recorder holds several records open at once. A step goes to the record of its parent, or to
+the record named by `recordId`, or else to the newest open turn, which is where every
+generation-path step without a parent has always gone. A parent in an ended record refuses the
+step, so work unwinding from one record cannot land in another. There are two kinds of record:
+`turn`, keyed by the narration entry and bounded by `RETAINED_TURNS`, and `chapter`, keyed by a
+chapter creation card and kept as long as the card.
+
+A turn's record stays open past its narration while its background work runs: **After the turn**
+holds the style review and the chapter check (`BackgroundTaskCoordinator`), and the record ends
+when both have settled. The input is free as soon as the narration is in. A check or review that
+is not due is not recorded, and an empty **After the turn** is dropped. Until a later turn starts,
+the spinner under the latest entry names them ("Checking for a new chapter...",
+`ui.chapterCheckActiveFor`, and the style review's own loading flag). When the check cuts a
+chapter it records a hand-off and the card starts at once, without waiting for the style
+review; the summary and lore management go to the chapter creation card's own record instead:
+lore management's model calls, each named for why the loop makes it (`loreModelCallReason`), each
+followed by its tool calls at the same level, and **Saving changes**, one step per lorebook write,
+after the last call. The agent only approves changes into its ledger; `saveLoreSession` writes
+them once it has finished.
+
+### Chapter creation cards
+
+A chapter cut automatically after a turn is reported by a card in the story, right after the
+narration of the turn that cut it (`ChapterCreationCard.svelte`). The card is virtual: never a
+story entry, never sent to a model or counted, held for the session only
+(`services/chapterCreation/`, wrapped by `stores/chapterCards.svelte.ts`), and shown only on its
+own story and branch. It carries its record with the same line and tree as an entry's report,
+following the reporting setting.
+
+It finishes when lore management finishes: with banners on it names the chapter and offers
+**Go to Chapter N**, landing on the banner, and **Dismiss**; with banners off it reads that
+chapter creation is finished. A failed summary leaves no chapter and offers **Retry**, while
+the span is still the first one no chapter covers, and **Dismiss**; a later turn cuts the span
+again. A retry runs outside the turn's background tasks, so it is put off while another chapter
+check, card or lore management run on the branch is in progress (`cutState`), and `createManualChapter` refuses while a
+card on the branch is pending, as it does during a turn's background tasks. Lore management that fails, or is refused by the branch lock,
+leaves a chapter without its lore, so the card offers **Restart lore management**, recorded as a
+further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Delete, here and
+in the Memory view, is offered only for the branch's last chapter, and `story.deleteChapter`
+refuses any other, and any while `chapterCards.busy`: the next chapter starts where the last ends,
+so an earlier one's entries, or the one a running cut started after, would stay uncut. Deleting a
+chapter, from anywhere, removes its card. A card whose narration a retry or a delete removed is shown after the last entry. Both kinds of
+failure also raise a toast, since the reader may already be on the next turn or another branch.
+
+While a chapter check on a branch is asking the model, a card on it is summarizing or running lore
+management, or any lore management run holds it, a turn on it starts no chapter check
+(`chapterCards.busy`): a second chapter cut meanwhile would cover the same entries, or have
+its own lore management refused.
 
 ## Images
 

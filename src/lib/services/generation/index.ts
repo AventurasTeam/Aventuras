@@ -56,7 +56,7 @@ export { ChapterService } from './ChapterService'
 export type {
   ChapterServiceDependencies,
   ChapterCheckInput,
-  ChapterCreationResult,
+  ChapterCut,
   ChapterAnalysisResult,
   ChapterSummaryData,
 } from './ChapterService'
@@ -98,9 +98,14 @@ export {
   type MergeField,
   type FieldOrigin,
 } from './mergeEntities'
-export { LoreManagementCoordinator, isLoreManagementRunning } from './LoreManagementCoordinator'
+export {
+  LoreManagementCoordinator,
+  isLoreManagementRunning,
+  LORE_SESSION_BUSY,
+} from './LoreManagementCoordinator'
 export type {
   LoreManagementCallbacks,
+  LoreSessionActivity,
   LoreManagementUICallbacks,
   LoreSessionInput,
   LoreManagementDependencies,
@@ -123,6 +128,7 @@ export type {
   BackgroundTaskDependencies,
   BackgroundTaskInput,
   BackgroundTaskResult,
+  ChapterCardReporting,
 } from './BackgroundTaskCoordinator'
 
 // World state translation service

@@ -7,6 +7,9 @@
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import ChapterBanner from './ChapterBanner.svelte'
+  import ChapterCreationCard from './ChapterCreationCard.svelte'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
+  import type { ChapterCard } from '#lib/services/chapterCreation/index.ts'
   import TimeAnchorModal from '#lib/components/world/TimeAnchorModal.svelte'
   import EntryTimeModal from '#lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -129,6 +132,33 @@
   const chapterBanners = $derived(
     settings.uiSettings.showChapterBanners ? story.chapterBanners : null,
   )
+
+  const afterTurnStatus = $derived.by(() => {
+    const current = story.currentStory
+    if (!current) return ''
+    const checking = ui.chapterCheckActiveFor(current.id, current.currentBranchId ?? null)
+    const reviewing = ui.styleReviewLoading
+    if (checking && reviewing) return 'Checking for a new chapter and reviewing the prose style...'
+    if (checking) return 'Checking for a new chapter...'
+    if (reviewing) return 'Reviewing the prose style...'
+    return ''
+  })
+
+  // Each card sits after the narration of the turn that cut its chapter, on that branch only.
+  // A card whose narration is gone, by a retry or a delete, goes after the last entry instead,
+  // so its controls and the toast pointing at it still lead somewhere.
+  const placedCards = $derived.by(() => {
+    const byAnchor: Record<string, ChapterCard[]> = {}
+    const unanchored: ChapterCard[] = []
+    const current = story.currentStory
+    if (!current) return { byAnchor, unanchored }
+    const present = new Set(story.entries.map((entry) => entry.id))
+    for (const card of chapterCards.forScope(current.id, current.currentBranchId ?? null)) {
+      if (present.has(card.anchorEntryId)) (byAnchor[card.anchorEntryId] ??= []).push(card)
+      else unanchored.push(card)
+    }
+    return { byAnchor, unanchored }
+  })
 
   // Load earlier entries above, compensate scroll, then trim the bottom if it's
   // safely off-screen (two-phase so each compensation is isolated and correct).
@@ -603,20 +633,37 @@
             {/if}
             <StoryEntry {entry} />
           </div>
+          {#each placedCards.byAnchor[entry.id] ?? [] as card (card.id)}
+            <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
+          {/each}
         {/each}
+
+        {#if displayedEntries.hiddenAtBottom === 0}
+          {#each placedCards.unanchored as card (card.id)}
+            <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
+          {/each}
+        {/if}
 
         <!-- Show streaming entry while generating -->
         {#if showStreamingEntry}
           <StreamingEntry />
         {/if}
 
-        <!-- Show post-generation status (e.g. Updating world...) -->
+        <!-- Show post-generation status (e.g. Updating world...), then the work that outlives
+             the turn until a chapter card, if any, takes over. -->
         {#if ui.isGenerating && !ui.isStreaming && ui.generationStatus}
           <div
             class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
           >
             <Loader2 class="h-4 w-4 animate-spin" />
             <span class="text-sm">{ui.generationStatus}</span>
+          </div>
+        {:else if !ui.isGenerating && afterTurnStatus}
+          <div
+            class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
+          >
+            <Loader2 class="h-4 w-4 animate-spin" />
+            <span class="text-sm">{afterTurnStatus}</span>
           </div>
         {/if}
 

@@ -44,7 +44,6 @@ import type {
   Entry,
   ImageGenerationMode,
   ImageProfile,
-  LoreChange,
   LoreManagementResult,
   MemoryConfig,
   POV,
@@ -95,7 +94,12 @@ import type {
 } from './generation'
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
 export { clearTier3SelectionCache } from './retrieval'
-import type { TimelineFillResult, EntryRetrievalResult, EntryRetrievalOptions } from './retrieval'
+import type {
+  TimelineFillResult,
+  TimelineAnswer,
+  EntryRetrievalResult,
+  EntryRetrievalOptions,
+} from './retrieval'
 import type {
   RetrievalResult as AgenticRetrievalResult,
   RetrievalContext as AgenticRetrievalContext,
@@ -114,6 +118,7 @@ import type { Translated, TranslationResult, UITranslationItem } from './utils'
 import { recentContent, AS_HAYSTACK, AS_PROSE } from '#lib/utils/recentContent.ts'
 import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
+import { saveLoreSession } from './lorebook'
 import { describeActivityError, failStep, isAbortError } from '#lib/services/activity/index.ts'
 
 // Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
@@ -462,9 +467,18 @@ class AIService {
     pov?: POV,
     tense?: Tense,
     recentEntriesCount?: number,
+    activityParentId?: string,
   ): Promise<StyleReviewResult> {
     const service = serviceFactory.createStyleReviewerService()
-    return service.analyzeStyle(storyId, entries, mode, pov, tense, recentEntriesCount)
+    return service.analyzeStyle(
+      storyId,
+      entries,
+      mode,
+      pov,
+      tense,
+      recentEntriesCount,
+      activityParentId,
+    )
   }
 
   /**
@@ -479,6 +493,7 @@ class AIService {
     mode: StoryMode = 'adventure',
     pov?: POV,
     tense?: Tense,
+    activityParentId?: string,
   ): Promise<ChapterAnalysis> {
     const memoryService = serviceFactory.createMemoryService()
     return memoryService.analyzeForChapter(
@@ -489,6 +504,7 @@ class AIService {
       mode,
       pov,
       tense,
+      activityParentId,
     )
   }
 
@@ -503,6 +519,7 @@ class AIService {
     pov?: POV,
     tense?: Tense,
     summaryDetail: SummaryDetail = 'auto',
+    activityParentId?: string,
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
     return memoryService.summarizeChapter(
@@ -513,6 +530,7 @@ class AIService {
       pov,
       tense,
       summaryDetail,
+      activityParentId,
     )
   }
 
@@ -668,6 +686,8 @@ class AIService {
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
     options: LoreRunOptions,
+    /** Step the session's model calls and its saving are recorded under. */
+    activityParentId?: string,
   ): Promise<LoreManagementResult> {
     const { mode, pov, tense, tokenThreshold, chapterBuffer, newChapter } = options
 
@@ -687,46 +707,16 @@ class AIService {
       queryChapter: callbacks.onQueryChapter,
       keptSeparate: await callbacks.getKeptSeparate?.(),
       onKeepSeparate: callbacks.onKeepSeparate,
+      activityParentId,
     })
 
-    // Build changes array for the result
-    const changes: LoreChange[] = []
-
-    // Apply changes via callbacks and build changes array
-    for (const entry of sessionResult.createdEntries) {
-      // Assign proper ID before creating
-      const newEntry: Entry = {
-        ...entry,
-        id: crypto.randomUUID(),
-        branchId,
-      }
-      await callbacks.onCreateEntry(newEntry)
-      changes.push({ type: 'create', entry: newEntry })
-    }
-
-    for (const entry of sessionResult.updatedEntries) {
-      await callbacks.onUpdateEntry(entry.id, entry)
-      changes.push({ type: 'update', entry })
-    }
-
-    // Consolidation is what keeps a lorebook from growing without bound, and it used to
-    // stop here: merges and deletes were approved, logged, then dropped, so every run
-    // re-proposed the same duplicates it had "already" merged.
-    for (const { sources, merged } of sessionResult.merges) {
-      const mergedEntry = { ...merged, id: crypto.randomUUID(), branchId }
-      await callbacks.onMergeEntries(
-        sources.map((e) => e.id),
-        mergedEntry,
-      )
-      changes.push({ type: 'merge', entry: mergedEntry, mergedFrom: sources.map((e) => e.id) })
-    }
-
-    const mergedAway = new Set(sessionResult.merges.flatMap((m) => m.sources.map((e) => e.id)))
-    for (const entry of sessionResult.deletedEntries) {
-      if (mergedAway.has(entry.id)) continue
-      await callbacks.onDeleteEntry(entry.id)
-      changes.push({ type: 'delete', previous: entry })
-    }
+    const changes = await saveLoreSession(
+      sessionResult,
+      branchId,
+      callbacks,
+      activity,
+      activityParentId,
+    )
 
     log('runLoreManagement complete', {
       created: sessionResult.createdEntries.length,
@@ -843,6 +833,27 @@ class AIService {
     /** Budget for the chapter text; see `chapterReadBudget`. */
     maxChapterTokens?: number,
   ): Promise<string> {
+    const answer = await this.queryChapter(
+      storyId,
+      chapterNumber,
+      question,
+      chapters,
+      getChapterEntries,
+      maxChapterTokens,
+    )
+    return answer.answer
+  }
+
+  /** `answerChapterQuestion` with the failure it absorbed, for a caller closing a step on it. */
+  async queryChapter(
+    storyId: string | undefined,
+    chapterNumber: number,
+    question: string,
+    chapters: Chapter[],
+    getChapterEntries: (chapter: Chapter) => StoryEntry[],
+    maxChapterTokens?: number,
+    activityParentId?: string,
+  ): Promise<TimelineAnswer> {
     log('answerChapterQuestion called', {
       chapterNumber,
       question,
@@ -851,15 +862,15 @@ class AIService {
     })
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
-    const answer = await chapterQueryService.answerQuestion(
+    return chapterQueryService.answerQuestion(
       storyId,
       question,
       chapters,
       [chapterNumber],
       getChapterEntries,
       maxChapterTokens,
+      activityParentId,
     )
-    return answer.answer
   }
 
   /**

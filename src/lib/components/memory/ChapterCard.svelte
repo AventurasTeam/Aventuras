@@ -95,6 +95,8 @@
     }
   }
 
+  const isLast = $derived(story.isLastChapter(chapter.id))
+
   async function handleDelete() {
     const confirmed = await ask(
       `Are you sure you want to delete Chapter ${chapter.number}${chapter.title ? `: ${chapter.title}` : ''}? The story entries will remain, but the summary will be lost.`,
@@ -157,7 +159,8 @@
           size="icon"
           class="text-muted-foreground h-7 w-7 hover:text-red-500"
           onclick={handleDelete}
-          title="Delete chapter"
+          disabled={!isLast}
+          title={isLast ? 'Delete chapter' : 'Only the last chapter can be deleted'}
         >
           <Trash2 class="h-3.5 w-3.5" />
         </Button>
