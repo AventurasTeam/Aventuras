@@ -41,7 +41,9 @@ export function entityCascadeKeys(row: Pick<RowRef, 'branchId'>): RowLockKey[] {
 }
 
 /** Keys serializing writes to the rows `rows` targets, so a reversal can't straddle a Save. */
-export function deltaLockKeys(rows: readonly Delta[]): RowLockKey[] {
+export function deltaLockKeys(
+  rows: readonly Pick<Delta, 'branchId' | 'targetTable' | 'targetId'>[],
+): RowLockKey[] {
   return rows.flatMap((d) => {
     if (!isLockedTable(d.targetTable)) return []
     const row = { branchId: d.branchId, id: d.targetId }

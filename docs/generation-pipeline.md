@@ -912,7 +912,8 @@ runner rejects a group up front: writing the same row's column twice
 (`apply-delta-action.ts`'s `groupConflict`): two deletes whose
 cascades overlap, a write to a row that a delete in the group
 deletes or cascades, or a link or translation write naming a row the
-group deletes or cascades. A write to an existing `entities` row, any
+group deletes or cascades, or a place created or moved under a parent
+the group deletes. A write to an existing `entities` row, any
 `character_relationships` write, and any `happening_involvements` /
 `happening_awareness` write or happening delete, holds a key lock
 across that read and its commit, since the classifier and a World or
@@ -1417,7 +1418,8 @@ names a row the window removes.
 The closure is a fixed point. The removed set starts as the rows whose
 `create` the set holds, and any row naming a removed row joins it —
 live in its table, held in a delete's `undo_payload`, or deleted on its
-own — until nothing new joins. One registry of references serves the
+own — until nothing new joins, except a place naming its parent
+(below). One registry of references serves the
 closure; the forward guard `missingRef`, which turns a link write
 naming a dead row into a no-op
 ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes));
@@ -1425,7 +1427,28 @@ and the live-link filter, which drops a restored link whose far end is
 gone, now a backstop for payloads written before this rule: an
 involvement names its happening and its entity, awareness its
 happening and its character, a relationship both its characters, and a
-translation its target by `target_kind`. Every `create` and `update`
+translation its target by `target_kind`. A place names its parent
+through `state.parent_location_id`, the one reference the registry
+reads inside a JSON column, which `missingRef` doesn't guard. A place
+left naming a removed parent isn't taken: the reversal clears its
+parent in the same transaction, in its row or in the copy a delete
+holds, putting it at the root as
+[World's delete](./ui/screens/world/world.md#delete) of the parent
+does. The places inside it stay under it, and its facts stay. The
+clear isn't a writer's write: it logs no delta, like the views the
+reversal nulls on a kept relationship. A link row's ends never change
+after its create, but a `state` field can, so the reversal judges that
+reference by the parent the row names once the set's own writes to it
+are undone: the pre-value of the oldest update in the set that changed
+it, which the newest-first walk restores last even over a later user
+write, else its live value, or the held copy's for a row a delete
+holds. A place the user moved under a removed parent so returns to its
+old parent, and one the set moved off a removed parent goes to the
+root, since the reversal puts it back under that parent first. One a
+write outside the set moved under a removed parent goes to the root
+too, and the move stays in the log. A place whose own `create` the set
+holds goes anyway. CTRL-Z's redo puts a cleared parent back
+with the parent's row (below). Every `create` and `update`
 of a removed row joins the set, whatever its source; a `delete` of it
 never does, as the next paragraph covers. A table registering
 `rowKeepingColumns` keeps its exemption only when the row's own create
@@ -1477,11 +1500,12 @@ write the removed id back: an entity delete's `state` and tail-scene
 updates do, so a later CTRL-Z of the group would restore a dead id. A
 chapter-close consolidation's upserts name the surviving happening, so
 its deletes prune. A row a delete holds among the rows a CTRL-Z's redo
-would restore (below): it would need a newer non-classifier delete
-still in the log, which CTRL-Z picks first. A row the closure reaches
-by reference with no `create` in the log, which only a writer outside
-the log could make: the wizard, a seed or an import. And a pair a
-CTRL-Z leaves absent whose other writes the prune
+would restore, or a place a delete holds whose parent the reversal
+clears and redo would restore (below): it would need a newer
+non-classifier delete still in the log, which CTRL-Z picks first. A row
+the closure reaches by reference with no `create` in the log, which
+only a writer outside the log could make: the wizard, a seed or an
+import. And a pair a CTRL-Z leaves absent whose other writes the prune
 above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
 reporting an undo that changed nothing. Only `write-back`
@@ -1496,7 +1520,8 @@ entity's create is never reversed while a delete holds it, given the
 no-gate write phase, newest-first
 undo, every window holding a delete with the create it follows, and
 sweeps sparing entity creates. A writer outside the log names only
-rows it made itself, which lack a `create` too; the closure starts
+rows it made itself, which lack a `create` too, and a place the user
+moves under a logged one is cleared, never taken; the closure starts
 from rows whose `create` the set holds; and a `create` a user write
 keeps stays in the log, re-owned. Only periodic-classifier
 groups sit above the group CTRL-Z undoes, every delta-logged write
@@ -1510,8 +1535,16 @@ reached by the closure from it, or a sweep's row and what the closure
 reaches only from one. CTRL-Z's redo snapshot covers the first two, so
 redo restores the links the closure removed with the group; a sweep's
 rows stay out, since the clamped watermark re-derives them. A delta
-reached both ways counts as the closure's. Every delta-logged write
-clears the redo stack, so redo always meets the state its undo left.
+reached both ways counts as the closure's. The snapshot also takes,
+before the undo, the parent of each place whose parent the reversal
+clears when the parent's `create` is among the first two, and redo puts
+that parent alone back with the parent's row, over the place's `state`
+as the undo left it, logging nothing, as the clear did. A place the
+snapshot restores whole gets its parent back with its row. A place
+whose parent only a sweep's row removes would stay at the root; that
+is a guard, since no sweep holds an entity create today. Every
+delta-logged write clears the redo stack, so redo always meets the
+state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed

@@ -1075,18 +1075,21 @@ gaining a synchronous subscriber or patch logic that can throw
 
 #### The reversal closure doesn't follow ids inside JSON columns
 
-`REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers only
-link-table columns, so `selectReversalSet` in
-`lib/actions/delta/row-closure.ts` never reaches ids held inside JSON:
-`entities.state`'s `current_location_id`, `faction_id`,
-`parent_location_id`, `at_location_id`, `lastSeenAt.locationId` and
-`lastSeenAt.entryId`, its `equipped_items` and `inventory` arrays (all
-in `lib/db/entities/entity-state-schema.ts`), and
+`REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
+columns and, inside JSON, only a place's `state.parent_location_id`,
+which a reversal clears rather than follows
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
+reaches the other ids held inside JSON: `entities.state`'s
+`current_location_id`, `faction_id`, `at_location_id`,
+`lastSeenAt.locationId` and `lastSeenAt.entryId`, its `equipped_items`
+and `inventory` arrays (all in
+`lib/db/entities/entity-state-schema.ts`), and
 `story_entries.metadata`'s `sceneEntities` and `currentLocationId`. A
 reversal that removes an entity could leave one of them naming it.
 
 Not reachable for `state`, verified by reading in the 2026-10-05
-triage pass: the periodic classifier creates only characters
+triage pass: the periodic classifier created only characters then
 (`lib/classifier/plan.ts`), and no `state` field names a character;
 CTRL-Z is newest-first, and rollback and regenerate windows take every
 later write; prose-edit sweeps spare entity creates; and a no-gate
@@ -1119,31 +1122,51 @@ it. The boot-recovery caveat above stands.
 
 Re-checked 2026-10-16 for the places a pass creates from mentions
 ([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
-by reading the reversal canon and code: a prose edit's sweep spares
-entity creates of every kind (`isReversible` in
-`lib/actions/story-entries/classifier-facts.ts`), CTRL-Z skips
-classifier groups, rollback and regenerate take every later turn
-with the place, and a pass's abort runs inside its write lock, which
-it takes only when no turn is in flight. So only the boot-recovery
-window above can remove such a place while a later turn's writes name
-it in JSON: an entry's `currentLocationId`, a character's
-`current_location_id` or `lastSeenAt`, an item's `at_location_id`, or
-a new child place's `parent_location_id`. More fields than for
-characters, the same window.
+by reading the reversal canon and code, and wrong for the parent: a
+pass anchors each place on its own turn, so a child can sit on an
+earlier turn than its parent, and a rollback or regenerate that removed
+the parent's turn spared the child, left naming a parent that existed
+nowhere. Since 2026-10-17 the reversal clears that parent instead, so
+the child goes to the root and keeps its facts.
 
-A fix is a JSON-path reference registry the closure queries through
-`json_each`. Parked 2026-10-05, re-checked 2026-10-10 and 2026-10-16;
+Re-checked 2026-10-17 for the remaining fields, by reading the reversal
+canon and code: still not reachable outside the boot-recovery window.
+A pass writes none of them, only a new place's parent
+(`lib/classifier/plan.ts`), and every other write naming a place lands
+after its create, so after its parent's too. CTRL-Z reverses the
+parent's create only once every later group but a pass's is undone, a
+rollback or regenerate that removes the parent's turn takes every later
+turn and every null-anchored edit after its target, a prose edit's
+sweep spares entity creates of every kind (`isReversible` in
+`lib/actions/story-entries/classifier-facts.ts`), and a pass's abort
+runs inside its write lock, which it takes only when no turn is in
+flight. In the boot-recovery window above, an entry's
+`currentLocationId`, a character's `current_location_id` or
+`lastSeenAt` and an item's `at_location_id` can still name a place
+recovery removes. A user's move of another place under it is cleared
+too, putting that place at the root
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A move under it and back off it is not: the place stays where the user
+left it, but the later move's undo still names the removed place, so
+a later CTRL-Z of that move writes the dead id back. The `write-back`
+refusal checks only the groups of the deletes recovery prunes.
+
+A fix adds these fields to the registry's JSON-path references, which
+the closure reads through `json_extract`; the arrays need `json_each`.
+Parked 2026-10-05, re-checked 2026-10-10, 2026-10-16 and 2026-10-17;
 the signal to revisit now is the factions design, whose membership
 facts put faction ids a pass creates into characters' `state`.
 
-The group runner's conflict check has the same blind spot and would be
-the registry's second consumer: `rowRefs` (`lib/actions/delta/live-refs.ts`)
-covers link-row columns but not the ref fields inside an entity's `state`
-or an entry's `metadata`, so `groupConflict` can't refuse a write there
-that names a row the same group deletes. Planners avoid it by discipline
-(4.2c's merge rewrites every ref to the loser before deleting it, and the
-entity delete clears the tail's scene fields); nothing checks it. Folded
-in from triage 2026-10-09.
+The group runner's conflict check, the registry's second consumer, has
+the same blind spot: `rowRefs` (`lib/actions/delta/live-refs.ts`)
+covers link-row columns and a place's parent but not the other ref
+fields inside an entity's `state` or an entry's `metadata`, so
+`groupConflict` refuses a place written under a parent the same group
+deletes but can't refuse a write through another field that names such
+a row. Planners avoid it by discipline (4.2c's merge rewrites every ref
+to the loser before deleting it, and the entity delete clears the
+tail's scene fields); nothing checks it. Folded in from triage
+2026-10-09.
 
 Nor does the write path stop a dangling parent: the entity create and
 update handler accepts a `parent_location_id` naming no row (cycle
@@ -1539,6 +1562,13 @@ for mentioned places nobody can locate yet. A merge of any two rows of
 one kind would cover what both miss. Parked 2026-10-16 by the mentioned
 places design; the signal is duplicates of root-level mentioned places
 in real stories.
+
+That kind of place outside the tree has a second use. A place whose parent a
+reversal removes lands at the root today, such as a pass's child of a
+place a later turn created, once that turn is rolled back or
+regenerated
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay));
+it would go to that place instead. Added 2026-10-17.
 
 ### UX (parked)
 

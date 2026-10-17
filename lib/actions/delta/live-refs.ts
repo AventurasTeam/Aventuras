@@ -3,6 +3,8 @@ import { and, eq } from 'drizzle-orm'
 import {
   translations,
   type CharacterRelationship,
+  type EntityId,
+  type EntityState,
   type HappeningAwareness,
   type HappeningInvolvement,
   type Translation,
@@ -23,24 +25,41 @@ export type RefTable =
 
 export type LiveRef = { table: RefTable; id: string }
 
-type ReferringRows = {
-  happening_involvements: HappeningInvolvement
-  happening_awareness: HappeningAwareness
-  character_relationships: CharacterRelationship
-  translations: Translation
-}
-
-/** Tables whose rows name other rows. */
-export type ReferringTable = keyof ReferringRows
-
 /** A column of `Row` naming a `refTable` row; `when` limits it to one translation target kind. */
 type RefColumnOf<Row> = {
   readonly column: keyof Row & string
+  readonly path?: never
   readonly refTable: RefTable
   readonly when?: { readonly column: keyof Row & string; readonly value: Translation['targetKind'] }
 }
 
-export type RefColumn = { [T in ReferringTable]: RefColumnOf<ReferringRows[T]> }[ReferringTable]
+// Distributes over the kinds' state shapes. EntityId aliases string: any nullable string field.
+type IdField<S> = S extends unknown
+  ? {
+      [K in keyof S]-?: [S[K], EntityId | null] extends [EntityId | null, S[K]] ? K : never
+    }[keyof S]
+  : never
+
+/** A field of an entity's `state` naming a `refTable` row; unlike a link row's end, it can change. */
+export type RefPath = {
+  readonly column: 'state'
+  readonly path: IdField<EntityState>
+  readonly refTable: 'entities'
+  readonly when?: never
+}
+
+type RefsByTable = {
+  happening_involvements: RefColumnOf<HappeningInvolvement>
+  happening_awareness: RefColumnOf<HappeningAwareness>
+  character_relationships: RefColumnOf<CharacterRelationship>
+  translations: RefColumnOf<Translation>
+  entities: RefPath
+}
+
+/** Tables whose rows name other rows. */
+export type ReferringTable = keyof RefsByTable
+
+export type RefColumn = RefsByTable[ReferringTable]
 
 export const TRANSLATION_TARGET_TABLE = {
   entity: 'entities',
@@ -56,9 +75,7 @@ export const TRANSLATION_TARGET_TABLE = {
  * The one reference registry, keyed by the referring table's registered name
  * (generation-pipeline.md → Reverse-replay).
  */
-export const REF_COLUMNS: {
-  readonly [T in ReferringTable]: readonly RefColumnOf<ReferringRows[T]>[]
-} = {
+export const REF_COLUMNS: { readonly [T in ReferringTable]: readonly RefsByTable[T][] } = {
   happening_involvements: [
     { column: 'happeningId', refTable: 'happenings' },
     { column: 'entityId', refTable: 'entities' },
@@ -76,6 +93,7 @@ export const REF_COLUMNS: {
     refTable: TRANSLATION_TARGET_TABLE[kind],
     when: { column: 'targetKind', value: kind },
   })),
+  entities: [{ column: 'state', path: 'parent_location_id', refTable: 'entities' }],
 }
 
 // The annotation above closes REF_COLUMNS' keys, so its entries are exactly these.
@@ -93,13 +111,56 @@ export function isRefTable(table: string): table is RefTable {
   return REF_TABLES.has(table)
 }
 
+function refsOf(table: string): readonly RefColumn[] {
+  return isReferringTable(table) ? REF_COLUMNS[table] : []
+}
+
+export function isPathRef(ref: RefColumn): ref is RefPath {
+  return ref.path !== undefined
+}
+
+/** The JSON-path references a row of `table` can hold. */
+export function pathRefsOf(table: string): readonly RefPath[] {
+  return refsOf(table).filter(isPathRef)
+}
+
+function refValue(ref: RefColumn, row: Readonly<Record<string, unknown>>): unknown {
+  const value = row[ref.column]
+  if (ref.path === undefined) return value
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)[ref.path]
+    : undefined
+}
+
+function namedBy(refs: readonly RefColumn[], row: Readonly<Record<string, unknown>>): LiveRef[] {
+  return refs.flatMap((ref) => {
+    if (ref.when && row[ref.when.column] !== ref.when.value) return []
+    const id = refValue(ref, row)
+    return typeof id === 'string' ? [{ table: ref.refTable, id }] : []
+  })
+}
+
 /** The rows `row` of `table` names; none if the table names nothing or the row lacks columns. */
-export function rowRefs(table: string, row: Record<string, unknown>): LiveRef[] {
-  const refs: readonly RefColumn[] = isReferringTable(table) ? REF_COLUMNS[table] : []
-  return refs.flatMap(({ column, refTable, when }) => {
-    if (when && row[when.column] !== when.value) return []
-    const id = row[column]
-    return typeof id === 'string' ? [{ table: refTable, id }] : []
+export function rowRefs(table: string, row: Readonly<Record<string, unknown>>): LiveRef[] {
+  return namedBy(refsOf(table), row)
+}
+
+/** The rows `row` of `table` names through a link-row column, never through a JSON path. */
+export function columnRefs(table: string, row: Readonly<Record<string, unknown>>): LiveRef[] {
+  return namedBy(
+    refsOf(table).filter((ref) => !isPathRef(ref)),
+    row,
+  )
+}
+
+/** Each JSON-path reference of `row`, with the id it holds or null. */
+export function pathRefIds(
+  table: string,
+  row: Readonly<Record<string, unknown>>,
+): { ref: RefPath; id: string | null }[] {
+  return pathRefsOf(table).map((ref) => {
+    const id = refValue(ref, row)
+    return { ref, id: typeof id === 'string' ? id : null }
   })
 }
 

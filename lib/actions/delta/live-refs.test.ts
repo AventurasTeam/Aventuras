@@ -49,7 +49,7 @@ beforeEach(async () => {
 })
 
 const describeRef = ({ table, ref }: { table: string; ref: RefColumn }) =>
-  `${table}.${ref.column}${ref.when ? ` when ${ref.when.column}=${ref.when.value}` : ''}`
+  `${table}.${ref.column}${ref.path ? `.${ref.path}` : ''}${ref.when ? ` when ${ref.when.column}=${ref.when.value}` : ''}`
 
 describe('rowRefs', () => {
   it("reads a link row's ends through its columns", () => {
@@ -98,14 +98,27 @@ describe('rowRefs', () => {
     ])
     expect(rowRefs('translations', { targetKind: 'bogus', targetId: 'row_1' })).toEqual([])
     expect(rowRefs('entities', { id: 'char_1', name: 'Kael' })).toEqual([])
+    expect(rowRefs('lore', { id: 'lore_1', title: 'Kael' })).toEqual([])
+  })
+
+  it("reads a place's parent inside its state, and no other state field", () => {
+    expect(rowRefs('entities', { id: 'loc_1', state: { parent_location_id: 'loc_p' } })).toEqual([
+      { table: 'entities', id: 'loc_p' },
+    ])
+    expect(rowRefs('entities', { id: 'loc_1', state: { parent_location_id: null } })).toEqual([])
+    expect(
+      rowRefs('entities', { id: 'char_1', state: { current_location_id: 'loc_p', inventory: [] } }),
+    ).toEqual([])
+    expect(rowRefs('entities', { id: 'loc_1', state: null })).toEqual([])
   })
 })
 
 describe('referrersOf', () => {
-  it('lists every column that can name an entity', () => {
+  it('lists every column and state field that can name an entity', () => {
     expect(referrersOf('entities').map(describeRef).sort()).toEqual([
       'character_relationships.aId',
       'character_relationships.bId',
+      'entities.state.parent_location_id',
       'happening_awareness.characterId',
       'happening_involvements.entityId',
       'translations.targetId when targetKind=entity',

@@ -18,6 +18,7 @@ import { PER_TURN_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
   currentStoryStore,
+  entitiesStore,
   entriesStore,
   generationStore,
   hydrateAppSettings,
@@ -837,5 +838,47 @@ describe('regenerateTurn', () => {
     expect(regen.status).toBe('ran')
     expect(await db.select().from(characterRelationships)).toEqual([])
     expect(await pairDeltas()).toEqual([])
+  })
+
+  it('keeps a place whose parent only the regenerated turn anchors, at the root', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const createPlace = async (id: string, parent: string | null, entryId: string) => {
+      const entry = {
+        id,
+        branchId: 'b1',
+        kind: 'location' as const,
+        name: id,
+        status: 'active' as const,
+        injectionMode: 'auto' as const,
+        state: { parent_location_id: parent },
+        createdAt: 7,
+        updatedAt: 7,
+      }
+      const action: PipelineAction = {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry },
+      }
+      const result = await applyDeltaAction(
+        { action, actionId: 'act_places', branchId: 'b1', entryId },
+        ctx,
+      )
+      expect(result.status).toBe('ok')
+    }
+    await createPlace('loc_varn', null, 'e_r2')
+    await createPlace('loc_docks', 'loc_varn', 'e_r1')
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    const places = await db.select({ id: entities.id, state: entities.state }).from(entities)
+    expect(places).toEqual([{ id: 'loc_docks', state: { parent_location_id: null } }])
+    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+    expect(entitiesStore.getById('loc_varn')).toBeUndefined()
   })
 })
