@@ -205,6 +205,7 @@ describe('suggestion-refresh declaration', () => {
     const running = {
       runs: new Map([['run-1', { runId: 'run-1', kind: SUGGESTION_REFRESH_KIND, gateBehavior }]]),
       reversalInProgress: false,
+      pendingTurns: new Set(),
     }
     expect(isUserEditBlocked(running as never)).toBe(true)
   })

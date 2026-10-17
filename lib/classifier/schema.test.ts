@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { classifierExtractionSchema } from './schema'
+import {
+  classifierExtractionSchema,
+  classifierExtractionWithPlacesSchema,
+  classifierReplySchema,
+  newPlacesOf,
+} from './schema'
 
 describe('classifierExtractionSchema', () => {
   it('defaults every collection so a sparse reply still parses', () => {
@@ -79,5 +84,47 @@ describe('classifierExtractionSchema', () => {
       happenings: [{ title: 'x', sourceTurn: 't1', commonKnowledge: true }],
     })
     expect('commonKnowledge' in parsed.happenings[0]).toBe(false)
+  })
+})
+
+describe('classifierExtractionWithPlacesSchema', () => {
+  const place = { handle: 'new:varn', name: 'Varn', description: 'A salt town.', sourceTurn: 't1' }
+
+  it('parses a new place, defaulting its keywords and leaving its parent optional', () => {
+    const parsed = classifierExtractionWithPlacesSchema.parse({
+      newPlaces: [
+        place,
+        { ...place, handle: 'new:inn', parent: 'new:varn', keywords: ['the inn'] },
+      ],
+    })
+    expect(parsed.newPlaces).toEqual([
+      { ...place, keywords: [] },
+      { ...place, handle: 'new:inn', parent: 'new:varn', keywords: ['the inn'] },
+    ])
+    expect(classifierExtractionWithPlacesSchema.parse({}).newPlaces).toEqual([])
+  })
+
+  // The setting off sends the base schema, so a reply's places never reach the planner.
+  it('is the only schema that keeps newPlaces', () => {
+    expect('newPlaces' in classifierExtractionSchema.parse({ newPlaces: [place] })).toBe(false)
+  })
+
+  it('is representable as JSON schema for the structured call', () => {
+    expect(() => z.toJSONSchema(classifierExtractionWithPlacesSchema)).not.toThrow()
+  })
+})
+
+describe('classifierReplySchema', () => {
+  it('asks for places only with the setting on', () => {
+    expect(classifierReplySchema(true)).toBe(classifierExtractionWithPlacesSchema)
+    expect(classifierReplySchema(false)).toBe(classifierExtractionSchema)
+  })
+
+  it('reads a reply under either schema as its new places', () => {
+    const place = { handle: 'new:varn', name: 'Varn', description: '', keywords: [] }
+    expect(newPlacesOf(classifierExtractionWithPlacesSchema.parse({ newPlaces: [place] }))).toEqual(
+      [place],
+    )
+    expect(newPlacesOf(classifierExtractionSchema.parse({ newPlaces: [place] }))).toEqual([])
   })
 })

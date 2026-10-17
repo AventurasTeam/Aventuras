@@ -395,6 +395,35 @@ describe('regenerateTurn', () => {
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
   })
 
+  // generation-pipeline.md → Gate derivation as a selector: the sweep's barrier drops before the
+  // run registers, and a reversal opened in that gap would refuse the user's next Send.
+  it('keeps the edit gate up from its admission until its run registers', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const seen: { reversal: boolean; blocked: boolean }[] = []
+    let registered = false
+    const unsubscribe = generationStore.subscribe(() => {
+      const tx = generationStore.getTxState()
+      registered ||= [...tx.runs.values()].some((r) => r.kind === PER_TURN_KIND)
+      if (!registered)
+        seen.push({ reversal: tx.reversalInProgress, blocked: generationStore.isUserEditBlocked() })
+    })
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    unsubscribe()
+
+    expect(regen.status).toBe('ran')
+    expect(registered).toBe(true)
+    // Marked, barrier up, barrier down: the last is the gap before the run registers.
+    expect(seen).toEqual([
+      { reversal: false, blocked: true },
+      { reversal: true, blocked: true },
+      { reversal: false, blocked: true },
+    ])
+  })
+
   // The sweep destroys everything from the target forward, so a misresolved
   // origin unwinds the wrong entry and hands the host the wrong Retry text.
   it('resolves the origin past a system entry rather than treating it as the action', async () => {
@@ -525,6 +554,9 @@ describe('regenerateTurn', () => {
 
     await expect(regen).rejects.toBeInstanceOf(DeltaReplayError)
     expect(undoRedoStore.hasRedo()).toBe(expectedHasRedo)
+    // A thrown regenerate leaves no mark to hold the gate up and stall every pass.
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
   })
 
   // Where clearing eagerly earns its keep: a failed run writes no delta, so

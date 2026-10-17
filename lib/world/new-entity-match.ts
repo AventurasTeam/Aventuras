@@ -1,7 +1,7 @@
 import type { CollisionReason, Entity } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 
-import type { LocationMapView } from './location-map'
+import { realParentOf, type LocationMatchView } from './location-map'
 import { nameBasis, namesakeBasis } from './namesakes'
 import { parentIdOf } from './parent-chain'
 
@@ -18,11 +18,11 @@ function byAge(a: Entity, b: Entity): number {
 /**
  * piggyback.md → Matching before creating. Reuses a non-retired exact namesake the prompt's map
  * (`view`) hangs under `parentId` (null: the root), places it left out included; otherwise flags
- * against real siblings of any status.
+ * against real siblings of any status, the candidate's `keywords` counting for a keyword hit.
  */
 export function matchNewLocation(
-  candidate: { name: string; parentId: string | null },
-  view: LocationMapView,
+  candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+  view: LocationMatchView,
 ): PlaceMatch {
   const { locations } = view
 
@@ -36,9 +36,10 @@ export function matchNewLocation(
     .sort((a, b) => a.real - b.real || a.hidden - b.hidden || byAge(a.entity, b.entity))
   if (reused !== undefined) return { kind: 'reuse', id: reused.entity.id }
 
-  const side = { name: candidate.name, keywords: [] }
+  const side = { name: candidate.name, keywords: candidate.keywords ?? [] }
+  const parentOf = realParentOf(locations)
   const [partner] = locations
-    .filter((e) => parentIdOf(e) === candidate.parentId)
+    .filter((e) => parentOf(e.id) === candidate.parentId)
     .flatMap((entity) => {
       const basis = namesakeBasis(side, entity)?.basis
       if (basis === 'same-name' && entity.status === 'retired') return [{ entity, rank: 0 }]
@@ -51,6 +52,24 @@ export function matchNewLocation(
     kind: 'create',
     flag: partner === undefined ? null : { partnerId: partner.entity.id, reason: SAME_PARENT },
   }
+}
+
+/** A new place this reply already settled, under the parent it resolved to. */
+export type SettledNewPlace = { name: string; parentId: string | null; id: string }
+
+/**
+ * piggyback.md → Matching before creating, within one reply: a second new place with the same name
+ * and parent maps to the first; otherwise the place is matched against the existing rows.
+ */
+export function matchNewPlace(
+  candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+  settled: readonly SettledNewPlace[],
+  view: LocationMatchView,
+): PlaceMatch | { kind: 'twin'; id: string } {
+  const twin = settled.find(
+    (p) => p.parentId === candidate.parentId && nameBasis(p.name, candidate.name) === 'same-name',
+  )
+  return twin === undefined ? matchNewLocation(candidate, view) : { kind: 'twin', id: twin.id }
 }
 
 /** An item's exact namesakes anywhere on the branch, any status, oldest first. */

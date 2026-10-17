@@ -14,14 +14,23 @@ Rules:
 - Retirement. Move a character or faction to retired only on unambiguous finality: death stated plainly, explicit exile with no return arc, structural dissolution. Ambiguous prose does NOT retire anyone — a character who "wandered off" or was "badly hurt" stays active.
 - Promotion. Move a staged character to active only when the prose actually brings them into the scene.
 - Scene. After a turn's handle come the entities the story had in that scene when the turn was saved, and its location. Prose naming an entity in its turn's scene, or its location, refers to that entity.
-- New characters. A character the prose introduces who is not in the Known entities list goes in newCharacters with a handle you choose. The handle MUST start with "new:" (for example "new:captain") so it can never be confused with an ID from the Known lists. Reference that same handle in any involvement, awareness or relationship in this reply. Also give keywords: the titles, epithets and relational references the prose used for that character alongside their name (for example "the Grey Wolf", "the innkeeper"). Omit the name itself, which retrieval already matches, and return an empty array when the prose used none. A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else: refer to it by its listed ID instead of adding a newCharacters entry, and put the new name form in aliases.
-- Aliases. When the prose calls a listed entity of any kind by a title, epithet or name form its Known entities line doesn't show, add an aliases entry with its ID as ref, those terms, and the sourceTurn. Leave out forms its line already shows.
+- New characters. A character the prose introduces who is not in the Known entities list goes in newCharacters with a handle you choose. The handle MUST start with "new:" (for example "new:captain") so it can never be confused with a listed ID. Reference that same handle in any involvement, awareness or relationship in this reply. Also give keywords: the titles, epithets and relational references the prose used for that character alongside their name (for example "the Grey Wolf", "the innkeeper"). Omit the name itself, which retrieval already matches, and return an empty array when the prose used none. A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else: refer to it by its listed ID instead of adding a newCharacters entry, and put the new name form in aliases.
+- Aliases. When the prose calls a listed entity of any kind by a title, epithet or name form its line in Known entities or Places doesn't show, add an aliases entry with its ID as ref, those terms, and the sourceTurn. Leave out forms its line already shows.{% if mentionedPlaces %}
+- New places. Add a place the turns mention but the scene doesn't enter when the prose establishes it exists in the story's world with its own identity: a named place (a town, a keep, a region, an inn), or an unnamed one the story could come back to ("the old mill on the ridge"). Not a generic kind of place ("a tavern", "the road north"), not one that exists only in a hypothetical, a dream or a figure of speech, and not a place already in the Places list, even under another name: use its ID and add the name form as an alias. Put each in newPlaces with a handle that starts with "new:", as a new character's does, its name, a short description from the prose, keywords for the other names the prose used for it, and the sourceTurn. A new place's handle must differ from every newCharacters handle and from every other new place's, even when a character shares its name. Set parent to the ID from Places of the place it is part of, or to another new place's handle; leave parent out when the turns don't say. Use the handle wherever the place's ID would go: in a happening's involvements, and as another new place's parent.{% endif %}
 - Silence is valid. Return empty arrays for anything the prose does not support.`,
   user: `Known entities, referenced only by the ID shown in brackets — write it without the brackets, never invent one:
 {%- for e in entities %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }}{% if e.status != 'active' %}, {{ e.status }}{% endif %}){% if e.description %} — {{ e.description }}{% endif %}{% if e.keywords.size > 0 %} (also called: {{ e.keywords | join: ', ' }}){% endif %}
 {%- endfor %}
 {%- unless entities and entities.size > 0 %}
+(none)
+{%- endunless %}
+
+Places, same ID rule — each nested under the place it is part of:
+{%- for p in places %}
+{% for d in (1..p.depth) %}  {% endfor %}- [{{ p.id }}] {{ p.name }}{% if p.status != 'active' %} ({{ p.status }}{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% endif %}{% if p.description %} — {{ p.description }}{% endif %}{% if p.keywords.size > 0 %} (also called: {{ p.keywords | join: ', ' }}){% endif %}
+{%- endfor %}
+{%- unless places and places.size > 0 %}
 (none)
 {%- endunless %}
 

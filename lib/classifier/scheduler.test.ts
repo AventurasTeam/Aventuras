@@ -1,7 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createClassifierScheduler } from './scheduler'
+import { createClassifierScheduler, type StartRunOutcome } from './scheduler'
 import { idleStatus } from './status'
+
+// The first run holds until released; every later run completes at once.
+function blockingFirstRun(outcome: 'completed' | 'failed' = 'completed') {
+  let release!: () => void
+  let started!: () => void
+  const running = new Promise<void>((r) => (started = r))
+  const startRun = vi
+    .fn<(branchId: string) => Promise<StartRunOutcome>>()
+    .mockImplementationOnce(() => {
+      started()
+      return new Promise((r) => (release = () => r({ outcome })))
+    })
+    .mockResolvedValue({ outcome: 'completed' })
+  return { startRun, running, release: () => release() }
+}
+
+const flush = () => new Promise((r) => setTimeout(r, 0))
 
 function harness(over: Partial<Parameters<typeof createClassifierScheduler>[0]> = {}) {
   const timers: { fn: () => void; ms: number }[] = []
@@ -47,6 +64,68 @@ describe('createClassifierScheduler', () => {
     expect(startRun).toHaveBeenCalledTimes(1)
     release()
     await first
+  })
+
+  // cadence.md → Buffer-aware cadence indicator: a pass holds its writes until an overlapping
+  // turn has left, so that turn's tick always lands mid-run.
+  it('re-checks a tick that landed mid-run once the run settles', async () => {
+    const run = blockingFirstRun()
+    const { scheduler } = harness({ startRun: run.startRun })
+    const first = scheduler.noteTurnCommitted('branch_1')
+    await run.running
+    await scheduler.noteTurnCommitted('branch_1')
+    expect(run.startRun).toHaveBeenCalledTimes(1)
+    run.release()
+    await first
+    await vi.waitFor(() => expect(run.startRun).toHaveBeenCalledTimes(2))
+    await flush()
+    expect(run.startRun).toHaveBeenCalledTimes(2)
+  })
+
+  it('re-reads the count for a deferred tick, starting nothing once the run caught up', async () => {
+    const run = blockingFirstRun()
+    const unprocessedEntriesFor = vi.fn().mockResolvedValueOnce(8).mockResolvedValue(2)
+    const { scheduler } = harness({ startRun: run.startRun, unprocessedEntriesFor })
+    const first = scheduler.noteTurnCommitted('branch_1')
+    await run.running
+    await scheduler.noteTurnCommitted('branch_1')
+    run.release()
+    await first
+    await vi.waitFor(() => expect(unprocessedEntriesFor).toHaveBeenCalledTimes(2))
+    await flush()
+    expect(run.startRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a deferred tick suspended when the run left the branch failed-persistent', async () => {
+    const run = blockingFirstRun('failed')
+    const statusFor = vi
+      .fn()
+      .mockResolvedValueOnce(idleStatus())
+      .mockResolvedValue({ ...idleStatus(), state: 'failed-persistent' as const, retryCount: 3 })
+    const unprocessedEntriesFor = vi.fn(async () => 8)
+    const { scheduler } = harness({ startRun: run.startRun, statusFor, unprocessedEntriesFor })
+    const first = scheduler.noteTurnCommitted('branch_1')
+    await run.running
+    await scheduler.noteTurnCommitted('branch_1')
+    run.release()
+    await first
+    await vi.waitFor(() => expect(unprocessedEntriesFor).toHaveBeenCalledTimes(2))
+    await flush()
+    expect(run.startRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a deferred tick when the scheduler stops before the run settles', async () => {
+    const run = blockingFirstRun()
+    const { deps, scheduler } = harness({ startRun: run.startRun })
+    const first = scheduler.noteTurnCommitted('branch_1')
+    await run.running
+    await scheduler.noteTurnCommitted('branch_1')
+    scheduler.stop()
+    run.release()
+    await first
+    await flush()
+    expect(deps.statusFor).toHaveBeenCalledTimes(1)
+    expect(run.startRun).toHaveBeenCalledTimes(1)
   })
 
   it('waits for the next tick on a rejected start, scheduling no retry', async () => {

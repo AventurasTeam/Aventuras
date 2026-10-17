@@ -124,6 +124,14 @@ regenerate, rollback) leaves an odd number of entries unprocessed.
 The indicator subtracts that worst case, cadence + 1, whatever the
 parity: cadence 8 against a buffer of 10 is 1 entry of overlap.
 
+A turn that completes while a pass is running is checked once the
+pass settles, against the watermark the pass moved: a pass holds its
+writes until an overlapping turn has left
+([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)),
+so that turn's own check always finds it running. Only a pass that
+spans more than one turn can leave the next one firing past
+cadence + 1.
+
 **Full mode suppresses the warning.** Full mode keeps the entire
 current chapter in context, and chapter-close phase 0 catches up
 any unclassified entries before lore-mgmt runs. No eviction risk;

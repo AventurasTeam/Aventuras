@@ -162,6 +162,16 @@ function defaultLanes(): Record<string, Lane> {
       }),
     ]),
 
+    'periodic-classifier-places': lane([
+      canned('Nothing extracted', {
+        happenings: [],
+        relationships: [],
+        statusFlips: [],
+        newCharacters: [],
+        newPlaces: [],
+      }),
+    ]),
+
     // A refresh that resolves nothing is a run failure, so the default is not
     // the empty list the other lanes use.
     'suggestion-refresh': lane([canned('Three chips', { suggestions: SAMPLE_SUGGESTIONS })]),

@@ -1,20 +1,37 @@
 import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
+import {
+  matchNewPlace,
+  parentOfLocations,
+  placeNewLocation,
+  settlingOrder,
+  unhiddenLocationView,
+  type ParentDropCause,
+  type SettledNewPlace,
+} from '@/lib/world'
 
 import type { ReconcileDecision } from './reconcile'
-import type { ClassifierExtraction } from './schema'
+import { newPlacesOf, type ClassifierReply, type NewPlace } from './schema'
 import type { ClassifierWindow } from './window'
 
 /** A delta the phase will emit, with its own survival anchor. */
 export type PlannedWrite = { action: PipelineAction; entryId: string }
 
+/** A new place sent to the root although it named a parent. */
+export type ParentDrop = { handle: string; parent: string; cause: ParentDropCause }
+
+/** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
+export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
+
 export type PlanResult = {
   planned: readonly PlannedWrite[]
-  /** Temp handle -> allocated entity id, for refs later in the same reply. */
+  /** Temp handle -> allocated or matched entity id, for refs later in the same reply. */
   handleMap: Map<string, string>
   fellBackCount: number
   unresolvedRefs: readonly string[]
+  droppedPlaces: readonly DroppedPlace[]
+  parentDrops: readonly ParentDrop[]
 }
 
 export type PlanDeps = {
@@ -27,7 +44,7 @@ export type PlanDeps = {
   // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
   // lib/actions/happenings/register-awareness.ts allocates the awareness id
   // itself, so the planner must not.
-  newId: (kind: 'hap' | 'char' | 'hinv') => string
+  newId: (kind: 'hap' | 'char' | 'hinv' | 'loc') => string
 }
 
 const SOURCE = 'periodic_classifier' as const
@@ -73,10 +90,7 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
   }
 }
 
-export function buildClassifierActions(
-  extraction: ClassifierExtraction,
-  deps: PlanDeps,
-): PlanResult {
+export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDeps): PlanResult {
   const { branchId, window, entities, decisions, now, newId } = deps
   const planned: PlannedWrite[] = []
   const handleMap = new Map<string, string>()
@@ -117,6 +131,113 @@ export function buildClassifierActions(
     return id
   }
 
+  // New terms only, so a term the row already holds plans no write.
+  // Anchored only when it writes, so a no-op never counts as a window-head fallback.
+  const appendNewTerms = (id: string, terms: readonly string[], sourceTurn?: string): void => {
+    const row = index.get(id)
+    if (row == null) return
+    const added = newTerms(row.keywords, terms)
+    if (added.length === 0) return
+    index.set(id, { ...row, keywords: [...row.keywords, ...added] })
+    planned.push({
+      action: {
+        kind: 'appendEntityKeywords',
+        source: SOURCE,
+        payload: { branchId, id, keywords: added, proseEntryId: proseSource(sourceTurn) },
+      },
+      entryId: anchor(sourceTurn),
+    })
+  }
+
+  // classifier.md → Mentioned places. After the characters, so the handle namespace they share
+  // keeps a character's binding; before anything that names a place by its handle.
+  const planNewPlaces = (): { droppedPlaces: DroppedPlace[]; parentDrops: ParentDrop[] } => {
+    const droppedPlaces: DroppedPlace[] = []
+    const parentDrops: ParentDrop[] = []
+    const byId = new Map(entities.map((e) => [e.id, e]))
+    // The pass saw every place, so matching is over real children: nothing is hidden.
+    const view = unhiddenLocationView(entities)
+    const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
+    const placed: SettledNewPlace[] = []
+
+    const declared: NewPlace[] = []
+    for (const place of newPlacesOf(extraction)) {
+      const { handle, name } = place
+      if (nonBlank(name) == null) droppedPlaces.push({ handle, name, cause: 'blank-name' })
+      else if (handleMap.has(handle)) droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+      else declared.push(place)
+    }
+
+    const { order, duplicates } = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
+    for (const { handle, name } of duplicates)
+      droppedPlaces.push({ handle, name, cause: 'handle-taken' })
+    for (const settling of order) {
+      const place = settling.emission
+      const placement = placeNewLocation({
+        place: settling,
+        resolve: (parent) => handleMap.get(parent) ?? parent,
+        statusOf: (id) => index.get(id)?.status,
+        parentOf: parentOfLocations([...entities, ...created]),
+      })
+      if (placement.kind === 'dropped')
+        parentDrops.push({ handle: place.handle, parent: placement.parent, cause: placement.cause })
+      const parentId = placement.kind === 'kept' ? placement.parentId : null
+
+      const stored = clampEmbeddedCharacter({
+        name: place.name,
+        description: place.description.trim(),
+      })
+      const match = matchNewPlace(
+        { name: stored.name, parentId, keywords: place.keywords },
+        placed,
+        view,
+      )
+
+      let id: string
+      if (match.kind !== 'create') {
+        // A reused place keeps its description and its status: a mention doesn't enter it.
+        id = match.id
+        appendNewTerms(id, place.keywords, place.sourceTurn)
+      } else {
+        id = newId('loc')
+        const { flag } = match
+        const keywords = dedupeTerms(place.keywords)
+        const timestamp = now()
+        index.set(id, { kind: 'location', status: 'active', keywords })
+        created.push({ id, kind: 'location', state: { parent_location_id: parentId } })
+        planned.push({
+          action: {
+            kind: 'createEntity',
+            source: SOURCE,
+            payload: {
+              entry: {
+                id,
+                branchId,
+                kind: 'location',
+                name: stored.name,
+                description: stored.description === '' ? null : stored.description,
+                keywords,
+                status: 'active',
+                injectionMode: 'auto',
+                state: { parent_location_id: parentId },
+                nameCollisionFlag: flag === null ? 0 : 1,
+                nameCollisionPartnerId: flag?.partnerId ?? null,
+                nameCollisionReason: flag?.reason ?? null,
+                embeddingStale: 1,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              },
+            },
+          },
+          entryId: anchor(place.sourceTurn),
+        })
+      }
+      handleMap.set(place.handle, id)
+      placed.push({ name: stored.name, parentId, id })
+    }
+    return { droppedPlaces, parentDrops }
+  }
+
   // New characters first: later refs in the same reply resolve through handleMap,
   // and involvements/awareness rows must not precede the row they point at.
   for (const candidate of extraction.newCharacters) {
@@ -137,7 +258,7 @@ export function buildClassifierActions(
     }
     const entryId = anchor(candidate.sourceTurn)
     const proseEntryId = proseSource(candidate.sourceTurn)
-    // New terms only: resending a held one would restore an alias the user removed mid-pass.
+    // New terms only, so a term the row already holds plans no write.
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
       const promoted = index.get(decision.entityId)
@@ -221,30 +342,13 @@ export function buildClassifierActions(
     })
   }
 
+  const { droppedPlaces, parentDrops } = planNewPlaces()
+
   // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
   for (const alias of extraction.aliases) {
-    const current = index.get(alias.ref)
-    if (current == null) {
-      unresolvedRefs.push(alias.ref)
-      continue
-    }
-    const added = newTerms(current.keywords, alias.terms)
-    if (added.length === 0) continue
-    index.set(alias.ref, { ...current, keywords: [...current.keywords, ...added] })
-    planned.push({
-      action: {
-        kind: 'appendEntityKeywords',
-        source: SOURCE,
-        payload: {
-          branchId,
-          id: alias.ref,
-          keywords: added,
-          proseEntryId: proseSource(alias.sourceTurn),
-        },
-      },
-      entryId: anchor(alias.sourceTurn),
-    })
+    if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
+    else appendNewTerms(alias.ref, alias.terms, alias.sourceTurn)
   }
 
   for (const happening of extraction.happenings) {
@@ -399,5 +503,12 @@ export function buildClassifierActions(
     })
   }
 
-  return { planned, handleMap, fellBackCount, unresolvedRefs }
+  return {
+    planned,
+    handleMap,
+    fellBackCount,
+    unresolvedRefs,
+    droppedPlaces,
+    parentDrops,
+  }
 }

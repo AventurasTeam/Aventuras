@@ -9,6 +9,7 @@ import {
   removeUserDataDir,
   seedClassifierBacklog,
   setClassifierCadence,
+  setClassifierMentionedPlaces,
   setProviderEndpoint,
   unassignClassifierAgent,
 } from '../harness/seed'
@@ -158,6 +159,121 @@ test.describe('periodic classifier — graph population', () => {
       [branchId],
     )
     expect(status[0][0]).toBeGreaterThan(0)
+  })
+})
+
+// classifier.md → Mentioned places: only a running app takes the stored setting's schema pick to
+// the commit. Turn race and matcher are unit-tested (classifier-turn-wait.test.ts, plan.test.ts).
+test.describe('periodic classifier — mentioned places', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setNarrative('E2E-PLACES the fleet is said to sail from Varn.')
+    mock.setStructured('periodic-classifier-places', {
+      happenings: [
+        {
+          title: 'The fleet sails from Varn',
+          sourceTurn: 't1',
+          involvements: [{ ref: 'new:dock', role: 'site' }],
+          awareness: [],
+        },
+      ],
+      relationships: [],
+      statusFlips: [],
+      newCharacters: [],
+      newPlaces: [
+        {
+          handle: 'new:varn',
+          name: 'Varn',
+          description: 'A salt town on the far coast.',
+          keywords: ['the salt town'],
+          sourceTurn: 't1',
+        },
+        {
+          handle: 'new:dock',
+          name: 'the East Dock',
+          description: 'Where the fleet ties up.',
+          sourceTurn: 't1',
+          parent: 'new:varn',
+        },
+      ],
+    })
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    setClassifierCadence(seeded.dbPath, 'story_hero', 1)
+    setClassifierMentionedPlaces(seeded.dbPath, 'story_hero', true)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('a pass creates the places it names, nested, and ties its happening to the dock', async () => {
+    await home.openStory(app.window, 'The Veilstone Courier').click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    await reader.composer(app.window).fill('E2E-PLACES I ask where the fleet sails from.')
+    await reader.send(app.window).click()
+    await expect(app.window.getByText('E2E-PLACES the fleet', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+
+    await expect
+      .poll(() => mock.requests.some((r) => r.agent === 'periodic-classifier-places'), {
+        timeout: 20_000,
+      })
+      .toBe(true)
+    expect(mock.requests.some((r) => r.agent === 'periodic-classifier')).toBe(false)
+
+    const branchId = (
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+    const placeRow = async (name: string) =>
+      (
+        await queryApp(
+          app.window,
+          `SELECT id, status, injection_mode, json_extract(state, '$.parent_location_id'),
+                  keywords, description
+           FROM entities WHERE branch_id = ? AND kind = 'location' AND name = ?`,
+          [branchId, name],
+        )
+      )[0]
+
+    // The involvement is the burst's last write, and each write commits on its own.
+    const site = async () =>
+      queryApp(
+        app.window,
+        `SELECT entity_id FROM happening_involvements
+         WHERE branch_id = ? AND happening_id IN
+           (SELECT id FROM happenings WHERE branch_id = ? AND title = 'The fleet sails from Varn')`,
+        [branchId, branchId],
+      )
+    await expect.poll(async () => (await site()).length, { timeout: 20_000 }).toBe(1)
+    const varn = await placeRow('Varn')
+    const dock = await placeRow('the East Dock')
+    expect(varn.slice(1, 4)).toEqual(['active', 'auto', null])
+    expect(JSON.parse(varn[4] as string)).toEqual(['the salt town'])
+    expect(varn[5]).toBe('A salt town on the far coast.')
+    expect(dock[3]).toBe(varn[0])
+    expect(await site()).toEqual([[dock[0]]])
+
+    // Both creates are the pass's, on an entry anchor; plan.test.ts pins which entry.
+    const anchored = await queryApp(
+      app.window,
+      `SELECT COUNT(*) FROM deltas
+       WHERE branch_id = ? AND source = 'periodic_classifier' AND entry_id IS NOT NULL
+         AND target_table = 'entities' AND target_id IN (?, ?)`,
+      [branchId, varn[0], dock[0]],
+    )
+    expect(anchored[0][0]).toBe(2)
   })
 })
 

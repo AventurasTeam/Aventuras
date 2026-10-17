@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
-import { locationMapView } from './location-map'
-import { itemNamesakes, matchNewLocation as matchAgainst } from './new-entity-match'
+import { locationMapView, unhiddenLocationView } from './location-map'
+import { itemNamesakes, matchNewLocation as matchAgainst, matchNewPlace } from './new-entity-match'
 
 const place = (
   id: string,
@@ -22,14 +22,15 @@ const flaggedWith = (partnerId: string) => ({
   flag: { partnerId, reason: 'same-parent' },
 })
 
+const HOLLOW = place('loc_hollow', 'Hollow', null)
 const MARKET = place('loc_market', 'The Drowned Market', 'loc_hollow')
 
-// The map the prompt showed: built from the same entities around the scene's location.
+// The map the prompt showed; it always holds the Hollow, as a candidate's parent always exists.
 const matchNewLocation = (
   candidate: { name: string; parentId: string | null },
   entities: readonly Entity[],
   currentLocationId: string | null = null,
-) => matchAgainst(candidate, locationMapView(entities, currentLocationId))
+) => matchAgainst(candidate, locationMapView([HOLLOW, ...entities], currentLocationId))
 
 describe('matchNewLocation', () => {
   it('reuses an exact sibling across case and spacing', () => {
@@ -246,6 +247,13 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     })
   })
 
+  it('flags a place the map roots through a missing parent as a root sibling', () => {
+    const orphan = place('loc_orphan', 'Quay', 'loc_gone')
+    expect(matchNewLocation({ name: 'Quay Street', parentId: null }, [orphan])).toEqual(
+      flaggedWith('loc_orphan'),
+    )
+  })
+
   it('stops at a listed place: what hangs under it is not under the parent above', () => {
     const listedVellis = { ...VELLIS, injectionMode: 'auto' as const }
     expect(
@@ -275,6 +283,81 @@ describe('matchNewLocation — by the map the prompt showed', () => {
     expect(matchNewLocation({ name: 'The Vault Door', parentId: 'loc_eldra' }, REGION)).toEqual(
       PLAIN,
     )
+  })
+})
+
+// classifier.md → Mentioned places: the pass saw every place, so its real children are the set.
+describe('matchNewLocation — over an unhidden view, with the candidate keywords', () => {
+  const ELDRA = place('loc_eldra', 'Eldra', null)
+  const VELLIS = place('loc_vellis', 'Port Vellis', 'loc_eldra', { injectionMode: 'disabled' })
+  const VAULT = place('loc_vault', 'The Vault', 'loc_vellis')
+  const REGION = [ELDRA, VELLIS, VAULT]
+  const unhidden = (
+    candidate: { name: string; parentId: string | null; keywords?: readonly string[] },
+    entities: readonly Entity[],
+  ) => matchAgainst(candidate, unhiddenLocationView(entities))
+
+  it('reuses a disabled real child', () => {
+    expect(unhidden({ name: 'Port Vellis', parentId: 'loc_eldra' }, REGION)).toEqual({
+      kind: 'reuse',
+      id: 'loc_vellis',
+    })
+  })
+
+  it('never reaches through a disabled place: a grandchild is not a child', () => {
+    expect(unhidden({ name: 'The Vault', parentId: 'loc_eldra' }, REGION)).toEqual(PLAIN)
+  })
+
+  it('flags a place whose parent row is gone as a root sibling, where the tree shows it', () => {
+    const orphan = place('loc_orphan', 'Quay', 'loc_gone')
+    expect(unhidden({ name: 'Quay Street', parentId: null }, [orphan])).toEqual(
+      flaggedWith('loc_orphan'),
+    )
+    expect(unhidden({ name: 'Quay Street', parentId: 'loc_eldra' }, [ELDRA, orphan])).toEqual(PLAIN)
+  })
+
+  it("flags a sibling named among the candidate's keywords", () => {
+    const mill = place('loc_mill', 'The Old Mill', 'loc_eldra')
+    const candidate = { name: 'Varn Mill', parentId: 'loc_eldra' }
+    expect(unhidden({ ...candidate, keywords: ['the old mill'] }, [ELDRA, mill])).toEqual(
+      flaggedWith('loc_mill'),
+    )
+    expect(unhidden(candidate, [ELDRA, mill])).toEqual(PLAIN)
+  })
+
+  it("pairs with a contained name before an older hit through the candidate's keywords", () => {
+    const mill = place('loc_mill', 'The Old Mill', 'loc_eldra', { createdAt: 1 })
+    const ford = place('loc_ford', 'Ford', 'loc_eldra', { createdAt: 9 })
+    expect(
+      unhidden({ name: 'Varn Ford', parentId: 'loc_eldra', keywords: ['the old mill'] }, [
+        ELDRA,
+        mill,
+        ford,
+      ]),
+    ).toEqual(flaggedWith('loc_ford'))
+  })
+})
+
+describe('matchNewPlace', () => {
+  const settled = [{ name: 'the Gull Inn', parentId: 'loc_town', id: 'loc_new1' }]
+  const view = unhiddenLocationView([
+    place('loc_town', 'Varn', null),
+    place('loc_inn', 'The Gull Inn', 'loc_town'),
+  ])
+
+  it('maps a place to an earlier one in the reply with its name and parent, before any row', () => {
+    expect(matchNewPlace({ name: 'The Gull Inn', parentId: 'loc_town' }, settled, view)).toEqual({
+      kind: 'twin',
+      id: 'loc_new1',
+    })
+  })
+
+  it('matches the existing rows when no earlier place shares its parent', () => {
+    expect(matchNewPlace({ name: 'The Gull Inn', parentId: 'loc_town' }, [], view)).toEqual({
+      kind: 'reuse',
+      id: 'loc_inn',
+    })
+    expect(matchNewPlace({ name: 'the Gull Inn', parentId: null }, settled, view)).toEqual(PLAIN)
   })
 })
 

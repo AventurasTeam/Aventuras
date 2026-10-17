@@ -250,6 +250,8 @@
       "cadenceOverlap_other": "{{count}} entries of coverage overlap with the partial buffer.",
       "cadenceWarning": "Classifier runs are further apart than the partial buffer — entries can leave the window unclassified.",
       "cadenceWarningChip": "Coverage gap",
+      "mentionedPlaces": "Create mentioned places",
+      "mentionedPlacesHint": "The background classifier also adds places the story mentions without going there, so the place map grows with every one. Applies from the next run; turns already classified aren't revisited.",
       "budgets": "Retrieval budgets",
       "budgetsHint": "Token budgets per type. Hard partitions — unused tokens don't spill over.",
       "budget": {
@@ -296,6 +298,7 @@
         "protectedBuffer": "protected buffer",
         "classifierContextEntries": "classifier context",
         "classifierCadence": "classifier cadence",
+        "classifierMentionedPlaces": "create mentioned places",
         "retrievalBudgets": "retrieval budgets",
         "keywordRetrieval": "keyword retrieval"
       }

@@ -241,15 +241,15 @@ export function markSwapPending(dbPath: string, storyId: string, targetModelId: 
   }
 }
 
-// Force the classifier to fire on the next committed turn. Runs before launch.
-export function setClassifierCadence(dbPath: string, storyId: string, cadence: number): void {
+// A story missing from the fixture throws here; markSwapPending's json_patch would match no row.
+function setStorySetting(dbPath: string, storyId: string, key: string, value: unknown): void {
   const db = new DatabaseSync(dbPath)
   try {
     const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
       settings: string
     }
     const settings = JSON.parse(row.settings) as Record<string, unknown>
-    settings.classifierCadence = cadence
+    settings[key] = value
     db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
       JSON.stringify(settings),
       storyId,
@@ -257,44 +257,28 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   } finally {
     db.close()
   }
+}
+
+// Force the classifier to fire on the next committed turn. Runs before launch.
+export function setClassifierCadence(dbPath: string, storyId: string, cadence: number): void {
+  setStorySetting(dbPath, storyId, 'classifierCadence', cadence)
+}
+
+// Story Settings → Classifier's "Create mentioned places" switch. Runs before launch.
+export function setClassifierMentionedPlaces(dbPath: string, storyId: string, on: boolean): void {
+  setStorySetting(dbPath, storyId, 'classifierMentionedPlaces', on)
 }
 
 // The fixture seeds 'on'; 'off' is what story-settings-defaults.ts gives a real story — and
 // unlike disablePiggybackCapability it doesn't lie about the model. Runs before launch.
 export function setPiggybackMode(dbPath: string, storyId: string, mode: 'on' | 'off'): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
-      settings: string
-    }
-    const settings = JSON.parse(row.settings) as Record<string, unknown>
-    settings.piggybackMode = mode
-    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
-      JSON.stringify(settings),
-      storyId,
-    )
-  } finally {
-    db.close()
-  }
+  setStorySetting(dbPath, storyId, 'piggybackMode', mode)
 }
 
 // Arm the story half of the probe's two gates (the app half is enableDiagnostics).
 // Both must be on before a turn writes a capture. Runs before launch.
 export function enableStoryProbeMode(dbPath: string, storyId: string): void {
-  const db = new DatabaseSync(dbPath)
-  try {
-    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
-      settings: string
-    }
-    const settings = JSON.parse(row.settings) as Record<string, unknown>
-    settings.probe_mode_active = true
-    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
-      JSON.stringify(settings),
-      storyId,
-    )
-  } finally {
-    db.close()
-  }
+  setStorySetting(dbPath, storyId, 'probe_mode_active', true)
 }
 
 function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: number): void {

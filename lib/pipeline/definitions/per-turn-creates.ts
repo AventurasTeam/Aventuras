@@ -20,12 +20,14 @@ import {
   type SubstitutedStateBlock,
 } from '@/lib/piggyback'
 import {
-  checkParentChain,
   itemNamesakes,
   locationMapView,
-  matchNewLocation,
-  nameBasis,
+  matchNewPlace,
   parentOfLocations,
+  placeNewLocation,
+  settlingOrder,
+  type ParentDropCause,
+  type SettledNewPlace,
 } from '@/lib/world'
 
 type CreateEntityAction = Extract<PipelineAction, { kind: 'createEntity' }>
@@ -42,8 +44,6 @@ type LocationFate = {
   parentId: string | null
   parentDropped: boolean
 }
-
-type Settling = { emission: NewLocationEmission; parentUnresolved: boolean }
 
 type StoredText = { name: string; description: string }
 
@@ -96,14 +96,10 @@ function logDropped(
 
 function logParentDropped(
   log: Logger,
-  emission: NewLocationEmission,
-  cause: 'unresolved' | 'retired' | 'chain-broken',
+  handle: string,
+  drop: { parent: string; cause: ParentDropCause },
 ): void {
-  log.warn('classifier.create_parent_dropped', {
-    handle: emission.handle,
-    parent: emission.parent,
-    cause,
-  })
+  log.warn('classifier.create_parent_dropped', { handle, parent: drop.parent, cause: drop.cause })
 }
 
 /** piggyback.md → Kept only if used. */
@@ -130,52 +126,6 @@ function keptItemHandles(block: ParsedStateBlock, byId: ReadonlyMap<string, Enti
   return kept
 }
 
-function inHandleCycle(
-  create: NewLocationEmission,
-  waiting: readonly NewLocationEmission[],
-): boolean {
-  const parentOf = new Map(waiting.map((e) => [e.handle, e.parent]))
-  const seen = new Set<string>()
-  let at = create.parent
-  while (at !== undefined && !seen.has(at)) {
-    if (at === create.handle) return true
-    seen.add(at)
-    at = parentOf.get(at)
-  }
-  return false
-}
-
-// Top-down passes: a child listed before its parent settles on a later pass. A parent that never
-// resolves (undeclared handle, non-location id, handle cycle) roots its create; children follow it.
-function settlingOrder(
-  creates: readonly NewLocationEmission[],
-  isLocationId: (id: string) => boolean,
-): Settling[] {
-  const order: Settling[] = []
-  const settled = new Set<string>()
-  const settle = (emission: NewLocationEmission, parentUnresolved: boolean) => {
-    order.push({ emission, parentUnresolved })
-    settled.add(emission.handle)
-  }
-  const resolvable = (parent: string | undefined) =>
-    parent === undefined || settled.has(parent) || (!isCreateHandle(parent) && isLocationId(parent))
-
-  let waiting = [...creates]
-  while (waiting.length > 0) {
-    const before = order.length
-    for (const emission of waiting) if (resolvable(emission.parent)) settle(emission, false)
-    if (order.length === before) {
-      const handles = new Set(waiting.map((e) => e.handle))
-      const orphans = waiting.filter((e) => e.parent === undefined || !handles.has(e.parent))
-      // No orphan: every waiting create is in a handle cycle or hangs off one.
-      const stuck = orphans.length > 0 ? orphans : waiting.filter((e) => inHandleCycle(e, waiting))
-      for (const emission of stuck) settle(emission, true)
-    }
-    waiting = waiting.filter((e) => !settled.has(e.handle))
-  }
-  return order
-}
-
 function planLocations(args: {
   emissions: readonly NewLocationEmission[]
   kept: ReadonlySet<string>
@@ -192,59 +142,44 @@ function planLocations(args: {
   const fates = new Map<string, LocationFate>()
   const rows: Entity[] = []
   const reused = new Set<string>()
-  const placed: { name: string; parentId: string | null; id: string }[] = []
+  const placed: SettledNewPlace[] = []
 
-  const order = settlingOrder(
+  // normalizeCreates already dropped a second declaration of a handle, so none is a duplicate.
+  const { order } = settlingOrder(
     args.emissions.filter((e) => args.kept.has(e.handle)),
     (id) => byId.get(id)?.kind === 'location',
   )
-  for (const { emission, parentUnresolved } of order) {
-    const { parent } = emission
-    let parentId =
-      parentUnresolved || parent === undefined ? null : (fates.get(parent)?.id ?? parent)
-    let parentDropped = parentUnresolved
-    if (parentUnresolved) {
-      logParentDropped(args.log, emission, 'unresolved')
-    } else if (parentId !== null && byId.get(parentId)?.status === 'retired') {
-      // Nothing active may sit inside a retired place (data-model.md → LocationState shape).
-      logParentDropped(args.log, emission, 'retired')
-      parentId = null
-      parentDropped = true
-    } else if (
-      parentId !== null &&
-      // The new row has no children, so only a loop already stored above its parent fails.
-      checkParentChain(emission.handle, parentId, parentOfLocations([...entities, ...rows])) !==
-        'ok'
-    ) {
-      logParentDropped(args.log, emission, 'chain-broken')
-      parentId = null
-      parentDropped = true
-    }
+  for (const place of order) {
+    const { emission } = place
+    const placement = placeNewLocation({
+      place,
+      resolve: (parent) => fates.get(parent)?.id ?? parent,
+      statusOf: (id) => byId.get(id)?.status,
+      parentOf: parentOfLocations([...entities, ...rows]),
+    })
+    const parentId = placement.kind === 'kept' ? placement.parentId : null
+    const parentDropped = placement.kind === 'dropped'
+    if (placement.kind === 'dropped') logParentDropped(args.log, emission.handle, placement)
 
     const text = storedText(emission)
-    const twin = placed.find(
-      (p) => p.parentId === parentId && nameBasis(p.name, text.name) === 'same-name',
-    )
+    const match = matchNewPlace({ name: text.name, parentId }, placed, view)
     let fate: LocationFate
-    if (twin !== undefined) {
-      fate = { outcome: 'reused', id: twin.id, parentId, parentDropped }
+    if (match.kind === 'twin') {
+      fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
+    } else if (match.kind === 'reuse') {
+      if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
+      fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
     } else {
-      const match = matchNewLocation({ name: text.name, parentId }, view)
-      if (match.kind === 'reuse') {
-        if (byId.get(match.id)?.status === 'staged') reused.add(match.id)
-        fate = { outcome: 'reused', id: match.id, parentId, parentDropped }
-      } else {
-        const row = newRow({
-          id: args.newId('loc'),
-          branchId: args.branchId,
-          shape: { kind: 'location', state: { parent_location_id: parentId } },
-          text,
-          flag: match.flag,
-          at: args.now(),
-        })
-        rows.push(row)
-        fate = { outcome: 'created', id: row.id, parentId, parentDropped }
-      }
+      const row = newRow({
+        id: args.newId('loc'),
+        branchId: args.branchId,
+        shape: { kind: 'location', state: { parent_location_id: parentId } },
+        text,
+        flag: match.flag,
+        at: args.now(),
+      })
+      rows.push(row)
+      fate = { outcome: 'created', id: row.id, parentId, parentDropped }
     }
     fates.set(emission.handle, fate)
     placed.push({ name: text.name, parentId, id: fate.id })

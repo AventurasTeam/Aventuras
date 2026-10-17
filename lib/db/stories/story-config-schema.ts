@@ -138,6 +138,7 @@ export const storySettingsSchema = z.object({
   // than failing story load. No `.default()` either — matches classifierCadence (migration 0013).
   classifierContextEntries: z.number(),
   piggybackMode: z.enum(['on', 'off']),
+  classifierMentionedPlaces: z.boolean().default(false),
   embeddingBackend: z.enum(['provider', 'local']),
   embedding_model_id: z.string(),
   embedding_swap_target: z.string().optional(),

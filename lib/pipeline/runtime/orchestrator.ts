@@ -53,6 +53,8 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
+  /** Called once the run is in txState, before any await; not for a chain's successor. */
+  onReserved?: () => void
 } & DbCtx
 
 // RunCtx with `inputs` narrowed to whatever the kind declares in
@@ -88,6 +90,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
 function reserveRun(kind: string, ctx: RunCtx): RunState {
   const run = newRunState(kind, ctx)
   generationStore.startRun(run)
+  ctx.onReserved?.()
   return run
 }
 
@@ -117,8 +120,8 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   })
 }
 
-// generation-pipeline.md → No-gate write phase: the hold ends when the run settles. A run
-// that never wrote holds nothing, so the release does nothing.
+// generation-pipeline.md → No-gate write phase: the hold ends when the run settles, written or
+// not, since a pass can discard inside it. A run that never asked for it releases nothing.
 function endWritePhase(run: RunState): void {
   if (run.gateBehavior === 'no-gate') releaseWritePhase(run.branchId, run.actionId)
 }

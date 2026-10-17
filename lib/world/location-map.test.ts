@@ -9,6 +9,8 @@ import {
   listedAncestorNames,
   locationMapView,
   looseItemLines,
+  placeTree,
+  unhiddenLocationView,
 } from './location-map'
 
 const location = (
@@ -200,6 +202,62 @@ describe('buildLocationMap', () => {
 
   it('returns no rows for a branch without locations', () => {
     expect(buildLocationMap([holder({})], null)).toEqual([])
+  })
+})
+
+describe('placeTree', () => {
+  const tree = (entities: readonly Entity[]) =>
+    placeTree(entities).map(({ entity, depth }) => `${'  '.repeat(depth)}${entity.id}`)
+
+  it('nests every place by its real parent, children by name, whatever the input order', () => {
+    expect(tree(WORLD)).toEqual([
+      'loc_eldra',
+      '  loc_vellis',
+      '    loc_market',
+      '    loc_anchor',
+      '      loc_back',
+      'loc_thorn',
+    ])
+  })
+
+  it('hides nothing: a retired, staged or disabled place keeps its row and its children', () => {
+    const world = [
+      ELDRA,
+      { ...VELLIS, status: 'retired' as const },
+      { ...ANCHOR, status: 'staged' as const },
+      { ...MARKET, injectionMode: 'disabled' as const },
+      BACK_ROOM,
+    ]
+    expect(tree(world)).toEqual([
+      'loc_eldra',
+      '  loc_vellis',
+      '    loc_market',
+      '    loc_anchor',
+      '      loc_back',
+    ])
+  })
+
+  it('roots a place whose parent is no place, and lists a looping chain flat at the root', () => {
+    const orphan = location('loc_orphan', 'Ashfall', 'loc_gone')
+    const a = location('loc_a', 'Upper', 'loc_b')
+    const b = location('loc_b', 'Lower', 'loc_a')
+    expect(tree([ELDRA, orphan, a, b, holder({})])).toEqual([
+      'loc_orphan',
+      'loc_eldra',
+      'loc_b',
+      'loc_a',
+    ])
+  })
+})
+
+describe('unhiddenLocationView', () => {
+  it('hangs a place only under its real parent, the root counting as one', () => {
+    const view = unhiddenLocationView([ELDRA, DISABLED_VELLIS, ANCHOR, holder({})])
+    expect(view.locations.map((e) => e.id)).not.toContain('char_kael')
+    expect(view.hiddenBetween('loc_vellis', 'loc_eldra')).toBe(0)
+    expect(view.hiddenBetween('loc_anchor', 'loc_eldra')).toBeNull()
+    expect(view.hiddenBetween('loc_eldra', null)).toBe(0)
+    expect(view.hiddenBetween('loc_vellis', null)).toBeNull()
   })
 })
 

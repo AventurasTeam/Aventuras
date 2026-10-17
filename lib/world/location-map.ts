@@ -3,7 +3,7 @@ import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
 import { byName, itemsAt, locationAncestors } from './overview'
-import { parentChainIds, parentOfLocations } from './parent-chain'
+import { parentChainIds, parentIdOf, parentOfLocations } from './parent-chain'
 import { placeModes } from './place-modes'
 
 /** A retired row carries no id: the map offers none to move the scene to or nest a place under. */
@@ -12,6 +12,8 @@ export type LocationMapRow =
   | { retired: true; id: null; name: string; depth: number; retiredReason: string | null }
 export type HeldItemLine = { id: string; name: string; equipped: boolean }
 export type LooseItemLine = { id: string; name: string }
+
+export type PlaceTreeRow = { entity: Entity; depth: number }
 
 /** Where the map hangs a place, listed or not, and how many left-out places lie in between. */
 export type MapAnchor = { parentId: string | null; hidden: number }
@@ -27,6 +29,67 @@ export type LocationMapView = {
    * or a reused handle can name one.
    */
   hiddenBetween: (id: string, parentId: string | null) => number | null
+}
+
+/** The place-matching half of a view: which places exist, and where a place hangs. */
+export type LocationMatchView = Pick<LocationMapView, 'locations' | 'hiddenBetween'>
+
+// Places on a parent loop never reach the root: they're listed there, flat, and in `atRoot`.
+function nest(
+  places: readonly Entity[],
+  parentOf: (id: string) => string | null,
+): { tree: PlaceTreeRow[]; atRoot: ReadonlySet<string> } {
+  const childrenOf = new Map<string | null, Entity[]>()
+  for (const place of places) {
+    const parentId = parentOf(place.id)
+    const siblings = childrenOf.get(parentId)
+    if (siblings === undefined) childrenOf.set(parentId, [place])
+    else siblings.push(place)
+  }
+
+  const tree: PlaceTreeRow[] = []
+  const reached = new Set<string>()
+  const walk = (parentId: string | null, depth: number): void => {
+    for (const place of (childrenOf.get(parentId) ?? []).sort(byName)) {
+      reached.add(place.id)
+      tree.push({ entity: place, depth })
+      walk(place.id, depth + 1)
+    }
+  }
+  walk(null, 0)
+  const unreached = places.filter((e) => !reached.has(e.id)).sort(byName)
+  for (const place of unreached) tree.push({ entity: place, depth: 0 })
+  return { tree, atRoot: new Set(unreached.map((e) => e.id)) }
+}
+
+/** A place's stored parent when that is a place; else the root, where every view hangs it. */
+export function realParentOf(locations: readonly Entity[]): (id: string) => string | null {
+  const byId = new Map(locations.map((e) => [e.id, e]))
+  return (id) => {
+    const row = byId.get(id)
+    const parentId = row === undefined ? null : parentIdOf(row)
+    return parentId !== null && byId.has(parentId) ? parentId : null
+  }
+}
+
+/**
+ * classifier.md → Mentioned places: every place on the branch, whatever its status or mode, under
+ * its real parent. A parent that is no place puts it at the root.
+ */
+export function placeTree(entities: readonly Entity[]): PlaceTreeRow[] {
+  const locations = entities.filter((e) => e.kind === 'location')
+  return nest(locations, realParentOf(locations)).tree
+}
+
+/** A view that hides nothing: a place hangs only under its real parent (null: the root). */
+export function unhiddenLocationView(entities: readonly Entity[]): LocationMatchView {
+  const locations = entities.filter((e) => e.kind === 'location')
+  const parentOf = realParentOf(locations)
+  const ids = new Set(locations.map((e) => e.id))
+  return {
+    locations,
+    hiddenBetween: (id, parentId) => (ids.has(id) && parentOf(id) === parentId ? 0 : null),
+  }
 }
 
 function mapRow(location: Entity, depth: number): LocationMapRow {
@@ -66,28 +129,8 @@ export function locationMapView(
     return { parentId: null, hidden }
   }
 
-  const childrenOf = new Map<string | null, Entity[]>()
-  for (const location of listed) {
-    const { parentId } = chainAnchor(location.id)
-    const siblings = childrenOf.get(parentId)
-    if (siblings === undefined) childrenOf.set(parentId, [location])
-    else siblings.push(location)
-  }
-
-  const rows: LocationMapRow[] = []
-  const reached = new Set<string>()
-  const walk = (parentId: string | null, depth: number): void => {
-    for (const location of (childrenOf.get(parentId) ?? []).sort(byName)) {
-      reached.add(location.id)
-      rows.push(mapRow(location, depth))
-      walk(location.id, depth + 1)
-    }
-  }
-  walk(null, 0)
-  // A chain looping through listed rows never reaches the root: list those rows there, flat.
-  const unreached = listed.filter((e) => !reached.has(e.id)).sort(byName)
-  for (const location of unreached) rows.push(mapRow(location, 0))
-  const atRoot = new Set(unreached.map((e) => e.id))
+  const { tree, atRoot } = nest(listed, (id) => chainAnchor(id).parentId)
+  const rows = tree.map(({ entity, depth }) => mapRow(entity, depth))
 
   const anchorOf = (id: string): MapAnchor =>
     atRoot.has(id) ? { parentId: null, hidden: 0 } : chainAnchor(id)

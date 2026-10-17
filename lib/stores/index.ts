@@ -102,7 +102,7 @@ export {
   isForegroundGenerating,
   isUserEditBlocked,
 } from './generation/generation'
-export type { RunState, TxState } from './generation/generation'
+export type { PendingTurn, RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'

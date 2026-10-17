@@ -26,11 +26,14 @@ const context = {
       description: 'His sister.',
       keywords: [],
     },
+  ],
+  places: [
     {
       id: 'l1',
       name: 'The ford',
-      kind: 'location',
+      depth: 0,
       status: 'active',
+      retiredReason: null,
       description: null,
       keywords: [],
     },
@@ -179,9 +182,9 @@ describe('periodic classifier template — system and user halves', () => {
     expect(system).toContain(
       'A character the prose introduces who is not in the Known entities list goes in newCharacters',
     )
-    expect(system).toContain('so it can never be confused with an ID from the Known lists.')
+    expect(system).toContain('so it can never be confused with a listed ID.')
     expect(system).toContain(
-      "by a title, epithet or name form its Known entities line doesn't show",
+      "by a title, epithet or name form its line in Known entities or Places doesn't show",
     )
     expect(system).not.toMatch(/\babove\b/)
   })
@@ -204,5 +207,96 @@ describe('periodic classifier template — system and user halves', () => {
     expect(lines.at(-1)).toBe('Aria hears of it from Jorin.')
     expect(user).not.toContain('Rules:')
     expect(user).not.toContain('You are extracting structured world state')
+  })
+})
+
+// classifier.md → Mentioned places.
+describe('periodic classifier template — places', () => {
+  const RULE =
+    'Add a place the turns mention but the scene doesn\'t enter when the prose establishes it exists in the story\'s world with its own identity: a named place (a town, a keep, a region, an inn), or an unnamed one the story could come back to ("the old mill on the ridge"). Not a generic kind of place ("a tavern", "the road north"), not one that exists only in a hypothetical, a dream or a figure of speech, and not a place already in the Places list, even under another name: use its ID and add the name form as an alias.'
+
+  const places = [
+    {
+      id: 'l1',
+      name: 'Ashen Keep',
+      depth: 0,
+      status: 'active',
+      retiredReason: null,
+      description: 'A burnt hillfort.',
+      keywords: ['the keep'],
+    },
+    {
+      id: 'l2',
+      name: 'Great Hall',
+      depth: 1,
+      status: 'staged',
+      retiredReason: null,
+      description: null,
+      keywords: [],
+    },
+    {
+      id: 'l3',
+      name: 'The Crypt',
+      depth: 1,
+      status: 'retired',
+      retiredReason: 'sealed by the abbot',
+      description: null,
+      keywords: [],
+    },
+    {
+      id: 'l4',
+      name: 'Old Well',
+      depth: 2,
+      status: 'retired',
+      retiredReason: null,
+      description: null,
+      keywords: [],
+    },
+  ]
+
+  it.each([true, false])(
+    'renders the Places tree in the user half, setting on: %s',
+    (mentionedPlaces) => {
+      const { user, system } = render({ places, mentionedPlaces })
+      expect(user).toContain(
+        [
+          'Places, same ID rule — each nested under the place it is part of:',
+          '- [l1] Ashen Keep — A burnt hillfort. (also called: the keep)',
+          '  - [l2] Great Hall (staged)',
+          '  - [l3] The Crypt (retired: sealed by the abbot)',
+          '    - [l4] Old Well (retired)',
+          '',
+          'Known relationships',
+        ].join('\n'),
+      )
+      expect(system).not.toContain('[l1]')
+    },
+  )
+
+  it('sits between Known entities and Known relationships, (none) when empty', () => {
+    const { user } = render({ places: [] })
+    expect(user).toContain('— A courier.')
+    expect(user.indexOf('Known entities')).toBeLessThan(user.indexOf('Places, same ID rule'))
+    expect(user).toContain(
+      'Places, same ID rule — each nested under the place it is part of:\n(none)\n',
+    )
+  })
+
+  it('adds the significance rule to the system half only with the setting on', () => {
+    const on = render({ mentionedPlaces: true })
+    expect(on.system).toContain(`- New places. ${RULE}`)
+    expect(on.system).toMatch(/newPlaces with a handle that starts with "new:"/)
+    expect(on.system).toContain(
+      "A new place's handle must differ from every newCharacters handle and from every other new place's, even when a character shares its name.",
+    )
+    expect(on.system).toMatch(/leave parent out when the turns don't say/)
+    expect(on.user).not.toContain('newPlaces')
+
+    const off = render({ mentionedPlaces: false })
+    expect(off.system).not.toContain('New places')
+    expect(off.system).not.toContain('newPlaces')
+    // The rule leaves no gap behind it either way.
+    for (const { system } of [on, off]) expect(system).toMatch(/\n- Silence is valid\./)
+    expect(off.system).toMatch(/already shows\.\n- Silence is valid\./)
   })
 })

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
+
 import { buildClassifierActions, clampEmbeddedCharacter, type PlannedWrite } from './plan'
 import type { ReconcileDecision } from './reconcile'
-import type { ClassifierExtraction } from './schema'
+import type { ClassifierExtraction, ClassifierPlacesExtraction, NewPlace } from './schema'
 import { buildClassifierWindow } from './window'
 
 // `.find()` / `.filter()` on action.kind doesn't narrow the PipelineAction union,
@@ -852,8 +854,7 @@ describe('entity keywords', () => {
     ])
   })
 
-  // The payload carries only terms new against the pass's snapshot, so an alias the user removed
-  // mid-pass isn't re-sent; the handler merges into the live list, so one they added survives.
+  // The handler merges the sent terms into the live list, so a term the user added survives.
   it('sends a known entity only the terms its snapshot lacks', () => {
     const { planned } = buildClassifierActions(candidate(['the grey wolf', 'The Innkeeper']), {
       ...base,
@@ -1371,5 +1372,444 @@ describe('embedded-column bounds', () => {
       base,
     )
     expect(payloadOf<{ entry: { description: null } }>(planned[0]).entry.description).toBeNull()
+  })
+})
+
+// classifier.md → Mentioned places.
+describe('mentioned places', () => {
+  const placeRow = (
+    id: string,
+    name: string,
+    parent: string | null,
+    over: Partial<Entity> = {},
+  ): Entity =>
+    ({
+      id,
+      branchId: 'branch_1',
+      kind: 'location',
+      name,
+      description: `${name}, as stored.`,
+      status: 'active',
+      keywords: [],
+      state: { parent_location_id: parent },
+      createdAt: 1,
+      ...over,
+    }) as unknown as Entity
+
+  const newPlace = (handle: string, name: string, over: Partial<NewPlace> = {}): NewPlace => ({
+    handle,
+    name,
+    description: `${name}, from the prose.`,
+    keywords: [],
+    sourceTurn: 't2',
+    ...over,
+  })
+
+  const reply = (
+    newPlaces: NewPlace[],
+    over: Partial<ClassifierPlacesExtraction> = {},
+  ): ClassifierPlacesExtraction => ({
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters: [],
+    aliases: [],
+    newPlaces,
+    ...over,
+  })
+
+  const deps = (entities: Entity[], over: Partial<typeof base> = {}) => {
+    let n = 0
+    return {
+      ...base,
+      entities: entities as never[],
+      newId: (kind: string) => `${kind}_new${++n}`,
+      ...over,
+    }
+  }
+
+  type Created = {
+    id: string
+    name: string
+    state: { parent_location_id: string | null }
+  } & Record<string, unknown>
+  const createdPlaces = (planned: readonly PlannedWrite[]) =>
+    planned
+      .filter((p) => p.action.kind === 'createEntity')
+      .map((p) => payloadOf<{ entry: Created }>(p).entry)
+      .filter((e) => e.kind === 'location')
+  const parentOf = (planned: readonly PlannedWrite[], name: string) =>
+    createdPlaces(planned).find((e) => e.name === name)?.state.parent_location_id
+
+  const TOWN = placeRow('loc_town', 'Varn', null)
+
+  it('creates an active, auto place from the prose, stale, anchored on its turn', () => {
+    const { planned, handleMap, parentDrops } = buildClassifierActions(
+      reply([
+        newPlace('new:mill', 'the Old Mill', {
+          description: '  A mill on the ridge.  ',
+          keywords: ['the mill', 'The Mill', ' '],
+          parent: 'loc_town',
+        }),
+      ]),
+      deps([TOWN]),
+    )
+    expect(planned).toEqual([
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'periodic_classifier',
+          payload: {
+            entry: {
+              id: 'loc_new1',
+              branchId: 'branch_1',
+              kind: 'location',
+              name: 'the Old Mill',
+              description: 'A mill on the ridge.',
+              keywords: ['the mill'],
+              status: 'active',
+              injectionMode: 'auto',
+              state: { parent_location_id: 'loc_town' },
+              nameCollisionFlag: 0,
+              nameCollisionPartnerId: null,
+              nameCollisionReason: null,
+              embeddingStale: 1,
+              createdAt: 1_700_000_000_000,
+              updatedAt: 1_700_000_000_000,
+            },
+          },
+        },
+        entryId: 'e2',
+      },
+    ])
+    expect(handleMap.get('new:mill')).toBe('loc_new1')
+    expect(parentDrops).toEqual([])
+  })
+
+  it('clamps the text as a new character is, and stores a blank description as null', () => {
+    const long = 'x'.repeat(2000)
+    const { planned } = buildClassifierActions(
+      reply([
+        newPlace('new:a', 'Ash', { description: long }),
+        newPlace('new:b', 'Birch', { description: '   ' }),
+      ]),
+      deps([]),
+    )
+    const [ash, birch] = createdPlaces(planned)
+    expect(ash.description).toBe(
+      clampEmbeddedCharacter({ name: 'Ash', description: long }).description,
+    )
+    expect(birch.description).toBeNull()
+  })
+
+  it('puts a place whose parent the turns do not give at the root, unlogged', () => {
+    const { planned, parentDrops } = buildClassifierActions(
+      reply([newPlace('new:a', 'Ash')]),
+      deps([]),
+    )
+    expect(parentOf(planned, 'Ash')).toBeNull()
+    expect(parentDrops).toEqual([])
+  })
+
+  it('resolves parents top-down: a child listed before its parent hangs under its new row', () => {
+    const { planned } = buildClassifierActions(
+      reply([
+        newPlace('new:cellar', 'the Cellar', { parent: 'new:inn' }),
+        newPlace('new:inn', 'the Gull Inn', { parent: 'loc_town' }),
+      ]),
+      deps([TOWN]),
+    )
+    expect(createdPlaces(planned).map((e) => e.name)).toEqual(['the Gull Inn', 'the Cellar'])
+    expect(parentOf(planned, 'the Gull Inn')).toBe('loc_town')
+    expect(parentOf(planned, 'the Cellar')).toBe('loc_new1')
+  })
+
+  it.each([
+    ['names nothing', 'loc_missing', [TOWN], 'unresolved'],
+    ['is a character', 'char_kael', [TOWN, entityRow('char_kael')], 'unresolved'],
+    [
+      'is retired',
+      'loc_ruin',
+      [placeRow('loc_ruin', 'Ruin', null, { status: 'retired' })],
+      'retired',
+    ],
+    [
+      'has a broken chain above it',
+      'loc_a',
+      [placeRow('loc_a', 'Upper', 'loc_b'), placeRow('loc_b', 'Lower', 'loc_a')],
+      'chain-broken',
+    ],
+  ] as const)(
+    'roots a place whose parent %s, and reports why',
+    (_label, parent, entities, cause) => {
+      const { planned, parentDrops } = buildClassifierActions(
+        reply([newPlace('new:inn', 'the Gull Inn', { parent })]),
+        deps([...entities]),
+      )
+      expect(parentOf(planned, 'the Gull Inn')).toBeNull()
+      expect(parentDrops).toEqual([{ handle: 'new:inn', parent, cause }])
+    },
+  )
+
+  it('hangs a child under a new place whose own parent was dropped', () => {
+    const { planned, parentDrops } = buildClassifierActions(
+      reply([
+        newPlace('new:inn', 'the Gull Inn', { parent: 'loc_missing' }),
+        newPlace('new:cellar', 'the Cellar', { parent: 'new:inn' }),
+      ]),
+      deps([]),
+    )
+    expect(parentOf(planned, 'the Cellar')).toBe('loc_new1')
+    expect(parentDrops.map((d) => d.handle)).toEqual(['new:inn'])
+  })
+
+  describe('reuse', () => {
+    const MILL = placeRow('loc_mill', 'The Old Mill', 'loc_town', {
+      keywords: ['the mill'],
+      status: 'staged',
+    })
+
+    it('reuses an exact sibling, keeping its description and status, appending only new terms', () => {
+      const { planned, handleMap } = buildClassifierActions(
+        reply([
+          newPlace('new:mill', 'the old mill', {
+            parent: 'loc_town',
+            keywords: ['The Mill', 'the grinding house'],
+            sourceTurn: 't3',
+          }),
+        ]),
+        deps([TOWN, MILL]),
+      )
+      expect(handleMap.get('new:mill')).toBe('loc_mill')
+      // No create, no description write and no promotion: a mention doesn't enter a staged place.
+      expect(planned).toEqual([
+        {
+          action: {
+            kind: 'appendEntityKeywords',
+            source: 'periodic_classifier',
+            payload: {
+              branchId: 'branch_1',
+              id: 'loc_mill',
+              keywords: ['the grinding house'],
+              proseEntryId: 'e3',
+            },
+          },
+          entryId: 'e3',
+        },
+      ])
+    })
+
+    it('writes nothing for a reused sibling whose terms it already holds', () => {
+      const { planned } = buildClassifierActions(
+        reply([
+          newPlace('new:mill', 'The Old Mill', { parent: 'loc_town', keywords: ['the mill'] }),
+        ]),
+        deps([TOWN, MILL]),
+      )
+      expect(planned).toEqual([])
+    })
+
+    it('hangs a child under the row its parent reused, and names it in an involvement', () => {
+      const { planned } = buildClassifierActions(
+        reply(
+          [
+            newPlace('new:mill', 'The Old Mill', { parent: 'loc_town' }),
+            newPlace('new:wheel', 'the Wheelhouse', { parent: 'new:mill' }),
+          ],
+          {
+            happenings: [
+              {
+                title: 'The wheel jams',
+                sourceTurn: 't2',
+                involvements: [{ ref: 'new:mill', role: 'site' }],
+                awareness: [],
+              },
+            ],
+          },
+        ),
+        deps([TOWN, MILL]),
+      )
+      expect(parentOf(planned, 'the Wheelhouse')).toBe('loc_mill')
+      const involvement = planned.find((p) => p.action.kind === 'createHappeningInvolvement')
+      expect(payloadOf<{ entry: { entityId: string } }>(involvement).entry.entityId).toBe(
+        'loc_mill',
+      )
+    })
+
+    // The pass saw every place, so a place a disabled one hides is not under the town.
+    it('never reaches a place through a disabled one, as the narrator map would', () => {
+      const vault = placeRow('loc_vault', 'The Vault', 'loc_town', { injectionMode: 'disabled' })
+      const cellar = placeRow('loc_cellar', 'the Cellar', 'loc_vault')
+      const { planned, handleMap } = buildClassifierActions(
+        reply([newPlace('new:cellar', 'the Cellar', { parent: 'loc_town' })]),
+        deps([TOWN, vault, cellar]),
+      )
+      expect(handleMap.get('new:cellar')).toBe('loc_new1')
+      expect(parentOf(planned, 'the Cellar')).toBe('loc_town')
+    })
+
+    it("compares a candidate only with its parent's real children", () => {
+      const { planned } = buildClassifierActions(
+        reply([newPlace('new:mill', 'The Old Mill')]),
+        deps([TOWN, MILL]),
+      )
+      expect(createdPlaces(planned)).toEqual([
+        expect.objectContaining({ name: 'The Old Mill', nameCollisionFlag: 0 }),
+      ])
+    })
+  })
+
+  describe('flags', () => {
+    const flagOf = (planned: readonly PlannedWrite[]) => {
+      const [row] = createdPlaces(planned)
+      return [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+    }
+
+    it('never reuses a retired namesake: it creates the row flagged against it', () => {
+      const ruin = placeRow('loc_ruin', 'The Old Mill', 'loc_town', {
+        status: 'retired',
+        createdAt: 9,
+      })
+      const contained = placeRow('loc_old', 'Old Mill Lane', 'loc_town', { createdAt: 1 })
+      const { planned } = buildClassifierActions(
+        reply([newPlace('new:mill', 'The Old Mill', { parent: 'loc_town' })]),
+        deps([TOWN, contained, ruin]),
+      )
+      expect(flagOf(planned)).toEqual([1, 'loc_ruin', 'same-parent'])
+    })
+
+    it('flags a contained name', () => {
+      const { planned } = buildClassifierActions(
+        reply([newPlace('new:mill', 'Mill', { parent: 'loc_town' })]),
+        deps([TOWN, placeRow('loc_old', 'Old Mill', 'loc_town')]),
+      )
+      expect(flagOf(planned)).toEqual([1, 'loc_old', 'same-parent'])
+    })
+
+    it("flags a sibling named among the entry's keywords, or whose keywords hold its name", () => {
+      const ford = placeRow('loc_ford', 'Grey Ford', 'loc_town', { keywords: ['the crossing'] })
+      const byEntry = buildClassifierActions(
+        reply([newPlace('new:x', 'Ashwater', { parent: 'loc_town', keywords: ['grey ford'] })]),
+        deps([TOWN, ford]),
+      )
+      expect(flagOf(byEntry.planned)).toEqual([1, 'loc_ford', 'same-parent'])
+      const bySibling = buildClassifierActions(
+        reply([newPlace('new:x', 'The Crossing', { parent: 'loc_town' })]),
+        deps([TOWN, ford]),
+      )
+      expect(flagOf(bySibling.planned)).toEqual([1, 'loc_ford', 'same-parent'])
+    })
+  })
+
+  describe('one reply', () => {
+    it('maps a second place with the same name and parent to the first, appending its terms', () => {
+      const { planned, handleMap } = buildClassifierActions(
+        reply([
+          newPlace('new:a', 'the Gull Inn', { parent: 'loc_town', keywords: ['the gull'] }),
+          newPlace('new:b', 'The Gull Inn', {
+            parent: 'loc_town',
+            keywords: ['the Gull', 'the alehouse'],
+            sourceTurn: 't3',
+          }),
+        ]),
+        deps([TOWN]),
+      )
+      expect(createdPlaces(planned)).toHaveLength(1)
+      expect(handleMap.get('new:b')).toBe('loc_new1')
+      expect(planned.at(-1)).toEqual({
+        action: {
+          kind: 'appendEntityKeywords',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'branch_1',
+            id: 'loc_new1',
+            keywords: ['the alehouse'],
+            proseEntryId: 'e3',
+          },
+        },
+        entryId: 'e3',
+      })
+    })
+
+    it('creates both of two same-named places under different parents', () => {
+      const { planned } = buildClassifierActions(
+        reply([
+          newPlace('new:a', 'the Cellar', { parent: 'loc_town' }),
+          newPlace('new:b', 'the Cellar'),
+        ]),
+        deps([TOWN]),
+      )
+      expect(createdPlaces(planned).map((e) => e.state.parent_location_id)).toEqual([
+        'loc_town',
+        null,
+      ])
+    })
+
+    it('keeps a handle bound to the newCharacters entry that claimed it, and the first place', () => {
+      const { planned, handleMap, unresolvedRefs, droppedPlaces } = buildClassifierActions(
+        reply(
+          [
+            newPlace('new:x', 'Ashwater'),
+            newPlace('new:y', 'Birchmoor'),
+            newPlace('new:y', 'Coldharbour'),
+          ],
+          {
+            newCharacters: [
+              {
+                handle: 'new:x',
+                name: 'Xan',
+                description: 'A smith.',
+                keywords: [],
+                sourceTurn: 't1',
+              },
+            ],
+          },
+        ),
+        deps([], { decisions: new Map([['new:x', { kind: 'create', flag: null }]]) }),
+      )
+      expect(createdPlaces(planned).map((e) => e.name)).toEqual(['Birchmoor'])
+      expect(handleMap.get('new:x')).toMatch(/^char_/)
+      expect(droppedPlaces).toEqual([
+        { handle: 'new:x', name: 'Ashwater', cause: 'handle-taken' },
+        { handle: 'new:y', name: 'Coldharbour', cause: 'handle-taken' },
+      ])
+      expect(unresolvedRefs).toEqual([])
+    })
+
+    it('drops a blank-named place and reports it', () => {
+      const { planned, unresolvedRefs, droppedPlaces } = buildClassifierActions(
+        reply([newPlace('new:x', '   ')]),
+        deps([]),
+      )
+      expect(planned).toEqual([])
+      expect(droppedPlaces).toEqual([{ handle: 'new:x', name: '   ', cause: 'blank-name' }])
+      expect(unresolvedRefs).toEqual([])
+    })
+
+    it("resolves a new place's handle as a site, never as a character", () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        reply([newPlace('new:inn', 'the Gull Inn')], {
+          happenings: [
+            {
+              title: 'A brawl',
+              sourceTurn: 't2',
+              involvements: [{ ref: 'new:inn', role: 'site' }],
+              awareness: [{ ref: 'new:inn', source: 'saw it', severity: 0.5 }],
+            },
+          ],
+        }),
+        deps([]),
+      )
+      const involvement = planned.find((p) => p.action.kind === 'createHappeningInvolvement')
+      expect(payloadOf<{ entry: { entityId: string } }>(involvement).entry.entityId).toBe(
+        'loc_new1',
+      )
+      expect(planned.some((p) => p.action.kind === 'upsertHappeningAwareness')).toBe(false)
+      expect(unresolvedRefs).toEqual(['new:inn'])
+      // The create precedes every write that names it.
+      expect(planned.findIndex((p) => p.action.kind === 'createEntity')).toBeLessThan(
+        planned.indexOf(involvement as PlannedWrite),
+      )
+    })
   })
 })

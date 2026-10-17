@@ -14,6 +14,7 @@ export type MemoryKnobsDraft = {
   protectedBuffer: number | null
   classifierContextEntries: number
   classifierCadence: number | null
+  classifierMentionedPlaces: boolean
   retrievalBudgets: Record<BudgetKey, number | null>
   keywordRetrieval: {
     mode: Keyword['mode']
@@ -39,6 +40,7 @@ const MEMORY_KNOBS_ORDER = {
   protectedBuffer: true,
   classifierContextEntries: true,
   classifierCadence: true,
+  classifierMentionedPlaces: true,
   retrievalBudgets: true,
   keywordRetrieval: true,
 } satisfies Record<MemoryKnobsKey, true>
@@ -90,6 +92,7 @@ export function toMemoryKnobsDraft(settings: StorySettings): MemoryKnobsDraft {
     protectedBuffer: settings.protectedBuffer,
     classifierContextEntries: settings.classifierContextEntries,
     classifierCadence: settings.classifierCadence,
+    classifierMentionedPlaces: settings.classifierMentionedPlaces,
     retrievalBudgets: { ...settings.retrievalBudgets },
     keywordRetrieval: { ...settings.keywordRetrieval },
   }
@@ -144,6 +147,7 @@ export function toMemoryKnobsPatch(draft: MemoryKnobsDraft): MemoryKnobsPatch {
     protectedBuffer: draft.protectedBuffer as number,
     classifierContextEntries: draft.classifierContextEntries,
     classifierCadence: draft.classifierCadence as number,
+    classifierMentionedPlaces: draft.classifierMentionedPlaces,
     retrievalBudgets: budgets,
     keywordRetrieval: {
       mode: draft.keywordRetrieval.mode,

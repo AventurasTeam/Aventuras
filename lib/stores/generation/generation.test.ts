@@ -35,11 +35,98 @@ describe('isUserEditBlocked', () => {
     const tx = (runs: ReturnType<typeof mk>[], reversalInProgress = false): TxState => ({
       runs: new Map(runs.map((r) => [r.runId, r])),
       reversalInProgress,
+      pendingTurns: new Set(),
     })
     expect(isUserEditBlocked(tx([]))).toBe(false)
     expect(isUserEditBlocked(tx([mk('bg', 'no-gate')]))).toBe(false)
     expect(isUserEditBlocked(tx([mk('bg', 'no-gate'), mk('fg', 'hard-gate')]))).toBe(true)
     expect(isUserEditBlocked(tx([], true))).toBe(true)
+  })
+
+  // generation-pipeline.md → No-gate write phase: a reversal opened between a Send and its run's
+  // registration would have the turn's queued user_action refused.
+  it('blocks while a turn is pending, on any branch', () => {
+    const blocked = (pendingTurns: TxState['pendingTurns']) =>
+      isUserEditBlocked({ runs: new Map(), reversalInProgress: false, pendingTurns })
+    expect(blocked(new Set([{ branchId: 'b2' }]))).toBe(true)
+    expect(blocked(new Set())).toBe(false)
+  })
+})
+
+describe('pending turns', () => {
+  beforeEach(() => generationStore.__reset())
+
+  const pending = () => [...generationStore.getTxState().pendingTurns].map((t) => t.branchId)
+
+  function holdTurn(branchId: string) {
+    let endEarly!: () => void
+    let settleBody!: (outcome: 'resolve' | 'reject') => void
+    const bracket = generationStore.bracketPendingTurn(branchId, (end) => {
+      endEarly = end
+      return new Promise<void>((resolve, reject) => {
+        settleBody = (outcome) => (outcome === 'resolve' ? resolve() : reject(new Error('boom')))
+      })
+    })
+    return {
+      endEarly: () => endEarly(),
+      settle: (outcome: 'resolve' | 'reject' = 'resolve') => {
+        settleBody(outcome)
+        return bracket
+      },
+    }
+  }
+
+  it('holds a turn until its early end, once, beside another on the same branch', async () => {
+    const first = holdTurn('b1')
+    const second = holdTurn('b1')
+    expect(pending()).toEqual(['b1', 'b1'])
+    expect(generationStore.isUserEditBlocked()).toBe(true)
+    first.endEarly()
+    first.endEarly()
+    expect(pending()).toEqual(['b1'])
+    await first.settle()
+    expect(pending()).toEqual(['b1'])
+    second.endEarly()
+    expect(pending()).toEqual([])
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+    await second.settle()
+  })
+
+  it('ends the mark when the body settles without an early end, thrown or not', async () => {
+    const resolved = holdTurn('b1')
+    const thrown = holdTurn('b2')
+    await resolved.settle('resolve')
+    expect(pending()).toEqual(['b2'])
+    await expect(thrown.settle('reject')).rejects.toThrow('boom')
+    expect(pending()).toEqual([])
+  })
+
+  it('notifies subscribers when a turn ends, so a waiter wakes on a refused Send', async () => {
+    const turn = holdTurn('b1')
+    let calls = 0
+    const unsubscribe = generationStore.subscribe(() => calls++)
+    turn.endEarly()
+    expect(calls).toBe(1)
+    await turn.settle()
+    expect(calls).toBe(1)
+    unsubscribe()
+  })
+
+  it('ignores a late end after a reset, leaving a newer turn marked', async () => {
+    const stale = holdTurn('b1')
+    generationStore.__reset()
+    holdTurn('b1')
+    stale.endEarly()
+    await stale.settle()
+    expect(pending()).toEqual(['b1'])
+  })
+
+  it('keeps pending turns through run and reversal transitions', () => {
+    holdTurn('b1')
+    generationStore.startRun(run('run_1'))
+    generationStore.finishRun('run_1')
+    generationStore.setReversalInProgress(true)
+    expect(pending()).toEqual(['b1'])
   })
 })
 

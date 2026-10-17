@@ -406,19 +406,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the fallback, which extracts but can also move the scene, is the case
   that rule doesn't settle.
 
-- **A periodic pass isn't cancelled when its story closes.** After its
-  model call the pass re-reads the global entity stores
-  (`lib/pipeline/definitions/periodic-classifier.ts`, the re-read before
-  reconciliation) and filters them by its branch, with no check that the
-  stores still hold that branch, as `loadPerTurnWorkingSet` makes for a
-  turn. Nothing found in `lib/stores/generation` or the story actions
-  cancels a pass when the user closes the story or switches branch, so a
-  pass finishing then could reconcile its new characters against an
-  empty roster and create them unmatched. Unverified: not traced through
-  story close, and not reproduced. The mentioned-places implementation
-  makes the same check for places; this item is the character path,
-  which predates it. Raised 2026-10-16 by the mentioned places design.
-
 - **The scene editor can write a character into a retired place.**
   Removing a character from the tail's scene sets their
   `current_location_id` to the previous entry's location, as the
@@ -446,4 +433,102 @@ slice-planning gate forces its resolution before that slice is planned.
   both; it simplifies anything only once Story Settings adopts it.
   `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
   2026-10-15 by the retired and disabled places slice review's
+  simplifier pass.
+
+- **A pass keeps a failed turn's user_action in its window.** A
+  periodic pass reads its window when it starts. If a turn is streaming
+  then, the window holds that turn's user_action. The pass waits the
+  turn out, then plans and writes against that window. If the turn
+  fails or is cancelled, it reverses its own user_action. A fact the pass
+  anchored on that entry then names a deleted row, and `processedThrough`
+  stays past positions the next Send reuses, so that prose is never
+  classified (`lib/pipeline/definitions/periodic-classifier.ts`, the
+  window read and the watermark write). The prose-reversal barrier
+  doesn't cover a failed turn's own reversal
+  ([`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)).
+  Trigger: the scheduler's retry timer, or the gap in `noteTurnCommitted`,
+  starts a pass while a turn streams, and the turn then fails or the
+  user presses Cancel. Probed with a scratch test: the end state is the
+  same on `main`, so this predates the mentioned-places write-phase
+  wait. Raised 2026-10-16 by the mentioned places slice review.
+
+- **Regenerate checks the edit gate, then awaits before raising it.**
+  `regenerateTurn` (`lib/actions/turns/regenerate-turn.ts`) checks
+  `isUserEditBlocked`, runs two awaited selects, then raises its
+  pending-turn mark and opens its prose-reversal bracket. The CTRL-Z
+  hotkey (`runUndoRedo` in `app/reader-composer/[branchId].tsx`) isn't
+  held back by the reader's dispatch ref, so an undo can open its
+  bracket in that gap. Regenerate then throws "bracketProseReversal is
+  not re-entrant", and the reader toasts the regenerate failure and
+  reloads. The window is milliseconds, and the check, reads, bracket
+  order is unchanged from `main`. `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts`) already re-checks the
+  gate after its read, which would close it here too. Read, not probed.
+  Raised 2026-10-16 by the mentioned places slice review.
+
+- **A pass whose story closed holds the classifier slot until it
+  ends.** The mentioned-places branch check discards a pass once the
+  entity stores leave its branch, but only when the pass wakes: nothing
+  cancels it on a story or branch switch. Until its model call returns
+  or times out (up to 300 s), it holds the only periodic-classifier
+  slot, since `blockedBy` covers every branch
+  (`lib/pipeline/runtime/concurrency.ts`). Meanwhile the newly opened
+  story's cadence passes are rejected as busy and wait for the next
+  tick. Read, not probed. Residual of the removed item "A periodic
+  pass isn't cancelled when its story closes". Raised 2026-10-16 by the
+  mentioned places slice review.
+
+- **Two new characters with one handle share a reconcile decision.**
+  The periodic phase stores each `newCharacters` candidate's
+  reconcile decision in a map keyed by handle
+  (`lib/pipeline/definitions/periodic-classifier.ts`, the
+  reconciliation loop). With two candidates on one handle, the second
+  decision overwrites the first, and the planner applies it to the
+  first candidate, binding it to the wrong row with no log. Canon
+  doesn't say what a duplicate handle does in the pass; `piggyback.md`
+  keeps the first declaration for the per-turn writer. Read, not
+  probed. Predates the mentioned-places work. Raised 2026-10-16 by the
+  mentioned places slice review.
+
+- **The generation store's run mutators are public.**
+  `generationStore.startRun`, `finishRun`, `abortRun` and
+  `setReversalInProgress` (`lib/stores/generation/generation.ts`) are
+  exported to every module. Only the orchestrator and the
+  prose-reversal bracket should call them, and a stray caller can leave
+  the hard gate or the reversal barrier stuck. The mentioned-places
+  slice review closed the same gap for the pending-turn mark by
+  exposing it only as a bracket. A `boundaries` lint rule limiting
+  these to `lib/pipeline/runtime` and `lib/actions` is the route
+  [`code-conventions.md → Syncing a store after a write`](../code-conventions.md#syncing-a-store-after-a-write)
+  names for a package-private mutator. Raised 2026-10-16 by the
+  mentioned places slice review.
+
+- **The classifier's Known entities lines print stored text raw.** The
+  periodic classifier's prompt
+  (`lib/prompts/bundled/periodic-classifier.ts`) prints each Known
+  entities row's name, description and keywords as stored, so a
+  newline in any of them starts a line that isn't an entity, and the
+  model may read it as one. The Places tree collapses the same fields
+  onto one line (`oneLine` in
+  `lib/pipeline/definitions/classifier-context.ts`). Doing the same
+  for the roster would close this. Read, not probed; predates the
+  mentioned-places work. Raised 2026-10-16 by the mentioned places
+  slice review.
+
+- **Nine migration tests carry their own copy of two helpers.**
+  `migrationTags` and `applyMigration` are copied byte for byte into the
+  seven migration tests under `lib/db/__tests__/`, plus
+  `lib/db/embeddings/stale.test.ts` and `lib/embedder/service.test.ts`.
+  They belong in `lib/db/__tests__/test-db.ts`, which tests in other
+  modules already import. One `refactor(test):` commit would move them
+  and replace the copies with an import. Raised 2026-10-16 by the
+  mentioned places slice review's simplifier pass, which skipped it as
+  outside that slice.
+
+- **`clampEmbeddedCharacter` clamps places and items too.** The helper
+  in `lib/classifier/plan.ts` bounds the embedded name and description
+  of any new row: the per-turn writer already used it for places and
+  items, and the periodic classifier now uses it for mentioned places.
+  A neutral name such as `clampEmbeddedText` would stop it misleading.
+  Rename only. Raised 2026-10-16 by the mentioned places slice review's
   simplifier pass.

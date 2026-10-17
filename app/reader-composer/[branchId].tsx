@@ -616,12 +616,8 @@ export default function ReaderComposerRoute() {
     toast.info(t('reader:failedTurnTextRestored'))
   }, [])
 
-  // `editBlocked` only goes true once a dispatch registers a hard-gate run or
-  // enters its reversal barrier — several awaits and a branch-queue hop past the
-  // tap. Send survives that window only because the composer clears its own text
-  // on send; the per-entry glyphs have no such accident, so every turn dispatch
-  // marks the window itself. The ref is the correctness guard (synchronous, no
-  // render lag); the state is what disables the affordances.
+  // `editBlocked` rises a queue hop and several awaits after the tap; only Send survives the gap
+  // (the composer clears), so each dispatch marks it: ref is the sync guard, state disables.
   const dispatchInFlightRef = useRef(false)
   const [dispatchInFlight, setDispatchInFlight] = useState(false)
   const beginDispatch = useCallback((): boolean => {

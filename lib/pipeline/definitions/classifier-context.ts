@@ -1,6 +1,8 @@
 import type { ClassifierWindow } from '@/lib/classifier'
 import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { blankToNull } from '@/lib/text'
+import { placeTree } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -9,6 +11,11 @@ type RelationshipFact = {
   objectName: string
   kind: string
 }
+
+// Each place is one line of the tree: stored text spanning several would break its nesting.
+const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
+const oneLine = (text: string | null): string | null =>
+  text == null ? null : blankToNull(flat(text))
 
 // One row can emit two facts, one per non-null perspective; a row whose character
 // has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
@@ -52,20 +59,34 @@ export function buildClassifierContext(args: {
   entities: readonly Entity[]
   happenings: readonly Happening[]
   relationships: readonly CharacterRelationship[]
+  /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
+  mentionedPlaces: boolean
   idMap: IdBiMap
 }): Record<string, unknown> {
-  const { window, entities, happenings, relationships, idMap } = args
+  const { window, entities, happenings, relationships, mentionedPlaces, idMap } = args
   const known = new Set(entities.map((e) => e.id))
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
     // Narrower than generationContext's on purpose: no injectionMode, a retrieval-time knob.
-    entities: entities.map((e) => ({
+    entities: entities
+      .filter((e) => e.kind !== 'location')
+      .map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        name: e.name,
+        description: e.description,
+        status: e.status,
+        keywords: e.keywords,
+      })),
+    // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
+    places: placeTree(entities).map(({ entity: e, depth }) => ({
       id: e.id,
-      kind: e.kind,
-      name: e.name,
-      description: e.description,
+      name: flat(e.name),
+      depth,
       status: e.status,
-      keywords: e.keywords,
+      retiredReason: e.status === 'retired' ? oneLine(e.retiredReason) : null,
+      description: oneLine(e.description),
+      keywords: e.keywords.map(flat),
     })),
     // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
     // Scene/location ids are filtered to known: a deleted row would get a placeholder.
@@ -78,6 +99,7 @@ export function buildClassifierContext(args: {
     })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
     relationships: projectRelationships(relationships, entities),
+    mentionedPlaces,
   }
   return substituteIds(context, idMap) as Record<string, unknown>
 }

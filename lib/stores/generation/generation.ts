@@ -23,13 +23,22 @@ export type RunState = {
   resolveTerminal: () => void
 }
 
-// reversalInProgress brackets a prose-reversal's wait->sweep window: while set it blocks
-// REVERSAL_BLOCKED scheduling (concurrency.ts) and makes applyDeltaAction reject user
-// dispatch. ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
-export type TxState = { runs: ReadonlyMap<string, RunState>; reversalInProgress: boolean }
+/** A turn admitted on its branch but not yet registered as a run; identity is the token. */
+export type PendingTurn = { readonly branchId: string }
 
+// reversalInProgress brackets a prose-reversal's wait->sweep window, blocking REVERSAL_BLOCKED
+// scheduling (concurrency.ts) and user dispatch. pendingTurns: generation-pipeline.md → No-gate
+// write phase. ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
+export type TxState = {
+  runs: ReadonlyMap<string, RunState>
+  reversalInProgress: boolean
+  pendingTurns: ReadonlySet<PendingTurn>
+}
+
+// A pending turn counts: it is about to raise the hard gate, and a reversal opened in the gap
+// would have its queued user_action refused.
 export function isUserEditBlocked(txState: TxState): boolean {
-  if (txState.reversalInProgress) return true
+  if (txState.reversalInProgress || txState.pendingTurns.size > 0) return true
   return [...txState.runs.values()].some((r) => r.gateBehavior === 'hard-gate')
 }
 
@@ -48,11 +57,22 @@ type GenerationState = {
   finishRun: (runId: string, successor?: RunState) => void
   abortRun: (runId: string) => void
   setReversalInProgress: (value: boolean) => void
+  /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
+  bracketPendingTurn: <T>(
+    branchId: string,
+    body: (endEarly: () => void) => Promise<T>,
+  ) => Promise<T>
   __reset: () => void
 }
 
+const emptyTxState = (): TxState => ({
+  runs: new Map(),
+  reversalInProgress: false,
+  pendingTurns: new Set(),
+})
+
 const store = createStore<GenerationState>()((set) => ({
-  txState: { runs: new Map(), reversalInProgress: false },
+  txState: emptyTxState(),
   settleCount: 0,
   startRun: (run) =>
     set((s) => {
@@ -92,7 +112,26 @@ const store = createStore<GenerationState>()((set) => ({
       txState: { ...s.txState, reversalInProgress: value },
       settleCount: !value && s.txState.reversalInProgress ? s.settleCount + 1 : s.settleCount,
     })),
-  __reset: () => set({ txState: { runs: new Map(), reversalInProgress: false }, settleCount: 0 }),
+  bracketPendingTurn: async (branchId, body) => {
+    const turn: PendingTurn = { branchId }
+    set((s) => ({
+      txState: { ...s.txState, pendingTurns: new Set([...s.txState.pendingTurns, turn]) },
+    }))
+    // Idempotent; a no-op once __reset dropped the token, so a late end can't free another's.
+    const end = () =>
+      set((s) => {
+        if (!s.txState.pendingTurns.has(turn)) return s
+        const pendingTurns = new Set(s.txState.pendingTurns)
+        pendingTurns.delete(turn)
+        return { txState: { ...s.txState, pendingTurns } }
+      })
+    try {
+      return await body(end)
+    } finally {
+      end()
+    }
+  },
+  __reset: () => set({ txState: emptyTxState(), settleCount: 0 }),
 }))
 
 function getTxState(): TxState {
@@ -126,6 +165,9 @@ export const generationStore = {
   finishRun: api.finishRun,
   abortRun: api.abortRun,
   setReversalInProgress: api.setReversalInProgress,
+  bracketPendingTurn: api.bracketPendingTurn,
+  /** Fires after every state change; returns the unsubscribe. */
+  subscribe: (listener: () => void): (() => void) => store.subscribe(() => listener()),
   __reset: api.__reset,
 }
 
