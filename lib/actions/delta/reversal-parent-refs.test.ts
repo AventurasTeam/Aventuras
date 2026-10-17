@@ -6,6 +6,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { parentIdOf } from '@/lib/world'
 
 import { applyDeltaAction } from './apply-delta-action'
+import { applyRedo, prepareUndo } from './redo'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 import { selectReversalSet, type ReversalSet } from './row-closure'
 import type { DbCtx, DeltaSource, PipelineAction } from '../types'
@@ -121,6 +122,47 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(await parentOf('loc_old')).toBe('loc_quarter')
   })
 
+  it('keeps a root place the set moved under a removed parent, back at the root', async () => {
+    await act('act_root', create('loc_root', null, 'piggyback_tagged_block'))
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_move', move('loc_root', 'loc_varn'))
+
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_varn', 'act_move'),
+    })
+
+    expect(labels(set)).toEqual(['update entities:loc_root', 'create entities:loc_varn'])
+    await reverse(set)
+    expect(await entityIds()).toEqual(['loc_quarter', 'loc_root'])
+    expect(await parentOf('loc_root')).toBeNull()
+  })
+
+  it('takes a child whose state the set changed without moving it', async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
+    await act('act_flood', {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_docks',
+        patch: { state: { parent_location_id: 'loc_varn', condition: 'flooded' } },
+      },
+    })
+
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_varn', 'act_flood'),
+    })
+
+    expect(labels(set)).toEqual([
+      'update entities:loc_docks',
+      'create entities:loc_docks',
+      'create entities:loc_varn',
+    ])
+  })
+
   it('judges a place the set moved twice by what its oldest move replaced', async () => {
     await act('act_old', create('loc_old', 'loc_quarter', 'piggyback_tagged_block'))
     await act('act_harbor', create('loc_harbor', null, 'user_edit'))
@@ -189,5 +231,20 @@ describe('selectReversalSet — a place names its parent', () => {
     await reverse(set)
     expect(await ctx.db.select().from(deltas)).toEqual([])
     expect(await entityIds()).toEqual(['loc_quarter'])
+  })
+
+  it('redoes a child CTRL-Z took through its parent, under that parent', async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_varn') })
+    const { group, reverse: undo } = await prepareUndo(set, ctx)
+    await undo()
+    expect(await entityIds()).toEqual(['loc_quarter'])
+
+    await applyRedo(group, ctx)
+    expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter', 'loc_varn'])
+    expect(await parentOf('loc_docks')).toBe('loc_varn')
+    expect((await deltasOf('act_pass')).map((d) => d.targetId)).toEqual(['loc_docks'])
   })
 })
