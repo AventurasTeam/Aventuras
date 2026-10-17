@@ -345,7 +345,12 @@ already broken above it puts the place at the root too, logged, as it
 does for the per-turn writer
 ([`piggyback.md → Creating a place or an item`](./piggyback.md#creating-a-place-or-an-item)).
 The create handler refuses a place under a retired parent that slips
-through, which fails the whole pass.
+through, which fails the whole pass. A place created under a parent
+anchored on a later turn goes with that turn's reversal, along with its
+facts, though its own turn survives
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay));
+the watermark resumes at the removed turn, so no pass reads the mention
+again.
 
 **Matching.** Each new place is matched by the per-turn writer's
 sibling rule

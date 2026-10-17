@@ -1425,7 +1425,18 @@ and the live-link filter, which drops a restored link whose far end is
 gone, now a backstop for payloads written before this rule: an
 involvement names its happening and its entity, awareness its
 happening and its character, a relationship both its characters, and a
-translation its target by `target_kind`. Every `create` and `update`
+translation its target by `target_kind`. A place names its parent
+through `state.parent_location_id`, the one reference the registry
+reads inside a JSON column, which `missingRef` doesn't guard. A link
+row's ends never change after its create, but a `state` field can, so
+the closure judges that reference by the parent the row names once the
+set's own writes to it are undone: the pre-value of the oldest update
+in the set that changed it, which the newest-first walk restores last
+even over a later user write, else its live value, or the held copy's
+for a row a delete holds. A place the user moved under a removed parent
+so returns to its old parent rather than going with it, and one the set
+moved off a removed parent goes, since the reversal puts it back under
+that parent. Every `create` and `update`
 of a removed row joins the set, whatever its source; a `delete` of it
 never does, as the next paragraph covers. A table registering
 `rowKeepingColumns` keeps its exemption only when the row's own create
