@@ -37,7 +37,8 @@
   import * as Dialog from '#lib/components/ui/dialog/index.ts'
   import { database } from '#lib/services/database.ts'
   import { story } from '#lib/stores/story.svelte.ts'
-  import { isAndroid, isIos } from '#lib/utils/platform.ts'
+  import { isIos } from '#lib/utils/platform.ts'
+  import { supportsBackgroundGeneration } from '#lib/utils/backgroundKeepAlive.ts'
   import { autosize } from '#lib/utils/autosize.ts'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '#lib/utils/dialogFilters.ts'
@@ -258,9 +259,9 @@
     await settings.updateExperimentalFeatures({ autoSnapshotInterval: value })
   }
 
-  // -- Android background generation handlers --
+  // -- Background generation handlers --
 
-  const showAndroidSection = isAndroid()
+  const showBackgroundSection = supportsBackgroundGeneration()
 
   async function handleBackgroundGenerationToggle(checked: boolean) {
     if (!checked) {
@@ -518,12 +519,12 @@
 
   <Separator />
 
-  <!-- Android Background Generation (only shown on Android) -->
-  {#if showAndroidSection}
+  <!-- Background Generation (Android and iOS) -->
+  {#if showBackgroundSection}
     <div class="space-y-5">
       <div class="flex items-center gap-2">
         <Smartphone class="text-muted-foreground h-4 w-4" />
-        <Label class="text-sm font-medium">Android Background Generation</Label>
+        <Label class="text-sm font-medium">Background Generation</Label>
       </div>
 
       <!-- Background Generation toggle -->
@@ -535,7 +536,13 @@
           </div>
           <p class="text-muted-foreground text-xs">
             Keeps the app alive during text generation when you switch apps or lock your screen.
-            Uses a foreground service and wake lock — may use slightly more battery.
+            {#if onIos}
+              Uses a system background task, shown in the Dynamic Island, and an inaudible audio
+              loop that keeps the story page running — may use slightly more battery. iOS can still
+              end the task early.
+            {:else}
+              Uses a foreground service and wake lock — may use slightly more battery.
+            {/if}
           </p>
           {#if settings.experimentalFeatures.backgroundGeneration}
             <p class="pt-1 text-xs font-medium text-amber-500">
@@ -605,11 +612,13 @@
         />
       </div>
 
-      <p class="text-muted-foreground text-xs italic">
-        Note: Some phone manufacturers (Xiaomi, Huawei, Samsung, etc.) have aggressive battery
-        optimization that may still interrupt generation. You may need to exempt Aventura from
-        battery optimization in your device settings.
-      </p>
+      {#if !onIos}
+        <p class="text-muted-foreground text-xs italic">
+          Note: Some phone manufacturers (Xiaomi, Huawei, Samsung, etc.) have aggressive battery
+          optimization that may still interrupt generation. You may need to exempt Aventura from
+          battery optimization in your device settings.
+        </p>
+      {/if}
     </div>
 
     <Separator />
