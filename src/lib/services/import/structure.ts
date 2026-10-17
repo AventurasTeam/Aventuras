@@ -22,6 +22,7 @@ import { remapRuntimeVars } from '#lib/services/packs/index.ts'
 import type { RuntimeVariable, RuntimeEntityType } from '#lib/services/packs/index.ts'
 import type { PackBindingResolution } from './packBinding'
 import { createMappers } from './idMaps'
+import { remapRecord } from './worldStateRecords'
 import { normalizeTime } from '#lib/services/storyTime/index.ts'
 
 /** The resolved binding, plus both sides' runtime variable definitions for the re-keying. */
@@ -372,6 +373,23 @@ export async function importStructure(
       overridesId: mapOverridesId(entry.overridesId),
       deleted: entry.deleted ?? false,
     })
+  }
+
+  // State Tracking records (added in v1.11.0), in their original order so `seq` keeps it.
+  const records = [...(data.worldStateRecords ?? [])]
+    .sort((a, b) => a.seq - b.seq)
+    .map((record) =>
+      remapRecord(record, {
+        newStoryId,
+        mapEntryId: (id) => oldToNewId.get(id),
+        mapBranchId,
+        mapEntityId: remapEntityId,
+        remapMetadata: (metadata, type) => remapMetadata(metadata, type as RuntimeEntityType),
+      }),
+    )
+    .filter((record) => record !== null)
+  if (records.length > 0) {
+    await database.transaction(records.map((r) => database.worldStateRecordStatement(r)))
   }
 
   // Checkpoints (added in v1.6.0). Their snapshots are whole entity graphs, each needing the

@@ -15,6 +15,7 @@
   import type { Character, StoryEntry, EmbeddedImage, TimeTracker } from '#lib/types/index.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import {
     User,
@@ -37,6 +38,7 @@
     Metronome,
     MoreVertical,
     MilestoneIcon,
+    CornerLeftUp,
   } from '@lucide/svelte'
   import { aiService } from '#lib/services/ai/index.ts'
   import { aiTTSService } from '#lib/services/ai/utils/TTSService.ts'
@@ -47,7 +49,7 @@
   } from '#lib/services/ai/utils/ttsText.ts'
   import { parseMarkdown, parseStoryMarkdown } from '#lib/utils/markdown.ts'
   import { findPrecedingUserAction, isGenerationErrorEntry } from '#lib/utils/storyEntries.ts'
-  import { entryNumber } from '#lib/utils/storyNavigation.ts'
+  import { canCreateCheckpointAt, entryNumber } from '#lib/utils/storyNavigation.ts'
   import { sanitizeTextForTTS } from '#lib/utils/htmlSanitize.ts'
   import {
     processStoryContent,
@@ -81,7 +83,6 @@
   import * as Popover from '#lib/components/ui/popover/index.ts'
   import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
-  import { Input } from '#lib/components/ui/input/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { escapeHtml } from '#lib/utils/inlineImageParser.ts'
@@ -323,8 +324,6 @@
 
   let isEditing = $state(false)
   let editContent = $state('')
-  let isDeleting = $state(false)
-
   // Embedded images state
   let embeddedImages = $state<EmbeddedImage[]>([])
   let expandedImageId = $state<string | null>(null)
@@ -339,10 +338,6 @@
   )
   const ttsLabel = $derived(isPlayingTTS ? 'Stop narration' : 'Narrate')
   const copyLabel = $derived(isCopied ? 'Copied!' : 'Copy message text')
-
-  // Branching state
-  let isBranching = $state(false)
-  let branchName = $state('')
 
   // Inline image edit state
 
@@ -366,36 +361,17 @@
   // Main branch has no Branch record, so no divergence point
   const isForkPoint = $derived(!!activeBranch && activeBranch.forkEntryId === entry.id)
 
-  // Handle creating a branch from this entry
-  async function handleCreateBranch() {
-    if (!branchName.trim()) return
-    if (!entryCheckpoint) {
-      alert('Cannot branch from this entry - no checkpoint available')
-      return
-    }
-    try {
-      await story.createBranchFromCheckpoint(branchName.trim(), entry.id, entryCheckpoint.id)
-      isBranching = false
-      branchName = ''
-    } catch (error) {
-      console.error('[StoryEntry] Failed to create branch:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create branch')
-    }
-  }
-
-  function cancelBranch() {
-    isBranching = false
-    branchName = ''
-  }
-
-  // Checkpoint creation state
-  let isCreatingCheckpoint = $state(false)
-
-  // The activity report is rendered only while the entry shows its text: editing, deleting,
-  // branching and checkpointing take the content area, and the report gives way as the text does.
-  const showReport = $derived(
-    showActivityRecord && !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint,
+  // An inherited entry belongs to an ancestor branch: it is edited, deleted, branched from and
+  // checkpointed there, so here it only carries a marker that says so.
+  const ownerBranchName = $derived(
+    entry.branchId
+      ? (story.branches.find((b) => b.id === entry.branchId)?.name ?? 'a parent branch')
+      : 'Main',
   )
+
+  // The activity report is rendered only while the entry shows its text: editing takes the
+  // content area, and the report gives way as the text does.
+  const showReport = $derived(showActivityRecord && !isEditing)
 
   let adjustmentsOpen = $state(false)
   /** Outlives the submenu by one tap: the click that closed it must not land on a live item. */
@@ -418,16 +394,21 @@
     window.addEventListener('click', release, { capture: true, signal: gestureEnd.signal })
     window.addEventListener('pointercancel', release, { capture: true, signal: gestureEnd.signal })
   }
-  let checkpointName = $state('')
-
-  // Check if this is the latest entry (checkpoints can only be created at the latest entry)
   const isLatestEntry = $derived(
     story.entries.length > 0 && story.entries[story.entries.length - 1].id === entry.id,
   )
+  const isOwnedEntry = $derived(
+    (entry.branchId ?? null) === (story.currentStory?.currentBranchId ?? null),
+  )
 
-  // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
   const canCreateCheckpoint = $derived(
-    isLatestEntry && entry.type !== 'system' && !entryCheckpoint && !entriesLocked,
+    canCreateCheckpointAt(entry, {
+      entries: story.entries,
+      checkpoints: story.checkpoints,
+      currentBranchId: story.currentStory?.currentBranchId ?? null,
+      tracking: settings.experimentalFeatures.stateTracking,
+      locked: entriesLocked,
+    }),
   )
 
   // Is this the last user_action in the story? (used for the regeneration hint)
@@ -444,23 +425,6 @@
       !!story.currentScope &&
       sameBranchScope(ui.retryBackup, story.currentScope),
   )
-
-  async function handleCreateCheckpoint() {
-    if (!checkpointName.trim()) return
-    try {
-      await story.createCheckpoint(checkpointName.trim())
-      isCreatingCheckpoint = false
-      checkpointName = ''
-    } catch (error) {
-      console.error('[StoryEntry] Failed to create checkpoint:', error)
-      alert(error instanceof Error ? error.message : 'Failed to create checkpoint')
-    }
-  }
-
-  function cancelCheckpoint() {
-    isCreatingCheckpoint = false
-    checkpointName = ''
-  }
 
   // Reads of this entry's images race each other: five callers fire the full load without
   // awaiting it, and the single-row refreshes below run alongside them. Every read takes a
@@ -1374,17 +1338,6 @@
     editContent = ''
   }
 
-  async function confirmDelete() {
-    try {
-      await story.deleteEntry(entry.id)
-      isDeleting = false
-    } catch (error) {
-      console.error('[StoryEntry] Failed to delete entry:', error)
-      alert(error instanceof Error ? error.message : 'Failed to delete entry')
-      isDeleting = false
-    }
-  }
-
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       cancelEdit()
@@ -1476,23 +1429,48 @@
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
-    <!-- Fork point marker: this branch diverged from its parent here. Passive (not a
-         Button) and outside the toolbar guard below, so it survives on system entries.
-         Matches the toolbar's h-7 w-7 slot so it lines up with "Branch from here".
-         Muted rather than accent-coloured: --color-accent-500 is the exact amber of the
-         "Branch from here" button in some themes (fantasy, royal), and both can land on
-         the same entry when a branch's fork entry is still its latest entry. -->
-    {#if isForkPoint}
-      <span
-        class="flex h-7 w-7 shrink-0 items-center justify-center"
-        title="Branch &quot;{activeBranch?.name}&quot; starts here"
-      >
-        <GitBranch class="text-muted-foreground h-4 w-4" />
-      </span>
+    <!-- Lineage marker: the fork point, or any other entry inherited from an ancestor branch.
+         Outside the toolbar guard below, so it survives on system entries. Matches the toolbar's
+         h-7 w-7 slot so it lines up with "Branch from here". Muted rather than accent-coloured:
+         --color-accent-500 is the exact amber of the "Branch from here" button in some themes
+         (fantasy, royal), and both can land on the same entry when a branch's fork entry is
+         still its latest entry. A popover rather than a title, so a tap explains it on a phone. -->
+    {#if isForkPoint || !isOwnedEntry}
+      <!-- Opens on hover after a delay like a native tooltip, and on a tap where there is no hover. -->
+      <Popover.Root>
+        <Popover.Trigger openOnHover openDelay={500}>
+          {#snippet child({ props })}
+            <button
+              {...props}
+              class="text-muted-foreground hover:text-foreground flex h-7 w-7 shrink-0 items-center justify-center"
+              aria-label={isForkPoint ? 'Where this branch starts' : 'Inherited entry'}
+            >
+              {#if isForkPoint}
+                <GitBranch class="h-4 w-4" />
+              {:else}
+                <CornerLeftUp class="h-4 w-4" />
+              {/if}
+            </button>
+          {/snippet}
+        </Popover.Trigger>
+        <!-- Dark on light, as the native tooltips beside it are. -->
+        <!-- No focus moves: focusing the trigger again on close scrolls the story to it. -->
+        <Popover.Content
+          class="w-60 rounded-sm border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-900 shadow-md"
+          align="end"
+          onOpenAutoFocus={(e: Event) => e.preventDefault()}
+          onCloseAutoFocus={(e: Event) => e.preventDefault()}
+        >
+          {#if isForkPoint}
+            Branch “{activeBranch?.name}” starts here.
+          {/if}
+          This entry is inherited from the branch “{ownerBranchName}”.
+        </Popover.Content>
+      </Popover.Root>
     {/if}
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
-    {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
+    {#if !isEditing && entry.type !== 'system'}
       <!-- -ml-2 cancels the row's gap, so the leftmost icon keeps the same rhythm as its neighbours. -->
       <div class="-ml-2 flex shrink-0 items-center gap-0.5">
         {#snippet copyIcon()}
@@ -1611,7 +1589,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => ui.triggerRetryLastMessage()}
+            onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: true })}
             class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
@@ -1621,7 +1599,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => ui.triggerRegenerateNarration(entry.id)}
+            onclick={() => ui.requestRegenerate({ entryId: entry.id, retry: false })}
             class="h-7 w-7 text-amber-700 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-600"
             title="Generate a different response"
           >
@@ -1632,7 +1610,7 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => (isBranching = true)}
+            onclick={() => ui.requestBranchFrom(entryCheckpoint?.id ?? null)}
             class="hidden h-7 w-7 text-amber-700 hover:text-amber-800 @min-[23rem]:flex dark:text-amber-500 dark:hover:text-amber-600"
             title="Branch from here"
           >
@@ -1643,8 +1621,14 @@
           <Button
             variant="text"
             size="icon"
-            onclick={() => (isCreatingCheckpoint = true)}
-            class="hidden h-7 w-7 text-blue-700 hover:text-blue-800 @min-[23rem]:flex dark:text-blue-500 dark:hover:text-blue-600"
+            onclick={() => ui.requestCheckpointForm(entry.id)}
+            class={cn(
+              'hidden h-7 w-7 @min-[23rem]:flex',
+              // Accent only where a checkpoint is the usual next step: at the latest entry.
+              isLatestEntry
+                ? 'text-blue-700 hover:text-blue-800 dark:text-blue-500 dark:hover:text-blue-600'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1743,13 +1727,13 @@
             onpointerdown={closeAdjustmentsFromOutside}
           >
             {#if canBranch}
-              <DropdownMenu.Item onclick={() => (isBranching = true)}>
+              <DropdownMenu.Item onclick={() => ui.requestBranchFrom(entryCheckpoint?.id ?? null)}>
                 <GitBranch class="h-4 w-4" />
                 Branch from here
               </DropdownMenu.Item>
             {/if}
             {#if canCreateCheckpoint}
-              <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
+              <DropdownMenu.Item onclick={() => ui.requestCheckpointForm(entry.id)}>
                 <Bookmark class="h-4 w-4" />
                 Create checkpoint
               </DropdownMenu.Item>
@@ -1823,7 +1807,7 @@
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       </div>
-    {:else if !isEditing && !isDeleting && entry.type === 'system' && !isErrorEntry}
+    {:else if !isEditing && entry.type === 'system' && !isErrorEntry}
       <!-- Any other system entry: regenerate (as the last entry, answering the action before it),
            edit and delete. -->
       <div class="-ml-2 flex shrink-0 items-center gap-0.5">
@@ -1845,26 +1829,28 @@
   </div>
 
   {#snippet editDeleteButtons()}
-    <Button
-      variant="text"
-      size="icon"
-      onclick={startEdit}
-      disabled={entriesLocked}
-      class="text-muted-foreground hover:text-foreground h-7 w-7"
-      title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
-    >
-      <Pencil class="h-4 w-4" />
-    </Button>
-    <Button
-      variant="text"
-      size="icon"
-      onclick={() => (isDeleting = true)}
-      disabled={entriesLocked}
-      class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
-      title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
-    >
-      <Trash2 class="h-4 w-4" />
-    </Button>
+    {#if isOwnedEntry}
+      <Button
+        variant="text"
+        size="icon"
+        onclick={startEdit}
+        disabled={entriesLocked}
+        class="text-muted-foreground hover:text-foreground h-7 w-7"
+        title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
+      >
+        <Pencil class="h-4 w-4" />
+      </Button>
+      <Button
+        variant="text"
+        size="icon"
+        onclick={() => ui.requestEntryDelete(entry.id)}
+        disabled={entriesLocked}
+        class="text-muted-foreground h-7 w-7 hover:text-red-700 dark:hover:text-red-500"
+        title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
+      >
+        <Trash2 class="h-4 w-4" />
+      </Button>
+    {/if}
   {/snippet}
 
   {#snippet storyTimeChip()}
@@ -1929,89 +1915,6 @@
             <RotateCcw class="h-3 w-3" />
           </p>
         {/if}
-      </div>
-    {:else if isDeleting}
-      <div class="space-y-2">
-        <p class="text-muted-foreground text-sm">Delete this entry?</p>
-        <div class="flex gap-2">
-          <Button variant="destructive" size="sm" onclick={confirmDelete} class="h-9 px-3">
-            <Trash2 class="mr-1.5 h-4 w-4" />
-            Delete
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onclick={() => (isDeleting = false)}
-            class="h-9 px-3"
-          >
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-        </div>
-      </div>
-    {:else if isBranching}
-      <div class="space-y-2">
-        <p class="text-muted-foreground text-sm">Create a branch from this point:</p>
-        <Input
-          type="text"
-          class="h-9 text-sm"
-          placeholder="Branch name..."
-          bind:value={branchName}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') handleCreateBranch()
-            if (e.key === 'Escape') cancelBranch()
-          }}
-        />
-        <div class="flex gap-2">
-          <Button
-            size="sm"
-            onclick={handleCreateBranch}
-            disabled={!branchName.trim()}
-            class="h-9 bg-amber-500 px-3 text-white hover:bg-amber-600"
-          >
-            <GitBranch class="mr-1.5 h-4 w-4" />
-            Create Branch
-          </Button>
-          <Button variant="secondary" size="sm" onclick={cancelBranch} class="h-9 px-3">
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-        </div>
-        <p class="text-muted-foreground text-xs">
-          This will create a new timeline from this checkpoint.
-        </p>
-      </div>
-    {:else if isCreatingCheckpoint}
-      <div class="space-y-2">
-        <p class="text-muted-foreground text-sm">Create a checkpoint at this point:</p>
-        <Input
-          type="text"
-          class="h-9 text-sm"
-          placeholder="Checkpoint name..."
-          bind:value={checkpointName}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') handleCreateCheckpoint()
-            if (e.key === 'Escape') cancelCheckpoint()
-          }}
-        />
-        <div class="flex gap-2">
-          <Button
-            size="sm"
-            onclick={handleCreateCheckpoint}
-            disabled={!checkpointName.trim()}
-            class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
-          >
-            <Bookmark class="mr-1.5 h-4 w-4" />
-            Create Checkpoint
-          </Button>
-          <Button variant="secondary" size="sm" onclick={cancelCheckpoint} class="h-9 px-3">
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-        </div>
-        <p class="text-muted-foreground text-xs">
-          Checkpoints save the current story state and allow branching from this point.
-        </p>
       </div>
     {:else}
       <!-- Reasoning content panel (between header and story text) -->

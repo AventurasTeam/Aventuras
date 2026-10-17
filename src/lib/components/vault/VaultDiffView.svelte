@@ -258,17 +258,15 @@
   const afterData = $derived.by(() => {
     if (change.action !== 'update') return null
     if (change.entityType !== 'character' && change.entityType !== 'scenario') return null
-    if (!('previous' in change) || !change.previous) return null
 
     const effective = vaultEditor.getEffectiveChange(change)
-    const data = (effective as { data?: Record<string, unknown> }).data
-    const prev = (effective as { previous?: Record<string, unknown> }).previous
-    if (!data) return null
+    if (effective.action !== 'update') return null
+    if (effective.entityType !== 'character' && effective.entityType !== 'scenario') return null
 
-    const base = JSON.parse(JSON.stringify(change.previous)) as Record<string, unknown>
-    const delta = computeDelta(data, prev ?? (change.previous as Record<string, unknown>))
-    Object.assign(base, delta)
-    return base
+    return {
+      ...$state.snapshot(change.previous),
+      ...computeDelta(effective.data, effective.previous),
+    }
   })
 </script>
 

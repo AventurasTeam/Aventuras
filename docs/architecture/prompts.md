@@ -79,7 +79,14 @@ Vault is global and has no story, so it resolves against `default-pack` by desig
 is rendered once per conversation and carries the Active Context for the entity the assistant was
 opened from. The user half wraps each message and adds that entity's current record only on a turn
 where it changed, or a note once it is gone from the vault, so the history the provider has cached is
-never rewritten.
+never rewritten. That record and the assistant's tools see the vault with unapproved changes and
+unsaved editor edits laid over the saved state (`effectiveVault.ts`), so a follow-up builds on the
+earlier proposal; `unsavedFields` names what is not saved yet. A lorebook's `entryCount` is the
+entries it has now, and proposed new ones are listed under `pendingCreates`. A view-mode Save
+approves the pending proposals its form already held. Approving a proposal likewise resolves the
+values of earlier pending ones that it replaces, since it was built on them: an earlier proposal left
+with nothing is marked approved, one with other fields keeps only those. Array fields stay independent,
+because their additions and removals merge.
 
 `PackService.initialize()` does two distinct things on startup, and they are not interchangeable:
 

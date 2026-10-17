@@ -81,10 +81,12 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
         : undefined,
       chapterBuffer: story.memoryConfig.chapterBuffer,
     },
-    buildLoreManagementCallbacks({
-      storyId: currentStory.id,
-      branchId: currentStory.currentBranchId,
-    }),
+    buildLoreManagementCallbacks(
+      { storyId: currentStory.id, branchId: currentStory.currentBranchId },
+      newChapter
+        ? { origin: 'chapter', entryId: newChapter.endEntryId }
+        : { origin: 'tidy', entryId: story.lastCompletedEntryId ?? undefined },
+    ),
     buildLoreManagementUICallbacks(),
   )
 }

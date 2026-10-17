@@ -3,6 +3,7 @@
  * Coordinates with the main exportService to provide complete story data.
  */
 
+import { recordsForExport } from '#lib/services/stateTracking/index.ts'
 import { database } from '#lib/services/database.ts'
 import type {
   StoryEntry,
@@ -12,6 +13,7 @@ import type {
   StoryBeat,
   Chapter,
   TimeAnchor,
+  WorldStateRecord,
   Entry,
   CheckpointRecord,
   Branch,
@@ -34,6 +36,7 @@ export interface StoryExportData {
   branches: Branch[]
   chapters: Chapter[]
   timeAnchors: TimeAnchor[]
+  worldStateRecords: WorldStateRecord[]
   /**
    * The story's prompt pack, as much of it as can safely travel. Null when the story has no pack
    * row to point at (a story predating the column, or one whose pack has since been deleted) —
@@ -98,12 +101,24 @@ export async function gatherPackBinding(storyId: string): Promise<PackBindingExp
   }
 }
 
+/** Whether this device has State Tracking on, and since when; see `recordsForExport`. */
+export interface ExportTracking {
+  on: boolean
+  enabledSince: number | null
+}
+
+/** Assumes tracking cannot be vouched for, which can only add a break. */
+export const NOT_VOUCHED: ExportTracking = { on: false, enabledSince: null }
+
 /**
  * Gather all story data in parallel for export.
  * @param storyId - The story ID to gather data for
  * @returns Complete story data ready for export
  */
-export async function gatherStoryData(storyId: string): Promise<StoryExportData> {
+export async function gatherStoryData(
+  storyId: string,
+  tracking: ExportTracking = NOT_VOUCHED,
+): Promise<StoryExportData> {
   const [
     entries,
     characters,
@@ -117,6 +132,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     chapters,
     packBinding,
     timeAnchors,
+    worldStateRecords,
   ] = await Promise.all([
     database.getStoryEntries(storyId),
     database.getCharacters(storyId),
@@ -130,6 +146,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     database.getChapters(storyId),
     gatherPackBinding(storyId),
     database.getTimeAnchors(storyId),
+    database.getWorldStateRecordsForStory(storyId),
   ])
 
   return {
@@ -145,6 +162,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     chapters,
     packBinding,
     timeAnchors,
+    worldStateRecords: recordsForExport(worldStateRecords, tracking, Date.now()),
   }
 }
 

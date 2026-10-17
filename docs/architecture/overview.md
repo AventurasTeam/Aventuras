@@ -186,6 +186,16 @@ does not scroll. Two things keep that true, and both are structural:
 `holdFocus` calls remain where a card is about to disappear under an open soft keyboard, so the
 keyboard closes before the card does; they are no longer what stops the scroll.
 
+## One way out of a dialog
+
+A dialog has exactly one dismiss control: either the header's X or a Cancel button, never both.
+Two controls that do the same thing make the reader wonder how they differ, and a Cancel beside a
+confirming action is the clearer of the two wherever the dialog asks for a decision. Such a dialog
+passes `closeButton={false}` to `ResponsiveModal.Header`; the X stays for dialogs that only show
+something and have no action to cancel. The rule is about controls drawn on the dialog, not the
+platform's own gestures: on a phone the dialog is a drawer, and swiping it down stays available
+whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight.
+
 ## Data Model
 
 The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`),
@@ -209,6 +219,10 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   standing on) and refuses the reverse case, where you stand on the new branch and edit entry 12
   — the edit that would have had the same effect, from the branch that cares about it. That is
   known, and left alone until we decide what editing shared history should mean.
+
+  An inherited entry carries a lineage marker in the slot the fork marker uses, and shows no Edit
+  or Delete: both are refused on it, as are a past checkpoint and a branch from it. Its popover
+  names the branch the entry belongs to, where those actions are.
 
 - **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
   so the last entry's number equals the branch's entry count. Numbering is per branch view — a
@@ -297,10 +311,17 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   scene, and the template forbids rewriting an appearance it was not shown, so a returning
   character keeps the descriptors it accumulated.
 
-- **`worldStateDelta`** on an entry records what its classification changed, which is what makes
-  retry, time-travel delete and regenerate reversible (`rollbackService`).
+- **State Tracking** (Labs) records every world and lorebook change in `world_state_changes`,
+  which is what makes retry, time-travel delete and regenerate reversible (`rollbackService`) and
+  lets a checkpoint be rebuilt at a past entry. Older entries keep a per-entry `worldStateDelta`.
+  See [state-tracking.md](state-tracking.md).
 - **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
-  survive an app restart or a story switch. A checkpoint is anchored to its `lastEntryId` and is
+  survive an app restart or a story switch. With State Tracking on, a retry backup copies no world
+  state: the retry rewinds through the records, as a delete does (see
+  [state-tracking.md](state-tracking.md)). The backup says which (`throughRecords`), so turning
+  the feature on or off between a turn and its retry does not pick the wrong path. With it off,
+  the lorebook is left as it is, as before. Either way the entries go through
+  `deleteEntriesFromPosition`, so chapters on them are dropped. A checkpoint is anchored to its `lastEntryId` and is
   deleted with that entry - in the same transaction, alongside the chapters and embedded images
   that reference it. It is the fork point a branch would be created from, so an orphaned one
   yields a branch pointing at an entry the database no longer holds. A reader may delete a

@@ -50,6 +50,7 @@ describe('atomic branch deletion', () => {
       'DELETE FROM checkpoints WHERE id IN ( SELECT c.id FROM checkpoints c ' +
         'JOIN story_entries e ON e.id = c.last_entry_id WHERE e.branch_id = ?)',
       'DELETE FROM chapters WHERE branch_id = ?',
+      'DELETE FROM world_state_changes WHERE branch_id = ?',
       'DELETE FROM story_entries WHERE branch_id = ?',
       'DELETE FROM characters WHERE branch_id = ?',
       'DELETE FROM locations WHERE branch_id = ?',

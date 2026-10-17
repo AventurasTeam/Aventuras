@@ -45,6 +45,7 @@ import { StreamingHtmlRenderer } from '#lib/utils/htmlStreaming.ts'
 import { countTokens } from '#lib/services/tokenizer.ts'
 import { branchScopeKey } from '#lib/utils/branchScope.ts'
 import type { LandmarkFilterGroup } from '#lib/utils/storyNavigation.ts'
+import type { RevertKeep } from '#lib/services/stateTracking/index.ts'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -63,6 +64,8 @@ export interface RetryBackup {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
+  // Taken while State Tracking was on: no world state is copied, a retry rewinds the records
+  throughRecords: boolean
   // The user's input to re-trigger
   userActionContent: string
   rawInput: string
@@ -128,6 +131,11 @@ class UIStore {
   // Held here rather than in the panel so it survives closing and reopening, as the sidebar's
   // does. It opens on Navigation until the reader leaves it somewhere else.
   navPanelTab = $state<NavPanelTab>('navigation')
+  // The story-level entry modals, each opened for one entry at a time.
+  checkpointFormEntryId = $state<string | null>(null)
+  deleteEntryId = $state<string | null>(null)
+  regenerateRequest = $state<{ entryId: string; retry: boolean } | null>(null)
+  branchCheckpointId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
   // reader opts into, not an ambient reference the way the sidebar is.
@@ -162,6 +170,10 @@ class UIStore {
     chapters: true,
     checkpoints: true,
   })
+  /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
+  navShowSnapshots = $state(false)
+  /** Whether the checkpoint form's explanation of past checkpoints is folded. */
+  checkpointHelpFolded = $state(false)
 
   // Streaming state
   streamingContent = $state('')
@@ -340,12 +352,13 @@ class UIStore {
   private retryCallback: (() => Promise<void>) | null = null
 
   // Retry last message callback - set by ActionInput for edit-and-retry feature
-  private retryLastMessageCallback: (() => Promise<void>) | null = null
+  private retryLastMessageCallback: ((keep?: RevertKeep) => Promise<void>) | null = null
 
   // Regenerate narration callback - set by ActionInput. Lighter-weight fallback used when
   // no full retry backup is available (e.g. the latest narration survived a manual delete
   // of the entries that came after it).
-  private regenerateNarrationCallback: ((entryId: string) => Promise<void>) | null = null
+  private regenerateNarrationCallback:
+    ((entryId: string, keep?: RevertKeep) => Promise<void>) | null = null
 
   // Reasoning block state persistence
   streamingReasoningExpanded = $state(false)
@@ -407,6 +420,23 @@ class UIStore {
     this.navPanelTab = tab
   }
 
+  requestCheckpointForm(entryId: string | null) {
+    this.checkpointFormEntryId = entryId
+  }
+
+  requestEntryDelete(entryId: string | null) {
+    this.deleteEntryId = entryId
+  }
+
+  /** `retry` restores the backup taken before the last action; otherwise the narration alone. */
+  requestRegenerate(request: { entryId: string; retry: boolean } | null) {
+    this.regenerateRequest = request
+  }
+
+  requestBranchFrom(checkpointId: string | null) {
+    this.branchCheckpointId = checkpointId
+  }
+
   setVaultTab(tab: VaultTab) {
     this.vaultTab = tab
   }
@@ -429,6 +459,13 @@ class UIStore {
     return database
       .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
+  }
+
+  setCheckpointHelpFolded(folded: boolean): Promise<void> {
+    this.checkpointHelpFolded = folded
+    return database
+      .setSetting('checkpoint_help_folded', folded.toString())
+      .catch((err) => console.warn('[UI] Failed to persist checkpoint help fold:', err))
   }
 
   setNavFilter(group: LandmarkFilterGroup, show: boolean): Promise<void> {
@@ -755,8 +792,10 @@ class UIStore {
     actionType: ActionInputType,
     wasRawActionChoice: boolean,
     timeTracker: TimeTracker | null,
+    throughRecords: boolean,
   ) {
     const timestamp = Date.now()
+    const copiesWorld = !throughRecords
     const nextEntryPosition =
       entries.reduce((max, entry) => Math.max(max, entry.position ?? -1), -1) + 1
 
@@ -812,10 +851,11 @@ class UIStore {
       // Large data - shallow copy to break potential proxy chains
       entries: [...entries],
       // Smaller data - shallow copy to break proxy chains
-      characters: copyCharacters(characters),
-      locations: copyLocations(locations),
-      items: shallowCopyArray(items),
-      storyBeats: shallowCopyArray(storyBeats),
+      characters: copiesWorld ? copyCharacters(characters) : [],
+      locations: copiesWorld ? copyLocations(locations) : [],
+      items: copiesWorld ? shallowCopyArray(items) : [],
+      storyBeats: copiesWorld ? shallowCopyArray(storyBeats) : [],
+      throughRecords,
       characterSnapshots,
       userActionContent,
       rawInput,
@@ -827,7 +867,7 @@ class UIStore {
       storyPosition: this.currentStoryPosition,
       // New fields for persistent retry
       entryCountBeforeAction: nextEntryPosition,
-      hasFullState: true,
+      hasFullState: copiesWorld,
       hasEntityIds: true,
       // Entity IDs for persistent restore
       characterIds,
@@ -891,11 +931,13 @@ class UIStore {
           timeTracker: timeTracker ? { ...timeTracker } : null,
           activationData: Object.fromEntries(Object.entries(this.activationData)),
           storyPosition: this.currentStoryPosition,
+          throughRecords,
         }),
       'persist',
     )
 
-    console.log('[UI] *** IN-MEMORY BACKUP CREATED (hasFullState: true) ***', {
+    console.log('[UI] *** IN-MEMORY BACKUP CREATED ***', {
+      hasFullState: copiesWorld,
       storyId,
       entriesCount: entries.length,
       charactersCount: characters.length,
@@ -980,6 +1022,7 @@ class UIStore {
       activationData?: Record<string, number>
       storyPosition?: number
       branchId?: string | null
+      throughRecords?: boolean
     },
   ) {
     // State written before the branch was recorded cannot be attributed to one, and a wrong
@@ -1050,6 +1093,7 @@ class UIStore {
       // Persistent retry fields
       entryCountBeforeAction: retryState.entryCountBeforeAction,
       hasFullState: false, // Indicates ID-based restore
+      throughRecords: retryState.throughRecords ?? false,
       hasEntityIds,
       // Entity IDs for restore - delete any entities not in these lists
       characterIds: retryState.characterIds ?? [],
@@ -1397,16 +1441,16 @@ class UIStore {
   }
 
   // Retry last message callback management (for edit-and-retry feature)
-  setRetryLastMessageCallback(callback: (() => Promise<void>) | null) {
+  setRetryLastMessageCallback(callback: ((keep?: RevertKeep) => Promise<void>) | null) {
     this.retryLastMessageCallback = callback
   }
 
-  async triggerRetryLastMessage() {
+  async triggerRetryLastMessage(keep?: RevertKeep) {
     console.log('[UI] triggerRetryLastMessage called', {
       hasCallback: !!this.retryLastMessageCallback,
     })
     if (this.retryLastMessageCallback) {
-      await this.retryLastMessageCallback()
+      await this.retryLastMessageCallback(keep)
       console.log('[UI] retryLastMessageCallback completed')
     } else {
       console.log('[UI] No retry last message callback registered!')
@@ -1414,13 +1458,15 @@ class UIStore {
   }
 
   // Regenerate narration callback management (fallback when no retry backup exists)
-  setRegenerateNarrationCallback(callback: ((entryId: string) => Promise<void>) | null) {
+  setRegenerateNarrationCallback(
+    callback: ((entryId: string, keep?: RevertKeep) => Promise<void>) | null,
+  ) {
     this.regenerateNarrationCallback = callback
   }
 
-  async triggerRegenerateNarration(entryId: string) {
+  async triggerRegenerateNarration(entryId: string, keep?: RevertKeep) {
     if (this.regenerateNarrationCallback) {
-      await this.regenerateNarrationCallback(entryId)
+      await this.regenerateNarrationCallback(entryId, keep)
     } else {
       console.log('[UI] No regenerate narration callback registered!')
     }

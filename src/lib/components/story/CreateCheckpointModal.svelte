@@ -1,0 +1,411 @@
+<script lang="ts">
+  import type { StoryEntry } from '#lib/types/index.ts'
+  import { gapMessage, loreLine, type GapOverride } from '#lib/services/stateTracking/index.ts'
+  import { story, type AnchorLabel, type PastCheckpointPreview } from '#lib/stores/story.svelte.ts'
+  import { ui } from '#lib/stores/ui.svelte.ts'
+  import { settings } from '#lib/stores/settings.svelte.ts'
+  import { canCreateCheckpointAt, entryNumber } from '#lib/utils/storyNavigation.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { Button } from '#lib/components/ui/button/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { Input } from '#lib/components/ui/input/index.ts'
+  import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
+  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import {
+    Bookmark,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    Loader2,
+    TriangleAlert,
+    X,
+  } from '@lucide/svelte'
+  import ChangeList from './ChangeList.svelte'
+
+  let entry = $state<StoryEntry | null>(null)
+  let name = $state('')
+  // For a past entry: whether it can be rebuilt, and the manual changes that would undo.
+  let pastCheckpoint = $state<PastCheckpointPreview | null>(null)
+  let keepManual = $state(false)
+  let keepTidy = $state(false)
+  let saving = $state(false)
+  // A refused past checkpoint can still be built from a full state the reader picks.
+  let advancedOpen = $state(false)
+  let overruleGaps = $state(false)
+  let gapOverride = $state<GapOverride>('undoRecorded')
+
+  const isLatestEntry = $derived(
+    !!entry && story.entries[story.entries.length - 1]?.id === entry.id,
+  )
+  const overriding = $derived(!!pastCheckpoint?.refusal && overruleGaps)
+  const overrideAnchor = $derived(
+    gapOverride === 'previousAsIs'
+      ? (pastCheckpoint?.overrides?.previous ?? null)
+      : (pastCheckpoint?.overrides?.next ?? null),
+  )
+  // What the rebuild undoes is shown only for a rebuild that undoes: a clean one, or the override.
+  const showUndone = $derived(
+    !!pastCheckpoint && (!pastCheckpoint.refusal || (overriding && gapOverride === 'undoRecorded')),
+  )
+  const blocked = $derived(
+    !isLatestEntry &&
+      (pastCheckpoint === null ||
+        (pastCheckpoint.refusal !== null && !(overriding && overrideAnchor))),
+  )
+
+  $effect(() => {
+    const id = ui.checkpointFormEntryId
+    if (!id) return
+    ui.requestCheckpointForm(null)
+    void open(id)
+  })
+
+  async function open(id: string) {
+    const target = story.entries.find((e) => e.id === id)
+    const allowed =
+      !!target &&
+      canCreateCheckpointAt(target, {
+        entries: story.entries,
+        checkpoints: story.checkpoints,
+        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        tracking: settings.experimentalFeatures.stateTracking,
+        locked: ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
+      })
+    if (!target || !allowed) {
+      ui.showToast('A checkpoint cannot be created at this entry', 'info')
+      return
+    }
+    entry = target
+    name = ''
+    pastCheckpoint = null
+    keepManual = false
+    keepTidy = false
+    advancedOpen = false
+    overruleGaps = false
+    if (isLatestEntry) return
+    try {
+      pastCheckpoint = await story.previewCheckpointAt(target.id)
+      gapOverride = pastCheckpoint.overrides?.next ? 'undoRecorded' : 'previousAsIs'
+    } catch (error) {
+      console.error('[CreateCheckpointModal] Could not preview the checkpoint:', error)
+      entry = null
+      ui.showToast(errMessage(error), 'error')
+    }
+  }
+
+  function setOverruleGaps(checked: boolean) {
+    overruleGaps = checked
+    if (checked && !name.trim()) name = 'Approximate — '
+  }
+
+  function skippedSnapshotText(position: number): string {
+    return `The snapshot at entry ${position + 1} was saved without the lorebook, so it can't be used.`
+  }
+
+  function entryNumberOf(id: string): number | null {
+    const at = story.entries.find((e) => e.id === id)
+    return at ? entryNumber(at) : null
+  }
+
+  const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
+
+  function anchorText(label: AnchorLabel): string {
+    if (label.kind === 'live') return 'the last entry world state'
+    const number = label.position + 1
+    return label.kind === 'checkpoint'
+      ? `checkpoint “${label.name ?? ''}” at entry ${number}`
+      : `a snapshot at entry ${number}`
+  }
+
+  async function create() {
+    if (!entry || !name.trim() || blocked || saving) return
+    saving = true
+    try {
+      if (isLatestEntry) await story.createCheckpoint(name.trim())
+      else {
+        await story.createCheckpointAt(entry.id, name.trim(), {
+          keepManual,
+          keepTidy,
+          override: overriding ? gapOverride : undefined,
+        })
+      }
+      entry = null
+    } catch (error) {
+      console.error('[CreateCheckpointModal] Failed to create checkpoint:', error)
+      alert(errMessage(error))
+    } finally {
+      saving = false
+    }
+  }
+
+  function cancel() {
+    if (saving) return
+    entry = null
+  }
+</script>
+
+{#snippet finding(status: 'ok' | 'warn' | 'fail', text: string)}
+  <li class="flex items-start gap-1.5">
+    {#if status === 'ok'}
+      <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+    {:else if status === 'warn'}
+      <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+    {:else}
+      <X class="mt-px h-3.5 w-3.5 shrink-0 text-red-500" />
+    {/if}
+    <span>{text}</span>
+  </li>
+{/snippet}
+
+{#snippet option(value: GapOverride, title: string, anchor: AnchorLabel | null, note?: string)}
+  <div class="flex items-start gap-2">
+    <RadioGroupItem {value} id={`gap-${value}`} disabled={!anchor} class="mt-0.5" />
+    <label for={`gap-${value}`} class:opacity-50={!anchor}>
+      <span class="text-foreground">{title}</span>
+      <span class="block">
+        {anchor ? `Data origin: ${anchorText(anchor)}.` : 'None was saved.'}
+      </span>
+      {#if anchor && note}
+        <span class="block">{note}</span>
+      {/if}
+    </label>
+  </div>
+{/snippet}
+
+<!-- Modal: the story must not change while the checkpoint is described and taken. -->
+<ResponsiveModal.Root
+  bind:open={
+    () => entry !== null,
+    (next) => {
+      if (!next) cancel()
+    }
+  }
+  dismissible={!saving}
+>
+  <ResponsiveModal.Content
+    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
+    interactOutsideBehavior="ignore"
+    escapeKeydownBehavior={saving ? 'ignore' : 'close'}
+  >
+    {#if entry}
+      {@const number = entryNumber(entry)}
+      <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
+        <ResponsiveModal.Title>Create checkpoint</ResponsiveModal.Title>
+        <ResponsiveModal.Description
+          >Create a new checkpoint at entry {number}</ResponsiveModal.Description
+        >
+      </ResponsiveModal.Header>
+      <!-- The one scroller: the refusal report and the change lists can run long. Buttons scroll
+           with the content, so what they do is read before them. -->
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        <div class="space-y-3 px-6 py-4">
+          <Input
+            type="text"
+            class="h-9 text-sm"
+            placeholder="Checkpoint name..."
+            bind:value={name}
+            disabled={saving}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') create()
+            }}
+          />
+          <div class="text-muted-foreground space-y-1 text-xs">
+            <p>Checkpoints save the story state and allow branching.</p>
+            <button
+              type="button"
+              class="hover:text-foreground flex items-center gap-1 font-medium"
+              onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
+              aria-expanded={!ui.checkpointHelpFolded}
+              aria-controls="past-checkpoint-help"
+            >
+              {#if ui.checkpointHelpFolded}
+                <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+              {:else}
+                <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+              {/if}
+              How past checkpoints work
+            </button>
+            {#if !ui.checkpointHelpFolded}
+              <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
+                Historical checkpoints rely on the state diffs that are recorded alongside the
+                tracked entries, and calculate past state through the rollback from the nearest
+                full-state landmark: an automated snapshot, another checkpoint, or current state.
+              </p>
+            {/if}
+          </div>
+
+          {#if isLatestEntry}
+            <!-- The latest entry is checkpointed from the current state: nothing to check. -->
+          {:else if pastCheckpoint === null}
+            <p class="text-muted-foreground text-xs italic">
+              Checking the recorded world state changes…
+            </p>
+          {:else if pastCheckpoint.refusal}
+            <!-- The diagnosis below explains a refusal; the warning only heads it. -->
+            <p class="text-xs text-amber-500">
+              {pastCheckpoint.diagnosis
+                ? 'The world state at this entry cannot be guaranteed.'
+                : pastCheckpoint.refusal}
+            </p>
+            {#if pastCheckpoint.diagnosis}
+              {@const diagnosis = pastCheckpoint.diagnosis}
+              <!-- An old record holds part of the history, so it warns rather than fails. -->
+              <ul class="text-muted-foreground space-y-1 text-xs">
+                {@render finding(
+                  diagnosis.target === 'recorded'
+                    ? 'ok'
+                    : diagnosis.target === 'classifierOnly'
+                      ? 'warn'
+                      : 'fail',
+                  diagnosis.target === 'recorded'
+                    ? `World state changes were recorded for entry ${number}.`
+                    : diagnosis.target === 'classifierOnly'
+                      ? `Entry ${number} has an old world state record without the lorebook.`
+                      : `World state changes were not recorded for entry ${number}.`,
+                )}
+                {@render finding(
+                  diagnosis.anchor ? 'ok' : 'fail',
+                  diagnosis.anchor
+                    ? `The nearest full world state is ${anchorText(diagnosis.anchor)}.`
+                    : 'No full world state was saved after this entry.',
+                )}
+                {#each pastCheckpoint.skipped as position, i (i)}
+                  {@render finding('warn', skippedSnapshotText(position))}
+                {/each}
+                {#if diagnosis.anchor}
+                  {#each diagnosis.gaps as gap, i (i)}
+                    {@render finding(
+                      gap.cause === 'classifierOnly' ? 'warn' : 'fail',
+                      gapMessage(gap, entryNumberOf),
+                    )}
+                  {:else}
+                    {@render finding(
+                      'ok',
+                      'World state changes were recorded for every entry in between.',
+                    )}
+                  {/each}
+                {/if}
+              </ul>
+            {/if}
+            {#if pastCheckpoint.overrides}
+              {@const overrides = pastCheckpoint.overrides}
+              <div class="text-muted-foreground text-xs">
+                <button
+                  type="button"
+                  class="hover:text-foreground flex items-center gap-1 font-medium"
+                  onclick={() => (advancedOpen = !advancedOpen)}
+                  aria-expanded={advancedOpen}
+                  aria-controls="past-checkpoint-advanced"
+                >
+                  {#if advancedOpen}
+                    <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+                  {:else}
+                    <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+                  {/if}
+                  Advanced
+                </button>
+                {#if advancedOpen}
+                  <div id="past-checkpoint-advanced" class="mt-2 space-y-2 pl-[1.125rem]">
+                    <label class="flex items-center gap-2">
+                      <Checkbox
+                        checked={overruleGaps}
+                        onCheckedChange={(checked) => setOverruleGaps(checked === true)}
+                        disabled={saving}
+                      />
+                      Create it anyway:
+                    </label>
+                    <RadioGroup
+                      value={gapOverride}
+                      onValueChange={(v) => (gapOverride = v as GapOverride)}
+                      disabled={!overruleGaps || saving}
+                      class="gap-2 pl-6"
+                    >
+                      {@render option(
+                        'undoRecorded',
+                        'Use a partial rollback from the next full state',
+                        overrides.next,
+                        'Changes that were not recorded stay in.',
+                      )}
+                      {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
+                      {@render option(
+                        'previousAsIs',
+                        'Copy the previous full state',
+                        overrides.previous,
+                      )}
+                    </RadioGroup>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {:else if pastCheckpoint.source}
+            <div class="text-muted-foreground space-y-1 text-xs">
+              <p>The world state at this entry is known:</p>
+              {#each pastCheckpoint.skipped as position, i (i)}
+                <p class="flex items-start gap-1.5">
+                  <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  {skippedSnapshotText(position)}
+                </p>
+              {/each}
+              <p class="flex items-start gap-1.5">
+                <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+                {pastCheckpoint.source.position === entry.position
+                  ? `${capitalize(anchorText(pastCheckpoint.source))} exists, so no rollback is needed.`
+                  : `Built by a rollback from ${anchorText(pastCheckpoint.source)}.`}
+              </p>
+            </div>
+          {/if}
+          {#if pastCheckpoint && showUndone}
+            {#if pastCheckpoint.manual.length > 0}
+              <p class="text-muted-foreground text-xs">
+                Some changes were made by a user after this entry:
+              </p>
+              <ChangeList changes={pastCheckpoint.manual} unkeepable={pastCheckpoint.unkeepable} />
+              <label class="flex items-center gap-2 text-xs">
+                <Checkbox bind:checked={keepManual} disabled={saving} />
+                Include them in the checkpoint
+              </label>
+            {/if}
+            {#if pastCheckpoint.tidy.length > 0}
+              <p class="text-muted-foreground text-xs">
+                Lore management you ran after this entry made these changes:
+              </p>
+              <ChangeList changes={pastCheckpoint.tidy} unkeepable={pastCheckpoint.unkeepable} />
+              <label class="flex items-center gap-2 text-xs">
+                <Checkbox bind:checked={keepTidy} disabled={saving} />
+                Include them in the checkpoint
+              </label>
+            {/if}
+            {#if pastCheckpoint.source?.position !== entry.position}
+              {@const line = loreLine(
+                pastCheckpoint.lore,
+                pastCheckpoint.manual.length + pastCheckpoint.tidy.length > 0,
+              )}
+              {#if line}
+                <p class="text-muted-foreground text-xs">{line}</p>
+              {/if}
+            {/if}
+          {/if}
+        </div>
+        <ResponsiveModal.Footer class="border-t px-6 py-4">
+          <Button variant="secondary" size="sm" onclick={cancel} disabled={saving} class="h-9 px-3">
+            <X class="mr-1.5 h-4 w-4" />
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onclick={create}
+            disabled={!name.trim() || blocked || saving}
+            class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
+          >
+            {#if saving}
+              <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+            {:else}
+              <Bookmark class="mr-1.5 h-4 w-4" />
+            {/if}
+            Create Checkpoint
+          </Button>
+        </ResponsiveModal.Footer>
+      </div>
+    {/if}
+  </ResponsiveModal.Content>
+</ResponsiveModal.Root>

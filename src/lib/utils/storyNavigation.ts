@@ -146,7 +146,8 @@ export function contextLift(input: ContextLiftInput): number {
   return Math.max(0, wanted - Math.max(0, offset))
 }
 
-export type LandmarkKind = 'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last'
+export type LandmarkKind =
+  'origin' | 'checkpoint' | 'chapter' | 'tail' | 'first' | 'last' | 'snapshot'
 
 /** The filter option each kind of row belongs to. */
 export type LandmarkFilterGroup = 'firstLast' | 'chapters' | 'checkpoints'
@@ -157,7 +158,8 @@ export const LANDMARK_FILTER_GROUPS: LandmarkFilterGroup[] = [
   'checkpoints',
 ]
 
-const FILTER_GROUP_OF: Record<LandmarkKind, LandmarkFilterGroup> = {
+// Snapshot rows are added after filtering, under an option of their own.
+const FILTER_GROUP_OF: Record<Exclude<LandmarkKind, 'snapshot'>, LandmarkFilterGroup> = {
   origin: 'checkpoints',
   checkpoint: 'checkpoints',
   chapter: 'chapters',
@@ -170,7 +172,9 @@ export function filterLandmarks(
   landmarks: Landmark[],
   shown: Record<LandmarkFilterGroup, boolean>,
 ): Landmark[] {
-  return landmarks.filter((landmark) => shown[FILTER_GROUP_OF[landmark.kind]])
+  return landmarks.filter(
+    (landmark) => landmark.kind === 'snapshot' || shown[FILTER_GROUP_OF[landmark.kind]],
+  )
 }
 
 export interface Landmark {
@@ -190,6 +194,31 @@ export interface Landmark {
  * take a branch from — and its `branchId` is null whatever branch it was made on, so counting one
  * would read it as Main's.
  */
+/**
+ * Whether a checkpoint can be created at `entry`: at the latest entry always, unless it is a
+ * system entry; at an earlier narration the open branch owns while State Tracking is on, since a
+ * fork after a player action would leave its answer to one branch only. Never where one exists,
+ * nor while a generation or retry holds the entries.
+ */
+export function canCreateCheckpointAt(
+  entry: Pick<StoryEntry, 'id' | 'type' | 'branchId'>,
+  context: {
+    entries: Pick<StoryEntry, 'id'>[]
+    checkpoints: Pick<Checkpoint, 'lastEntryId'>[]
+    currentBranchId: string | null
+    tracking: boolean
+    locked: boolean
+  },
+): boolean {
+  if (context.locked || context.checkpoints.some((cp) => cp.lastEntryId === entry.id)) return false
+  if (context.entries[context.entries.length - 1]?.id === entry.id) return entry.type !== 'system'
+  return (
+    context.tracking &&
+    entry.type === 'narration' &&
+    (entry.branchId ?? null) === context.currentBranchId
+  )
+}
+
 export function checkpointsOnBranch(
   checkpoints: Checkpoint[],
   branchId: string | null,
@@ -346,4 +375,46 @@ export function buildLandmarks(
       .sort((a, b) => a.createdAt - b.createdAt)
       .map(({ checkpointId, label }) => ({ checkpointId, label })),
   }
+}
+
+/** A world-state snapshot of the branch being read, as the navigation panel lists it. */
+export interface SnapshotMark {
+  id: string
+  entryId: string
+}
+
+/** Ids of the snapshots taken when State Tracking is turned off begin with this. */
+export const CLOSING_SNAPSHOT_PREFIX = 'closing:'
+
+/**
+ * `landmarks` with a row for each snapshot whose entry is on the branch, after any other row on
+ * the same entry: a snapshot is taken once that entry is done.
+ */
+export function withSnapshotLandmarks(
+  landmarks: Landmark[],
+  snapshots: SnapshotMark[],
+  entries: StoryEntry[],
+  branchId: string | null,
+  branchName: string,
+): Landmark[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]))
+  const rows: Landmark[] = []
+  for (const snapshot of snapshots) {
+    const entry = byId.get(snapshot.entryId)
+    if (!entry) continue
+    rows.push({
+      entryId: entry.id,
+      checkpointId: null,
+      branchId,
+      switchesBranch: false,
+      number: entryNumber(entry),
+      kind: 'snapshot',
+      label: snapshot.id.startsWith(CLOSING_SNAPSHOT_PREFIX)
+        ? 'Snapshot (tracking stopped)'
+        : 'Snapshot',
+      branchName,
+    })
+  }
+  const order = (row: Landmark) => (row.kind === 'snapshot' ? 1 : 0)
+  return [...landmarks, ...rows].sort((a, b) => a.number - b.number || order(a) - order(b))
 }
