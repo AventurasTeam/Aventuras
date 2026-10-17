@@ -912,7 +912,8 @@ runner rejects a group up front: writing the same row's column twice
 (`apply-delta-action.ts`'s `groupConflict`): two deletes whose
 cascades overlap, a write to a row that a delete in the group
 deletes or cascades, or a link or translation write naming a row the
-group deletes or cascades. A write to an existing `entities` row, any
+group deletes or cascades, or a place created or moved under a parent
+the group deletes. A write to an existing `entities` row, any
 `character_relationships` write, and any `happening_involvements` /
 `happening_awareness` write or happening delete, holds a key lock
 across that read and its commit, since the classifier and a World or
