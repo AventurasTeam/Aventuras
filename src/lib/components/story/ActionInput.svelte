@@ -582,23 +582,24 @@
     }
 
     // Keeps the process alive when backgrounded: a foreground service on Android, a continued
-    // processing task on iOS. The OS may end the iOS allowance early, which aborts like a lost
-    // connection.
+    // processing task on iOS. The OS may end the iOS allowance early; see the expiry callback below.
     const useBackgroundService =
       supportsBackgroundGeneration() && settings.experimentalFeatures.backgroundGeneration
     // Set when the OS ends the keep-alive (the Dynamic Island's Stop, or a system cutoff). The
     // native side has already posted the "interrupted" notice, so no completion notice follows.
     let keepAliveEnded = false
+    // What the turn ran into, for the outcome its record closes with.
+    const ending: Omit<TurnEnding, 'stopRequested'> = {}
     const releaseKeepAlive = useBackgroundService
       ? await holdBackgroundKeepAlive(() => {
           keepAliveEnded = true
+          // Before the narration is saved, end the turn like the in-app Stop so the action
+          // returns to the input; afterwards only the later phases are cut short.
           activeAbortController?.abort()
+          if (!ending.narrationSaved) void handleStopGeneration()
         }, settings.experimentalFeatures.generationNotifications)
       : () => {}
     ui.resetBackgroundedFlag()
-
-    // What the turn ran into, for the outcome its record closes with.
-    const ending: Omit<TurnEnding, 'stopRequested'> = {}
 
     try {
       // Inside the try: only its `finally` closes the turn, and a throw before that point
@@ -900,6 +901,12 @@
 
       ui.updateActivationData(activationTracker, currentStoryRef.id)
       if (stopRequested) return
+
+      // Stop was unavailable (a retry, an uninterruptible step), so the turn cannot be rewound:
+      // fail it, which records the error and offers Retry.
+      if (keepAliveEnded && !ending.narrationSaved) {
+        throw new Error('The system ended background generation before the story was written.')
+      }
 
       if (!fullResponse.trim()) {
         // The reason when the pipeline gave one: with reporting off, nothing else shows it.

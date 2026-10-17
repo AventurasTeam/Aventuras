@@ -83,15 +83,17 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   holds the keep-alive and before the task stops, so it arrives with the Island's "Story ready".
   Android has no such display and notifies as soon as the pipeline ends. It is skipped when the OS
   ended the keep-alive (the Island's Stop button): the native side has already posted its own
-  notice, and the generation may still run to its end. The page's "failed" notification is
-  skipped the same way, so one interruption gives one notification.
+  notice. The page's "failed" notification is skipped the same way, so one interruption gives
+  one notification.
 - **Audio loop.** `silentAudio.ts` plays one second of 16-bit audio at ±1 LSB, looped. An
   `<audio>` element is required: a Web Audio context is interrupted when the app is hidden. The
   element must stay unmuted at full volume, or WebKit does not count the page as playing audio. A
   `pause` listener restarts it, which is what survives another app (YouTube) taking the audio.
   The loop starts before the native call, so it is playing before the app can be hidden.
-- **Expiry.** The page aborts through the existing `AbortController`; the turn ends through the
-  same path as a lost connection.
+- **Expiry.** The page aborts through the existing `AbortController`. Before the narration is
+  saved the turn is rewound like the in-app Stop, so the action returns to the input; if Stop is
+  unavailable (a retry, an uninterruptible step) the turn fails with an error entry and Retry.
+  Once the narration is saved only the later phases are cut short.
 - **Settings.** The background-generation section is shown on iOS and Android; the text differs.
 
 ### Configuration
