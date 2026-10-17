@@ -108,6 +108,19 @@ describe('holdBackgroundKeepAlive', () => {
     expect(calls()).toEqual(['plugin:generation|start', 'plugin:generation|stop'])
   })
 
+  it('restarts the Android service for every turn and stops it when that turn ends', async () => {
+    onPlatform(true, false)
+    const releaseFirst = await holdBackgroundKeepAlive(() => {})
+    const releaseSecond = await holdBackgroundKeepAlive(() => {})
+    expect(bridge.startGenerationService).toHaveBeenCalledTimes(2)
+    releaseFirst()
+    releaseFirst()
+    releaseSecond()
+    expect(bridge.stopGenerationService).toHaveBeenCalledTimes(2)
+    retainBackgroundKeepAlive()()
+    expect(bridge.stopGenerationService).toHaveBeenCalledTimes(2)
+  })
+
   it('retains nothing when no keep-alive runs', () => {
     onPlatform(false, true)
     retainBackgroundKeepAlive()()

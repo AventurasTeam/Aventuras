@@ -73,7 +73,8 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
 
 ### Page side
 
-- **Reference-counted keep-alive.** The turn holds the keep-alive; translation and the post-turn
+- **Reference-counted keep-alive (iOS only).** Android keeps its old behaviour: each turn restarts
+  the service, which renews its wake lock, and stops it when that turn ends. The turn holds the keep-alive; translation and the post-turn
   tasks (`runBackgroundTasks`) retain it, since they are started un-awaited and outlive the turn.
   The task stops when the last holder releases. A release from before an expiry cannot end the next
   run.

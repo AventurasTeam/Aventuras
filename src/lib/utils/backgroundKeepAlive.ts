@@ -114,11 +114,24 @@ export function afterBackgroundKeepAlive(callback: () => Promise<void> | void): 
   else idleCallbacks.push(callback)
 }
 
-/** Starts the keep-alive, or joins it if one is running. Call the result once the work is done. */
+/**
+ * Starts the keep-alive, or joins it if one is running. Call the result once the work is done.
+ * Android keeps one service per turn, restarted by each turn so its wake lock is renewed; only
+ * iOS shares one keep-alive across overlapping holders.
+ */
 export async function holdBackgroundKeepAlive(
   onExpire: () => void,
   notifyOnExpire = false,
 ): Promise<Release> {
+  if (isAndroid()) {
+    await startBackgroundKeepAlive(onExpire)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      void stopBackgroundKeepAlive()
+    }
+  }
   holds++
   const release = releaser()
   if (holds === 1) {
