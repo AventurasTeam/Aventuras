@@ -185,7 +185,11 @@ describe('rolling back past a place parent anchored on a later turn than its chi
 
     const result = await rollbackToEntry('b1', 't2', ctx)
 
-    expect(result.status).toBe('ok')
+    // The parent's create and the child's cleared parent: the preview counts the move too.
+    expect(result).toEqual({
+      status: 'ok',
+      counts: { entries: 2, chapters: 0, worldStateChanges: 2 },
+    })
     await expectDocksAtTheRoot()
   })
 

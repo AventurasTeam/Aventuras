@@ -250,10 +250,11 @@ export async function resolveSweep(
 // narrative tables. An entry-scoped delta is spared by the survival anchor unless its
 // entry is being deleted, so counting one here would charge the user twice for a loss
 // the entries line already reports.
-function countBuckets(rows: readonly Pick<Delta, 'op' | 'targetTable'>[]): RollbackCounts {
+// A cleared parent logs no delta but still moves a place, so it counts as a change.
+function countBuckets({ rows, refClears }: ReversalSet): RollbackCounts {
   let entries = 0
   let chapters = 0
-  let worldStateChanges = 0
+  let worldStateChanges = refClears.length
   for (const r of rows) {
     if (r.targetTable === 'story_entries') {
       if (r.op === 'create') entries++
@@ -278,7 +279,7 @@ export async function getRollbackCounts(
     resolveSweep(branchId, targetId, ctx),
   )
   if ('status' in swept) return swept
-  return countBuckets(swept.set.rows)
+  return countBuckets(swept.set)
 }
 
 export async function rollbackToEntry(
@@ -296,7 +297,7 @@ export async function rollbackToEntry(
   return bracketProseReversal(branchId, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
-    const counts = countBuckets(swept.set.rows)
+    const counts = countBuckets(swept.set)
     try {
       await commitNewAction(swept.set, ctx, swept.clampOps)
     } catch (e) {
