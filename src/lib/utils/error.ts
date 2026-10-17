@@ -1,3 +1,14 @@
+/** An HTTP helper's own timer expired. Not named `TimeoutError`: the AI SDK treats that as an abort. */
+export class RequestTimeoutError extends Error {
+  override name = 'RequestTimeoutError'
+  constructor(
+    readonly timeoutMs: number,
+    what = 'Request',
+  ) {
+    super(`${what} timed out after ${timeoutMs / 1000}s`)
+  }
+}
+
 /**
  * Extract a human-readable message from an unknown thrown value.
  *

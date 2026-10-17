@@ -6,15 +6,32 @@
  * Longer default timeout (5 min) since image generation is slow.
  */
 
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { debug } from '#lib/stores/debug.svelte.ts'
+import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
+import { httpFetch } from '#lib/utils/http.ts'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
-function normalizeHeaders(headers?: Record<string, string>): Record<string, string> {
-  return headers ?? {}
+async function logImageResponse(
+  response: Response,
+  debugId: string,
+  serviceId: string,
+  startTime: number,
+): Promise<void> {
+  try {
+    const text = await response.text()
+    let responsePayload: unknown
+    try {
+      responsePayload = JSON.parse(text)
+    } catch {
+      responsePayload = { size: text.length }
+    }
+    debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
+  } catch {
+    // Debug logging is best-effort.
+  }
 }
 
 /**
@@ -39,14 +56,11 @@ export async function imageFetch(options: {
     serviceId = 'image-gen',
   } = options
 
-  const controller = new AbortController()
-  let timedOut = false
-  const timeoutId = setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, timeoutMs)
-  signal?.addEventListener('abort', () => controller.abort())
-
+  const guard = createRequestGuard({
+    timeoutMs,
+    what: 'Image generation',
+    callerSignal: signal,
+  })
   const startTime = Date.now()
 
   // Safe debug logging - don't parse FormData as JSON
@@ -58,9 +72,7 @@ export async function imageFetch(options: {
       debugBody = { raw: body.slice(0, 200) }
     }
   } else if (body instanceof FormData) {
-    const keys: string[] = []
-    body.forEach((_val, key) => keys.push(key))
-    debugBody = { formData: keys }
+    debugBody = { formData: [...body.keys()] }
   }
 
   const debugId = debug.addDebugRequest(serviceId, { url, method, body: debugBody })
@@ -72,25 +84,25 @@ export async function imageFetch(options: {
       // For FormData, use Request object so Tauri handles multipart encoding
       const request = new Request(url, {
         method,
-        headers: normalizeHeaders(headers),
+        headers,
         body,
-        signal: controller.signal,
+        signal: guard.signal,
       })
       // Convert to arrayBuffer for Tauri compatibility
       const arrayBuf = await request.arrayBuffer()
-      const contentType = request.headers.get('content-type') || ''
-      response = await tauriHttpFetch(url, {
+      const contentType = request.headers.get('content-type') ?? ''
+      response = await httpFetch(url, {
         method,
-        headers: { ...normalizeHeaders(headers), 'content-type': contentType },
-        body: arrayBuf as unknown as BodyInit,
-        signal: controller.signal,
+        headers: { ...headers, 'content-type': contentType },
+        body: arrayBuf,
+        signal: guard.signal,
       })
     } else {
-      response = await tauriHttpFetch(url, {
+      response = await httpFetch(url, {
         method,
-        headers: normalizeHeaders(headers),
+        headers,
         body: body as string | undefined,
-        signal: controller.signal,
+        signal: guard.signal,
       })
     }
 
@@ -119,35 +131,20 @@ export async function imageFetch(options: {
       )
     }
 
+    response = guard.wrapBody(response)
     // Only buffer the body for the debug panel when debug is active. Otherwise hand the
     // response straight to the caller (which chooses .json()/.blob()): this avoids forcing
     // text() on every response — which would also corrupt binary image bodies — and skips a
     // redundant full-body copy + double parse.
     if (debug.isActive) {
-      response
-        .clone()
-        .text()
-        .then((text) => {
-          let responsePayload: unknown
-          try {
-            responsePayload = JSON.parse(text)
-          } catch {
-            responsePayload = { size: text.length }
-          }
-          debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
-        })
-        .catch(() => {})
+      void logImageResponse(response.clone(), debugId, serviceId, startTime)
     }
 
     return response
   } catch (error) {
-    // Tauri HTTP rejects an aborted request with a plain Error, not an AbortError.
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
-      throw new Error(`Image generation timed out after ${timeoutMs / 1000}s`)
-    }
-    throw error
+    throw guard.mapError(error)
   } finally {
-    clearTimeout(timeoutId)
+    guard.dispose()
   }
 }
 
@@ -166,7 +163,7 @@ const MAX_REDIRECTS = 3
 /** Like `fetchImageBase64`, for a URL that came from outside: the URL and every redirect must be public. */
 export async function fetchPublicImageBase64(
   url: string,
-  options?: { signal?: AbortSignal; serviceId?: string },
+  options?: { signal?: AbortSignal; serviceId?: string; timeoutMs?: number },
 ): Promise<string> {
   let target = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -207,22 +204,15 @@ export async function imageGetFetch(
     followRedirects = true,
   } = options ?? {}
 
-  const controller = new AbortController()
-  let timedOut = false
-  const timeoutId = setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, timeoutMs)
-  signal?.addEventListener('abort', () => controller.abort())
-
+  const guard = createRequestGuard({ timeoutMs, what: 'Image fetch', callerSignal: signal })
   const startTime = Date.now()
   const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
 
   try {
-    const response = await tauriHttpFetch(url, {
+    const response = await httpFetch(url, {
       method: 'GET',
-      headers: normalizeHeaders(headers),
-      signal: controller.signal,
+      headers,
+      signal: guard.signal,
       ...(followRedirects ? {} : { maxRedirections: 0 }),
     })
 
@@ -240,14 +230,10 @@ export async function imageGetFetch(
     }
 
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
-    return response
+    return guard.wrapBody(response)
   } catch (error) {
-    // Tauri HTTP rejects an aborted request with a plain Error, not an AbortError.
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
-      throw new Error(`Image fetch timed out after ${timeoutMs / 1000}s`)
-    }
-    throw error
+    throw guard.mapError(error)
   } finally {
-    clearTimeout(timeoutId)
+    guard.dispose()
   }
 }

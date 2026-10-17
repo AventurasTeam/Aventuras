@@ -25,11 +25,11 @@
 
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { getVersion, getBundleType, type BundleType } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isAndroid, isIos } from '#lib/utils/platform.ts'
 import { isNewerVersion } from '#lib/utils/version.ts'
+import { httpFetch } from '#lib/utils/http.ts'
 
 /**
  * The repository the release workflow publishes to. Must stay in step with the `updater`
@@ -250,7 +250,7 @@ class UpdaterService {
 
     let response: Response
     try {
-      response = await tauriHttpFetch(LATEST_RELEASE_API, {
+      response = await httpFetch(LATEST_RELEASE_API, {
         method: 'GET',
         headers: {
           Accept: 'application/vnd.github+json',

@@ -91,6 +91,87 @@ export function base64ImageMime(b64: string): 'image/png' | 'image/jpeg' | 'imag
   return 'image/png'
 }
 
+export type SniffedImageMime =
+  | 'image/png'
+  | 'image/apng'
+  | 'image/jpeg'
+  | 'image/gif'
+  | 'image/webp'
+  | 'image/avif'
+  | 'image/heic'
+  | 'image/heic-sequence'
+  | 'image/heif'
+  | 'image/heif-sequence'
+
+const SNIFF_BYTES = 64 * 1024
+// Whole base64 quanta, so the slice decodes. Must reach past a large `iCCP` profile to `acTL`.
+const SNIFF_PREFIX_CHARS = Math.ceil(SNIFF_BYTES / 3) * 4
+
+// Ordered: the first brand present anywhere in the `ftyp` box wins.
+const ISOBMFF_BRANDS: readonly (readonly [string, SniffedImageMime])[] = [
+  ['avif', 'image/avif'],
+  ['avis', 'image/avif'],
+  ['heic', 'image/heic'],
+  ['heix', 'image/heic'],
+  ['heim', 'image/heic'],
+  ['heis', 'image/heic'],
+  ['hevc', 'image/heic-sequence'],
+  ['hevx', 'image/heic-sequence'],
+  ['hevm', 'image/heic-sequence'],
+  ['hevs', 'image/heic-sequence'],
+  ['mif1', 'image/heif'],
+  ['msf1', 'image/heif-sequence'],
+]
+
+const ascii = (bytes: Uint8Array, start: number, length: number): string =>
+  String.fromCharCode(...bytes.subarray(start, start + length))
+
+const u32 = (bytes: Uint8Array, pos: number): number =>
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(pos)
+
+/**
+ * MIME type of raw base64 image data, from its magic bytes, or `null` when it is not a
+ * recognised image. Unlike `base64ImageMime`, nothing is assumed to be PNG.
+ */
+export function sniffImageMime(b64: string): SniffedImageMime | null {
+  let bytes: Uint8Array
+  try {
+    bytes = base64ToBytes(b64.slice(0, SNIFF_PREFIX_CHARS))
+  } catch {
+    return null
+  }
+
+  const head = ascii(bytes, 0, 12)
+  if (head.startsWith('\x89PNG\r\n\x1a\n')) return pngMime(bytes)
+  if (head.startsWith('\xff\xd8\xff')) return 'image/jpeg'
+  if (head.startsWith('GIF87a') || head.startsWith('GIF89a')) return 'image/gif'
+  if (head.startsWith('RIFF') && head.slice(8) === 'WEBP') return 'image/webp'
+  if (head.slice(4, 8) === 'ftyp') return isobmffMime(bytes)
+  return null
+}
+
+/** APNG is a PNG with an `acTL` chunk ahead of the first `IDAT`. */
+function pngMime(bytes: Uint8Array): SniffedImageMime {
+  let pos = 8
+  while (pos + 8 <= bytes.length) {
+    const type = ascii(bytes, pos + 4, 4)
+    if (type === 'acTL') return 'image/apng'
+    if (type === 'IDAT') return 'image/png'
+    pos += u32(bytes, pos) + 12
+  }
+  return 'image/png'
+}
+
+/** Some encoders write `mif1` as the major brand and list `avif` or `heic` as compatible. */
+function isobmffMime(bytes: Uint8Array): SniffedImageMime | null {
+  // A box size of 0 means the box runs to the end of the file.
+  const size = u32(bytes, 0)
+  const end = size === 0 ? bytes.length : Math.min(size, bytes.length)
+  const brands = new Set([ascii(bytes, 8, 4)])
+  for (let pos = 16; pos + 4 <= end; pos += 4) brands.add(ascii(bytes, pos, 4))
+  return ISOBMFF_BRANDS.find(([brand]) => brands.has(brand))?.[1] ?? null
+}
+
 const BASE64_CHUNK = 0x8000
 
 export function bytesToBase64(bytes: Uint8Array): string {

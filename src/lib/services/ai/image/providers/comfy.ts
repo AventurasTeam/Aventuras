@@ -25,10 +25,10 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { specToPixels } from '#lib/utils/image.ts'
+import { httpFetch } from '#lib/utils/http.ts'
 import { imageGetFetch } from './fetchAdapter'
 import type { ComfyApiFetchInternals } from './comfyFetchMembers'
 import { TauriWebSocket } from './tauriWebSocket'
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
@@ -352,9 +352,9 @@ function getApi(baseUrl: string): ComfyApi {
   // servers"); headers are replaced, not merged, as in the SDK.
   const internal = api as unknown as ComfyApiFetchInternals
   internal.fetchApi = (path, options = {}) => {
-    options.headers = { ...internal.getCredentialHeaders() }
+    options.headers = internal.getCredentialHeaders()
     options.mode = 'cors'
-    return tauriHttpFetch(internal.apiURL(path), options)
+    return httpFetch(internal.apiURL(path), options)
   }
 
   // A failed init() never opens a socket, so a cached client would never see generation events.
