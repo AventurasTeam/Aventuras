@@ -1191,7 +1191,7 @@ reversal failed: the
 [no-gate write phase](#no-gate-write-phase) ends the run's hold even
 then, so a user write can land that the reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
-or `moved-outside` on each boot. The orphan's writes stay, and so does its branch's
+on each boot. The orphan's writes stay, and so does its branch's
 pause.
 
 ### `chainsTo` on predecessor
@@ -1418,7 +1418,8 @@ names a row the window removes.
 The closure is a fixed point. The removed set starts as the rows whose
 `create` the set holds, and any row naming a removed row joins it —
 live in its table, held in a delete's `undo_payload`, or deleted on its
-own — until nothing new joins. One registry of references serves the
+own — until nothing new joins, except a place naming its parent
+(below). One registry of references serves the
 closure; the forward guard `missingRef`, which turns a link write
 naming a dead row into a no-op
 ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes));
@@ -1428,17 +1429,26 @@ involvement names its happening and its entity, awareness its
 happening and its character, a relationship both its characters, and a
 translation its target by `target_kind`. A place names its parent
 through `state.parent_location_id`, the one reference the registry
-reads inside a JSON column, which `missingRef` doesn't guard. A link
-row's ends never change after its create, but a `state` field can, so
-the closure judges that reference by the parent the row names once the
-set's own writes to it are undone: the pre-value of the oldest update
-in the set that changed it, which the newest-first walk restores last
-even over a later user write, else its live value, or the held copy's
-for a row a delete holds. A place the user moved under a removed parent
-so returns to its old parent rather than going with it, and one the set
-moved off a removed parent goes, since the reversal puts it back under
-that parent. One a write outside the set moved under a removed parent
-is refused instead (below). Every `create` and `update`
+reads inside a JSON column, which `missingRef` doesn't guard. A place
+left naming a removed parent isn't taken: the reversal clears its
+parent in the same transaction, in its row or in the copy a delete
+holds, putting it at the root as
+[World's delete](./ui/screens/world/world.md#delete) of the parent
+does. The places inside it stay under it, and its facts stay. The
+clear isn't a writer's write: it logs no delta, like the views the
+reversal nulls on a kept relationship. A link row's ends never change
+after its create, but a `state` field can, so the reversal judges that
+reference by the parent the row names once the set's own writes to it
+are undone: the pre-value of the oldest update in the set that changed
+it, which the newest-first walk restores last even over a later user
+write, else its live value, or the held copy's for a row a delete
+holds. A place the user moved under a removed parent so returns to its
+old parent, and one the set moved off a removed parent goes to the
+root, since the reversal puts it back under that parent first. One a
+write outside the set moved under a removed parent goes to the root
+too, and the move stays in the log. A place whose own `create` the set
+holds goes anyway. CTRL-Z's redo puts a cleared parent back
+with the parent's row (below). Every `create` and `update`
 of a removed row joins the set, whatever its source; a `delete` of it
 never does, as the next paragraph covers. A table registering
 `rowKeepingColumns` keeps its exemption only when the row's own create
@@ -1483,40 +1493,35 @@ fact came from is back. The cost is narrow: a pass that runs between
 the two undos cannot re-derive a link naming the still-deleted row,
 and that link stays lost.
 
-**Five states are refused as integrity errors, writing nothing.** A
+**Four states are refused as integrity errors, writing nothing.** A
 delete the planner would prune that shares its action group with a
 delta still in the log whose undo, as this reversal leaves it, would
 write the removed id back: an entity delete's `state` and tail-scene
 updates do, so a later CTRL-Z of the group would restore a dead id. A
 chapter-close consolidation's upserts name the surviving happening, so
 its deletes prune. A row a delete holds among the rows a CTRL-Z's redo
-would restore (below): it would need a newer non-classifier delete
-still in the log, which CTRL-Z picks first. A row the closure reaches
-by reference with no `create` in the log, which only a writer outside
-the log could make: the wizard, a seed or an import. A place the
-closure reaches through its parent when a write outside the set moved
-it there, `moved-outside`: taking it would delete a row, with every
-place inside it, that the reversal didn't make, whoever made it. And a pair a
-CTRL-Z leaves absent whose other writes the prune
+would restore, or a place a delete holds whose parent the reversal
+clears and redo would restore (below): it would need a newer
+non-classifier delete still in the log, which CTRL-Z picks first. A row
+the closure reaches by reference with no `create` in the log, which
+only a writer outside the log could make: the wizard, a seed or an
+import. And a pair a CTRL-Z leaves absent whose other writes the prune
 above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
-reporting an undo that changed nothing. Only `write-back` and
-`moved-outside` are reachable today, and only at boot recovery of a
-`no-gate` run whose abort's own reversal failed: the
+reporting an undo that changed nothing. Only `write-back`
+is reachable today, and only at boot recovery of a `no-gate` run
+whose abort's own reversal failed: the
 [no-gate write phase](#no-gate-write-phase) ends the hold then, so
-before recovery reverses the create the user can delete a row the
-pass created, in an entity delete whose tail-scene update names it,
-or move another place under a place the pass created. Each boot
-refuses it again, a failure a restart can't heal
+the user can delete a row the pass created, in an entity delete whose
+tail-scene update names it, before recovery reverses the create. Each
+boot refuses it again, a failure a restart can't heal
 ([Recovery-failure policy](#recovery-failure-policy)). Otherwise an
 entity's create is never reversed while a delete holds it, given the
 no-gate write phase, newest-first
 undo, every window holding a delete with the create it follows, and
 sweeps sparing entity creates. A writer outside the log names only
-rows it made itself, which lack a `create` too, and a later move of
-one under a logged place is refused as `moved-outside` first; outside
-that window every set that removes a place holds the later moves of
-other places under it; the closure starts
+rows it made itself, which lack a `create` too, and a place the user
+moves under a logged one is cleared, never taken; the closure starts
 from rows whose `create` the set holds; and a `create` a user write
 keeps stays in the log, re-owned. Only periodic-classifier
 groups sit above the group CTRL-Z undoes, every delta-logged write
@@ -1530,8 +1535,14 @@ reached by the closure from it, or a sweep's row and what the closure
 reaches only from one. CTRL-Z's redo snapshot covers the first two, so
 redo restores the links the closure removed with the group; a sweep's
 rows stay out, since the clamped watermark re-derives them. A delta
-reached both ways counts as the closure's. Every delta-logged write
-clears the redo stack, so redo always meets the state its undo left.
+reached both ways counts as the closure's. The snapshot also takes,
+before the undo, the `state` of each place whose parent the reversal
+clears when the parent's `create` is among the first two, and redo
+writes it back with the parent's row, logging nothing, as the clear
+did. A place whose parent only a sweep's row removes stays at the
+root. Every
+delta-logged write clears the redo stack, so redo always meets the
+state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed
@@ -2015,9 +2026,8 @@ write on success, after the abort's reversal on failure, whether it
 commits or leaves the run to boot recovery. Ending it on an
 uncommitted reversal keeps a held lock from stalling every write to
 the branch until the next boot, at a cost: a user's delete of a row
-the run created, or a move of another place under one, can then land
-first, and recovery refuses to reverse the
-create on each boot
+the run created can then land first, and recovery refuses to reverse
+the create as `write-back` on each boot
 ([Reverse-replay](#reverse-replay),
 [Recovery-failure policy](#recovery-failure-policy)). A write
 arriving meanwhile waits a few milliseconds; nothing is disabled

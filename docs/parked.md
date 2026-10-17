@@ -976,15 +976,13 @@ it in World, the delete's tail-scene update still names it. Recovery
 would prune that delete with the create it holds, so it refuses as
 `write-back`
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
-writes nothing, and leaves the marker open. Moving another place
-under a place the pass created refuses the same way, as
-`moved-outside`: taking the moved place would delete it, with every
-place inside it. Every boot refuses again while that delete or move stays in the log: the "Recovery incomplete" modal
+writes nothing, and leaves the marker open. Every boot refuses again
+while that delete stays in the log: the "Recovery incomplete" modal
 shows at each startup, without promising a retry, and boot keeps the
 branch off the classifier cadence (`resetStuckClassifierRunState`).
 Nothing else is lost, but v1 has no "drop orphan" affordance to clear
 it. It takes two faults in one session: a database error during the
-abort's reversal, then that delete or move.
+abort's reversal, then that delete.
 
 The remedy is to settle such an orphan at recovery: on an integrity
 refusal, close its `pipeline_runs` row as `failed` and keep its writes
@@ -1078,7 +1076,8 @@ gaining a synchronous subscriber or patch logic that can throw
 #### The reversal closure doesn't follow ids inside JSON columns
 
 `REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
-columns and, inside JSON, only a place's `state.parent_location_id`
+columns and, inside JSON, only a place's `state.parent_location_id`,
+which a reversal clears rather than follows
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
 reaches the other ids held inside JSON: `entities.state`'s
@@ -1127,8 +1126,8 @@ by reading the reversal canon and code, and wrong for the parent: a
 pass anchors each place on its own turn, so a child can sit on an
 earlier turn than its parent, and a rollback or regenerate that removed
 the parent's turn spared the child, left naming a parent that existed
-nowhere. The closure has followed `parent_location_id` since
-2026-10-17, so the child goes with its parent.
+nowhere. Since 2026-10-17 the reversal clears that parent instead, so
+the child goes to the root and keeps its facts.
 
 Re-checked 2026-10-17 for the remaining fields, by reading the reversal
 canon and code: still not reachable outside the boot-recovery window.
@@ -1144,11 +1143,9 @@ runs inside its write lock, which it takes only when no turn is in
 flight. In the boot-recovery window above, an entry's
 `currentLocationId`, a character's `current_location_id` or
 `lastSeenAt` and an item's `at_location_id` can still name a place
-recovery removes. A user's move of another place under it is refused
-instead, as `moved-outside`
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
-since taking the moved place would delete it and every place inside
-it.
+recovery removes. A user's move of another place under it is cleared
+too, putting that place at the root
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 A fix adds these fields to the registry's JSON-path references, which
 the closure reads through `json_extract`; the arrays need `json_each`.
@@ -1561,6 +1558,13 @@ for mentioned places nobody can locate yet. A merge of any two rows of
 one kind would cover what both miss. Parked 2026-10-16 by the mentioned
 places design; the signal is duplicates of root-level mentioned places
 in real stories.
+
+That kind of place outside the tree has a second use. A place whose parent a
+reversal removes lands at the root today, such as a pass's child of a
+place a later turn created, once that turn is rolled back or
+regenerated
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay));
+it would go to that place instead. Added 2026-10-17.
 
 ### UX (parked)
 
