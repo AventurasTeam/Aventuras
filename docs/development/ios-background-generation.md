@@ -50,21 +50,22 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   the `.fail` strategy. The plist lists `$(PRODUCT_BUNDLE_IDENTIFIER).generation.*`, and the
   identifier is built from the live bundle id, so it holds when a sideloader rewrites the id.
   Registering the wildcard itself fails.
-- **Progress.** A continued-processing task has to report progress and may be expired if it
-  stalls. Progress follows the pipeline's stages: 0 to 10% preparing, 10 to 70% writing, 70 to 90%
-  updating the world, 90 to 99% finishing, and 100% only on success. Within a stage it creeps
-  toward the ceiling so it never looks stuck. It cannot be exact, since generation time is not
-  predictable.
-- **Island text.** The subtitle follows the stage. When the task ends its title becomes "Story
-  ready", "Generation failed", "Generation stopped" or "Generation interrupted", from the
-  `outcome` that `stop` receives.
+- **Progress.** A continued-processing task has to report progress, and the system prioritises
+  ending tasks whose progress barely moves. Progress follows the pipeline's stages: 0 to 10%
+  preparing, 10 to 70% writing, 70 to 90% updating the world, 90 to 99% finishing, and 100% only
+  on success, out of 1,000,000 units. Within a stage it approaches the ceiling hyperbolically and
+  moves at least one unit per second, so it never flattens however long a stage lasts. It cannot
+  be exact, since generation time is not predictable, so the subtitle also shows the elapsed time.
+- **Island text.** The subtitle follows the stage and ends with the elapsed time. When the task
+  ends its title becomes "Story ready", "Generation failed", "Generation stopped" or "Generation
+  interrupted", from the `outcome` that `stop` receives.
 - **Audio session.** A playback session with `mixWithOthers`, re-activated after an interruption.
   The page's own audio plays in WebKit's separate session, so this one is not what keeps the page
   alive.
 - **Expiry.** The expiration handler posts a notification itself, because the page may be suspended
-  before JS can react, then tells JS to abort. In the last stage ("finishing") the story is already
-  saved and only the background updates were cut short, so both the notification and the Island's
-  final message say "Story ready"; in any earlier stage they say "interrupted". It skips the
+  before JS can react, then tells JS to abort. From the "world" stage on the narration is already
+  saved and only the later updates were cut short, so both the notification and the Island's
+  final message say "Story ready"; in an earlier stage they say "interrupted". It skips the
   notification while the app is active.
 - **Notification delegate.** `tauri-plugin-notification` force-unwraps its own lookup
   (`notificationsMap[id]!`) for every notification it is handed, so showing or tapping the one this

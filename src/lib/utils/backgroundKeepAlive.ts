@@ -15,7 +15,7 @@ export function supportsBackgroundGeneration(): boolean {
  * allowance first, which only iOS does. `notifyOnExpire` lets the native side post the
  * "interrupted" notice itself, since JS may already be suspended.
  */
-export async function startBackgroundKeepAlive(
+async function startBackgroundKeepAlive(
   onExpire: () => void,
   notifyOnExpire = false,
 ): Promise<void> {
@@ -43,7 +43,7 @@ export async function startBackgroundKeepAlive(
   }
 }
 
-export async function stopBackgroundKeepAlive(outcome: KeepAliveOutcome = 'done'): Promise<void> {
+async function stopBackgroundKeepAlive(outcome: KeepAliveOutcome = 'done'): Promise<void> {
   try {
     if (isAndroid()) {
       window.AndroidBridge?.stopGenerationService()
@@ -63,7 +63,7 @@ export type KeepAliveStage = 'preparing' | 'writing' | 'world' | 'finishing'
 
 /** Tells the iOS task which part of the pipeline is running, for its text and progress. */
 export function setKeepAliveStage(stage: KeepAliveStage, notifyOnExpire?: boolean): void {
-  if (!isIos()) return
+  if (!isIos() || holds === 0) return
   invoke('plugin:generation|update', { stage, notifyOnExpire }).catch(() => {})
 }
 
@@ -74,7 +74,7 @@ let worstOutcome: KeepAliveOutcome = 'done'
 // the allowance has to last until the last of it settles, not until the narration does.
 let holds = 0
 let epoch = 0
-let idleCallbacks: Array<() => Promise<void> | void> = []
+let idleCallback: (() => Promise<void> | void) | null = null
 
 type Release = (outcome?: KeepAliveOutcome) => void
 
@@ -94,10 +94,10 @@ function releaser(onExpire?: () => void): Release {
       epoch++
       const final = worstOutcome
       worstOutcome = 'done'
-      const callbacks = idleCallbacks
-      idleCallbacks = []
+      const callback = idleCallback
+      idleCallback = null
       void (async () => {
-        for (const callback of callbacks) {
+        if (callback) {
           try {
             await callback()
           } catch (e) {
@@ -112,11 +112,12 @@ function releaser(onExpire?: () => void): Release {
 
 /**
  * Runs `callback` once nothing holds the keep-alive any more, before it is stopped; at once when
- * nothing holds it now. Dropped if the OS ends the keep-alive first.
+ * nothing holds it now. A later call replaces a queued one, so overlapping turns notify once.
+ * Dropped if the OS ends the keep-alive first.
  */
 export function afterBackgroundKeepAlive(callback: () => Promise<void> | void): void {
   if (holds === 0) void callback()
-  else idleCallbacks.push(callback)
+  else idleCallback = callback
 }
 
 /**
@@ -145,7 +146,7 @@ export async function holdBackgroundKeepAlive(
       holds = 0
       epoch++
       worstOutcome = 'done'
-      idleCallbacks = []
+      idleCallback = null
       const handlers = [...expiryHandlers]
       expiryHandlers.clear()
       for (const handler of handlers) handler()

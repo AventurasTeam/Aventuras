@@ -21,10 +21,10 @@ struct UpdateArgs: Decodable {
 // One continued-processing task at a time, matching one generation at a time in the app.
 @available(iOS 26.0, *)
 final class GenerationPlugin: Plugin {
-  // Progress follows the pipeline's stages. Within a stage it creeps toward the ceiling, because
-  // the system may expire a task whose progress stops moving.
-  private static let totalUnits: Int64 = 10_000
-  private static let creepTimeConstant = 45.0
+  // Progress follows the pipeline's stages. Within a stage it creeps toward the ceiling without
+  // ever flattening, because the system may expire a task whose progress stops moving.
+  private static let totalUnits: Int64 = 1_000_000
+  private static let creepHalfLife = 60.0
   private static let stages: [String: (floor: Double, ceiling: Double, subtitle: String)] = [
     "preparing": (0, 10, "Preparing…"),
     "writing": (10, 70, "Writing the next scene…"),
@@ -49,6 +49,7 @@ final class GenerationPlugin: Plugin {
   private var timer: DispatchSourceTimer?
   private var stage = "preparing"
   private var stageStartedAt = Date()
+  private var startedAt = Date()
 
   private var identifierPrefix: String {
     "\(Bundle.main.bundleIdentifier ?? "app").generation"
@@ -122,6 +123,7 @@ final class GenerationPlugin: Plugin {
       return
     }
     self.task = task
+    startedAt = Date()
     task.progress.totalUnitCount = Self.totalUnits
     task.progress.completedUnitCount = 0
     enter(stage: stage)
@@ -130,8 +132,8 @@ final class GenerationPlugin: Plugin {
       DispatchQueue.main.async {
         guard let self = self else { return }
         self.log.error("task expired")
-        // In the last stage the story is saved; only the background updates were cut short.
-        let storyReady = self.stage == "finishing"
+        // Once the narration is saved only the world update and background tasks were cut short.
+        let storyReady = self.stage == "world" || self.stage == "finishing"
         self.notifyExpired(storyReady: storyReady)
         try? self.onExpire?.send(["reason": "expired"])
         self.finish(success: storyReady, outcome: storyReady ? "cutShort" : "interrupted")
@@ -155,16 +157,24 @@ final class GenerationPlugin: Plugin {
     if name == "preparing" || floor > task.progress.completedUnitCount {
       task.progress.completedUnitCount = floor
     }
-    task.updateTitle("Generating story…", subtitle: stage.subtitle)
+    task.updateTitle("Generating story…", subtitle: subtitle(for: stage.subtitle))
+  }
+
+  private func subtitle(for text: String) -> String {
+    let seconds = Int(Date().timeIntervalSince(startedAt))
+    return "\(text) · \(seconds / 60):\(String(format: "%02d", seconds % 60))"
   }
 
   private func creep() {
     guard let task = task, let stage = Self.stages[stage] else { return }
-    let sinceStage = Date().timeIntervalSince(stageStartedAt)
-    let fraction = 0.95 * (1 - exp(-sinceStage / Self.creepTimeConstant))
-    let percent = stage.floor + (stage.ceiling - stage.floor) * fraction
-    let units = Int64(percent / 100 * Double(Self.totalUnits))
-    if units > task.progress.completedUnitCount { task.progress.completedUnitCount = units }
+    let elapsed = Date().timeIntervalSince(stageStartedAt)
+    let percent = stage.floor + (stage.ceiling - stage.floor) * elapsed / (elapsed + Self.creepHalfLife)
+    let ceiling = Int64(stage.ceiling / 100 * Double(Self.totalUnits)) - 1
+    let current = task.progress.completedUnitCount
+    // At least one unit per tick, so the count never stops moving while the stage lasts.
+    let units = min(max(Int64(percent / 100 * Double(Self.totalUnits)), current + 1), ceiling)
+    if units > current { task.progress.completedUnitCount = units }
+    task.updateTitle("Generating story…", subtitle: subtitle(for: stage.subtitle))
   }
 
   // The notification plugin installs its delegate when the app starts, so wrap it here, once, at the

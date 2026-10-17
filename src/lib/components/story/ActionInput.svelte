@@ -588,6 +588,8 @@
     // Set when the OS ends the keep-alive (the Dynamic Island's Stop, or a system cutoff). The
     // native side has already posted the "interrupted" notice, so no completion notice follows.
     let keepAliveEnded = false
+    // Before the hold's await, which an app switch can land in.
+    ui.resetBackgroundedFlag()
     // What the turn ran into, for the outcome its record closes with.
     const ending: Omit<TurnEnding, 'stopRequested'> = {}
     const releaseKeepAlive = useBackgroundService
@@ -599,7 +601,6 @@
           if (!ending.narrationSaved) void handleStopGeneration()
         }, settings.experimentalFeatures.generationNotifications)
       : () => {}
-    ui.resetBackgroundedFlag()
 
     try {
       // Inside the try: only its `finally` closes the turn, and a throw before that point
@@ -733,9 +734,6 @@
 
         if (event.type === 'phase_start' && event.phase === 'narrative')
           setKeepAliveStage('writing')
-        if (event.type === 'phase_start' && event.phase === 'classification') {
-          setKeepAliveStage('world')
-        }
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
@@ -787,6 +785,7 @@
           ui.endStreaming()
           stopUnavailable = true
           ending.narrationSaved = true
+          setKeepAliveStage('world')
           emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }

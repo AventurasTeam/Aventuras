@@ -16,8 +16,6 @@ const isIos = vi.fn()
 vi.mock('#lib/utils/platform.ts', () => ({ isAndroid, isIos }))
 
 const {
-  startBackgroundKeepAlive,
-  stopBackgroundKeepAlive,
   supportsBackgroundGeneration,
   holdBackgroundKeepAlive,
   retainBackgroundKeepAlive,
@@ -45,8 +43,8 @@ function onPlatform(android: boolean, ios: boolean) {
 describe('backgroundKeepAlive', () => {
   it('drives the Android bridge on Android', async () => {
     onPlatform(true, false)
-    await startBackgroundKeepAlive(() => {})
-    await stopBackgroundKeepAlive()
+    const release = await holdBackgroundKeepAlive(() => {})
+    release()
     expect(bridge.startGenerationService).toHaveBeenCalledOnce()
     expect(bridge.stopGenerationService).toHaveBeenCalledOnce()
     expect(invoke).not.toHaveBeenCalled()
@@ -55,21 +53,23 @@ describe('backgroundKeepAlive', () => {
   it('invokes the generation plugin on iOS and forwards expiry', async () => {
     onPlatform(false, true)
     const onExpire = vi.fn()
-    await startBackgroundKeepAlive(onExpire, true)
+    const release = await holdBackgroundKeepAlive(onExpire, true)
     const [command, args] = invoke.mock.calls[0]
     expect(command).toBe('plugin:generation|start')
     expect(args.notifyOnExpire).toBe(true)
     args.onExpire.onmessage({ reason: 'expired' })
     expect(onExpire).toHaveBeenCalledOnce()
 
-    await stopBackgroundKeepAlive()
+    const next = await holdBackgroundKeepAlive(() => {})
+    release()
+    next()
     expect(invoke).toHaveBeenLastCalledWith('plugin:generation|stop', { outcome: 'done' })
   })
 
   it('does nothing elsewhere', async () => {
     onPlatform(false, false)
-    await startBackgroundKeepAlive(() => {})
-    await stopBackgroundKeepAlive()
+    const release = await holdBackgroundKeepAlive(() => {})
+    release()
     expect(invoke).not.toHaveBeenCalled()
     expect(supportsBackgroundGeneration()).toBe(false)
   })
@@ -77,7 +77,8 @@ describe('backgroundKeepAlive', () => {
   it('swallows a failed start so the generation still runs', async () => {
     onPlatform(false, true)
     invoke.mockRejectedValueOnce(new Error('not permitted'))
-    await expect(startBackgroundKeepAlive(() => {})).resolves.toBeUndefined()
+    const release = await holdBackgroundKeepAlive(() => {})
+    release()
   })
 })
 
@@ -194,6 +195,18 @@ describe('holdBackgroundKeepAlive', () => {
     releaseTail()
     await vi.waitFor(() => expect(order).toEqual(['start', 'callback', 'stop']))
     invoke.mockReset()
+  })
+
+  it('keeps only the latest queued idle callback', async () => {
+    onPlatform(false, true)
+    const first = vi.fn()
+    const second = vi.fn()
+    const releaseTurn = await holdBackgroundKeepAlive(() => {})
+    afterBackgroundKeepAlive(first)
+    afterBackgroundKeepAlive(second)
+    releaseTurn()
+    await vi.waitFor(() => expect(second).toHaveBeenCalledOnce())
+    expect(first).not.toHaveBeenCalled()
   })
 
   it('runs an idle callback at once when nothing holds the keep-alive', () => {
