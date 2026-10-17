@@ -1,7 +1,7 @@
 {
   "bundle": {
     "iOS": {
-      "minimumSystemVersion": "16.4"
+      "minimumSystemVersion": "26.0"
     }
   },
   "build": {

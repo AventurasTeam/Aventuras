@@ -167,8 +167,8 @@ then smoke-test the full unsigned build and upload the test `.ipa`.
 - **`src-tauri/tauri.ios.conf.json`** — a Tauri v2 platform-config override, merged
   automatically for every `tauri ios *` command (unlike `tauri.release.conf.json`, which only
   applies when passed explicitly via `--config`). Sets `bundle.iOS.minimumSystemVersion` to
-  `16.4` (the frontend's actual WebKit floor — Tailwind v4's `@property`/cascade-layer usage
-  and `color-mix()` need it; Tauri's own default is lower) and empties `build.features`, so
+  `26.0` (the floor `BGContinuedProcessingTask` needs; see
+  [ios-background-generation.md](ios-background-generation.md)) and empties `build.features`, so
   the devtools-feature workaround below (§7) is no longer needed by hand.
 
 None of the three is referenced by, or changes the output of, a Windows, Linux, macOS-desktop
@@ -250,8 +250,9 @@ all bundles had already succeeded; nothing in the iOS work touches that path.
 - **No in-app updater on iOS.** `tauri-plugin-updater` supports neither Android nor
   iOS; the mobile path offers the release page / `.ipa` asset in the browser. The
   existing `unsupported` error kind covers any future platform gap.
-- **No background generation on iOS.** Android's `GenerationForegroundService` has no
-  iOS equivalent (the Android-only Kotlin/bridge code is inert on iOS).
+- **Background generation on iOS needs a real device and iOS 26.** It keeps a generation running
+  across an app switch or a lock, with a `BGContinuedProcessingTask` and an inaudible audio loop;
+  see [ios-background-generation.md](ios-background-generation.md).
 - **`tauri ios dev` without `--config`** relies on `tauri.ios.conf.json` dropping the devtools
   feature; this is untested on a real run.
 - **Simulator builds** (`aarch64-sim`) are possible with the same script but are not

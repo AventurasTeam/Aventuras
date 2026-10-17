@@ -1,0 +1,141 @@
+import { Channel, invoke } from '@tauri-apps/api/core'
+import { isAndroid, isIos } from '#lib/utils/platform.ts'
+import { startSilentAudio, stopSilentAudio } from '#lib/utils/silentAudio.ts'
+
+const TITLE = 'Generating story…'
+const SUBTITLE = 'AI generation is running.'
+
+/** Whether this platform can keep a generation running while the app is backgrounded. */
+export function supportsBackgroundGeneration(): boolean {
+  return isAndroid() || isIos()
+}
+
+/**
+ * Keeps the process alive until `stopBackgroundKeepAlive`. `onExpire` fires if the OS ends the
+ * allowance first, which only iOS does. `notifyOnExpire` lets the native side post the
+ * "interrupted" notice itself, since JS may already be suspended.
+ */
+export async function startBackgroundKeepAlive(
+  onExpire: () => void,
+  notifyOnExpire = false,
+): Promise<void> {
+  try {
+    if (isAndroid()) {
+      window.AndroidBridge?.startGenerationService()
+    } else if (isIos()) {
+      // Before the native call: the loop has to be playing before the app is hidden.
+      startSilentAudio()
+      const channel = new Channel<unknown>()
+      channel.onmessage = () => {
+        stopSilentAudio()
+        onExpire()
+      }
+      await invoke('plugin:generation|start', {
+        title: TITLE,
+        subtitle: SUBTITLE,
+        onExpire: channel,
+        notifyOnExpire,
+      })
+    }
+  } catch (e) {
+    stopSilentAudio()
+    console.warn('[backgroundKeepAlive] Failed to start:', e)
+  }
+}
+
+export async function stopBackgroundKeepAlive(outcome: KeepAliveOutcome = 'done'): Promise<void> {
+  try {
+    if (isAndroid()) {
+      window.AndroidBridge?.stopGenerationService()
+    } else if (isIos()) {
+      stopSilentAudio()
+      await invoke('plugin:generation|stop', { outcome })
+    }
+  } catch (e) {
+    console.warn('[backgroundKeepAlive] Failed to stop:', e)
+  }
+}
+
+/** How the work ended; the Dynamic Island shows it as the task's last message. */
+export type KeepAliveOutcome = 'done' | 'failed' | 'stopped'
+
+export type KeepAliveStage = 'preparing' | 'writing' | 'world' | 'finishing'
+
+/** Tells the iOS task which part of the pipeline is running, for its text and progress. */
+export function setKeepAliveStage(stage: KeepAliveStage): void {
+  if (!isIos()) return
+  invoke('plugin:generation|update', { stage }).catch(() => {})
+}
+
+const OUTCOME_RANK: Record<KeepAliveOutcome, number> = { done: 0, stopped: 1, failed: 2 }
+let worstOutcome: KeepAliveOutcome = 'done'
+
+// Work that outlives the turn (translation, chapter and lore tasks) is started un-awaited, so
+// the allowance has to last until the last of it settles, not until the narration does.
+let holds = 0
+let epoch = 0
+let idleCallbacks: Array<() => Promise<void> | void> = []
+
+type Release = (outcome?: KeepAliveOutcome) => void
+
+function releaser(): Release {
+  const mine = epoch
+  let released = false
+  return (outcome = 'done') => {
+    if (released || mine !== epoch) return
+    released = true
+    if (OUTCOME_RANK[outcome] > OUTCOME_RANK[worstOutcome]) worstOutcome = outcome
+    if (--holds === 0) {
+      epoch++
+      const final = worstOutcome
+      worstOutcome = 'done'
+      const callbacks = idleCallbacks
+      idleCallbacks = []
+      void (async () => {
+        for (const callback of callbacks) {
+          try {
+            await callback()
+          } catch (e) {
+            console.warn('[backgroundKeepAlive] idle callback failed:', e)
+          }
+        }
+        await stopBackgroundKeepAlive(final)
+      })()
+    }
+  }
+}
+
+/**
+ * Runs `callback` once nothing holds the keep-alive any more, before it is stopped; at once when
+ * nothing holds it now. Dropped if the OS ends the keep-alive first.
+ */
+export function afterBackgroundKeepAlive(callback: () => Promise<void> | void): void {
+  if (holds === 0) void callback()
+  else idleCallbacks.push(callback)
+}
+
+/** Starts the keep-alive, or joins it if one is running. Call the result once the work is done. */
+export async function holdBackgroundKeepAlive(
+  onExpire: () => void,
+  notifyOnExpire = false,
+): Promise<Release> {
+  holds++
+  const release = releaser()
+  if (holds === 1) {
+    await startBackgroundKeepAlive(() => {
+      holds = 0
+      epoch++
+      worstOutcome = 'done'
+      idleCallbacks = []
+      onExpire()
+    }, notifyOnExpire)
+  }
+  return release
+}
+
+/** Joins a running keep-alive for work that outlives its caller; does nothing when none runs. */
+export function retainBackgroundKeepAlive(): Release {
+  if (holds === 0) return () => {}
+  holds++
+  return releaser()
+}

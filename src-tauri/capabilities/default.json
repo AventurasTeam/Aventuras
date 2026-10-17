@@ -10,6 +10,7 @@
     "core:event:allow-emit",
     "core:event:allow-listen",
     "opener:default",
+    "generation:default",
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",

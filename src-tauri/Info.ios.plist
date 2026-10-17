@@ -19,6 +19,16 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Background generation: BGContinuedProcessingTask identifiers must start with the bundle id. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).generation.*</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+		<string>audio</string>
+	</array>
 	<!-- The app uses only HTTPS/TLS standard crypto. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
