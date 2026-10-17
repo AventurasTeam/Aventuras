@@ -43,13 +43,21 @@ impl<R: Runtime> Generation<R> {
             .map_err(|e| e.to_string())
     }
 
-    pub fn update(&self, stage: String) -> Result<(), String> {
+    pub fn update(&self, stage: String, notify_on_expire: Option<bool>) -> Result<(), String> {
         #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct Args {
             stage: String,
+            notify_on_expire: Option<bool>,
         }
         self.0
-            .run_mobile_plugin::<()>("update", Args { stage })
+            .run_mobile_plugin::<()>(
+                "update",
+                Args {
+                    stage,
+                    notify_on_expire,
+                },
+            )
             .map_err(|e| e.to_string())
     }
 }

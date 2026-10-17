@@ -78,6 +78,12 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   tasks (`runBackgroundTasks`) retain it, since they are started un-awaited and outlive the turn.
   The task stops when the last holder releases. A release from before an expiry cannot end the next
   run.
+- **Joining a running task.** A turn that starts while the previous turn's tail still holds the
+  task sends `update` with the stage reset to "preparing" (which also restarts the progress ring)
+  and its own `notifyOnExpire`. The native side only keeps the first turn's expiry channel, so the
+  page keeps every holder's handler and calls them all on expiry. Lowering the ring's progress is
+  not documented either way by Apple; the stall check reported in the developer forums is about
+  progress updates stopping, and the creep keeps them coming.
 - **Outcome.** Each release can report `failed` or `stopped`; the worst one is the Island's final
   message.
 - **Completion notification.** On iOS it is sent through `afterBackgroundKeepAlive`, once nothing

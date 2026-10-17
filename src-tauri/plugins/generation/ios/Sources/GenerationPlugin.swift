@@ -13,7 +13,10 @@ struct StartArgs: Decodable {
 
 struct StopArgs: Decodable { let outcome: String? }
 
-struct UpdateArgs: Decodable { let stage: String }
+struct UpdateArgs: Decodable {
+  let stage: String
+  let notifyOnExpire: Bool?
+}
 
 // One continued-processing task at a time, matching one generation at a time in the app.
 @available(iOS 26.0, *)
@@ -67,6 +70,7 @@ final class GenerationPlugin: Plugin {
   @objc public func update(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(UpdateArgs.self)
     DispatchQueue.main.async {
+      if let notify = args.notifyOnExpire { self.notifyOnExpire = notify }
       self.enter(stage: args.stage)
       invoke.resolve()
     }
@@ -147,7 +151,10 @@ final class GenerationPlugin: Plugin {
     stageStartedAt = Date()
     guard let task = task else { return }
     let floor = Int64(stage.floor / 100 * Double(Self.totalUnits))
-    if floor > task.progress.completedUnitCount { task.progress.completedUnitCount = floor }
+    // Entering "preparing" again means a new turn joined the task, so the ring starts over.
+    if name == "preparing" || floor > task.progress.completedUnitCount {
+      task.progress.completedUnitCount = floor
+    }
     task.updateTitle("Generating story…", subtitle: stage.subtitle)
   }
 

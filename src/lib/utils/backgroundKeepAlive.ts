@@ -62,9 +62,9 @@ export type KeepAliveOutcome = 'done' | 'failed' | 'stopped'
 export type KeepAliveStage = 'preparing' | 'writing' | 'world' | 'finishing'
 
 /** Tells the iOS task which part of the pipeline is running, for its text and progress. */
-export function setKeepAliveStage(stage: KeepAliveStage): void {
+export function setKeepAliveStage(stage: KeepAliveStage, notifyOnExpire?: boolean): void {
   if (!isIos()) return
-  invoke('plugin:generation|update', { stage }).catch(() => {})
+  invoke('plugin:generation|update', { stage, notifyOnExpire }).catch(() => {})
 }
 
 const OUTCOME_RANK: Record<KeepAliveOutcome, number> = { done: 0, stopped: 1, failed: 2 }
@@ -78,12 +78,17 @@ let idleCallbacks: Array<() => Promise<void> | void> = []
 
 type Release = (outcome?: KeepAliveOutcome) => void
 
-function releaser(): Release {
+// Each turn's own expiry handler: the native side holds only the first turn's channel, so an
+// expiry has to reach every turn still holding the keep-alive.
+const expiryHandlers = new Set<() => void>()
+
+function releaser(onExpire?: () => void): Release {
   const mine = epoch
   let released = false
   return (outcome = 'done') => {
     if (released || mine !== epoch) return
     released = true
+    if (onExpire) expiryHandlers.delete(onExpire)
     if (OUTCOME_RANK[outcome] > OUTCOME_RANK[worstOutcome]) worstOutcome = outcome
     if (--holds === 0) {
       epoch++
@@ -133,15 +138,20 @@ export async function holdBackgroundKeepAlive(
     }
   }
   holds++
-  const release = releaser()
+  expiryHandlers.add(onExpire)
+  const release = releaser(onExpire)
   if (holds === 1) {
     await startBackgroundKeepAlive(() => {
       holds = 0
       epoch++
       worstOutcome = 'done'
       idleCallbacks = []
-      onExpire()
+      const handlers = [...expiryHandlers]
+      expiryHandlers.clear()
+      for (const handler of handlers) handler()
     }, notifyOnExpire)
+  } else {
+    setKeepAliveStage('preparing', notifyOnExpire)
   }
   return release
 }

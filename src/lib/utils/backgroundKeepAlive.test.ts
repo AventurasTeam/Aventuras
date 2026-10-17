@@ -27,6 +27,7 @@ const {
 const bridge = { startGenerationService: vi.fn(), stopGenerationService: vi.fn() }
 
 beforeEach(() => {
+  invoke.mockResolvedValue(undefined)
   vi.stubGlobal('window', { AndroidBridge: bridge })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -139,6 +140,25 @@ describe('holdBackgroundKeepAlive', () => {
     expect(calls().filter((c) => c === 'plugin:generation|stop')).toHaveLength(0)
     releaseNext()
     expect(calls().filter((c) => c === 'plugin:generation|stop')).toHaveLength(1)
+  })
+
+  it('tells every turn that holds the keep-alive when it expires', async () => {
+    onPlatform(false, true)
+    const first = vi.fn()
+    const second = vi.fn()
+    const released = vi.fn()
+    await holdBackgroundKeepAlive(first)
+    await holdBackgroundKeepAlive(second, true)
+    const releaseThird = await holdBackgroundKeepAlive(released)
+    releaseThird()
+    expect(invoke).toHaveBeenCalledWith('plugin:generation|update', {
+      stage: 'preparing',
+      notifyOnExpire: true,
+    })
+    invoke.mock.calls[0][1].onExpire.onmessage({ reason: 'expired' })
+    expect(first).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
+    expect(released).not.toHaveBeenCalled()
   })
 
   it('ends the task with the worst outcome of everything that held it', async () => {

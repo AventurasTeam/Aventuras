@@ -60,17 +60,23 @@ async fn stop<R: Runtime>(app: tauri::AppHandle<R>, outcome: Option<String>) -> 
 }
 
 #[tauri::command]
-async fn update<R: Runtime>(app: tauri::AppHandle<R>, stage: String) -> Result<(), String> {
+async fn update<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    stage: String,
+    notify_on_expire: Option<bool>,
+) -> Result<(), String> {
     #[cfg(target_os = "ios")]
     {
         use tauri::Manager;
-        tauri::async_runtime::spawn_blocking(move || app.state::<Generation<R>>().update(stage))
-            .await
-            .map_err(|e| e.to_string())?
+        tauri::async_runtime::spawn_blocking(move || {
+            app.state::<Generation<R>>().update(stage, notify_on_expire)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
     #[cfg(not(target_os = "ios"))]
     {
-        let _ = (app, stage);
+        let _ = (app, stage, notify_on_expire);
         Ok(())
     }
 }
