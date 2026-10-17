@@ -1,4 +1,4 @@
-import { and, eq, getTableColumns, inArray, ne } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm'
 
 import { chunked, deltas, type Delta } from '@/lib/db'
 
@@ -9,9 +9,18 @@ import {
   heldKey,
   loadHeldRows,
   type HeldKey,
+  type HeldRow,
   type HeldRowIndex,
 } from './held-rows'
-import { isRefTable, referrersOf } from './live-refs'
+import {
+  isRefTable,
+  pathRefsOf,
+  referrersOf,
+  rowRefs,
+  type LiveRef,
+  type RefColumn,
+  type RefPath,
+} from './live-refs'
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
@@ -88,13 +97,15 @@ export async function writesTo(
   return found
 }
 
-/** Live rows on the branch naming any of `rows` through REF_COLUMNS. */
+type Referrer = RowRef & { readonly ref: RefColumn }
+
+/** Live rows on the branch naming any of `rows` through REF_COLUMNS, by their current values. */
 async function liveReferrers(
   ctx: DbCtx,
   branchId: string,
   rows: readonly RowRef[],
-): Promise<RowRef[]> {
-  const found: RowRef[] = []
+): Promise<Referrer[]> {
+  const found: Referrer[] = []
   for (const [refTable, ids] of idsByTable(rows)) {
     if (!isRefTable(refTable)) continue
     for (const { table: name, ref } of referrersOf(refTable)) {
@@ -103,6 +114,11 @@ async function liveReferrers(
       if (!entry) continue
       const { table, idCol, branchCol } = entry.descriptor
       const columns = getTableColumns(table)
+      const column = columns[ref.column]
+      const names = (chunk: string[]) =>
+        ref.path === undefined
+          ? inArray(column, chunk)
+          : inArray(sql`json_extract(${column}, ${`$.${ref.path}`})`, chunk)
       for (const chunk of chunked(ids)) {
         const hits = await ctx.db
           .select({ id: idCol })
@@ -110,15 +126,66 @@ async function liveReferrers(
           .where(
             and(
               branchCol ? eq(branchCol, branchId) : undefined,
-              inArray(columns[ref.column], chunk),
+              names(chunk),
               ref.when ? eq(columns[ref.when.column], ref.when.value) : undefined,
             ),
           )
-        for (const { id } of hits) if (typeof id === 'string') found.push({ table: name, id })
+        for (const { id } of hits) if (typeof id === 'string') found.push({ table: name, id, ref })
       }
     }
   }
   return found
+}
+
+/** A JSON-path ref's id once the set's undos have run, from the oldest set update that changed it. */
+type RestoredRef = {
+  readonly row: RowRef
+  readonly ref: RefPath
+  readonly id: string | null
+  readonly logPosition: number
+}
+
+const restoredKey = (row: RowRef, ref: RefPath) =>
+  `${heldKey(row.table, row.id)}:${ref.column}.${ref.path}`
+
+// The newest-first walk applies the oldest update's undo last, even over a later user write
+// (generation-pipeline.md → Reverse-replay).
+function restoredRefs(set: Iterable<Delta>): Map<string, RestoredRef> {
+  const restored = new Map<string, RestoredRef>()
+  for (const d of set) {
+    if (d.op !== 'update') continue
+    for (const ref of pathRefsOf(d.targetTable)) {
+      const column = d.undoPayload?.[ref.column]
+      if (typeof column !== 'object' || column === null || !Object.hasOwn(column, ref.path))
+        continue
+      const id = (column as Record<string, unknown>)[ref.path]
+      const row = { table: d.targetTable, id: d.targetId }
+      const key = restoredKey(row, ref)
+      const seen = restored.get(key)
+      if (!seen || d.logPosition < seen.logPosition)
+        restored.set(key, {
+          row,
+          ref,
+          id: typeof id === 'string' ? id : null,
+          logPosition: d.logPosition,
+        })
+    }
+  }
+  return restored
+}
+
+/** The held copy with its JSON-path refs as the set's undos leave them. */
+function restoredRow(
+  held: HeldRow,
+  restored: ReadonlyMap<string, RestoredRef>,
+): Readonly<Record<string, unknown>> {
+  let row = held.row
+  for (const ref of pathRefsOf(held.table)) {
+    const after = restored.get(restoredKey(held, ref))
+    if (after)
+      row = { ...row, [ref.column]: { ...(row[ref.column] as object), [ref.path]: after.id } }
+  }
+  return row
 }
 
 /**
@@ -223,11 +290,22 @@ async function closeOver(
       if (byReference.has(key) && !created.has(key))
         throw new ReversalIntegrityError('no-create', key, actionId)
     }
-    for (const row of await liveReferrers(ctx, branchId, round)) remove(row, true)
+    // A link row's ends never change; a JSON-path ref is judged by what the set's undos leave.
+    const restored = restoredRefs(set.values())
+    const isRemoved = (ref: LiveRef) => removed.has(heldKey(ref.table, ref.id))
+    const restoresRemoved = ({ ref, id }: RestoredRef) =>
+      id !== null && isRemoved({ table: ref.refTable, id })
+    for (const hit of await liveReferrers(ctx, branchId, round)) {
+      const after = hit.ref.path === undefined ? undefined : restored.get(restoredKey(hit, hit.ref))
+      if (after === undefined || restoresRemoved(after)) remove(hit, true)
+    }
     for (const { table, id } of round) {
       if (!isRefTable(table)) continue
-      for (const named of held.naming(table, id)) remove(named, true)
+      for (const named of held.naming(table, id))
+        if (rowRefs(named.table, restoredRow(named, restored)).some(isRemoved)) remove(named, true)
     }
+    // A row the set moved off a removed row names it again once the move is undone.
+    for (const after of restored.values()) if (restoresRemoved(after)) remove(after.row, true)
   }
   return [...set.values()].sort((a, b) => b.logPosition - a.logPosition)
 }
