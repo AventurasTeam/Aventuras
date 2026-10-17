@@ -7,6 +7,7 @@ import { parentIdOf } from '@/lib/world'
 
 import { applyDeltaAction } from './apply-delta-action'
 import { applyRedo, prepareUndo } from './redo'
+import { ReversalIntegrityError } from './replay-errors'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 import { selectReversalSet, type ReversalSet } from './row-closure'
 import type { DbCtx, DeltaSource, PipelineAction } from '../types'
@@ -246,5 +247,60 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter', 'loc_varn'])
     expect(await parentOf('loc_docks')).toBe('loc_varn')
     expect((await deltasOf('act_pass')).map((d) => d.targetId)).toEqual(['loc_docks'])
+  })
+
+  it.each([
+    ['the user made', true],
+    ['the wizard or a seed made', false],
+  ] as const)(
+    'refuses a place %s that a write outside the set moved under a removed parent',
+    async (_label, logged) => {
+      if (logged) {
+        await act('act_x', create('loc_x', null, 'user_edit'))
+        await act('act_z', create('loc_z', 'loc_x', 'user_edit'))
+      }
+      const moved = logged ? 'loc_x' : 'loc_quarter'
+      await act('act_pass', create('loc_p', null, 'periodic_classifier'))
+      await act('act_move', move(moved, 'loc_p'))
+
+      const selected = selectReversalSet(ctx, {
+        branchId: 'b1',
+        target: await deltasOf('act_pass'),
+      })
+
+      await expect(selected).rejects.toBeInstanceOf(ReversalIntegrityError)
+      await expect(selected).rejects.toMatchObject({ refusal: 'moved-outside' })
+    },
+  )
+
+  it('takes a child a write outside the set changed without moving it', async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_pass', create('loc_docks', 'loc_varn', 'periodic_classifier'))
+    await act('act_flood', {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_docks',
+        patch: { state: { parent_location_id: 'loc_varn', condition: 'flooded' } },
+      },
+    })
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_varn') })
+
+    expect(labels(set)).toEqual([
+      'update entities:loc_docks',
+      'create entities:loc_docks',
+      'create entities:loc_varn',
+    ])
+  })
+
+  it("takes a removed place's own later move outside the set, as any later write", async () => {
+    await act('act_varn', create('loc_varn', null, 'user_edit'))
+    await act('act_move', move('loc_varn', 'loc_quarter'))
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_varn') })
+
+    expect(labels(set)).toEqual(['update entities:loc_varn', 'create entities:loc_varn'])
   })
 })

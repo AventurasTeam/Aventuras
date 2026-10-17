@@ -148,27 +148,28 @@ type RestoredRef = {
 const restoredKey = (row: RowRef, ref: RefPath) =>
   `${heldKey(row.table, row.id)}:${ref.column}.${ref.path}`
 
+/** The JSON-path refs an update changed, each with the id it replaced. */
+function pathUndos(d: Delta): { ref: RefPath; id: string | null }[] {
+  if (d.op !== 'update') return []
+  return pathRefsOf(d.targetTable).flatMap((ref) => {
+    const column = d.undoPayload?.[ref.column]
+    if (typeof column !== 'object' || column === null || !Object.hasOwn(column, ref.path)) return []
+    const id = (column as Record<string, unknown>)[ref.path]
+    return [{ ref, id: typeof id === 'string' ? id : null }]
+  })
+}
+
 // The newest-first walk applies the oldest update's undo last, even over a later user write
 // (generation-pipeline.md → Reverse-replay).
 function restoredRefs(set: Iterable<Delta>): Map<string, RestoredRef> {
   const restored = new Map<string, RestoredRef>()
   for (const d of set) {
-    if (d.op !== 'update') continue
-    for (const ref of pathRefsOf(d.targetTable)) {
-      const column = d.undoPayload?.[ref.column]
-      if (typeof column !== 'object' || column === null || !Object.hasOwn(column, ref.path))
-        continue
-      const id = (column as Record<string, unknown>)[ref.path]
+    for (const { ref, id } of pathUndos(d)) {
       const row = { table: d.targetTable, id: d.targetId }
       const key = restoredKey(row, ref)
       const seen = restored.get(key)
       if (!seen || d.logPosition < seen.logPosition)
-        restored.set(key, {
-          row,
-          ref,
-          id: typeof id === 'string' ? id : null,
-          logPosition: d.logPosition,
-        })
+        restored.set(key, { row, ref, id, logPosition: d.logPosition })
     }
   }
   return restored
@@ -281,6 +282,19 @@ async function closeOver(
         return nulled === undefined || onlyNulledViews(d, nulled)
       })
     }
+    // Taking a row a write outside the set moved would delete a row the reversal didn't make.
+    const moved = writes.find(
+      (d) =>
+        !set.has(d.id) &&
+        byReference.has(heldKey(d.targetTable, d.targetId)) &&
+        pathUndos(d).length > 0,
+    )
+    if (moved)
+      throw new ReversalIntegrityError(
+        'moved-outside',
+        `${heldKey(moved.targetTable, moved.targetId)} moved by delta ${moved.id}`,
+        actionId,
+      )
     for (const d of writes) if (!set.has(d.id)) set.set(d.id, d)
     const created = new Set(
       writes.filter((d) => d.op === 'create').map((d) => heldKey(d.targetTable, d.targetId)),
