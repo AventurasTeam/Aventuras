@@ -20,6 +20,7 @@ import {
   happeningsStore,
   undoRedoStore,
 } from '@/lib/stores'
+import { parentIdOf } from '@/lib/world'
 
 import { rollbackToEntry } from './operational'
 import { applyDeltaAction } from '../delta/apply-delta-action'
@@ -71,8 +72,18 @@ async function turn(id: string, position: number): Promise<void> {
   expect(result.status).toBe('ok')
 }
 
-// The pass's happening survives on t1; only its involvement names the child.
-async function passInvolvesDocks(): Promise<void> {
+// The pass anchors the child, its own child and its happening on t1, all surviving.
+async function passCreatesDocks(): Promise<void> {
+  await apply(
+    createPlace(place('loc_docks', 'Varn Docks', 'loc_varn'), 'periodic_classifier'),
+    'act_pass',
+    't1',
+  )
+  await apply(
+    createPlace(place('loc_pier', 'Docks Pier', 'loc_docks'), 'periodic_classifier'),
+    'act_pass',
+    't1',
+  )
   await apply(
     {
       kind: 'createHappening',
@@ -109,6 +120,30 @@ async function entityIds(): Promise<string[]> {
   return rows.map((row) => row.id).sort()
 }
 
+async function parentOf(id: string): Promise<string | null> {
+  const [row] = await ctx.db.select().from(entities).where(eq(entities.id, id))
+  return parentIdOf(row)
+}
+
+async function expectDocksAtTheRoot(): Promise<void> {
+  expect(await entityIds()).toEqual(['loc_docks', 'loc_old', 'loc_pier'])
+  expect(await parentOf('loc_docks')).toBeNull()
+  expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+  expect(entitiesStore.getById('loc_varn')).toBeUndefined()
+  expect(await parentOf('loc_pier')).toBe('loc_docks')
+  expect(entitiesStore.getById('loc_pier')?.state).toEqual({ parent_location_id: 'loc_docks' })
+  expect(await ctx.db.select({ id: happeningInvolvements.id }).from(happeningInvolvements)).toEqual(
+    [{ id: 'hinv_docks' }],
+  )
+  expect(happeningInvolvementsStore.getById('hinv_docks')).toBeDefined()
+  expect(await ctx.db.select({ id: happenings.id }).from(happenings)).toEqual([{ id: 'hap_fire' }])
+  const left = await ctx.db
+    .select({ targetId: deltas.targetId })
+    .from(deltas)
+    .where(eq(deltas.targetTable, 'entities'))
+  expect(left.map((d) => d.targetId).sort()).toEqual(['loc_docks', 'loc_pier'])
+}
+
 beforeEach(async () => {
   const t = await createTestDb()
   ctx = { db: t.db, runInTransaction: t.runInTransaction }
@@ -139,60 +174,33 @@ afterEach(() => {
 })
 
 describe('rolling back past a place parent anchored on a later turn than its child', () => {
-  it('takes a child the same pass anchored on an earlier turn, with the rows naming it', async () => {
+  it('keeps a child the same pass anchored on an earlier turn, at the root', async () => {
     await apply(
       createPlace(place('loc_varn', 'Varn', null), 'periodic_classifier'),
       'act_pass',
       't3',
     )
-    await apply(
-      createPlace(place('loc_docks', 'Varn Docks', 'loc_varn'), 'periodic_classifier'),
-      'act_pass',
-      't1',
-    )
-    await passInvolvesDocks()
+    await passCreatesDocks()
     await hydrateStores()
 
     const result = await rollbackToEntry('b1', 't2', ctx)
 
     expect(result.status).toBe('ok')
-    expect(await entityIds()).toEqual(['loc_old'])
-    expect(entitiesStore.getById('loc_docks')).toBeUndefined()
-    expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
-    expect(happeningInvolvementsStore.getById('hinv_docks')).toBeUndefined()
-    expect(await ctx.db.select({ id: happenings.id }).from(happenings)).toEqual([
-      { id: 'hap_fire' },
-    ])
-    const left = await ctx.db
-      .select({ targetId: deltas.targetId })
-      .from(deltas)
-      .where(eq(deltas.targetTable, 'entities'))
-    expect(left).toEqual([])
+    await expectDocksAtTheRoot()
   })
 
-  it("takes a pass's child of a place the parent's own turn created", async () => {
+  it("keeps a pass's child of a place the parent's own turn created, at the root", async () => {
     await apply(
       createPlace(place('loc_varn', 'Varn', null), 'piggyback_tagged_block'),
       'turn_t3',
       't3',
     )
-    await apply(
-      createPlace(place('loc_docks', 'Varn Docks', 'loc_varn'), 'periodic_classifier'),
-      'act_pass',
-      't1',
-    )
-    await passInvolvesDocks()
+    await passCreatesDocks()
     await hydrateStores()
 
     const result = await rollbackToEntry('b1', 't2', ctx)
 
     expect(result.status).toBe('ok')
-    expect(await entityIds()).toEqual(['loc_old'])
-    expect(entitiesStore.getById('loc_docks')).toBeUndefined()
-    expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
-    expect(happeningInvolvementsStore.getById('hinv_docks')).toBeUndefined()
-    expect(await ctx.db.select({ id: happenings.id }).from(happenings)).toEqual([
-      { id: 'hap_fire' },
-    ])
+    await expectDocksAtTheRoot()
   })
 })

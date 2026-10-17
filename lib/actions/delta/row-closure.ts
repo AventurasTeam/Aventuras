@@ -9,14 +9,15 @@ import {
   heldKey,
   loadHeldRows,
   type HeldKey,
-  type HeldRow,
   type HeldRowIndex,
 } from './held-rows'
 import {
+  columnRefs,
+  isPathRef,
   isRefTable,
+  pathRefIds,
   pathRefsOf,
   referrersOf,
-  rowRefs,
   type LiveRef,
   type RefColumn,
   type RefPath,
@@ -26,7 +27,15 @@ import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
 import { wroteColumn } from './user-precedence'
 
-type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held'>
+type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears'>
+
+/** A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a removed row. */
+export type RefClear = {
+  readonly row: RowRef
+  readonly ref: RefPath
+  /** The id of the removed `ref.refTable` row it names. */
+  readonly removedId: string
+}
 
 /** A closed reversal set, built only by selectReversalSet so no path reverses an unclosed one. */
 class ReversalSet {
@@ -39,12 +48,15 @@ class ReversalSet {
   readonly redoRows: readonly Delta[]
   /** The rows the branch's deletes held when the set was selected. */
   readonly held: HeldRowIndex
+  /** The refs the planner nulls, in a live row or a held copy, writing no delta. */
+  readonly refClears: readonly RefClear[]
 
   constructor(fields: ReversalSetFields) {
     this.branchId = fields.branchId
     this.rows = fields.rows
     this.redoRows = fields.redoRows
     this.held = fields.held
+    this.refClears = fields.refClears
   }
 }
 
@@ -97,40 +109,42 @@ export async function writesTo(
   return found
 }
 
-type Referrer = RowRef & { readonly ref: RefColumn }
+type Referrer = RowRef & { readonly ref: RefColumn; readonly named: string }
 
-/** Live rows on the branch naming any of `rows` through REF_COLUMNS, by their current values. */
+/** Live rows on the branch naming any of `rows` through the REF_COLUMNS refs `picks` keeps. */
 async function liveReferrers(
   ctx: DbCtx,
   branchId: string,
   rows: readonly RowRef[],
+  picks: (ref: RefColumn) => boolean,
 ): Promise<Referrer[]> {
   const found: Referrer[] = []
   for (const [refTable, ids] of idsByTable(rows)) {
     if (!isRefTable(refTable)) continue
     for (const { table: name, ref } of referrersOf(refTable)) {
+      if (!picks(ref)) continue
       // Boot registers every referring table; a test registering a subset skips the rest.
       const entry = resolveByTable(name)
       if (!entry) continue
       const { table, idCol, branchCol } = entry.descriptor
       const columns = getTableColumns(table)
       const column = columns[ref.column]
-      const names = (chunk: string[]) =>
-        ref.path === undefined
-          ? inArray(column, chunk)
-          : inArray(sql`json_extract(${column}, ${`$.${ref.path}`})`, chunk)
+      const value =
+        ref.path === undefined ? sql`${column}` : sql`json_extract(${column}, ${`$.${ref.path}`})`
       for (const chunk of chunked(ids)) {
         const hits = await ctx.db
-          .select({ id: idCol })
+          .select({ id: idCol, named: value })
           .from(table)
           .where(
             and(
               branchCol ? eq(branchCol, branchId) : undefined,
-              names(chunk),
+              inArray(value, chunk),
               ref.when ? eq(columns[ref.when.column], ref.when.value) : undefined,
             ),
           )
-        for (const { id } of hits) if (typeof id === 'string') found.push({ table: name, id, ref })
+        for (const { id, named } of hits)
+          if (typeof id === 'string' && typeof named === 'string')
+            found.push({ table: name, id, ref, named })
       }
     }
   }
@@ -173,20 +187,6 @@ function restoredRefs(set: Iterable<Delta>): Map<string, RestoredRef> {
     }
   }
   return restored
-}
-
-/** The held copy with its JSON-path refs as the set's undos leave them. */
-function restoredRow(
-  held: HeldRow,
-  restored: ReadonlyMap<string, RestoredRef>,
-): Readonly<Record<string, unknown>> {
-  let row = held.row
-  for (const ref of pathRefsOf(held.table)) {
-    const after = restored.get(restoredKey(held, ref))
-    if (after)
-      row = { ...row, [ref.column]: { ...(row[ref.column] as object), [ref.path]: after.id } }
-  }
-  return row
 }
 
 /**
@@ -236,6 +236,14 @@ function onlyNulledViews(delta: Delta, nulled: readonly string[]): boolean {
   return columns.length > 0 && columns.every((col) => nulled.includes(col))
 }
 
+type Closure = {
+  /** Newest-first. */
+  readonly rows: readonly Delta[]
+  readonly removed: ReadonlyMap<HeldKey, RowRef>
+}
+
+const NOTHING_CLOSED: Closure = { rows: [], removed: new Map() }
+
 // Fixed point of generation-pipeline.md → Reverse-replay: removed rows, then every row naming one.
 async function closeOver(
   ctx: DbCtx,
@@ -243,18 +251,20 @@ async function closeOver(
   seed: readonly Delta[],
   held: HeldRowIndex,
   actionId: string,
-): Promise<Delta[]> {
+): Promise<Closure> {
   const set = new Map(seed.map((d) => [d.id, d]))
-  const removed = new Set<HeldKey>()
+  const removed = new Map<HeldKey, RowRef>()
   const byReference = new Set<HeldKey>()
   let frontier: RowRef[] = []
   const remove = (row: RowRef, viaReference: boolean) => {
     const key = heldKey(row.table, row.id)
     if (removed.has(key)) return
-    removed.add(key)
+    const ref = { table: row.table, id: row.id }
+    removed.set(key, ref)
     if (viaReference) byReference.add(key)
-    frontier.push({ table: row.table, id: row.id })
+    frontier.push(ref)
   }
+  const isRemoved = (ref: LiveRef) => removed.has(heldKey(ref.table, ref.id))
 
   const seedIds = new Set(seed.map((d) => d.id))
   let seedCreates = new Map<HeldKey, Delta[]>()
@@ -282,19 +292,6 @@ async function closeOver(
         return nulled === undefined || onlyNulledViews(d, nulled)
       })
     }
-    // Taking a row a write outside the set moved would delete a row the reversal didn't make.
-    const moved = writes.find(
-      (d) =>
-        !set.has(d.id) &&
-        byReference.has(heldKey(d.targetTable, d.targetId)) &&
-        pathUndos(d).length > 0,
-    )
-    if (moved)
-      throw new ReversalIntegrityError(
-        'moved-outside',
-        `${heldKey(moved.targetTable, moved.targetId)} moved by delta ${moved.id}`,
-        actionId,
-      )
     for (const d of writes) if (!set.has(d.id)) set.set(d.id, d)
     const created = new Set(
       writes.filter((d) => d.op === 'create').map((d) => heldKey(d.targetTable, d.targetId)),
@@ -304,24 +301,48 @@ async function closeOver(
       if (byReference.has(key) && !created.has(key))
         throw new ReversalIntegrityError('no-create', key, actionId)
     }
-    // A link row's ends never change; a JSON-path ref is judged by what the set's undos leave.
-    const restored = restoredRefs(set.values())
-    const isRemoved = (ref: LiveRef) => removed.has(heldKey(ref.table, ref.id))
-    const restoresRemoved = ({ ref, id }: RestoredRef) =>
-      id !== null && isRemoved({ table: ref.refTable, id })
-    // A row the set moved is judged by the last loop, by where its undos leave it.
-    for (const hit of await liveReferrers(ctx, branchId, round)) {
-      if (hit.ref.path === undefined || !restored.has(restoredKey(hit, hit.ref))) remove(hit, true)
-    }
+    // A JSON-path ref takes nothing: the planner clears it (refClearsOf).
+    for (const hit of await liveReferrers(ctx, branchId, round, (ref) => !isPathRef(ref)))
+      remove(hit, true)
     for (const { table, id } of round) {
       if (!isRefTable(table)) continue
       for (const named of held.naming(table, id))
-        if (rowRefs(named.table, restoredRow(named, restored)).some(isRemoved)) remove(named, true)
+        if (columnRefs(named.table, named.row).some(isRemoved)) remove(named, true)
     }
-    // A row the set moved off a removed row names it again once the move is undone.
-    for (const after of restored.values()) if (restoresRemoved(after)) remove(after.row, true)
   }
-  return [...set.values()].sort((a, b) => b.logPosition - a.logPosition)
+  return { rows: [...set.values()].sort((a, b) => b.logPosition - a.logPosition), removed }
+}
+
+// Entities go only through their own create, so the fixed point never waits on a clear.
+async function refClearsOf(
+  ctx: DbCtx,
+  branchId: string,
+  { rows, removed }: Closure,
+  held: HeldRowIndex,
+): Promise<RefClear[]> {
+  const restored = restoredRefs(rows)
+  const clears = new Map<string, RefClear>()
+  const judge = (row: RowRef, ref: RefPath, id: string | null) => {
+    if (id === null || removed.has(heldKey(row.table, row.id))) return
+    if (removed.has(heldKey(ref.refTable, id)))
+      clears.set(restoredKey(row, ref), {
+        row: { table: row.table, id: row.id },
+        ref,
+        removedId: id,
+      })
+  }
+  // A row the set moved is judged by where its undos leave it, the rest by the value they hold.
+  for (const after of restored.values()) judge(after.row, after.ref, after.id)
+  const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
+  const named = [...removed.values()].filter((row): row is LiveRef => isRefTable(row.table))
+  for (const hit of await liveReferrers(ctx, branchId, named, isPathRef))
+    if (isPathRef(hit.ref) && unmoved(hit, hit.ref)) judge(hit, hit.ref, hit.named)
+  for (const { table, id } of named) {
+    for (const copy of held.naming(table, id))
+      for (const { ref, id: names } of pathRefIds(copy.table, copy.row))
+        if (unmoved(copy, ref)) judge(copy, ref, names)
+  }
+  return [...clears.values()]
 }
 
 export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise<ReversalSet> {
@@ -334,23 +355,39 @@ export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise
       `selectReversalSet: delta ${stray.id} is on ${stray.branchId}, not the seed branch ${branchId}`,
     )
   if (all.length === 0)
-    return new ReversalSet({ branchId, rows: [], redoRows: [], held: EMPTY_HELD_ROWS })
+    return new ReversalSet({
+      branchId,
+      rows: [],
+      redoRows: [],
+      held: EMPTY_HELD_ROWS,
+      refClears: [],
+    })
 
   const held = await loadHeldRows(ctx, branchId)
   const { actionId } = all[0]
-  const redoRows = target.length > 0 ? await closeOver(ctx, branchId, target, held, actionId) : []
-  const rows =
+  const redo =
+    target.length > 0 ? await closeOver(ctx, branchId, target, held, actionId) : NOTHING_CLOSED
+  const closure =
     sweep.length > 0
-      ? await closeOver(ctx, branchId, [...redoRows, ...sweep], held, actionId)
-      : redoRows
-  return new ReversalSet({ branchId, rows, redoRows, held })
+      ? await closeOver(ctx, branchId, [...redo.rows, ...sweep], held, actionId)
+      : redo
+  const refClears = await refClearsOf(ctx, branchId, closure, held)
+  return new ReversalSet({ branchId, rows: closure.rows, redoRows: redo.rows, held, refClears })
 }
 
-/** Row keys for the set's rows and for every delete holding a row it writes. */
+/** Row keys for the rows the set writes or clears a ref in, and for every delete holding one. */
 export function reversalLockKeys(set: ReversalSet): RowLockKey[] {
-  const holders = set.rows.flatMap((d) => {
+  const written = [
+    ...set.rows,
+    ...set.refClears.map(({ row }) => ({
+      branchId: set.branchId,
+      targetTable: row.table,
+      targetId: row.id,
+    })),
+  ]
+  const holders = written.flatMap((d) => {
     const held = set.held.byRow.get(heldKey(d.targetTable, d.targetId))
     return held ? [held.holder] : []
   })
-  return deltaLockKeys([...set.rows, ...holders])
+  return deltaLockKeys([...written, ...holders])
 }

@@ -115,9 +115,13 @@ function refsOf(table: string): readonly RefColumn[] {
   return isReferringTable(table) ? REF_COLUMNS[table] : []
 }
 
+export function isPathRef(ref: RefColumn): ref is RefPath {
+  return ref.path !== undefined
+}
+
 /** The JSON-path references a row of `table` can hold. */
 export function pathRefsOf(table: string): readonly RefPath[] {
-  return refsOf(table).filter((ref): ref is RefPath => ref.path !== undefined)
+  return refsOf(table).filter(isPathRef)
 }
 
 function refValue(ref: RefColumn, row: Readonly<Record<string, unknown>>): unknown {
@@ -128,12 +132,35 @@ function refValue(ref: RefColumn, row: Readonly<Record<string, unknown>>): unkno
     : undefined
 }
 
-/** The rows `row` of `table` names; none if the table names nothing or the row lacks columns. */
-export function rowRefs(table: string, row: Readonly<Record<string, unknown>>): LiveRef[] {
-  return refsOf(table).flatMap((ref) => {
+function namedBy(refs: readonly RefColumn[], row: Readonly<Record<string, unknown>>): LiveRef[] {
+  return refs.flatMap((ref) => {
     if (ref.when && row[ref.when.column] !== ref.when.value) return []
     const id = refValue(ref, row)
     return typeof id === 'string' ? [{ table: ref.refTable, id }] : []
+  })
+}
+
+/** The rows `row` of `table` names; none if the table names nothing or the row lacks columns. */
+export function rowRefs(table: string, row: Readonly<Record<string, unknown>>): LiveRef[] {
+  return namedBy(refsOf(table), row)
+}
+
+/** The rows `row` of `table` names through a link-row column, never through a JSON path. */
+export function columnRefs(table: string, row: Readonly<Record<string, unknown>>): LiveRef[] {
+  return namedBy(
+    refsOf(table).filter((ref) => !isPathRef(ref)),
+    row,
+  )
+}
+
+/** Each JSON-path reference of `row`, with the id it holds or null. */
+export function pathRefIds(
+  table: string,
+  row: Readonly<Record<string, unknown>>,
+): { ref: RefPath; id: string | null }[] {
+  return pathRefsOf(table).map((ref) => {
+    const id = refValue(ref, row)
+    return { ref, id: typeof id === 'string' ? id : null }
   })
 }
 

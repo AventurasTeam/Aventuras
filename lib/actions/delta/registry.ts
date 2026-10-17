@@ -79,7 +79,10 @@ export type TableDescriptor = { table: SQLiteTable; idCol: SQLiteColumn; branchC
 
 // Shared by undo (reverse-replay.ts) and redo (redo.ts) — both target the same
 // row for a given delta and descriptor.
-export function whereForDelta(descriptor: TableDescriptor, delta: Delta) {
+export function whereForDelta(
+  descriptor: TableDescriptor,
+  delta: Pick<Delta, 'branchId' | 'targetId'>,
+) {
   return descriptor.branchCol
     ? and(eq(descriptor.branchCol, delta.branchId), eq(descriptor.idCol, delta.targetId))
     : eq(descriptor.idCol, delta.targetId)
