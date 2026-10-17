@@ -131,7 +131,7 @@ referenced anywhere.
 
 ### `.github/workflows/bootstrap-ios.yml` — one-shot scaffold generator
 
-Manual dispatch on `macos-15`: npm install, Rust + target, ensure XcodeGen,
+Manual dispatch on `macos-15`: npm install, Select Xcode 26, Rust + target, ensure XcodeGen,
 `tauri ios init --skip-targets-install`, upload the **pristine** scaffold immediately
 (before the smoke test patches `project.yml` and leaves compiled outputs behind),
 then smoke-test the full unsigned build and upload the test `.ipa`.
