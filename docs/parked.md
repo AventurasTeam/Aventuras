@@ -976,13 +976,16 @@ it in World, the delete's tail-scene update still names it. Recovery
 would prune that delete with the create it holds, so it refuses as
 `write-back`
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
-writes nothing, and leaves the marker open. Every boot refuses again
-while that delete stays in the log: the "Recovery incomplete" modal
+writes nothing, and leaves the marker open. Moving a place the
+wizard, a seed or an import made under a place the pass created
+refuses the same way, as `no-create`: the closure follows the moved
+place's parent to the pass's place and finds no `create` to reverse.
+Every boot refuses again while that delete or move stays in the log: the "Recovery incomplete" modal
 shows at each startup, without promising a retry, and boot keeps the
 branch off the classifier cadence (`resetStuckClassifierRunState`).
 Nothing else is lost, but v1 has no "drop orphan" affordance to clear
 it. It takes two faults in one session: a database error during the
-abort's reversal, then that delete.
+abort's reversal, then that delete or move.
 
 The remedy is to settle such an orphan at recovery: on an integrity
 refusal, close its `pipeline_runs` row as `failed` and keep its writes

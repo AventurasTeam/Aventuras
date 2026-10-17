@@ -1190,7 +1190,7 @@ reversal failed: the
 [no-gate write phase](#no-gate-write-phase) ends the run's hold even
 then, so a user write can land that the reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
-on each boot. The orphan's writes stay, and so does its branch's
+or `no-create` on each boot. The orphan's writes stay, and so does its branch's
 pause.
 
 ### `chainsTo` on predecessor
@@ -1495,19 +1495,22 @@ the log could make: the wizard, a seed or an import. And a pair a
 CTRL-Z leaves absent whose other writes the prune
 above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
-reporting an undo that changed nothing. Only `write-back`
-is reachable today, and only at boot recovery of a `no-gate` run
-whose abort's own reversal failed: the
+reporting an undo that changed nothing. Only `write-back` and
+`no-create` are reachable today, and only at boot recovery of a
+`no-gate` run whose abort's own reversal failed: the
 [no-gate write phase](#no-gate-write-phase) ends the hold then, so
-the user can delete a row the pass created, in an entity delete whose
-tail-scene update names it, before recovery reverses the create. Each
-boot refuses it again, a failure a restart can't heal
+before recovery reverses the create the user can delete a row the
+pass created, in an entity delete whose tail-scene update names it,
+or move a place a writer outside the log made under a place the pass
+created. Each boot refuses it again, a failure a restart can't heal
 ([Recovery-failure policy](#recovery-failure-policy)). Otherwise an
 entity's create is never reversed while a delete holds it, given the
 no-gate write phase, newest-first
 undo, every window holding a delete with the create it follows, and
 sweeps sparing entity creates. A writer outside the log names only
-rows it made itself, which lack a `create` too; the closure starts
+rows it made itself, which lack a `create` too, and outside that
+window every set that removes a place holds the user's later move of
+another place under it; the closure starts
 from rows whose `create` the set holds; and a `create` a user write
 keeps stays in the log, re-owned. Only periodic-classifier
 groups sit above the group CTRL-Z undoes, every delta-logged write
@@ -2006,8 +2009,9 @@ write on success, after the abort's reversal on failure, whether it
 commits or leaves the run to boot recovery. Ending it on an
 uncommitted reversal keeps a held lock from stalling every write to
 the branch until the next boot, at a cost: a user's delete of a row
-the run created can then land first, and recovery refuses to reverse
-the create as `write-back` on each boot
+the run created, or a move of a place a writer outside the log made
+under one, can then land first, and recovery refuses to reverse the
+create on each boot
 ([Reverse-replay](#reverse-replay),
 [Recovery-failure policy](#recovery-failure-policy)). A write
 arriving meanwhile waits a few milliseconds; nothing is disabled
