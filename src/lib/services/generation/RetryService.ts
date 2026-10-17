@@ -18,6 +18,7 @@ import type {
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
 import { createLogger } from '#lib/log.ts'
+import { errMessage } from '#lib/utils/error.ts'
 import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 
 const log = createLogger('RetryService')
@@ -35,6 +36,8 @@ export interface RetryBackupData {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
+  /** Taken while State Tracking was on: restored by rewinding the records, not from a copy. */
+  throughRecords?: boolean
   userActionContent: string
   rawInput: string
   actionType: ActionInputType
@@ -69,6 +72,8 @@ export interface RetryStoreCallbacks {
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }) => Promise<void>
+  /** Rewinds through the records from the position before the action, for a backup that holds them. */
+  rewindThroughRecords?: (position: number) => Promise<void>
   deleteEntriesFromPosition: (position: number) => Promise<void>
   deleteEntitiesCreatedAfterBackup: (savedIds: {
     characterIds: string[]
@@ -134,7 +139,9 @@ export class RetryService {
     if (refusedForBranch) return refusedForBranch
 
     try {
-      if (backup.hasFullState) {
+      if (backup.throughRecords && callbacks.rewindThroughRecords) {
+        await this.rewindThroughRecords(backup, callbacks, callbacks.rewindThroughRecords)
+      } else if (backup.hasFullState) {
         // Full state restore path
         await this.restoreFullState(backup, callbacks)
       } else {
@@ -152,7 +159,7 @@ export class RetryService {
       log('Restore failed', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown restore error',
+        error: errMessage(error),
       }
     }
   }
@@ -192,7 +199,7 @@ export class RetryService {
       log('Restore refused before any state was touched', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown restore error',
+        error: errMessage(error),
       }
     }
   }
@@ -223,6 +230,26 @@ export class RetryService {
     })
 
     log('Full state restore complete')
+  }
+
+  /** Rewind through the records, as a delete does; the entities and the clock follow them. */
+  private async rewindThroughRecords(
+    backup: RetryBackupData,
+    callbacks: RetryStoreCallbacks,
+    rewind: (position: number) => Promise<void>,
+  ): Promise<void> {
+    log('Rewinding through the records', { entryCountBeforeAction: backup.entryCountBeforeAction })
+    callbacks.lockRetryInProgress()
+    try {
+      if (backup.activationData && Object.keys(backup.activationData).length > 0) {
+        callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
+      } else {
+        callbacks.clearActivationData()
+      }
+      await rewind(backup.entryCountBeforeAction)
+    } finally {
+      callbacks.unlockRetryInProgress()
+    }
   }
 
   /**

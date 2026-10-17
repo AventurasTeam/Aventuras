@@ -84,6 +84,8 @@ export interface PersistentRetryState {
   // The branch the generation was bound to. Absent in state written before it was recorded;
   // such state cannot be attributed to a branch and is discarded rather than guessed at.
   branchId?: string | null
+  // Taken while State Tracking was on: a retry rewinds through the records.
+  throughRecords?: boolean
 }
 
 export interface PersistentCharacterSnapshot {
@@ -934,6 +936,8 @@ export interface ExperimentalFeatures {
   lightweightBranches: boolean
   /** Number of entries between automatic world state snapshots (for fast rollback) */
   autoSnapshotInterval: number
+  /** When State Tracking was last turned on; a header written before it cannot vouch for a run. */
+  trackingEnabledSince: number | null
   /** Android: Keep generation alive when app is backgrounded or screen is locked */
   backgroundGeneration: boolean
   /** Android: Send OS notification when generation completes while app is backgrounded */
@@ -1019,10 +1023,70 @@ export interface WorldStateDelta {
   }
 }
 
+export type TrackedEntityType = 'character' | 'location' | 'item' | 'story_beat' | 'lorebook_entry'
+
 /**
- * Periodic full snapshot of world state for fast rollback reconstruction.
- * Instead of replaying all deltas from the start, rollback can start from the
- * nearest snapshot and only replay/undo deltas from there.
+ * Who made a change: the classifier, the story-image generator's portraits (`image`), lore
+ * management after a chapter (`chapter`), a lore management run the reader started (`tidy`), or
+ * the reader (`manual`).
+ */
+export type ChangeOrigin = 'classifier' | 'image' | 'chapter' | 'tidy' | 'manual'
+
+/** `softDelete` sets the row's tombstone flag; `delete` removes the row. */
+export type ChangeOp = 'create' | 'update' | 'delete' | 'softDelete'
+
+interface WorldStateRecordBase {
+  id: string
+  storyId: string
+  branchId: string | null
+  entryId: string
+  /** Write order within the story. */
+  seq: number
+  createdAt: number
+}
+
+/**
+ * One write to one entity. `entityId` is the row written, which on a lightweight branch can be
+ * an override or a tombstone.
+ * - create: `before` is the row this one shadows (null for a new entity); `after` is the full row.
+ * - update: `before`/`after` hold only the changed fields.
+ * `after` is absent on the classifier's records: they are written with the snapshot that follows
+ * them, so none is ever applied late.
+ * - delete / softDelete: `before` is the full row.
+ */
+export interface WorldStateChangeRecord extends WorldStateRecordBase {
+  kind: 'change'
+  origin: ChangeOrigin
+  entityType: TrackedEntityType
+  entityId: string
+  op: ChangeOp
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+}
+
+/** Written for every narration classified while tracking is on, even when nothing changed. */
+export interface WorldStateHeaderRecord extends WorldStateRecordBase {
+  kind: 'header'
+  continuous: boolean
+  /**
+   * Only on a header read from an old delta: the scene before it, which that format kept apart
+   * from the location rows. A stored header has none; the classifier records the flags it moves.
+   */
+  legacyLocationBefore?: string | null
+  /** `classifier` marks history recorded before lorebook and manual changes were tracked. */
+  coverage: 'full' | 'classifier'
+}
+
+export interface WorldStateBreakRecord extends WorldStateRecordBase {
+  kind: 'break'
+}
+
+export type WorldStateRecord =
+  WorldStateChangeRecord | WorldStateHeaderRecord | WorldStateBreakRecord
+
+/**
+ * A full world state saved at an entry: every few entries while State Tracking is on, and on
+ * each written branch when it is turned off. A past state is rebuilt from the nearest one after it.
  */
 export interface WorldStateSnapshot {
   id: string

@@ -17,6 +17,10 @@
   import { eventBus, type BranchSwitchedEvent } from '#lib/services/events.ts'
   import { repinDecision, type PinSnapshot } from '#lib/utils/storyPin.ts'
   import { contextLift } from '#lib/utils/storyNavigation.ts'
+  import DeleteEntryModal from './DeleteEntryModal.svelte'
+  import RegenerateEntryModal from './RegenerateEntryModal.svelte'
+  import CreateCheckpointModal from './CreateCheckpointModal.svelte'
+  import CreateBranchModal from '#lib/components/branch/CreateBranchModal.svelte'
 
   const storyMaxWidthStyle = $derived.by(() => {
     const maxWidth =
@@ -699,3 +703,17 @@
   <TimeAnchorModal bind:open={ui.anchorModalOpen} entryId={ui.timeDialogEntryId} />
   <EntryTimeModal bind:open={ui.entryTimeModalOpen} entryId={ui.timeDialogEntryId} />
 {/if}
+
+<!-- One of each for every entry: an entry asks through `ui` for the one it needs. -->
+<DeleteEntryModal />
+<RegenerateEntryModal />
+<CreateCheckpointModal />
+<CreateBranchModal
+  bind:open={
+    () => ui.branchCheckpointId !== null,
+    (next) => {
+      if (!next) ui.requestBranchFrom(null)
+    }
+  }
+  checkpoint={story.checkpoints.find((cp) => cp.id === ui.branchCheckpointId) ?? null}
+/>

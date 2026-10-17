@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { Branch, Chapter, Checkpoint, StoryEntry } from '#lib/types/index.ts'
 import { buildChapterBanners } from './chapterBanners'
 import {
+  canCreateCheckpointAt,
   branchesUsingCheckpoint,
   buildLandmarks,
   checkpointsOnBranch,
@@ -12,7 +13,9 @@ import {
   entryNumberRange,
   jumpToEntry,
   resolveEntryByNumber,
+  withSnapshotLandmarks,
   type EntryJumpUi,
+  type Landmark,
 } from './storyNavigation'
 
 function entry(id: string, position: number, branchId: string | null = null): StoryEntry {
@@ -675,5 +678,85 @@ describe('filterLandmarks', () => {
     const shown = kinds({ ...all, firstLast: false })
     expect(shown).not.toContain('first')
     expect(shown).not.toContain('last')
+  })
+})
+
+describe('withSnapshotLandmarks', () => {
+  const entries = [entry('a', 0), entry('b', 1), entry('c', 2)]
+  const checkpointRow: Landmark = {
+    entryId: 'b',
+    checkpointId: 'cp',
+    branchId: null,
+    switchesBranch: false,
+    number: entryNumber(entries[1]),
+    kind: 'checkpoint',
+    label: 'Before the duel',
+    branchName: 'Main',
+  }
+
+  it('lists snapshots in entry order, after other rows on the same entry', () => {
+    const rows = withSnapshotLandmarks(
+      [checkpointRow],
+      [
+        { id: 'snap-c', entryId: 'c' },
+        { id: 'snap-b', entryId: 'b' },
+      ],
+      entries,
+      null,
+      'Main',
+    )
+    expect(rows.map((r) => [r.kind, r.entryId])).toEqual([
+      ['checkpoint', 'b'],
+      ['snapshot', 'b'],
+      ['snapshot', 'c'],
+    ])
+  })
+
+  it('names the snapshot taken when tracking was turned off', () => {
+    const [row] = withSnapshotLandmarks(
+      [],
+      [{ id: 'closing:x', entryId: 'a' }],
+      entries,
+      null,
+      'Main',
+    )
+    expect(row).toMatchObject({ label: 'Snapshot (tracking stopped)', kind: 'snapshot' })
+  })
+
+  it('leaves out a snapshot whose entry is not on the branch', () => {
+    expect(
+      withSnapshotLandmarks([], [{ id: 's', entryId: 'gone' }], entries, null, 'Main'),
+    ).toEqual([])
+  })
+})
+
+describe('canCreateCheckpointAt', () => {
+  const entry = (id: string, type: StoryEntry['type'], branchId: string | null = null) =>
+    ({ id, type, branchId }) as StoryEntry
+  const entries = [entry('a', 'narration'), entry('b', 'user_action'), entry('c', 'narration')]
+  const context = {
+    entries,
+    checkpoints: [],
+    currentBranchId: null,
+    tracking: true,
+    locked: false,
+  }
+
+  it('allows the latest entry whatever tracking says', () => {
+    expect(canCreateCheckpointAt(entries[2], { ...context, tracking: false })).toBe(true)
+  })
+
+  it('allows an earlier narration only while tracking is on and the branch owns it', () => {
+    expect(canCreateCheckpointAt(entries[0], context)).toBe(true)
+    expect(canCreateCheckpointAt(entries[0], { ...context, tracking: false })).toBe(false)
+    expect(canCreateCheckpointAt(entries[1], context)).toBe(false)
+    expect(canCreateCheckpointAt(entries[0], { ...context, currentBranchId: 'b' })).toBe(false)
+  })
+
+  it('refuses where a checkpoint exists or while entries are locked', () => {
+    expect(
+      canCreateCheckpointAt(entries[0], { ...context, checkpoints: [{ lastEntryId: 'a' }] }),
+    ).toBe(false)
+    expect(canCreateCheckpointAt(entries[2], { ...context, locked: true })).toBe(false)
   })
 })

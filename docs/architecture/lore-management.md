@@ -58,8 +58,11 @@ it, so a decision made once is not re-argued by either side.
 `src/lib/services/ai/lorebook/LoreManagementService.ts` is the one agent that _writes_ to the
 Lorebook on its own. It runs after a chapter is created — automatically at the token threshold,
 manually from the Memory view, and once per batch during `chapterizeFromBeginning` (the
-SillyTavern import path) — and on demand from the **Tidy lorebook** button in the Active Context
-panel (`runManualLoreManagement`, shared by both manual callers).
+SillyTavern import path) — and on demand from **Run lore management** in the Active Context
+panel, called Tidy below (`runManualLoreManagement`, shared by both manual callers). With State
+Tracking on, every change a session makes is recorded: a session after a chapter as `chapter` on the
+chapter's last entry, a Tidy run as `tidy` on the last completed entry, so a revert can undo them —
+see [state-tracking.md](state-tracking.md).
 
 **By default, the chapter that triggered a run arrives in full, not as a summary.** Every other
 chapter is still a `{number, title, summary}` line, but the one just written is handed over as its own
@@ -83,7 +86,7 @@ the manual path's cost a slice of the store.
 
 **The batch importer is the exception** — `chapterizeFromBeginning`
 writes many chapters in one pass, so its single lore session keeps summaries only, as does a
-Tidy-lorebook run with no new chapter to speak of.
+Tidy run with no new chapter to speak of.
 
 **Its failure mode is growth.** A model that cannot see its own past sessions re-creates what it
 already wrote, so a lorebook accumulates "Kaelen", "Kaelen the Bold" and "Kaelan" and never loses
@@ -254,7 +257,7 @@ with no character budget and no floor, however long they are. Off, it is the sam
 and floor, counted from the chapter's end. A buffer of 0 shows none, and an empty tail is absent
 rather than announced: `hasRecentStory` drops both its section and every mention of it in the
 instructions. Callers pass `chapterBuffer` unconditionally; only a run with a `newChapter` uses it,
-so the batch importer and the Tidy-lorebook button read the newest entries within the character
+so the batch importer and Tidy read the newest entries within the character
 budget.
 
 **A tail that stops short of the present says so.** Cut off at Buffer Messages, the excerpt can end

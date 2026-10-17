@@ -216,6 +216,12 @@ describe('applyReconciliation', () => {
     ])
   })
 
+  it('leaves State Tracking records alone: the clock is read from entries', () => {
+    const plan = planReconciliation({ entries, chapters: [], times: [reconciled('B', t(3), t(5))] })
+    const sql = reconciliationStatements(plan, entries).map((s) => s.sql)
+    expect(sql.some((q) => q.includes('world_state_changes'))).toBe(false)
+  })
+
   it('keeps the rest of an entry metadata when it rewrites the times', () => {
     const plan = planReconciliation({ entries, chapters: [], times: [reconciled('B', t(1), t(5))] })
     const written = JSON.parse(String(reconciliationStatements(plan, entries)[0].params![0]))

@@ -125,7 +125,7 @@
       })
 
       if (result.success) {
-        story.appendImportedLorebookEntries(result.entries, scope)
+        await story.appendImportedLorebookEntries(result.entries, scope)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
         if (aventura) {

@@ -27,7 +27,7 @@ describe('pushSyncedStory', () => {
   it('exports and pushes the story without a checkpoint mutation', async () => {
     await pushSyncedStory(connection, 'story-1')
 
-    expect(sync.exportStoryToJson).toHaveBeenCalledWith('story-1')
+    expect(sync.exportStoryToJson).toHaveBeenCalledWith('story-1', undefined)
     expect(sync.pushStory).toHaveBeenCalledWith(connection, '{"story":{"id":"story-1"}}')
   })
 })

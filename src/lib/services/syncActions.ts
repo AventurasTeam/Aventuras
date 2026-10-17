@@ -1,13 +1,14 @@
 import type { SyncConnectionData } from '#lib/types/sync.ts'
 import type { ImportResult, PackBindingResolution } from './import'
-import { exportService } from './export'
+import { exportService, type ExportTracking } from './export'
 import { syncService } from './sync'
 
 export async function pushSyncedStory(
   connection: SyncConnectionData,
   storyId: string,
+  tracking?: ExportTracking,
 ): Promise<void> {
-  const storyJson = await syncService.exportStoryToJson(storyId)
+  const storyJson = await syncService.exportStoryToJson(storyId, tracking)
   await syncService.pushStory(connection, storyJson)
 }
 

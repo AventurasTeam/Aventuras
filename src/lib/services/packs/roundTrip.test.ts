@@ -81,6 +81,7 @@ vi.mock('#lib/services/database.ts', () => ({
     getBranches: vi.fn(async () => []),
     getChapters: vi.fn(async () => []),
     getTimeAnchors: vi.fn(async () => []),
+    getWorldStateRecordsForStory: vi.fn(async () => []),
     setTimeAnchor: vi.fn(async () => {}),
     getStoryPackId: vi.fn(async () => SOURCE.packId),
     getPack: vi.fn(async () => pack(SOURCE.packId, 'Grimdark', 'Ada')),
