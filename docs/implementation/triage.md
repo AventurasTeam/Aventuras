@@ -532,3 +532,13 @@ slice-planning gate forces its resolution before that slice is planned.
   its own commit
   ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
   Raised 2026-10-18 by the classifier factions slice review.
+
+- **Three copies of `isPlainObject`.** `lib/actions/delta/delta-encoding.ts`
+  exports one, which `user-precedence.ts` now shares;
+  `lib/actions/settings/normalize.ts` keeps its own copy inside the same
+  module, and `lib/history/humanize.ts` another. The settings copy can
+  import the delta one today; the History one needs a home every module
+  may import, and `lib/utils.ts` pulls in UI and toast dependencies the
+  delta code shouldn't take. Raised 2026-10-18 by the classifier
+  factions slice review's simplifier pass, which skipped it as outside
+  the slice.
