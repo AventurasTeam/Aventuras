@@ -172,21 +172,19 @@ export function applyRedo(
   return withKeyLocks(keys, () => applyRedoLocked(snapshots, refRestores, ctx, extraOps))
 }
 
-type RestoredRow = { snapshot: RedoSnapshot; row: Record<string, unknown> | null }
-
 // generation-pipeline.md → Reverse-replay: a redo never leaves a ref naming a row that doesn't exist.
 // A ref restore is checked too: the id it held before the undo can be one a sweep set.
 async function deadAfterRedo(
   ctx: DbCtx,
-  restoredRows: readonly RestoredRow[],
+  snapshots: readonly RedoSnapshot[],
   refRestores: readonly RefRestore[],
 ): Promise<Set<HeldKey>> {
   const recreated = new Set<HeldKey>()
   const dead = new Set<HeldKey>()
-  for (const { snapshot, row } of restoredRows) {
-    const key = heldKey(snapshot.delta.targetTable, snapshot.delta.targetId)
-    if (snapshot.delta.op === 'create' && row) recreated.add(key)
-    if (snapshot.delta.op === 'delete') dead.add(key)
+  for (const { delta, rowBeforeUndo } of snapshots) {
+    const key = heldKey(delta.targetTable, delta.targetId)
+    if (delta.op === 'create' && rowBeforeUndo) recreated.add(key)
+    if (delta.op === 'delete') dead.add(key)
   }
   const named = new Map<string, LiveRef[]>()
   const name = (branchId: string, ref: RefPath, id: string | null) => {
@@ -195,10 +193,10 @@ async function deadAfterRedo(
     refs.push({ table: ref.refTable, id })
     named.set(branchId, refs)
   }
-  for (const { snapshot, row } of restoredRows) {
-    if (!row || snapshot.delta.op === 'delete') continue
-    for (const { ref, id } of pathRefIds(snapshot.delta.targetTable, row))
-      name(snapshot.delta.branchId, ref, id)
+  for (const { delta, rowBeforeUndo } of snapshots) {
+    if (!rowBeforeUndo || delta.op === 'delete') continue
+    for (const { ref, id } of pathRefIds(delta.targetTable, rowBeforeUndo))
+      name(delta.branchId, ref, id)
   }
   for (const { branchId, ref, idBeforeUndo } of refRestores) name(branchId, ref, idBeforeUndo)
   for (const [branchId, refs] of named)
@@ -229,16 +227,13 @@ async function applyRedoLocked(
   const ops = []
   const restoredDeltas: Delta[] = []
   const cascadeInfo: Map<string, Record<string, Record<string, unknown>[]>> = new Map()
-  const restoredRows = snapshots.map((snapshot) => ({
-    snapshot,
-    row: redoRow(snapshot.delta, snapshot.rowBeforeUndo),
+  const dead = await deadAfterRedo(ctx, snapshots, refRestores)
+  const restoredRows = snapshots.map(({ delta, rowBeforeUndo }) => ({
+    delta,
+    row: withoutDeadRefs(delta.targetTable, redoRow(delta, rowBeforeUndo), dead),
   }))
-  const dead = await deadAfterRedo(ctx, restoredRows, refRestores)
-  for (const restoredRow of restoredRows)
-    restoredRow.row = withoutDeadRefs(restoredRow.snapshot.delta.targetTable, restoredRow.row, dead)
 
-  for (const { snapshot, row } of restoredRows) {
-    const { delta } = snapshot
+  for (const { delta, row } of restoredRows) {
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`redo apply: unknown target_table ${delta.targetTable}`)
     const where = whereForDelta(entry.descriptor, delta)
@@ -300,8 +295,7 @@ async function applyRedoLocked(
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {
-    for (const { snapshot, row } of restoredRows) {
-      const { delta } = snapshot
+    for (const { delta, row } of restoredRows) {
       const entry = resolveByTable(delta.targetTable)
       if (delta.op === 'delete') {
         entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })

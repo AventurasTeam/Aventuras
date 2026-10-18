@@ -12,12 +12,12 @@ import {
   type HeldRowIndex,
 } from './held-rows'
 import {
+  absentRefs,
   columnRefs,
   isPathRef,
   isRefTable,
   pathRefIds,
   pathRefsOf,
-  absentRefs,
   referrersOf,
   type LiveRef,
   type RefColumn,
