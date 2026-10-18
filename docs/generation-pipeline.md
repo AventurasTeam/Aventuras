@@ -1359,6 +1359,13 @@ by sub-field: its undo restores the sub-fields its delta changed except
 those a later user write changed, which the undo payload records field
 by field
 ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+That record can't tell one user write apart: removing a whole record,
+as World's Save drops an emptied `stackables`, records the record's old
+keys, the same as an edit of those keys, so the undo would restore a
+key the user removed with it. Nothing reaches that today, since the
+reversals that run after later user edits take only the periodic
+classifier's facts, whose one `state` write is a character's faction;
+it needs a guard once one of them takes a write to a record.
 The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row
