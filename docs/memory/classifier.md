@@ -461,7 +461,7 @@ retirement keeps the faction, since retiring touches no member, and a
 faction the reply itself retires keeps the memberships from its turns.
 A staged faction takes members and stays staged. One character's facts
 are planned in source-turn order, ties in reply order, each against the
-faction the earlier ones left, and one matching it plans nothing: a
+faction the earlier ones left, and one matching it writes nothing: a
 character who joins at one turn and leaves at a later one writes twice,
 and reversing the later turn leaves the earlier membership the prose
 still holds. Each is planned after the reply's creates, so it can name

@@ -2181,6 +2181,30 @@ describe('factions', () => {
       ])
     })
 
+    // The handler can refuse the earlier write (a user edit between the turns), so only the
+    // stored faction, never a planned one, can rule a later fact out.
+    it('keeps a fact restating an earlier planned one, so a refused write cannot hide it', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_circle', sourceTurn: 't1' },
+            { character: 'char_kael', faction: 'fact_circle', sourceTurn: 't2' },
+          ],
+        }),
+        deps([
+          member('char_kael', 'fact_crown'),
+          factionRow('fact_crown'),
+          factionRow('fact_circle'),
+        ]),
+      )
+      expect(
+        memberships(planned).map(({ factionId, proseEntryId }) => [factionId, proseEntryId]),
+      ).toEqual([
+        ['fact_circle', 'e1'],
+        ['fact_circle', 'e2'],
+      ])
+    })
+
     it('sorts a fact whose turn does not resolve at the window head, dated by the oldest turn', () => {
       const { planned, fellBackCount } = buildClassifierActions(
         reply({

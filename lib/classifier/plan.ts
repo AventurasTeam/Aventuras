@@ -515,9 +515,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // classifier.md → Factions → Memberships. Retired per the pre-reply `rowById`, not `index`, so
   // the reply's own flips never count. Anchor-ordered: a head-turn reversal undoes only the latest.
   const droppedMemberships: DroppedMembership[] = []
-  const factionNow = new Map<string, string | null>()
-  const factionOf = (id: string): string | null => {
-    if (factionNow.has(id)) return factionNow.get(id) ?? null
+  // Only the stored faction rules a fact out: the handler may refuse an earlier planned one.
+  const sentFor = new Set<string>()
+  const storedFaction = (id: string): string | null => {
     const row = rowById.get(id)
     return row == null ? null : characterFactionId(row)
   }
@@ -544,8 +544,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         continue
       }
     }
-    if (factionOf(characterId) === factionId) continue
-    factionNow.set(characterId, factionId)
+    if (!sentFor.has(characterId) && storedFaction(characterId) === factionId) continue
+    sentFor.add(characterId)
     planned.push({
       action: {
         kind: 'setCharacterFaction',
