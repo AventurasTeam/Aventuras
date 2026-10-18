@@ -286,6 +286,7 @@ describe('an undo never restores a dead id', () => {
       state: { ...(before.state as CharacterState), faction_id: 'fact_f' },
     }
 
+    await hydrateEntities()
     await applyRedo(
       __redoGroupForTest([
         { delta: delta('delta_named', 'update', 'char_x', 98), rowBeforeUndo: named },
@@ -296,6 +297,7 @@ describe('an undo never restores a dead id', () => {
 
     expect(await entityRow('fact_f')).toBeUndefined()
     expect(await factionOf('char_x')).toBeNull()
+    expect(entitiesStore.getById('char_x')).toEqual(await entityRow('char_x'))
   })
 
   it('writes null when a redo would restore a faction no row holds', async () => {
@@ -319,8 +321,36 @@ describe('an undo never restores a dead id', () => {
       state: { ...(before.state as CharacterState), faction_id: 'fact_gone' },
     }
 
+    await hydrateEntities()
     await applyRedo(__redoGroupForTest([{ delta, rowBeforeUndo }]), ctx)
 
     expect(await factionOf('char_x')).toBeNull()
+    expect(entitiesStore.getById('char_x')).toEqual(await entityRow('char_x'))
+  })
+
+  it('writes null when a redo puts back a faction only a sweep had set', async () => {
+    await seedMemberOfUserFaction()
+    await act('act_p2', {
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: { entry: faction('fact_z') },
+    })
+    await act('act_p2', join('char_x', 'fact_z'))
+    await hydrateEntities()
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_f'),
+      sweep: await deltasOf('act_p2'),
+    })
+    expect(clears(set)).toEqual(['entities:char_x.faction_id -> fact_f'])
+
+    const undo = await prepareUndo(set, ctx)
+    await undo.reverse()
+    await applyRedo(undo.group, ctx)
+
+    expect(await entityRow('fact_f')).toBeDefined()
+    expect(await entityRow('fact_z')).toBeUndefined()
+    expect(await factionOf('char_x')).toBeNull()
+    expect((entitiesStore.getById('char_x')?.state as CharacterState).faction_id).toBeNull()
   })
 })

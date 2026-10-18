@@ -18,8 +18,8 @@ import { deltaLockKeys } from './row-locks'
 export type RedoSnapshot = {
   delta: Delta
   // Full row content captured immediately BEFORE the undo reversal runs — this
-  // is the "forward" state redo restores to, since deltas only store the
-  // backward (undo_payload) diff, never a forward one.
+  // is the "forward" state redo restores to, less any ref to a row gone at redo,
+  // since deltas only store the backward (undo_payload) diff, never a forward one.
   rowBeforeUndo: Record<string, unknown> | null
 }
 
@@ -175,10 +175,11 @@ export function applyRedo(
 type RestoredRow = { snapshot: RedoSnapshot; row: Record<string, unknown> | null }
 
 // generation-pipeline.md → Reverse-replay: a redo never leaves a ref naming a row that doesn't exist.
-// A ref restore needs no check: it exists only for a row this redo re-creates.
+// A ref restore is checked too: the id it held before the undo can be one a sweep set.
 async function deadAfterRedo(
   ctx: DbCtx,
   restoredRows: readonly RestoredRow[],
+  refRestores: readonly RefRestore[],
 ): Promise<Set<HeldKey>> {
   const recreated = new Set<HeldKey>()
   const dead = new Set<HeldKey>()
@@ -188,14 +189,18 @@ async function deadAfterRedo(
     if (snapshot.delta.op === 'delete') dead.add(key)
   }
   const named = new Map<string, LiveRef[]>()
+  const name = (branchId: string, ref: RefPath, id: string | null) => {
+    if (id === null || recreated.has(heldKey(ref.refTable, id))) return
+    const refs = named.get(branchId) ?? []
+    refs.push({ table: ref.refTable, id })
+    named.set(branchId, refs)
+  }
   for (const { snapshot, row } of restoredRows) {
     if (!row || snapshot.delta.op === 'delete') continue
-    const refs = named.get(snapshot.delta.branchId) ?? []
     for (const { ref, id } of pathRefIds(snapshot.delta.targetTable, row))
-      if (id !== null && !recreated.has(heldKey(ref.refTable, id)))
-        refs.push({ table: ref.refTable, id })
-    named.set(snapshot.delta.branchId, refs)
+      name(snapshot.delta.branchId, ref, id)
   }
+  for (const { branchId, ref, idBeforeUndo } of refRestores) name(branchId, ref, idBeforeUndo)
   for (const [branchId, refs] of named)
     for (const { table, id } of await absentRefs(ctx, branchId, refs)) dead.add(heldKey(table, id))
   return dead
@@ -228,7 +233,7 @@ async function applyRedoLocked(
     snapshot,
     row: redoRow(snapshot.delta, snapshot.rowBeforeUndo),
   }))
-  const dead = await deadAfterRedo(ctx, restoredRows)
+  const dead = await deadAfterRedo(ctx, restoredRows, refRestores)
   for (const restoredRow of restoredRows)
     restoredRow.row = withoutDeadRefs(restoredRow.snapshot.delta.targetTable, restoredRow.row, dead)
 
@@ -279,9 +284,9 @@ async function applyRedoLocked(
     if (!entry) throw new Error(`redo apply: unknown target_table ${row.table}`)
     const current = await currentRow(ctx, row.table, { branchId, targetId: row.id })
     if (!current) continue
-    const columns = {
-      [ref.column]: { ...(current[ref.column] as object), [ref.path]: idBeforeUndo },
-    }
+    const id =
+      idBeforeUndo !== null && dead.has(heldKey(ref.refTable, idBeforeUndo)) ? null : idBeforeUndo
+    const columns = { [ref.column]: { ...(current[ref.column] as object), [ref.path]: id } }
     ops.push(
       ctx.db
         .update(entry.descriptor.table)
