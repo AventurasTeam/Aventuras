@@ -365,8 +365,8 @@ are referenced.
   keeps its stored value.
 
 **Edits and memory updates.** A memory update never overwrites a
-status, a removed alias or a relationship view the user saved after the
-prose it processes, whether the save came before the pass started or
+status, a removed alias, a character's faction or a relationship view
+the user saved after the prose it processes, whether the save came before the pass started or
 while it ran, and it does not re-create a pair the user deleted after
 that prose
 ([`cadence.md → User edits and classifier writes`](../../../memory/cadence.md#user-edits-and-classifier-writes)).
@@ -374,7 +374,9 @@ Prose written after the user's edit can still revise it, per the
 authoring contract below. A Save leaves a pass's writes alone the same
 way: keywords, like relationships, merge three-way, so the Save applies
 only the terms the user added or removed to the stored list, and an
-alias a pass appended while the list was dirty stays. The generation
+alias a pass appended while the list was dirty stays. A faction a pass
+set while the pane was open stays unless the user changed the faction:
+the pane refreshes every field the user hasn't touched. The generation
 status pill reads
 `updating memory…` while a pass runs
 ([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases)).

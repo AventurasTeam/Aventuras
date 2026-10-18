@@ -697,24 +697,16 @@ wizard) or _when_ it was last touched. Two real costs:
   explicitly contradicts.
 
 User-edit precedence for `status`, keywords and relationship views
-has landed without this sidecar, through the delta log's order
+has landed without this sidecar, through the delta log's order. The
+factions design, not yet implemented, gives a character's faction the
+same precedence through the undo payload's per-field record
 ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
-What remains here is stale detection, and honoring a user's
-`entities.state` value until prose explicitly contradicts it. Ordering
+What remains here is stale detection, and honoring a user's other
+`entities.state` values until prose explicitly contradicts them. Ordering
 alone can't do that for state: piggyback, its per-turn writer, always
 reads the newest prose. Chapter-close identity compaction, once built,
 is the exception, since it reads a whole chapter whose prose can
 predate the user's edit.
-
-Reverse-replay's schema-backed-column exception is the same gap from
-the undo side: reversing a machine delta on `entities.state` or
-`story_entries.metadata` restores the sub-fields it changed, even over
-a later user write to one of them
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-Latent: only hard-gated runs write either column, so no user edit lands
-while such a run can abort, and a rollback or regenerate that reverses
-them sweeps the user's later edits too. Provenance would let the undo
-skip a sub-field the user wrote. Added 2026-09-27 from triage.
 
 Sketch shape (v1.5):
 
@@ -1151,11 +1143,26 @@ left it, but the later move's undo still names the removed place, so
 a later CTRL-Z of that move writes the dead id back. The `write-back`
 refusal checks only the groups of the deletes recovery prunes.
 
+Re-checked 2026-10-18 for the factions design
+([`classifier.md → Factions`](./memory/classifier.md#factions)): a pass
+now writes a character's `faction_id`, and a membership can sit on an
+earlier turn than the faction it names, or name a faction the user
+created whose create CTRL-Z then undoes. So the design adds
+`faction_id` to the registry beside a place's parent, cleared when a
+reversal removes its faction, and an undo or a redo never leaves either
+reference naming a row that doesn't exist, writing null instead
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+That also closes the place case above: a later CTRL-Z of a move under
+a removed place and back off it writes null, not the dead id. Both
+land with the implementation entry in
+[`followups.md`](./followups.md). The fields left are the rest of the
+list above, which no pass writes.
+
 A fix adds these fields to the registry's JSON-path references, which
 the closure reads through `json_extract`; the arrays need `json_each`.
-Parked 2026-10-05, re-checked 2026-10-10, 2026-10-16 and 2026-10-17;
-the signal to revisit now is the factions design, whose membership
-facts put faction ids a pass creates into characters' `state`.
+Parked 2026-10-05, re-checked 2026-10-10, 2026-10-16, 2026-10-17 and
+2026-10-18; the signal to revisit now is a machine writer of another of
+these fields outside a turn.
 
 The group runner's conflict check, the registry's second consumer, has
 the same blind spot: `rowRefs` (`lib/actions/delta/live-refs.ts`)

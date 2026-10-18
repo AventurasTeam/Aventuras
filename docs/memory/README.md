@@ -31,7 +31,7 @@ the shape.
   across a story.
 - **[classifier.md](./classifier.md)** — periodic classifier
   contract: what it reads, write set, disambiguation on new-character
-  mentions, mentioned places, background-task framing.
+  mentions, mentioned places, factions, background-task framing.
 - **[chapter-close.md](./chapter-close.md)** — 5-phase chapter-close
   pipeline: catch-up, boundary selection, metadata, lore-mgmt
   (5 sub-jobs), lifecycle review, failure modes, manual close.

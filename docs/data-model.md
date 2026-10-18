@@ -1156,7 +1156,7 @@ Per-field "who writes / when":
 | `voice`                                                     | Classifier from prose, or user via form                                                                | Both                                                                                                                                               |
 | `current_location_id`                                       | Classifier per-turn                                                                                    | Classifier per-turn primary; user can edit                                                                                                         |
 | `equipped_items`, `inventory`, `stackables`                 | Classifier per-turn                                                                                    | Classifier per-turn primary; user can edit                                                                                                         |
-| `faction_id`                                                | Classifier or user                                                                                     | Both                                                                                                                                               |
+| `faction_id`                                                | The periodic classifier from prose, or user                                                            | Both: the classifier sets and clears it from prose; a user write after that prose stands                                                           |
 | `lastSeenAt`                                                | Classifier-only                                                                                        | Classifier-only                                                                                                                                    |
 | `parent_location_id`                                        | User, the per-turn writer creating the location, or the periodic classifier creating a mentioned place | User-only in v1                                                                                                                                    |
 | `condition` (Location/Item)                                 | Classifier or user                                                                                     | Both                                                                                                                                               |
@@ -2522,8 +2522,9 @@ arbitrary editing.
   since a fact anchored to a surviving turn can name a row the suffix
   removes
   ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-  A place naming a removed parent is the exception: it stays, and the
-  reversal clears its parent to the root.
+  A row naming a removed row through a `state` reference is the
+  exception: a place naming a removed parent stays and goes to the
+  root, and a character naming a removed faction stays with none.
 - **A first-introduction entity survives the edit that removed its prose.**
   It is not a fact about that turn but a row the rest of the branch now
   references — `sceneEntities` arrays, later happenings' involvements,
@@ -2816,8 +2817,9 @@ background delta naming a row the reversal removes goes with it
 whatever its anchor, so a fact about a surviving turn cannot name a
 row that exists nowhere
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-A place's create naming a removed parent stays instead, and the
-reversal clears that parent to the root. The same predicate drives the
+A `state` reference the reversal registers is cleared instead: a place
+whose parent the reversal removes stays and goes to the root, and a
+character whose faction it removes stays with none. The same predicate drives the
 [fork reverse-apply partition](#branch-model), and is orthogonal to the
 in-flight
 [classifier barrier](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier),

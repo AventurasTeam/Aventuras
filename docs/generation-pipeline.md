@@ -382,8 +382,10 @@ and accept a handle only where
 [`piggyback.md → Creating a place or an item`](./memory/piggyback.md#creating-a-place-or-an-item)
 allows; characters are the periodic classifier's
 ([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions)),
-which also creates places the prose mentions without entering, with
-the same `new:` handles
+which also creates factions
+([`classifier.md → Factions`](./memory/classifier.md#factions)) and
+places the prose mentions without entering, with the same `new:`
+handles
 ([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)).
 
 #### Failure modes
@@ -912,8 +914,8 @@ runner rejects a group up front: writing the same row's column twice
 (`apply-delta-action.ts`'s `groupConflict`): two deletes whose
 cascades overlap, a write to a row that a delete in the group
 deletes or cascades, or a link or translation write naming a row the
-group deletes or cascades, or a place created or moved under a parent
-the group deletes. A write to an existing `entities` row, any
+group deletes or cascades, or a place created or moved under a parent,
+or a character given a faction, that the group deletes. A write to an existing `entities` row, any
 `character_relationships` write, and any `happening_involvements` /
 `happening_awareness` write or happening delete, holds a key lock
 across that read and its commit, since the classifier and a World or
@@ -1351,10 +1353,13 @@ regenerate sweeps every null-anchored World edit after its target, so
 the row still returns to its prior value, and CTRL-Z of the user's own
 action is never filtered. CTRL-Z of a user edit the rule kept restores
 the value that edit overwrote, which may be the reversed fact's; of the
-oldest user write that kept a create (below), it removes the row. The
-rule has two exceptions. A schema-backed JSON column such as an
-entity's `state` restores the sub-fields its delta changed as before,
-even over a later user write to the same sub-field. A machine `create`
+oldest user write that kept a create (below), it removes the row. A
+schema-backed JSON column such as an entity's `state` is judged sub-field
+by sub-field: its undo restores the sub-fields its delta changed except
+those a later user write changed, which the undo payload records field
+by field
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row
 with it, whatever its source (see the closure below), except in a
@@ -1418,8 +1423,8 @@ names a row the window removes.
 The closure is a fixed point. The removed set starts as the rows whose
 `create` the set holds, and any row naming a removed row joins it —
 live in its table, held in a delete's `undo_payload`, or deleted on its
-own — until nothing new joins, except a place naming its parent
-(below). One registry of references serves the
+own — until nothing new joins, except a row naming another through a
+`state` reference, a place's parent or a character's faction (below). One registry of references serves the
 closure; the forward guard `missingRef`, which turns a link write
 naming a dead row into a no-op
 ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes));
@@ -1427,28 +1432,35 @@ and the live-link filter, which drops a restored link whose far end is
 gone, now a backstop for payloads written before this rule: an
 involvement names its happening and its entity, awareness its
 happening and its character, a relationship both its characters, and a
-translation its target by `target_kind`. A place names its parent
-through `state.parent_location_id`, the one reference the registry
-reads inside a JSON column, which `missingRef` doesn't guard. A place
-left naming a removed parent isn't taken: the reversal clears its
-parent in the same transaction, in its row or in the copy a delete
-holds, putting it at the root as
-[World's delete](./ui/screens/world/world.md#delete) of the parent
+translation its target by `target_kind`. Two references sit inside a
+JSON column, which `missingRef` doesn't guard: a place names its parent
+through `state.parent_location_id`, and a character its faction through
+`state.faction_id`. A row left naming a removed row through one isn't
+taken: the reversal clears that field in the same transaction, in its
+row or in the copy a delete holds, putting a place at the root and
+leaving a character with no faction, as
+[World's delete](./ui/screens/world/world.md#delete) of the named row
 does. The places inside it stay under it, and its facts stay. The
 clear isn't a writer's write: it logs no delta, like the views the
 reversal nulls on a kept relationship. A link row's ends never change
 after its create, but a `state` field can, so the reversal judges that
-reference by the parent the row names once the set's own writes to it
+reference by the value the row holds once the set's own writes to it
 are undone: the pre-value of the oldest update in the set that changed
-it, which the newest-first walk restores last even over a later user
-write, else its live value, or the held copy's for a row a delete
+it, which the newest-first walk restores last unless a later user write
+changed it, else its live value, or the held copy's for a row a delete
 holds. A place the user moved under a removed parent so returns to its
 old parent, and one the set moved off a removed parent goes to the
 root, since the reversal puts it back under that parent first. One a
 write outside the set moved under a removed parent goes to the root
 too, and the move stays in the log. A place whose own `create` the set
-holds goes anyway. CTRL-Z's redo puts a cleared parent back
-with the parent's row (below). Every `create` and `update`
+holds goes anyway. A row the set doesn't remove but that is gone
+anyway, deleted by a write outside it, counts as removed too: an undo
+or a redo never leaves either field naming a row that doesn't exist,
+and writes null instead, as the live-link filter drops a restored link
+whose far end is gone. A prose edit's sweep that undoes a membership
+whose earlier faction the user has deleted since so leaves the
+character with none. CTRL-Z's redo puts a cleared reference back
+with the named row (below). Every `create` and `update`
 of a removed row joins the set, whatever its source; a `delete` of it
 never does, as the next paragraph covers. A table registering
 `rowKeepingColumns` keeps its exemption only when the row's own create
@@ -1474,8 +1486,8 @@ captured child from the payload, and prunes the delete when the row is
 the delete's own target: its captured children name the target, so the
 closure takes them and their deltas. An `update`'s undo patches the
 payload copy under the rules a live row follows — user precedence,
-schema-backed sub-fields, and a relationship left with no view is
-stripped. A relationship's `create` follows the live arm too: a view a
+field by field inside a schema-backed column, and a relationship left
+with no view is stripped. A relationship's `create` follows the live arm too: a view a
 later user write set keeps the copy, with the views the user did not
 write nulled and the create re-owned. Each changed payload is one write
 to that delta's `undo_payload` in the reversal's transaction; stores
@@ -1500,8 +1512,8 @@ write the removed id back: an entity delete's `state` and tail-scene
 updates do, so a later CTRL-Z of the group would restore a dead id. A
 chapter-close consolidation's upserts name the surviving happening, so
 its deletes prune. A row a delete holds among the rows a CTRL-Z's redo
-would restore, or a place a delete holds whose parent the reversal
-clears and redo would restore (below): it would need a newer
+would restore, or a row a delete holds whose parent or faction the
+reversal clears and redo would restore (below): it would need a newer
 non-classifier delete still in the log, which CTRL-Z picks first. A row
 the closure reaches by reference with no `create` in the log, which
 only a writer outside the log could make: the wizard, a seed or an
@@ -1521,7 +1533,8 @@ no-gate write phase, newest-first
 undo, every window holding a delete with the create it follows, and
 sweeps sparing entity creates. A writer outside the log names only
 rows it made itself, which lack a `create` too, and a place the user
-moves under a logged one is cleared, never taken; the closure starts
+moves under a logged one, or a character given a logged faction, is
+cleared, never taken; the closure starts
 from rows whose `create` the set holds; and a `create` a user write
 keeps stays in the log, re-owned. Only periodic-classifier
 groups sit above the group CTRL-Z undoes, every delta-logged write
@@ -1536,13 +1549,13 @@ reaches only from one. CTRL-Z's redo snapshot covers the first two, so
 redo restores the links the closure removed with the group; a sweep's
 rows stay out, since the clamped watermark re-derives them. A delta
 reached both ways counts as the closure's. The snapshot also takes,
-before the undo, the parent of each place whose parent the reversal
-clears when the parent's `create` is among the first two, and redo puts
-that parent alone back with the parent's row, over the place's `state`
-as the undo left it, logging nothing, as the clear did. A place the
-snapshot restores whole gets its parent back with its row. A place
-whose parent only a sweep's row removes would stay at the root; that
-is a guard, since no sweep holds an entity create today. Every
+before the undo, the parent of each place and the faction of each
+character the reversal clears when the named row's `create` is among
+the first two, and redo puts that field alone back with the named row,
+over the row's `state` as the undo left it, logging nothing, as the
+clear did. A row the snapshot restores whole gets the field back with
+its row. A row whose reference only a sweep's row removes would stay
+cleared; that is a guard, since no sweep holds an entity create today. Every
 delta-logged write clears the redo stack, so redo always meets the
 state its undo left.
 

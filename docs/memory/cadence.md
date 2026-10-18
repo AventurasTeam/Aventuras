@@ -169,28 +169,29 @@ The piggyback agent and the periodic classifier write to disjoint
 field sets, with one documented overlap on `entities.status`. Both
 create entities: piggyback the locations and items its state names
 ([`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)),
-the classifier characters and, with the story's setting on, the places
-the prose mentions without entering
+the classifier characters, factions and, with the story's setting on,
+the places the prose mentions without entering
 ([`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
 Places are the one kind both create, so the two never write at once: a
 pass writes only when no turn is in flight on its branch
 ([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)),
 and the turn's read of the entities stays current for its whole run.
 
-| Field                                                                                     | Piggyback                                                                                               | Classifier                                               |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `story_entries.metadata` (current entry)                                                  | ✓                                                                                                       | —                                                        |
-| `entities.state.visual.*`                                                                 | ✓                                                                                                       | —                                                        |
-| `entities.state` (location, equipped, inventory, stackables, lastSeenAt)                  | ✓                                                                                                       | —                                                        |
-| `entities.status`                                                                         | ✓ (staged → active only, on a `sceneEntities` or `<current_location>` ID hit, or a reused staged place) | ✓ (staged → active slow path; active → retired)          |
-| `entities` creates (name, description, a place's parent, collision flag, partner, reason) | ✓ (locations and items)                                                                                 | ✓ (characters; mentioned places, never during a turn)    |
-| `entities.description`                                                                    | ✓ (its own creates only)                                                                                | ✓ (first introduction only; see authorship contract)     |
-| `entities.keywords`                                                                       | —                                                                                                       | ✓ (append-only; new characters and places, later passes) |
-| `entities.retired_reason`                                                                 | —                                                                                                       | ✓ (with active → retired)                                |
-| `happenings`                                                                              | —                                                                                                       | ✓                                                        |
-| `happening_involvements`                                                                  | —                                                                                                       | ✓                                                        |
-| `happening_awareness`                                                                     | —                                                                                                       | ✓                                                        |
-| `character_relationships`                                                                 | —                                                                                                       | ✓                                                        |
+| Field                                                                                     | Piggyback                                                                                               | Classifier                                                         |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `story_entries.metadata` (current entry)                                                  | ✓                                                                                                       | —                                                                  |
+| `entities.state.visual.*`                                                                 | ✓                                                                                                       | —                                                                  |
+| `entities.state` (location, equipped, inventory, stackables, lastSeenAt)                  | ✓                                                                                                       | —                                                                  |
+| `entities.state.faction_id`                                                               | —                                                                                                       | ✓ (memberships)                                                    |
+| `entities.status`                                                                         | ✓ (staged → active only, on a `sceneEntities` or `<current_location>` ID hit, or a reused staged place) | ✓ (staged → active slow path; active → retired)                    |
+| `entities` creates (name, description, a place's parent, collision flag, partner, reason) | ✓ (locations and items)                                                                                 | ✓ (characters and factions; mentioned places, never during a turn) |
+| `entities.description`                                                                    | ✓ (its own creates only)                                                                                | ✓ (first introduction only; see authorship contract)               |
+| `entities.keywords`                                                                       | —                                                                                                       | ✓ (append-only; new characters, factions and places, later passes) |
+| `entities.retired_reason`                                                                 | —                                                                                                       | ✓ (with active → retired)                                          |
+| `happenings`                                                                              | —                                                                                                       | ✓                                                                  |
+| `happening_involvements`                                                                  | —                                                                                                       | ✓                                                                  |
+| `happening_awareness`                                                                     | —                                                                                                       | ✓                                                                  |
+| `character_relationships`                                                                 | —                                                                                                       | ✓                                                                  |
 
 **Field-overlap invariant.** `entities.status` is the only field
 both writers touch. They never collide on the same entity at the
@@ -210,13 +211,19 @@ the piggyback, the classifier or a user edit. A World Save builds its
 values from the row as the pane rendered it, not from that read, so it
 can still overwrite a classifier write that landed after the render
 (see [User edits and classifier writes](#user-edits-and-classifier-writes)).
+A World delete and a collision merge build their writes under the
+branch lock's shared hold, from the rows as they stand, so a pass's
+write can't land between their read and their commit: a delete's
+re-pointing of members' factions never overwrites a membership or
+misses a character a pass just put in the deleted faction.
 `character_relationships` writes serialize on one key per branch,
 since a delete names a row id, not a pair. Involvement and awareness
 writes and a happening delete serialize on one per-branch
 `happening_links` key, for the same reason. An entity delete holds
 both link-family keys as well as its row key, and every reversal or
-redo of these tables takes the same keys. A shared JSON column such
-as `branches.classifier_status`, which the reversal clamp and the
+redo of these tables takes the same keys. A shared JSON column no row
+lock covers, such as `branches.classifier_status`, which the reversal
+clamp and the
 classifier pipeline both write, is written with key-scoped `json_set`,
 never a whole-blob read-modify-write.
 
@@ -227,7 +234,7 @@ with the per-turn pipeline. The user-edit gate (UI-side disabling of
 controls during `hard-gate` pipeline runs) does **not** relax. The
 classifier itself is `no-gate`, and its write set is not disjoint from
 user edits: both write entity status (with its retired reason),
-keywords and character relationships. [User edits and classifier writes](#user-edits-and-classifier-writes)
+keywords, a character's faction and character relationships. [User edits and classifier writes](#user-edits-and-classifier-writes)
 covers how those overlaps resolve.
 
 `'concurrent-allowed'` was previously theoretical in
@@ -246,13 +253,14 @@ which hold the branch's write lock for their few milliseconds
 Or it can predate the pass but
 postdate the prose the pass processes, since a pass works through the
 backlog of turns written since the last one. The classifier's writes
-to an existing entity's status and keywords, and to a relationship
-view, resolve both. Each decides and commits under the lock a World
+to an existing entity's status and keywords, to a character's faction
+and to a relationship view resolve both. Each decides and commits under the lock a World
 Save takes too ([Concurrency](#concurrency)), so a Save cannot land
 between a write's check and its commit.
 
-**Live-row guards.** Status, keyword and link writes check the row or
-rows as they stand when the write lands, not only the pass's snapshot:
+**Live-row guards.** Status, keyword, faction and link writes check the
+row or rows as they stand when the write lands, not only the pass's
+snapshot:
 
 - Promotion goes through `promoteStagedEntity`. The pass plans it only
   for a row its snapshot holds as `staged`, and the handler no-ops
@@ -265,19 +273,24 @@ rows as they stand when the write lands, not only the pass's snapshot:
   sends only terms new against its snapshot, so an alias the user
   removed mid-pass is not re-sent; the handler appends only terms the
   live list lacks, so one the user added is not duplicated.
+- A membership goes through `setCharacterFaction`, which writes
+  `state.faction_id` alone. The handler no-ops when the live row isn't
+  a character, when a faction it names isn't a faction live or created
+  earlier in the same action group (none needs no row), and when the
+  live faction already matches.
 - Link rows go through `createHappeningInvolvement`,
   `upsertHappeningAwareness` and `upsertCharacterRelationship`. A create
   re-reads the rows it names — the entity and the happening, or both
   ends of a pair — and no-ops when one is gone, so a delete landing
   after the pass's post-call re-read leaves no orphan row; a row the
   same action group creates counts as present, in either order. A new
-  character reconciled to a row deleted in that window is dropped for
-  the pass. Lock keys: [Concurrency](#concurrency).
+  character or faction reconciled to a row deleted in that window is
+  dropped for the pass. Lock keys: [Concurrency](#concurrency).
 
 **User precedence.** A field the user wrote after the prose a fact
-came from keeps the user's value. The classifier's status, keyword and
-relationship writes carry the fact's source entry, and the delta log
-already orders both writers, so nothing new is stored:
+came from keeps the user's value. The classifier's status, keyword,
+faction and relationship writes carry the fact's source entry, and the
+delta log already orders both writers, so nothing new is stored:
 
 - The prose's position is the log position of the entry's latest
   create or content-edit delta. An entry with neither predates the
@@ -285,12 +298,18 @@ already orders both writers, so nothing new is stored:
 - The user wrote a field after that prose when a `user_edit` delta on
   the same row, logged later, created the row or changed that column.
   `updateEntity` drops the columns a patch leaves unchanged, so an edit
-  to a description does not shield the status.
+  to a description does not shield the status. Inside `state` the
+  check is per field: the undo payload holds only the fields an update
+  changed, so an edit to a character's traits does not shield its
+  faction.
 - A status the user wrote after the prose stands: promotion and
   retirement no-op. The scene editor's staged-to-active promotion of an
   entity it brings into the scene is a user status write too.
 - An alias the user removed after the prose stays removed. The same
   write's other new aliases still land.
+- A faction the user set or cleared after the prose stands: the
+  membership no-ops. A World delete or merge that re-points a
+  character's faction is a user write to it too.
 
 Undoing the user's edit removes its delta, which lifts the protection
 for any pass that reads the prose afterwards. A pass the edit already
@@ -318,9 +337,12 @@ updates a view on subsequent contradicting prose, is enforced
 
 **Reversals.** Reversing a classifier fact for a prose edit, its undo
 or redo, or a failed or interrupted pass keeps each field the user
-wrote after the fact on a row the reversal leaves standing, so the
-precedence above never leaves a value neither the user nor the prose
-chose. A pair the classifier created keeps a view the user added since
+wrote after the fact on a row the reversal leaves standing, field by
+field inside `state`, so the precedence above never leaves a value
+neither the user nor the prose chose. A membership's undo that would
+put back a faction the user has deleted since writes none instead
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+A pair the classifier created keeps a view the user added since
 and loses the classifier's, and a pair the reversal would leave with no
 view is deleted. A row the reversal deletes takes the user's edits to
 it along too; the cases are below, under what stays open. A rollback or
@@ -349,6 +371,11 @@ What stays open:
   merges against is the row as the pane rendered it at Save, so a
   classifier write landing in the milliseconds between that render and
   the Save's commit is still overwritten: a keyword appended then, or
-  the untouched view of an edited pair. `entities.state` is written
-  whole, which holds only while no writer outside the hard gate
-  touches it.
+  the untouched view of an edited pair. `entities.state` is rebuilt
+  from the row as the pane rendered it, with only the fields the user
+  changed, and the pane refreshes a field the user hasn't touched when
+  a pass writes it. A membership landing between that render and the
+  Save's commit, as when the Save waits on the lock while a pass's
+  burst holds it, is overwritten with the older faction, and the
+  Save's delta records the change as the user's, so the precedence
+  above then keeps that membership from prose older than the Save.

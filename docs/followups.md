@@ -13,21 +13,50 @@ for the placement rule.
 
 ## Data-model
 
-- **The periodic classifier creates factions.** Factions follow the
-  character path: a new-faction list in the extraction, reconciled by
-  Layer B
-  ([`classifier.md → Disambiguation on new-character mentions`](./memory/classifier.md#disambiguation-on-new-character-mentions))
-  with the same matcher, flag, partner and reason, plus membership
-  facts writing characters' `faction_id`, which the authorship contract
-  gives the classifier and nothing machine-writes yet. Membership facts
-  make a pass write `entities.state`, which a World Save writes whole
-  from the row as the pane rendered it, so a Save can overwrite a
-  pass's membership
-  ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes));
-  the design settles how the two merge. Open: re-checking the parked
-  [closure gap](./parked.md#the-reversal-closure-doesnt-follow-ids-inside-json-columns)
-  for the faction ids a pass writes into `state`. Raised 2026-10-10;
-  mentioned places split off and were designed 2026-10-16.
+- **Implement classifier factions.** The periodic classifier creates
+  the factions the prose establishes and sets and clears characters'
+  `faction_id`
+  ([`classifier.md → Factions`](./memory/classifier.md#factions)),
+  with the per-field user precedence and reversal rules it needs
+  ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes),
+  [`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+  Designed 2026-10-18
+  ([exploration record](./explorations/2026-10-18-classifier-factions.md)).
+  The plan must check:
+  - that the reversal's per-sub-field keep, which covers every
+    schema-backed column (`story_entries.metadata` too), and its null
+    for a `state` reference naming a row that doesn't exist, the place
+    parent's later CTRL-Z of a move included, each have a test that
+    fails on the code before the change, since none is reachable
+    until a pass writes `state`; the code comments stating the old
+    rule go with them (`lib/actions/delta/reverse-replay.ts`,
+    `lib/actions/delta/row-closure.ts`);
+  - that World's delete builds its writes under the branch lock's
+    shared hold, as the collision merge does
+    (`applyDeltaActionGroupBuilt`), since its re-points come from a
+    store snapshot today (`lib/world/entity-delete.ts`);
+  - how History renders a classifier change to `state.faction_id`;
+  - whether the mock LLM can return a reply with `newFactions` and
+    `memberships`, for the E2E decision
+    ([`testing.md`](./testing.md)).
+
+- **Entity state in the narrator's prompt.** No entity `state`
+  reaches the narrator but in-scene characters' held items, the items
+  lying at the current location and the location map: an entity renders
+  as its name, status and description
+  (`lib/retrieval/rendered-text.ts`, `lib/prompts/bundled/memory-blocks.ts`,
+  `lib/prompts/bundled/per-turn.ts`), so a character's `visual`,
+  `traits`, `drives`, `voice` and faction, a place's or item's
+  `condition` and a faction's `standing` and `agenda` never reach it.
+  The design decides which fields render and where (in-scene lines,
+  the current location, ranked rows, pinned rows), what they cost (an
+  in-scene line counts against the structural floor's budget, a ranked
+  row's text is what the ranker measures), and whether an in-scene
+  character's faction is seated beside them, since a faction is never
+  in a scene. It also covers the per-turn writer emitting a visual
+  change as the full new value without being shown the current one
+  (`lib/prompts/bundled/state-emission.ts`). Raised 2026-10-18 by the
+  factions design.
 
 - **Chapter-close agent design.** Chapter close is designed in
   [`memory/chapter-close.md`](./memory/chapter-close.md), but not

@@ -19,7 +19,9 @@ branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 
 - **Known entities** — every character, item and faction on the
-  branch, of any status, with its description and keywords. The
+  branch, of any status, with its description and keywords, and a
+  character with its faction's id when it has one
+  ([Factions](#factions)). The
   classifier sees the whole roster, so the
   [reconciliation](#disambiguation-on-new-character-mentions)
   below is a backstop for a row the model missed, not a lookup the
@@ -73,8 +75,11 @@ alias list (the keywords bullet below).
 - **Mentioned places** — with the story's setting on, the places the
   turns mention but the scene doesn't enter
   ([Mentioned places](#mentioned-places)).
+- **Factions and memberships** — the factions the turns establish, and
+  each character's `faction_id`, set and cleared from prose
+  ([Factions](#factions)).
 - **First-introduction descriptions** — when the classifier creates
-  a character, one the
+  a character or a faction, one the
   [reconciliation](#disambiguation-on-new-character-mentions) didn't
   absorb into an existing row, or a mentioned place, it authors the
   initial `description` from prose. After
@@ -217,7 +222,8 @@ are not compared with each other.
 
 The rule pairs rows of one kind, works for any kind, and lives in
 `lib/world` beside World's pairing. The classifier reconciles the
-characters it creates; the places it creates, and the per-turn
+characters and the factions it creates, a faction without the scene
+signal below ([Factions](#factions)); the places it creates, and the per-turn
 writer's locations and items, match under their own rules
 ([Mentioned places](#mentioned-places),
 [`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)). A name in a script written without spaces never
@@ -370,19 +376,113 @@ is in flight on its branch
 So when a turn and a pass both create a place, the turn, which wrote
 from the newer prose, commits first, and the pass reuses its row.
 
+## Factions
+
+A pass creates the factions the turns establish and records which one
+each character belongs to, with no setting, as it creates characters.
+A faction keeps the narrator consistent once retrieval ranks it, and
+World shows its members, read from the characters' `faction_id`
+([`data-model.md → FactionState shape`](../data-model.md#factionstate-shape)).
+No narrator prompt shows a character's faction yet
+([`followups.md`](../followups.md)); the pass's prompt does.
+
+**What the pass sees.** Factions are in Known entities with every
+other kind. A character's line also shows its faction's placeholder id;
+a `faction_id` naming no faction is left out, so no raw id reaches the
+prompt. Without it a pass couldn't tell a change of side from a repeat,
+the reason relationship views are listed too.
+
+**What it emits.** Two lists, always in the schema, and both rules
+below in the system half. A `newFactions` entry has a handle starting
+`new:`, in the namespace the `newCharacters` and `newPlaces` handles
+share, a name, a description, keywords and a `sourceTurn`. It carries
+no `standing` or `agenda`, as a pass's new character carries no traits;
+chapter close and the user fill them in later
+([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+The handle stands wherever a listed faction's id would: in a
+happening's involvements and in a membership. A `memberships` entry
+has a character (an id or a new character's handle), a faction (an id,
+a new faction's handle, or null for none) and a `sourceTurn`. The
+rules:
+
+> Add a faction when the prose establishes an organized group with its
+> own identity in the story's world: a named one (a guild, an order, a
+> noble house, a gang, a church, a government), or an unnamed one the
+> story could come back to ("the smugglers who run the docks"). Not a
+> loose crowd or a kind of person ("the guards", "the villagers"), not
+> one that exists only in a hypothetical, a dream or a figure of
+> speech, and not one already in Known entities, even under another
+> name: use its ID and add the name form as an alias.
+
+> Set a character's faction when the turns establish which organized
+> group they belong to now: they join it, are revealed as a member, or
+> change sides. Set it to none when they leave it or are cast out. Only
+> their main allegiance: a secondary tie, a past membership ("once of
+> the Iron Circle"), a disguise or a cover story doesn't change it.
+> Emit a fact only when the turns establish one or change the faction
+> their line shows.
+
+**Matching.** A new faction reconciles against the branch's factions
+of every status, by the namesake rule, similarity and thresholds of
+[Disambiguation on new-character mentions](#disambiguation-on-new-character-mentions).
+A faction is never in a scene
+([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)),
+so the scene signal never applies, and the decision table reads:
+
+| Condition                                                | Outcome                                                                                                    |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| An exact namesake scores `sim ≥ τ_high`                  | **Absorb** into the best-scoring such row: promote it if staged, otherwise treat the mention as that row's |
+| Any exact namesake                                       | Create with `name_collision_flag = 1`                                                                      |
+| A partial namesake scores `sim ≥ τ_low`, or has no score | Create with the flag                                                                                       |
+| Otherwise                                                | Create, unflagged                                                                                          |
+
+An exact namesake in the ambiguous band flags, with nothing to break
+the tie. Partner and reason follow the character rule, so the reason is
+never `in-scene`. Absorbing appends the entry's new keywords. Candidates
+in one reply aren't compared with each other, so a model naming one
+faction twice in a reply makes two rows. A candidate reconciled to a
+row deleted before the pass plans is dropped for the pass, as a
+character is.
+
+**The row.** `active`, mode `auto`, the entry's keywords and its
+description, clamped to a new character's bounds, the flag columns from
+the table, landing `embedding_stale = 1` with `sourceTurn` as its
+survival anchor. Its `state` holds no `standing` or `agenda`.
+
+**Memberships.** A fact's character must resolve to a character and its
+faction to a faction or null; one resolving to nothing or the wrong
+kind is dropped and logged, so an unresolvable faction never reads as
+none. A fact naming a faction retired as the rows stood before the
+reply is dropped as a misreading of a past membership. A member at
+retirement keeps the faction, since retiring touches no member, and a
+faction the reply itself retires keeps the memberships from its turns.
+A staged faction takes members and stays staged. One character's facts
+are planned in source-turn order, ties in reply order, each against the
+faction the earlier ones left, and one matching it plans nothing: a
+character who joins at one turn and leaves at a later one writes twice,
+and reversing the later turn leaves the earlier membership the prose
+still holds. Each is planned after the reply's creates, so it can name
+a character or faction the same burst creates, anchored on its
+`sourceTurn`. The handler writes `state.faction_id` alone, checked
+against the rows as they stand and the user's later edits
+([`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
+A reversal that removes a faction clears it from its members, which
+keep their facts, as World's delete of a faction does
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+
 ## Background-task framing
 
 The periodic classifier runs as a background pipeline — a Pipeline
 declaration in the framework's registry, same shape as per-turn and
 chapter-close but with different concurrency / gating values:
 
-| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                         |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                                                                                                                                                            |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                                                                                                                                                                        |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                                                                                                                                                                 |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character entities and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent, collision flag with its partner and reason), entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates and reused places), character relationships |
+| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                                                                                                                                                                                                          |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                                                                                                                                                                                                                      |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                                                                                                                                                                                                               |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character and faction entities and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent, collision flag with its partner and reason), a character's `state.faction_id`, entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates and reused places), character relationships |
 
 Write-set boundaries between the classifier and the piggyback / per-turn
 pipeline are enforced via narrow action functions named for field-set
