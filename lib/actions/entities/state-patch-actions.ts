@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import {
+  emptyEntityState,
   entities,
   entityStateColumnSchema,
   type CharacterState,
@@ -413,7 +414,9 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
     }
   if (current.kind !== 'character')
     return { status: 'rejected', reason: 'not-a-character', code: 'noop' }
-  if (((current.state as CharacterState).faction_id ?? null) === factionId)
+  // A null column reads as the empty state, as updateEntity's does.
+  const state = (current.state ?? emptyEntityState('character')) as CharacterState
+  if ((state.faction_id ?? null) === factionId)
     return { status: 'rejected', reason: 'faction-unchanged', code: 'noop' }
   if (factionId !== null && !(await isFaction(ctx, bid, factionId, group)))
     return { status: 'rejected', reason: 'not-a-faction', code: 'noop' }
@@ -424,5 +427,5 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
     ])
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
-  return buildStatePatchOutcome(bid, id, current, { faction_id: factionId }, ctx)
+  return buildStatePatchOutcome(bid, id, { ...current, state }, { faction_id: factionId }, ctx)
 }

@@ -909,6 +909,14 @@ describe('setCharacterFaction', () => {
     expect(await factionOf(db)).toBeNull()
   })
 
+  it('writes onto a character whose state column is null', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await db.update(entities).set({ state: null }).where(eq(entities.id, 'char_1'))
+    expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
+    expect(await factionOf(db)).toBe('fact_circle')
+  })
+
   it('no-ops on a row that is gone', async () => {
     const { ctx, db } = await setup()
     await seed(ctx, db)
