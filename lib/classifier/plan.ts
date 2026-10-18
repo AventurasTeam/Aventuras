@@ -11,13 +11,12 @@ import {
   type SettledNewPlace,
 } from '@/lib/world'
 
-import type { ReconcileDecision } from './reconcile'
+import type { ReconciledKind, ReconcileDecision } from './reconcile'
 import {
   newPlacesOf,
+  type ClassifierExtraction,
   type ClassifierReply,
   type Membership,
-  type NewCharacter,
-  type NewFaction,
   type NewPlace,
 } from './schema'
 import type { ClassifierWindow } from './window'
@@ -64,6 +63,22 @@ export type PlanDeps = {
 
 const SOURCE = 'periodic_classifier' as const
 
+/**
+ * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction share one shape, so
+ * a hand-made pairing of them compiles swapped.
+ */
+export const RECONCILED_KINDS = {
+  character: { reply: 'newCharacters', decisions: 'decisions', idPrefix: 'char' },
+  faction: { reply: 'newFactions', decisions: 'factionDecisions', idPrefix: 'fact' },
+} as const satisfies Record<
+  ReconciledKind,
+  {
+    reply: keyof ClassifierExtraction
+    decisions: keyof PlanDeps
+    idPrefix: Parameters<PlanDeps['newId']>[0]
+  }
+>
+
 // An embedded pair composites as `${first} ${second}` and must clear the tightest catalog
 // window: MiniLM-L6's 512 tokens (the mobile default), ~4 chars/token, so ~330 per pair.
 const MAX_EMBEDDED_NAME = 120
@@ -106,7 +121,7 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
 }
 
 export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDeps): PlanResult {
-  const { branchId, window, entities, decisions, factionDecisions, now, newId } = deps
+  const { branchId, window, entities, now, newId } = deps
   const planned: PlannedWrite[] = []
   const handleMap = new Map<string, string>()
   const unresolvedRefs: string[] = []
@@ -254,12 +269,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   }
 
   // classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision.
-  const planNewEntities = (
-    candidates: readonly (NewCharacter | NewFaction)[],
-    decisionOf: ReadonlyMap<string, ReconcileDecision>,
-    kind: 'character' | 'faction',
-  ): void => {
-    for (const candidate of candidates) {
+  const planNewEntities = (kind: ReconciledKind): void => {
+    const { reply, decisions, idPrefix } = RECONCILED_KINDS[kind]
+    const decisionOf = deps[decisions]
+    for (const candidate of extraction[reply]) {
       if (nonBlank(candidate.name) == null) {
         unresolvedRefs.push(candidate.handle)
         continue
@@ -325,7 +338,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
         }
         continue
       }
-      const id = newId(kind === 'character' ? 'char' : 'fact')
+      const id = newId(idPrefix)
       const timestamp = now()
       const keywords = dedupeTerms(candidate.keywords)
       const stored = clampEmbeddedCharacter(candidate)
@@ -365,8 +378,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // New characters first: later refs in the same reply resolve through handleMap,
   // and involvements/awareness rows must not precede the row they point at. Factions next,
   // so a handle a character claimed stays the character's.
-  planNewEntities(extraction.newCharacters, decisions, 'character')
-  planNewEntities(extraction.newFactions, factionDecisions, 'faction')
+  planNewEntities('character')
+  planNewEntities('faction')
 
   const { droppedPlaces, parentDrops } = planNewPlaces()
 

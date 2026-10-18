@@ -14,10 +14,10 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
+  RECONCILED_KINDS,
   reconcileNewEntity,
   substituteClassifierIds,
-  type NewCharacter,
-  type NewFaction,
+  type ReconciledKind,
   type ReconcileDecision,
 } from '@/lib/classifier'
 import {
@@ -265,13 +265,12 @@ export async function* periodicClassifierPhase(
   const current = branchEntities(ctx.branchId)
   const embedDescriptions = classifierEmbedder()
   const reconcile = async (
-    candidates: readonly (NewCharacter | NewFaction)[],
-    kind: 'character' | 'faction',
+    kind: ReconciledKind,
     // A handle a character already claimed plans nothing as a faction (plan.ts).
     claimed: ReadonlySet<string> = new Set(),
   ): Promise<Map<string, ReconcileDecision> | null> => {
     const decided = new Map<string, ReconcileDecision>()
-    for (const candidate of candidates) {
+    for (const candidate of substituted[RECONCILED_KINDS[kind].reply]) {
       if (ctx.abortSignal.aborted) return null
       // A repeated handle keeps its first declaration, as piggyback.md's does.
       if (decided.has(candidate.handle) || claimed.has(candidate.handle)) continue
@@ -285,25 +284,22 @@ export async function* periodicClassifierPhase(
         candidate.handle,
         await reconcileNewEntity(
           { ...stored, keywords: candidate.keywords },
-          {
-            kind,
-            entities: current,
-            embedDescriptions,
-            // classifier.md → Factions: a faction is never in a scene.
-            scene: kind === 'faction' ? null : window.sceneOf(candidate.sourceTurn),
-          },
+          kind === 'character'
+            ? {
+                kind,
+                entities: current,
+                embedDescriptions,
+                scene: window.sceneOf(candidate.sourceTurn),
+              }
+            : { kind, entities: current, embedDescriptions },
         ),
       )
     }
     return decided
   }
-  const decisions = await reconcile(substituted.newCharacters, 'character')
+  const decisions = await reconcile('character')
   if (decisions === null) return discard(null)
-  const factionDecisions = await reconcile(
-    substituted.newFactions,
-    'faction',
-    new Set(decisions.keys()),
-  )
+  const factionDecisions = await reconcile('faction', new Set(decisions.keys()))
   if (factionDecisions === null) return discard(null)
 
   // generation-pipeline.md → No-gate write phase.

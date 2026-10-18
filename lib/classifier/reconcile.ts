@@ -154,22 +154,29 @@ export async function scoreDescriptions(
   return scores
 }
 
+/** The kinds Layer B reconciles a reply's new entries against. */
+export type ReconciledKind = Extract<Entity['kind'], 'character' | 'faction'>
+
+type ReconcileDeps = {
+  entities: readonly Entity[]
+  embedDescriptions: EmbedDescriptions
+} & (
+  | {
+      kind: 'character'
+      /** The candidate's sourceTurn scene; null when its handle fell back to the window head. */
+      scene: ReadonlySet<string> | null
+    }
+  // classifier.md → Factions: never in a scene, so never absorbed at τ_low.
+  | { kind: 'faction'; scene?: null }
+)
+
 /**
  * Layer B reconciliation (edge-cases.md -> Layer B): the candidate against every row of its kind
  * that is its namesake, any status. Candidates in one reply are not compared with each other.
  */
 export async function reconcileNewEntity(
   candidate: { name: string; description: string; keywords: readonly string[] },
-  deps: {
-    kind: Extract<Entity['kind'], 'character' | 'faction'>
-    entities: readonly Entity[]
-    embedDescriptions: EmbedDescriptions
-    /**
-     * The candidate's sourceTurn scene; null when its handle fell back to the window head, and
-     * always for a faction, which is never in a scene (classifier.md → Factions).
-     */
-    scene: ReadonlySet<string> | null
-  },
+  deps: ReconcileDeps,
 ): Promise<ReconcileDecision> {
   const matched: Omit<ScoredNamesake, 'similarity' | 'inScene'>[] = []
   for (const entity of deps.entities) {
