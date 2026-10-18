@@ -329,15 +329,24 @@ test.describe('periodic classifier — factions', () => {
   test('a pass creates the faction it names and puts the new character in it', async () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    const branchId = (
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+    // Read before the turn: t1 is the first prose turn above the watermark the pass starts from.
+    const [[firstTurn]] = await queryApp(
+      app.window,
+      `SELECT id FROM story_entries
+       WHERE branch_id = ? AND kind <> 'system' AND position > COALESCE(
+         (SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?), 0)
+       ORDER BY position LIMIT 1`,
+      [branchId, branchId],
+    )
     await reader.composer(app.window).fill('E2E-FACTIONS I watch Ilsabet take the oath.')
     await reader.send(app.window).click()
     await expect(app.window.getByText('E2E-FACTIONS Ilsabet', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
     // The membership is the burst's last write, and each write commits on its own.
     const memberFaction = async () =>
       (
@@ -360,17 +369,21 @@ test.describe('periodic classifier — factions', () => {
     expect(JSON.parse(faction[4] as string)).toEqual(['the Wardens'])
     expect(await memberFaction()).toBe(faction[0])
 
-    // The membership is its own field write, anchored on the turn it came from.
-    const [membership] = await queryApp(
+    // The membership is its own field write, anchored on the turn its sourceTurn names.
+    const memberships = await queryApp(
       app.window,
       `SELECT undo_payload, entry_id FROM deltas
        WHERE branch_id = ? AND source = 'periodic_classifier' AND op = 'update'
-         AND target_table = 'entities' AND target_id IN
-           (SELECT id FROM entities WHERE branch_id = ? AND name = 'Ilsabet Varr')`,
+         AND target_table = 'entities'
+         AND json_type(undo_payload, '$.state.faction_id') IS NOT NULL
+         AND target_id IN
+           (SELECT id FROM entities WHERE branch_id = ? AND name = 'Ilsabet Varr')
+       ORDER BY log_position`,
       [branchId, branchId],
     )
-    expect(JSON.parse(membership[0] as string)).toEqual({ state: { faction_id: null } })
-    expect(membership[1]).not.toBeNull()
+    expect(memberships).toHaveLength(1)
+    expect(JSON.parse(memberships[0][0] as string)).toEqual({ state: { faction_id: null } })
+    expect(memberships[0][1]).toBe(firstTurn)
   })
 })
 
