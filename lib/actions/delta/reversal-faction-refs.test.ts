@@ -263,6 +263,41 @@ describe('an undo never restores a dead id', () => {
     expect(await factionOf('char_x')).toBeNull()
   })
 
+  it('writes null when the same redo deletes the faction a restored row names', async () => {
+    await ctx.db.insert(entities).values(faction('fact_f'))
+    const before = (await entityRow('char_x'))!
+    const factionRow = (await entityRow('fact_f'))!
+    const delta = (id: string, op: Delta['op'], targetId: string, logPosition: number): Delta => ({
+      id,
+      branchId: 'b1',
+      actionId: 'act_redo',
+      op,
+      targetTable: 'entities',
+      targetId,
+      entryId: null,
+      source: 'user_edit',
+      undoPayload: op === 'delete' ? { ...factionRow } : { state: { faction_id: null } },
+      logPosition,
+      encodingVersion: 1,
+      createdAt: logPosition,
+    })
+    const named = {
+      ...before,
+      state: { ...(before.state as CharacterState), faction_id: 'fact_f' },
+    }
+
+    await applyRedo(
+      __redoGroupForTest([
+        { delta: delta('delta_named', 'update', 'char_x', 98), rowBeforeUndo: named },
+        { delta: delta('delta_gone', 'delete', 'fact_f', 99), rowBeforeUndo: factionRow },
+      ]),
+      ctx,
+    )
+
+    expect(await entityRow('fact_f')).toBeUndefined()
+    expect(await factionOf('char_x')).toBeNull()
+  })
+
   it('writes null when a redo would restore a faction no row holds', async () => {
     const before = (await entityRow('char_x'))!
     const delta: Delta = {

@@ -115,7 +115,9 @@ function buildStatePatchOutcome(
   topLevelPatch: Record<string, unknown>,
   ctx: DbCtx,
 ) {
-  const mergedState = { ...(current.state as Record<string, unknown>) } as Record<string, unknown>
+  // A null column reads as the empty state, as updateEntity's does.
+  const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
+  const mergedState: Record<string, unknown> = { ...prior }
   for (const [key, value] of Object.entries(topLevelPatch)) {
     if (key === 'visual' && typeof value === 'object' && value !== null) {
       mergedState.visual = {
@@ -128,11 +130,7 @@ function buildStatePatchOutcome(
   }
 
   const undoPayload = {
-    state: computeUndoPayload(
-      entityStateColumnSchema,
-      current.state as Record<string, unknown>,
-      mergedState,
-    ),
+    state: computeUndoPayload(entityStateColumnSchema, prior, mergedState),
   }
   if (Object.keys(undoPayload.state).length === 0) {
     // 'noop', not a plain rejection: a model restating an entity's current state
@@ -414,9 +412,7 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
     }
   if (current.kind !== 'character')
     return { status: 'rejected', reason: 'not-a-character', code: 'noop' }
-  // A null column reads as the empty state, as updateEntity's does.
-  const state = (current.state ?? emptyEntityState('character')) as CharacterState
-  if ((state.faction_id ?? null) === factionId)
+  if (((current.state as CharacterState | null)?.faction_id ?? null) === factionId)
     return { status: 'rejected', reason: 'faction-unchanged', code: 'noop' }
   if (factionId !== null && !(await isFaction(ctx, bid, factionId, group)))
     return { status: 'rejected', reason: 'not-a-faction', code: 'noop' }
@@ -427,5 +423,5 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
     ])
   )
     return { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
-  return buildStatePatchOutcome(bid, id, { ...current, state }, { faction_id: factionId }, ctx)
+  return buildStatePatchOutcome(bid, id, current, { faction_id: factionId }, ctx)
 }

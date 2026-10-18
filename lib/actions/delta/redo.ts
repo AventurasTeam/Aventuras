@@ -5,7 +5,7 @@ import type { DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
 import { heldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
-import { pathRefIds, presentIds, type RefPath } from './live-refs'
+import { absentRefs, pathRefIds, type LiveRef, type RefPath } from './live-refs'
 import { resolveByTable, whereForDelta } from './registry'
 import {
   DeltaReplayError,
@@ -180,31 +180,24 @@ async function deadAfterRedo(
   ctx: DbCtx,
   restoredRows: readonly RestoredRow[],
 ): Promise<Set<string>> {
-  const recreated = new Set(
-    restoredRows
-      .filter(({ snapshot, row }) => snapshot.delta.op === 'create' && row)
-      .map(({ snapshot }) => heldKey(snapshot.delta.targetTable, snapshot.delta.targetId)),
-  )
-  const named = new Map<string, { branchId: string; table: RefPath['refTable']; ids: string[] }>()
+  const recreated = new Set<string>()
+  const dead = new Set<string>()
+  for (const { snapshot, row } of restoredRows) {
+    const key = heldKey(snapshot.delta.targetTable, snapshot.delta.targetId)
+    if (snapshot.delta.op === 'create' && row) recreated.add(key)
+    if (snapshot.delta.op === 'delete') dead.add(key)
+  }
+  const named = new Map<string, LiveRef[]>()
   for (const { snapshot, row } of restoredRows) {
     if (!row || snapshot.delta.op === 'delete') continue
-    for (const { ref, id } of pathRefIds(snapshot.delta.targetTable, row)) {
-      if (id === null || recreated.has(heldKey(ref.refTable, id))) continue
-      const key = `${snapshot.delta.branchId}:${ref.refTable}`
-      const group = named.get(key) ?? {
-        branchId: snapshot.delta.branchId,
-        table: ref.refTable,
-        ids: [],
-      }
-      group.ids.push(id)
-      named.set(key, group)
-    }
+    const refs = named.get(snapshot.delta.branchId) ?? []
+    for (const { ref, id } of pathRefIds(snapshot.delta.targetTable, row))
+      if (id !== null && !recreated.has(heldKey(ref.refTable, id)))
+        refs.push({ table: ref.refTable, id })
+    named.set(snapshot.delta.branchId, refs)
   }
-  const dead = new Set<string>()
-  for (const { branchId, table, ids } of named.values()) {
-    const present = await presentIds(ctx, branchId, table, ids)
-    for (const id of ids) if (!present.has(id)) dead.add(heldKey(table, id))
-  }
+  for (const [branchId, refs] of named)
+    for (const key of await absentRefs(ctx, branchId, refs)) dead.add(key)
   return dead
 }
 

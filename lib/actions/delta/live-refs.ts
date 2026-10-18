@@ -196,27 +196,36 @@ async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boole
   return row != null
 }
 
-/** The ids of `ids` that have a `table` row on the branch. */
-export async function presentIds(
+/** The refs among `refs` with no row on the branch, as `createdKey`s. */
+export async function absentRefs(
   ctx: DbCtx,
   branchId: string,
-  table: RefTable,
-  ids: readonly string[],
+  refs: readonly LiveRef[],
 ): Promise<Set<string>> {
-  const entry = resolveByTable(table)
-  if (!entry) throw new Error(`presentIds: ${table} is not a registered table`)
-  const { table: target, idCol, branchCol } = entry.descriptor
-  const present = new Set<string>()
-  for (const chunk of chunked([...new Set(ids)])) {
-    const rows = await ctx.db
-      .select({ id: idCol })
-      .from(target)
-      .where(
-        branchCol ? and(eq(branchCol, branchId), inArray(idCol, chunk)) : inArray(idCol, chunk),
-      )
-    for (const { id } of rows) if (typeof id === 'string') present.add(id)
+  const byTable = new Map<RefTable, Set<string>>()
+  for (const { table, id } of refs) {
+    const ids = byTable.get(table) ?? new Set<string>()
+    ids.add(id)
+    byTable.set(table, ids)
   }
-  return present
+  const absent = new Set<string>()
+  for (const [table, ids] of byTable) {
+    const entry = resolveByTable(table)
+    if (!entry) throw new Error(`absentRefs: ${table} is not a registered table`)
+    const { table: target, idCol, branchCol } = entry.descriptor
+    const present = new Set<unknown>()
+    for (const chunk of chunked([...ids])) {
+      const rows = await ctx.db
+        .select({ id: idCol })
+        .from(target)
+        .where(
+          branchCol ? and(eq(branchCol, branchId), inArray(idCol, chunk)) : inArray(idCol, chunk),
+        )
+      for (const { id } of rows) present.add(id)
+    }
+    for (const id of ids) if (!present.has(id)) absent.add(createdKey(table, id))
+  }
+  return absent
 }
 
 /**

@@ -276,6 +276,29 @@ describe('character-only state arms', () => {
   })
 })
 
+describe('a null state column', () => {
+  it('reads as the empty state for a per-turn state patch', async () => {
+    const { db, ctx } = await setup()
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+      'act_c',
+    )
+    await db.update(entities).set({ state: null }).where(eq(entities.id, 'char_1'))
+    const result = await apply(
+      ctx,
+      {
+        kind: 'updateEntityInventory',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'br_1', id: 'char_1', inventory: ['item_rope'] },
+      },
+      'act_i',
+    )
+    expect(result.status).toBe('ok')
+    expect((await rowFor(db, 'char_1')).state).toMatchObject({ inventory: ['item_rope'] })
+  })
+})
+
 describe('updateEntityStackables', () => {
   it('replaces the stackables record', async () => {
     const { db, ctx } = await setup()

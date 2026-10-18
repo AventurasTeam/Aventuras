@@ -17,7 +17,7 @@ import {
   isRefTable,
   pathRefIds,
   pathRefsOf,
-  presentIds,
+  absentRefs,
   referrersOf,
   type LiveRef,
   type RefColumn,
@@ -333,23 +333,16 @@ async function goneRows(
   written: readonly PathRefValue[],
   rows: readonly Delta[],
   removed: ReadonlyMap<HeldKey, RowRef>,
-): Promise<Set<HeldKey>> {
+): Promise<ReadonlySet<string>> {
   const reinserted = new Set(
     rows.filter((d) => d.op === 'delete').map((d) => heldKey(d.targetTable, d.targetId)),
   )
-  const candidates = new Map<RefPath['refTable'], string[]>()
-  for (const { ref, id } of written) {
-    if (id === null) continue
+  const candidates = written.flatMap(({ ref, id }) => {
+    if (id === null) return []
     const key = heldKey(ref.refTable, id)
-    if (removed.has(key) || reinserted.has(key)) continue
-    candidates.set(ref.refTable, [...(candidates.get(ref.refTable) ?? []), id])
-  }
-  const gone = new Set<HeldKey>()
-  for (const [table, ids] of candidates) {
-    const present = await presentIds(ctx, branchId, table, ids)
-    for (const id of ids) if (!present.has(id)) gone.add(heldKey(table, id))
-  }
-  return gone
+    return removed.has(key) || reinserted.has(key) ? [] : [{ table: ref.refTable, id }]
+  })
+  return absentRefs(ctx, branchId, candidates)
 }
 
 // Entities go only through their own create, so the fixed point never waits on a clear.
