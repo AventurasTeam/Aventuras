@@ -73,8 +73,12 @@ for the placement rule.
     blank line under its heading;
   - the Gregorian calendar line reads "time in seconds (1 seconds per
     second)", now inside the cached system half;
-  - the periodic classifier's Known entities line ends on a dangling
-    dash for an entity whose description is the empty string;
+  - the periodic classifier's Known relationships and Known happenings
+    lines print a character's name, a view's kind and a happening's
+    title as stored, so a newline in one starts a line the model may
+    read as another fact (`classifier-context.ts`); Known entities and
+    Places already collapse theirs with `flat` / `oneLine` (raised
+    2026-10-18 by the classifier factions slice review);
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;
   - the suggestion refresh's In scene list prints an empty line under

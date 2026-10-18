@@ -508,3 +508,27 @@ slice-planning gate forces its resolution before that slice is planned.
   A neutral name such as `clampEmbeddedText` would stop it misleading.
   Rename only. Raised 2026-10-16 by the mentioned places slice review's
   simplifier pass.
+
+- **Older reads cast `state` to `CharacterState` without checking the
+  kind.** `lib/piggyback/apply.ts` (two reads of a holder's state) and
+  `lib/world/entity-actions.ts` (a merge's other row) cast an entity's
+  `state` straight to `CharacterState`, though `EntityState` is
+  undiscriminated and callers should pair the kind with the state
+  (`lib/db/entities/entities-types.ts`). The classifier factions slice
+  added a helper that checks the kind first for a character's faction;
+  these older reads predate it and stay out of its scope
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
+  Read, not probed. Raised 2026-10-18 by the classifier factions slice
+  review.
+
+- **The classifier planner's decision maps are paired by name.**
+  `PlanDeps.decisions` in `lib/classifier/plan.ts` is a `Map` the
+  planner only reads, where its `factionDecisions` sibling is a
+  `ReadonlyMap`. Both have one type, so the pass
+  (`lib/pipeline/definitions/periodic-classifier.ts`) could hand them
+  over swapped and still compile. Keying them by kind, as
+  `RECONCILED_KINDS` already keys the reply field and id prefix, would
+  close both; it changes the older `decisions` field, so it waits on
+  its own commit
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
+  Raised 2026-10-18 by the classifier factions slice review.
