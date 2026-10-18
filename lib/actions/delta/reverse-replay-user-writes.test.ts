@@ -360,12 +360,12 @@ describe('reversing a machine write under a later user write', () => {
       payload: { branchId: 'b1', id: 'char_kael', patch: { state } },
     })
 
-    async function stateAfter(
+    async function writeBoth(
       ctx: Ctx,
       db: Db,
       machine: CharacterState,
-      user: CharacterState,
-      initial: CharacterState = STATE,
+      user: CharacterState | null,
+      initial: CharacterState,
     ) {
       await db.insert(entities).values(
         ['fact_old', 'fact_new', 'fact_user'].map((id) => ({
@@ -377,7 +377,17 @@ describe('reversing a machine write under a later user write', () => {
       )
       await createKael(ctx, { state: initial })
       await apply(ctx, machineState(machine), 'act_c')
-      await apply(ctx, userPatch({ state: user }), 'act_u')
+      if (user) await apply(ctx, userPatch({ state: user }), 'act_u')
+    }
+
+    async function stateAfter(
+      ctx: Ctx,
+      db: Db,
+      machine: CharacterState,
+      user: CharacterState | null,
+      initial: CharacterState = STATE,
+    ) {
+      await writeBoth(ctx, db, machine, user, initial)
       await reverseRows(await deltasOf(db, 'act_c'), ctx)
       return (await kael(db)).state as CharacterState
     }
@@ -447,6 +457,58 @@ describe('reversing a machine write under a later user write', () => {
       const state = await stateAfter(ctx, db, machine, { ...machine, traits: ['brave', 'stern'] })
 
       expect(state.inventory).toEqual([])
+    })
+
+    it('restores an empty record the machine removed', async () => {
+      const { db, ctx } = await setup()
+      const initial = { ...STATE, stackables: {} }
+      const state = await stateAfter(ctx, db, STATE, null, initial)
+
+      expect(state).toEqual(initial)
+    })
+
+    it('leaves out an empty record the machine removed once the user wrote it since', async () => {
+      const { db, ctx } = await setup()
+      await writeBoth(
+        ctx,
+        db,
+        STATE,
+        { ...STATE, stackables: { gold: 1 } },
+        {
+          ...STATE,
+          stackables: {},
+        },
+      )
+      await apply(ctx, userPatch({ state: STATE }), 'act_u2')
+
+      await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+      expect((await kael(db)).state).toEqual(STATE)
+    })
+
+    it('writes nothing for a column whose every changed sub-field the user wrote since', async () => {
+      const { db, ctx } = await setup()
+      const initial = { ...STATE, stackables: { gold: 5 } }
+      const machine = { ...initial, stackables: { gold: 7 } }
+      const user = { ...machine, stackables: { gold: 9 } }
+      await writeBoth(ctx, db, machine, user, initial)
+
+      const plan = await buildReverseAndPrunePlan(
+        await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf(db, 'act_c') }),
+        ctx,
+        { keepRedoExact: false },
+      )
+      expect(plan.ops).toEqual([])
+      expect(plan.pruneOps).toHaveLength(1)
+    })
+
+    it('leaves out a record the user removed after the machine changed a key of it', async () => {
+      const { db, ctx } = await setup()
+      const initial = { ...STATE, stackables: { gold: 5 } }
+      const machine = { ...initial, stackables: { gold: 7 } }
+      const state = await stateAfter(ctx, db, machine, STATE, initial)
+
+      expect(state).toEqual(STATE)
     })
 
     describe('on an entry', () => {

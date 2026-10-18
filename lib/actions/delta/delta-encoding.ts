@@ -122,8 +122,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * `partial` without the paths `blocked` reports, walked by the schema: an array, a leaf or a null
- * is one path, so an empty-array restore is kept. Undefined when nothing is left.
+ * `partial` without the paths `blocked` reports, walked by the schema: an array, a leaf, a null or
+ * an empty object or record is one path, so an empty restore is kept. A container the pruning
+ * leaves empty drops; undefined when nothing is left.
  */
 export function pruneUndoPartial(
   schema: ZodType,
@@ -140,7 +141,8 @@ function pruneNode(
   blocked: (path: readonly string[]) => boolean,
 ): unknown {
   const node = schema && classify(schema)
-  if (!node || (node.kind !== 'object' && node.kind !== 'record') || !isPlainObject(value))
+  const container = node && (node.kind === 'object' || node.kind === 'record')
+  if (!container || !isPlainObject(value) || Object.keys(value).length === 0)
     return blocked(path) ? undefined : value
   const kept: Record<string, unknown> = {}
   for (const [key, child] of Object.entries(value)) {
