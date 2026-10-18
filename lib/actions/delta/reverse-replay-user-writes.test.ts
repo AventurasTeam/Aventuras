@@ -585,7 +585,7 @@ describe('reversing a machine write under a later user write', () => {
 
         await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
-        expect(await metadataOf(db)).toMatchObject({ currentLocationId: 'loc_yard' })
+        expect(await metadataOf(db)).toEqual({ ...ENTRY_METADATA, currentLocationId: 'loc_yard' })
       })
     })
   })

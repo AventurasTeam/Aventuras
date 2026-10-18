@@ -133,7 +133,6 @@ afterEach(() => {
   entitiesStore.__reset()
 })
 
-// A user creates the Circle; a pass then puts Kael in it.
 async function seedMemberOfUserFaction(): Promise<void> {
   await act('act_f', {
     kind: 'createEntity',
@@ -185,6 +184,31 @@ describe('a character names its faction', () => {
     expect(await factionOf('char_x')).toBe('fact_f')
   })
 
+  it('returns a member the set re-inserts to the faction it held before the set moved it', async () => {
+    await ctx.db.insert(entities).values(faction('fact_y'))
+    await ctx.db
+      .update(entities)
+      .set({ state: { ...emptyEntityState('character'), faction_id: 'fact_y' } })
+      .where(eq(entities.id, 'char_x'))
+    await act('act_pass', {
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: { entry: faction('fact_r') },
+    })
+    await act('act_pass', join('char_x', 'fact_r'))
+    await act('act_del', remove('char_x'))
+
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf('act_pass', 'act_del'),
+    })
+    expect(clears(set)).toEqual([])
+    await reverse(set)
+
+    expect(await entityRow('fact_r')).toBeUndefined()
+    expect(await factionOf('char_x')).toBe('fact_y')
+  })
+
   it("refuses a CTRL-Z whose redo would restore a held member's faction", async () => {
     await seedMemberOfUserFaction()
     await act('act_del', remove('char_x'))
@@ -198,7 +222,7 @@ describe('a character names its faction', () => {
   })
 })
 
-describe('an undo never restores a dead id', () => {
+describe('a reversal or redo never restores a dead id', () => {
   it('leaves none when a swept membership would restore a faction the user deleted since', async () => {
     await ctx.db.insert(entities).values([faction('fact_a'), faction('fact_b')])
     await ctx.db
@@ -230,7 +254,7 @@ describe('an undo never restores a dead id', () => {
     expect(await entityRow('fact_a')).toBeUndefined()
   })
 
-  it("writes null on CTRL-Z of a move off a place that's gone since", async () => {
+  it("writes null when reversing a move off a place that's gone since", async () => {
     await act('act_pass', {
       kind: 'createEntity',
       source: 'periodic_classifier',
@@ -250,7 +274,7 @@ describe('an undo never restores a dead id', () => {
   it.each([
     ['names no row', [] as NewEntity[]],
     ['names a row only another branch holds', [faction('fact_gone', 'b2')]],
-  ])('writes null when a delete it undoes re-inserts a faction that %s', async (_label, rows) => {
+  ])('writes null re-inserting a deleted character whose faction %s', async (_label, rows) => {
     if (rows.length > 0) await ctx.db.insert(entities).values(rows)
     await ctx.db
       .update(entities)
