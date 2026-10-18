@@ -600,7 +600,7 @@ function undoHeldUpdate(
   copy.removed = keepsNothing(entry, copy.row)
 }
 
-// As World's delete of the named row leaves the row (stateWithRefRewritten): kept, at the root.
+// As World's delete of the named row leaves the row (stateWithRefRewritten): kept, the ref nulled.
 async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   const target = rowTargetOf(row.table, walk.set.branchId, row.id)
   const cleared = (column: unknown) => ({ ...(column as object), [ref.path]: null })

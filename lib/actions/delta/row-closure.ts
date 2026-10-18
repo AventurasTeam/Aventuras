@@ -17,6 +17,7 @@ import {
   isRefTable,
   pathRefIds,
   pathRefsOf,
+  presentIds,
   referrersOf,
   type LiveRef,
   type RefColumn,
@@ -29,11 +30,14 @@ import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears'>
 
-/** A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a removed row. */
+/**
+ * A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a row the
+ * reversal removes or one already gone.
+ */
 export type RefClear = {
   readonly row: RowRef
   readonly ref: RefPath
-  /** The id of the removed `ref.refTable` row it names. */
+  /** The id of the removed or gone `ref.refTable` row it names. */
   readonly removedId: string
 }
 
@@ -318,6 +322,36 @@ async function closeOver(
   return { rows: [...set.values()].sort((a, b) => b.logPosition - a.logPosition), removed }
 }
 
+type PathRefValue = { readonly row: RowRef; readonly ref: RefPath; readonly id: string | null }
+
+// generation-pipeline.md → Reverse-replay: a value the reversal writes never names a row that
+// doesn't exist, so a row deleted outside the set counts as removed. A delete in the set puts its
+// row back, so the row it names is present.
+async function goneRows(
+  ctx: DbCtx,
+  branchId: string,
+  written: readonly PathRefValue[],
+  rows: readonly Delta[],
+  removed: ReadonlyMap<HeldKey, RowRef>,
+): Promise<Set<HeldKey>> {
+  const reinserted = new Set(
+    rows.filter((d) => d.op === 'delete').map((d) => heldKey(d.targetTable, d.targetId)),
+  )
+  const candidates = new Map<RefPath['refTable'], string[]>()
+  for (const { ref, id } of written) {
+    if (id === null) continue
+    const key = heldKey(ref.refTable, id)
+    if (removed.has(key) || reinserted.has(key)) continue
+    candidates.set(ref.refTable, [...(candidates.get(ref.refTable) ?? []), id])
+  }
+  const gone = new Set<HeldKey>()
+  for (const [table, ids] of candidates) {
+    const present = await presentIds(ctx, branchId, table, ids)
+    for (const id of ids) if (!present.has(id)) gone.add(heldKey(table, id))
+  }
+  return gone
+}
+
 // Entities go only through their own create, so the fixed point never waits on a clear.
 async function refClearsOf(
   ctx: DbCtx,
@@ -327,10 +361,25 @@ async function refClearsOf(
 ): Promise<RefClear[]> {
   const laterUserEdits = await userEditsOutliving(ctx, rows, (d) => pathUndos(d).length > 0)
   const restored = restoredRefs(rows, laterUserEdits)
+  const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
+  // What the set's undos write: each moved ref's restored value, and each re-inserted row's refs.
+  const written: PathRefValue[] = [
+    ...restored.values(),
+    ...rows
+      .filter((d) => d.op === 'delete')
+      .flatMap((d) => {
+        const row = { table: d.targetTable, id: d.targetId }
+        return pathRefIds(d.targetTable, d.undoPayload ?? {})
+          .filter(({ ref }) => unmoved(row, ref))
+          .map(({ ref, id }) => ({ row, ref, id }))
+      }),
+  ]
+  const gone = await goneRows(ctx, branchId, written, rows, removed)
   const clears = new Map<string, RefClear>()
   const judge = (row: RowRef, ref: RefPath, id: string | null) => {
     if (id === null || removed.has(heldKey(row.table, row.id))) return
-    if (removed.has(heldKey(ref.refTable, id)))
+    const named = heldKey(ref.refTable, id)
+    if (removed.has(named) || gone.has(named))
       clears.set(restoredKey(row, ref), {
         row: { table: row.table, id: row.id },
         ref,
@@ -338,8 +387,7 @@ async function refClearsOf(
       })
   }
   // A row the set moved is judged by where its undos leave it, the rest by the value they hold.
-  for (const after of restored.values()) judge(after.row, after.ref, after.id)
-  const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
+  for (const { row, ref, id } of written) judge(row, ref, id)
   const named = [...removed.values()].filter((row): row is LiveRef => isRefTable(row.table))
   for (const hit of await liveReferrers(ctx, branchId, named, isPathRef))
     if (isPathRef(hit.ref) && unmoved(hit, hit.ref)) judge(hit, hit.ref, hit.named)

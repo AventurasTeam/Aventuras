@@ -5,7 +5,7 @@ import type { DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
 import { heldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
-import { pathRefIds, type RefPath } from './live-refs'
+import { pathRefIds, presentIds, type RefPath } from './live-refs'
 import { resolveByTable, whereForDelta } from './registry'
 import {
   DeltaReplayError,
@@ -172,6 +172,56 @@ export function applyRedo(
   return withKeyLocks(keys, () => applyRedoLocked(snapshots, refRestores, ctx, extraOps))
 }
 
+type RestoredRow = { snapshot: RedoSnapshot; row: Record<string, unknown> | null }
+
+// generation-pipeline.md → Reverse-replay: a redo never leaves a ref naming a row that doesn't exist.
+// A ref restore needs no check: it exists only for a row this redo re-creates.
+async function deadAfterRedo(
+  ctx: DbCtx,
+  restoredRows: readonly RestoredRow[],
+): Promise<Set<string>> {
+  const recreated = new Set(
+    restoredRows
+      .filter(({ snapshot, row }) => snapshot.delta.op === 'create' && row)
+      .map(({ snapshot }) => heldKey(snapshot.delta.targetTable, snapshot.delta.targetId)),
+  )
+  const named = new Map<string, { branchId: string; table: RefPath['refTable']; ids: string[] }>()
+  for (const { snapshot, row } of restoredRows) {
+    if (!row || snapshot.delta.op === 'delete') continue
+    for (const { ref, id } of pathRefIds(snapshot.delta.targetTable, row)) {
+      if (id === null || recreated.has(heldKey(ref.refTable, id))) continue
+      const key = `${snapshot.delta.branchId}:${ref.refTable}`
+      const group = named.get(key) ?? {
+        branchId: snapshot.delta.branchId,
+        table: ref.refTable,
+        ids: [],
+      }
+      group.ids.push(id)
+      named.set(key, group)
+    }
+  }
+  const dead = new Set<string>()
+  for (const { branchId, table, ids } of named.values()) {
+    const present = await presentIds(ctx, branchId, table, ids)
+    for (const id of ids) if (!present.has(id)) dead.add(heldKey(table, id))
+  }
+  return dead
+}
+
+function withoutDeadRefs(
+  table: string,
+  row: Record<string, unknown> | null,
+  dead: ReadonlySet<string>,
+): Record<string, unknown> | null {
+  if (!row) return row
+  let out = row
+  for (const { ref, id } of pathRefIds(table, row)) {
+    if (id === null || !dead.has(heldKey(ref.refTable, id))) continue
+    out = { ...out, [ref.column]: { ...(out[ref.column] as object), [ref.path]: null } }
+  }
+  return out
+}
+
 async function applyRedoLocked(
   snapshots: readonly RedoSnapshot[],
   refRestores: readonly RefRestore[],
@@ -181,12 +231,19 @@ async function applyRedoLocked(
   const ops = []
   const restoredDeltas: Delta[] = []
   const cascadeInfo: Map<string, Record<string, Record<string, unknown>[]>> = new Map()
+  const restoredRows = snapshots.map((snapshot) => ({
+    snapshot,
+    row: redoRow(snapshot.delta, snapshot.rowBeforeUndo),
+  }))
+  const dead = await deadAfterRedo(ctx, restoredRows)
+  for (const restoredRow of restoredRows)
+    restoredRow.row = withoutDeadRefs(restoredRow.snapshot.delta.targetTable, restoredRow.row, dead)
 
-  for (const { delta, rowBeforeUndo } of snapshots) {
+  for (const { snapshot, row } of restoredRows) {
+    const { delta } = snapshot
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`redo apply: unknown target_table ${delta.targetTable}`)
     const where = whereForDelta(entry.descriptor, delta)
-    const row = redoRow(delta, rowBeforeUndo)
 
     // A delete needs no row; create and update restore one, and a snapshot that
     // carries none can restore nothing.
@@ -245,9 +302,9 @@ async function applyRedoLocked(
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {
-    for (const { delta, rowBeforeUndo } of snapshots) {
+    for (const { snapshot, row } of restoredRows) {
+      const { delta } = snapshot
       const entry = resolveByTable(delta.targetTable)
-      const row = redoRow(delta, rowBeforeUndo)
       if (delta.op === 'delete') {
         entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
         const children = cascadeInfo.get(delta.targetId)

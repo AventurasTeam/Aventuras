@@ -318,6 +318,8 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
 
     const ids = (await ctx.db.select({ id: entities.id }).from(entities)).map((row) => row.id)
     expect(ids).toContain('fac_1')
+    const [member] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_member'))
+    expect(member.state).toMatchObject({ faction_id: 'fac_1' })
     const inv = await ctx.db.select({ id: happeningInvolvements.id }).from(happeningInvolvements)
     expect(inv).toEqual([{ id: 'hinv_f' }])
   })
@@ -352,6 +354,23 @@ describe('applyDeltaActionGroup — a delete and a write naming what it removes'
 
     expect(created).toMatchObject({ status: 'rejected', code: 'group-conflict' })
     expect(moved).toMatchObject({ status: 'rejected', code: 'group-conflict' })
+    expect(await snapshot()).toEqual(before)
+  })
+
+  it('rejects a character given a faction the group deletes', async () => {
+    await ctx.db.insert(entities).values(entity('fac_d', 'faction'))
+    const before = await snapshot()
+
+    const joined = await group([
+      {
+        kind: 'setCharacterFaction',
+        source: 'periodic_classifier',
+        payload: { branchId: 'b1', id: 'char_keep', factionId: 'fac_d', proseEntryId: null },
+      },
+      deleteEntity('fac_d'),
+    ])
+
+    expect(joined).toMatchObject({ status: 'rejected', code: 'group-conflict' })
     expect(await snapshot()).toEqual(before)
   })
 

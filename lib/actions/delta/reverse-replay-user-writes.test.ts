@@ -367,6 +367,14 @@ describe('reversing a machine write under a later user write', () => {
       user: CharacterState,
       initial: CharacterState = STATE,
     ) {
+      await db.insert(entities).values(
+        ['fact_old', 'fact_new', 'fact_user'].map((id) => ({
+          ...KAEL,
+          id,
+          kind: 'faction' as const,
+          name: id,
+        })),
+      )
       await createKael(ctx, { state: initial })
       await apply(ctx, machineState(machine), 'act_c')
       await apply(ctx, userPatch({ state: user }), 'act_u')

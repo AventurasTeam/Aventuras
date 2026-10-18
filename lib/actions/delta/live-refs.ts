@@ -1,6 +1,7 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import {
+  chunked,
   translations,
   type CharacterRelationship,
   type EntityId,
@@ -93,7 +94,10 @@ export const REF_COLUMNS: { readonly [T in ReferringTable]: readonly RefsByTable
     refTable: TRANSLATION_TARGET_TABLE[kind],
     when: { column: 'targetKind', value: kind },
   })),
-  entities: [{ column: 'state', path: 'parent_location_id', refTable: 'entities' }],
+  entities: [
+    { column: 'state', path: 'parent_location_id', refTable: 'entities' },
+    { column: 'state', path: 'faction_id', refTable: 'entities' },
+  ],
 }
 
 // The annotation above closes REF_COLUMNS' keys, so its entries are exactly these.
@@ -190,6 +194,29 @@ async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boole
     .where(branchCol ? and(eq(branchCol, branchId), eq(idCol, ref.id)) : eq(idCol, ref.id))
     .limit(1)
   return row != null
+}
+
+/** The ids of `ids` that have a `table` row on the branch. */
+export async function presentIds(
+  ctx: DbCtx,
+  branchId: string,
+  table: RefTable,
+  ids: readonly string[],
+): Promise<Set<string>> {
+  const entry = resolveByTable(table)
+  if (!entry) throw new Error(`presentIds: ${table} is not a registered table`)
+  const { table: target, idCol, branchCol } = entry.descriptor
+  const present = new Set<string>()
+  for (const chunk of chunked([...new Set(ids)])) {
+    const rows = await ctx.db
+      .select({ id: idCol })
+      .from(target)
+      .where(
+        branchCol ? and(eq(branchCol, branchId), inArray(idCol, chunk)) : inArray(idCol, chunk),
+      )
+    for (const { id } of rows) if (typeof id === 'string') present.add(id)
+  }
+  return present
 }
 
 /**
