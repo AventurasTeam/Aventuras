@@ -31,7 +31,8 @@ export type ParentDrop = { handle: string; parent: string; cause: ParentDropCaus
 export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
 
 /** A membership naming a faction retired before the reply: a misreading of a past membership. */
-export type DroppedMembership = Pick<Membership, 'character' | 'faction'> & {
+export type DroppedMembership = Pick<Membership, 'character'> & {
+  faction: NonNullable<Membership['faction']>
   cause: 'retired-faction'
 }
 
@@ -53,7 +54,7 @@ export type PlanDeps = {
   /** Reconcile decision per newCharacters handle, resolved before planning. */
   decisions: Map<string, ReconcileDecision>
   /** Per newFactions handle: kept apart, since one handle can name a character and a faction. */
-  factionDecisions: Map<string, ReconcileDecision>
+  factionDecisions: ReadonlyMap<string, ReconcileDecision>
   now: () => number
   // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
   // lib/actions/happenings/register-awareness.ts allocates the awareness id
@@ -527,15 +528,18 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   for (const { fact } of memberships) {
     const characterId = resolveRef(fact.character, 'character')
     if (characterId == null) continue
-    const factionId = fact.faction === null ? null : resolveRef(fact.faction, 'faction')
-    if (fact.faction !== null && factionId == null) continue
-    if (factionId != null && rowById.get(factionId)?.status === 'retired') {
-      droppedMemberships.push({
-        character: fact.character,
-        faction: fact.faction,
-        cause: 'retired-faction',
-      })
-      continue
+    const factionRef = fact.faction
+    const factionId = factionRef === null ? null : resolveRef(factionRef, 'faction')
+    if (factionRef !== null) {
+      if (factionId == null) continue
+      if (rowById.get(factionId)?.status === 'retired') {
+        droppedMemberships.push({
+          character: fact.character,
+          faction: factionRef,
+          cause: 'retired-faction',
+        })
+        continue
+      }
     }
     if (factionOf(characterId) === factionId) continue
     factionNow.set(characterId, factionId)
