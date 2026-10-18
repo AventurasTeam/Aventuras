@@ -1067,12 +1067,13 @@ gaining a synchronous subscriber or patch logic that can throw
 #### The reversal closure doesn't follow ids inside JSON columns
 
 `REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
-columns and, inside JSON, only a place's `state.parent_location_id`,
-which a reversal clears rather than follows
+columns and, inside JSON, only a place's `state.parent_location_id` and
+a character's `state.faction_id`, which a reversal clears rather than
+follows
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
 reaches the other ids held inside JSON: `entities.state`'s
-`current_location_id`, `faction_id`, `at_location_id`,
+`current_location_id`, `at_location_id`,
 `lastSeenAt.locationId` and `lastSeenAt.entryId`, its `equipped_items`
 and `inventory` arrays (all in
 `lib/db/entities/entity-state-schema.ts`), and
@@ -1137,10 +1138,11 @@ flight. In the boot-recovery window above, an entry's
 recovery removes. A user's move of another place under it is cleared
 too, putting that place at the root
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-A move under it and back off it is not: the place stays where the user
-left it, but the later move's undo still names the removed place, so
-a later CTRL-Z of that move writes the dead id back. The `write-back`
-refusal checks only the groups of the deletes recovery prunes.
+A move under it and back off it was not: the place stayed where the
+user left it, but the later move's undo still named the removed place,
+so a later CTRL-Z of that move wrote the dead id back (closed
+2026-10-18, below). The `write-back` refusal checks only the groups of
+the deletes recovery prunes.
 
 Re-checked 2026-10-18 for the factions design
 ([`classifier.md → Factions`](./memory/classifier.md#factions)): a pass

@@ -163,7 +163,10 @@ state fields, etc. Parse allocates a fresh `char_<uuid>` (or other
 kind-appropriate prefix). Any subsequent reference in the same
 response uses a temporary handle the LLM picks; the planner maps the
 temporary handle to the newly-allocated UUID for the rest of that
-reply, outside the idMap.
+reply, outside the idMap. A handle declared twice keeps its first
+declaration, and the later entry plans nothing; across the lists that
+share the namespace, `newCharacters` claim first, then `newFactions`,
+then `newPlaces`.
 
 This separation keeps the LLM's surface area small (no UUID
 copying) while preserving the existing disambiguation flow below

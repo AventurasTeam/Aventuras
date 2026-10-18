@@ -9,8 +9,9 @@ documents rather than chases.
 
 ## Name collision and disambiguation
 
-Two layers handle the case where the AI invents a character whose name
-matches an existing (often staged) entity's, exactly or in part. A
+Two layers handle the case where the AI invents a character, or the
+periodic classifier a faction, whose name matches an existing (often
+staged) entity's, exactly or in part. A
 place or an item the per-turn writer creates, or a place the periodic
 classifier creates from a mention, is matched when it is created
 instead
@@ -81,6 +82,9 @@ is created with `name_collision_flag = 1` for World-panel review,
 naming the namesake it was compared against. The rule, the signals and the decision table
 live in
 [`classifier.md → Disambiguation on new-character mentions`](./classifier.md#disambiguation-on-new-character-mentions).
+A new faction is compared with the branch's factions the same way,
+without the scene signal
+([`classifier.md → Factions`](./classifier.md#factions)).
 
 ### Schema
 
