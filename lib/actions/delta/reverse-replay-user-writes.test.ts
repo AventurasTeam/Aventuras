@@ -7,6 +7,7 @@ import {
   deltas,
   entities,
   stories,
+  storyEntries,
   type CharacterState,
   type Delta,
   type NewEntity,
@@ -338,6 +339,184 @@ describe('reversing a machine write under a later user write', () => {
     expect((await kael(db)).state).toMatchObject({
       visual: { attire: 'travel cloak' },
       traits: ['brave', 'stubborn'],
+    })
+  })
+
+  describe('a schema-backed column, sub-field by sub-field', () => {
+    const STATE: CharacterState = {
+      visual: { attire: 'travel cloak' },
+      traits: ['brave'],
+      drives: [],
+      current_location_id: null,
+      equipped_items: [],
+      inventory: [],
+      faction_id: 'fact_old',
+      lastSeenAt: null,
+    }
+
+    const machineState = (state: CharacterState): PipelineAction => ({
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'char_kael', patch: { state } },
+    })
+
+    async function stateAfter(
+      ctx: Ctx,
+      db: Db,
+      machine: CharacterState,
+      user: CharacterState,
+      initial: CharacterState = STATE,
+    ) {
+      await createKael(ctx, { state: initial })
+      await apply(ctx, machineState(machine), 'act_c')
+      await apply(ctx, userPatch({ state: user }), 'act_u')
+      await reverseRows(await deltasOf(db, 'act_c'), ctx)
+      return (await kael(db)).state as CharacterState
+    }
+
+    it('keeps a faction the user set later while restoring the attire it changed', async () => {
+      const { db, ctx } = await setup()
+      const machine = { ...STATE, visual: { attire: 'plate' }, faction_id: 'fact_new' }
+      const state = await stateAfter(ctx, db, machine, { ...machine, faction_id: 'fact_user' })
+
+      expect(state.visual).toEqual({ attire: 'travel cloak' })
+      expect(state.faction_id).toBe('fact_user')
+    })
+
+    it("restores the faction under a later edit of the character's traits", async () => {
+      const { db, ctx } = await setup()
+      const machine = { ...STATE, faction_id: 'fact_new' }
+      const state = await stateAfter(ctx, db, machine, { ...machine, traits: ['brave', 'stern'] })
+
+      expect(state.faction_id).toBe('fact_old')
+      expect(state.traits).toEqual(['brave', 'stern'])
+    })
+
+    it('keeps a record key and an array the user wrote, restoring their siblings', async () => {
+      const { db, ctx } = await setup()
+      const initial = { ...STATE, stackables: { gold: 5, arrows: 2 }, inventory: ['item_a'] }
+      const machine = {
+        ...initial,
+        stackables: { gold: 7, arrows: 3 },
+        inventory: ['item_a', 'item_b'],
+        traits: ['brave', 'tired'],
+      }
+      const user = { ...machine, stackables: { gold: 9, arrows: 3 }, inventory: ['item_c'] }
+      const state = await stateAfter(ctx, db, machine, user, initial)
+
+      expect(state.stackables).toEqual({ gold: 9, arrows: 2 })
+      expect(state.inventory).toEqual(['item_c'])
+      expect(state.traits).toEqual(['brave'])
+    })
+
+    it('keeps a record the machine added when the user later changed a key of it', async () => {
+      const { db, ctx } = await setup()
+      const machine = { ...STATE, stackables: { gold: 5 } }
+      const state = await stateAfter(ctx, db, machine, { ...machine, stackables: { gold: 9 } })
+
+      expect(state.stackables).toEqual({ gold: 9 })
+    })
+
+    it('keeps a value the user wrote over a field the machine had cleared', async () => {
+      const { db, ctx } = await setup()
+      const initial = {
+        ...STATE,
+        lastSeenAt: { entryId: 'entry_a', locationId: null, worldTime: 3 },
+      }
+      const machine = { ...initial, lastSeenAt: null }
+      const user = {
+        ...machine,
+        lastSeenAt: { entryId: 'entry_b', locationId: null, worldTime: 4 },
+      }
+      const state = await stateAfter(ctx, db, machine, user, initial)
+
+      expect(state.lastSeenAt).toEqual({ entryId: 'entry_b', locationId: null, worldTime: 4 })
+    })
+
+    it('restores an empty array beside an unrelated user write', async () => {
+      const { db, ctx } = await setup()
+      const machine = { ...STATE, inventory: ['item_x'] }
+      const state = await stateAfter(ctx, db, machine, { ...machine, traits: ['brave', 'stern'] })
+
+      expect(state.inventory).toEqual([])
+    })
+
+    describe('on an entry', () => {
+      const ENTRY_METADATA = {
+        sceneEntities: [],
+        currentLocationId: 'loc_gate',
+        worldTime: 5,
+        summary: 'At the gate.',
+      }
+
+      async function createEntry(ctx: Ctx, metadata: Record<string, unknown> | null) {
+        await apply(
+          ctx,
+          {
+            kind: 'createStoryEntry',
+            source: 'user_edit',
+            payload: {
+              entry: {
+                id: 'entry_1',
+                branchId: 'b1',
+                position: 1,
+                kind: 'ai_reply',
+                content: 'hi',
+                metadata: metadata as never,
+                createdAt: 1,
+              },
+            },
+          },
+          'act_0',
+          'entry_1',
+        )
+      }
+
+      const metadataWrite = (
+        source: 'piggyback_tagged_block' | 'user_edit',
+        metadata: Record<string, unknown>,
+      ): PipelineAction => ({
+        kind: 'updateStoryEntryMetadata',
+        source,
+        payload: { branchId: 'b1', id: 'entry_1', metadata },
+      })
+
+      async function metadataOf(db: Db) {
+        const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_1'))
+        return row.metadata
+      }
+
+      it('keeps a location the user set later while restoring the summary', async () => {
+        const { db, ctx } = await setup()
+        await createEntry(ctx, ENTRY_METADATA)
+        await apply(
+          ctx,
+          metadataWrite('piggyback_tagged_block', {
+            currentLocationId: 'loc_hall',
+            summary: 'In the hall.',
+          }),
+          'act_c',
+        )
+        await apply(ctx, metadataWrite('user_edit', { currentLocationId: 'loc_yard' }), 'act_u')
+
+        await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+        expect(await metadataOf(db)).toMatchObject({
+          currentLocationId: 'loc_yard',
+          summary: 'At the gate.',
+        })
+      })
+
+      it('keeps metadata the machine wrote onto a null column once the user changed it', async () => {
+        const { db, ctx } = await setup()
+        await createEntry(ctx, null)
+        await apply(ctx, metadataWrite('piggyback_tagged_block', ENTRY_METADATA), 'act_c')
+        await apply(ctx, metadataWrite('user_edit', { currentLocationId: 'loc_yard' }), 'act_u')
+
+        await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+        expect(await metadataOf(db)).toMatchObject({ currentLocationId: 'loc_yard' })
+      })
     })
   })
 

@@ -25,7 +25,7 @@ import {
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { wroteColumn } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears'>
 
@@ -173,12 +173,17 @@ function pathUndos(d: Delta): { ref: RefPath; id: string | null }[] {
   })
 }
 
-// The newest-first walk applies the oldest update's undo last, even over a later user write
-// (generation-pipeline.md → Reverse-replay).
-function restoredRefs(set: Iterable<Delta>): Map<string, RestoredRef> {
+// The newest-first walk applies the oldest update's undo last, unless a later user write changed
+// that field (generation-pipeline.md → Reverse-replay).
+function restoredRefs(
+  set: Iterable<Delta>,
+  laterUserEdits: ReadonlyMap<string, readonly Delta[]>,
+): Map<string, RestoredRef> {
   const restored = new Map<string, RestoredRef>()
   for (const d of set) {
+    const edits = laterUserEdits.get(d.id) ?? []
     for (const { ref, id } of pathUndos(d)) {
+      if (wrotePath(edits, ref.column, [ref.path])) continue
       const row = { table: d.targetTable, id: d.targetId }
       const key = restoredKey(row, ref)
       const seen = restored.get(key)
@@ -320,7 +325,8 @@ async function refClearsOf(
   { rows, removed }: Closure,
   held: HeldRowIndex,
 ): Promise<RefClear[]> {
-  const restored = restoredRefs(rows)
+  const laterUserEdits = await userEditsOutliving(ctx, rows, (d) => pathUndos(d).length > 0)
+  const restored = restoredRefs(rows, laterUserEdits)
   const clears = new Map<string, RefClear>()
   const judge = (row: RowRef, ref: RefPath, id: string | null) => {
     if (id === null || removed.has(heldKey(row.table, row.id))) return
