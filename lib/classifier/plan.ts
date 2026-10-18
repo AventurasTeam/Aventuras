@@ -385,7 +385,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
 
   const { droppedPlaces, parentDrops } = planNewPlaces()
 
-  // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
+  // Index is keyed by row id, so a handle this reply declares misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
   for (const alias of extraction.aliases) {
     if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
@@ -509,9 +509,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  // classifier.md → Factions → Memberships. Retired as the rows stood before the reply: this
-  // reply's own flips touch only `index`. Write order follows anchor order, so a reversal of the
-  // head turn undoes only the latest writes.
+  // classifier.md → Factions → Memberships. Retired as the rows stood before the reply: read from
+  // the snapshot (`rowById`), not `index`, so the reply's own flips never count. Write order
+  // follows anchor order, so a reversal of the head turn undoes only the latest writes.
   const rowById = new Map(entities.map((e) => [e.id, e]))
   const droppedMemberships: DroppedMembership[] = []
   const factionNow = new Map<string, string | null>()

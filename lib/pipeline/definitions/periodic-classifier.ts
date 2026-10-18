@@ -272,7 +272,7 @@ export async function* periodicClassifierPhase(
     const decided = new Map<string, ReconcileDecision>()
     for (const candidate of substituted[RECONCILED_KINDS[kind].reply]) {
       if (ctx.abortSignal.aborted) return null
-      // A repeated handle keeps its first declaration, as piggyback.md's does.
+      // A repeated handle keeps its first declaration, as plan.ts keeps its first binding.
       if (decided.has(candidate.handle) || claimed.has(candidate.handle)) continue
       // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
       // fields, so a key built from an unbounded one measures text no row holds.
@@ -323,11 +323,11 @@ export async function* periodicClassifierPhase(
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
   if (plan.unresolvedRefs.length > 0)
     ctx.log.warn('classifier.unresolved_refs', { refs: plan.unresolvedRefs })
+  for (const drop of plan.droppedMemberships) ctx.log.warn('classifier.membership_dropped', drop)
   // The per-turn writer's keys (per-turn-creates.ts).
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
-  for (const drop of plan.droppedMemberships) ctx.log.warn('classifier.membership_dropped', drop)
 
   for (const write of plan.planned) {
     yield { type: 'delta_emitted', action: write.action, entryId: write.entryId }

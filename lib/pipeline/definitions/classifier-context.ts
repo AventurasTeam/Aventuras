@@ -66,15 +66,15 @@ export function buildClassifierContext(args: {
   const { window, entities, happenings, relationships, mentionedPlaces, idMap } = args
   const known = new Set(entities.map((e) => e.id))
   const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
-  // classifier.md → Factions: an id naming no listed faction would reach the prompt raw.
+  // classifier.md → Factions: an id naming no listed faction would otherwise reach the prompt as
+  // a placeholder no faction's line holds.
   const factionOf = (e: Entity): string | null => {
     const id = characterFactionId(e)
     return id != null && factions.has(id) ? id : null
   }
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
-    // Narrower than generationContext's on purpose: no injectionMode, a retrieval-time knob.
-    // Each entity is one line of the list, as each place is of the tree.
+    // No injectionMode, which generationContext's carries: a retrieval-time knob.
     entities: entities
       .filter((e) => e.kind !== 'location')
       .map((e) => ({
