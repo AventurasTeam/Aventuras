@@ -15,6 +15,7 @@ import { generateStructured } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   deltas,
+  emptyEntityState,
   entities,
   happeningInvolvements,
   happenings,
@@ -84,6 +85,8 @@ const reply = (over: Record<string, unknown> = {}) => ({
   statusFlips: [],
   newCharacters: [],
   aliases: [],
+  newFactions: [],
+  memberships: [],
   ...over,
 })
 
@@ -516,5 +519,77 @@ describe('a periodic pass and a turn on one branch', () => {
     expect(await ctx.db.select().from(happeningInvolvements)).toEqual([])
     const [branch] = await ctx.db.query.branches.findMany({ where: (b) => eq(b.id, 'b1') })
     expect((branch.classifierStatus as ClassifierStatus).processedThrough).toBe(1)
+  })
+
+  // classifier.md → Factions → Matching: a faction reconciled to a row deleted before planning
+  // goes, and its memberships with it; the pass commits the rest.
+  it('drops a membership to a faction whose matched row the user deletes mid-reconciliation', async () => {
+    const KAEL = 'char_11111111-1111-1111-1111-111111111111'
+    const CIRCLE = 'fact_22222222-2222-2222-2222-222222222222'
+    const row = (id: string, kind: Entity['kind'], name: string, state: unknown) =>
+      ({
+        id,
+        branchId: 'b1',
+        kind,
+        name,
+        description: 'Smiths who answer to no lord.',
+        status: 'active',
+        retiredReason: null,
+        injectionMode: 'auto',
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+        state,
+        tags: [],
+        keywords: [],
+        priority: 0,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      }) as Entity
+    const kael = row(KAEL, 'character', 'Kael', { ...emptyEntityState('character') })
+    const circle = row(CIRCLE, 'faction', 'The Iron Circle', {})
+    await ctx.db.insert(entities).values([kael, circle])
+    entitiesStore.hydrate('b1', [kael, circle])
+    await ctx.db
+      .update(storyEntries)
+      .set({ metadata: { sceneEntities: [] } } as never)
+      .where(eq(storyEntries.id, 'entry_1'))
+    const embedding = gate()
+    const embedCalled = gate()
+    configureClassifierEmbedder(async () => {
+      embedCalled.open()
+      await embedding.opened
+      const vector = Float32Array.from([1, 0, 0])
+      return { vectors: [vector, vector], dim: 3 }
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: reply({
+        newFactions: [
+          {
+            handle: 'new:c',
+            name: 'The Iron Circle',
+            description: 'Smiths who answer to no lord.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+        memberships: [{ character: 'c1', faction: 'new:c', sourceTurn: 't1' }],
+        happenings: [happening('The fleet sails')],
+      }),
+    })
+
+    const run = pass()
+    await within(embedCalled.opened)
+    expect(await deleteEntityRow('b1', CIRCLE, ctx)).toEqual({ status: 'ok' })
+    embedding.open()
+
+    expect(await within(run)).toMatchObject({ outcome: 'completed' })
+    expect(await ctx.db.select({ id: entities.id }).from(entities)).toEqual([{ id: KAEL }])
+    const [stored] = await ctx.db.select().from(entities).where(eq(entities.id, KAEL))
+    expect(stored.state).toMatchObject({ faction_id: null })
+    const titles = await ctx.db.select({ title: happenings.title }).from(happenings)
+    expect(titles).toEqual([{ title: 'The fleet sails' }])
   })
 })

@@ -2,11 +2,18 @@ import type { IdBiMap } from '@/lib/ids'
 
 /** Schema fields whose string value is an entity reference. Must stay in sync
  * with the planner's ref consumers. */
-export const PLACEHOLDER_FIELDS = ['ref', 'subject', 'object', 'parent'] as const
+export const PLACEHOLDER_FIELDS = [
+  'ref',
+  'subject',
+  'object',
+  'parent',
+  'character',
+  'faction',
+] as const
 
 /**
- * Namespace the prompt reserves for `newCharacters` and `newPlaces` handles, so a handle can
- * never be mistaken for an entity placeholder (`c1`, `hp1`, ...).
+ * Namespace the prompt reserves for `newCharacters`, `newFactions` and `newPlaces` handles, so a
+ * handle can never be mistaken for an entity placeholder (`c1`, `hp1`, ...).
  */
 export const NEW_HANDLE_PREFIX = 'new:'
 

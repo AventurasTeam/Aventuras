@@ -6,7 +6,7 @@ import {
   cosine,
   decideNewItem,
   decideReconcile,
-  reconcileNewCharacter,
+  reconcileNewEntity,
   scoreDescriptions,
   TAU_HIGH,
   TAU_LOW,
@@ -289,10 +289,11 @@ const candidate = (
   ...over,
 })
 
-describe('reconcileNewCharacter', () => {
+describe('reconcileNewEntity', () => {
   it('creates plain with no embed call when no character is a namesake', async () => {
     const embed = embedder({})
-    const decision = await reconcileNewCharacter(candidate({ name: 'John' }), {
+    const decision = await reconcileNewEntity(candidate({ name: 'John' }), {
+      kind: 'character',
       entities: [row({ name: 'Johnson' }), row({ id: 'loc_1', kind: 'location', name: 'John' })],
       embedDescriptions: embed,
       scene: null,
@@ -302,13 +303,15 @@ describe('reconcileNewCharacter', () => {
   })
 
   it('matches an exact namesake across case, spacing and NFC spellings', async () => {
-    const spaced = await reconcileNewCharacter(candidate({ name: '  ELDRIN ' }), {
+    const spaced = await reconcileNewEntity(candidate({ name: '  ELDRIN ' }), {
+      kind: 'character',
       entities: [row({ name: 'Eldrin' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
       scene: null,
     })
     expect(spaced).toEqual({ kind: 'known', entityId: 'char_1', similarity: 0.9 })
-    const decomposed = await reconcileNewCharacter(candidate({ name: 'Zoë' }), {
+    const decomposed = await reconcileNewEntity(candidate({ name: 'Zoë' }), {
+      kind: 'character',
       entities: [row({ name: 'Zoë' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
       scene: null,
@@ -317,7 +320,8 @@ describe('reconcileNewCharacter', () => {
   })
 
   it('treats a contained name as a partial namesake, which never absorbs', async () => {
-    const decision = await reconcileNewCharacter(candidate(), {
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
       entities: [row({ name: 'Eldrin Vane' })],
       embedDescriptions: embedder({ [KEEPER]: 0.9 }),
       scene: null,
@@ -326,16 +330,18 @@ describe('reconcileNewCharacter', () => {
   })
 
   it("treats a hit on either side's keywords as a partial namesake", async () => {
-    const innkeeper = await reconcileNewCharacter(
+    const innkeeper = await reconcileNewEntity(
       candidate({ name: 'Marta', keywords: ['the innkeeper'] }),
       {
+        kind: 'character',
         entities: [row({ name: 'The Innkeeper' })],
         embedDescriptions: embedder({ [KEEPER]: 0.6 }),
         scene: null,
       },
     )
     expect(innkeeper).toEqual(flagOf('char_1', 'ambiguous'))
-    const wolf = await reconcileNewCharacter(candidate({ name: 'the Grey Wolf' }), {
+    const wolf = await reconcileNewEntity(candidate({ name: 'the Grey Wolf' }), {
+      kind: 'character',
       entities: [row({ name: 'Aric', keywords: ['The Grey Wolf'] })],
       embedDescriptions: embedder({ [KEEPER]: 0.6 }),
       scene: null,
@@ -345,7 +351,8 @@ describe('reconcileNewCharacter', () => {
 
   it('embeds the candidate with every namesake in one call and scores each', async () => {
     const embed = embedder({ 'A blacksmith.': 0, [KEEPER]: 1 })
-    const decision = await reconcileNewCharacter(candidate(), {
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
       entities: [
         row({ id: 'char_decoy', description: 'A blacksmith.' }),
         row({ id: 'char_real', description: KEEPER }),
@@ -360,7 +367,8 @@ describe('reconcileNewCharacter', () => {
 
   it('leaves a namesake with a blank description unscored, and out of the call', async () => {
     const embed = embedder({ [KEEPER]: 0.2 })
-    const decision = await reconcileNewCharacter(candidate(), {
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
       entities: [
         row({ id: 'char_blank', description: '   ', createdAt: 0 }),
         row({ id: 'char_null', description: null, createdAt: 0 }),
@@ -376,7 +384,8 @@ describe('reconcileNewCharacter', () => {
 
   it('makes no call when no namesake has a description', async () => {
     const embed = embedder({})
-    const decision = await reconcileNewCharacter(candidate(), {
+    const decision = await reconcileNewEntity(candidate(), {
+      kind: 'character',
       entities: [row({ description: null })],
       embedDescriptions: embed,
       scene: null,
@@ -388,12 +397,14 @@ describe('reconcileNewCharacter', () => {
   // classifier.md → Disambiguation on new-character mentions, Signals: blank candidate = unscored.
   it('scores nothing for a blank candidate description, flagging exact and partial no-signal', async () => {
     const embed = embedder({ [KEEPER]: 0.99 })
-    const exact = await reconcileNewCharacter(candidate({ description: '  ' }), {
+    const exact = await reconcileNewEntity(candidate({ description: '  ' }), {
+      kind: 'character',
       entities: [row({ id: 'char_part', name: 'Eldrin Vane' }), row({ id: 'char_exact' })],
       embedDescriptions: embed,
       scene: null,
     })
-    const partial = await reconcileNewCharacter(candidate({ description: '' }), {
+    const partial = await reconcileNewEntity(candidate({ description: '' }), {
+      kind: 'character',
       entities: [row({ id: 'char_part', name: 'Eldrin Vane' })],
       embedDescriptions: embed,
       scene: null,
@@ -405,7 +416,12 @@ describe('reconcileNewCharacter', () => {
 
   describe('an unusable embed reply leaves every namesake unscored', () => {
     const decide = (embedDescriptions: EmbedDescriptions) =>
-      reconcileNewCharacter(candidate(), { entities: [row()], embedDescriptions, scene: null })
+      reconcileNewEntity(candidate(), {
+        kind: 'character',
+        entities: [row()],
+        embedDescriptions,
+        scene: null,
+      })
 
     it('when the call throws', async () => {
       expect(
@@ -455,7 +471,8 @@ describe('reconcileNewCharacter', () => {
     ['a NaN component', [Number.NaN, 1]],
   ])('a namesake embedded as %s is unscored', (_, components) => {
     const decide = (name: string) =>
-      reconcileNewCharacter(candidate(), {
+      reconcileNewEntity(candidate(), {
+        kind: 'character',
         entities: [row({ name })],
         embedDescriptions: async () => ({
           vectors: [new Float32Array([1, 0]), new Float32Array(components)],
@@ -475,7 +492,8 @@ describe('reconcileNewCharacter', () => {
 
   describe('scene presence', () => {
     const decide = (scene: ReadonlySet<string> | null) =>
-      reconcileNewCharacter(candidate(), {
+      reconcileNewEntity(candidate(), {
+        kind: 'character',
         entities: [row({ status: 'staged' })],
         embedDescriptions: embedder({ [KEEPER]: 0.6 }),
         scene,
@@ -583,5 +601,54 @@ describe('decideNewItem', () => {
       partnerId: 'item_a',
       reason: 'ambiguous',
     })
+  })
+})
+
+// classifier.md → Factions → Matching: Layer B without the scene signal.
+describe('reconcileNewEntity — a faction', () => {
+  const faction = (over: Partial<Entity> = {}) =>
+    row({ id: 'fact_1', kind: 'faction', name: 'The Iron Circle', description: KEEPER, ...over })
+  const decide = (namesakes: Entity[], similarity: number | null, name = 'The Iron Circle') =>
+    reconcileNewEntity(candidate({ name, description: similarity === null ? '' : 'Smiths.' }), {
+      kind: 'faction',
+      entities: namesakes,
+      embedDescriptions: embedder(similarity === null ? {} : { [KEEPER]: similarity }),
+      scene: null,
+    })
+
+  it('reconciles against factions only', async () => {
+    const decision = await decide([row({ name: 'The Iron Circle', description: KEEPER })], 0.9)
+    expect(decision).toEqual({ kind: 'create', flag: null })
+  })
+
+  it('absorbs an exact namesake at or above τ_high, promoting a staged one', async () => {
+    expect(await decide([faction()], TAU_HIGH)).toEqual({
+      kind: 'known',
+      entityId: 'fact_1',
+      similarity: TAU_HIGH,
+    })
+    expect(await decide([faction({ status: 'staged' })], 0.9)).toMatchObject({
+      kind: 'promote',
+      entityId: 'fact_1',
+    })
+  })
+
+  it('flags an exact namesake in the ambiguous band, which nothing breaks', async () => {
+    expect(await decide([faction()], 0.6)).toEqual(flagOf('fact_1', 'ambiguous'))
+  })
+
+  it('flags any other exact namesake', async () => {
+    expect(await decide([faction()], 0.2)).toEqual(flagOf('fact_1', 'distinct'))
+    expect(await decide([faction()], null)).toEqual(flagOf('fact_1', 'no-signal'))
+  })
+
+  it('flags a partial namesake at or above τ_low, or with no score', async () => {
+    expect(await decide([faction()], 0.9, 'Circle')).toEqual(flagOf('fact_1', 'alike'))
+    expect(await decide([faction()], 0.6, 'Circle')).toEqual(flagOf('fact_1', 'ambiguous'))
+    expect(await decide([faction()], null, 'Circle')).toEqual(flagOf('fact_1', 'no-signal'))
+  })
+
+  it('creates unflagged beside a partial namesake below τ_low, never as in-scene', async () => {
+    expect(await decide([faction()], 0.2, 'Circle')).toEqual({ kind: 'create', flag: null })
   })
 })

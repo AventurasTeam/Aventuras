@@ -54,6 +54,7 @@ const base = {
     entityRow('char_aria'),
   ] as never[],
   decisions: new Map(),
+  factionDecisions: new Map(),
   now: () => 1_700_000_000_000,
   newId: (() => {
     let n = 0
@@ -73,6 +74,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -88,6 +91,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -112,6 +117,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -138,6 +145,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [{ ref: 'char_kael', to: 'retired', reason: '\n', sourceTurn: 't2' }],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -172,6 +181,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -188,6 +199,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -212,6 +225,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       { ...base, entities: [entityRow('char_a'), entityRow('char_b')] },
     )
@@ -236,6 +251,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -256,6 +273,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -274,6 +293,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -294,6 +315,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -310,6 +333,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -329,6 +354,8 @@ describe('buildClassifierActions', () => {
         ],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -358,6 +385,8 @@ describe('buildClassifierActions', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       { ...base, decisions },
     )
@@ -394,6 +423,8 @@ describe('buildClassifierActions', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
     )
@@ -424,6 +455,8 @@ describe('buildClassifierActions', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       { ...base, decisions },
     )
@@ -453,6 +486,8 @@ describe('buildClassifierActions', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       { ...base, decisions },
     )
@@ -473,6 +508,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -493,6 +530,8 @@ describe('buildClassifierActions', () => {
           { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       { ...base, decisions },
     )
@@ -514,6 +553,8 @@ describe('buildClassifierActions', () => {
           statusFlips: [],
           newCharacters: [],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         base,
       )
@@ -583,6 +624,8 @@ describe('buildClassifierActions', () => {
           statusFlips: [],
           newCharacters: [],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, entities },
       )
@@ -598,6 +641,8 @@ describe('buildClassifierActions', () => {
           statusFlips: [],
           newCharacters: [],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, entities },
       )
@@ -615,6 +660,8 @@ describe('buildClassifierActions', () => {
           statusFlips: [],
           newCharacters: [],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, entities },
       )
@@ -635,6 +682,8 @@ describe('buildClassifierActions', () => {
             { handle: 'h9', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         base,
       )
@@ -652,6 +701,8 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: '  ', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, decisions: new Map([['h1', { kind: 'create', flag: null }]]) },
       )
@@ -672,6 +723,8 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'char_a', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, decisions },
       )
@@ -693,6 +746,8 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'Second', description: 'y', keywords: [], sourceTurn: 't1' },
           ],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, decisions },
       )
@@ -717,6 +772,8 @@ describe('buildClassifierActions', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -732,6 +789,8 @@ describe('buildClassifierActions', () => {
           statusFlips: [{ ref, to, sourceTurn: 't1' }] as never,
           newCharacters: [],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, entities },
       )
@@ -781,6 +840,8 @@ describe('buildClassifierActions', () => {
           ],
           newCharacters: [],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, entities: [entityRow('char_a')] },
       )
@@ -800,6 +861,8 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'char_s', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, decisions, entities: [entityRow('char_s', 'staged')] },
       )
@@ -820,6 +883,8 @@ describe('buildClassifierActions', () => {
             { handle: 'h1', name: 'Eldrin', description: 'x', keywords: [], sourceTurn: 't1' },
           ],
           aliases: [],
+          newFactions: [],
+          memberships: [],
         },
         { ...base, decisions },
       )
@@ -839,6 +904,8 @@ describe('entity keywords', () => {
     statusFlips: [],
     newCharacters: [{ handle: 'new:k', name: 'Kael', description: 'A courier.', keywords }],
     aliases: [],
+    newFactions: [],
+    memberships: [],
   })
 
   const decide = (decision: ReconcileDecision) => new Map([['new:k', decision]])
@@ -923,6 +990,8 @@ describe('entity keywords', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       {
         ...base,
@@ -961,6 +1030,8 @@ describe('entity keywords', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       {
         ...base,
@@ -997,6 +1068,8 @@ describe('entity keywords', () => {
           },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       {
         ...base,
@@ -1028,6 +1101,8 @@ describe('alias list', () => {
     relationships: [],
     statusFlips: [],
     newCharacters,
+    newFactions: [],
+    memberships: [],
     aliases,
   })
   const kael = entityRow('char_kael', 'active', 'Kael', ['the courier'])
@@ -1192,6 +1267,8 @@ describe('prose source on guarded writes', () => {
           { handle: 'h2', name: 'A', description: 'x', keywords: ['the wolf'], sourceTurn: 't2' },
         ],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       {
         ...base,
@@ -1234,6 +1311,8 @@ describe('prose source on guarded writes', () => {
         statusFlips: [{ ref: 'char_a', to: 'retired' }],
         newCharacters: [{ handle: 'h1', name: 'P', description: 'x', keywords: ['the keeper'] }],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       {
         ...base,
@@ -1273,6 +1352,8 @@ describe('embedded-column bounds', () => {
     statusFlips: [],
     newCharacters: [{ handle: 'h1', name, description, keywords: [], sourceTurn: 't1' }],
     aliases: [],
+    newFactions: [],
+    memberships: [],
   })
   const deps = {
     ...base,
@@ -1350,6 +1431,8 @@ describe('embedded-column bounds', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -1368,6 +1451,8 @@ describe('embedded-column bounds', () => {
         statusFlips: [],
         newCharacters: [],
         aliases: [],
+        newFactions: [],
+        memberships: [],
       },
       base,
     )
@@ -1414,6 +1499,8 @@ describe('mentioned places', () => {
     statusFlips: [],
     newCharacters: [],
     aliases: [],
+    newFactions: [],
+    memberships: [],
     newPlaces,
     ...over,
   })
@@ -1810,6 +1897,356 @@ describe('mentioned places', () => {
       expect(planned.findIndex((p) => p.action.kind === 'createEntity')).toBeLessThan(
         planned.indexOf(involvement as PlannedWrite),
       )
+    })
+  })
+})
+
+// classifier.md → Factions.
+describe('factions', () => {
+  const reply = (over: Partial<ClassifierExtraction> = {}): ClassifierExtraction => ({
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters: [],
+    newFactions: [],
+    memberships: [],
+    aliases: [],
+    ...over,
+  })
+  const factionRow = (id: string, status = 'active', keywords: string[] = []) =>
+    ({
+      id,
+      branchId: 'branch_1',
+      kind: 'faction',
+      name: id,
+      description: 'x',
+      status,
+      keywords,
+      state: {},
+    }) as never
+  const member = (id: string, factionId: string | null) =>
+    ({
+      id,
+      branchId: 'branch_1',
+      kind: 'character',
+      name: id,
+      description: 'x',
+      status: 'active',
+      keywords: [],
+      state: { faction_id: factionId },
+    }) as never
+  const deps = (entities: Entity[], over: Partial<typeof base> = {}) => {
+    let n = 0
+    return {
+      ...base,
+      entities: entities as never[],
+      newId: (kind: string) => `${kind}_new${++n}`,
+      ...over,
+    }
+  }
+  const circle = {
+    handle: 'new:circle',
+    name: 'The Iron Circle',
+    description: 'Smiths who answer to no lord.',
+    keywords: ['the Circle'],
+    sourceTurn: 't2',
+  }
+  const decided = (decision: ReconcileDecision, handle = 'new:circle') =>
+    new Map<string, ReconcileDecision>([[handle, decision]])
+  const create = { kind: 'create', flag: null } as const
+  type FactionWrite = { id: string; factionId: string | null; proseEntryId: string | null }
+  const memberships = (planned: readonly PlannedWrite[]) =>
+    planned
+      .filter((p) => p.action.kind === 'setCharacterFaction')
+      .map((p) => ({ ...payloadOf<FactionWrite>(p), entryId: p.entryId }))
+  const kinds = (planned: readonly PlannedWrite[]) => planned.map((p) => p.action.kind)
+
+  describe('new factions', () => {
+    it('creates an active, auto faction from the prose, stale, anchored on its turn', () => {
+      const { planned, handleMap } = buildClassifierActions(
+        reply({ newFactions: [circle] }),
+        deps([], { factionDecisions: decided(create) } as never),
+      )
+      expect(planned).toHaveLength(1)
+      const { entry } = payloadOf<{ entry: Record<string, unknown> }>(planned[0])
+      expect(entry).toMatchObject({
+        id: 'fact_new1',
+        kind: 'faction',
+        name: 'The Iron Circle',
+        description: 'Smiths who answer to no lord.',
+        keywords: ['the Circle'],
+        status: 'active',
+        injectionMode: 'auto',
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+        embeddingStale: 1,
+      })
+      expect(entry.state).toBeUndefined()
+      expect(planned[0].entryId).toBe('e2')
+      expect(handleMap.get('new:circle')).toBe('fact_new1')
+    })
+
+    it('stores the flag its decision carries', () => {
+      const { planned } = buildClassifierActions(
+        reply({ newFactions: [circle] }),
+        deps([factionRow('fact_old')], {
+          factionDecisions: decided({
+            kind: 'create',
+            flag: { partnerId: 'fact_old', reason: 'ambiguous' },
+          }),
+        } as never),
+      )
+      expect(payloadOf<{ entry: Record<string, unknown> }>(planned[0]).entry).toMatchObject({
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'fact_old',
+        nameCollisionReason: 'ambiguous',
+      })
+    })
+
+    it("clamps the name and description as a new character's are", () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          newFactions: [{ ...circle, name: `  ${'N'.repeat(130)}`, description: 'D'.repeat(1300) }],
+        }),
+        deps([], { factionDecisions: decided(create) } as never),
+      )
+      const { entry } = payloadOf<{ entry: { name: string; description: string } }>(planned[0])
+      expect(entry.name).toBe('N'.repeat(120))
+      expect(entry.description).toBe('D'.repeat(1200))
+    })
+
+    it('promotes a staged faction it absorbs and appends only its new keywords', () => {
+      const { planned, handleMap } = buildClassifierActions(
+        reply({ newFactions: [{ ...circle, keywords: ['the Circle', 'the smiths'] }] }),
+        deps([factionRow('fact_old', 'staged', ['the smiths'])], {
+          factionDecisions: decided({ kind: 'promote', entityId: 'fact_old', similarity: 0.9 }),
+        } as never),
+      )
+      expect(kinds(planned)).toEqual(['promoteStagedEntity', 'appendEntityKeywords'])
+      expect(payloadOf<{ keywords: string[] }>(planned[1]).keywords).toEqual(['the Circle'])
+      expect(handleMap.get('new:circle')).toBe('fact_old')
+    })
+
+    it('appends the new keywords of a faction it absorbs into a listed one', () => {
+      const { planned } = buildClassifierActions(
+        reply({ newFactions: [circle] }),
+        deps([factionRow('fact_old')], {
+          factionDecisions: decided({ kind: 'known', entityId: 'fact_old', similarity: 0.9 }),
+        } as never),
+      )
+      expect(kinds(planned)).toEqual(['appendEntityKeywords'])
+      expect(payloadOf<{ id: string }>(planned[0]).id).toBe('fact_old')
+    })
+
+    it("keeps a handle a new character claimed, and never reads the character's decision", () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        reply({
+          newCharacters: [{ ...circle, name: 'Circe' }],
+          newFactions: [circle],
+        }),
+        deps([], { decisions: decided(create) }),
+      )
+      expect(planned).toHaveLength(1)
+      expect(payloadOf<{ entry: { kind: string } }>(planned[0]).entry.kind).toBe('character')
+      expect(unresolvedRefs).toEqual(['new:circle'])
+    })
+
+    it('reports a faction with no decision or a blank name, creating nothing', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        reply({ newFactions: [circle, { ...circle, handle: 'new:blank', name: '  ' }] }),
+        deps([], { factionDecisions: decided(create, 'new:blank') } as never),
+      )
+      expect(planned).toEqual([])
+      expect(unresolvedRefs).toEqual(['new:circle', 'new:blank'])
+    })
+  })
+
+  describe('memberships', () => {
+    it("sets a listed character's faction, anchored and dated on its turn", () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [{ character: 'char_kael', faction: 'fact_crown', sourceTurn: 't2' }],
+        }),
+        deps([member('char_kael', null), factionRow('fact_crown')]),
+      )
+      expect(memberships(planned)).toEqual([
+        {
+          branchId: 'branch_1',
+          id: 'char_kael',
+          factionId: 'fact_crown',
+          proseEntryId: 'e2',
+          entryId: 'e2',
+        },
+      ])
+    })
+
+    it('clears a faction with a null fact, and plans nothing for one that matches', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: null, sourceTurn: 't1' },
+            { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't1' },
+          ],
+        }),
+        deps([
+          member('char_kael', 'fact_crown'),
+          member('char_aria', 'fact_crown'),
+          factionRow('fact_crown'),
+        ]),
+      )
+      expect(memberships(planned).map(({ id, factionId }) => [id, factionId])).toEqual([
+        ['char_kael', null],
+      ])
+    })
+
+    it('writes a join and a later leave both, in turn order, ties in reply order', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: null, sourceTurn: 't3' },
+            { character: 'char_kael', faction: 'fact_crown', sourceTurn: 't1' },
+            { character: 'char_aria', faction: 'fact_crown', sourceTurn: 't2' },
+            { character: 'char_aria', faction: null, sourceTurn: 't2' },
+          ],
+        }),
+        deps([member('char_kael', null), member('char_aria', null), factionRow('fact_crown')]),
+      )
+      expect(
+        memberships(planned).map(({ id, factionId, entryId }) => [id, factionId, entryId]),
+      ).toEqual([
+        ['char_kael', 'fact_crown', 'e1'],
+        ['char_aria', 'fact_crown', 'e2'],
+        ['char_aria', null, 'e2'],
+        ['char_kael', null, 'e3'],
+      ])
+    })
+
+    it('sorts a fact whose turn does not resolve at the window head, dated by the oldest turn', () => {
+      const { planned, fellBackCount } = buildClassifierActions(
+        reply({
+          memberships: [
+            { character: 'char_kael', faction: 'fact_b', sourceTurn: 'bogus' },
+            { character: 'char_kael', faction: null, sourceTurn: 't1' },
+          ],
+        }),
+        deps([member('char_kael', 'fact_a'), factionRow('fact_a'), factionRow('fact_b')]),
+      )
+      expect(
+        memberships(planned).map(({ factionId, entryId, proseEntryId }) => [
+          factionId,
+          entryId,
+          proseEntryId,
+        ]),
+      ).toEqual([
+        [null, 'e1', 'e1'],
+        ['fact_b', 'e3', 'e1'],
+      ])
+      expect(fellBackCount).toBe(1)
+    })
+
+    it('names a character and a faction the same reply creates, after both creates', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          newCharacters: [
+            {
+              handle: 'new:mara',
+              name: 'Mara',
+              description: 'A smith.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+          newFactions: [circle],
+          memberships: [{ character: 'new:mara', faction: 'new:circle', sourceTurn: 't2' }],
+        }),
+        deps([], {
+          decisions: decided(create, 'new:mara'),
+          factionDecisions: decided(create),
+        } as never),
+      )
+      expect(kinds(planned)).toEqual(['createEntity', 'createEntity', 'setCharacterFaction'])
+      expect(memberships(planned)[0]).toMatchObject({ id: 'char_new1', factionId: 'fact_new2' })
+    })
+
+    it.each([
+      ['names no row', 'fact_gone'],
+      ['names a character', 'char_aria'],
+      ['is blank', ' '],
+    ])('drops a fact whose faction %s, never reading it as none', (_label, faction) => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        reply({ memberships: [{ character: 'char_kael', faction, sourceTurn: 't1' }] }),
+        deps([
+          member('char_kael', 'fact_crown'),
+          member('char_aria', null),
+          factionRow('fact_crown'),
+        ]),
+      )
+      expect(memberships(planned)).toEqual([])
+      expect(unresolvedRefs).toEqual([faction])
+    })
+
+    it('drops a fact whose character is not a character', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        reply({ memberships: [{ character: 'fact_crown', faction: null, sourceTurn: 't1' }] }),
+        deps([factionRow('fact_crown')]),
+      )
+      expect(planned).toEqual([])
+      expect(unresolvedRefs).toEqual(['fact_crown'])
+    })
+
+    it('drops a fact naming a faction absorbed into a row deleted before planning', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        reply({
+          newFactions: [circle],
+          memberships: [{ character: 'char_kael', faction: 'new:circle', sourceTurn: 't2' }],
+        }),
+        deps([member('char_kael', null)], {
+          factionDecisions: decided({ kind: 'known', entityId: 'fact_deleted', similarity: 0.9 }),
+        } as never),
+      )
+      expect(memberships(planned)).toEqual([])
+      expect(unresolvedRefs).toContain('new:circle')
+    })
+
+    it('drops and reports a fact naming a faction retired before the reply', () => {
+      const { planned, droppedMemberships } = buildClassifierActions(
+        reply({ memberships: [{ character: 'char_kael', faction: 'fact_old', sourceTurn: 't1' }] }),
+        deps([member('char_kael', null), factionRow('fact_old', 'retired')]),
+      )
+      expect(memberships(planned)).toEqual([])
+      expect(droppedMemberships).toEqual([
+        { character: 'char_kael', faction: 'fact_old', cause: 'retired-faction' },
+      ])
+    })
+
+    it('keeps a membership to a faction the same reply retires', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [{ character: 'char_kael', faction: 'fact_crown', sourceTurn: 't1' }],
+          statusFlips: [{ ref: 'fact_crown', to: 'retired', sourceTurn: 't2' }],
+        }),
+        deps([member('char_kael', null), factionRow('fact_crown')]),
+      )
+      expect(kinds(planned)).toEqual(['setCharacterFaction', 'retireEntity'])
+    })
+
+    it('takes a member into a staged faction without promoting it', () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          memberships: [{ character: 'char_kael', faction: 'fact_hidden', sourceTurn: 't1' }],
+        }),
+        deps([member('char_kael', null), factionRow('fact_hidden', 'staged')]),
+      )
+      expect(kinds(planned)).toEqual(['setCharacterFaction'])
+    })
+
+    it('clears a faction id that names no row when a fact sets none', () => {
+      const { planned } = buildClassifierActions(
+        reply({ memberships: [{ character: 'char_kael', faction: null, sourceTurn: 't1' }] }),
+        deps([member('char_kael', 'fact_gone')]),
+      )
+      expect(memberships(planned).map(({ factionId }) => factionId)).toEqual([null])
     })
   })
 })

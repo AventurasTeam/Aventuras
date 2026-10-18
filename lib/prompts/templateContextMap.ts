@@ -273,7 +273,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entity[]',
       category: 'Entities',
       description:
-        'Branch entities other than places (id/kind/name/description/status/keywords), any status.',
+        "Branch entities other than places (id/kind/name/description/status/keywords), any status, each on one line. A character's `faction` is its faction's id when that names a listed faction, else null.",
       required: true,
     },
     {

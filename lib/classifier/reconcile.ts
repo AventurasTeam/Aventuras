@@ -155,21 +155,25 @@ export async function scoreDescriptions(
 }
 
 /**
- * Layer B reconciliation (edge-cases.md -> Layer B): the candidate against every character
+ * Layer B reconciliation (edge-cases.md -> Layer B): the candidate against every row of its kind
  * that is its namesake, any status. Candidates in one reply are not compared with each other.
  */
-export async function reconcileNewCharacter(
+export async function reconcileNewEntity(
   candidate: { name: string; description: string; keywords: readonly string[] },
   deps: {
+    kind: Extract<Entity['kind'], 'character' | 'faction'>
     entities: readonly Entity[]
     embedDescriptions: EmbedDescriptions
-    /** The candidate's sourceTurn scene; null when its handle fell back to the window head. */
+    /**
+     * The candidate's sourceTurn scene; null when its handle fell back to the window head, and
+     * always for a faction, which is never in a scene (classifier.md → Factions).
+     */
     scene: ReadonlySet<string> | null
   },
 ): Promise<ReconcileDecision> {
   const matched: Omit<ScoredNamesake, 'similarity' | 'inScene'>[] = []
   for (const entity of deps.entities) {
-    if (entity.kind !== 'character') continue
+    if (entity.kind !== deps.kind) continue
     const basis = namesakeBasis(candidate, entity)?.basis
     if (basis != null) matched.push({ entity, match: basis === 'same-name' ? 'exact' : 'partial' })
   }

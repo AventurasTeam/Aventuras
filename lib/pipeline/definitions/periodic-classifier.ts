@@ -14,7 +14,7 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
-  reconcileNewCharacter,
+  reconcileNewEntity,
   substituteClassifierIds,
   type ReconcileDecision,
 } from '@/lib/classifier'
@@ -244,6 +244,7 @@ export async function* periodicClassifierPhase(
     idMap,
     new Set([
       ...extraction.newCharacters.map((c) => c.handle),
+      ...extraction.newFactions.map((f) => f.handle),
       ...newPlacesOf(extraction).map((p) => p.handle),
     ]),
   )
@@ -261,23 +262,47 @@ export async function* periodicClassifierPhase(
   // snapshot misses a character the user created mid-call and still holds one deleted.
   const current = branchEntities(ctx.branchId)
   const embedDescriptions = classifierEmbedder()
-  const decisions = new Map<string, ReconcileDecision>()
-  for (const candidate of substituted.newCharacters) {
-    if (ctx.abortSignal.aborted) return discard(null)
-    // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
-    // fields, so a key built from an unbounded one measures text no row holds.
-    const stored = clampEmbeddedCharacter(candidate)
-    // The planner drops a blank name, yet its keywords can still name a row: reconciling
-    // it would spend an embed call on a decision nothing reads.
-    if (stored.name === '') continue
-    decisions.set(
-      candidate.handle,
-      await reconcileNewCharacter(
-        { ...stored, keywords: candidate.keywords },
-        { entities: current, embedDescriptions, scene: window.sceneOf(candidate.sourceTurn) },
-      ),
-    )
+  const reconcile = async (
+    candidates: readonly {
+      handle: string
+      name: string
+      description: string
+      keywords: string[]
+      sourceTurn?: string
+    }[],
+    kind: 'character' | 'faction',
+  ): Promise<Map<string, ReconcileDecision> | null> => {
+    const decided = new Map<string, ReconcileDecision>()
+    for (const candidate of candidates) {
+      if (ctx.abortSignal.aborted) return null
+      // A repeated handle keeps its first declaration, as piggyback.md's does.
+      if (decided.has(candidate.handle)) continue
+      // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
+      // fields, so a key built from an unbounded one measures text no row holds.
+      const stored = clampEmbeddedCharacter(candidate)
+      // The planner drops a blank name, yet its keywords can still name a row: reconciling
+      // it would spend an embed call on a decision nothing reads.
+      if (stored.name === '') continue
+      decided.set(
+        candidate.handle,
+        await reconcileNewEntity(
+          { ...stored, keywords: candidate.keywords },
+          {
+            kind,
+            entities: current,
+            embedDescriptions,
+            // classifier.md → Factions: a faction is never in a scene.
+            scene: kind === 'faction' ? null : window.sceneOf(candidate.sourceTurn),
+          },
+        ),
+      )
+    }
+    return decided
   }
+  const decisions = await reconcile(substituted.newCharacters, 'character')
+  if (decisions === null) return discard(null)
+  const factionDecisions = await reconcile(substituted.newFactions, 'faction')
+  if (factionDecisions === null) return discard(null)
 
   // generation-pipeline.md → No-gate write phase.
   if (!(await enterWritePhase(ctx))) return discard(null)
@@ -292,6 +317,7 @@ export async function* periodicClassifierPhase(
     window,
     entities: branchEntities(ctx.branchId),
     decisions,
+    factionDecisions,
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
   })
@@ -303,6 +329,7 @@ export async function* periodicClassifierPhase(
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
+  for (const drop of plan.droppedMemberships) ctx.log.warn('classifier.membership_dropped', drop)
 
   for (const write of plan.planned) {
     yield { type: 'delta_emitted', action: write.action, entryId: write.entryId }

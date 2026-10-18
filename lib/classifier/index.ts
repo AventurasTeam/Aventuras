@@ -11,13 +11,15 @@ export type {
   ClassifierExtraction,
   ClassifierPlacesExtraction,
   ClassifierReply,
+  Membership,
+  NewFaction,
   NewPlace,
 } from './schema'
 export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
 export {
   cosine,
   decideNewItem,
-  reconcileNewCharacter,
+  reconcileNewEntity,
   scoreDescriptions,
   TAU_HIGH,
   TAU_LOW,

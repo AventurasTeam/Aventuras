@@ -1,5 +1,5 @@
 import type { ClassifierWindow } from '@/lib/classifier'
-import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
+import type { CharacterRelationship, CharacterState, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { blankToNull } from '@/lib/text'
 import { placeTree } from '@/lib/world'
@@ -12,7 +12,7 @@ type RelationshipFact = {
   kind: string
 }
 
-// Each place is one line of the tree: stored text spanning several would break its nesting.
+// One line per entity and place: stored text spanning several would break the list and the tree.
 const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
 const oneLine = (text: string | null): string | null =>
   text == null ? null : blankToNull(flat(text))
@@ -65,18 +65,26 @@ export function buildClassifierContext(args: {
 }): Record<string, unknown> {
   const { window, entities, happenings, relationships, mentionedPlaces, idMap } = args
   const known = new Set(entities.map((e) => e.id))
+  const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
+  // classifier.md → Factions: an id naming no listed faction would reach the prompt raw.
+  const factionOf = (e: Entity): string | null => {
+    const id = e.kind === 'character' ? (e.state as CharacterState | null)?.faction_id : null
+    return id != null && factions.has(id) ? id : null
+  }
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
     // Narrower than generationContext's on purpose: no injectionMode, a retrieval-time knob.
+    // Each entity is one line of the list, as each place is of the tree.
     entities: entities
       .filter((e) => e.kind !== 'location')
       .map((e) => ({
         id: e.id,
         kind: e.kind,
-        name: e.name,
-        description: e.description,
+        name: flat(e.name),
+        description: oneLine(e.description),
         status: e.status,
-        keywords: e.keywords,
+        keywords: e.keywords.map(flat),
+        faction: factionOf(e),
       })),
     // classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
     places: placeTree(entities).map(({ entity: e, depth }) => ({
