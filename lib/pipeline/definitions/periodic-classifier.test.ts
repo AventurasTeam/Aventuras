@@ -33,6 +33,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
+  __resetDiagnosticsGate,
   clearBuffers,
   configureDiagnosticsGate,
   getDiagnosticsSnapshot,
@@ -240,6 +241,9 @@ const createdEntry = (events: unknown[]) =>
       | { action: { payload: { entry: Record<string, unknown> } } }
       | undefined
   )?.action.payload.entry
+
+// The log tests switch the gate on; without this, later tests would run under it.
+afterEach(() => __resetDiagnosticsGate())
 
 describe('periodicClassifierPhase', () => {
   beforeEach(() => {
