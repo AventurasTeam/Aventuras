@@ -1,6 +1,7 @@
 <script lang="ts">
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
   import { Plus, Settings } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
@@ -23,7 +24,8 @@
   // chapters over overlapping ranges is what comes of offering the button anyway.
   const chapterWorkInFlight = $derived(
     story.currentStory
-      ? ui.backgroundTasksActiveFor(story.currentStory.id, story.currentStory.currentBranchId)
+      ? ui.backgroundTasksActiveFor(story.currentStory.id, story.currentStory.currentBranchId) ||
+          chapterCards.busy(story.currentStory.id, story.currentStory.currentBranchId ?? null)
       : false,
   )
   const bufferSize = $derived(story.memoryConfig.chapterBuffer)

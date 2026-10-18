@@ -84,6 +84,11 @@ The `.deb` and `.rpm` use the system's `webkit2gtk-4.1` and declare no minimum v
   in the `ubuntu:22.04` container, so its engine is whatever `jammy-security` carried on the build
   date and does not depend on the user's distro. It still needs the host's glibc 2.35
   ([release.md](release.md#runner-pinning)).
+- **NVIDIA on Wayland** (`is_nvidia_wayland` in `src-tauri/src/main.rs`) sets
+  `__NV_DISABLE_EXPLICIT_SYNC=1` to avoid "Error 71". Inside an AppImage (`APPIMAGE` is set) it also
+  sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`, because the bundled libgbm cannot allocate buffers on
+  NVIDIA; that fallback renders on the CPU. System builds keep GPU rendering. A variable already
+  set in the environment is never overwritten.
 
 ### Android
 

@@ -286,10 +286,12 @@
     flushAutoSave()
   })
 
-  // Fix #1: shared handler to avoid duplication between new-profile and edit forms
   function handleProviderTypeChange(v: ProviderType) {
+    const trimmedName = formName.trim()
+    if (!trimmedName || trimmedName === PROVIDERS[formProviderType].name) {
+      formName = PROVIDERS[v].name
+    }
     formProviderType = v
-    formName = PROVIDERS[v].name
     formBaseUrl = ''
     formFetchedModels = []
     formCustomModels = []

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ActivityRecorder } from './recorder'
+import { RETAINED_TURNS } from './retention'
 
 function recorderAt(times: number[] = []) {
   let i = 0
@@ -400,5 +401,162 @@ describe('steps outside the turn in flight', () => {
     recorder.discardStep(group)
 
     expect(recorder.activeTurn?.steps.map((s) => s.id)).toEqual([keep, narrative])
+  })
+})
+
+describe('several open records', () => {
+  function twoTurns() {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    const first = recorder.startTurn('entry-1')
+    const background = recorder.startStep('After the turn')
+    const second = recorder.startTurn('entry-2')
+    return { recorder, first, second, background }
+  }
+
+  it('gives a step without a parent to the newest open turn', () => {
+    const { recorder } = twoTurns()
+
+    recorder.startStep('Retrieval')
+
+    expect(recorder.find('entry-1')?.steps.map((s) => s.label)).toEqual(['After the turn'])
+    expect(recorder.find('entry-2')?.steps.map((s) => s.label)).toEqual(['Retrieval'])
+  })
+
+  it('gives a step to the record of its parent, not the newest turn', () => {
+    const { recorder, background } = twoTurns()
+
+    const check = recorder.startStep('Chapter check', { parentId: background })
+    recorder.endStep(check, 'failed', undefined, '401')
+
+    const [step] = recorder.find('entry-1')!.steps.filter((s) => s.label === 'Chapter check')
+    expect(step).toMatchObject({ status: 'failed', error: '401' })
+    expect(recorder.find('entry-2')?.steps).toEqual([])
+  })
+
+  it('ends the record it is given, leaving the newer turn open', () => {
+    const { recorder, first, background } = twoTurns()
+
+    recorder.endRecord(first)
+
+    expect(recorder.find('entry-1')).toMatchObject({ outcome: 'finished' })
+    expect(recorder.activeTurn?.entryId).toBe('entry-2')
+    expect(recorder.startStep('late', { parentId: background })).toBe('')
+  })
+
+  it('opens a chapter record whose root steps name it', () => {
+    const { recorder } = twoTurns()
+
+    const record = recorder.startRecord('chapter:card-1', 'chapter')
+    const summary = recorder.startStep('Chapter summary', { recordId: record, isLLM: true })
+    recorder.startStep('Attempt 1', { parentId: summary, attempt: true })
+
+    expect(recorder.find('chapter:card-1')?.kind).toBe('chapter')
+    expect(recorder.find('chapter:card-1')?.steps.map((s) => s.label)).toEqual([
+      'Chapter summary',
+      'Attempt 1',
+    ])
+    expect(recorder.activeTurn?.entryId).toBe('entry-2')
+    expect(recorder.latestTurn?.entryId).toBe('entry-2')
+  })
+
+  it('records nothing for a record id that is not open', () => {
+    const { recorder } = twoTurns()
+
+    expect(recorder.startStep('orphan', { recordId: 'chapter-99' })).toBe('')
+    expect(recorder.startStep('unopened', { recordId: '' })).toBe('')
+    expect(recorder.activeTurn?.steps).toEqual([])
+  })
+
+  it('keeps a chapter record however many turns follow it', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startRecord('chapter:card-1', 'chapter')
+    for (let i = 0; i < RETAINED_TURNS + 5; i++) {
+      recorder.startTurn(`entry-${i}`)
+      recorder.endTurn()
+    }
+
+    expect(recorder.find('chapter:card-1')).not.toBeNull()
+    expect(recorder.snapshot().filter((t) => t.kind === 'turn')).toHaveLength(RETAINED_TURNS)
+  })
+
+  it('stops routing to a turn evicted while still open', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('line')
+    recorder.startTurn('entry-old')
+    const background = recorder.startStep('After the turn')
+    for (let i = 0; i < RETAINED_TURNS; i++) {
+      recorder.startTurn(`entry-${i}`)
+      recorder.endTurn()
+    }
+
+    expect(recorder.find('entry-old')).toBeNull()
+    expect(recorder.startStep('late', { parentId: background })).toBe('')
+  })
+
+  it('reopens an ended record, routing to it and to its old steps again', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    const first = recorder.startRecord('chapter:card-1', 'chapter')
+    const lore = recorder.startStep('Lore management', { recordId: first })
+    recorder.endStep(lore, 'failed', undefined, 'provider down')
+    recorder.endRecord(first)
+
+    const ended = recorder.find('chapter:card-1')
+    const again = recorder.reopenRecord('chapter:card-1')
+    // A new object, so a view that last read it ended reads it again.
+    expect(recorder.find('chapter:card-1')).not.toBe(ended)
+    recorder.startStep('Lore management (run 2)', { recordId: again })
+
+    expect(again).toBe(first)
+    expect(recorder.find('chapter:card-1')?.endedAt).toBeUndefined()
+    expect(recorder.find('chapter:card-1')?.outcome).toBeUndefined()
+    expect(recorder.find('chapter:card-1')?.steps.map((s) => s.label)).toEqual([
+      'Lore management',
+      'Lore management (run 2)',
+    ])
+    expect(recorder.hasOpenRecords).toBe(true)
+  })
+
+  it('discards a record and stops routing to it', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    const record = recorder.startRecord('chapter:card-1', 'chapter')
+    const step = recorder.startStep('Lore management', { recordId: record })
+
+    recorder.discardRecord('chapter:card-1')
+
+    expect(recorder.find('chapter:card-1')).toBeNull()
+    expect(recorder.startStep('Model call 1', { parentId: step })).toBe('')
+    expect(recorder.hasOpenRecords).toBe(false)
+  })
+
+  it('drops every open record when reporting is turned off', () => {
+    const { recorder } = twoTurns()
+    recorder.startRecord('chapter:card-1', 'chapter')
+
+    recorder.setReporting('off')
+
+    expect(recorder.snapshot()).toEqual([])
+    expect(recorder.hasOpenRecords).toBe(false)
+  })
+})
+
+describe('failure count', () => {
+  it('counts steps that failed or kept an error, in the record they belong to', () => {
+    const { recorder } = recorderAt()
+    recorder.setReporting('tree')
+    recorder.startTurn('entry')
+    const ok = recorder.startStep('Narrative')
+    recorder.endStep(ok)
+    expect(recorder.find('entry')?.failures).toBeUndefined()
+
+    const check = recorder.startStep('Chapter check')
+    recorder.endStep(check, 'failed', undefined, '401')
+    recorder.recordStep('Classification', { error: 'salvaged a broken response' })
+    recorder.recordStep('Skipped', { status: 'skipped' })
+
+    expect(recorder.find('entry')?.failures).toBe(2)
   })
 })

@@ -12,6 +12,7 @@ export {
 } from './LoreManagementService'
 
 export { LoreSessionLedger, type LoreMergeResult, type LoreSessionChanges } from './sessionChanges'
+export { saveLoreSession } from './saveSession'
 
 export {
   cleanAliases,

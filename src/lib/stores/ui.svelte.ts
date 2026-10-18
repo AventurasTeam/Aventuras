@@ -330,6 +330,8 @@ class UIStore {
    * cleared by whichever finished first, marking the branch idle with work still in flight.
    */
   backgroundTaskBranches = $state<SvelteMap<string, number>>(new SvelteMap())
+  /** Branches whose chapter check is asking the model, after the turn that started it. */
+  chapterCheckBranches = $state<SvelteMap<string, number>>(new SvelteMap())
   loreManagementActive = $state(false)
   loreManagementProgress = $state('')
   loreManagementChanges = $state<number>(0)
@@ -1709,6 +1711,18 @@ class UIStore {
   // Lore management mode methods
   backgroundTasksActiveFor(storyId: string, branchId: string | null): boolean {
     return (this.backgroundTaskBranches.get(branchScopeKey(storyId, branchId)) ?? 0) > 0
+  }
+
+  chapterCheckActiveFor(storyId: string, branchId: string | null): boolean {
+    return (this.chapterCheckBranches.get(branchScopeKey(storyId, branchId)) ?? 0) > 0
+  }
+
+  setChapterCheckActive(storyId: string, branchId: string | null, active: boolean) {
+    const key = branchScopeKey(storyId, branchId)
+    const running = this.chapterCheckBranches.get(key) ?? 0
+    if (active) this.chapterCheckBranches.set(key, running + 1)
+    else if (running <= 1) this.chapterCheckBranches.delete(key)
+    else this.chapterCheckBranches.set(key, running - 1)
   }
 
   setBackgroundTasksActive(storyId: string, branchId: string | null, active: boolean) {

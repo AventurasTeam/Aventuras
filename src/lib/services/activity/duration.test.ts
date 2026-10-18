@@ -26,7 +26,7 @@ describe('stepDuration', () => {
 })
 
 describe('turnDuration', () => {
-  const turn: ActivityTurn = { id: 't', entryId: 'e', startedAt: 500, steps: [] }
+  const turn: ActivityTurn = { id: 't', kind: 'turn', entryId: 'e', startedAt: 500, steps: [] }
 
   it('measures a running turn against now', () => {
     expect(turnDuration(turn, 2_500)).toBe(2_000)

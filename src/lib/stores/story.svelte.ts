@@ -70,6 +70,7 @@ import {
   type RollbackSummary,
 } from '#lib/services/rollbackService.ts'
 import { ui } from './ui.svelte'
+import { chapterCards } from './chapterCards.svelte'
 import {
   analyzeTimeline,
   applyReconciliation,
@@ -649,6 +650,7 @@ class StoryStore {
 
     if (chaptersToDelete.length > 0) {
       this.chapters = this.chapters.filter((ch) => !chaptersToDelete.includes(ch.id))
+      for (const id of chaptersToDelete) chapterCards.chapterDeleted(id)
       // Invalidate chapter cache after deletions
       this.invalidateChapterCache()
     }
@@ -963,6 +965,7 @@ class StoryStore {
       droppedCheckpoints.map((cp) => cp.id),
     )
     this.forgetCheckpoints(droppedCheckpoints)
+    for (const ch of this.chapters) if (ch.branchId === null) chapterCards.chapterDeleted(ch.id)
     this.chapters = this.chapters.filter((ch) => ch.branchId !== null)
     this.invalidateChapterCache()
 
@@ -2055,6 +2058,7 @@ class StoryStore {
     this.forgetAnchors(entryIdsToDelete)
 
     this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
+    for (const chapter of chaptersToDelete) chapterCards.chapterDeleted(chapter.id)
     this.forgetCheckpoints(droppedCheckpoints)
 
     // Update in-memory state
@@ -3719,10 +3723,18 @@ class StoryStore {
   }
 
   // Add a chapter
-  async addChapter(chapter: Chapter): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+  /**
+   * `scope`: the story and branch the chapter was built for. The row is always written, since it
+   * carries its own story and branch; the loaded list only takes it while that scope is open.
+   */
+  async addChapter(chapter: Chapter, scope?: BranchScope): Promise<void> {
+    if (!scope && !this.currentStory) throw new Error('No story loaded')
 
     await database.addChapter(chapter)
+    if (scope && !this.isOpen(scope)) {
+      log('Chapter added to a branch that is not open:', chapter.number, scope)
+      return
+    }
     this.chapters = [...this.chapters, chapter]
 
     // Invalidate chapter cache
@@ -3813,8 +3825,44 @@ class StoryStore {
   }
 
   // Delete a chapter
-  async deleteChapter(chapterId: string): Promise<void> {
+  /**
+   * Whether this is the open branch's last chapter, the only one that can be deleted: the next
+   * chapter starts where the last one ends, so deleting an earlier one leaves its entries uncut.
+   */
+  isLastChapter(chapterId: string): boolean {
+    const chapters = this.currentBranchChapters
+    const last = chapters.reduce<Chapter | null>(
+      (best, ch) => (!best || ch.number > best.number ? ch : best),
+      null,
+    )
+    return last?.id === chapterId
+  }
+
+  /**
+   * Refuses, with a toast, any chapter but the open branch's last, and any while chapter work on
+   * the branch runs: a chapter being cut starts where the last one ends, and would leave the
+   * deleted one's entries uncut.
+   */
+  async deleteChapter(chapterId: string): Promise<boolean> {
     if (!this.currentStory) throw new Error('No story loaded')
+    // The chapter's own branch too: a child branch shows a parent's chapter as its own.
+    const owner = this.chapters.find((ch) => ch.id === chapterId)?.branchId ?? null
+    if (
+      chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null) ||
+      chapterCards.busy(this.currentStory.id, owner)
+    ) {
+      log('Chapter work in flight, refusing to delete a chapter:', chapterId)
+      ui.showToast(
+        'A chapter is being written on this branch. Try again once it is done.',
+        'warning',
+      )
+      return false
+    }
+    if (!this.isLastChapter(chapterId)) {
+      log('Refusing to delete a chapter that is not the last:', chapterId)
+      ui.showToast('Only the last chapter can be deleted.', 'warning')
+      return false
+    }
 
     await database.deleteChapter(chapterId)
     this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
@@ -3823,6 +3871,8 @@ class StoryStore {
     this.invalidateChapterCache()
 
     log('Chapter deleted:', chapterId)
+    chapterCards.chapterDeleted(chapterId)
+    return true
   }
 
   // Update memory configuration (partial updates)
@@ -4084,7 +4134,11 @@ class StoryStore {
     // half: the check that has to hold is here, because both paths call
     // `buildAndSaveChapter` over `lastChapterEndIndex`, and two of them racing produce two
     // chapters covering the same entries.
-    if (ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId)) {
+    // A card's retried summary runs outside the turn's background tasks, so it is checked too.
+    if (
+      ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId) ||
+      chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null)
+    ) {
       log('Background chapter work in flight, refusing manual chapter creation')
       // Said out loud as well as returned: the caller closes the modal either way, so a
       // silent refusal looks exactly like a chapter that was created.
