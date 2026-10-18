@@ -200,7 +200,7 @@ describe('missingRef', () => {
     __resetRegistry()
     try {
       await expect(missingRef(ctx, 'b1', [{ table: 'lore', id: 'lore_1' }])).rejects.toThrow(
-        'missingRef: lore is not a registered table',
+        'absentRefs: lore is not a registered table',
       )
     } finally {
       __resetRegistrationGuard()

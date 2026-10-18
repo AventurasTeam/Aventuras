@@ -184,18 +184,6 @@ export function referrersOf(
   return REFERRERS.get(refTable) ?? []
 }
 
-async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boolean> {
-  const entry = resolveByTable(ref.table)
-  if (!entry) throw new Error(`missingRef: ${ref.table} is not a registered table`)
-  const { table, idCol, branchCol } = entry.descriptor
-  const [row] = await ctx.db
-    .select({ id: idCol })
-    .from(table)
-    .where(branchCol ? and(eq(branchCol, branchId), eq(idCol, ref.id)) : eq(idCol, ref.id))
-    .limit(1)
-  return row != null
-}
-
 /** The refs among `refs` with no row on the branch, each once. */
 export async function absentRefs(
   ctx: DbCtx,
@@ -238,11 +226,8 @@ export async function missingRef(
   refs: readonly LiveRef[],
   group?: GroupScope,
 ): Promise<boolean> {
-  for (const ref of refs) {
-    if (group?.created.has(createdKey(ref.table, ref.id))) continue
-    if (!(await exists(ctx, branchId, ref))) return true
-  }
-  return false
+  const outsideGroup = refs.filter((ref) => !group?.created.has(createdKey(ref.table, ref.id)))
+  return (await absentRefs(ctx, branchId, outsideGroup)).length > 0
 }
 
 export const MISSING_REF = {
