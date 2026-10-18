@@ -648,7 +648,7 @@ describe('reconcileNewEntity — a faction', () => {
     expect(await decide([faction()], null, 'Circle')).toEqual(flagOf('fact_1', 'no-signal'))
   })
 
-  it('creates unflagged beside a partial namesake below τ_low, never as in-scene', async () => {
+  it('creates unflagged beside a partial namesake below τ_low', async () => {
     expect(await decide([faction()], 0.2, 'Circle')).toEqual({ kind: 'create', flag: null })
   })
 })

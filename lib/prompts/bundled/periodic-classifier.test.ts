@@ -339,6 +339,15 @@ describe('periodic classifier template — factions', () => {
           faction: 'f1',
         },
         {
+          id: 'c2',
+          name: 'Aria',
+          kind: 'character',
+          status: 'active',
+          description: 'His sister.',
+          keywords: [],
+          faction: null,
+        },
+        {
           id: 'f1',
           name: 'The Iron Circle',
           kind: 'faction',
@@ -350,6 +359,7 @@ describe('periodic classifier template — factions', () => {
       ],
     })
     expect(user).toContain('- [c1] Kael (character) — A courier. (faction: [f1])')
+    expect(user).toContain('- [c2] Aria (character) — His sister.\n')
     expect(user).toContain('- [f1] The Iron Circle (faction)\n')
   })
 })

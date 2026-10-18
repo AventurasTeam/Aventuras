@@ -1066,6 +1066,54 @@ describe('periodicClassifierPhase', () => {
     expect(kinds).not.toContain('createEntity')
   })
 
+  it('keeps the first declaration of a repeated newCharacters handle', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the courier'],
+            sourceTurn: 't1',
+          },
+          {
+            handle: 'new:k',
+            name: 'Mara',
+            description: 'A smith.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+      }),
+    })
+    configureClassifierEmbedder(
+      vi.fn(async () => ({
+        vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
+        dim: 2,
+      })),
+    )
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+      nameCollisionFlag: 0,
+      createdAt: 1,
+      state: { faction_id: null },
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
+    expect(actions.map((a) => a.kind)).toEqual(['appendEntityKeywords'])
+    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL, keywords: ['the courier'] })
+  })
+
   // The reconcile key must be bounded like the stored name, or an over-long name never
   // matches the row it created and the character is introduced again every pass.
   it('matches a stored name against the bounded form of an over-long candidate', async () => {
@@ -1306,46 +1354,6 @@ describe('periodicClassifierPhase', () => {
       await drain(h.ctx)
 
       expect(embed).not.toHaveBeenCalled()
-    })
-
-    it('keeps the first declaration of a repeated newCharacters handle', async () => {
-      vi.mocked(generateStructured).mockResolvedValue({
-        status: 'ok',
-        value: extraction({
-          newCharacters: [
-            {
-              handle: 'new:k',
-              name: 'Kael',
-              description: 'A courier.',
-              keywords: ['the courier'],
-              sourceTurn: 't1',
-            },
-            {
-              handle: 'new:k',
-              name: 'Mara',
-              description: 'A smith.',
-              keywords: [],
-              sourceTurn: 't1',
-            },
-          ],
-        }),
-      })
-      configureClassifierEmbedder(
-        vi.fn(async () => ({
-          vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
-          dim: 2,
-        })),
-      )
-      const h = await ctxWith({
-        processedThrough: 0,
-        headPosition: 2,
-        entities: [{ ...row(CHAR_KAEL, 'character', 'Kael'), description: 'A courier.' } as Entity],
-      })
-      const { events } = await drain(h.ctx)
-
-      const actions = actionsOf(events)
-      expect(actions.map((a) => a.kind)).toEqual(['appendEntityKeywords'])
-      expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL, keywords: ['the courier'] })
     })
 
     it('binds a membership to the new faction when its handle collides with a live placeholder', async () => {
