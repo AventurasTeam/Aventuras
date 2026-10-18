@@ -394,14 +394,14 @@ describe('buildClassifierContext — factions', () => {
       state,
     }) as unknown as Entity
 
-  const contextOf = (entities: Entity[]) =>
+  const contextOf = (entities: Entity[], idMap = new IdBiMap()) =>
     buildClassifierContext({
       window: { turns: [] } as never,
       entities,
       happenings: [],
       relationships: [],
       mentionedPlaces: false,
-      idMap: new IdBiMap(),
+      idMap,
     }).entities as { id: string; faction: string | null }[]
 
   it("gives a character its faction's placeholder, a faction's prefix even when first met there", () => {
@@ -416,12 +416,17 @@ describe('buildClassifierContext — factions', () => {
   })
 
   it('leaves out a faction id that names no listed faction', () => {
-    const entities = contextOf([
-      row(KAEL, 'character', 'Kael', { faction_id: GONE }),
-      row(ARIA, 'character', 'Aria', { faction_id: KAEL }),
-    ])
+    const idMap = new IdBiMap()
+    const entities = contextOf(
+      [
+        row(KAEL, 'character', 'Kael', { faction_id: GONE }),
+        row(ARIA, 'character', 'Aria', { faction_id: KAEL }),
+      ],
+      idMap,
+    )
     expect(entities.map((e) => e.faction)).toEqual([null, null])
-    expect(JSON.stringify(entities)).not.toContain('fact_')
+    // Substituted, it would still reach the prompt: as a placeholder no line lists.
+    expect(idMap.getPlaceholderFor(GONE)).toBeUndefined()
   })
 
   it('collapses each entity onto one line', () => {
