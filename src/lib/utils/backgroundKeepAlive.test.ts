@@ -223,6 +223,37 @@ describe('holdBackgroundKeepAlive', () => {
     expect(queued).not.toHaveBeenCalled()
   })
 
+  it('does not stop a task that a new turn started during the idle callback', async () => {
+    onPlatform(false, true)
+    let finishCallback: () => void = () => {}
+    const release = await holdBackgroundKeepAlive(() => {})
+    afterBackgroundKeepAlive(() => new Promise<void>((resolve) => (finishCallback = resolve)))
+    release()
+    const releaseNext = await holdBackgroundKeepAlive(() => {})
+    finishCallback()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(calls().filter((c) => c === 'plugin:generation|stop')).toHaveLength(0)
+    releaseNext()
+    expect(calls().filter((c) => c === 'plugin:generation|stop')).toHaveLength(1)
+  })
+
+  it('sends native calls in the order they were issued', async () => {
+    onPlatform(false, true)
+    let finishStart: () => void = () => {}
+    invoke.mockImplementationOnce(() => new Promise<void>((resolve) => (finishStart = resolve)))
+    const starting = holdBackgroundKeepAlive(() => {})
+    const joining = holdBackgroundKeepAlive(() => {})
+    expect(calls()).toEqual(['plugin:generation|start'])
+    finishStart()
+    const [first, second] = await Promise.all([starting, joining])
+    await vi.waitFor(() =>
+      expect(calls()).toEqual(['plugin:generation|start', 'plugin:generation|update']),
+    )
+    first()
+    second()
+  })
+
   it('runs an idle callback at once when nothing holds the keep-alive', () => {
     const callback = vi.fn()
     afterBackgroundKeepAlive(callback)

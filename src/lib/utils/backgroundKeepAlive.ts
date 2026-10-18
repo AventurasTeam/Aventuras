@@ -2,6 +2,21 @@ import { Channel, invoke } from '@tauri-apps/api/core'
 import { isAndroid, isIos } from '#lib/utils/platform.ts'
 import { startSilentAudio, stopSilentAudio } from '#lib/utils/silentAudio.ts'
 
+// Native start, stop and update calls run in the order issued; the first runs at once.
+let nativeTail: Promise<unknown> | null = null
+function inOrder<T>(call: () => Promise<T>): Promise<T> {
+  const run = nativeTail ? nativeTail.then(call) : call()
+  const settled = run.then(
+    () => {},
+    () => {},
+  )
+  nativeTail = settled
+  void settled.then(() => {
+    if (nativeTail === settled) nativeTail = null
+  })
+  return run
+}
+
 const TITLE = 'Generating story…'
 const SUBTITLE = 'AI generation is running.'
 
@@ -30,12 +45,14 @@ async function startBackgroundKeepAlive(
         stopSilentAudio()
         onExpire()
       }
-      await invoke('plugin:generation|start', {
-        title: TITLE,
-        subtitle: SUBTITLE,
-        onExpire: channel,
-        notifyOnExpire,
-      })
+      await inOrder(async () =>
+        invoke('plugin:generation|start', {
+          title: TITLE,
+          subtitle: SUBTITLE,
+          onExpire: channel,
+          notifyOnExpire,
+        }),
+      )
     }
   } catch (e) {
     stopSilentAudio()
@@ -49,7 +66,7 @@ async function stopBackgroundKeepAlive(outcome: KeepAliveOutcome = 'done'): Prom
       window.AndroidBridge?.stopGenerationService()
     } else if (isIos()) {
       stopSilentAudio()
-      await invoke('plugin:generation|stop', { outcome })
+      await inOrder(async () => invoke('plugin:generation|stop', { outcome }))
     }
   } catch (e) {
     console.warn('[backgroundKeepAlive] Failed to stop:', e)
@@ -64,7 +81,7 @@ export type KeepAliveStage = 'preparing' | 'writing' | 'world' | 'finishing'
 /** Tells the iOS task which part of the pipeline is running, for its text and progress. */
 export function setKeepAliveStage(stage: KeepAliveStage, notifyOnExpire?: boolean): void {
   if (!isIos() || holds === 0) return
-  invoke('plugin:generation|update', { stage, notifyOnExpire }).catch(() => {})
+  inOrder(async () => invoke('plugin:generation|update', { stage, notifyOnExpire })).catch(() => {})
 }
 
 const OUTCOME_RANK: Record<KeepAliveOutcome, number> = { done: 0, stopped: 1, failed: 2 }
@@ -91,7 +108,7 @@ function releaser(onExpire?: () => void): Release {
     if (onExpire) expiryHandlers.delete(onExpire)
     if (OUTCOME_RANK[outcome] > OUTCOME_RANK[worstOutcome]) worstOutcome = outcome
     if (--holds === 0) {
-      epoch++
+      const idleEpoch = ++epoch
       const final = worstOutcome
       worstOutcome = 'done'
       const callback = idleCallback
@@ -104,6 +121,8 @@ function releaser(onExpire?: () => void): Release {
             console.warn('[backgroundKeepAlive] idle callback failed:', e)
           }
         }
+        // A turn that started meanwhile owns the task now.
+        if (holds !== 0 || epoch !== idleEpoch) return
         await stopBackgroundKeepAlive(final)
       })()
     }

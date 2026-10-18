@@ -85,6 +85,9 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   page keeps every holder's handler and calls them all on expiry. Lowering the ring's progress is
   not documented either way by Apple; the stall check reported in the developer forums is about
   progress updates stopping, and the creep keeps them coming.
+- **Ordering.** Native `start`, `update` and `stop` calls are chained, so they reach the plugin in
+  the order issued. The stop after the last release is skipped when a new turn took the keep-alive
+  while the idle callback ran, and the expiration handler ignores a task that is no longer current.
 - **Outcome.** Each release can report `failed` or `stopped`; the worst one is the Island's final
   message.
 - **Completion notification.** On iOS it is sent through `afterBackgroundKeepAlive`, once nothing

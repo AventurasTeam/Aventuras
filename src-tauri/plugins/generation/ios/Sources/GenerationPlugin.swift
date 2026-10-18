@@ -128,9 +128,10 @@ final class GenerationPlugin: Plugin {
     task.progress.completedUnitCount = 0
     enter(stage: stage)
 
-    task.expirationHandler = { [weak self] in
+    task.expirationHandler = { [weak self, weak task] in
       DispatchQueue.main.async {
-        guard let self = self else { return }
+        // A stopped or replaced task must not notify or finish its successor.
+        guard let self = self, let task = task, self.task === task else { return }
         self.log.error("task expired")
         // Once the narration is saved only the world update and background tasks were cut short.
         let storyReady = self.stage == "world" || self.stage == "finishing"
