@@ -143,6 +143,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return fellBack ? oldestEntryId : entryId
   }
 
+  const rowById = new Map(entities.map((e) => [e.id, e]))
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
   // facts in the same reply, so the flip guards read post-plan status and a ref
   // to a just-created character resolves.
@@ -186,7 +187,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const planNewPlaces = (): { droppedPlaces: DroppedPlace[]; parentDrops: ParentDrop[] } => {
     const droppedPlaces: DroppedPlace[] = []
     const parentDrops: ParentDrop[] = []
-    const byId = new Map(entities.map((e) => [e.id, e]))
     // The pass saw every place, so matching is over real children: nothing is hidden.
     const view = unhiddenLocationView(entities)
     const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
@@ -200,7 +200,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       else declared.push(place)
     }
 
-    const { order, duplicates } = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
+    const { order, duplicates } = settlingOrder(
+      declared,
+      (id) => rowById.get(id)?.kind === 'location',
+    )
     for (const { handle, name } of duplicates)
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
     for (const settling of order) {
@@ -512,7 +515,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   // classifier.md → Factions → Memberships. Retired as the rows stood before the reply: read from
   // the snapshot (`rowById`), not `index`, so the reply's own flips never count. Write order
   // follows anchor order, so a reversal of the head turn undoes only the latest writes.
-  const rowById = new Map(entities.map((e) => [e.id, e]))
   const droppedMemberships: DroppedMembership[] = []
   const factionNow = new Map<string, string | null>()
   const factionOf = (id: string): string | null => {
@@ -530,14 +532,14 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   for (const { fact } of memberships) {
     const characterId = resolveRef(fact.character, 'character')
     if (characterId == null) continue
-    const factionRef = fact.faction
-    const factionId = factionRef === null ? null : resolveRef(factionRef, 'faction')
-    if (factionRef !== null) {
+    let factionId: string | null = null
+    if (fact.faction !== null) {
+      factionId = resolveRef(fact.faction, 'faction')
       if (factionId == null) continue
       if (rowById.get(factionId)?.status === 'retired') {
         droppedMemberships.push({
           character: fact.character,
-          faction: factionRef,
+          faction: fact.faction,
           cause: 'retired-faction',
         })
         continue
