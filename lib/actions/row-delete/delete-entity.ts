@@ -6,7 +6,12 @@ import { deleteTailOf, entityDeleteActions } from '@/lib/world'
 
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
 import type { DbCtx } from '../types'
-import { commitRowDelete, ROW_DELETE_REJECTION, type RowDeleteResult } from './delete-row'
+import {
+  commitRowDeleteBuilt,
+  ROW_DELETE_REJECTION,
+  rowDeleteGateRefusal,
+  type RowDeleteResult,
+} from './delete-row'
 
 /**
  * world.md → Delete. Holds the tail's metadata lock like the scene editor, so the drop can't race
@@ -33,25 +38,37 @@ export function deleteEntityRow(
   )
 }
 
-async function deleteEntityLocked(
+function deleteEntityLocked(
   branchId: string,
   id: string,
   head: HeadTurn<StoryEntry> | null,
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  // Store read, plan build, and commitRowDelete's in-flight check must run with no await between
-  // them — a hard-gate run finishing in that gap would commit over a staled snapshot.
-  const branchEntities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === branchId,
-  )
-  const target = branchEntities.find((e) => e.id === id)
-  if (target == null)
-    return {
-      status: 'rejected',
-      reason: `entity ${id} not found`,
-      code: ROW_DELETE_REJECTION.notFound,
-    }
   const tail = deleteTailOf(head)
-  const { actions } = entityDeleteActions({ branchId, target, branchEntities, tail })
-  return commitRowDelete('entity', branchId, id, actions, ctx)
+  // cadence.md → Concurrency: built from the stores under the branch lock's shared hold, so a
+  // pass's write to a member can't land between this read and the commit.
+  return commitRowDeleteBuilt(
+    'entity',
+    branchId,
+    id,
+    () => {
+      const gated = rowDeleteGateRefusal()
+      if (gated) return gated
+      const branchEntities = [...entitiesStore.getEntities().values()].filter(
+        (e) => e.branchId === branchId,
+      )
+      const target = branchEntities.find((e) => e.id === id)
+      if (target == null)
+        return {
+          status: 'rejected',
+          reason: `entity ${id} not found`,
+          code: ROW_DELETE_REJECTION.notFound,
+        }
+      return {
+        status: 'ok',
+        actions: entityDeleteActions({ branchId, target, branchEntities, tail }).actions,
+      }
+    },
+    ctx,
+  )
 }
