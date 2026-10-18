@@ -277,8 +277,105 @@ test.describe('periodic classifier — mentioned places', () => {
   })
 })
 
+// classifier.md → Factions: a pass's faction create and the membership naming it, through the
+// real schema, parse and burst. Reconciliation and the planner's rules are unit-tested
+// (reconcile.test.ts, plan.test.ts).
+test.describe('periodic classifier — factions', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
+    mock = await startMockLlm()
+    mock.setNarrative('E2E-FACTIONS Ilsabet swears herself to the Salt Wardens.')
+    mock.setStructured('periodic-classifier', {
+      happenings: [],
+      relationships: [],
+      statusFlips: [],
+      newCharacters: [
+        {
+          handle: 'new:ilsabet',
+          name: 'Ilsabet Varr',
+          description: 'A tide-reader with a broken oar.',
+          sourceTurn: 't1',
+        },
+      ],
+      newFactions: [
+        {
+          handle: 'new:wardens',
+          name: 'The Salt Wardens',
+          description: 'Keepers of the drowned coast.',
+          keywords: ['the Wardens'],
+          sourceTurn: 't1',
+        },
+      ],
+      memberships: [{ character: 'new:ilsabet', faction: 'new:wardens', sourceTurn: 't1' }],
+    })
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    setClassifierCadence(seeded.dbPath, 'story_hero', 1)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('a pass creates the faction it names and puts the new character in it', async () => {
+    await home.openStory(app.window, 'The Veilstone Courier').click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    await reader.composer(app.window).fill('E2E-FACTIONS I watch Ilsabet take the oath.')
+    await reader.send(app.window).click()
+    await expect(app.window.getByText('E2E-FACTIONS Ilsabet', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+
+    const branchId = (
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+    // The membership is the burst's last write, and each write commits on its own.
+    const memberFaction = async () =>
+      (
+        await queryApp(
+          app.window,
+          `SELECT json_extract(state, '$.faction_id') FROM entities
+           WHERE branch_id = ? AND kind = 'character' AND name = 'Ilsabet Varr'`,
+          [branchId],
+        )
+      )[0]?.[0] ?? null
+    await expect.poll(memberFaction, { timeout: 20_000 }).not.toBeNull()
+
+    const [faction] = await queryApp(
+      app.window,
+      `SELECT id, status, injection_mode, description, keywords FROM entities
+       WHERE branch_id = ? AND kind = 'faction' AND name = 'The Salt Wardens'`,
+      [branchId],
+    )
+    expect(faction.slice(1, 4)).toEqual(['active', 'auto', 'Keepers of the drowned coast.'])
+    expect(JSON.parse(faction[4] as string)).toEqual(['the Wardens'])
+    expect(await memberFaction()).toBe(faction[0])
+
+    // The membership is its own field write, anchored on the turn it came from.
+    const [membership] = await queryApp(
+      app.window,
+      `SELECT undo_payload, entry_id FROM deltas
+       WHERE branch_id = ? AND source = 'periodic_classifier' AND op = 'update'
+         AND target_table = 'entities' AND target_id IN
+           (SELECT id FROM entities WHERE branch_id = ? AND name = 'Ilsabet Varr')`,
+      [branchId, branchId],
+    )
+    expect(JSON.parse(membership[0] as string)).toEqual({ state: { faction_id: null } })
+    expect(membership[1]).not.toBeNull()
+  })
+})
+
 // Covers the configureClassifierEmbedder wiring, which unit tests cannot reach:
-// reconcileNewCharacter is tested with an injected embedder and the boot wiring
+// reconcileNewEntity is tested with an injected embedder and the boot wiring
 // only for subscription/teardown, so an unwired setter passes both halves. Needs
 // a real name collision resolved by a real embedding (docs/testing.md -> Embedder
 // in E2E).

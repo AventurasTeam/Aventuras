@@ -527,7 +527,7 @@ describe('thresholds', () => {
   })
 })
 
-// The exported form of the scorer reconcileNewCharacter uses; the cases above cover its guards.
+// The exported form of the scorer reconcileNewEntity uses; the cases above cover its guards.
 describe('scoreDescriptions', () => {
   it('scores each description index-aligned, leaving a blank one unscored and out of the call', async () => {
     const embed = embedder({ [KEEPER]: 0.8 })

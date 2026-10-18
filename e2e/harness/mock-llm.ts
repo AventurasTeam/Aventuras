@@ -44,6 +44,8 @@ export const EXAMPLES: Record<string, unknown> = {
     relationships: [],
     statusFlips: [],
     newCharacters: [],
+    newFactions: [],
+    memberships: [],
   },
   // The same agent with the story's classifierMentionedPlaces on: the schema grows `newPlaces`,
   // so the injected TS block no longer matches the base entry. Inert for the same reason.
@@ -52,6 +54,8 @@ export const EXAMPLES: Record<string, unknown> = {
     relationships: [],
     statusFlips: [],
     newCharacters: [],
+    newFactions: [],
+    memberships: [],
     newPlaces: [],
   },
   // Same logical agent as per-turn-classifier, second reply shape: the

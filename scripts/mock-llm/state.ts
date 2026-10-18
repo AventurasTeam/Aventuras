@@ -159,6 +159,8 @@ function defaultLanes(): Record<string, Lane> {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        newFactions: [],
+        memberships: [],
       }),
     ]),
 
@@ -168,6 +170,8 @@ function defaultLanes(): Record<string, Lane> {
         relationships: [],
         statusFlips: [],
         newCharacters: [],
+        newFactions: [],
+        memberships: [],
         newPlaces: [],
       }),
     ]),
