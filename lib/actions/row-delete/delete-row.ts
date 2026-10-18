@@ -43,13 +43,21 @@ function rejectionCode(code: string | undefined): RowDeleteRejectionCode {
 export type RowDeleteKind = 'entity' | 'lore' | 'thread' | 'happening'
 
 /** generation-pipeline.md → Action rejection — defense in depth: the UI disables first. */
-export function rowDeleteGateRefusal(): Extract<
+function rowDeleteGateRefusal(): Extract<
   BuiltGroup<RowDeleteRejectionCode>,
   { status: 'rejected' }
 > | null {
   return generationStore.isUserEditBlocked()
     ? { status: 'rejected', reason: 'generation in flight', code: ROW_DELETE_REJECTION.inFlight }
     : null
+}
+
+// No await may sit between this and the write registering: a prose reversal raised before it is
+// refused here, and one raised after settles the write before reading the log.
+function loggedGateRefusal(kind: RowDeleteKind, branchId: string, id: string) {
+  const gated = rowDeleteGateRefusal()
+  if (gated) logger.warn(`action_layer.${kind}_delete_rejected`, { branchId, id, code: gated.code })
+  return gated
 }
 
 /** Refusals and failures log as `action_layer.<kind>_delete_*`. */
@@ -90,26 +98,32 @@ export async function commitRowDelete(
   actions: readonly PipelineAction[],
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  const gated = rowDeleteGateRefusal()
-  if (gated) {
-    logger.warn(`action_layer.${kind}_delete_rejected`, { branchId, id, code: gated.code })
-    return gated
-  }
+  const gated = loggedGateRefusal(kind, branchId, id)
+  if (gated) return gated
   return settleRowDelete(kind, branchId, id, () =>
     applyDeltaActionGroup(actions, { actionId: generateId('act'), branchId }, ctx),
   )
 }
 
-/** commitRowDelete, with `build` run under the branch lock's shared hold through the commit. */
-export function commitRowDeleteBuilt(
+/**
+ * commitRowDelete, with `build` run under the branch lock's shared hold through the commit, behind
+ * the gate again: a hard-gate run can start while the delete waits for the hold.
+ */
+export async function commitRowDeleteBuilt(
   kind: RowDeleteKind,
   branchId: string,
   id: string,
   build: () => BuiltGroup<RowDeleteRejectionCode>,
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
+  const gated = loggedGateRefusal(kind, branchId, id)
+  if (gated) return gated
   return settleRowDelete(kind, branchId, id, () =>
-    applyDeltaActionGroupBuilt(build, { actionId: generateId('act'), branchId }, ctx),
+    applyDeltaActionGroupBuilt(
+      () => rowDeleteGateRefusal() ?? build(),
+      { actionId: generateId('act'), branchId },
+      ctx,
+    ),
   )
 }
 

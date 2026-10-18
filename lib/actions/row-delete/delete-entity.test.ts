@@ -38,6 +38,7 @@ import {
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
+import { bracketProseReversal } from '../story-entries/prose-reversal'
 import { updateEntrySceneFields } from '../story-entries/scene-fields'
 import type { DbCtx } from '../types'
 
@@ -341,6 +342,52 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
     headTurnHook.onSecond = null
     expect(result).toEqual({ status: 'ok' })
     expect((await otherState()).inventory).toEqual(['item_y'])
+  })
+
+  it('refuses in-flight when a prose reversal takes the branch lock during the in-lock head read', async () => {
+    __resetBranchWriteLocks()
+    const restored = {
+      sceneEntities: ['char_x', 'char_lead'],
+      currentLocationId: null,
+      worldTime: 0,
+    } as EntryMetadata
+    let releaseBody = () => {}
+    const bodyGate = new Promise<void>((resolve) => {
+      releaseBody = resolve
+    })
+    let hooked = () => {}
+    const hookDone = new Promise<void>((resolve) => {
+      hooked = resolve
+    })
+    let reversal: Promise<void> = Promise.resolve()
+    headTurnHook.onSecond = async () => {
+      let holding = () => {}
+      const held = new Promise<void>((resolve) => {
+        holding = resolve
+      })
+      reversal = bracketProseReversal('b1', async () => {
+        holding()
+        await bodyGate
+        await ctx.db
+          .update(storyEntries)
+          .set({ metadata: restored })
+          .where(eq(storyEntries.id, 'entry_2'))
+      })
+      await held
+      hooked()
+    }
+    const deletion = deleteEntityRow('b1', 'char_x', ctx)
+    await hookDone
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    releaseBody()
+    const result = await deletion
+    await reversal
+    headTurnHook.onSecond = null
+
+    expect(result).toMatchObject({ status: 'rejected', code: ROW_DELETE_REJECTION.inFlight })
+    expect(await ctx.db.select().from(deltas)).toEqual([])
+    expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))).toHaveLength(1)
+    expect(await tailScene()).toEqual(['char_x', 'char_lead'])
   })
 
   it('a new tail landing between the outer and inner head reads is never edited under the stale lock', async () => {

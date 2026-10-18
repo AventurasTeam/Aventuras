@@ -6,12 +6,7 @@ import { deleteTailOf, entityDeleteActions } from '@/lib/world'
 
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
 import type { DbCtx } from '../types'
-import {
-  commitRowDeleteBuilt,
-  ROW_DELETE_REJECTION,
-  rowDeleteGateRefusal,
-  type RowDeleteResult,
-} from './delete-row'
+import { commitRowDeleteBuilt, ROW_DELETE_REJECTION, type RowDeleteResult } from './delete-row'
 
 /**
  * world.md → Delete. Holds the tail's metadata lock like the scene editor, so the drop can't race
@@ -46,14 +41,12 @@ function deleteEntityLocked(
 ): Promise<RowDeleteResult> {
   const tail = deleteTailOf(head)
   // cadence.md → Concurrency: built from the stores under the branch lock's shared hold, so a
-  // pass's write to a member can't land between this read and the commit.
+  // pass's write to a row the delete rewrites can't land between this read and the commit.
   return commitRowDeleteBuilt(
     'entity',
     branchId,
     id,
     () => {
-      const gated = rowDeleteGateRefusal()
-      if (gated) return gated
       const branchEntities = [...entitiesStore.getEntities().values()].filter(
         (e) => e.branchId === branchId,
       )
