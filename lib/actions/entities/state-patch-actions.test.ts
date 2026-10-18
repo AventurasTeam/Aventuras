@@ -5,6 +5,7 @@ import {
   branches,
   deltas,
   entities,
+  entityStateSchemaForKind,
   stories,
   type CharacterState,
   type Entity,
@@ -56,6 +57,18 @@ const CHAR: NewEntity = {
   },
   createdAt: 1,
   updatedAt: 1,
+}
+
+// Spelled out, not taken from emptyEntityState: the null-column fill under test calls it.
+const NO_CHARACTER_STATE = {
+  visual: {},
+  traits: [],
+  drives: [],
+  current_location_id: null,
+  equipped_items: [],
+  inventory: [],
+  faction_id: null,
+  lastSeenAt: null,
 }
 
 async function rowFor(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
@@ -295,7 +308,9 @@ describe('a null state column', () => {
       'act_i',
     )
     expect(result.status).toBe('ok')
-    expect((await rowFor(db, 'char_1')).state).toMatchObject({ inventory: ['item_rope'] })
+    const { state } = await rowFor(db, 'char_1')
+    expect(state).toEqual({ ...NO_CHARACTER_STATE, inventory: ['item_rope'] })
+    expect(entityStateSchemaForKind('character').safeParse(state).success).toBe(true)
   })
 })
 
@@ -937,7 +952,9 @@ describe('setCharacterFaction', () => {
     await seed(ctx, db)
     await db.update(entities).set({ state: null }).where(eq(entities.id, 'char_1'))
     expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
-    expect(await factionOf(db)).toBe('fact_circle')
+    const { state } = await rowFor(db, 'char_1')
+    expect(state).toEqual({ ...NO_CHARACTER_STATE, faction_id: 'fact_circle' })
+    expect(entityStateSchemaForKind('character').safeParse(state).success).toBe(true)
   })
 
   it('no-ops on a row that is gone', async () => {
@@ -971,6 +988,15 @@ describe('setCharacterFaction', () => {
     await seed(ctx, db)
     await db.insert(entities).values({ ...ACTIVE, id: 'char_2' })
     expect(await apply(ctx, join(factionId), 'act_j')).toEqual(noop('not-a-faction'))
+    expect(await factionOf(db)).toBeNull()
+  })
+
+  it('no-ops on a faction that exists only on another branch', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'alt', createdAt: 1 })
+    await db.insert(entities).values(faction('fact_elsewhere', { branchId: 'br_2' }))
+    expect(await apply(ctx, join('fact_elsewhere'), 'act_j')).toEqual(noop('not-a-faction'))
     expect(await factionOf(db)).toBeNull()
   })
 
