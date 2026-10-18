@@ -5,6 +5,7 @@ import { VISUAL_CATEGORIES, type CharacterState, type Entity } from '@/lib/db'
 import {
   characterDraftFrom,
   characterDraftSchema,
+  characterFactionId,
   factionDraftFrom,
   factionDraftSchema,
   itemDraftFrom,
@@ -163,6 +164,20 @@ describe('characterDraftFrom', () => {
       }),
     ).toMatchObject({ atLocationId: 'loc_hollow', condition: 'chipped' })
   })
+})
+
+describe('characterFactionId', () => {
+  it("reads a character's faction, and a null state as none", () => {
+    expect(characterFactionId(KAEL)).toBe('fac_wardens')
+    expect(characterFactionId({ kind: 'character', state: null })).toBeNull()
+  })
+
+  it.each(['location', 'item', 'faction'] as const)(
+    "reads no faction from another kind (%s), even one holding a character's state",
+    (kind) => {
+      expect(characterFactionId({ kind, state: KAEL_STATE })).toBeNull()
+    },
+  )
 })
 
 describe('draft schemas', () => {
