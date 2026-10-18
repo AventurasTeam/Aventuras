@@ -238,6 +238,20 @@ describe('holdBackgroundKeepAlive', () => {
     expect(calls().filter((c) => c === 'plugin:generation|stop')).toHaveLength(1)
   })
 
+  it('ignores an expiry message from a run that already ended', async () => {
+    onPlatform(false, true)
+    const stale = vi.fn()
+    const release = await holdBackgroundKeepAlive(stale)
+    const oldChannel = invoke.mock.calls[0][1].onExpire
+    release()
+    const current = vi.fn()
+    const releaseCurrent = await holdBackgroundKeepAlive(current)
+    oldChannel.onmessage({ reason: 'expired' })
+    expect(stale).not.toHaveBeenCalled()
+    expect(current).not.toHaveBeenCalled()
+    releaseCurrent()
+  })
+
   it('sends native calls in the order they were issued', async () => {
     onPlatform(false, true)
     let finishStart: () => void = () => {}

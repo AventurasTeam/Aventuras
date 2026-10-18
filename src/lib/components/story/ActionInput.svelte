@@ -949,6 +949,9 @@
         return
       }
 
+      // The user stopped it from the Island: the story is saved, and no speech or other work is started.
+      if (keepAliveEnded) return
+
       if (
         narrationEntry &&
         settings.systemServicesSettings.tts.enabled &&
@@ -956,9 +959,6 @@
       ) {
         emitTTSQueued(narrationEntry.id, fullResponse)
       }
-
-      // The user stopped it from the Island: the story is saved, and no more work is started.
-      if (keepAliveEnded) return
 
       const coordinator = new BackgroundTaskCoordinator(
         buildBackgroundTaskDependencies(currentStoryRef.id),

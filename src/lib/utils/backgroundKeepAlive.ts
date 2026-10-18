@@ -34,6 +34,7 @@ async function startBackgroundKeepAlive(
   onExpire: () => void,
   notifyOnExpire = false,
 ): Promise<void> {
+  const runEpoch = epoch
   try {
     if (isAndroid()) {
       window.AndroidBridge?.startGenerationService()
@@ -42,6 +43,8 @@ async function startBackgroundKeepAlive(
       startSilentAudio()
       const channel = new Channel<unknown>()
       channel.onmessage = () => {
+        // A late message from a run that has already ended must not touch the current one.
+        if (epoch !== runEpoch) return
         stopSilentAudio()
         onExpire()
       }
