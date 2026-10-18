@@ -104,7 +104,9 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
 - **Expiry.** The page aborts through the existing `AbortController`. Before the narration is
   saved the turn is rewound like the in-app Stop, so the action returns to the input; if Stop is
   unavailable (a retry) or there is no backup to rewind to (a plain regenerate) the turn fails with an error entry and Retry.
-  Once the narration is saved only the later phases are cut short.
+  Once the narration is saved only the later phases are cut short: the classifier request is
+  cancelled through the same signal, and the post-turn tasks (chapter, lore, style review) are not
+  started.
 - **Settings.** The background-generation section is shown on iOS and Android; the text differs.
 
 ### Configuration
