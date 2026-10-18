@@ -1863,6 +1863,27 @@ describe('mentioned places', () => {
       expect(unresolvedRefs).toEqual([])
     })
 
+    it('keeps a handle bound to the newFactions entry that claimed it', () => {
+      const { planned, handleMap, unresolvedRefs, droppedPlaces } = buildClassifierActions(
+        reply([newPlace('new:x', 'Ashwater')], {
+          newFactions: [
+            {
+              handle: 'new:x',
+              name: 'The Ash Guild',
+              description: 'Ferrymen.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+        }),
+        deps([], { factionDecisions: new Map([['new:x', { kind: 'create', flag: null }]]) }),
+      )
+      expect(createdPlaces(planned)).toEqual([])
+      expect(handleMap.get('new:x')).toMatch(/^fact_/)
+      expect(droppedPlaces).toEqual([{ handle: 'new:x', name: 'Ashwater', cause: 'handle-taken' }])
+      expect(unresolvedRefs).toEqual([])
+    })
+
     it('drops a blank-named place and reports it', () => {
       const { planned, unresolvedRefs, droppedPlaces } = buildClassifierActions(
         reply([newPlace('new:x', '   ')]),
@@ -2039,17 +2060,55 @@ describe('factions', () => {
       expect(payloadOf<{ id: string }>(planned[0]).id).toBe('fact_old')
     })
 
-    it("keeps a handle a new character claimed, and never reads the character's decision", () => {
-      const { planned, unresolvedRefs } = buildClassifierActions(
+    it("keeps a handle a new character claimed, ignoring the faction's decision for it", () => {
+      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
         reply({
           newCharacters: [{ ...circle, name: 'Circe' }],
           newFactions: [circle],
         }),
-        deps([], { decisions: decided(create) }),
+        deps([], { decisions: decided(create), factionDecisions: decided(create) } as never),
       )
       expect(planned).toHaveLength(1)
       expect(payloadOf<{ entry: { kind: string } }>(planned[0]).entry.kind).toBe('character')
+      expect(handleMap.get('new:circle')).toBe('char_new1')
       expect(unresolvedRefs).toEqual(['new:circle'])
+    })
+
+    it("decides a faction by its own decision, never the character's for its handle", () => {
+      const { planned, handleMap } = buildClassifierActions(
+        reply({ newFactions: [circle] }),
+        deps([member('char_kael', null)], {
+          decisions: decided({ kind: 'known', entityId: 'char_kael', similarity: 0.9 }),
+          factionDecisions: decided(create),
+        } as never),
+      )
+      expect(kinds(planned)).toEqual(['createEntity'])
+      expect(handleMap.get('new:circle')).toBe('fact_new1')
+    })
+
+    it("resolves a happening's involvement naming the new faction's handle", () => {
+      const { planned } = buildClassifierActions(
+        reply({
+          newFactions: [circle],
+          happenings: [
+            {
+              title: 'The Circle takes the forge',
+              sourceTurn: 't2',
+              involvements: [{ ref: 'new:circle', role: 'claimant' }],
+              awareness: [],
+            },
+          ],
+        }),
+        deps([], { factionDecisions: decided(create) } as never),
+      )
+      expect(kinds(planned)).toEqual([
+        'createEntity',
+        'createHappening',
+        'createHappeningInvolvement',
+      ])
+      expect(payloadOf<{ entry: { entityId: string } }>(planned[2]).entry.entityId).toBe(
+        'fact_new1',
+      )
     })
 
     it('reports a faction with no decision or a blank name, creating nothing', () => {
