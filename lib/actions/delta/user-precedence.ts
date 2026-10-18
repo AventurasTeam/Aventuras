@@ -148,7 +148,7 @@ export function carriesColumn(delta: Delta, column: string): boolean {
  * Whether the delta recorded a prior value at `path` inside `column`, at a path above it or at one
  * below it: the undo payload records only the sub-fields an update changed.
  */
-export function carriesPath(delta: Delta, column: string, path: readonly string[]): boolean {
+function carriesPath(delta: Delta, column: string, path: readonly string[]): boolean {
   if (!carriesColumn(delta, column)) return false
   let node: unknown = delta.undoPayload?.[column]
   for (const key of path) {

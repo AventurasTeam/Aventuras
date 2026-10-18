@@ -32,7 +32,7 @@ type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'h
 
 /**
  * A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a row the
- * reversal removes or one already gone.
+ * reversal removes, or one already gone when the undos write that value.
  */
 export type RefClear = {
   readonly row: RowRef
@@ -155,7 +155,10 @@ async function liveReferrers(
   return found
 }
 
-/** A JSON-path ref's id once the set's undos have run, from the oldest set update that changed it. */
+/**
+ * A JSON-path ref's id once the set's undos have run, from the oldest set update that changed it
+ * and no later user write overrode.
+ */
 type RestoredRef = {
   readonly row: RowRef
   readonly ref: RefPath
@@ -326,7 +329,7 @@ type PathRefValue = { readonly row: RowRef; readonly ref: RefPath; readonly id: 
 
 // generation-pipeline.md → Reverse-replay: a value the reversal writes never names a row that
 // doesn't exist, so a row deleted outside the set counts as removed. A delete in the set puts its
-// row back, so the row it names is present.
+// row back, so a ref naming that row finds it present.
 async function goneRows(
   ctx: DbCtx,
   branchId: string,
