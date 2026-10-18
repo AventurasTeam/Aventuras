@@ -327,9 +327,8 @@ async function closeOver(
 
 type PathRefValue = { readonly row: RowRef; readonly ref: RefPath; readonly id: string | null }
 
-// generation-pipeline.md → Reverse-replay: a value the reversal writes never names a row that
-// doesn't exist, so a row deleted outside the set counts as removed. A delete in the set puts its
-// row back, so a ref naming that row finds it present.
+// generation-pipeline.md → Reverse-replay: a written ref never names a missing row, so a row
+// deleted outside the set counts as removed; a row a delete in the set puts back counts present.
 async function goneRows(
   ctx: DbCtx,
   branchId: string,

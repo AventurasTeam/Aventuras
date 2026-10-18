@@ -17,9 +17,8 @@ import { deltaLockKeys } from './row-locks'
 
 export type RedoSnapshot = {
   delta: Delta
-  // Full row content captured immediately BEFORE the undo reversal runs — this
-  // is the "forward" state redo restores to, less any ref to a row gone at redo,
-  // since deltas only store the backward (undo_payload) diff, never a forward one.
+  // Full row captured BEFORE the undo runs: the forward state redo restores, less refs to rows
+  // gone at redo; deltas store only the backward (undo_payload) diff.
   rowBeforeUndo: Record<string, unknown> | null
 }
 
@@ -172,8 +171,8 @@ export function applyRedo(
   return withKeyLocks(keys, () => applyRedoLocked(snapshots, refRestores, ctx, extraOps))
 }
 
-// generation-pipeline.md → Reverse-replay: a redo never leaves a ref naming a row that doesn't exist.
-// A ref restore is checked too: the id it held before the undo can be one a sweep set.
+// generation-pipeline.md → Reverse-replay: a redo never leaves a ref naming a row that doesn't
+// exist. A ref restore is checked too: the id it held before the undo can be one a sweep set.
 async function deadAfterRedo(
   ctx: DbCtx,
   snapshots: readonly RedoSnapshot[],

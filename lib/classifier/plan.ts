@@ -512,9 +512,8 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  // classifier.md → Factions → Memberships. Retired as the rows stood before the reply: read from
-  // the snapshot (`rowById`), not `index`, so the reply's own flips never count. Write order
-  // follows anchor order, so a reversal of the head turn undoes only the latest writes.
+  // classifier.md → Factions → Memberships. Retired per the pre-reply `rowById`, not `index`, so
+  // the reply's own flips never count. Anchor-ordered: a head-turn reversal undoes only the latest.
   const droppedMemberships: DroppedMembership[] = []
   const factionNow = new Map<string, string | null>()
   const factionOf = (id: string): string | null => {

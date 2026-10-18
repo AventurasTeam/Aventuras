@@ -220,11 +220,9 @@ export type DeltaGroupResult =
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 /**
- * Handlers read pre-group state, so a delete's cascade can't see the group's other writes: a
- * second delete of a row, or a second write to a cascaded one, logs it twice (undo then hits a
- * unique constraint forever); a write to a row the group deletes leaves an undo that refuses as
- * held; a link, a translation, a place's parent or a character's faction naming a deleted or
- * cascaded row dangles.
+ * Handlers read pre-group state. A second delete of a row, or a write to a cascaded one, logs it
+ * twice (undo hits a unique constraint forever); a write to a deleted row leaves an undo refused as
+ * held; a link, translation, place parent or faction naming a deleted or cascaded row dangles.
  */
 function groupConflict(outcomes: readonly OkOutcome[]): string | null {
   const cascaded = new Set<string>()
