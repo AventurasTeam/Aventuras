@@ -596,9 +596,13 @@
       ? await holdBackgroundKeepAlive(() => {
           keepAliveEnded = true
           // Before the narration is saved, end the turn like the in-app Stop so the action
-          // returns to the input; afterwards only the later phases are cut short.
+          // returns to the input; afterwards only the later phases are cut short. Without a
+          // backup there is nothing to rewind to, so the abort fails the turn instead.
           activeAbortController?.abort()
-          if (!ending.narrationSaved) void handleStopGeneration()
+          const backup = ui.retryBackup
+          if (!ending.narrationSaved && backup && backup.storyId === story.currentStory?.id) {
+            void handleStopGeneration()
+          }
         }, settings.experimentalFeatures.generationNotifications)
       : () => {}
 
@@ -901,7 +905,7 @@
       ui.updateActivationData(activationTracker, currentStoryRef.id)
       if (stopRequested) return
 
-      // Stop was unavailable (a retry, an uninterruptible step), so the turn cannot be rewound:
+      // Stop was unavailable (a retry) or has no backup to rewind to, so the turn cannot be rewound:
       // fail it, which records the error and offers Retry.
       if (keepAliveEnded && !ending.narrationSaved) {
         throw new Error('The system ended background generation before the story was written.')
