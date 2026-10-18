@@ -1,8 +1,8 @@
 import type { ClassifierWindow } from '@/lib/classifier'
-import type { CharacterRelationship, CharacterState, Entity, Happening } from '@/lib/db'
+import type { CharacterRelationship, Entity, Happening } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { blankToNull } from '@/lib/text'
-import { placeTree } from '@/lib/world'
+import { characterFactionId, placeTree } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -68,7 +68,7 @@ export function buildClassifierContext(args: {
   const factions = new Set(entities.filter((e) => e.kind === 'faction').map((e) => e.id))
   // classifier.md → Factions: an id naming no listed faction would reach the prompt raw.
   const factionOf = (e: Entity): string | null => {
-    const id = e.kind === 'character' ? (e.state as CharacterState | null)?.faction_id : null
+    const id = characterFactionId(e)
     return id != null && factions.has(id) ? id : null
   }
   const context = {

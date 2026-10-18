@@ -2,6 +2,7 @@ import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 import {
+  characterFactionId,
   matchNewPlace,
   parentOfLocations,
   placeNewLocation,
@@ -514,10 +515,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
   const rowById = new Map(entities.map((e) => [e.id, e]))
   const droppedMemberships: DroppedMembership[] = []
   const factionNow = new Map<string, string | null>()
-  const factionOf = (id: string): string | null =>
-    factionNow.has(id)
-      ? (factionNow.get(id) ?? null)
-      : ((rowById.get(id)?.state as { faction_id?: string | null } | null)?.faction_id ?? null)
+  const factionOf = (id: string): string | null => {
+    if (factionNow.has(id)) return factionNow.get(id) ?? null
+    const row = rowById.get(id)
+    return row == null ? null : characterFactionId(row)
+  }
   const turnPosition = (turn: string | undefined): number => {
     const { entryId } = window.resolveHandle(turn)
     return window.turns.findIndex((t) => t.entryId === entryId)

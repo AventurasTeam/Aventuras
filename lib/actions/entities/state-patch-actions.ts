@@ -11,6 +11,7 @@ import {
 } from '@/lib/db'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { entitiesStore } from '@/lib/stores'
+import { characterFactionId } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import {
@@ -412,7 +413,7 @@ export const setCharacterFactionHandler: ActionHandler = async (action, branchId
     }
   if (current.kind !== 'character')
     return { status: 'rejected', reason: 'not-a-character', code: 'noop' }
-  if (((current.state as CharacterState | null)?.faction_id ?? null) === factionId)
+  if (characterFactionId(current) === factionId)
     return { status: 'rejected', reason: 'faction-unchanged', code: 'noop' }
   if (factionId !== null && !(await isFaction(ctx, bid, factionId, group)))
     return { status: 'rejected', reason: 'not-a-faction', code: 'noop' }

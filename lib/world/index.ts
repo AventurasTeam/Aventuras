@@ -10,6 +10,7 @@ export {
 export {
   characterDraftFrom,
   characterDraftSchema,
+  characterFactionId,
   ENTITY_STATUSES,
   factionDraftFrom,
   factionDraftSchema,
