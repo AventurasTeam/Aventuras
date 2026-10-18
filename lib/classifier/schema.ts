@@ -144,6 +144,7 @@ export const classifierExtractionWithPlacesSchema = classifierExtractionSchema.e
 export type ClassifierExtraction = z.infer<typeof classifierExtractionSchema>
 export type ClassifierPlacesExtraction = z.infer<typeof classifierExtractionWithPlacesSchema>
 export type NewPlace = ClassifierPlacesExtraction['newPlaces'][number]
+export type NewCharacter = ClassifierExtraction['newCharacters'][number]
 export type NewFaction = ClassifierExtraction['newFactions'][number]
 export type Membership = ClassifierExtraction['memberships'][number]
 /** A reply under either schema: newPlaces only when the pass read the setting on. */

@@ -1269,6 +1269,45 @@ describe('periodicClassifierPhase', () => {
       expect(createdEntry(events)).toMatchObject({ kind: 'character', name: 'Mara' })
     })
 
+    it('spends no embed call on a faction whose handle a character claimed', async () => {
+      const embed = vi.fn(async () => ({
+        vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
+        dim: 2,
+      }))
+      configureClassifierEmbedder(embed)
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newCharacters: [
+            {
+              handle: 'new:x',
+              name: 'Mara',
+              description: 'A smith.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+          newFactions: [
+            {
+              handle: 'new:x',
+              name: 'The Iron Circle',
+              description: 'Smiths.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [row(FACT_CIRCLE, 'faction', 'The Iron Circle')],
+      })
+      await drain(h.ctx)
+
+      expect(embed).not.toHaveBeenCalled()
+    })
+
     it('keeps the first declaration of a repeated newCharacters handle', async () => {
       vi.mocked(generateStructured).mockResolvedValue({
         status: 'ok',

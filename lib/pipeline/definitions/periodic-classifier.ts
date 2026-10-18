@@ -16,6 +16,8 @@ import {
   PERIODIC_CLASSIFIER_KIND,
   reconcileNewEntity,
   substituteClassifierIds,
+  type NewCharacter,
+  type NewFaction,
   type ReconcileDecision,
 } from '@/lib/classifier'
 import {
@@ -263,20 +265,16 @@ export async function* periodicClassifierPhase(
   const current = branchEntities(ctx.branchId)
   const embedDescriptions = classifierEmbedder()
   const reconcile = async (
-    candidates: readonly {
-      handle: string
-      name: string
-      description: string
-      keywords: string[]
-      sourceTurn?: string
-    }[],
+    candidates: readonly (NewCharacter | NewFaction)[],
     kind: 'character' | 'faction',
+    // A handle a character already claimed plans nothing as a faction (plan.ts).
+    claimed: ReadonlySet<string> = new Set(),
   ): Promise<Map<string, ReconcileDecision> | null> => {
     const decided = new Map<string, ReconcileDecision>()
     for (const candidate of candidates) {
       if (ctx.abortSignal.aborted) return null
       // A repeated handle keeps its first declaration, as piggyback.md's does.
-      if (decided.has(candidate.handle)) continue
+      if (decided.has(candidate.handle) || claimed.has(candidate.handle)) continue
       // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
       // fields, so a key built from an unbounded one measures text no row holds.
       const stored = clampEmbeddedCharacter(candidate)
@@ -301,7 +299,11 @@ export async function* periodicClassifierPhase(
   }
   const decisions = await reconcile(substituted.newCharacters, 'character')
   if (decisions === null) return discard(null)
-  const factionDecisions = await reconcile(substituted.newFactions, 'faction')
+  const factionDecisions = await reconcile(
+    substituted.newFactions,
+    'faction',
+    new Set(decisions.keys()),
+  )
   if (factionDecisions === null) return discard(null)
 
   // generation-pipeline.md → No-gate write phase.

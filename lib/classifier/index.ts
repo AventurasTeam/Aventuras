@@ -12,6 +12,7 @@ export type {
   ClassifierPlacesExtraction,
   ClassifierReply,
   Membership,
+  NewCharacter,
   NewFaction,
   NewPlace,
 } from './schema'

@@ -12,7 +12,14 @@ import {
 } from '@/lib/world'
 
 import type { ReconcileDecision } from './reconcile'
-import { newPlacesOf, type ClassifierReply, type Membership, type NewPlace } from './schema'
+import {
+  newPlacesOf,
+  type ClassifierReply,
+  type Membership,
+  type NewCharacter,
+  type NewFaction,
+  type NewPlace,
+} from './schema'
 import type { ClassifierWindow } from './window'
 
 /** A delta the phase will emit, with its own survival anchor. */
@@ -246,17 +253,9 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return { droppedPlaces, parentDrops }
   }
 
-  type NewEntityCandidate = {
-    handle: string
-    name: string
-    description: string
-    keywords: readonly string[]
-    sourceTurn?: string
-  }
-
   // classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision.
   const planNewEntities = (
-    candidates: readonly NewEntityCandidate[],
+    candidates: readonly (NewCharacter | NewFaction)[],
     decisionOf: ReadonlyMap<string, ReconcileDecision>,
     kind: 'character' | 'faction',
   ): void => {
