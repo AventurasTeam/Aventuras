@@ -196,19 +196,19 @@ async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boole
   return row != null
 }
 
-/** The refs among `refs` with no row on the branch, as `createdKey`s. */
+/** The refs among `refs` with no row on the branch, each once. */
 export async function absentRefs(
   ctx: DbCtx,
   branchId: string,
   refs: readonly LiveRef[],
-): Promise<Set<string>> {
+): Promise<LiveRef[]> {
   const byTable = new Map<RefTable, Set<string>>()
   for (const { table, id } of refs) {
     const ids = byTable.get(table) ?? new Set<string>()
     ids.add(id)
     byTable.set(table, ids)
   }
-  const absent = new Set<string>()
+  const absent: LiveRef[] = []
   for (const [table, ids] of byTable) {
     const entry = resolveByTable(table)
     if (!entry) throw new Error(`absentRefs: ${table} is not a registered table`)
@@ -223,7 +223,7 @@ export async function absentRefs(
         )
       for (const { id } of rows) present.add(id)
     }
-    for (const id of ids) if (!present.has(id)) absent.add(createdKey(table, id))
+    for (const id of ids) if (!present.has(id)) absent.push({ table, id })
   }
   return absent
 }

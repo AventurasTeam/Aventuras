@@ -333,7 +333,7 @@ async function goneRows(
   written: readonly PathRefValue[],
   rows: readonly Delta[],
   removed: ReadonlyMap<HeldKey, RowRef>,
-): Promise<ReadonlySet<string>> {
+): Promise<ReadonlySet<HeldKey>> {
   const reinserted = new Set(
     rows.filter((d) => d.op === 'delete').map((d) => heldKey(d.targetTable, d.targetId)),
   )
@@ -342,7 +342,8 @@ async function goneRows(
     const key = heldKey(ref.refTable, id)
     return removed.has(key) || reinserted.has(key) ? [] : [{ table: ref.refTable, id }]
   })
-  return absentRefs(ctx, branchId, candidates)
+  const absent = await absentRefs(ctx, branchId, candidates)
+  return new Set(absent.map(({ table, id }) => heldKey(table, id)))
 }
 
 // Entities go only through their own create, so the fixed point never waits on a clear.

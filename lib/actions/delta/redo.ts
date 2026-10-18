@@ -3,7 +3,7 @@ import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { cascadePatches } from './delete-cascade'
-import { heldKey } from './held-rows'
+import { heldKey, type HeldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { absentRefs, pathRefIds, type LiveRef, type RefPath } from './live-refs'
 import { resolveByTable, whereForDelta } from './registry'
@@ -179,9 +179,9 @@ type RestoredRow = { snapshot: RedoSnapshot; row: Record<string, unknown> | null
 async function deadAfterRedo(
   ctx: DbCtx,
   restoredRows: readonly RestoredRow[],
-): Promise<Set<string>> {
-  const recreated = new Set<string>()
-  const dead = new Set<string>()
+): Promise<Set<HeldKey>> {
+  const recreated = new Set<HeldKey>()
+  const dead = new Set<HeldKey>()
   for (const { snapshot, row } of restoredRows) {
     const key = heldKey(snapshot.delta.targetTable, snapshot.delta.targetId)
     if (snapshot.delta.op === 'create' && row) recreated.add(key)
@@ -197,14 +197,14 @@ async function deadAfterRedo(
     named.set(snapshot.delta.branchId, refs)
   }
   for (const [branchId, refs] of named)
-    for (const key of await absentRefs(ctx, branchId, refs)) dead.add(key)
+    for (const { table, id } of await absentRefs(ctx, branchId, refs)) dead.add(heldKey(table, id))
   return dead
 }
 
 function withoutDeadRefs(
   table: string,
   row: Record<string, unknown> | null,
-  dead: ReadonlySet<string>,
+  dead: ReadonlySet<HeldKey>,
 ): Record<string, unknown> | null {
   if (!row) return row
   let out = row
