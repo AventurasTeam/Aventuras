@@ -7,8 +7,8 @@
  * injection on these probes.
  */
 
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { PROVIDERS } from './config'
+import { httpFetch } from '#lib/utils/http.ts'
 import type { APIProfile } from '#lib/types/index.ts'
 import {
   HEALTHY_THRESHOLD_MS,
@@ -75,7 +75,7 @@ export async function pingModel(
   const t0 = performance.now()
   try {
     const url = `${normalizeBaseUrl(baseUrl)}/chat/completions`
-    const resp = await tauriHttpFetch(url, {
+    const resp = await httpFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

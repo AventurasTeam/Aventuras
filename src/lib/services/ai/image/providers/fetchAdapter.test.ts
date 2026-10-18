@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
@@ -8,7 +8,9 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
 }))
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
-import { fetchPublicImageBase64 } from './fetchAdapter'
+import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { RequestTimeoutError } from '#lib/utils/error.ts'
+import { fetchPublicImageBase64, imageFetch, imageGetFetch } from './fetchAdapter'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 
@@ -86,8 +88,11 @@ describe('fetchPublicImageBase64', () => {
   })
 
   it('cancels the body of a redirect it follows', async () => {
-    const hop = new Response('moved', { status: 302, headers: { location: 'https://cdn.test/a' } })
-    const cancel = vi.spyOn(hop.body!, 'cancel')
+    const cancel = vi.fn()
+    const hop = new Response(new ReadableStream({ cancel }), {
+      status: 302,
+      headers: { location: 'https://cdn.test/a' },
+    })
     mockFetch.mockResolvedValueOnce(hop).mockResolvedValueOnce(image([0x68, 0x69]))
 
     await fetchPublicImageBase64('https://img.test/a.png')
@@ -100,5 +105,137 @@ describe('fetchPublicImageBase64', () => {
     await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
       'Image API error 404',
     )
+  })
+})
+
+/** Like the plugin: stays pending, then rejects with a bare string when its signal aborts. */
+function pendingUntilAborted(_url: unknown, init?: { signal?: AbortSignal | null }) {
+  return new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject('Request canceled'))
+  })
+}
+
+describe.each([
+  [
+    'imageFetch',
+    'Image generation',
+    (signal: AbortSignal | undefined, timeoutMs: number) =>
+      imageFetch({ url: 'https://img.test/gen', body: '{}', signal, timeoutMs }),
+  ],
+  [
+    'imageGetFetch',
+    'Image fetch',
+    (signal: AbortSignal | undefined, timeoutMs: number) =>
+      imageGetFetch('https://img.test/a.png', undefined, { signal, timeoutMs }),
+  ],
+])('%s abort handling', (_name, what, run) => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(pendingUntilAborted)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('rejects a caller abort as an AbortError', async () => {
+    const caller = new AbortController()
+    const request = run(caller.signal, 60_000).catch((e: unknown) => e)
+
+    caller.abort()
+
+    const error = await request
+    expect(error).toMatchObject({ name: 'AbortError' })
+    expect(isAbortError(error)).toBe(true)
+  })
+
+  it('rejects a timeout as a RequestTimeoutError, not an abort', async () => {
+    vi.useFakeTimers()
+    const request = run(new AbortController().signal, 5_000).catch((e: unknown) => e)
+
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const error = await request
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: `${what} timed out after 5s` })
+    expect(isAbortError(error)).toBe(false)
+  })
+})
+
+describe.each([
+  [
+    'imageFetch',
+    'Image generation',
+    (timeoutMs: number) => imageFetch({ url: 'https://img.test/gen', body: '{}', timeoutMs }),
+  ],
+  [
+    'imageGetFetch',
+    'Image fetch',
+    (timeoutMs: number) => imageGetFetch('https://img.test/a.png', undefined, { timeoutMs }),
+  ],
+])('%s body timeout', (_name, what, run) => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('errors a body that stalls after the headers with a RequestTimeoutError', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start: (c) => init?.signal?.addEventListener('abort', () => c.error('Request cancelled')),
+      })
+      return new Response(body, { status: 200 })
+    })
+
+    const response = await run(5_000)
+    const read = response.arrayBuffer().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const error = await read
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: `${what} timed out after 5s` })
+  })
+})
+
+describe('request headers', () => {
+  const expectNoOriginWithAuth = () => {
+    const headers = new Headers(mockFetch.mock.calls[0][1]?.headers)
+    expect(headers.get('origin')).toBe('')
+    expect(headers.get('authorization')).toBe('Bearer key')
+  }
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
+  })
+
+  it('imageFetch sends an empty Origin with a JSON body', async () => {
+    await imageFetch({
+      url: 'https://img.test/gen',
+      body: '{}',
+      headers: { Authorization: 'Bearer key' },
+    })
+
+    expectNoOriginWithAuth()
+  })
+
+  it('imageFetch sends an empty Origin with a FormData body', async () => {
+    const form = new FormData()
+    form.append('prompt', 'a cat')
+
+    await imageFetch({
+      url: 'https://img.test/gen',
+      body: form,
+      headers: { Authorization: 'Bearer key' },
+    })
+
+    expectNoOriginWithAuth()
+  })
+
+  it('imageGetFetch sends an empty Origin', async () => {
+    await imageGetFetch('https://img.test/a.png', { Authorization: 'Bearer key' })
+
+    expectNoOriginWithAuth()
   })
 })

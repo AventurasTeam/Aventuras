@@ -13,7 +13,7 @@
 	<string>Scan QR codes to pair devices for local story sync.</string>
 	<!-- LAN story sync (the sync server binds 0.0.0.0) and local LLM servers. -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Aventuras uses the local network to sync stories directly between your devices.</string>
+	<string>Aventuras uses the local network to sync stories between your devices and to connect to local AI servers.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -607,20 +607,30 @@ socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
 
 Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
 user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
-them. Use the existing helper: `createTimeoutFetch` for AI SDK providers, `imageFetch` /
-`imageGetFetch` / `fetchPublicImageBase64` for images, `corsFetch` for discovery.
+them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
+any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
+AI SDK providers, `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64` for images,
+`corsFetch` for discovery.
 
 What the plugin changes for the server on the other end:
 
-- Every request carries `Origin` set to the webview origin: `http://tauri.localhost` on Windows and
-  Android, `tauri://localhost` elsewhere, the dev-server URL in dev. It cannot be dropped without
-  the `unsafe-headers` feature.
-- Certificates are checked against bundled webpki roots, not the OS trust store.
-- Responses arrive uncompressed; reqwest's decompression features are off.
+- No `Origin` is sent unless the caller sets one. The plugin would otherwise send the webview
+  origin (`http://tauri.localhost` on Windows and Android, `tauri://localhost` elsewhere, the
+  dev-server URL in dev), which local servers reject. `httpFetch` sets `Origin: ''`, which the
+  plugin drops under `unsafe-headers`. A caller's `Origin` and `Referer` are sent as set.
+- `unsafe-headers` lifts the plugin's whole forbidden-header filter, not just `Origin`. `Host`,
+  `Cookie`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Sec-*` and `Proxy-*` reach
+  reqwest exactly as callers set them. Every caller is app code, so nothing sets these today. If
+  untrusted input ever feeds request headers, `httpFetch` is where to filter them.
+- Certificates are checked against the bundled webpki roots and, on Windows and Linux, the OS trust
+  store. macOS, Android and iOS use the bundled roots only. The OS roots are only added as extra
+  anchors, so a CA the OS distrusts or revokes is still accepted if the bundled set has it;
+  plugin-http 3's platform verifier replaces this.
+- `Accept-Encoding: gzip, br, zstd` is sent and responses are decoded in Rust before the WebView
+  sees them.
 
-Known limitation: stock Ollama allows `tauri://*` and `http://localhost:*` origins but not
-`http://tauri.localhost`, so it may reject Windows and Android requests until the user sets
-`OLLAMA_ORIGINS=http://tauri.localhost`. Unverified; not yet tested against a release build.
+Stock Ollama and ComfyUI on loopback work without `OLLAMA_ORIGINS` or `--enable-cors-header`,
+because the helpers send no `Origin`.
 
 ## Environment
 

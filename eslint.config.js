@@ -207,4 +207,22 @@ export default [
       ],
     },
   },
+  {
+    files: ['src/**/*.{ts,svelte}'],
+    ignores: ['src/lib/utils/http.ts', '**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@tauri-apps/plugin-http',
+              importNames: ['fetch'],
+              message: "Use httpFetch from '#lib/utils/http.ts'; it drops the webview Origin.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]

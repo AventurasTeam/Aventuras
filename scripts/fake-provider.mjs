@@ -42,6 +42,7 @@ const CHAT_MODELS = [
   'partial', //        as ok-fill, plus one invalid element in the first list: only the classifier salvages the rest
   'stream-connection-lost', // streaming only: some text, then the connection drops
   'stream-cut-error', //       streaming only: some text, then an error event in the stream
+  'stream-stall', //           streaming only: some text, then silence with the connection open
 ]
 
 const IMAGE_MODELS = [
@@ -211,7 +212,7 @@ const completion = (model, content) => ({
   usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
 })
 
-/** `cut`: how the stream breaks off after `sky`, if it does — `'connection'` or `'error'`. */
+/** `cut`: how the stream breaks off after `sky`, if it does — `'connection'`, `'error'` or `'stall'`. */
 async function streamCompletion(res, model, content, cut) {
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
   const chunk = (delta, finish = null) =>
@@ -231,6 +232,7 @@ async function streamCompletion(res, model, content, cut) {
         res.socket?.destroy()
         return
       }
+      if (cut === 'stall') return // headers and text sent; the connection stays open and silent
       // As OpenRouter reports an upstream failure once the 200 and some text are already sent.
       res.write(
         `data: ${JSON.stringify({
@@ -296,7 +298,11 @@ async function chat(req, res, body) {
 
   const content = chatContent(body, scenario)
   if (body.stream) {
-    const cut = { 'stream-connection-lost': 'connection', 'stream-cut-error': 'error' }[scenario]
+    const cut = {
+      'stream-connection-lost': 'connection',
+      'stream-cut-error': 'error',
+      'stream-stall': 'stall',
+    }[scenario]
     return streamCompletion(res, requested, content, cut)
   }
   return sendJson(res, 200, completion(requested, content))

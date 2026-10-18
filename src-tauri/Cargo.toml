@@ -26,7 +26,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
-tauri-plugin-http = "2"
+# Defaults are off so the `cookies` jar stays out; the rest of them are listed again here.
+# unsafe-headers lets httpFetch drop Origin and lifts the forbidden-header filter for every call.
+tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls", "http2", "charset", "system-proxy", "gzip", "brotli", "zstd", "unsafe-headers"] }
 tauri-plugin-websocket = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-generation = { path = "plugins/generation" }
@@ -48,6 +50,12 @@ sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio"] }
 hex = "0.4.3"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 futures-util = "0.3"
+
+# OS trust store on top of the bundled roots, Windows and Linux only. Android and iOS have no store
+# rustls-native-certs can read; on macOS every request would walk the keychain.
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+# default-features = false, or Cargo merges the defaults (cookies included) back in on these targets.
+tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls-native-roots"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

@@ -85,6 +85,7 @@ It listens on `http://localhost:4010/v1`; `npm run fake-provider -- 4020` picks 
 | `fail-hang`              | never answers                                                                     |
 | `stream-connection-lost` | streaming only: some text, then the connection drops                              |
 | `stream-cut-error`       | streaming only: some text, then an error event in the stream, as OpenRouter sends |
+| `stream-stall`           | streaming only: some text, then silence with the connection open                  |
 
 The narration is always _The dragon fell from the sky, and the valley was quiet again._, and every
 scene's quote is _The dragon fell from the sky_, so images land in the text — including the part a

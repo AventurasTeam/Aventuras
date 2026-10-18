@@ -297,6 +297,11 @@ pub fn run() {
                 tauri::async_runtime::block_on(migration_patch::apply_checksum_patch(&db_path));
             }
 
+            // The HTTP plugin's cookie jar is off; drop the file an older build left behind.
+            if let Ok(dir) = app.path().app_cache_dir() {
+                let _ = std::fs::remove_file(dir.join(".cookies"));
+            }
+
             Ok(())
         })
         .plugin(tauri_plugin_fs::init())
