@@ -37,7 +37,7 @@ The floor is the WebView the app runs in: **Chrome 111 / Safari 16.4**, both rel
 | macOS    | system WKWebView              | Safari 16.4's WebKit; macOS 13.3 or later                      |
 | Linux    | WebKitGTK `webkit2gtk-4.1`    | 2.40 or later (`.deb`/`.rpm`); the AppImage carries its own    |
 | Android  | System WebView (Chromium)     | WebView 111 or later; `minSdk` 26 (Android 8)                  |
-| iOS      | system WKWebView              | iOS 16.4 or later                                              |
+| iOS      | system WKWebView              | iOS 26 or later                                                |
 
 ### Windows
 
@@ -103,10 +103,12 @@ provider, fall below the floor, and nothing checks for this at runtime.
 
 ### iOS
 
-iOS 16.4 or later. WKWebView is tied to the OS, and Safari 16.4's WebKit shipped in iOS 16.4
-([WebKit blog](https://webkit.org/blog/13966/webkit-features-in-safari-16-4/)); Vite's default
-target names `ios16.4` too. The `.ipa` is unsigned and built best-effort
-([release.md](release.md), [ios-build-target.md](ios-build-target.md)).
+iOS 26 or later. The floor is set by the background-generation task (`BGContinuedProcessingTask`,
+[ios-background-generation.md](ios-background-generation.md)), not by WebKit: Safari 16.4's WebKit
+shipped in iOS 16.4 ([WebKit blog](https://webkit.org/blog/13966/webkit-features-in-safari-16-4/)),
+and Vite's default target still names `ios16.4`, because the shared floor above is set by the other
+platforms. The `.ipa` is unsigned and built best-effort ([release.md](release.md),
+[ios-build-target.md](ios-build-target.md)).
 
 ## Known gaps
 

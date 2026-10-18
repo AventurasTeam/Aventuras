@@ -64,6 +64,24 @@ describe('ClassificationPhase', () => {
     expect(classifyResponse.mock.calls[0][5]).toEqual({ years: 0, days: 3, hours: 9, minutes: 0 })
   })
 
+  it('hands the abort signal to the classifier call and ends as aborted when it throws', async () => {
+    const controller = new AbortController()
+    const classifyResponse = vi.fn().mockImplementation(async () => {
+      controller.abort()
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+    })
+
+    const { events, result } = await drain(
+      new ClassificationPhase({ classifyResponse }).execute(
+        makeInput({ abortSignal: controller.signal }),
+      ),
+    )
+
+    expect(classifyResponse.mock.calls[0][7]).toBe(controller.signal)
+    expect(events.map((e) => e.type)).toContain('aborted')
+    expect(result).toBeNull()
+  })
+
   it('treats a classifier failure as non-fatal', async () => {
     // World state simply does not update; the narration the user is reading stands.
     const phase = new ClassificationPhase({

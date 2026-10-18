@@ -32,6 +32,7 @@ comments stay short and say only what the next reader cannot infer — see
 | [release.md](development/release.md)                   | cutting a release, or changing the updater, CI or the build scripts                   |
 | [ci-caching.md](development/ci-caching.md)             | changing a CI cache key, what a cache stores, or the Android targets                  |
 | [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`                    |
+| [ios-background-generation.md](development/ios-background-generation.md) | keeping a generation running while the app is in the background on iOS, or the `generation` plugin |
 | [platform-support.md](development/platform-support.md) | using a new JS, CSS or Web API, or changing the bundle targets or minimum OS versions |
 | [shadcn-svelte.md](development/shadcn-svelte.md)       | regenerating `components/ui/` or bringing back the shadcn-svelte generator |
 

@@ -324,6 +324,7 @@ class AIService {
     visibleEntries?: StoryEntry[],
     currentStoryTime?: TimeTracker | null,
     activityParentId?: string,
+    signal?: AbortSignal,
   ): Promise<ClassificationResult> {
     log('classifyResponse called', {
       narrativeLength: narrativeResponse.length,
@@ -365,7 +366,13 @@ class AIService {
       existingStoryBeats: worldState.storyBeats ?? [],
     }
 
-    return classifierService.classify(context, visibleEntries, currentStoryTime, activityParentId)
+    return classifierService.classify(
+      context,
+      visibleEntries,
+      currentStoryTime,
+      activityParentId,
+      signal,
+    )
   }
 
   /**

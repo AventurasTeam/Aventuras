@@ -306,6 +306,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_generation::init())
         .invoke_handler(tauri::generate_handler![
             start_sync_server,
             stop_sync_server,

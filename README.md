@@ -41,7 +41,7 @@ Pre-built binaries are on the [Releases](https://github.com/AventurasTeam/Aventu
 | macOS    | `Aventuras_vX.Y.Z_x64.dmg` / `_aarch64.dmg`                    | macOS 13.3                                                               |
 | Linux    | `Aventuras_vX.Y.Z_amd64.deb` / `.AppImage`, or `_x86_64.rpm`   | WebKitGTK 2.40 for the `.deb` / `.rpm`; the AppImage carries its own, needs glibc 2.35 |
 | Android  | `Aventuras_vX.Y.Z.apk`                                         | Android 8, with System WebView 111 or later                              |
-| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) | iOS 16.4                                                                 |
+| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) | iOS 26                                                                   |
 
 The minimums come from each platform's web engine, OS and runtime requirements. They are derived from documentation and
 have not been tested on devices at those versions; see

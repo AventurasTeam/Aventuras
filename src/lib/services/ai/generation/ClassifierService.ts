@@ -78,6 +78,7 @@ export class ClassifierService extends BaseAIService {
     visibleEntries?: StoryEntry[],
     currentStoryTime?: TimeTracker | null,
     activityParentId?: string,
+    signal?: AbortSignal,
   ): Promise<ClassificationResult> {
     log('classify', {
       narrativeLength: context.narrativeResponse.length,
@@ -156,6 +157,7 @@ export class ClassifierService extends BaseAIService {
           schema,
           system,
           prompt,
+          signal,
           activityParentId,
         },
         'classifier',

@@ -118,8 +118,9 @@ against, so `build-desktop.yml`'s matrix pins its runners rather than tracking `
   a future move to a newer image is a deliberate version bump rather than a silent one.
 
 Android and the lint job stay on `ubuntu-latest`: their output doesn't depend on the host OS.
-iOS builds pin `macos-15` like the macOS desktop legs: the archive must be produced by a
-Xcode version the project is actually tested against.
+iOS builds pin `macos-15` like the macOS desktop legs, and select Xcode 26.3 on it: the
+background-generation plugin uses `BGContinuedProcessingTask`, which the default Xcode 16.4 SDK
+lacks.
 
 Dependabot (`.github/dependabot.yml`) opens one grouped PR a month for `github-actions` updates, so
 action versions don't drift the way the runner pins are meant to prevent.

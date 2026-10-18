@@ -34,7 +34,14 @@
     type ClassificationCompleteEvent,
   } from '#lib/services/events.ts'
   import { isTouchDevice } from '#lib/utils/swipe.ts'
-  import { isAndroid } from '#lib/utils/platform.ts'
+  import { isIos } from '#lib/utils/platform.ts'
+  import {
+    afterBackgroundKeepAlive,
+    holdBackgroundKeepAlive,
+    retainBackgroundKeepAlive,
+    setKeepAliveStage,
+    supportsBackgroundGeneration,
+  } from '#lib/utils/backgroundKeepAlive.ts'
   import { findPrecedingUserAction, GENERATION_ERROR_SOURCE } from '#lib/utils/storyEntries.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import {
@@ -468,9 +475,12 @@
   }
 
   /** Send a failure notification if the user was backgrounded during this generation. */
-  async function notifyFailureIfBackgrounded() {
+  async function notifyFailureIfBackgrounded(keepAliveEnded = false) {
+    // After the OS ended the keep-alive, the native side has already posted its own notice.
     if (
+      !keepAliveEnded &&
       ui.wasBackgroundedDuringGeneration &&
+      ui.isAppBackgrounded &&
       settings.experimentalFeatures.generationNotifications
     ) {
       await sendGenerationNotification('', false)
@@ -585,19 +595,30 @@
       )
     }
 
-    // Android: start foreground service to keep process alive when backgrounded
-    const useBackgroundService = isAndroid() && settings.experimentalFeatures.backgroundGeneration
-    if (useBackgroundService) {
-      try {
-        window.AndroidBridge?.startGenerationService()
-      } catch (e) {
-        console.warn('[ActionInput] Failed to start generation foreground service:', e)
-      }
-    }
+    // Keeps the process alive when backgrounded: a foreground service on Android, a continued
+    // processing task on iOS. The OS may end the iOS allowance early; see the expiry callback below.
+    const useBackgroundService =
+      supportsBackgroundGeneration() && settings.experimentalFeatures.backgroundGeneration
+    // Set when the OS ends the keep-alive (the Dynamic Island's Stop, or a system cutoff). The
+    // native side has already posted the "interrupted" notice, so no completion notice follows.
+    let keepAliveEnded = false
+    // Before the hold's await, which an app switch can land in.
     ui.resetBackgroundedFlag()
-
     // What the turn ran into, for the outcome its record closes with.
     const ending: Omit<TurnEnding, 'stopRequested'> = {}
+    const releaseKeepAlive = useBackgroundService
+      ? await holdBackgroundKeepAlive(() => {
+          keepAliveEnded = true
+          // Before the narration is saved, end the turn like the in-app Stop so the action
+          // returns to the input; afterwards only the later phases are cut short. Without a
+          // backup there is nothing to rewind to, so the abort fails the turn instead.
+          activeAbortController?.abort()
+          const backup = ui.retryBackup
+          if (!ending.narrationSaved && backup && backup.storyId === story.currentStory?.id) {
+            void handleStopGeneration()
+          }
+        }, settings.experimentalFeatures.generationNotifications)
+      : () => {}
     let turnRecordId = ''
     // Set once the background work is handed off: the record then ends when that work does.
     let turnEndsLater = false
@@ -732,6 +753,8 @@
       for await (const event of pipeline.execute(ctx, cfg)) {
         if (stopRequested) break
 
+        if (event.type === 'phase_start' && event.phase === 'narrative')
+          setKeepAliveStage('writing')
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
@@ -783,6 +806,7 @@
           ui.endStreaming()
           stopUnavailable = true
           ending.narrationSaved = true
+          setKeepAliveStage('world')
           emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }
@@ -830,6 +854,7 @@
             const translationService = new WorldStateTranslationService({
               translateUIElements: aiService.translateUIElements.bind(aiService),
             })
+            const releaseTranslation = retainBackgroundKeepAlive()
             translationService
               .translateEntities(
                 {
@@ -857,6 +882,7 @@
                 },
               )
               .catch((err) => log('World state translation failed (non-fatal)', err))
+              .finally(releaseTranslation)
           }
         }
 
@@ -896,6 +922,12 @@
       ui.updateActivationData(activationTracker, currentStoryRef.id)
       if (stopRequested) return
 
+      // Stop was unavailable (a retry) or has no backup to rewind to, so the turn cannot be rewound:
+      // fail it, which records the error and offers Retry.
+      if (keepAliveEnded && !ending.narrationSaved) {
+        throw new Error('The system ended background generation before the story was written.')
+      }
+
       if (!fullResponse.trim()) {
         // The reason when the pipeline gave one: with reporting off, nothing else shows it.
         const errorMessage = ending.fatalError
@@ -913,9 +945,12 @@
           timestamp: Date.now(),
         })
 
-        await notifyFailureIfBackgrounded()
+        await notifyFailureIfBackgrounded(keepAliveEnded)
         return
       }
+
+      // The user stopped it from the Island: the story is saved, and no speech or other work is started.
+      if (keepAliveEnded) return
 
       if (
         narrationEntry &&
@@ -970,20 +1005,31 @@
       // Deliberately not awaited — but the flag has to outlive the call, or the Memory
       // view will offer to create a chapter while this one is being created.
       ui.setBackgroundTasksActive(bgStoryId, bgBranchId, true)
+      const releaseBackgroundTasks = retainBackgroundKeepAlive()
+      setKeepAliveStage('finishing')
       coordinator
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
-        .finally(() => ui.setBackgroundTasksActive(bgStoryId, bgBranchId, false))
+        .finally(() => {
+          ui.setBackgroundTasksActive(bgStoryId, bgBranchId, false)
+          releaseBackgroundTasks()
+        })
 
-      // Android: notify user that generation completed while app is still backgrounded.
-      // Awaited so the foreground service isn't torn down before the notification fires.
-      if (
-        ui.wasBackgroundedDuringGeneration &&
-        ui.isAppBackgrounded &&
-        settings.experimentalFeatures.generationNotifications
-      ) {
-        await sendGenerationNotification(fullResponse, true)
+      // Notify the user that generation completed while the app is still backgrounded. On iOS it
+      // waits for the keep-alive to go idle, so it lands with the Dynamic Island's "complete" and
+      // the task is not torn down first; Android has no such display and notifies at once.
+      const notifyCompletion = async () => {
+        if (
+          !keepAliveEnded &&
+          ui.wasBackgroundedDuringGeneration &&
+          ui.isAppBackgrounded &&
+          settings.experimentalFeatures.generationNotifications
+        ) {
+          await sendGenerationNotification(fullResponse, true)
+        }
       }
+      if (useBackgroundService && isIos()) afterBackgroundKeepAlive(notifyCompletion)
+      else await notifyCompletion()
     } catch (error) {
       // Only suppress handling when the user explicitly requested a stop.
       // An AbortError that arrives with stopRequested=false means the request
@@ -1021,7 +1067,7 @@
         ui.showToast(errorMessage, 'error')
       }
 
-      await notifyFailureIfBackgrounded()
+      await notifyFailureIfBackgrounded(keepAliveEnded)
     } finally {
       ui.endStreaming()
       ui.setGenerating(false)
@@ -1034,14 +1080,13 @@
       activeAbortController = null
       stopUnavailable = false
 
-      // Android: always stop the foreground service when generation ends
-      if (useBackgroundService) {
-        try {
-          window.AndroidBridge?.stopGenerationService()
-        } catch (e) {
-          console.warn('[ActionInput] Failed to stop generation foreground service:', e)
-        }
-      }
+      releaseKeepAlive(
+        ending.fatalError || ending.caughtError || ending.emptyResponse
+          ? 'failed'
+          : stopRequested
+            ? 'stopped'
+            : 'done',
+      )
     }
   }
 

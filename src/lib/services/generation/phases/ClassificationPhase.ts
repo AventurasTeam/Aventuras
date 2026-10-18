@@ -31,6 +31,7 @@ export interface ClassificationDependencies {
     chatHistoryEntries: StoryEntry[],
     timeTracker: TimeTracker | null | undefined,
     activityParentId?: string,
+    signal?: AbortSignal,
   ) => Promise<ClassificationResult>
 }
 
@@ -102,6 +103,7 @@ export class ClassificationPhase {
           chatHistoryEntries,
           story?.timeTracker,
           callId,
+          abortSignal,
         )
       } catch (error) {
         failStep(activity, callId, error)
