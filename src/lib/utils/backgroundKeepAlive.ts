@@ -152,6 +152,8 @@ export async function holdBackgroundKeepAlive(
       for (const handler of handlers) handler()
     }, notifyOnExpire)
   } else {
+    // The joining turn queues its own notice if it completes.
+    idleCallback = null
     setKeepAliveStage('preparing', notifyOnExpire)
   }
   return release

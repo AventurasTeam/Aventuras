@@ -209,6 +209,20 @@ describe('holdBackgroundKeepAlive', () => {
     expect(first).not.toHaveBeenCalled()
   })
 
+  it('drops a queued idle callback when another turn joins', async () => {
+    onPlatform(false, true)
+    const queued = vi.fn()
+    const releaseFirst = await holdBackgroundKeepAlive(() => {})
+    afterBackgroundKeepAlive(queued)
+    const releaseSecond = await holdBackgroundKeepAlive(() => {})
+    releaseFirst()
+    releaseSecond()
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenLastCalledWith('plugin:generation|stop', { outcome: 'done' }),
+    )
+    expect(queued).not.toHaveBeenCalled()
+  })
+
   it('runs an idle callback at once when nothing holds the keep-alive', () => {
     const callback = vi.fn()
     afterBackgroundKeepAlive(callback)

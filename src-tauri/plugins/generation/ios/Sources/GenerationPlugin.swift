@@ -153,8 +153,11 @@ final class GenerationPlugin: Plugin {
     stageStartedAt = Date()
     guard let task = task else { return }
     let floor = Int64(stage.floor / 100 * Double(Self.totalUnits))
-    // Entering "preparing" again means a new turn joined the task, so the ring starts over.
-    if name == "preparing" || floor > task.progress.completedUnitCount {
+    // Entering "preparing" again means a new turn joined the task, so the ring and clock restart.
+    if name == "preparing" {
+      startedAt = Date()
+      task.progress.completedUnitCount = floor
+    } else if floor > task.progress.completedUnitCount {
       task.progress.completedUnitCount = floor
     }
     task.updateTitle("Generating story…", subtitle: subtitle(for: stage.subtitle))
