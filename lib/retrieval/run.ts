@@ -4,11 +4,11 @@ import {
   unpackFloat32,
   vecTableName,
   vectorsByIdQuery,
+  type Entity,
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
-import type { EntityViews } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
@@ -85,11 +85,11 @@ export type RetrievalParams = {
    */
   disabledPlaceIds: ReadonlySet<string>
   /**
-   * The branch's state views over the same scene (lib/world buildEntityViews). Source rows carry
-   * no state: the floor reads the scene's factions and items off these, and an entity row is
-   * measured, and later rendered, from its view.
+   * The branch's entities from the store. Source rows carry no state, so the floor builds the
+   * views over this pass's scene from these: it reads the scene's factions and items off them, and
+   * an entity row is measured, and later rendered, from its view.
    */
-  entityViews: EntityViews
+  storeEntities: readonly Entity[]
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
   /**
@@ -319,12 +319,12 @@ async function runRetrievalPass(
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,
+    storeEntities: params.storeEntities,
     lore: sourceRows.lore,
     threads: sourceRows.threads,
     sceneEntityIds: params.sceneEntityIds,
     currentLocationId: params.currentLocationId,
     disabledPlaceIds: params.disabledPlaceIds,
-    views: params.entityViews,
   })
   partial.floor = floor
 
@@ -359,7 +359,6 @@ async function runRetrievalPass(
     awareness,
     recentProse: params.recentProse,
     disabledPlaceIds: params.disabledPlaceIds,
-    entityViews: params.entityViews,
     scanText: params.scanText,
   }
 
@@ -424,7 +423,7 @@ async function runRetrievalPass(
     floorIds: floor.seatedIds,
     recentProse: params.recentProse,
     disabledPlaceIds: params.disabledPlaceIds,
-    entityViews: params.entityViews,
+    entityViews: floor.views,
     scanText: params.scanText,
     budgets: params.budgets,
     params: RANKER_DEFAULTS,
@@ -575,7 +574,6 @@ type PoolCtx = {
   awareness: readonly AwarenessRow[]
   recentProse: string
   disabledPlaceIds: ReadonlySet<string>
-  entityViews: EntityViews
   scanText: string
 }
 
@@ -777,7 +775,7 @@ function assembleCandidates(
       })
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
-        const entity = measuredEntity(r, ctx.entityViews)
+        const entity = measuredEntity(r, floor.views)
         return {
           ...shared(),
           kind: 'entity' as const,

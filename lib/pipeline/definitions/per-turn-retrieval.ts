@@ -21,7 +21,7 @@ import {
   type RetrievalType,
 } from '@/lib/retrieval'
 import { appSettingsStore } from '@/lib/stores'
-import { buildEntityViews, placeModes } from '@/lib/world'
+import { placeModes } from '@/lib/world'
 
 import { readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -78,10 +78,6 @@ export async function* retrievalPhase(
   const disabledPlaceIds = new Set(
     entities.filter((e) => e.kind === 'location' && modes.isDisabled(e.id)).map((e) => e.id),
   )
-  // Over the store and the scene generation-context builds its own views from, so a ranked row's
-  // measured view is the one the template would have built for it.
-  const entityViews = buildEntityViews(entities, scene)
-
   // The same window generation-context composes for the prompt, so the capture
   // prices what the pools actually competed against rather than re-deriving the
   // mode rule. Priced on the prose alone: the per-turn template wraps entries in
@@ -155,7 +151,9 @@ export async function* retrievalPhase(
         sceneEntityIds: scene.sceneEntities,
         currentLocationId: scene.currentLocationId,
         disabledPlaceIds,
-        entityViews,
+        // The store generation-context builds its own views from, so a ranked row's measured view
+        // is the one the template would have built for it.
+        storeEntities: entities,
         // Layer A scans the recent un-classified buffer prose (edge-cases.md →
         // Layer A — retrieval-time same-name suppression); the prompt buffer only
         // approximates that set, over-suppressing while classifierCadence stays
@@ -225,7 +223,6 @@ export async function* retrievalPhase(
         promptBufferTokens: countTokens(promptBuffer),
         scanText,
         outcome: probed,
-        entityViews,
       },
     )
     // A failed write leaves the arm loaded: the deep capture the user asked for

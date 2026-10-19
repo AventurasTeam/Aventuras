@@ -1074,6 +1074,20 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     ])
   })
 
+  // The pass builds its views from these: source rows carry no state.
+  it("passes the branch's store entities to the pass", async () => {
+    seedOpenStory({
+      entities: [
+        entity('char_hero', 'character', 'Kael'),
+        entity('loc_keep', 'location', 'The Keep'),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().storeEntities.map((e) => e.id)).toEqual(['char_hero', 'loc_keep'])
+  })
+
   // The sync scope is no longer passed alongside the branch — runRetrieval
   // derives it from this one field, so the pair cannot disagree. Pinning the
   // field is all that is left to get wrong here.

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
-import { buildEntityViews } from '@/lib/world'
 
 import {
   buildStructuralFloor,
@@ -60,17 +59,16 @@ const loadedThread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): LoadedT
 })
 
 const NONE: ReadonlySet<string> = new Set()
-const NO_VIEWS = buildEntityViews([], { sceneEntities: [], currentLocationId: null })
 
 const floorOf = (over: Partial<Parameters<typeof buildStructuralFloor>[0]> = {}) =>
   buildStructuralFloor({
     entities: [],
+    storeEntities: [],
     lore: [],
     threads: [],
     sceneEntityIds: [],
     currentLocationId: null,
     disabledPlaceIds: NONE,
-    views: NO_VIEWS,
     ...over,
   })
 
@@ -214,26 +212,23 @@ describe('buildStructuralFloor', () => {
       sceneEntityIds: ['char_1'],
       currentLocationId: 'loc_1',
       disabledPlaceIds: NONE,
-      views: buildEntityViews(
-        [
-          makeEntity({
-            id: 'char_1',
-            kind: 'character',
-            name: 'char_1',
-            state: { faction_id: 'fact_1', inventory: ['item_1'] } as Entity['state'],
-          }),
-          makeEntity({ id: 'loc_1', kind: 'location', name: 'loc_1' }),
-          makeEntity({ id: 'fact_1', kind: 'faction', name: 'fact_1' }),
-          makeEntity({ id: 'item_1', kind: 'item', name: 'item_1' }),
-          makeEntity({
-            id: 'item_2',
-            kind: 'item',
-            name: 'item_2',
-            state: { at_location_id: 'loc_1' },
-          }),
-        ],
-        { sceneEntities: ['char_1'], currentLocationId: 'loc_1' },
-      ),
+      storeEntities: [
+        makeEntity({
+          id: 'char_1',
+          kind: 'character',
+          name: 'char_1',
+          state: { faction_id: 'fact_1', inventory: ['item_1'] } as Entity['state'],
+        }),
+        makeEntity({ id: 'loc_1', kind: 'location', name: 'loc_1' }),
+        makeEntity({ id: 'fact_1', kind: 'faction', name: 'fact_1' }),
+        makeEntity({ id: 'item_1', kind: 'item', name: 'item_1' }),
+        makeEntity({
+          id: 'item_2',
+          kind: 'item',
+          name: 'item_2',
+          state: { at_location_id: 'loc_1' },
+        }),
+      ],
     })
 
     expect(
@@ -276,7 +271,7 @@ function impliedFloor(
     sceneEntityIds: scene.sceneEntities,
     currentLocationId: scene.currentLocationId,
     disabledPlaceIds: NONE,
-    views: buildEntityViews(rows, scene),
+    storeEntities: rows,
   })
 }
 

@@ -9,7 +9,6 @@ import {
   type QueryStackInput,
 } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
-import { buildEntityViews } from '@/lib/world'
 
 import type { CaptureWriteInput } from '../writer'
 
@@ -99,6 +98,5 @@ export const captureInput = (overrides: Partial<CaptureWriteInput> = {}): Captur
   promptBufferTokens: 0,
   scanText: '',
   outcome: successOutcome(),
-  entityViews: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
   ...overrides,
 })

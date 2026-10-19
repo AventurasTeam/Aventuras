@@ -50,8 +50,6 @@ export type CapturePayloadInput = {
   /** The scan surface the pass ran with (retrieval.md → Keyword scan surface). */
   scanText: string
   outcome: RetrievalOutcome
-  /** The views the pass seated the floor from, for the floor rows' state lines. */
-  entityViews: EntityViews
 }
 
 const candidateOf = (
@@ -198,11 +196,9 @@ const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>
 
 const alwaysLoreText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
 
-const floorRowsOf = (
-  floor: StructuralFloor | null,
-  views: EntityViews,
-): ProbeCapturePayload['structural_floor'] => {
+const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
+  const { views } = floor
   const rows: ProbeCapturePayload['structural_floor'] = []
   const push = (kind: VecTargetKind, id: string, text: string) =>
     rows.push({ target_kind: kind, target_id: id, tokens: countTokens(text) })
@@ -283,7 +279,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       threads: funnelOf(bundles.threads),
       chapters: funnelOf(bundles.chapters),
     },
-    structural_floor: floorRowsOf(floor, input.entityViews),
+    structural_floor: floorRowsOf(floor),
     keyword_injections: keywordInjections.map(injectionOf),
     prompt_buffer_tokens: input.promptBufferTokens,
     // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;

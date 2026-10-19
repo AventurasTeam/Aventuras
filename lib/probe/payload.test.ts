@@ -39,7 +39,6 @@ const identity = {
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   promptBufferTokens: 0,
   scanText: '',
-  entityViews: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
 }
 
 const zeroFunnel = {
@@ -241,7 +240,7 @@ const floorFixture = () =>
     sceneEntityIds: FLOOR_SCENE.sceneEntities,
     currentLocationId: FLOOR_SCENE.currentLocationId,
     disabledPlaceIds: new Set(),
-    views: FLOOR_VIEWS,
+    storeEntities: FLOOR_WORLD,
   })
 
 describe('buildCapturePayload', () => {
@@ -338,7 +337,6 @@ describe('buildCapturePayload', () => {
       promptBufferTokens: 0,
       scanText: '',
       outcome: successOutcome(),
-      entityViews: identity.entityViews,
     })
 
     expect(payload).toMatchObject({
@@ -689,7 +687,6 @@ describe('buildCapturePayload', () => {
       settings,
       params: RANKER_DEFAULTS,
       outcome: retrievalSuccess({ floor: floorFixture() }),
-      entityViews: FLOOR_VIEWS,
     })
 
     expect(payload.prompt_buffer_tokens).toBe(1840)
@@ -750,7 +747,6 @@ describe('buildCapturePayload', () => {
       settings,
       params: RANKER_DEFAULTS,
       outcome: retrievalSuccess({ floor: floorFixture() }),
-      entityViews: FLOOR_VIEWS,
     })
 
     // Priced through the real tokenizer as an independent oracle; the strings
@@ -851,7 +847,6 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
         }
       : e,
   )
-  const views = buildEntityViews(world, scene)
   const floor = buildStructuralFloor({
     entities: FLOOR_ENTITIES,
     lore: [],
@@ -859,7 +854,7 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
     sceneEntityIds: scene.sceneEntities,
     currentLocationId: scene.currentLocationId,
     disabledPlaceIds: new Set(),
-    views,
+    storeEntities: world,
   })
   const payload = buildCapturePayload({
     ...identity,
@@ -867,7 +862,6 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
     settings,
     params: RANKER_DEFAULTS,
     outcome: retrievalSuccess({ floor }),
-    entityViews: views,
   })
   const rowsFor = (id: string) => payload.structural_floor.filter((r) => r.target_id === id)
   const held = '- Brass key (equipped): opens the sluice gate'
@@ -892,7 +886,6 @@ describe('structural-floor formulas match the templates that render them', () =>
       settings,
       params: RANKER_DEFAULTS,
       outcome: retrievalSuccess({ floor: floorFixture() }),
-      entityViews: FLOOR_VIEWS,
     })
     const tokensOf = (id: string) =>
       payload.structural_floor.find((r) => r.target_id === id)?.tokens

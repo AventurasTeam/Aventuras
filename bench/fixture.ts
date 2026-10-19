@@ -7,7 +7,6 @@ import { getLoadablePath } from 'sqlite-vec'
 
 import { STORY_SETTINGS_DEFAULTS, type Entity } from '@/lib/db'
 import type { QueryAll } from '@/lib/retrieval'
-import { buildEntityViews } from '@/lib/world'
 
 /**
  * The one synthetic branch every bench in this folder prices against, so
@@ -423,10 +422,7 @@ export function passInputs(
     sceneEntityIds: sceneCharacterIds,
     currentLocationId,
     disabledPlaceIds: new Set<string>(),
-    entityViews: buildEntityViews(storeRows, {
-      sceneEntities: sceneCharacterIds,
-      currentLocationId,
-    }),
+    storeEntities: storeRows,
     recentProse: prose(rand, 200),
     // The default one-entry surface: the matchTerms cost measured is what a turn actually pays.
     scanText: `${userAction}\n${recentNarrative}`,

@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, InjectionMode, Thread, VecTargetKind } from '@/lib/db'
-import type { EntityViews } from '@/lib/world'
+import { buildEntityViews, type EntityViews } from '@/lib/world'
 
 import { matchTerms, normalizeTerm } from './name-index'
 
@@ -41,20 +41,22 @@ export type StructuralFloor = {
   alwaysEntities: readonly EntityRow[]
   alwaysLore: readonly LoreRow[]
   alwaysThreads: readonly ThreadRow[]
+  /** The branch's views over this floor's scene; every entity row's state is read off these. */
+  views: EntityViews
   /** Every id the floor seats — excluded from the ranker pools. */
   seatedIds: ReadonlySet<string>
 }
 
 export type StructuralFloorInput = {
   entities: readonly EntityRow[]
+  /** The branch's rows from the store, which the views read: source rows carry no state. */
+  storeEntities: readonly Entity[]
   lore: readonly LoreRow[]
   threads: readonly ThreadRow[]
   sceneEntityIds: readonly string[]
   currentLocationId: string | null
   /** Places effectively disabled around the scene; never the current location. */
   disabledPlaceIds: ReadonlySet<string>
-  /** The branch's views over the same scene: which factions and items the scene implies. */
-  views: EntityViews
 }
 
 // The floor is built over loaded source rows, which carry `embeddingStale` (and
@@ -98,6 +100,10 @@ export const FLOOR_SEATABLE_KINDS = new Set<VecTargetKind>(['entity', 'lore', 't
  */
 export function buildStructuralFloor(input: StructuralFloorInput): StructuralFloor {
   const scene = new Set(input.sceneEntityIds)
+  const views = buildEntityViews(input.storeEntities, {
+    sceneEntities: input.sceneEntityIds,
+    currentLocationId: input.currentLocationId,
+  })
 
   // No entity id is null, so a null currentLocationId matches nothing.
   const currentLocationRow =
@@ -132,10 +138,10 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     })
   const sceneCharacters = sceneEntities
     .filter((e) => e.kind === 'character')
-    .map((e) => input.views.of(e.id, 'character'))
+    .map((e) => views.of(e.id, 'character'))
   const sceneFactions = seat(sceneCharacters.flatMap((c) => (c.faction ? [c.faction.id] : [])))
   const heldItems = seat(sceneCharacters.flatMap((c) => c.holdings.map((h) => h.id)))
-  const looseItems = seat(currentLocation ? input.views.looseAt(currentLocation.id) : [])
+  const looseItems = seat(currentLocation ? views.looseAt(currentLocation.id) : [])
 
   // 'always' is a user-intent override across entities / lore / threads, and
   // deliberately status-blind: seating here is what exempts an `always` row from
@@ -168,6 +174,7 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     alwaysEntities,
     alwaysLore,
     alwaysThreads,
+    views,
     seatedIds,
   }
 }
