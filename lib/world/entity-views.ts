@@ -24,7 +24,7 @@ export type CharacterStateView = {
   drives: readonly string[]
   voice: string | null
   faction: EntityRef | null
-  /** In scene, the scene's location; out of it, the last place the character was seen. */
+  /** Active and in scene, the scene's location; otherwise the last place the character was seen. */
   location: EntityRef | null
   /** Inventory, then equipped items. */
   holdings: readonly HoldingView[]
@@ -198,7 +198,7 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
       voice: text(state.voice),
       faction: ref(state.faction_id, 'faction'),
       location: ref(
-        inScene.has(e.id) ? scene.currentLocationId : state.current_location_id,
+        seatedByScene(e) ? scene.currentLocationId : state.current_location_id,
         'location',
       ),
       holdings,

@@ -316,6 +316,19 @@ describe('buildEntityViews — who a reference names', () => {
     )
   })
 
+  it.each(['staged', 'retired'] as const)(
+    'keeps a %s character listed in the scene at its last-seen place',
+    (status) => {
+      const entities = [
+        location('loc_c', 'The Chapel', null),
+        location('loc_d', 'The Docks', null),
+        character('char_k', 'Kael', { current_location_id: 'loc_d' }, { status }),
+      ]
+      const scene = { sceneEntities: ['char_k'], currentLocationId: 'loc_c' }
+      expect(characterOf(entities, 'char_k', scene).location?.id).toBe('loc_d')
+    },
+  )
+
   it('leaves retired items out of holdings and the loose list, but keeps a retired faction', () => {
     const entities = [
       character('char_k', 'Kael', { inventory: ['item_s'], faction_id: 'fact_h' }),
