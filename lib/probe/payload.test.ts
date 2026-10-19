@@ -16,10 +16,10 @@ import {
   type EntityRow,
   type LoreRow,
   type RetrievalType,
+  type StructuralFloor,
   type ThreadRow,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
-import { buildEntityViews } from '@/lib/world'
 
 import {
   loreBundle,
@@ -160,17 +160,24 @@ const FLOOR_WORLD: Entity[] = [
   }),
 ]
 
-const FLOOR_ENTITIES: EntityRow[] = FLOOR_WORLD.map((e) => ({
+const sourceRow = (e: Entity): EntityRow => ({
   id: e.id,
   kind: e.kind,
   status: e.status,
   injectionMode: e.injectionMode,
   name: e.name,
   description: e.description,
-}))
+})
+
+const FLOOR_ENTITIES: EntityRow[] = FLOOR_WORLD.map(sourceRow)
 
 const FLOOR_SCENE = { sceneEntities: ['e_scene'], currentLocationId: 'e_loc' }
-const FLOOR_VIEWS = buildEntityViews(FLOOR_WORLD, FLOOR_SCENE)
+
+const worldRow = (id: string): Entity => {
+  const row = FLOOR_WORLD.find((e) => e.id === id)
+  if (row === undefined) throw new Error(`no fixture row ${id}`)
+  return row
+}
 
 const FLOOR_LORE: LoreRow[] = [
   {
@@ -242,6 +249,35 @@ const floorFixture = () =>
     disabledPlaceIds: new Set(),
     storeEntities: FLOOR_WORLD,
   })
+
+// The fixture world with `rows` replacing or joining its own, in the store's rows and in
+// retrieval's alike: the floor reads names and descriptions off the one and views off the other.
+const worldWith = (rows: readonly Entity[]): Entity[] => [
+  ...new Map([...FLOOR_WORLD, ...rows].map((e) => [e.id, e])).values(),
+]
+
+const floorOver = (world: readonly Entity[], scene = FLOOR_SCENE) =>
+  buildStructuralFloor({
+    entities: world.map(sourceRow),
+    lore: [],
+    threads: [],
+    sceneEntityIds: scene.sceneEntities,
+    currentLocationId: scene.currentLocationId,
+    disabledPlaceIds: new Set(),
+    storeEntities: world,
+  })
+
+const floorTokens = (floor: StructuralFloor) => {
+  const payload = buildCapturePayload({
+    ...identity,
+    mode: 'light',
+    settings,
+    params: RANKER_DEFAULTS,
+    outcome: retrievalSuccess({ floor }),
+  })
+  return (id: string) =>
+    payload.structural_floor.filter((r) => r.target_id === id).map((r) => r.tokens)
+}
 
 describe('buildCapturePayload', () => {
   it('carries the documented light-mode field inventory', () => {
@@ -799,8 +835,10 @@ describe('buildCapturePayload', () => {
 // payload.ts reimplements the Liquid render formulas by hand, so the assertion
 // above alone pins them only against themselves. Rendering the real bundled
 // templates over the same floor is what makes template drift fail a test.
-function renderFloor(piggybackFires: boolean): string {
-  const floor = floorFixture()
+function renderFloor(
+  piggybackFires: boolean,
+  { floor = floorFixture(), world = FLOOR_WORLD, sceneEntities = FLOOR_SCENE.sceneEntities } = {},
+): string {
   const pack: Pack = {
     templates: { t: { group: 'generationContext', ...PER_TURN_NARRATIVE } },
     macros: {
@@ -810,12 +848,12 @@ function renderFloor(piggybackFires: boolean): string {
   }
   // What generation-context hands the template: every row with its view.
   const withState = <T extends { id: string; kind: EntityRow['kind'] }>(rows: readonly T[]) =>
-    rows.map((e) => ({ ...e, state: FLOOR_VIEWS.of(e.id, e.kind) }))
+    rows.map((e) => ({ ...e, state: floor.views.of(e.id, e.kind) }))
   return renderWith(createEngine(pack), 't', {
     definition: { mode: 'adventure', genre: { promptBody: '' }, tone: { promptBody: '' } },
     entries: [],
-    entities: withState(FLOOR_ENTITIES),
-    sceneEntities: FLOOR_SCENE.sceneEntities,
+    entities: withState(world.map(sourceRow)),
+    sceneEntities,
     structuralLocation: floor.currentLocation ? withState([floor.currentLocation])[0] : null,
     structuralActiveThreads: floor.activeThreads,
     structuralPinnedEntities: withState(floor.alwaysEntities),
@@ -883,6 +921,16 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
 describe('structural-floor formulas match the templates that render them', () => {
   it.each(Object.entries(FLOOR_TEXTS))('renders the %s row verbatim', (_branch, text) => {
     expect(renderFloor(false)).toContain(text)
+  })
+
+  // `!= blank` drops a whitespace-only description, separator and all.
+  it('prices a whitespace-only current-location description as absent', () => {
+    const world = worldWith([{ ...worldRow('e_loc'), description: ' \n ' }])
+    const floor = floorOver(world)
+    const text = 'The drowned archive\nCondition: silted to the knee\nHere:'
+
+    expect(renderFloor(false, { floor, world })).toContain(`# Current location\n\n${text}\n`)
+    expect(floorTokens(floor)('e_loc')).toEqual([countTokens(text)])
   })
 
   // The gap probe.md → Structural floor records: piggyback firing is decided

@@ -145,8 +145,9 @@ const queriesOf = (
 ): ProbeCapturePayload['queries'] =>
   (stack ?? ABSENT_QUERY_STACK).specs.map((q, i) => queryOf(q, redundancy[i] ?? null))
 
+// Liquid's `blank` matches whitespace too, so the templates leave such a description out.
 const nameWithDescription = (name: string, description: string | null): string =>
-  description ? `${name}: ${description}` : name
+  description?.trim() ? `${name}: ${description}` : name
 
 // The floor's rows priced as the bundled templates render them (probe.md → Structural floor):
 // per-turn.ts's scene and location sections, its Holds and Here lines, and memory-blocks.ts's
