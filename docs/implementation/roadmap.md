@@ -1132,21 +1132,6 @@ code before it moved; resolve with the slice it names.
   only `swap-paused` and `memory-incomplete`. Reachable on any build
   whose provider or apply step fails repeatedly. The developer chose
   not to pull an interim pill forward. Routed from triage 2026-09-27.
-- **M7.2 — Every pack must rebuild the held-item id set in Liquid.** The
-  narrative (`lib/prompts/bundled/per-turn.ts`) and the fallback
-  classifier (`piggyback-fallback-classifier.ts`) each assign `heldIds`
-  from `heldItems` in the same loop to keep a held item out of the scene
-  list, because the context builder exposes no held-id set; a custom
-  pack (edited in this slice's pack tab) has to repeat that loop or list
-  held items twice. Candidate fix: a `heldItemIds` variable in the
-  generation context, read by both templates. Carried from the retired
-  "Implement system and user prompt halves" followup, which named the
-  split as the moment to share it; the split didn't. Raised 2026-10-11
-  by that PR's final review; routed from triage 2026-10-11. Entity state
-  gives each item's view a `holder`
-  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
-  which a scene loop can test in place of the id set; the
-  implementation decides whether that retires this entry.
 - **M7.3 — Reader jump-to-entry from a delta row.** The reader route
   takes only `branchId` and `ReaderSurfaceHandle` exposes
   `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log

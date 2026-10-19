@@ -171,14 +171,21 @@ when it creates.
   The structural floor seats both
   ([`retrieval.md → Structural floor`](./retrieval.md#structural-floor--always-inject)),
   so retrieval never offers either again as "currently elsewhere". An
-  item in a holder's list isn't repeated in the scene list.
+  item in a holder's list, or under `Here:`, isn't repeated in the scene
+  list. Its description and condition fold onto its one line; with no
+  description the condition follows the name
+  (`- [i7] lantern. Condition: guttering`), and after a description that
+  already ends a sentence it takes no second full stop.
 
 - **Entity state.** Every entity shown with its description carries
   its state lines: in scene, as the current location and in the memory
   blocks alike
   ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
   A visual change or a transfer can name any character the prompt
-  brackets, and each of them shows the values the write replaces.
+  brackets, and each of them shows the values the write replaces. The
+  fallback's roster brackets every active and staged entity by name
+  alone, so the fallback also shows the characters its turn names with
+  their state ([Fallback classifier context](#fallback-classifier-context)).
 
 These go in the prompt's user half
 ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)):
@@ -589,6 +596,14 @@ entity roster with bracketed IDs. The narrative sees only in-scene plus
 retrieved entities, while the fallback must be able to name an entity
 in `sceneEntities` that neither set contains. The two contexts are not
 symmetric in both directions.
+
+The roster names an entity without its values, and a write can name
+any roster id. So the fallback also shows, framed as maybe not present,
+the characters its last two entries name, by name or keyword, whom no
+other section shows with state: a character arriving this turn whom
+retrieval didn't seat would otherwise be written blind. Its scene
+sections and memory blocks bracket ids throughout, beside the state
+they show, rather than leave the model to match a name to the roster.
 
 Its system half is the calendar vocabulary, and everything else, the
 report directives included, is its user half

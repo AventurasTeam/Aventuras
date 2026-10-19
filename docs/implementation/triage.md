@@ -527,3 +527,16 @@ slice-planning gate forces its resolution before that slice is planned.
   delta code shouldn't take. Raised 2026-10-18 by the classifier
   factions slice review's simplifier pass, which skipped it as outside
   the slice.
+
+- **A probe capture's floor rows can't be grouped by source.** Each
+  `structural_floor` row is `{ target_kind, target_id, tokens }`, and the
+  seats entity state added (the in-scene characters' factions, their
+  held items, the items lying at the location) all carry `target_kind:
+'entity'` (`lib/probe/payload.ts`). The Selected tab's wireframe groups
+  "Their factions" and "Held and loose items" apart from the in-scene
+  entities
+  ([`memory-probe.md → Selected tab`](../ui/screens/memory-probe/memory-probe.md#selected-tab)),
+  and a capture written today can't be split later: the row carries no
+  source, and the entity it names may have changed since. A
+  `source` field means a `CAPTURE_VERSION` bump, which belongs with the
+  Selected-tab UI. Raised 2026-10-19 by the entity-state implementation.
