@@ -6,13 +6,12 @@
  * Longer default timeout (5 min) since image generation is slow.
  */
 
+import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
 import { httpFetch } from '#lib/utils/http.ts'
-
-const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
 async function logImageResponse(
   response: Response,
@@ -52,7 +51,7 @@ export async function imageFetch(options: {
     headers = {},
     body,
     signal,
-    timeoutMs = DEFAULT_IMAGE_TIMEOUT,
+    timeoutMs = IMAGE_TIMEOUT_DEFAULT,
     serviceId = 'image-gen',
   } = options
 
@@ -199,7 +198,7 @@ export async function imageGetFetch(
 ): Promise<Response> {
   const {
     signal,
-    timeoutMs = DEFAULT_IMAGE_TIMEOUT,
+    timeoutMs = IMAGE_TIMEOUT_DEFAULT,
     serviceId = 'image-gen',
     followRedirects = true,
   } = options ?? {}
