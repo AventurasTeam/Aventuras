@@ -157,7 +157,8 @@ override it — that violates the north star. Two categories:
   boundaries
 - `prose_join` — `["A","B","C"]` → `"A, B, and C"`
 - `one_line` — a string with every whitespace run, line breaks
-  included, as one space, for a value inside a one-line list item
+  included, as one space, for a value that must keep to its line: a
+  labelled state line or a one-line list item
 - `json` — stringify for cases where the prompt embeds JSON literally
 - `has_keyword: source_text` — truthy when any of the filter's
   keywords appear in source_text
@@ -466,12 +467,12 @@ in-scene characters
 The column isn't a surface: it holds `lastSeenAt.entryId`, a raw entry
 id ID substitution doesn't cover, bare id arrays and caches.
 
-| Kind      | `state`                                                                                                                                                                                                                                                                                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (in scene the current place, out of it the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
-| location  | `condition`, `parent`                                                                                                                                                                                                                                                                                                                      |
-| item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                            |
-| faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                     |
+| Kind      | `state`                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (the current place for an active character in the scene, else the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
+| location  | `condition`, `parent`                                                                                                                                                                                                                                                                                                                                             |
+| item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                                                   |
+| faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                                            |
 
 A reference is `{ id, name, status }`, one shape everywhere. A template
 wanting the whole referenced entity finds it in `entities`
@@ -506,7 +507,8 @@ location, `name (framing): description` in the memory blocks. The
 narrator's in-scene and current-location blocks, the memory blocks, the
 fallback classifier's scene sections and the characters it shows as
 named this turn, and suggestion refresh's in-scene block all include
-it. A field with nothing in it prints nothing, label included.
+it. A field with nothing in it prints nothing, label included, and a
+value with line breaks in it keeps to its one line (`one_line`).
 
 - **Character.** `Location:`, out of scene only; one line per visual
   category, labelled with its emission name (`Physique:` through
