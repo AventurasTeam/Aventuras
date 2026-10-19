@@ -200,6 +200,20 @@ describe('buildEntityViews — holdings, holder, members, stackables', () => {
     expect(itemOf(entities, 'item_s', scene).holder?.id).toBe('char_z')
   })
 
+  // Aria sorts first, so the fallback to the first holder is what names her.
+  it.each(['retired', 'staged'] as const)(
+    'passes over a %s in-scene holder for an active one out of the scene',
+    (status) => {
+      const entities = [
+        character('char_a', 'Aria', { inventory: ['item_s'] }),
+        character('char_z', 'Zev', { inventory: ['item_s'] }, { status }),
+        item('item_s', 'Sabre'),
+      ]
+      const scene = { sceneEntities: ['char_z'], currentLocationId: null }
+      expect(itemOf(entities, 'item_s', scene).holder?.id).toBe('char_a')
+    },
+  )
+
   it('lists a faction’s members by name, keeping retired ones', () => {
     const entities = [
       faction('fact_h', 'The Silver Hand'),
