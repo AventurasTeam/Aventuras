@@ -236,18 +236,13 @@ describe('Image Provider Registry', () => {
     })
 
     it('downloads no reference for a model that takes none', async () => {
-      const generate = setup('google', [
-        {
-          id: 'imagen-4.0-generate-001',
-          name: 'Imagen 4',
-          supportsImg2Img: false,
-          maxReferenceImages: 0,
-        },
+      const generate = setup('openai', [
+        { id: 'dall-e-3', name: 'DALL·E 3', supportsImg2Img: false, maxReferenceImages: 0 },
       ])
 
       await generateImage({
         profileId: 'p',
-        model: 'imagen-4.0-generate-001',
+        model: 'dall-e-3',
         prompt: 'x',
         referenceImages: ['https://img.test/a.png'],
       })

@@ -6,9 +6,6 @@ vi.mock('ai', () => ({
 vi.mock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: vi.fn(() => ({ image: (id: string) => ({ id }) })),
 }))
-vi.mock('../../sdk/providers/modelFetcher', () => ({
-  isGoogleImageModel: (id: string) => id.includes('-image'),
-}))
 vi.mock('../../sdk/providers/fetch', () => ({
   createTimeoutFetch: vi.fn(),
 }))
@@ -39,47 +36,55 @@ describe('Google adapter references', () => {
     })
   })
 
-  it('leaves an Imagen model on the plain prompt, which the SDK would reject with images', async () => {
-    await createGoogleProvider({ apiKey: 'k' }).generate(
-      options({ model: 'imagen-4.0-generate-001' }),
-    )
-    expect(sentPrompt()).toBe('a castle')
-  })
-
   it('sends the plain prompt when there are no references', async () => {
     await createGoogleProvider({ apiKey: 'k' }).generate(options({ referenceImages: undefined }))
     expect(sentPrompt()).toBe('a castle')
   })
 })
 
-describe('Google model reference support', () => {
+describe('Google model listing', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('marks the fallback Imagen models as taking no references', async () => {
-    const models = await createGoogleProvider({ apiKey: '' }).listModels()
-    expect(models.length).toBeGreaterThan(0)
-    for (const model of models) {
-      expect(model.supportsImg2Img).toBe(false)
-      expect(model.maxReferenceImages).toBe(0)
-    }
+  const respond = (response: { ok: boolean; status?: number; json?: () => Promise<unknown> }) =>
+    vi
+      .mocked(createTimeoutFetch)
+      .mockReturnValue((async () => response) as unknown as ReturnType<typeof createTimeoutFetch>)
+
+  it('returns no models, and makes no request, without a key', async () => {
+    expect(await createGoogleProvider({ apiKey: '' }).listModels()).toEqual([])
+    expect(createTimeoutFetch).not.toHaveBeenCalled()
   })
 
-  it('marks gemini-* models as taking references and Imagen models as taking none', async () => {
-    vi.mocked(createTimeoutFetch).mockReturnValue((async () => ({
+  it('lists only the image models, each taking references', async () => {
+    respond({
       ok: true,
       json: async () => ({
         models: [
           { name: 'models/gemini-2.5-flash-image' },
-          { name: 'models/imagen-4.0-generate-001', supportedGenerationMethods: ['predict'] },
+          { name: 'models/gemini-nano-banana-2.1' },
+          { name: 'models/nano-banana-pro-preview' },
+          { name: 'models/gemini-3.5-flash' },
+          { name: 'models/veo-3.1-generate-preview' },
         ],
       }),
-    })) as unknown as ReturnType<typeof createTimeoutFetch>)
+    })
 
     const models = await createGoogleProvider({ apiKey: 'k' }).listModels()
 
     expect(models.map((m) => [m.id, m.supportsImg2Img, m.maxReferenceImages])).toEqual([
       ['gemini-2.5-flash-image', true, undefined],
-      ['imagen-4.0-generate-001', false, 0],
+      ['gemini-nano-banana-2.1', true, undefined],
+      ['nano-banana-pro-preview', true, undefined],
     ])
+  })
+
+  it('returns no models when none of them generate images', async () => {
+    respond({ ok: true, json: async () => ({ models: [{ name: 'models/gemini-3.5-flash' }] }) })
+    expect(await createGoogleProvider({ apiKey: 'k' }).listModels()).toEqual([])
+  })
+
+  it('rejects when the request fails', async () => {
+    respond({ ok: false, status: 503 })
+    await expect(createGoogleProvider({ apiKey: 'k' }).listModels()).rejects.toThrow('HTTP 503')
   })
 })
