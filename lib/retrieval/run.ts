@@ -199,12 +199,8 @@ export type RetrievalOutcome =
        */
       injectedAwareness: InjectedAwareness[]
       /**
-       * Which of `bundles.entities.selected` are places. A Candidate's `kind` is
-       * the VecTargetKind ('entity'), not the EntityKind, and this pass is the
-       * last place that still holds the source row — without this a prompt
-       * cannot tell a retrieved location from a retrieved character, and an
-       * instruction naming "the IDs above" would point at a set that can be all
-       * characters.
+       * Which of `bundles.entities.selected` are places, in selection order; the
+       * generation context lists them in `locationIds`.
        */
       selectedLocationIds: string[]
       timings: RetrievalTimings

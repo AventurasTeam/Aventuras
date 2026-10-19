@@ -31,11 +31,11 @@ export type ThreadRow = {
 export type StructuralFloor = {
   sceneEntities: readonly EntityRow[]
   currentLocation: EntityRow | null
-  /** The factions of the in-scene characters, in scene order. */
+  /** The factions of the in-scene characters. */
   sceneFactions: readonly EntityRow[]
-  /** What the in-scene characters hold, rendered under each holder. */
+  /** What the in-scene characters hold, rendered under each holder, less items the scene seats. */
   heldItems: readonly EntityRow[]
-  /** What lies at the current location, rendered as `Here:`. */
+  /** The current location's `Here:` items, less those the scene or a holder seats. */
   looseItems: readonly EntityRow[]
   activeThreads: readonly ThreadRow[]
   alwaysEntities: readonly EntityRow[]
