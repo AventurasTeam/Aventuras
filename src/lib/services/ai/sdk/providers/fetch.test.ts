@@ -230,3 +230,92 @@ describe('createTimeoutFetch request headers', () => {
     expect(headers.get('authorization')).toBe('Bearer key')
   })
 })
+
+const jsonResponse = (payload: unknown) =>
+  new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } })
+
+describe('createTimeoutFetch response patching', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+  })
+
+  it('adds zero usage to a response without one', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ id: 'x' }))
+
+    const response = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+
+    expect(await response.json()).toEqual({ id: 'x', usage: { input_tokens: 0, output_tokens: 0 } })
+  })
+
+  it('maps prompt and completion tokens onto input and output tokens', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 } }),
+    )
+
+    const response = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+
+    expect(await response.json()).toEqual({
+      usage: {
+        prompt_tokens: 7,
+        completion_tokens: 3,
+        total_tokens: 10,
+        input_tokens: 7,
+        output_tokens: 3,
+      },
+    })
+  })
+
+  it('keeps existing input and output tokens', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ usage: { input_tokens: 1, output_tokens: 2, prompt_tokens: 9 } }),
+    )
+
+    const response = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+
+    expect(await response.json()).toEqual({
+      usage: { input_tokens: 1, output_tokens: 2, prompt_tokens: 9 },
+    })
+  })
+})
+
+describe('createTimeoutFetch manual body', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockResolvedValue(jsonResponse({}))
+  })
+
+  const sentBody = () => JSON.parse(mockFetch.mock.calls[0][1]?.body as string)
+
+  it('merges manual keys into the request body', async () => {
+    await createTimeoutFetch(
+      60_000,
+      'test',
+      '{"temperature":0.2}',
+    )('https://api.test/v1', {
+      method: 'POST',
+      body: '{"model":"m"}',
+    })
+
+    expect(sentBody()).toEqual({ model: 'm', temperature: 0.2 })
+  })
+
+  it('does not let the manual body override reserved keys', async () => {
+    const messages = [{ role: 'user', content: 'hi' }]
+    await createTimeoutFetch(
+      60_000,
+      'test',
+      '{"messages":[],"model":"other","stream":true,"top_p":0.5}',
+    )('https://api.test/v1', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'm', messages }),
+    })
+
+    expect(sentBody()).toEqual({ model: 'm', messages, top_p: 0.5 })
+  })
+
+  it('sends no body when there is neither a request nor a manual body', async () => {
+    await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+
+    expect(mockFetch.mock.calls[0][1]?.body).toBeUndefined()
+  })
+})
