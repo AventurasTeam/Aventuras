@@ -111,7 +111,9 @@ const knnFailureOutcome = () =>
     { queries: queryStack(), bundles: { chapters: chapterBundle() } },
   )
 
-// The store's rows the views are built from; FLOOR_ENTITIES is retrieval's source-row side.
+// The store's rows the views are built from; FLOOR_ENTITIES is retrieval's source-row side. Each
+// row carries what only its own pricing branch prints: Mira's key is equipped and worn, the
+// archive sits under a listed parent, the Warden has a last-seen place.
 const FLOOR_WORLD: Entity[] = [
   makeEntity({
     id: 'e_scene',
@@ -120,8 +122,8 @@ const FLOOR_WORLD: Entity[] = [
     description: 'a courier',
     state: {
       visual: { attire: 'a grey cloak' },
-      inventory: ['e_key'],
-      equipped_items: [],
+      inventory: [],
+      equipped_items: ['e_key'],
       faction_id: 'e_hand',
     } as never,
   }),
@@ -151,6 +153,7 @@ const FLOOR_WORLD: Entity[] = [
     injectionMode: 'always',
     name: 'The Warden',
     description: 'a ghost who still audits the ledgers',
+    state: { current_location_id: 'e_quarter' } as never,
   }),
   makeEntity({
     id: 'e_hand',
@@ -164,7 +167,7 @@ const FLOOR_WORLD: Entity[] = [
     kind: 'item',
     name: 'Brass key',
     description: 'opens the sluice gate',
-    state: { at_location_id: null },
+    state: { at_location_id: null, condition: 'tarnished' },
   }),
   makeEntity({
     id: 'e_lamp',
@@ -234,10 +237,10 @@ const FLOOR_TEXTS = {
     'The drowned archive — in The Low Quarter › Vellis: half-flooded stacks\nCondition: silted to the knee\nHere:',
   sceneFaction:
     'The Tidewardens: keepers of the sluices\nStanding: dwindling since the great flood\nMembers: Mira',
-  heldItem: '- Brass key: opens the sluice gate',
+  heldItem: '- Brass key (equipped): opens the sluice gate. Condition: tarnished',
   looseItem: '- Lamp. Condition: guttering',
   activeThread: 'Find the missing ledger\nMira needs it before the tide returns',
-  alwaysEntity: 'The Warden: a ghost who still audits the ledgers',
+  alwaysEntity: 'The Warden: a ghost who still audits the ledgers\nLocation: The Low Quarter',
   alwaysLore: 'The Flood Accord\nEvery archive keeps one drowned shelf.',
   alwaysThread: "The Warden's Contract (pending)\na debt owed across three generations",
 }
@@ -896,49 +899,53 @@ function renderFloor(
 // The scene list skips an item its in-scene holder lists, or one lying here, so the probe prices
 // such a seat as that one line, never also as a scene row.
 it('prices an in-scene item its holder lists, or one lying here, as its one line', () => {
-  const scene = { sceneEntities: ['e_scene', 'e_key', 'e_lamp'], currentLocationId: 'e_loc' }
-  // Equipped, so the held line costs more than a `## Brass key` scene row would: priced as
-  // either, the two would otherwise tokenize alike. The lamp's description spans two lines for
-  // the same reason, since only the loose line folds it onto one.
-  const lampDescription = 'a hooded lantern\nits glass cracked'
-  const world = FLOOR_WORLD.map((e) =>
-    e.id === 'e_scene'
-      ? {
-          ...e,
-          state: { ...(e.state as object), inventory: [], equipped_items: ['e_key'] } as never,
-        }
-      : e.id === 'e_lamp'
-        ? { ...e, description: lampDescription }
-        : e,
+  // A two-line description, which only the loose line folds onto one: in one line each, the
+  // lamp's two renderings tokenize alike. The key's are apart already, by its `(equipped)`.
+  const world = worldWith([
+    { ...worldRow('e_lamp'), description: 'a hooded lantern\nits glass cracked' },
+  ])
+  const tokensOf = floorTokens(
+    floorOver(world, { ...FLOOR_SCENE, sceneEntities: ['e_scene', 'e_key', 'e_lamp'] }),
+    world,
   )
-  const floor = buildStructuralFloor({
-    entities: FLOOR_ENTITIES.map((e) =>
-      e.id === 'e_lamp' ? { ...e, description: lampDescription } : e,
-    ),
-    lore: [],
-    threads: [],
-    sceneEntityIds: scene.sceneEntities,
-    currentLocationId: scene.currentLocationId,
-    disabledPlaceIds: new Set(),
-    storeEntities: world,
-  })
-  const payload = buildCapturePayload({
-    ...identity,
-    storeEntities: world,
-    mode: 'light',
-    settings,
-    params: RANKER_DEFAULTS,
-    outcome: retrievalSuccess({ floor }),
-  })
-  const rowsFor = (id: string) => payload.structural_floor.filter((r) => r.target_id === id)
-  const held = '- Brass key (equipped): opens the sluice gate'
-  expect(countTokens(held)).not.toBe(countTokens('## Brass key\nopens the sluice gate'))
-  expect(rowsFor('e_key').map((r) => r.tokens)).toEqual([countTokens(held)])
+  const held = '- Brass key (equipped): opens the sluice gate. Condition: tarnished'
+  expect(countTokens(held)).not.toBe(
+    countTokens('## Brass key\nopens the sluice gate\nCondition: tarnished'),
+  )
+  expect(tokensOf('e_key')).toEqual([countTokens(held)])
   const loose = '- Lamp: a hooded lantern its glass cracked. Condition: guttering'
   expect(countTokens(loose)).not.toBe(
     countTokens('## Lamp\na hooded lantern\nits glass cracked\nCondition: guttering'),
   )
-  expect(rowsFor('e_lamp').map((r) => r.tokens)).toEqual([countTokens(loose)])
+  expect(tokensOf('e_lamp')).toEqual([countTokens(loose)])
+})
+
+// Its holder isn't in the scene, so no Holds lists it and the scene list does.
+it('prices an in-scene item an off-scene character holds as its scene row', () => {
+  const world = worldWith([
+    makeEntity({
+      id: 'e_kael',
+      kind: 'character',
+      name: 'Kael',
+      state: { inventory: [], equipped_items: ['e_coin'] } as never,
+    }),
+    makeEntity({
+      id: 'e_coin',
+      kind: 'item',
+      name: 'Silver coin',
+      description: 'stamped with a drowned crown',
+      state: { at_location_id: null },
+    }),
+  ])
+  const sceneEntities = ['e_scene', 'e_coin']
+  const floor = floorOver(world, { ...FLOOR_SCENE, sceneEntities })
+  const row = '## Silver coin\nstamped with a drowned crown'
+
+  expect(renderFloor(false, { floor, world, sceneEntities })).toContain(`\n${row}\n`)
+  expect(countTokens(row)).not.toBe(
+    countTokens('- Silver coin (equipped): stamped with a drowned crown'),
+  )
+  expect(floorTokens(floor, world)('e_coin')).toEqual([countTokens(row)])
 })
 
 describe('structural-floor formulas match the templates that render them', () => {
@@ -996,9 +1003,12 @@ describe('structural-floor formulas match the templates that render them', () =>
         'e_hand',
         '[e_hand] The Tidewardens: keepers of the sluices\nStanding: dwindling since the great flood\nMembers: Mira',
       ],
-      ['e_key', '- [e_key] Brass key: opens the sluice gate'],
+      ['e_key', '- [e_key] Brass key (equipped): opens the sluice gate. Condition: tarnished'],
       ['e_lamp', '- [e_lamp] Lamp. Condition: guttering'],
-      ['e_always', '[e_always] The Warden: a ghost who still audits the ledgers'],
+      [
+        'e_always',
+        '[e_always] The Warden: a ghost who still audits the ledgers\nLocation: The Low Quarter',
+      ],
     ]) {
       expect(rendered).toContain(affixed)
       expect(tokensOf(id!)).toBeLessThan(countTokens(affixed!))
