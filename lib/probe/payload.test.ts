@@ -920,6 +920,49 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
   expect(tokensOf('e_lamp')).toEqual([countTokens(loose)])
 })
 
+// An older write can leave one item with two holders, and each in-scene holder's Holds lists it.
+it.each([
+  ['held', ['e_scene', 'e_kael']],
+  ['held and in scene', ['e_scene', 'e_kael', 'e_key']],
+])('prices an item two in-scene holders list, %s, once per listing', (_case, sceneEntities) => {
+  const world = worldWith([
+    makeEntity({
+      id: 'e_kael',
+      kind: 'character',
+      name: 'Kael',
+      state: { inventory: ['e_key'], equipped_items: [] } as never,
+    }),
+  ])
+  const floor = floorOver(world, { ...FLOOR_SCENE, sceneEntities })
+  const listings = [
+    '- Brass key (equipped): opens the sluice gate. Condition: tarnished',
+    '- Brass key: opens the sluice gate. Condition: tarnished',
+  ]
+
+  const rendered = renderFloor(false, { floor, world, sceneEntities })
+  for (const line of listings) expect(rendered).toContain(`\n${line}\n`)
+  expect(rendered).not.toContain('## Brass key')
+  expect(floorTokens(floor, world)('e_key')).toEqual([
+    countTokens(listings[0]!) + countTokens(listings[1]!),
+  ])
+})
+
+// Held items are seated off the in-scene holders' Holds, so one none lists has no line to price.
+it('refuses to price a held item no in-scene holder lists', () => {
+  const floor = { ...floorFixture(), heldItems: [sourceRow(worldRow('e_lamp'))] }
+
+  expect(() =>
+    buildCapturePayload({
+      ...identity,
+      storeEntities: FLOOR_WORLD,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ floor }),
+    }),
+  ).toThrow('held item e_lamp has no in-scene holder listing it')
+})
+
 // Its holder isn't in the scene, so no Holds lists it and the scene list does.
 it('prices an in-scene item an off-scene character holds as its scene row', () => {
   const world = worldWith([

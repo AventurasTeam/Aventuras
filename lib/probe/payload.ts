@@ -153,8 +153,8 @@ const queriesOf = (
 // rows for a scene's faction, a pinned row and the threads and lore. Every entity row leaves out
 // the `[id]` affixes the templates add when piggybackFires, which is decided after retrieval and
 // so unknowable here: on those turns the floor cost reads as a lower bound. A held or loose item
-// is its own row, its line priced there and its holder's row or the location's carrying only the
-// Holds or Here label, so the template's one rendering is counted once.
+// is its own row, priced as each line the template prints for it, and its holder's row or the
+// location's carries only the Holds or Here label, so no line is counted twice.
 const stateLinesOf = (
   e: Pick<EntityRow, 'id' | 'kind'>,
   views: EntityViews,
@@ -208,16 +208,20 @@ const floorRowsOf = (
   if (floor === null) return []
   const { views } = floor
   const rows: ProbeCapturePayload['structural_floor'] = []
-  const push = (kind: VecTargetKind, id: string, text: string) =>
-    rows.push({ target_kind: kind, target_id: id, tokens: countTokens(text) })
+  const push = (kind: VecTargetKind, id: string, ...texts: string[]) =>
+    rows.push({
+      target_kind: kind,
+      target_id: id,
+      tokens: texts.reduce((sum, text) => sum + countTokens(text), 0),
+    })
 
-  const inScene = new Set(floor.sceneEntities.map((e) => e.id))
-  const heldLine = (itemId: string): string | null => {
-    const holderId = views.of(itemId, 'item').holder?.id
-    if (holderId === undefined || !inScene.has(holderId)) return null
-    const held = views.of(holderId, 'character').holdings.find((h) => h.id === itemId)
-    return held === undefined ? null : itemLine(held, null)
-  }
+  // Every in-scene holder's Holds lists its items, so one an older write left with two holders
+  // prints under both.
+  const sceneHoldings = floor.sceneEntities
+    .filter((e) => e.kind === 'character')
+    .flatMap((e) => views.of(e.id, 'character').holdings)
+  const heldLines = (itemId: string): string[] =>
+    sceneHoldings.filter((h) => h.id === itemId).map((h) => itemLine(h, null))
   const looseLine = (e: Pick<EntityRow, 'id' | 'name' | 'description'>): string =>
     itemLine(
       { name: e.name, description: e.description, condition: views.of(e.id, 'item').condition },
@@ -227,10 +231,10 @@ const floorRowsOf = (
   const liesHere = (id: string): boolean =>
     here !== undefined && views.of(id, 'item').location?.id === here
 
-  // An in-scene item a holder in the scene holds, or one lying here, renders as that one line.
+  // An in-scene item a holder in the scene holds, or one lying here, renders as those lines alone.
   for (const e of floor.sceneEntities) {
-    const held = e.kind === 'item' ? heldLine(e.id) : null
-    if (held !== null) push('entity', e.id, held)
+    const held = e.kind === 'item' ? heldLines(e.id) : []
+    if (held.length > 0) push('entity', e.id, ...held)
     else if (e.kind === 'item' && liesHere(e.id)) push('entity', e.id, looseLine(e))
     else push('entity', e.id, sceneEntityText(e, views))
   }
@@ -243,7 +247,11 @@ const floorRowsOf = (
     )
   }
   for (const e of floor.sceneFactions) push('entity', e.id, memoryRowText(e, views))
-  for (const e of floor.heldItems) push('entity', e.id, heldLine(e.id) ?? looseLine(e))
+  for (const e of floor.heldItems) {
+    const held = heldLines(e.id)
+    if (held.length === 0) throw new Error(`held item ${e.id} has no in-scene holder listing it`)
+    push('entity', e.id, ...held)
+  }
   for (const e of floor.looseItems) push('entity', e.id, looseLine(e))
   for (const t of floor.activeThreads) push('thread', t.id, activeThreadText(t))
   for (const e of floor.alwaysEntities) push('entity', e.id, memoryRowText(e, views))
