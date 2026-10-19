@@ -175,7 +175,11 @@ Branched (forks with the branch like every other branch-scoped table).
 embeddings would force per-turn re-embeds across the cast. State
 mutations affect retrieval via the structural floor (active+in-scene
 short-circuit) and via the entity's role in scene digests, not via the
-entity embedding itself.
+entity embedding itself. State reaches the prompt as rendered text
+instead: every entity the prompt shows carries its state lines
+([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
+and a ranked row's measured text includes them
+([Token estimation](#token-estimation)).
 
 **Every embedder has a finite input window, and past it the text is
 gone rather than diminished.** Both local runtimes truncate at the
@@ -1165,20 +1169,23 @@ The retrieval pool per type after the structural floor is satisfied.
 
 ### Structural floor — always inject
 
-| Source                         | Notes                                                                                                                                                                                                                                                        |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Prompt buffer                  | Partial mode: last `partialChapterBuffer` entries of current chapter. Full mode: entire current chapter. Both modes: previous-chapter spillover to satisfy `protectedBuffer` floor. See [`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs) |
-| Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                                                                                                                                                          |
-| Current location entity        | `entities.status='active' AND id = currentLocationId` — same short-circuit. A staged, retired or deleted `currentLocationId` seats nothing, so the location block is guarded on the seated row, never on the id                                              |
-| Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                |
-| `injection_mode='always'` rows | Across entities / lore / threads — user-intent override. A location disabled through an ancestor isn't seated: the ancestor's `disabled` wins ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape))                                |
+| Source                         | Notes                                                                                                                                                                                                                                                          |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt buffer                  | Partial mode: last `partialChapterBuffer` entries of current chapter. Full mode: entire current chapter. Both modes: previous-chapter spillover to satisfy `protectedBuffer` floor. See [`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs)   |
+| Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                                                                                                                                                            |
+| Current location entity        | `entities.status='active' AND id = currentLocationId` — same short-circuit. A staged, retired or deleted `currentLocationId` seats nothing, so the location block is guarded on the seated row, never on the id                                                |
+| Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                  |
+| `injection_mode='always'` rows | Across entities / lore / threads — user-intent override. A location disabled through an ancestor isn't seated: the ancestor's `disabled` wins ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape))                                  |
+| In-scene characters' factions  | The faction of each active in-scene character, unless retired or disabled; rendered with the pinned rows. A faction is never in a scene, but its agenda shapes how its members act in one                                                                      |
+| Held and loose items           | Items held by active in-scene characters and items lying at the current location, unless retired or disabled; rendered under their holder and as `Here:` ([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)), so never ranked again |
 
-Beside the floor, the per-turn prompt carries the location map, every
-listed location's name as a tree with the id of each one not retired,
-the in-scene characters' held
-items and the items lying at the current location
+Seating follows rendering: an entity the prompt shows in full in its
+structural sections is seated, so the ranker never offers it a second
+time as "currently elsewhere". Beside the floor, the per-turn prompt
+carries the location map, every listed location's name as a tree with
+the id of each one not retired
 ([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)).
-They bypass the ranker and are seated unconditionally, so they count
+It bypasses the ranker and is seated unconditionally, so it counts
 with the floor's tokens
 ([Structural floor takes budget first](#structural-floor-takes-budget-first)).
 
@@ -1217,6 +1224,10 @@ The retrieval pool for entities splits by status:
 | **Active off-scene** | "Currently elsewhere; available for retrieval reference"                 |
 | **Staged**           | "Available to introduce when narratively appropriate"                    |
 | **Retired**          | Default-excluded; opt-in via `injection_mode='always'` for ghosts/echoes |
+
+An active faction carries no framing: it is never in a scene, so
+"currently elsewhere" says nothing about it. A staged one keeps
+"available to introduce".
 
 Active off-scene and staged compete for the entity-type token budget.
 Embedding similarity to the current scene digest determines which
@@ -1546,9 +1557,10 @@ without breaking changes.
 ### Structural floor takes budget first
 
 The numbers in per-type budgets apply to **what's left after the
-structural floor seats**. Recent buffer + active+in-scene entities +
-their location + active threads, and the location map and held items
-beside them, consume tokens unconditionally. Then
+structural floor seats**. Recent buffer, active+in-scene entities with
+their factions and the items they hold, their location with the items
+lying there, active threads, and the location map beside them consume
+tokens unconditionally. Then
 prompt-overhead reservation. Then the per-type retrieval budgets
 allocate the remainder.
 
@@ -2001,7 +2013,10 @@ return selected
   Don't truncate (truncated candidates are noise).
 - **Candidate larger than the entire type budget** — skip permanently.
   Surface in Story Settings as a warning ("your happenings budget is
-  below the median happening size; consider raising it").
+  below the median happening size; consider raising it"). A pass that
+  skips one also logs a diagnostics warning naming the row, its type
+  and its cost: an entity row carries its state, so the entity most
+  fully described is the one most likely to outgrow its type.
 - **`min_score_threshold = 0.15`** — rows below this are essentially
   semantically unrelated to current scene; including them clutters
   the prompt with noise. Underutilized budget is fine; we don't
@@ -2050,12 +2065,21 @@ code thereafter:
 
 Three rules hold those numbers in place:
 
-- **A ranked row renders its `rendered_field_text` and nothing else.**
+- **A ranked row renders exactly its `rendered_field_text`.**
   Anything a block puts outside that string — a heading, a label — is
   length the estimate never charged for, so the type overruns its
   partition by that length times the row count. A chapter's title
   therefore lives inside the string rather than on a `##` line above
-  it.
+  it. An entity row renders through `macro_entity_state` from the view
+  it was measured with
+  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
+  and its `rendered_field_text` is built in code to mirror that row:
+  the head, then the state lines, with the ids of held items measured
+  as though piggyback fires, through a stand-in placeholder of
+  realistic width. `lib/prompts/bundled/memory-blocks.test.ts` renders
+  the macro over views of every kind and fails unless each row equals
+  its mirror exactly. A custom pack that formats an entity differently
+  is measured as the bundled row, and the difference is the pack's.
 - **Only the entity block brackets an id.** The `<state>` block
   references entities and nothing else, so an id on lore / happenings
   / threads / chapters is spend that invites a reference no parser

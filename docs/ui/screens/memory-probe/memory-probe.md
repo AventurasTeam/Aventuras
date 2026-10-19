@@ -340,12 +340,14 @@ Click a row → opens a detail drawer with:
 #### Selected tab
 
 ```
-Total injected: 1840 + structural 2400 = 4240 tokens
+Total injected: 1840 + structural 2550 = 4390 tokens
 
 Structural floor (fixed):
   ▸ Recent buffer (12 entries) ········ 1820 tokens
   ▸ Active+in-scene entities (Aria, Kael) · 320 tokens
+  ▸ Their factions (the Silver Hand) ···· 90 tokens
   ▸ Current location (the_study) ······· 110 tokens
+  ▸ Held and loose items (3) ··········· 60 tokens
   ▸ Active threads (2) ················ 150 tokens
 
 Retrieved (per type, in injection order):

@@ -13,23 +13,67 @@ for the placement rule.
 
 ## Data-model
 
-- **Entity state in the narrator's prompt.** No entity `state`
-  reaches the narrator but in-scene characters' held items, the items
-  lying at the current location and the location map: an entity renders
-  as its name, status and description
-  (`lib/retrieval/rendered-text.ts`, `lib/prompts/bundled/memory-blocks.ts`,
-  `lib/prompts/bundled/per-turn.ts`), so a character's `visual`,
-  `traits`, `drives`, `voice` and faction, a place's or item's
-  `condition` and a faction's `standing` and `agenda` never reach it.
-  The design decides which fields render and where (in-scene lines,
-  the current location, ranked rows, pinned rows), what they cost (an
-  in-scene line counts against the structural floor's budget, a ranked
-  row's text is what the ranker measures), and whether an in-scene
-  character's faction is seated beside them, since a faction is never
-  in a scene. It also covers the per-turn writer emitting a visual
-  change as the full new value without being shown the current one
-  (`lib/prompts/bundled/state-emission.ts`). Raised 2026-10-18 by the
-  factions design.
+- **Implement entity state in prompts.** Every entity a generation
+  prompt shows carries a `state` view, rendered by
+  `macro_entity_state` in the narrator, the fallback classifier and
+  suggestion refresh
+  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface));
+  the floor seats in-scene characters' factions and their held and
+  loose items
+  ([`retrieval.md → Structural floor`](./memory/retrieval.md#structural-floor--always-inject));
+  a ranked row is measured by a code mirror of the bundled row
+  ([`retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation));
+  and the writer restates visuals and moves stackables against what it
+  sees
+  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)).
+  Designed 2026-10-19
+  ([exploration record](./explorations/2026-10-19-entity-state-in-prompts.md)).
+  The plan must check:
+  - the test pinning each memory-blocks row to its mirror, beside the
+    existing overhead re-derivation, and that a ranked row carries the
+    view it was measured with;
+  - that retrieval reads whole rows, since its `EntityRow`
+    (`lib/retrieval/pools.ts`) carries no `state`;
+  - the registry and both parity tests for the new fields and
+    `structuralSceneFactions` (`lib/prompts/templateContextMap.ts`);
+  - the bundled-pack invariant test extended to a disabled held item in
+    the scene, which renders, and a disabled faction, which no member
+    shows;
+  - that the fallback's schema descriptions say what the emission
+    prompt says;
+  - that the Memory probe's floor accounting
+    ([`memory/probe.md`](./memory/probe.md)) counts the new seats;
+  - that the rewritten in-scene blocks close the prompt content pass's
+    two nits on them, the In-scene loop's two blank lines and suggestion
+    refresh's empty line under an entity with no description, whose
+    sub-bullets go when they do;
+  - the code comments stating the old surface, which go with it
+    (`lib/retrieval/rendered-text.ts`,
+    `lib/prompts/bundled/memory-blocks.ts`,
+    `lib/pipeline/definitions/generation-context.ts`,
+    `lib/world/location-map.ts`);
+  - the E2E decision ([`testing.md`](./testing.md)).
+
+  Once it runs, a play check of the three assumptions the design rides
+  on: the writer restates a visual category rather than appending to
+  it, keeps to the word bound, and isn't pulled into bringing on stage
+  the characters whose full rows sit elsewhere. The visual-cut and
+  shortfall warnings measure the first two; only play shows the third.
+
+- **Retrieval budget defaults.** The per-type budgets
+  (`stories.settings.retrievalBudgets`, entities 1200) are
+  placeholders, expected to rise severalfold. Entity rows now carry
+  their state
+  ([`retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation)),
+  so at the default a fully described character can outgrow the whole
+  entity budget, which budget fill skips permanently
+  ([`retrieval.md → Budget-fill termination`](./memory/retrieval.md#budget-fill-termination)):
+  the characters a user invested in most become the ones retrieval
+  can't seat. Nothing compares a generation prompt against the model's
+  window either (`maxInputTokens` is read by the embedder only), while
+  the structural floor now seats more, and how a provider's overflow
+  error reaches the user is unverified. Raised 2026-10-19 by the
+  entity-state design.
 
 - **Chapter-close agent design.** Chapter close is designed in
   [`memory/chapter-close.md`](./memory/chapter-close.md), but not

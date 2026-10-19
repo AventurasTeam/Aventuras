@@ -383,11 +383,13 @@ from the newer prose, commits first, and the pass reuses its row.
 
 A pass creates the factions the turns establish and records which one
 each character belongs to, with no setting, as it creates characters.
-A faction keeps the narrator consistent once retrieval ranks it, and
-World shows its members, read from the characters' `faction_id`
+A faction keeps the narrator consistent once retrieval ranks it or an
+in-scene member seats it, and World shows its members, read from the
+characters' `faction_id`
 ([`data-model.md → FactionState shape`](../data-model.md#factionstate-shape)).
-No narrator prompt shows a character's faction yet
-([`followups.md`](../followups.md)); the pass's prompt does.
+The narrator's prompts show each character's faction, as the pass's
+prompt does, and each faction's members
+([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
 
 **What the pass sees.** Factions are in Known entities with every
 other kind. A character's line also shows its faction's placeholder id;

@@ -15,7 +15,7 @@ fast-mutating subset of state mutations.
 | `story_entries.metadata.summary`                             | LLM-emitted  | Optional one sentence; the next turn's [Q3 retrieval query](./retrieval.md#q3-piggyback-summary). Absent on parse failure or restart is fine.                                                                                                                                                                      |
 | `story_entries.metadata.retrievalQueries`                    | LLM-emitted  | Up to three strings the model wants retrieved next turn — the [Q4 slot](./retrieval.md#q4-classifier-emitted-queries). Optional; never inherited; excluded from `stateReport`.                                                                                                                                     |
 | `story_entries.metadata.stateReport`                         | **Computed** | The full parsed block as emitted, plus the producing layer and any parse failure. Written on every generating turn — the record of what this turn reported, distinct from the inherited absolute fields above. See [Persistence and stripping](#persistence-and-stripping).                                        |
-| `entities.state.visual.*`                                    | LLM-emitted  | One full-replace value per visual category (`physique` / `face` / `hair` / `eyes` / `attire` / `distinguishing`) — never a partial edit of the category's existing text.                                                                                                                                           |
+| `entities.state.visual.*`                                    | LLM-emitted  | One full-replace value per visual category (`physique` / `face` / `hair` / `eyes` / `attire` / `distinguishing`), restated from the current value the prompt shows — never a partial edit of the category's existing text.                                                                                         |
 | `entities.state.equipped_items` / `inventory` / `stackables` | LLM-emitted  | Structured item / stackable transfers between holders — see the tagged format below, not free text.                                                                                                                                                                                                                |
 | `entities.state.current_location_id` (per-character)         | **Computed** | If character ∈ `sceneEntities`, set to scene's `currentLocationId`. Otherwise preserve `lastSeenAt.locationId`. No LLM extraction needed.                                                                                                                                                                          |
 | `entities.state.lastSeenAt`                                  | **Computed** | When a character was in `sceneEntities` last turn but isn't this turn, update `lastSeenAt` from the previous entry's metadata.                                                                                                                                                                                     |
@@ -40,7 +40,7 @@ substitution layer swaps both directions; see
   <current_location>new:docks</current_location>
   <world_time_delta>120</world_time_delta>
   <visual_changes>
-    <entity id="c2" type="attire">cloak now muddied to the waist</entity>
+    <entity id="c2" type="attire">a grey travel cloak muddied to the waist over a linen shirt; riding boots</entity>
   </visual_changes>
   <transfers>
     <item id="i1" to="c1" from="c3" slot="inventory" />
@@ -69,6 +69,18 @@ never an array (see
 [`data-model.md → CharacterState shape`](../data-model.md#characterstate-shape)
 for why `distinguishing` is a single string here too, not a list).
 
+The writer sees every bracketed character's current value for each
+category ([What the writer sees](#what-the-writer-sees)) and writes a
+changed one as it is now: what still applies kept, what no longer does
+dropped, in about 60 words. The prompt and the fallback's schema state
+the bound in words, which a model counts better than characters, and
+60 leaves a margin under the 500-character bound
+([`data-model.md → Soft caps + compaction discipline`](../data-model.md#soft-caps--compaction-discipline)).
+A longer value is cut back to its last sentence or clause boundary
+inside the bound (`.`, `;` or `,`), else to its last whitespace, and
+mid-word only as a last resort, never mid-surrogate; the cut logs a
+diagnostics warning with the entity, the category and both lengths.
+
 **`transfers` is structured, not free text** — both sub-tags
 reference existing entities, apart from an `<item>` the same block
 creates ([New locations and items](#new-locations-and-items)):
@@ -82,7 +94,13 @@ creates ([New locations and items](#new-locations-and-items)):
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from
-  nowhere tracked / spent on nobody tracked).
+  nowhere tracked / spent on nobody tracked). The prompt asks for the
+  key exactly as the holder's `Stackables:` line shows it, a new key
+  only for something they don't hold yet, and never more than the
+  payer holds. A payer holding less is clamped at zero while the payee
+  gains the full amount, so the prose stays true for whoever received
+  it; the shortfall logs a diagnostics warning with the key, the amount
+  and the balance the payer had.
 
 This grammar was pinned in Slice 3.2 planning (2026-07-20), and the
 creation tags extend it; the principle behind it is "tagged-block alongside prose, parsed
@@ -139,17 +157,33 @@ when it creates.
   retrieved
   location keeps its own where retrieval puts it.
 
-- **Held and loose items.** Each active in-scene character that holds
-  anything lists it
-  (`Holds: [i2] Silver Key, [i5] worn sword (equipped)`), and
-  `# Current location` lists the items lying there
-  (`Here: [i7] the iron chest`). An item in a holder's line isn't
-  repeated in the scene list.
+- **Held and loose items.** Each active in-scene character lists what
+  it holds under `Holds:`, and `# Current location` lists the items
+  lying there under `Here:`, one item per line with its id, name, its
+  description and its condition, a held one marked `(equipped)`:
 
-Both go in the prompt's user half
+  ```
+  Holds:
+  - [i2] Silver Key: opens the vault under the chapel
+  - [i5] worn sword (equipped): a cavalry sabre. Condition: notched
+  ```
+
+  The structural floor seats both
+  ([`retrieval.md → Structural floor`](./retrieval.md#structural-floor--always-inject)),
+  so retrieval never offers either again as "currently elsewhere". An
+  item in a holder's list isn't repeated in the scene list.
+
+- **Entity state.** Every entity shown with its description carries
+  its state lines: in scene, as the current location and in the memory
+  blocks alike
+  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
+  A visual change or a transfer can name any character the prompt
+  brackets, and each of them shows the values the write replaces.
+
+These go in the prompt's user half
 ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)):
-they change whenever a place or an item is created, and the system half
-must not.
+they change whenever a place or an item is created or a state changes,
+and the system half must not.
 
 ### Creating a place or an item
 
@@ -536,7 +570,7 @@ The fallback receives most of what the narrative call receives, because
 the two paths are one contract with two implementations and equivalent
 output cannot come from strictly poorer input. Concretely it gains the
 assembled memory blocks, the in-scene and current-location sections
-with descriptions, and the calendar vocabulary — reusing the run's
+with descriptions and state, and the calendar vocabulary — reusing the run's
 stashed retrieval outcome, never triggering a second retrieval pass.
 
 The [Q4 slot](./retrieval.md#q4-classifier-emitted-queries) is what

@@ -199,10 +199,11 @@ Per capture:
   [pre-filter rule](./retrieval.md#diversity--mmr)),
   `selected_count`, `tokens_used`, `type_budget`.
 - **Structural floor.** List of must-inject rows (active+in-scene
-  entities, their location, active threads, `injection_mode='always'`
-  rows) and their token cost. The token cost **excludes the `[id]`
-  affix** the templates add to the three entity rows on a piggyback
-  turn — whether piggyback fires is decided after retrieval, so a
+  entities with their factions and held items, their location with the
+  items lying there, active threads, `injection_mode='always'` rows)
+  and their token cost. The token cost **excludes the `[id]` affixes**
+  the templates add to entity rows and to held and loose items on a
+  piggyback turn — whether piggyback fires is decided after retrieval, so a
   capture cannot know it. On those turns the floor's cost reads as a
   lower bound.
 - **Keyword injections.** `keyword_injections` — one entry per row

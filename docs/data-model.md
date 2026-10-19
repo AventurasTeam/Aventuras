@@ -704,6 +704,10 @@ conditions, or any entity machinery; they're just quantities.
 - Transfer ("Aria gives Kael 50 gold") writes deltas under one matching
   `action_id`: decrement on Aria's `stackables.gold`, increment-or-create
   on Kael's.
+- Shortfall: a payer holding less than the amount is clamped at zero
+  while the payee gains the full amount, keeping the prose true for the
+  receiver; the shortfall is logged
+  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)).
 - Depletion: decrement; if count → 0, remove the key from the Record.
 
 **v1 limitations** — locations don't get stackables (loose-fungibles-at-
@@ -2324,7 +2328,11 @@ swap UX warns about this case.
   - LLM-fallback. **Default** for new rows. See
     [docs/memory/retrieval.md → Hybrid retrieval per type](./memory/retrieval.md#hybrid-retrieval-per-type).
 - `disabled` — never include automatically; only surfaces if
-  explicitly referenced.
+  explicitly referenced. Another entity's state isn't such a reference:
+  a disabled entity is absent from every state the prompt shows — no
+  member's faction, no one's held item — unless the active+in-scene
+  invariant below seats it
+  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface)).
 
 For a location, `disabled` also covers every place inside it, and a
 disabled ancestor beats a place's own `always`

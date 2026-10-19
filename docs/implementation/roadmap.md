@@ -713,7 +713,11 @@ code before it moved; resolve with the slice it names.
   `<scene_entities>` among them. Reasoned, not probed: the same read
   renders the fallback prompt's `Holds:` and `Here:` lines with the
   fold's transfers already applied, under the template's "the world as
-  it stands going into that turn". Unreachable until this slice:
+  it stands going into that turn"; once entity state reaches prompts,
+  the same read renders each holder's `Stackables:` balances too, and
+  the fallback is told not to move more than a payer holds
+  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
+  Unreachable until this slice:
   `piggybackMode` defaults to `'off'` and only the dev seed turns it
   on. Canon decides the fold half
   ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery))
@@ -1138,7 +1142,11 @@ code before it moved; resolve with the slice it names.
   generation context, read by both templates. Carried from the retired
   "Implement system and user prompt halves" followup, which named the
   split as the moment to share it; the split didn't. Raised 2026-10-11
-  by that PR's final review; routed from triage 2026-10-11.
+  by that PR's final review; routed from triage 2026-10-11. Entity state
+  gives each item's view a `holder`
+  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
+  which a scene loop can test in place of the id set; the
+  implementation decides whether that retires this entry.
 - **M7.3 — Reader jump-to-entry from a delta row.** The reader route
   takes only `branchId` and `ReaderSurfaceHandle` exposes
   `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log

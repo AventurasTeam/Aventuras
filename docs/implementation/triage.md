@@ -79,21 +79,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Save could send the old name back. Reasoned, not reproduced; rare.
   Raised 2026-10-10 by the partial-name collisions code review.
 
-- **The `Holds:` and `Here:` lines can contradict a retrieved or pinned
-  held or loose item labelled "(currently elsewhere)".** The label comes
-  from `lib/retrieval/rendered-text.ts:9` and
-  `lib/prompts/bundled/memory-blocks.ts:13`, and the structural floor
-  seats only the scene entities, the current location and active
-  threads (`lib/retrieval/pools.ts:105-109`), so an item the prompt
-  shows as held or lying here can also render as elsewhere. Candidate
-  fixes: feed the held and loose ids to retrieval so it neither labels
-  them elsewhere nor renders them twice; seat them in the structural
-  floor with their descriptions (a floor and budget-accounting change);
-  or have the templates skip them, which loses the item's description
-  since `Holds:` shows only the name, wastes the ranked budget and
-  leaves custom packs unfixed. Raised 2026-10-11 in the
-  locations-and-items-from-prose PR.
-
 - **The item-match embed in the per-turn writers can't be cancelled.**
   `EmbedDescriptions` takes no abort signal, though `embedTexts`
   (`lib/embedder/service.ts`) accepts one, so a cancel during a slow

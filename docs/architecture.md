@@ -166,7 +166,7 @@ fn)`. Filter function is TypeScript, typed end-to-end.
 
 ### Macros — reusable Liquid snippets, not code-side formatters
 
-Text formatting — a character block, a happening rendered for memory
+Text formatting — an entity's state lines, a happening rendered for memory
 recall, an output-format directive — belongs in **macros**, not
 filters. A macro is a `.liquid` snippet included from other templates
 via `{% include 'macro-id' %}`. The old app had a `staticContent`
@@ -188,8 +188,9 @@ Every macro is created with a **context group tag**. The group drives:
 
 Example built-in macros:
 
-- `macro_character_block` (`generationContext`) — a character formatted
-  as a description block
+- `macro_entity_state` (`generationContext`) — an entity's state
+  lines, shared by every block that shows an entity
+  ([Entity state on the template surface](#entity-state-on-the-template-surface))
 - `macro_happening_for_memory` (`generationContext`) — a happening
   formatted as it would appear in a POV character's memory, including
   the source descriptor
@@ -436,12 +437,109 @@ for authoring ergonomics.
 **Every context is a projection, never a spread.** Both
 `buildGenerationContext` and the wizard's `wizardTemplateContext` list
 their keys explicitly and project the rows they carry — runtime entity
-rows down to `PROMPT_ENTITY_FIELDS`, wizard cast and lore rows minus
-`tags`. Handing a template a whole DB row or a whole working state makes
-every present and future field part of the authoring surface, and a
-field a user's pack can reach is a field that can't be withdrawn.
-Parity tests run in both directions: the registry's variables must all
-be emitted, and nothing outside the registry may be.
+rows down to `PROMPT_ENTITY_FIELDS`, whose `state` is a view built per
+kind rather than the stored column
+([Entity state on the template surface](#entity-state-on-the-template-surface)),
+wizard cast and lore rows minus `tags`. Handing a template a whole DB
+row or a whole working state makes every present and future field part
+of the authoring surface, and a field a user's pack can reach is a
+field that can't be withdrawn. Parity tests run in both directions: the
+registry's variables must all be emitted, and nothing outside the
+registry may be.
+
+### Entity state on the template surface
+
+Every entity a `generationContext` template sees carries `state`: a
+view of its stored state built per kind, never the column itself. It's
+on `entities`, `structuralLocation`, `structuralPinnedEntities`,
+`structuralSceneFactions`, `retrievedEntities` and `looseItems`, and a
+ranked row also carries `kind`, `name`, `description` and `status`, so
+a template renders it from data rather than from its measured string.
+`structuralSceneFactions` is the factions the floor seats for the
+in-scene characters
+([`memory/retrieval.md → Structural floor`](./memory/retrieval.md#structural-floor--always-inject)).
+The column isn't a surface: it holds `lastSeenAt.entryId`, a raw entry
+id ID substitution doesn't cover, bare id arrays and caches.
+
+| Kind      | `state`                                                                                                                                                                                                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (in scene the current place, out of it the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
+| location  | `condition`, `parent`                                                                                                                                                                                                                                                                                                                      |
+| item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                            |
+| faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                     |
+
+A reference is `{ id, name, status }`, one shape everywhere. A template
+wanting the whole referenced entity finds it in `entities`
+(`entities | find: 'id', ref.id`) rather than through a deeper
+reference. Its id is an entity id, so ID substitution turns it into a
+placeholder like any other.
+
+**Who a reference names.** A reference is left out — nil, or absent
+from its list — when its target is disabled and the active+in-scene
+invariant doesn't seat it
+([Structural floor](#structural-floor--always-inject)): a disabled
+entity doesn't exist narratively, so a member of a disabled faction has
+no faction and a disabled item is held by no one. For a place, disabled
+means effectively disabled
+([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
+Holdings and members leave out retired items, as held items always
+have; members keep retired characters, marked by `status`. The rule is
+applied when the view is built, so every template inherits it; a
+custom template can still reach a disabled entity through `entities`.
+
+**One builder, one view.** One module, beside the location map in
+`lib/world`, builds the views from the branch's entities and the scene.
+The ranker builds a candidate's view to measure it, and the seated row
+carries that view to the template, so what's measured and what's
+rendered come from one object
+([`memory/retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation)).
+
+**The bundled rendering.** `macro_entity_state` renders an entity's
+state lines from its view, and each caller keeps its own head line:
+`## name` and the description in scene, the chain for the current
+location, `name (framing): description` in the memory blocks. The
+narrator's in-scene and current-location blocks, the memory blocks, the
+fallback classifier's scene sections and suggestion refresh's in-scene
+block all include it. A field with nothing in it prints nothing, label
+included.
+
+- **Character.** One line per visual category, labelled with its
+  emission name (`Physique:` through `Distinguishing:`), so the writer
+  maps a line to the `type` a change restates; `Voice:`; `Traits:` and
+  `Drives:`, joined with `; ` since an entry can hold a comma;
+  `Faction:`; `Location:`, out of scene only; `Holds:`, one item per
+  line with its id, name, `(equipped)`, description and condition;
+  `Stackables:` as `gold 30, arrows 12`.
+- **Location.** `Condition:`, and `Part of:` with the parent's name,
+  except the current location, which keeps its chain.
+- **Item.** `Condition:`, and out of scene `Location:` and `Held by:`.
+- **Faction.** `Standing:`, `Agenda:` joined with `; `, and `Members:`,
+  the names of the members not retired.
+
+Ids are bracketed only where a write uses them, on held and loose
+items, which a transfer moves, under the same condition as the rest of
+the block's ids. A faction, a location, a holder and members print a
+name. A ranked character, with piggyback firing:
+
+```
+[c3] Kael (currently elsewhere): A scarred ex-soldier turned smuggler.
+Location: The Docks
+Physique: tall, broad-shouldered, a soldier's posture gone slack
+Hair: close-cropped, grey at the temples
+Attire: a salt-stained greatcoat over a leather jerkin; knee boots
+Voice: clipped, never wastes a word; calls everyone "friend"
+Traits: wary; loyal to a fault
+Drives: clear his brother's name
+Faction: The Silver Hand
+Holds:
+- [i2] Sword of Vael (equipped): a blade that glows near the dead. Condition: cracked near the hilt
+Stackables: gold 30
+```
+
+The periodic classifier's context and the wizard's `cast` are
+separate surfaces and carry no view: the classifier writes only a
+character's faction, which its own entity lines show, and `cast`
+exposes the wizard's state fields directly.
 
 ### v2 shape of `generationContext` — what's carried over, what changes
 
@@ -937,6 +1035,10 @@ unconditionally before per-type retrieval allocates the remainder:
 - **Active + in-scene entities.** `entities.status='active' AND id ∈
 metadata.sceneEntities` are ALWAYS injected, regardless of
   `injection_mode`. `currentLocationId` gets the same treatment.
+- **What the scene implies.** The factions of active in-scene
+  characters, the items they hold and the items lying at the current
+  location, unless retired or disabled
+  ([`memory/retrieval.md → Structural floor`](./memory/retrieval.md#structural-floor--always-inject)).
 - **Active threads.** `threads.status='active'` must-inject as
   structural framing.
 - **`injection_mode='always'` rows** across entities / lore /

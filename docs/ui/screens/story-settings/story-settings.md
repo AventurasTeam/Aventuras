@@ -465,8 +465,9 @@ prompt. Raising it improves what the classifier can reason over and
 raises its per-turn input cost on every turn it fires — which, while
 `piggybackMode` is off, is every turn.
 
-The structural floor — active+in-scene entities, current-location
-lore, awareness-driven happenings, always-injection rows — is not
+The structural floor — active+in-scene entities with their factions
+and held items, the current location with the items lying there,
+active threads, always-injection rows — is not
 governed by these buffer settings. Those reach the prompt
 unconditionally when their structural conditions hold. See
 [`memory/retrieval.md → Structural floor`](../../../memory/retrieval.md#structural-floor--always-inject)
