@@ -145,13 +145,10 @@ const queriesOf = (
 ): ProbeCapturePayload['queries'] =>
   (stack ?? ABSENT_QUERY_STACK).specs.map((q, i) => queryOf(q, redundancy[i] ?? null))
 
-// The floor's rows priced as the bundled templates render them (probe.md → Structural floor):
-// per-turn.ts's scene and location sections, its Holds and Here lines, and memory-blocks.ts's
-// rows for a scene's faction, a pinned row and the threads and lore. Every entity row leaves out
-// the `[id]` affixes the templates add when piggybackFires, which is decided after retrieval and
-// so unknowable here: on those turns the floor cost reads as a lower bound. A held or loose item
-// is its own row, priced as each line the template prints for it, and its holder's row or the
-// location's carries only the Holds or Here label, so no line is counted twice.
+// The floor's rows priced as the bundled templates render them (probe.md → Structural floor),
+// less the `[id]` affixes piggybackFires adds, which is decided after retrieval: on those turns
+// the cost is a lower bound. A held or loose item is priced on its own row, so its holder's row
+// or the location's carries only the Holds or Here label and no line counts twice.
 const stateLinesOf = (
   e: Pick<EntityRow, 'id' | 'kind'>,
   views: EntityViews,
@@ -161,7 +158,7 @@ const stateLinesOf = (
 const sceneEntityText = (
   e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
   views: EntityViews,
-) =>
+): string =>
   lines(
     `## ${e.name}`,
     e.description?.trim() ? e.description : null,
@@ -172,7 +169,7 @@ const currentLocationText = (
   e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
   views: EntityViews,
   chain: readonly string[],
-) =>
+): string =>
   [
     [
       e.name,
@@ -188,7 +185,7 @@ const currentLocationText = (
 const memoryRowText = (
   e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description' | 'status'>,
   views: EntityViews,
-) => [entityHead(e), ...stateLinesOf(e, views, { here: false, held: null })].join('\n')
+): string => [entityHead(e), ...stateLinesOf(e, views, { here: false, held: null })].join('\n')
 
 const activeThreadText = (t: Pick<ThreadRow, 'title' | 'description'>): string =>
   lines(t.title, t.description)

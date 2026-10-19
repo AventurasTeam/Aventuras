@@ -79,8 +79,8 @@ export type StateLineOptions = {
   held: ((id: string) => string) | null | 'label'
 }
 
-const labelled = (label: string, value: string | null | undefined): string[] =>
-  value == null || isBlank(value) ? [] : [`${label}: ${value}`]
+const labelled = (label: string, value: string | null): string[] =>
+  isBlank(value) ? [] : [`${label}: ${value}`]
 
 // A line break in free text would start a line with no label for the writer to map to a type.
 const labelledText = (label: string, value: string | null): string[] =>
@@ -91,8 +91,16 @@ const labelledList = (label: string, values: readonly string[]): string[] =>
 
 // A retired target is still the fact (the last place seen, a disbanded faction), so it's named,
 // and marked so it doesn't read as current.
-const refName = (ref: EntityRef | null): string | null =>
-  ref === null ? null : ref.status === 'retired' ? `${ref.name} (retired)` : ref.name
+const refName = (ref: EntityRef | null): string | null => {
+  if (ref === null) return null
+  return ref.status === 'retired' ? `${ref.name} (retired)` : ref.name
+}
+
+const holdsLines = (holdings: readonly HoldingView[], held: StateLineOptions['held']): string[] => {
+  if (holdings.length === 0) return []
+  if (held === 'label') return ['Holds:']
+  return ['Holds:', ...holdings.map((h) => itemLine(h, held === null ? null : held(h.id)))]
+}
 
 /** The lines the bundled entity-state macro prints for an entity, in its order; the macro is the spec. */
 export function entityStateLines(entity: KindedView, options: StateLineOptions): string[] {
@@ -100,15 +108,6 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
   switch (entity.kind) {
     case 'character': {
       const s = entity.state
-      const holds =
-        s.holdings.length === 0
-          ? []
-          : [
-              'Holds:',
-              ...(held === 'label'
-                ? []
-                : s.holdings.map((h) => itemLine(h, held === null ? null : held(h.id)))),
-            ]
       return [
         ...(here ? [] : labelled('Location', refName(s.location))),
         ...Object.entries(VISUAL_LABELS).flatMap(([key, label]) =>
@@ -118,7 +117,7 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
         ...labelledList('Traits', s.traits),
         ...labelledList('Drives', s.drives),
         ...labelled('Faction', refName(s.faction)),
-        ...holds,
+        ...holdsLines(s.holdings, held),
         ...(s.stackables.length > 0
           ? [`Stackables: ${s.stackables.map((st) => `${st.key} ${st.amount}`).join(', ')}`]
           : []),

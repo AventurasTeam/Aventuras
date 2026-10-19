@@ -246,8 +246,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const currentStackables = (id: string): Map<string, number> => {
     const patched = stackablePatches.get(id)
     if (patched) return new Map(patched)
-    // Folded as the prompt's view folds them, so the first transfer to touch a holder whose row
-    // holds "Gold" beside "gold" heals it, and debits the balance the writer was shown.
+    // The patch carries the folded keys, so the first transfer to touch a holder heals its row.
     const state = byId.get(id)?.state as CharacterState | undefined
     return foldStackables(state?.stackables)
   }

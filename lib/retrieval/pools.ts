@@ -136,8 +136,7 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   const seat = (ids: readonly string[]): Required<EntityRow>[] =>
     ids.flatMap((id) => {
       const row = byId.get(id)
-      if (row === undefined || seatedIds.has(id)) return []
-      if (row.status === 'retired') return []
+      if (row === undefined || row.status === 'retired' || seatedIds.has(id)) return []
       seatedIds.add(id)
       return [narrowEntity(row)]
     })

@@ -16,67 +16,55 @@ export type VariableDef = {
   required?: boolean
 }
 
-// architecture.md → Entity state on the template surface. Shared by every variable whose rows
-// carry an entity's `state`, so the view is documented once.
-const ENTITY_STATE_INFO: readonly InfoField[] = [
-  {
-    name: 'state',
-    type: 'EntityStateView',
-    description:
-      "The entity's state as a view built per kind, never the stored column. A reference is { id, name, status }; a disabled target is left out (null, or absent from a list) unless the scene seats it, and a place counts as disabled by the rule that leaves it out of locationMap.",
-  },
-  {
-    name: 'state.visual',
-    type: '{ physique, face, hair, eyes, attire, distinguishing }',
-    description: 'Character. Each category a string or null, named as a visual change names it.',
-  },
-  { name: 'state.traits', type: 'string[]', description: 'Character.' },
-  { name: 'state.drives', type: 'string[]', description: 'Character.' },
-  { name: 'state.voice', type: 'string | null', description: 'Character.' },
-  { name: 'state.faction', type: 'EntityRef | null', description: 'Character: its faction.' },
-  {
-    name: 'state.location',
-    type: 'EntityRef | null',
-    description:
-      'Character: in scene the current location, out of it the last place it was seen. Item: the place it lies at.',
-  },
-  {
-    name: 'state.holdings',
-    type: '{ id, name, status, description, condition, equipped }[]',
-    description:
-      'Character: what it holds, inventory then equipped, an item in both once as equipped. Retired items are left out.',
-  },
-  {
-    name: 'state.stackables',
-    type: '{ key, amount }[]',
-    description:
-      'Character: currencies, ammunition and supplies by key, largest amount first, ties by key. Keys are trimmed and lowercased, amounts under one key summed, and a blank key or an amount of zero or less left out.',
-  },
-  { name: 'state.condition', type: 'string | null', description: 'Location, item.' },
-  {
-    name: 'state.parent',
-    type: 'EntityRef | null',
-    description: 'Location: the place it is part of.',
-  },
-  {
-    name: 'state.holder',
-    type: '{ id, name, status, equipped } | null',
-    description: 'Item: the character holding it.',
-  },
-  { name: 'state.standing', type: 'string | null', description: 'Faction.' },
-  { name: 'state.agenda', type: 'string[]', description: 'Faction.' },
-  {
-    name: 'state.members',
-    type: 'EntityRef[]',
-    description: 'Faction: its members by name, retired ones kept and marked by status.',
-  },
-]
-
 const field = (name: string, type: string, description: string): InfoField => ({
   name,
   type,
   description,
 })
+
+// architecture.md → Entity state on the template surface. Shared by every variable whose rows
+// carry an entity's `state`, so the view is documented once.
+const ENTITY_STATE_INFO: readonly InfoField[] = [
+  field(
+    'state',
+    'EntityStateView',
+    "The entity's state as a view built per kind, never the stored column. A reference is { id, name, status }; a disabled target is left out (null, or absent from a list) unless the scene seats it, and a place counts as disabled by the rule that leaves it out of locationMap.",
+  ),
+  field(
+    'state.visual',
+    '{ physique, face, hair, eyes, attire, distinguishing }',
+    'Character. Each category a string or null, named as a visual change names it.',
+  ),
+  field('state.traits', 'string[]', 'Character.'),
+  field('state.drives', 'string[]', 'Character.'),
+  field('state.voice', 'string | null', 'Character.'),
+  field('state.faction', 'EntityRef | null', 'Character: its faction.'),
+  field(
+    'state.location',
+    'EntityRef | null',
+    'Character: in scene the current location, out of it the last place it was seen. Item: the place it lies at.',
+  ),
+  field(
+    'state.holdings',
+    '{ id, name, status, description, condition, equipped }[]',
+    'Character: what it holds, inventory then equipped, an item in both once as equipped. Retired items are left out.',
+  ),
+  field(
+    'state.stackables',
+    '{ key, amount }[]',
+    'Character: currencies, ammunition and supplies by key, largest amount first, ties by key. Keys are trimmed and lowercased, amounts under one key summed, and a blank key or an amount of zero or less left out.',
+  ),
+  field('state.condition', 'string | null', 'Location, item.'),
+  field('state.parent', 'EntityRef | null', 'Location: the place it is part of.'),
+  field('state.holder', '{ id, name, status, equipped } | null', 'Item: the character holding it.'),
+  field('state.standing', 'string | null', 'Faction.'),
+  field('state.agenda', 'string[]', 'Faction.'),
+  field(
+    'state.members',
+    'EntityRef[]',
+    'Faction: its members by name, retired ones kept and marked by status.',
+  ),
+]
 
 const ENTITY_FIELDS_INFO: readonly InfoField[] = [
   field('id', 'string', 'Placeholder id (c1, l1, i1, f1).'),

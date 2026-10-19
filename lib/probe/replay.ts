@@ -139,27 +139,19 @@ export function replayType(
   const injectedKind = type === 'entities' ? 'entity' : type === 'lore' ? 'lore' : null
   const keywordInjected: KeywordInjection[] = payload.keyword_injections
     .filter((i) => i.target_kind === injectedKind)
-    .map((i) => ({
-      row:
-        i.target_kind === 'entity'
-          ? {
-              kind: 'entity' as const,
-              id: i.target_id,
-              displayName: i.display_name,
-              renderedText: '',
-              entity: unrenderedEntity(i.display_name),
-            }
-          : {
-              kind: 'lore' as const,
-              id: i.target_id,
-              displayName: i.display_name,
-              renderedText: '',
-            },
-      terms: i.terms,
-      priority: i.priority,
-      tokensEstimated: i.tokens_estimated,
-      seated: i.seated,
-    }))
+    .map((i) => {
+      const shared = { id: i.target_id, displayName: i.display_name, renderedText: '' }
+      return {
+        row:
+          i.target_kind === 'entity'
+            ? { kind: 'entity' as const, ...shared, entity: unrenderedEntity(i.display_name) }
+            : { kind: 'lore' as const, ...shared },
+        terms: i.terms,
+        priority: i.priority,
+        tokensEstimated: i.tokens_estimated,
+        seated: i.seated,
+      }
+    })
 
   return rankPerType(pool, type, budget, {
     keywordInjected,

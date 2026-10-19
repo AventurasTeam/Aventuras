@@ -400,7 +400,6 @@ export function passInputs(
         createdAt: r.created_at,
       }) as Entity,
   )
-  const currentLocationId = 'char_000000'
   const params = {
     branchId: BRANCH,
     modelId: MODEL_ID,
@@ -420,7 +419,7 @@ export function passInputs(
     },
     sceneCharacterIds,
     sceneEntityIds: sceneCharacterIds,
-    currentLocationId,
+    currentLocationId: 'char_000000',
     disabledPlaceIds: new Set<string>(),
     storeEntities: storeRows,
     recentProse: prose(rand, 200),
