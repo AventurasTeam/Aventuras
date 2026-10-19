@@ -7,6 +7,9 @@ This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon 
   "user": "Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 - [c1] Kael (character)
 - [l1] The Drowned Keep (location)
+- [i3] Courier’s seal (item)
+- [i4] short sword (item)
+- [i5] a rusted lantern (item)
 
 - [i9] Veilstone (item, staged)
 
@@ -15,15 +18,17 @@ Take the changes from the turn below; nothing above it happened this turn.
 
 # In scene
 
-## Kael
+## Kael [c1]
 A courier with a stolen sigil.
-Holds: [i3] Courier’s seal, [i4] short sword (equipped)
-
+Holds:
+- [i3] Courier’s seal: Black wax, cracked.
+- [i4] short sword (equipped)
 
 # Current location
 
-The Drowned Keep — in The Marsh: Half sunk into the marsh.
-Here: [i5] a rusted lantern
+[l1] The Drowned Keep — in The Marsh: Half sunk into the marsh.
+Here:
+- [i5] a rusted lantern
 
 # Places
 [l2] The Marsh
@@ -31,7 +36,7 @@ Here: [i5] a rusted lantern
 
 # Elsewhere in the world
 
-Mora — last seen at the ford.
+[c7] Mora (currently elsewhere): last seen at the ford.
 
 # Relevant lore
 
@@ -50,6 +55,11 @@ Still open.
 # Earlier chapters
 
 Chapter One: the marsh road.
+
+# Named in this turn — not necessarily present
+
+[c8] Ilse: A ferrywoman.
+Voice: soft
 
 # Earlier turns — how the scene got here, not the turn you report on
 

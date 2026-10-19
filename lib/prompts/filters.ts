@@ -1,5 +1,7 @@
 import type { Liquid } from 'liquidjs'
 
+import { oneLine } from '@/lib/text'
+
 type Kinded = { kind?: unknown }
 type Statused = { status?: unknown }
 
@@ -43,6 +45,11 @@ export function jsonFilter(value: unknown): string {
   }
 }
 
+// A value printed inside a one-line list item, where a line break would start a new item.
+export function oneLineFilter(value: unknown): string {
+  return typeof value === 'string' ? oneLine(value) : ''
+}
+
 // Registered names match the author-facing filter names in architecture.md.
 export function registerFilters(engine: Liquid): void {
   engine.registerFilter('by_kind', byKind)
@@ -51,4 +58,5 @@ export function registerFilters(engine: Liquid): void {
   engine.registerFilter('recent', recent)
   engine.registerFilter('prose_join', proseJoin)
   engine.registerFilter('json', jsonFilter)
+  engine.registerFilter('one_line', oneLineFilter)
 }

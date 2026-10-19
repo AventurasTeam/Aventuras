@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { type ProbeCapturePayload } from '@/lib/db'
-import { MEMORY_BLOCKS } from '@/lib/prompts/bundled/memory-blocks'
+import { bundledPack } from '@/lib/prompts/bundled'
 import { PER_TURN_NARRATIVE } from '@/lib/prompts/bundled/per-turn'
-import { STATE_EMISSION } from '@/lib/prompts/bundled/state-emission'
 import { createEngine, renderWith } from '@/lib/prompts/engine'
 import { MACRO_IDS } from '@/lib/prompts/ids'
 import type { Pack } from '@/lib/prompts/types'
@@ -756,9 +755,8 @@ function renderFloor(piggybackFires: boolean): string {
   const pack: Pack = {
     templates: { t: { group: 'generationContext', ...PER_TURN_NARRATIVE } },
     macros: {
-      [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
+      ...bundledPack.macros,
       [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
-      [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
     },
   }
   return renderWith(createEngine(pack), 't', {
@@ -769,6 +767,7 @@ function renderFloor(piggybackFires: boolean): string {
     structuralLocation: floor.currentLocation,
     structuralActiveThreads: floor.activeThreads,
     structuralPinnedEntities: floor.alwaysEntities,
+    structuralSceneFactions: floor.sceneFactions,
     structuralPinnedLore: floor.alwaysLore,
     structuralPinnedThreads: floor.alwaysThreads,
     retrievedEntities: [],

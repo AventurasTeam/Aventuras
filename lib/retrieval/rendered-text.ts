@@ -75,7 +75,7 @@ export type StateLineOptions = {
 const labelled = (label: string, value: string | null | undefined): string[] =>
   value == null || isBlank(value) ? [] : [`${label}: ${value}`]
 
-/** The lines `macro_entity_state` prints for an entity, in its order; the macro is the spec. */
+/** The lines the bundled entity-state macro prints for an entity, in its order; the macro is the spec. */
 export function entityStateLines(entity: KindedView, options: StateLineOptions): string[] {
   const { here, heldId } = options
   switch (entity.kind) {

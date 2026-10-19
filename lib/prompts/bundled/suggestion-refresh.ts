@@ -23,19 +23,25 @@ export const SUGGESTION_REFRESH: TemplateSources = {
 {{ definitionBlocks | rstrip }}`,
   // Structured-output call: the emission section asks for a JSON field, NOT the tagged
   // <suggestions> block (macro_suggestion_emission is the narrative fold's, appended to prose).
-  user: `{%- assign hasScene = false -%}
-{%- for e in entities | active -%}
-{%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}
+  user: `{%- comment -%}
+The narrator's in-scene list (per-turn.ts), without ids: nothing here writes state. Assigned
+first: LiquidJS drops a filter on a for tag's collection.
+{%- endcomment -%}
+{%- assign activeEntities = entities | active -%}
+{%- assign inScene = '' | split: ',' -%}
+{%- for e in activeEntities -%}
+{%- if sceneEntities contains e.id -%}
+{%- assign listedElsewhere = false -%}
+{%- if e.state.holder and e.state.holder.status == 'active' and sceneEntities contains e.state.holder.id -%}{%- assign listedElsewhere = true -%}{%- endif -%}
+{%- unless listedElsewhere -%}{%- assign inScene = inScene | push: e -%}{%- endunless -%}
+{%- endif -%}
 {%- endfor -%}
-{% if hasScene -%}
+{% if inScene.size > 0 -%}
 # In scene
-{% for e in entities | active -%}
-{%- if sceneEntities contains e.id %}
-## {{ e.name }}
-{{ e.description }}
-{% endif -%}
-{%- endfor %}
-
+{% for e in inScene %}
+## {{ e.name }}{% if e.description != blank %}
+{{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: true, ids: false %}
+{% endfor %}
 {% endif -%}
 # Story so far
 {% for entry in entries %}

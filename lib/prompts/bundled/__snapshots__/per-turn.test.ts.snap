@@ -8,7 +8,6 @@ exports[`bundled per-turn template — empty-guard contract > matches the record
 ## Aria [char_1]
 A wary scout.
 
-
 # Story so far
 
 The gate groaned open.
@@ -23,12 +22,12 @@ After your narrative prose, append exactly one <state> block (never inside the p
   <current_location>the handle of a new_location above</current_location>
   <world_time_delta>seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
-    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the FULL new value for that category — this replaces whatever was there before, not a partial edit</entity>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
   </visual_changes>
   <new_item handle="new:a-short-label" name="the item's name">a short description of the item</new_item>
   <transfers>
     <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
-    <stackable key="lowercase name, e.g. gold" amount="quantity moved" to="ID" from="ID" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
   </transfers>
   <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
   <retrieval_queries>
@@ -53,13 +52,15 @@ exports[`bundled per-turn template — empty-guard contract > matches the record
 
 ## Aria [char_1]
 A wary scout.
-Holds: [item_1] Silver Key, [item_2] worn sword (equipped)
-
+Holds:
+- [item_1] Silver Key
+- [item_2] worn sword (equipped)
 
 # Current location
 
 [loc_1] The Keep — in Highmoor: A weathered hilltop fortress.
-Here: [item_3] the iron chest
+Here:
+- [item_3] the iron chest
 
 # Places
 [loc_0] Highmoor
@@ -99,12 +100,12 @@ After your narrative prose, append exactly one <state> block (never inside the p
   <current_location>the ID from Places, or the handle of a new_location above</current_location>
   <world_time_delta>seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
-    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the FULL new value for that category — this replaces whatever was there before, not a partial edit</entity>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
   </visual_changes>
   <new_item handle="new:a-short-label" name="the item's name">a short description of the item</new_item>
   <transfers>
     <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
-    <stackable key="lowercase name, e.g. gold" amount="quantity moved" to="ID" from="ID" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
   </transfers>
   <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
   <retrieval_queries>
@@ -142,7 +143,6 @@ Write the next beat of the story as prose. Do not break character or address the
 ## Aria [char_1]
 A wary scout.
 
-
 # Current location
 
 [loc_1] The Keep: A weathered hilltop fortress.
@@ -152,7 +152,7 @@ A wary scout.
 
 # Elsewhere in the world
 
-[char_2] Mira (currently elsewhere).
+[char_2] 
 
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
@@ -172,12 +172,12 @@ After your narrative prose, append exactly one <state> block (never inside the p
   <current_location>the ID from Places, or the handle of a new_location above</current_location>
   <world_time_delta>seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
-    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the FULL new value for that category — this replaces whatever was there before, not a partial edit</entity>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
   </visual_changes>
   <new_item handle="new:a-short-label" name="the item's name">a short description of the item</new_item>
   <transfers>
     <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
-    <stackable key="lowercase name, e.g. gold" amount="quantity moved" to="ID" from="ID" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
   </transfers>
   <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
   <retrieval_queries>

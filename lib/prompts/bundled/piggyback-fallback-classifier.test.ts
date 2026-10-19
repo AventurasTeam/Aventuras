@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews, emptyEntityView } from '@/lib/world'
+
 import { renderTemplate, TEMPLATE_IDS } from '../index'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
@@ -25,100 +29,122 @@ const PLACE_RULE =
 const ITEM_RULE =
   'Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.'
 
+const KAEL = makeEntity({
+  id: 'c1',
+  kind: 'character',
+  name: 'Kael',
+  description: 'A courier with a stolen sigil.',
+  state: { inventory: ['i3'], equipped_items: ['i4'] } as never,
+})
+const KEEP = makeEntity({
+  id: 'l1',
+  kind: 'location',
+  name: 'The Drowned Keep',
+  description: 'Half sunk into the marsh.',
+})
+const item = (id: string, name: string, over: Partial<Entity> = {}, at: string | null = null) =>
+  makeEntity({ id, kind: 'item', name, state: { at_location_id: at }, ...over })
+const SEAL = item('i3', 'Courier’s seal', { description: 'Black wax, cracked.' })
+const SWORD = item('i4', 'short sword')
+const LANTERN = item('i5', 'a rusted lantern', {}, 'l1')
+const VEILSTONE = item('i9', 'Veilstone', { description: '', status: 'staged' })
+const BEX = makeEntity({ id: 'c2', kind: 'character', name: 'Bex', description: 'A quiet smith.' })
+const WORLD = [KAEL, KEEP, VEILSTONE, SEAL, SWORD, LANTERN]
+
+// The rows generation-context hands over: each projected with its view over this scene.
+const project = (rows: Entity[], sceneEntities: string[]) => {
+  const views = buildEntityViews(rows, { sceneEntities, currentLocationId: 'l1' })
+  return rows.map((e) => ({
+    id: e.id,
+    kind: e.kind,
+    name: e.name,
+    description: e.description,
+    status: e.status,
+    injectionMode: e.injectionMode,
+    state: views.byId.get(e.id),
+  }))
+}
+
 /**
  * Every bucket buildGenerationContext emits, kept non-empty — an omitted one would make a
  * `nil.size > 0` assertion pass for the wrong reason.
  */
-const context = (over: Record<string, unknown> = {}) => ({
-  definition: {
-    mode: 'adventure',
-    genre: { label: 'Fantasy', promptBody: '' },
-    tone: { label: 'Wry', promptBody: '' },
-    setting: '',
-  },
-  entities: [
-    {
-      id: 'c1',
-      kind: 'character',
-      name: 'Kael',
-      description: 'A courier with a stolen sigil.',
-      status: 'active',
-      injectionMode: 'auto',
+const context = (over: Record<string, unknown> = {}, rows: Entity[] = WORLD) => {
+  const sceneEntities = (over.sceneEntities as string[] | undefined) ?? ['c1', 'l1']
+  const projected = project(rows, sceneEntities)
+  return {
+    definition: {
+      mode: 'adventure',
+      genre: { label: 'Fantasy', promptBody: '' },
+      tone: { label: 'Wry', promptBody: '' },
+      setting: '',
     },
-    {
-      id: 'l1',
-      kind: 'location',
-      name: 'The Drowned Keep',
-      description: 'Half sunk into the marsh.',
-      status: 'active',
-      injectionMode: 'auto',
+    entities: projected,
+    sceneEntities,
+    structuralLocation: projected.find((e) => e.id === 'l1'),
+    lastTurns: [
+      { position: 1, content: 'The marsh road ended at a wall of black water.' },
+      { position: 2, content: 'Kael went first, testing the stones.' },
+      { position: 3, content: 'I put the sword away and raised both hands.' },
+      { position: 4, content: 'The keep answered with a single lantern, swinging.' },
+    ],
+    calendarVocabulary: {
+      baseUnitName: 'day',
+      secondsPerBaseUnit: 86400,
+      tiers: [{ name: 'month', labels: ['Frostmoon', 'Thawmoon'] }],
     },
-    {
-      id: 'i9',
-      kind: 'item',
-      name: 'Veilstone',
-      description: '',
-      status: 'staged',
-      injectionMode: 'auto',
-    },
-  ],
-  sceneEntities: ['c1', 'l1'],
-  structuralLocation: {
-    id: 'l1',
-    kind: 'location',
-    status: 'active',
-    name: 'The Drowned Keep',
-    description: 'Half sunk into the marsh.',
-  },
-  lastTurns: [
-    { position: 1, content: 'The marsh road ended at a wall of black water.' },
-    { position: 2, content: 'Kael went first, testing the stones.' },
-    { position: 3, content: 'I put the sword away and raised both hands.' },
-    { position: 4, content: 'The keep answered with a single lantern, swinging.' },
-  ],
-  calendarVocabulary: {
-    baseUnitName: 'day',
-    secondsPerBaseUnit: 86400,
-    tiers: [{ name: 'month', labels: ['Frostmoon', 'Thawmoon'] }],
-  },
-  locationIds: [],
-  locationMap: [
-    { id: 'l2', name: 'The Marsh', depth: 0 },
-    { id: 'l1', name: 'The Drowned Keep', depth: 1 },
-  ],
-  currentLocationChain: ['The Marsh'],
-  heldItems: [
-    {
-      holderId: 'c1',
-      items: [
-        { id: 'i3', name: 'Courier’s seal', equipped: false },
-        { id: 'i4', name: 'short sword', equipped: true },
-      ],
-    },
-  ],
-  looseItems: [{ id: 'i5', name: 'a rusted lantern' }],
-  structuralActiveThreads: [
-    { id: 't1', status: 'active', title: 'Find the heir', description: 'Still open.' },
-  ],
-  structuralPinnedEntities: [],
-  structuralPinnedLore: [{ id: 'lore_1', title: 'House Eldrin', body: 'An exiled line.' }],
-  structuralPinnedThreads: [],
-  retrievedEntities: [
-    { id: 'c2', displayName: 'Mora', renderedText: 'Mora — last seen at the ford.' },
-  ],
-  retrievedLore: [],
-  retrievedHappenings: [
-    { id: 'h1', displayName: 'The siege', renderedText: 'The siege broke on the third night.' },
-  ],
-  retrievedThreads: [],
-  retrievedChapters: [
-    { id: 'ch1', displayName: 'Chapter One', renderedText: 'Chapter One: the marsh road.' },
-  ],
-  piggybackFires: false,
-  suggestionsFire: false,
-  worldTimeDeltaBasis: 'sinceLastAiReply',
-  ...over,
-})
+    locationIds: [],
+    locationMap: [
+      { id: 'l2', name: 'The Marsh', depth: 0 },
+      { id: 'l1', name: 'The Drowned Keep', depth: 1 },
+    ],
+    currentLocationChain: ['The Marsh'],
+    heldItems: [],
+    looseItems: projected.filter((e) => e.id === 'i5'),
+    structuralActiveThreads: [
+      { id: 't1', status: 'active', title: 'Find the heir', description: 'Still open.' },
+    ],
+    structuralPinnedEntities: [],
+    structuralSceneFactions: [],
+    structuralPinnedLore: [{ id: 'lore_1', title: 'House Eldrin', body: 'An exiled line.' }],
+    structuralPinnedThreads: [],
+    retrievedEntities: [
+      {
+        id: 'c7',
+        displayName: 'Mora',
+        renderedText: 'never rendered',
+        kind: 'character',
+        name: 'Mora',
+        description: 'last seen at the ford.',
+        status: 'active',
+        state: emptyEntityView('character'),
+      },
+    ],
+    retrievedLore: [],
+    retrievedHappenings: [
+      { id: 'h1', displayName: 'The siege', renderedText: 'The siege broke on the third night.' },
+    ],
+    retrievedThreads: [],
+    retrievedChapters: [
+      { id: 'ch1', displayName: 'Chapter One', renderedText: 'Chapter One: the marsh road.' },
+    ],
+    namedCharacters: [
+      {
+        id: 'c8',
+        kind: 'character',
+        name: 'Ilse',
+        description: 'A ferrywoman.',
+        status: 'staged',
+        injectionMode: 'auto',
+        state: { ...emptyEntityView('character'), voice: 'soft' },
+      },
+    ],
+    piggybackFires: false,
+    suggestionsFire: false,
+    worldTimeDeltaBasis: 'sinceLastAiReply',
+    ...over,
+  }
+}
 
 describe('bundled piggyback fallback classifier template', () => {
   /**
@@ -158,12 +184,16 @@ describe('bundled piggyback fallback classifier template', () => {
 
   // piggybackFires false → macro_memory_blocks brackets no ids (roster is the sole ID source);
   // true would also inject per-turn.ts's tagged-block lines for an emission this never makes.
-  it('renders memory blocks without bracketed ids and without tagged-block instructions', () => {
+  // piggyback.md → Fallback classifier context: the roster is where ids come from, and a row
+  // showing state without one leaves the model matching it to the roster by name.
+  it("brackets the memory blocks' entity ids, without the tagged-block instructions", () => {
     const prompt = render(context())
 
     expect(prompt).toContain('# Elsewhere in the world')
-    // The whole line, not a substring: a bracketed id would prefix it.
-    expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe('Mora — last seen at the ford.')
+    // The whole line, not a substring: it has to lead with the id.
+    expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe(
+      '[c7] Mora (currently elsewhere): last seen at the ford.',
+    )
     expect(prompt).not.toContain('include their ID (without brackets) in the trailing')
     expect(prompt).not.toContain('Use an ID from Places')
   })
@@ -199,6 +229,7 @@ describe('bundled piggyback fallback classifier template', () => {
         '# What has happened',
         '# Active threads',
         '# Earlier chapters',
+        '# Named in this turn — not necessarily present',
         '# Earlier turns — how the scene got here, not the turn you report on',
         '# This turn',
       ])
@@ -237,83 +268,56 @@ describe('bundled piggyback fallback classifier template', () => {
 
     it('renders the current location with its chain and the items lying there, with IDs', () => {
       expect(render(context())).toContain(
-        'The Drowned Keep — in The Marsh: Half sunk into the marsh.\nHere: [i5] a rusted lantern\n',
+        '[l1] The Drowned Keep — in The Marsh: Half sunk into the marsh.\nHere:\n- [i5] a rusted lantern\n',
       )
     })
 
     it('lists what an in-scene character holds, and does not repeat a held item in the scene list', () => {
-      const prompt = render(
-        context({
-          sceneEntities: ['c1', 'i3'],
-          entities: [
-            ...context().entities,
-            {
-              id: 'i3',
-              kind: 'item',
-              name: 'Courier’s seal',
-              description: 'Black wax, cracked.',
-              status: 'active',
-              injectionMode: 'auto',
-            },
-          ],
-        }),
-      )
+      const prompt = render(context({ sceneEntities: ['c1', 'i3'] }))
 
       expect(prompt).toContain(
-        '## Kael\nA courier with a stolen sigil.\nHolds: [i3] Courier’s seal, [i4] short sword (equipped)\n',
+        '## Kael [c1]\nA courier with a stolen sigil.\nHolds:\n- [i3] Courier’s seal: Black wax, cracked.\n- [i4] short sword (equipped)\n',
       )
       expect(prompt).not.toContain('## Courier’s seal')
-      expect(prompt).not.toContain('Black wax, cracked.')
+      expect(prompt.split('Black wax, cracked.')).toHaveLength(2)
     })
-
-    const bex = {
-      id: 'c2',
-      kind: 'character',
-      name: 'Bex',
-      description: 'A quiet smith.',
-      status: 'active',
-      injectionMode: 'auto',
-    }
-    const seal = {
-      id: 'i3',
-      kind: 'item',
-      name: 'Courier’s seal',
-      description: 'Black wax, cracked.',
-      status: 'active',
-      injectionMode: 'auto',
-    }
 
     it('does not repeat an item held by any in-scene character, not only the last holder', () => {
+      const bex = makeEntity({ ...BEX, state: { inventory: ['i6'], equipped_items: [] } as never })
+      const kael = makeEntity({
+        ...KAEL,
+        state: { inventory: ['i3'], equipped_items: [] } as never,
+      })
       const prompt = render(
-        context({
-          sceneEntities: ['c1', 'c2', 'i3'],
-          entities: [...context().entities, bex, seal],
-          heldItems: [
-            { holderId: 'c1', items: [{ id: 'i3', name: 'Courier’s seal', equipped: false }] },
-            { holderId: 'c2', items: [{ id: 'i6', name: 'hammer', equipped: false }] },
-          ],
-        }),
+        context({ sceneEntities: ['c1', 'c2', 'i3'] }, [
+          kael,
+          KEEP,
+          bex,
+          SEAL,
+          item('i6', 'hammer'),
+        ]),
       )
 
       expect(prompt).not.toContain('## Courier’s seal')
       expect(prompt).toContain(
-        '## Kael\nA courier with a stolen sigil.\nHolds: [i3] Courier’s seal\n',
+        '## Kael [c1]\nA courier with a stolen sigil.\nHolds:\n- [i3] Courier’s seal: Black wax, cracked.\n',
       )
-      expect(prompt).toContain('## Bex\nA quiet smith.\nHolds: [i6] hammer\n')
+      expect(prompt).toContain('## Bex [c2]\nA quiet smith.\nHolds:\n- [i6] hammer\n')
     })
 
-    it('gives a Holds line only to the character that holds the items', () => {
-      const prompt = render(
-        context({ sceneEntities: ['c1', 'c2'], entities: [...context().entities, bex] }),
-      )
+    it('gives a Holds block only to the character that holds the items', () => {
+      const prompt = render(context({ sceneEntities: ['c1', 'c2'] }, [...WORLD, BEX]))
 
       expect(prompt.split('Holds:')).toHaveLength(2)
-      expect(prompt).toContain('## Bex\nA quiet smith.\n\n')
+      expect(prompt).toContain('## Bex [c2]\nA quiet smith.\n\n')
     })
 
     it('omits the map, the chain and the item lines when there are none', () => {
       const prompt = render(
-        context({ locationMap: [], currentLocationChain: [], heldItems: [], looseItems: [] }),
+        context({ locationMap: [], currentLocationChain: [], looseItems: [] }, [
+          makeEntity({ ...KAEL, state: null }),
+          KEEP,
+        ]),
       )
 
       expect(prompt).not.toContain('# Places')
@@ -321,6 +325,22 @@ describe('bundled piggyback fallback classifier template', () => {
       expect(prompt).not.toContain('Holds:')
       expect(prompt).not.toContain('Here:')
       expect(prompt).toContain('The Drowned Keep: Half sunk into the marsh.')
+    })
+  })
+
+  // piggyback.md → Fallback classifier context: a character the turn names, whom nothing else
+  // shows with state, still carries the values a write replaces, beside its id.
+  describe('characters named in this turn', () => {
+    it('renders each with its id, head and state lines, in the baseline region', () => {
+      const prompt = render(context())
+      expect(prompt).toContain(
+        '# Named in this turn — not necessarily present\n\n[c8] Ilse: A ferrywoman.\nVoice: soft\n',
+      )
+      expect(prompt.indexOf('# Named in this turn')).toBeLessThan(prompt.indexOf('\n# This turn\n'))
+    })
+
+    it('leaves the block out when there are none', () => {
+      expect(render(context({ namedCharacters: [] }))).not.toContain('# Named in this turn')
     })
   })
 

@@ -791,6 +791,7 @@ describe('per-turn-piggyback', () => {
           kind: 'character',
           status: 'active',
           name: 'Hero',
+          keywords: [],
         } as never,
       ])
 
@@ -876,6 +877,7 @@ describe('per-turn-piggyback', () => {
           kind: 'character',
           status: 'active',
           name: 'Hero',
+          keywords: [],
         } as never,
       ])
 
@@ -947,6 +949,7 @@ describe('per-turn-piggyback', () => {
           kind: 'character',
           status: 'active',
           name: 'Hero',
+          keywords: [],
           state: { stackables: { gold: 10 } },
         } as never,
       ])

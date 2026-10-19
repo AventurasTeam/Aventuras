@@ -84,6 +84,10 @@ const TURN_A: Record<string, unknown> = {
   structuralPinnedEntities: [
     { id: 'c3', kind: 'character', status: 'staged', name: 'Ilse', description: 'A ferrywoman.' },
   ],
+  structuralSceneFactions: [
+    { id: 'f1', kind: 'faction', status: 'active', name: 'The Tidewardens', description: null },
+  ],
+  namedCharacters: [entity('c5', 'character', 'Orrin', 'A lock-keeper.')],
   structuralPinnedLore: [{ id: 'lo1', title: 'House Eldrin', body: 'An exiled line.' }],
   structuralPinnedThreads: [
     { id: 't2', status: 'pending', title: 'The debt', description: 'Owed to the guild.' },
@@ -133,6 +137,8 @@ const TURN_B: Record<string, unknown> = {
   ],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
+  structuralSceneFactions: [],
+  namedCharacters: [],
   structuralPinnedLore: [],
   structuralPinnedThreads: [],
   retrievedEntities: [],

@@ -27,35 +27,34 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
   // The scene loop ignores injectionMode on purpose (structural-floor invariant: active +
   // in-scene always inject), reading `entities`, not the floor, so it holds without retrieval.
   user: `{%- comment -%}
-The second half of the condition de-dupes the row the classifier named as both
-in-scene and the location; it is nil-safe, since a null structuralLocation
-makes the comparison "e.id != nil", which is true. An item a holder's Holds
-line names is not listed again (piggyback.md → What the writer sees).
+LiquidJS drops a filter on a for tag's collection, so the list is assigned first. The second
+half of the scene test de-dupes the row the classifier named as both in-scene and the location;
+it is nil-safe, since a null structuralLocation makes it "e.id != nil", which is true. An item
+its in-scene holder's Holds lists, or one listed under Here:, is not listed again
+(piggyback.md → What the writer sees); each test guards its left side, since nil == nil.
 {%- endcomment -%}
-{%- assign heldIds = '' | split: ',' -%}
-{%- for h in heldItems -%}{%- assign ids = h.items | map: 'id' -%}{%- assign heldIds = heldIds | concat: ids -%}{%- endfor -%}
-{%- assign hasScene = false -%}
-{%- for e in entities | active -%}
-{%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}{%- assign hasScene = true -%}{%- endif -%}
-{%- endfor -%}
-{% if hasScene -%}
-# In scene
-{% for e in entities | active -%}
+{%- assign activeEntities = entities | active -%}
+{%- assign inScene = '' | split: ',' -%}
+{%- for e in activeEntities -%}
 {%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}
-{%- unless heldIds contains e.id %}
-## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}{% if e.description != blank %}
-{{ e.description }}{% endif %}{% for h in heldItems %}{% if h.holderId == e.id %}
-Holds: {% for i in h.items %}{% if piggybackFires %}[{{ i.id }}] {% endif %}{{ i.name }}{% if i.equipped %} (equipped){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}{% endfor %}
-{% endunless -%}
+{%- assign listedElsewhere = false -%}
+{%- if e.state.holder and e.state.holder.status == 'active' and sceneEntities contains e.state.holder.id -%}{%- assign listedElsewhere = true -%}{%- endif -%}
+{%- if e.kind == 'item' and e.state.location and e.state.location.id == structuralLocation.id -%}{%- assign listedElsewhere = true -%}{%- endif -%}
+{%- unless listedElsewhere -%}{%- assign inScene = inScene | push: e -%}{%- endunless -%}
 {%- endif -%}
-{%- endfor %}
-
+{%- endfor -%}
+{% if inScene.size > 0 -%}
+# In scene
+{% for e in inScene %}
+## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}{% if e.description != blank %}
+{{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: true, ids: piggybackFires %}
+{% endfor %}
 {% endif -%}
 {% if structuralLocation -%}
 # Current location
 
-{% if piggybackFires %}[{{ structuralLocation.id }}] {% endif %}{{ structuralLocation.name }}{% if currentLocationChain.size > 0 %} — in {{ currentLocationChain | join: ' › ' }}{% endif %}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}{% if looseItems.size > 0 %}
-Here: {% for i in looseItems %}{% if piggybackFires %}[{{ i.id }}] {% endif %}{{ i.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}
+{% if piggybackFires %}[{{ structuralLocation.id }}] {% endif %}{{ structuralLocation.name }}{% if currentLocationChain.size > 0 %} — in {{ currentLocationChain | join: ' › ' }}{% endif %}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}{% include 'macro_entity_state', e: structuralLocation, here: true, ids: piggybackFires %}{% if looseItems.size > 0 %}
+Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: piggybackFires %}{% endfor %}{% endif %}
 
 {% endif -%}
 {% if locationMap.size > 0 -%}
@@ -63,7 +62,7 @@ Here: {% for i in looseItems %}{% if piggybackFires %}[{{ i.id }}] {% endif %}{{
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
 {% endfor %}
 {% endif -%}
-{% include 'macro_memory_blocks' -%}
+{% include 'macro_memory_blocks', ids: piggybackFires -%}
 {% if piggybackFires -%}
 {% if structuralPinnedEntities.size > 0 or retrievedEntities.size > 0 -%}
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.

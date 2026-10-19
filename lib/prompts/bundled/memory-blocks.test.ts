@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest'
 
-import { countTokens, entityFraming, RANKER_DEFAULTS, type RetrievalType } from '@/lib/retrieval'
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import {
+  countTokens,
+  entityFraming,
+  entityRenderedText,
+  HELD_ITEM_ID_STAND_IN,
+  measuredEntity,
+  RANKER_DEFAULTS,
+  type MeasuredEntity,
+  type RetrievalType,
+} from '@/lib/retrieval'
+import { buildEntityViews, emptyEntityView, type ViewScene } from '@/lib/world'
 
 import { createEngine } from '../engine'
 import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
-import { MEMORY_BLOCKS } from './memory-blocks'
+import { bundledPack } from './index'
 
 // Rendered by its own id, not through a template: an all-empty context renders
-// the macro blank, which renderWith refuses as a template's user half.
+// the macro blank, which renderWith refuses as a template's user half. Every
+// bundled macro is loaded, since the entity rows include the entity-state ones.
 function renderMacro(context: Record<string, unknown>): string {
-  const pack: Pack = {
-    templates: {},
-    macros: { [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS } },
-  }
+  const pack: Pack = { templates: {}, macros: bundledPack.macros }
   return createEngine(pack).renderFileSync(MACRO_IDS.memoryBlocks, context) as string
 }
 
@@ -21,6 +31,7 @@ function renderMacro(context: Record<string, unknown>): string {
 // populates exactly one and the rest stay provably absent.
 const EMPTY = {
   structuralPinnedEntities: [],
+  structuralSceneFactions: [],
   structuralPinnedLore: [],
   structuralPinnedThreads: [],
   structuralActiveThreads: [],
@@ -29,7 +40,7 @@ const EMPTY = {
   retrievedHappenings: [],
   retrievedThreads: [],
   retrievedChapters: [],
-  piggybackFires: true,
+  ids: true,
 }
 
 const ranked = (id: string, displayName: string, renderedText: string) => ({
@@ -38,13 +49,27 @@ const ranked = (id: string, displayName: string, renderedText: string) => ({
   renderedText,
 })
 
-const floorEntity = {
-  id: 'char_9',
+// An entity row as generation-context hands it over: id, the data, and its view.
+const entityRowOf = (id: string, entity: MeasuredEntity, ranking = false) => ({
+  id,
+  ...(ranking ? { displayName: entity.name, renderedText: 'never rendered' } : {}),
+  ...entity,
+})
+
+const plain = (over: Partial<Omit<MeasuredEntity, 'kind' | 'state'>> = {}): MeasuredEntity => ({
   kind: 'character',
-  status: 'retired',
-  name: 'Old Sesk',
-  description: 'A ferryman long dead.',
-}
+  name: 'Mira',
+  description: 'A courier.',
+  status: 'active',
+  state: emptyEntityView('character'),
+  ...over,
+})
+
+const floorEntity = entityRowOf(
+  'char_9',
+  plain({ name: 'Old Sesk', description: 'A ferryman long dead.', status: 'retired' }),
+)
+const rankedMira = entityRowOf('char_2', plain(), true)
 const floorLore = { id: 'lore_9', title: 'The Concord', body: 'Signed at the river.' }
 const floorThread = { id: 'thr_9', status: 'pending', title: 'The debt', description: 'Unpaid.' }
 
@@ -60,7 +85,8 @@ describe('memory-blocks macro — empty-guard contract', () => {
 
   const blocks: [header: string, key: string, row: unknown][] = [
     ['# Elsewhere in the world', 'structuralPinnedEntities', floorEntity],
-    ['# Elsewhere in the world', 'retrievedEntities', ranked('char_1', 'Mira', 'Mira: a courier.')],
+    ['# Elsewhere in the world', 'structuralSceneFactions', floorEntity],
+    ['# Elsewhere in the world', 'retrievedEntities', rankedMira],
     ['# Relevant lore', 'structuralPinnedLore', floorLore],
     ['# Relevant lore', 'retrievedLore', ranked('lore_1', 'Veilstone', 'Veilstone\nA shard.')],
     [
@@ -85,19 +111,11 @@ describe('memory-blocks macro — empty-guard contract', () => {
 })
 
 describe('memory-blocks macro — row content', () => {
-  it('renders the ranked entity text the ranker measured, with its sub-pool framing', () => {
-    const out = renderMacro({
-      ...EMPTY,
-      retrievedEntities: [ranked('char_2', 'Mira', 'Mira (available to introduce): A courier.')],
-    })
-    expect(out).toContain('[char_2] Mira (available to introduce): A courier.')
-  })
-
-  it('brackets entity ids only when piggybackFires, and never on the other types', () => {
+  it('brackets entity ids only on `ids`, and never on the other types', () => {
     const context = {
       ...EMPTY,
       structuralPinnedEntities: [floorEntity],
-      retrievedEntities: [ranked('char_2', 'Mira', 'Mira: A courier.')],
+      retrievedEntities: [rankedMira],
       retrievedLore: [ranked('lore_1', 'Veilstone', 'Veilstone\nA shard.')],
       retrievedHappenings: [ranked('hap_1', 'Fall', 'Fall\nAt dawn.')],
       retrievedThreads: [ranked('thr_1', 'Debt', 'Debt\nUnpaid.')],
@@ -108,11 +126,11 @@ describe('memory-blocks macro — row content', () => {
     expect(firing).toContain('[char_9] Old Sesk')
     for (const id of ['lore_1', 'hap_1', 'thr_1', 'chap_1']) expect(firing).not.toContain(id)
 
-    const quiet = renderMacro({ ...context, piggybackFires: false })
+    const quiet = renderMacro({ ...context, ids: false })
     expect(quiet).not.toContain('[char_2]')
     expect(quiet).not.toContain('[char_9]')
     // Positive control: the rows themselves still render, only the ids drop.
-    expect(quiet).toContain('Mira: A courier.')
+    expect(quiet).toContain('Mira (currently elsewhere): A courier.')
     expect(quiet).toContain('Old Sesk')
   })
 
@@ -120,12 +138,12 @@ describe('memory-blocks macro — row content', () => {
     const out = renderMacro({
       ...EMPTY,
       structuralPinnedEntities: [floorEntity],
-      retrievedEntities: [ranked('char_2', 'Mira', 'Mira: A courier.')],
+      retrievedEntities: [rankedMira],
     })
     expect(out).not.toContain('<scene_entities>')
     expect(out).not.toContain('<current_location>')
     // Positive control: the rows the instructions would have referred to render.
-    expect(out).toContain('[char_2] Mira: A courier.')
+    expect(out).toContain('[char_2] Mira (currently elsewhere): A courier.')
   })
 
   it('renders happening awareness sources verbatim, newlines and all', () => {
@@ -153,24 +171,31 @@ describe('memory-blocks macro — row content', () => {
     expect(out).toContain('Signed at the river.')
   })
 
-  // Whole render, not substrings: the two row families differ in shape but not
-  // in framing, so they share one header the way lore's and threads' do — and a
-  // second header would still leave every substring assertion green.
-  it('puts pinned and ranked entities under one header, pinned first', () => {
+  // Whole render, not substrings: the three row families share one shape and one header the way
+  // lore's and threads' do, and a second header would still leave every substring assertion green.
+  it('puts pinned, faction and ranked entities under one header, in that order', () => {
+    const faction = {
+      id: 'fact_1',
+      kind: 'faction',
+      name: 'The Silver Hand',
+      description: null,
+      status: 'active',
+      state: emptyEntityView('faction'),
+    }
     const out = renderMacro({
       ...EMPTY,
       structuralPinnedEntities: [floorEntity],
-      retrievedEntities: [ranked('char_2', 'Mira', 'Mira (currently elsewhere): A courier.')],
+      structuralSceneFactions: [faction],
+      retrievedEntities: [rankedMira],
     })
     expect(out).toBe(
-      '# Elsewhere in the world\n\n[char_9] Old Sesk: A ferryman long dead.\n\n[char_2] Mira (currently elsewhere): A courier.\n\n',
+      '# Elsewhere in the world\n\n[char_9] Old Sesk: A ferryman long dead.\n\n[fact_1] The Silver Hand\n\n[char_2] Mira (currently elsewhere): A courier.\n\n',
     )
   })
 
-  // A pinned row bypasses the ranker, so nothing pre-renders its sub-pool
-  // framing the way run.ts does for a candidate. Without it a pinned staged
-  // character reads as an existing off-scene figure rather than one the model
-  // may introduce.
+  // A pinned row bypasses the ranker, so the macro frames it from its status the way the
+  // mirror frames a candidate. Without it a pinned staged character reads as an existing
+  // off-scene figure rather than one the model may introduce.
   it.each([
     ['active', entityFraming('character', 'active')],
     ['staged', entityFraming('character', 'staged')],
@@ -182,10 +207,20 @@ describe('memory-blocks macro — row content', () => {
     expect(out).toContain(`[char_9] Old Sesk (${framing}): A ferryman long dead.`)
   })
 
-  it('leaves a pinned retired entity unframed', () => {
+  it('leaves a pinned retired entity, and an active faction, unframed', () => {
     const out = renderMacro({ ...EMPTY, structuralPinnedEntities: [floorEntity] })
     expect(out).toContain('[char_9] Old Sesk: A ferryman long dead.')
     expect(out).not.toContain('(')
+    const faction = {
+      ...floorEntity,
+      kind: 'faction',
+      status: 'active',
+      state: emptyEntityView('faction'),
+    }
+    expect(renderMacro({ ...EMPTY, structuralSceneFactions: [faction] })).toContain(
+      '[char_9] Old Sesk: A ferryman long dead.',
+    )
+    expect(renderMacro({ ...EMPTY, structuralSceneFactions: [faction] })).not.toContain('(')
   })
 
   it('puts pinned and ranked non-active threads under one header, pinned first', () => {
@@ -277,7 +312,7 @@ describe('memory-blocks macro — row content', () => {
         structuralActiveThreads: [
           { id: 'thr_8', status: 'active', title: 'The siege', description: 'Three weeks in.' },
         ],
-        retrievedEntities: [ranked('char_2', 'Mira', 'Mira (currently elsewhere): A courier.')],
+        retrievedEntities: [rankedMira],
         retrievedLore: [ranked('lore_1', 'Veilstone', 'Veilstone\nA shard of the old moon.')],
         retrievedHappenings: [
           ranked('hap_1', 'The bridge fell', 'The bridge fell\nAt dawn.\nSaw it happen'),
@@ -301,6 +336,206 @@ describe('memory-blocks macro — row content', () => {
   })
 })
 
+// retrieval.md → Token estimation: an entity row renders from its view through the entity-state
+// macro, and the ranker measures entityRenderedText, a code mirror of that row. The two must agree
+// exactly, or a type overruns its partition by the difference on every row.
+describe('memory-blocks macro — entity rows equal their measured mirror', () => {
+  const SCENE: ViewScene = { sceneEntities: [], currentLocationId: null }
+  const WORLD: Entity[] = [
+    makeEntity({
+      id: 'char_k',
+      kind: 'character',
+      name: 'Kael',
+      description: 'A scarred ex-soldier turned smuggler.',
+      state: {
+        visual: {
+          physique: "tall, broad-shouldered, a soldier's posture gone slack",
+          face: 'a scar through one brow',
+          hair: 'close-cropped, grey at the temples',
+          eyes: 'pale',
+          attire: 'a salt-stained greatcoat over a leather jerkin; knee boots',
+          distinguishing: 'a limp',
+        },
+        traits: ['wary', 'loyal to a fault'],
+        drives: ['clear his brother’s name'],
+        voice: 'clipped, never wastes a word; calls everyone "friend"',
+        current_location_id: 'loc_docks',
+        equipped_items: [HELD_ITEM_ID_STAND_IN],
+        inventory: ['item_key', 'item_rope', 'item_secret', 'item_ring'],
+        stackables: { gold: 30, arrows: 12 },
+        faction_id: 'fact_hand',
+        lastSeenAt: null,
+      },
+    }),
+    makeEntity({
+      id: HELD_ITEM_ID_STAND_IN,
+      kind: 'item',
+      name: 'Sword of Vael',
+      description: 'a blade that glows near the dead',
+      state: { at_location_id: null, condition: 'cracked near the hilt' },
+    }),
+    makeEntity({
+      id: 'item_key',
+      kind: 'item',
+      name: 'Silver Key',
+      description: 'opens the vault.\nUnder the chapel.',
+      state: { at_location_id: null, condition: 'bent' },
+    }),
+    makeEntity({
+      id: 'item_rope',
+      kind: 'item',
+      name: 'rope',
+      state: { at_location_id: null, condition: 'frayed' },
+    }),
+    makeEntity({
+      id: 'item_secret',
+      kind: 'item',
+      name: 'Hidden Letter',
+      injectionMode: 'disabled',
+      state: { at_location_id: null },
+    }),
+    makeEntity({
+      id: 'item_ring',
+      kind: 'item',
+      name: 'Ring',
+      status: 'retired',
+      state: { at_location_id: null },
+    }),
+    makeEntity({
+      id: 'fact_hand',
+      kind: 'faction',
+      name: 'The Silver Hand',
+      description: 'Smugglers.',
+      state: { standing: 'embattled in the south', agenda: ['hold the docks', 'find the heir'] },
+    }),
+    makeEntity({
+      id: 'fact_veil',
+      kind: 'faction',
+      name: 'The Veil',
+      status: 'staged',
+      injectionMode: 'disabled',
+    }),
+    makeEntity({
+      id: 'char_zev',
+      kind: 'character',
+      name: 'Zev',
+      status: 'retired',
+      state: { faction_id: 'fact_hand', inventory: [], equipped_items: [] } as never,
+    }),
+    makeEntity({
+      id: 'char_o',
+      kind: 'character',
+      name: 'Orin',
+      description: '  ',
+      state: { faction_id: 'fact_veil', inventory: [], equipped_items: [] } as never,
+    }),
+    makeEntity({ id: 'loc_rift', kind: 'location', name: 'The Rift', injectionMode: 'disabled' }),
+    makeEntity({
+      id: 'loc_docks',
+      kind: 'location',
+      name: 'The Docks',
+      state: { parent_location_id: 'loc_port', condition: 'half-flooded' },
+    }),
+    makeEntity({ id: 'loc_port', kind: 'location', name: 'Port Vellis' }),
+    makeEntity({
+      id: 'loc_chapel',
+      kind: 'location',
+      name: 'The Chapel',
+      status: 'staged',
+      state: { parent_location_id: 'loc_rift' },
+    }),
+    makeEntity({
+      id: 'item_lamp',
+      kind: 'item',
+      name: 'Lamp',
+      description: 'brass, still warm!',
+      state: { at_location_id: 'loc_docks', condition: 'dented' },
+    }),
+    makeEntity({ id: 'char_empty', kind: 'character', name: 'Nobody', state: null }),
+  ]
+  const views = buildEntityViews(WORLD, SCENE)
+  const measured = (id: string): MeasuredEntity =>
+    measuredEntity(WORLD.find((e) => e.id === id)!, views)
+
+  // Each kind, and each edge the macro and the mirror must agree on: empty fields, a blank or
+  // missing description, held items with and without a description or condition, one already
+  // ending a sentence, a multi-line one, members some retired, disabled references (a faction, an
+  // item, a parent place) and a retired item left out, framing per kind and status.
+  const fixtures: [label: string, id: string][] = [
+    ['a fully described character', 'char_k'],
+    ['a character with a disabled faction and a blank description', 'char_o'],
+    ['a retired character', 'char_zev'],
+    ['a character with no stored state', 'char_empty'],
+    ['a location with a condition and a parent', 'loc_docks'],
+    ['a staged location whose parent is disabled', 'loc_chapel'],
+    ['an item lying at a place', 'item_lamp'],
+    ['a held item', HELD_ITEM_ID_STAND_IN],
+    ['an active faction, members some retired', 'fact_hand'],
+    ['a staged faction', 'fact_veil'],
+  ]
+  const lists = ['structuralPinnedEntities', 'structuralSceneFactions', 'retrievedEntities']
+  // The mirror measures every held item's id through the stand-in (retrieval.md → Token
+  // estimation), so the render's held ids, and nothing else, map to it before comparing.
+  const asMeasured = (rendered: string, entity: MeasuredEntity): string =>
+    entity.kind === 'character'
+      ? entity.state.holdings.reduce(
+          (text, h) => text.replaceAll(`[${h.id}] `, `[${HELD_ITEM_ID_STAND_IN}] `),
+          rendered,
+        )
+      : rendered
+
+  it.each(lists.flatMap((list) => fixtures.map(([label, id]) => [list, label, id] as const)))(
+    'renders a %s row for %s exactly as its mirror',
+    (list, _label, id) => {
+      const entity = measured(id)
+      const row = entityRowOf('c1', entity, list === 'retrievedEntities')
+      expect(asMeasured(renderMacro({ ...EMPTY, [list]: [row] }), entity)).toBe(
+        `# Elsewhere in the world\n\n[c1] ${entityRenderedText(entity)}\n\n`,
+      )
+    },
+  )
+
+  // Guards the fixtures: an all-empty view would let a macro that prints no state pass.
+  it('exercises every kind’s state lines, held items included', () => {
+    const text = fixtures.map(([, id]) => entityRenderedText(measured(id))).join('\n')
+    for (const line of [
+      'Location: The Docks',
+      'Physique:',
+      'Face:',
+      'Hair:',
+      'Eyes:',
+      'Attire:',
+      'Distinguishing:',
+      'Voice:',
+      'Traits: wary; loyal to a fault',
+      'Drives:',
+      'Faction: The Silver Hand',
+      'Holds:',
+      `- [${HELD_ITEM_ID_STAND_IN}] Sword of Vael (equipped): a blade that glows near the dead. Condition: cracked near the hilt`,
+      `- [${HELD_ITEM_ID_STAND_IN}] Silver Key: opens the vault. Under the chapel. Condition: bent`,
+      `- [${HELD_ITEM_ID_STAND_IN}] rope. Condition: frayed`,
+      'Stackables: gold 30, arrows 12',
+      'Condition: half-flooded',
+      'Part of: Port Vellis',
+      'Held by: Kael',
+      'Standing: embattled in the south',
+      'Agenda: hold the docks; find the heir',
+      'Members: Kael',
+    ])
+      expect(text).toContain(line)
+    // Left out as references: a disabled item and faction, a retired item, a disabled parent, a
+    // retired member. Line-anchored, since a fixture of its own may print the same name.
+    for (const absent of [
+      /Hidden Letter/,
+      /- \[\S+\] Ring/,
+      /^Faction: The Veil$/m,
+      /^Part of: The Rift$/m,
+    ])
+      expect(text).not.toMatch(absent)
+    expect(text).toMatch(/^Members: Kael$/m)
+  })
+})
+
 // retrieval.md → Token estimation: the ranker charges
 // countTokens(renderedText) + typeOverhead[type] for every row it seats, so
 // typeOverhead has to be this macro's own wrapping cost. Measured by rendering
@@ -318,19 +553,36 @@ const OVERHEAD_BUCKET: Record<RetrievalType, string> = {
   chapters: 'retrievedChapters',
 }
 
-// piggybackFires true is the costlier of the two shapes — it brackets an id
-// beside every entity row — and the ranker has no per-turn flag to branch on.
-// `c1` is the substituted-placeholder shape an id actually has at prompt time.
-// Entity placeholders are a single letter plus a counter (lib/ids/prefixes.ts →
+// `ids` true is the costlier of the two shapes — it brackets an id beside every
+// entity row — and the ranker has no per-turn flag to branch on. `c1` is the
+// substituted-placeholder shape an id actually has at prompt time. Entity
+// placeholders are a single letter plus a counter (lib/ids/prefixes.ts →
 // PLACEHOLDER_PREFIX_BY_KIND) and every one up to three digits costs the same 4
-// tokens, so only a branch seating a four-digit id under-charges, by one.
+// tokens, so only a branch seating a four-digit id under-charges, by one. An entity
+// row renders from its data, so its probe row is a nameless retired character with
+// an empty view, whose mirror is the empty string.
 const PROBE_ROW = { id: 'c1', displayName: '', renderedText: '' }
+const ENTITY_PROBE_ROW = {
+  ...PROBE_ROW,
+  kind: 'character',
+  name: '',
+  description: null,
+  status: 'retired',
+  state: emptyEntityView('character'),
+} as const
 
 describe('per-type overhead constants', () => {
   const types = Object.keys(OVERHEAD_BUCKET) as RetrievalType[]
+  const probeRowFor = (type: RetrievalType) => (type === 'entities' ? ENTITY_PROBE_ROW : PROBE_ROW)
+
+  it('probes entities with a row whose mirror is empty', () => {
+    expect(entityRenderedText(ENTITY_PROBE_ROW)).toBe('')
+  })
 
   it.each(types)('typeOverhead.%s is what the macro wrapper actually costs', (type) => {
-    const measured = countTokens(renderMacro({ ...EMPTY, [OVERHEAD_BUCKET[type]]: [PROBE_ROW] }))
+    const measured = countTokens(
+      renderMacro({ ...EMPTY, [OVERHEAD_BUCKET[type]]: [probeRowFor(type)] }),
+    )
     // Guards the equality below against a macro that renders nothing: a
     // zero-cost wrapper would let a zeroed constant pass silently.
     expect(measured).toBeGreaterThan(0)
@@ -346,15 +598,17 @@ describe('per-type overhead constants', () => {
   // rendering the title costs nothing on the probe row and everything in
   // production — ~20 seated rows carrying an uncharged title overrun their
   // partition, and the snapshot diff reads as an intentional "show lore titles".
-  // renderedText is the only field the ranker charges for; nothing else may vary
-  // the output length.
+  // A ranked row is measured on renderedText, or for an entity on the mirror of
+  // its data: nothing else may vary the output length.
   it.each(types)('%s rows render nothing whose length the ranker did not charge', (type) => {
-    const withRow = (displayName: string) =>
+    const withRow = (displayName: string, renderedText: string) =>
       renderMacro({
         ...EMPTY,
-        [OVERHEAD_BUCKET[type]]: [{ id: 'c1', displayName, renderedText: 'The body.' }],
+        [OVERHEAD_BUCKET[type]]: [{ ...probeRowFor(type), displayName, renderedText }],
       })
 
-    expect(withRow('x'.repeat(200))).toBe(withRow('x'))
+    expect(withRow('x'.repeat(200), 'The body.')).toBe(withRow('x', 'The body.'))
+    // An entity row renders from its data, so its measured string never reaches the prompt.
+    if (type === 'entities') expect(withRow('x', 'y'.repeat(200))).toBe(withRow('x', 'The body.'))
   })
 })

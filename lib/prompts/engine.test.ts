@@ -144,6 +144,30 @@ describe('templateGlobals', () => {
     expect(globals).toContain('sceneMetadata')
   })
 
+  // A macro taking arguments (the bundled entity-state macro): its hash keys are the macro's own
+  // names, and only the value expressions are reads of the caller's context.
+  it("takes an include's arguments as the macro's own names, their values as reads", () => {
+    const macros = {
+      m: {
+        group: 'generationContext' as const,
+        source: '{% if here %}{{ e.name }}{% endif %}{% if ids %}x{% endif %}',
+      },
+    }
+    expect(
+      globalsFor(
+        "{% for e in rows %}{% include 'm', e: e, here: true, ids: flag %}{% endfor %}",
+        macros,
+      ).toSorted(),
+    ).toEqual(['flag', 'rows'])
+    // The hazard the bundled templates guard against: a site that leaves an argument out reads it.
+    expect(
+      globalsFor(
+        "{% for e in rows %}{% include 'm', e: e, here: true %}{% endfor %}",
+        macros,
+      ).toSorted(),
+    ).toEqual(['ids', 'rows'])
+  })
+
   it('excludes a name the template assigns itself', () => {
     expect(globalsFor("{% assign lastTurns = 'x' %}{{ lastTurns }}{{ entries }}")).toEqual([
       'entries',
