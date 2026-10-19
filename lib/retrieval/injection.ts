@@ -4,7 +4,7 @@ import type { EntityViews } from '@/lib/world'
 import { matchTerms, normalizeTerm } from './name-index'
 import { filterEntityPool, filterLorePool, type EntityRow, type LoreRow } from './pools'
 import { tokenCost, type RankTypeInput } from './ranker'
-import { entityHead, entityRenderedText, loreRenderedText, measuredEntity } from './rendered-text'
+import { entityRenderedText, lines, loreRenderedText, measuredEntity } from './rendered-text'
 import {
   type InjectedRow,
   type KeywordInjection,
@@ -92,11 +92,7 @@ type Matchable = {
   row: InjectedRow
   priority: number
   terms: readonly string[]
-  /**
-   * What cascade rescans once the row is seated. An entity's head only: its state lines name the
-   * faction, members, places and held items the row already shows, and seating those again would
-   * spend the allowance on rows the prompt carries twice (retrieval.md → Keyword injection).
-   */
+  /** What cascade rescans once the row is seated; an entity's is its name and description alone. */
   cascadeText: string
 }
 
@@ -125,7 +121,7 @@ function matchable(input: KeywordInjectionInput): Record<Injectable, Matchable[]
         // Canon: "Keyword on `name` and `entities.keywords`" — the name has no column,
         // hence prepended. De-duped so a name also listed as a keyword is not two hits.
         terms: [...new Set([r.name, ...r.keywords].map(normalizeTerm))],
-        cascadeText: entityHead(entity),
+        cascadeText: lines(r.name, r.description),
       }
     }),
     lore: lore.map((r) => ({

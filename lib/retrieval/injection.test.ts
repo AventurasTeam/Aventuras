@@ -290,8 +290,7 @@ describe('buildKeywordInjections — entity rows', () => {
     expect(seat?.row.kind === 'entity' && seat.row.entity.state).toBe(entityViews.byId.get('e1'))
   })
 
-  // retrieval.md → Keyword injection: the state lines name the faction, members and held items
-  // the row already shows, so cascade reads an entity's head and nothing below it.
+  // retrieval.md → Keyword injection: an entity row's own text is its name and description.
   it('cascades from an entity’s name and description, never from its state lines', () => {
     const rows = [
       makeEntity({
@@ -333,6 +332,35 @@ describe('buildKeywordInjections — entity rows', () => {
       }),
     )
     expect(ids(viaHead.entities)).toEqual(['e1', 'f1'])
+  })
+
+  it.each([
+    ['active', 'not in the scene', 'scene'],
+    ['staged', 'available to introduce', 'introduce'],
+  ] as const)('never cascades from the framing of a row at status %s', (status, framing, word) => {
+    const cascade = { mode: 'inject' as const, budgetShare: 1, cascade: true, cascadeMaxDepth: 2 }
+    const run = (description: string) =>
+      buildKeywordInjections(
+        input({
+          settings: cascade,
+          entities: [
+            entity({ status, description }),
+            entity({ id: 'e2', name: 'Bosun', keywords: [word] }),
+          ],
+          lore: [lore({ keywords: [word] })],
+          scanText: 'Kael waits.',
+        }),
+      )
+
+    const viaFraming = run('A ferryman.')
+    expect(viaFraming.entities[0]?.row.renderedText).toBe(`Kael (${framing}): A ferryman.`)
+    expect(ids(viaFraming.entities)).toEqual(['e1'])
+    expect(ids(viaFraming.lore)).toEqual([])
+
+    // Positive control: the same word in the description does cascade.
+    const viaDescription = run(`A ferryman who knows when to ${word}.`)
+    expect(ids(viaDescription.entities)).toEqual(['e1', 'e2'])
+    expect(ids(viaDescription.lore)).toEqual(['l1'])
   })
 })
 
