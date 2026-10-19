@@ -20,6 +20,7 @@ import {
   type ThreadRow,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
+import { listedAncestorNames } from '@/lib/world'
 
 import {
   loreBundle,
@@ -39,6 +40,7 @@ const identity = {
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   promptBufferTokens: 0,
   scanText: '',
+  storeEntities: [] as Entity[],
 }
 
 const zeroFunnel = {
@@ -128,7 +130,19 @@ const FLOOR_WORLD: Entity[] = [
     kind: 'location',
     name: 'The drowned archive',
     description: 'half-flooded stacks',
-    state: { parent_location_id: null, condition: 'silted to the knee' },
+    state: { parent_location_id: 'e_quarter', condition: 'silted to the knee' },
+  }),
+  makeEntity({
+    id: 'e_quarter',
+    kind: 'location',
+    name: 'The Low Quarter',
+    state: { parent_location_id: 'e_city' },
+  }),
+  makeEntity({
+    id: 'e_city',
+    kind: 'location',
+    name: 'Vellis',
+    state: { parent_location_id: null },
   }),
   makeEntity({
     id: 'e_always',
@@ -216,7 +230,8 @@ const FLOOR_THREADS: ThreadRow[] = [
 const FLOOR_TEXTS = {
   // Its held item's line is priced on that item's own row, the Holds label here.
   sceneEntity: '## Mira\na courier\nAttire: a grey cloak\nFaction: The Tidewardens\nHolds:',
-  currentLocation: 'The drowned archive: half-flooded stacks\nCondition: silted to the knee\nHere:',
+  currentLocation:
+    'The drowned archive — in The Low Quarter › Vellis: half-flooded stacks\nCondition: silted to the knee\nHere:',
   sceneFaction:
     'The Tidewardens: keepers of the sluices\nStanding: dwindling since the great flood\nMembers: Mira',
   heldItem: '- Brass key: opens the sluice gate',
@@ -267,9 +282,10 @@ const floorOver = (world: readonly Entity[], scene = FLOOR_SCENE) =>
     storeEntities: world,
   })
 
-const floorTokens = (floor: StructuralFloor) => {
+const floorTokens = (floor: StructuralFloor, world: Entity[]) => {
   const payload = buildCapturePayload({
     ...identity,
+    storeEntities: world,
     mode: 'light',
     settings,
     params: RANKER_DEFAULTS,
@@ -372,6 +388,7 @@ describe('buildCapturePayload', () => {
       params: RANKER_DEFAULTS,
       promptBufferTokens: 0,
       scanText: '',
+      storeEntities: [],
       outcome: successOutcome(),
     })
 
@@ -718,6 +735,7 @@ describe('buildCapturePayload', () => {
     // field sourced from settings or summed off structural_floor reads wrong.
     const payload = buildCapturePayload({
       ...identity,
+      storeEntities: FLOOR_WORLD,
       promptBufferTokens: 1840,
       mode: 'light',
       settings,
@@ -779,6 +797,7 @@ describe('buildCapturePayload', () => {
   it('emits one structural-floor row per seat: scene, location, faction, held and loose items, threads, pins', () => {
     const payload = buildCapturePayload({
       ...identity,
+      storeEntities: FLOOR_WORLD,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
@@ -855,6 +874,9 @@ function renderFloor(
     entities: withState(world.map(sourceRow)),
     sceneEntities,
     structuralLocation: floor.currentLocation ? withState([floor.currentLocation])[0] : null,
+    currentLocationChain: floor.currentLocation
+      ? listedAncestorNames(floor.currentLocation.id, world)
+      : [],
     structuralActiveThreads: floor.activeThreads,
     structuralPinnedEntities: withState(floor.alwaysEntities),
     structuralSceneFactions: withState(floor.sceneFactions),
@@ -902,6 +924,7 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
   })
   const payload = buildCapturePayload({
     ...identity,
+    storeEntities: world,
     mode: 'light',
     settings,
     params: RANKER_DEFAULTS,
@@ -927,10 +950,21 @@ describe('structural-floor formulas match the templates that render them', () =>
   it('prices a whitespace-only current-location description as absent', () => {
     const world = worldWith([{ ...worldRow('e_loc'), description: ' \n ' }])
     const floor = floorOver(world)
-    const text = 'The drowned archive\nCondition: silted to the knee\nHere:'
+    const text =
+      'The drowned archive — in The Low Quarter › Vellis\nCondition: silted to the knee\nHere:'
 
     expect(renderFloor(false, { floor, world })).toContain(`# Current location\n\n${text}\n`)
-    expect(floorTokens(floor)('e_loc')).toEqual([countTokens(text)])
+    expect(floorTokens(floor, world)('e_loc')).toEqual([countTokens(text)])
+  })
+
+  it('prices the chain without an ancestor the map leaves out', () => {
+    const world = worldWith([{ ...worldRow('e_quarter'), injectionMode: 'disabled' }])
+    const floor = floorOver(world)
+    const text =
+      'The drowned archive — in Vellis: half-flooded stacks\nCondition: silted to the knee\nHere:'
+
+    expect(renderFloor(false, { floor, world })).toContain(`# Current location\n\n${text}\n`)
+    expect(floorTokens(floor, world)('e_loc')).toEqual([countTokens(text)])
   })
 
   // The gap probe.md → Structural floor records: piggyback firing is decided
@@ -940,6 +974,7 @@ describe('structural-floor formulas match the templates that render them', () =>
     const rendered = renderFloor(true)
     const payload = buildCapturePayload({
       ...identity,
+      storeEntities: FLOOR_WORLD,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
@@ -955,7 +990,7 @@ describe('structural-floor formulas match the templates that render them', () =>
       ],
       [
         'e_loc',
-        '[e_loc] The drowned archive: half-flooded stacks\nCondition: silted to the knee\nHere:',
+        '[e_loc] The drowned archive — in The Low Quarter › Vellis: half-flooded stacks\nCondition: silted to the knee\nHere:',
       ],
       [
         'e_hand',

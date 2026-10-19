@@ -222,6 +222,7 @@ export async function* retrievalPhase(
         },
         promptBufferTokens: countTokens(promptBuffer),
         scanText,
+        storeEntities: entities,
         outcome: probed,
       },
     )

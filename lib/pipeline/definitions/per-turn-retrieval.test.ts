@@ -21,6 +21,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
 import { __resetCaptureMode, armDeepCapture, decompressPayload } from '@/lib/probe'
 import {
+  countTokens,
   RANKER_DEFAULTS,
   type CandidateTrace,
   type InjectedAwareness,
@@ -1513,6 +1514,51 @@ describe('retrieval phase — probe capture', () => {
     // probe.md → Failed captures: the reached query text is the evidence a
     // failed capture exists to carry.
     expect(payloadOf(rows[0]).queries.map((q) => q.text)).toEqual([...QUERY_TEXTS])
+  })
+
+  // The pass's views come from the branch's store rows, and the chain the template prints beside
+  // `# Current location` from the same rows.
+  it("prices the current location's chain off the branch's store entities", async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    const place = (id: string, name: string, parent: string | null): Entity => ({
+      ...entity(id, 'location', name),
+      state: { parent_location_id: parent },
+    })
+    seedOpenStory({
+      settings: { probe_mode_active: true },
+      entries: [entry(1, 'user_action', 'I draw the blade.', meta())],
+      entities: [
+        place('loc_eldra', 'Eldra', null),
+        place('loc_vellis', 'Port Vellis', 'loc_eldra'),
+        place('loc_anchor', 'The Rusty Anchor', 'loc_vellis'),
+      ],
+    })
+    runRetrievalMock.mockResolvedValue(
+      retrievalSuccess({
+        queries: queryStack(),
+        floor: {
+          currentLocation: {
+            id: 'loc_anchor',
+            kind: 'location',
+            status: 'active',
+            injectionMode: 'auto',
+            name: 'The Rusty Anchor',
+            description: null,
+          },
+        },
+      }),
+    )
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(payloadOf(captureRows(sqlite)[0]).structural_floor).toEqual([
+      {
+        target_kind: 'entity',
+        target_id: 'loc_anchor',
+        tokens: countTokens('The Rusty Anchor — in Port Vellis › Eldra'),
+      },
+    ])
   })
 
   it('writes nothing when the story gate is off', async () => {

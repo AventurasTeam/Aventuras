@@ -2,6 +2,7 @@ import {
   CAPTURE_VERSION,
   type CaptureCandidate,
   type CaptureKeywordInjection,
+  type Entity,
   type ProbeCapturePayload,
   type VecTargetKind,
 } from '@/lib/db'
@@ -28,7 +29,7 @@ import {
   type StateLineOptions,
   type ThreadRow,
 } from '@/lib/retrieval'
-import type { EntityViews } from '@/lib/world'
+import { listedAncestorNames, type EntityViews } from '@/lib/world'
 
 export type CapturePayloadInput = {
   branchId: string
@@ -49,6 +50,8 @@ export type CapturePayloadInput = {
   promptBufferTokens: number
   /** The scan surface the pass ran with (retrieval.md → Keyword scan surface). */
   scanText: string
+  /** The rows the pass built its floor's views from: `# Current location`'s chain reads them too. */
+  storeEntities: readonly Entity[]
   outcome: RetrievalOutcome
 }
 
@@ -145,18 +148,13 @@ const queriesOf = (
 ): ProbeCapturePayload['queries'] =>
   (stack ?? ABSENT_QUERY_STACK).specs.map((q, i) => queryOf(q, redundancy[i] ?? null))
 
-// Liquid's `blank` matches whitespace too, so the templates leave such a description out.
-const nameWithDescription = (name: string, description: string | null): string =>
-  description?.trim() ? `${name}: ${description}` : name
-
 // The floor's rows priced as the bundled templates render them (probe.md → Structural floor):
 // per-turn.ts's scene and location sections, its Holds and Here lines, and memory-blocks.ts's
 // rows for a scene's faction, a pinned row and the threads and lore. Every entity row leaves out
 // the `[id]` affixes the templates add when piggybackFires, which is decided after retrieval and
-// so unknowable here, and `# Current location` its chain, which isn't on the floor: on those
-// turns the floor cost reads as a lower bound. A held or loose item is its own row, its line
-// priced there and its holder's row or the location's carrying only the Holds or Here label, so
-// the template's one rendering is counted once.
+// so unknowable here: on those turns the floor cost reads as a lower bound. A held or loose item
+// is its own row, its line priced there and its holder's row or the location's carrying only the
+// Holds or Here label, so the template's one rendering is counted once.
 const stateLinesOf = (
   e: Pick<EntityRow, 'id' | 'kind'>,
   views: EntityViews,
@@ -176,9 +174,15 @@ const sceneEntityText = (
 const currentLocationText = (
   e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
   views: EntityViews,
+  chain: readonly string[],
 ) =>
   [
-    nameWithDescription(e.name, e.description),
+    [
+      e.name,
+      chain.length > 0 ? ` — in ${chain.join(' › ')}` : '',
+      // Liquid's `blank` matches whitespace too, so the template leaves such a description out.
+      e.description?.trim() ? `: ${e.description}` : '',
+    ].join(''),
     ...stateLinesOf(e, views, { here: true, held: null }),
     ...(views.looseAt(e.id).length > 0 ? ['Here:'] : []),
   ].join('\n')
@@ -197,7 +201,10 @@ const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>
 
 const alwaysLoreText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
 
-const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
+const floorRowsOf = (
+  floor: StructuralFloor | null,
+  storeEntities: readonly Entity[],
+): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
   const { views } = floor
   const rows: ProbeCapturePayload['structural_floor'] = []
@@ -228,7 +235,12 @@ const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['struct
     else push('entity', e.id, sceneEntityText(e, views))
   }
   if (floor.currentLocation) {
-    push('entity', floor.currentLocation.id, currentLocationText(floor.currentLocation, views))
+    const chain = listedAncestorNames(floor.currentLocation.id, storeEntities)
+    push(
+      'entity',
+      floor.currentLocation.id,
+      currentLocationText(floor.currentLocation, views, chain),
+    )
   }
   for (const e of floor.sceneFactions) push('entity', e.id, memoryRowText(e, views))
   for (const e of floor.heldItems) push('entity', e.id, heldLine(e.id) ?? looseLine(e))
@@ -280,7 +292,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       threads: funnelOf(bundles.threads),
       chapters: funnelOf(bundles.chapters),
     },
-    structural_floor: floorRowsOf(floor),
+    structural_floor: floorRowsOf(floor, input.storeEntities),
     keyword_injections: keywordInjections.map(injectionOf),
     prompt_buffer_tokens: input.promptBufferTokens,
     // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;
