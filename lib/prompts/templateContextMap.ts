@@ -23,7 +23,7 @@ const ENTITY_STATE_INFO: readonly InfoField[] = [
     name: 'state',
     type: 'EntityStateView',
     description:
-      "The entity's state as a view built per kind, never the stored column. A reference is { id, name, status }; a disabled target is left out (null, or absent from a list) unless the scene seats it, and a place counts as disabled when its own mode or an ancestor's is.",
+      "The entity's state as a view built per kind, never the stored column. A reference is { id, name, status }; a disabled target is left out (null, or absent from a list) unless the scene seats it, and a place counts as disabled by the rule that leaves it out of locationMap.",
   },
   {
     name: 'state.visual',
@@ -49,7 +49,8 @@ const ENTITY_STATE_INFO: readonly InfoField[] = [
   {
     name: 'state.stackables',
     type: '{ key, amount }[]',
-    description: 'Character: currencies, ammunition and supplies by key, largest amount first.',
+    description:
+      'Character: currencies, ammunition and supplies by key, largest amount first, ties by key. Keys are trimmed and lowercased, amounts under one key summed, and a blank key or an amount of zero or less left out.',
   },
   { name: 'state.condition', type: 'string | null', description: 'Location, item.' },
   {
@@ -97,7 +98,8 @@ const FLOOR_ENTITY_INFO: readonly InfoField[] = ENTITY_FIELDS_INFO.filter(
 
 // Pinned variable names per group. buildGenerationContext must emit these
 // exact names — parity-tested in lib/pipeline/definitions/generation-context.test.ts.
-// Entity fields follow the drizzle row shape (camelCase).
+// Entity fields follow the drizzle row shape (camelCase), except `state`: a per-kind view, not
+// the stored column.
 export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   generationContext: [
     {
@@ -238,7 +240,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'RetrievedRow[]',
       category: 'Retrieval',
       description:
-        'Lore rows the ranker seated this turn; same row shape as retrievedEntities. Empty when nothing scored or no retrieval ran.',
+        'Lore rows the ranker seated this turn, as { id, displayName, renderedText }: `displayName` is the title, and `renderedText` the title, then the body on its own line when there is one: the string the type budget was charged for, and the one to render. Empty when nothing scored or no retrieval ran.',
       required: true,
     },
     {
@@ -304,7 +306,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'FloorEntity[]',
       category: 'Retrieval',
       description:
-        'The factions of the active in-scene characters, seated by the structural floor unless retired or disabled, in scene order; shaped like structuralPinnedEntities, and rendered with them. A faction is never in a scene, but its agenda shapes how its members act in one. Empty when no in-scene character has one, or no retrieval ran.',
+        'The factions of the active in-scene characters, seated by the structural floor unless retired or disabled; shaped like structuralPinnedEntities, and rendered with them. A faction is never in a scene, but its agenda shapes how its members act in one. Empty when no in-scene character has one, or no retrieval ran.',
       infoFields: FLOOR_ENTITY_INFO,
       required: true,
     },
