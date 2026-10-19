@@ -132,7 +132,7 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     ids.flatMap((id) => {
       const row = byId.get(id)
       if (row === undefined || seatedIds.has(id)) return []
-      if (row.status === 'retired' || row.injectionMode === 'disabled') return []
+      if (row.status === 'retired') return []
       seatedIds.add(id)
       return [narrowEntity(row)]
     })
