@@ -749,6 +749,29 @@ describe('bundled per-turn template — the location map and item lines', () => 
     expect(rendered).not.toContain('Location:')
   })
 
+  // In scene, an item is where the scene is, whoever off-scene holds it.
+  it('renders an in-scene item held off-scene with no Location or Held by line', () => {
+    const scene = ['char_1', 'item_9']
+    const entities = withViews(
+      [
+        aria(),
+        makeEntity({ ...BEX, state: { inventory: ['item_9'], equipped_items: [] } as never }),
+        thing('item_9', 'A lantern', { description: 'Still lit.' }, { at_location_id: 'loc_2' }),
+        makeEntity({ id: 'loc_2', kind: 'location', name: 'The Mill' }),
+      ],
+      scene,
+    )
+    expect(entities.find((e) => e.id === 'item_9')?.state).toMatchObject({
+      holder: { name: 'Bex' },
+      location: { name: 'The Mill' },
+    })
+
+    const rendered = render({ sceneEntities: scene, entities })
+    expect(rendered).toContain('## A lantern [item_9]\nStill lit.\n\n# Story so far')
+    expect(rendered).not.toContain('Held by:')
+    expect(rendered).not.toContain('Location:')
+  })
+
   // piggyback.md → What the writer sees.
   it('does not repeat a held item in the scene list', () => {
     const scene = ['char_1', 'item_1', 'item_9', 'char_2']

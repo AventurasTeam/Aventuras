@@ -151,6 +151,40 @@ describe('bundled suggestion-refresh template — in scene', () => {
     expect(user).not.toContain('## Silver Key')
   })
 
+  // In scene, an item is where the scene is, whoever off-scene holds it.
+  it('renders an in-scene item held off-scene with no Location or Held by line', () => {
+    const rows = [
+      makeEntity({ ...aria, state: null }),
+      makeEntity({
+        id: 'char_2',
+        kind: 'character',
+        name: 'Bex',
+        state: { inventory: ['item_l'], equipped_items: [] } as never,
+      }),
+      makeEntity({
+        id: 'item_l',
+        kind: 'item',
+        name: 'Lantern',
+        description: 'Still lit.',
+        state: { at_location_id: 'loc_2' },
+      }),
+      makeEntity({ id: 'loc_2', kind: 'location', name: 'The Mill' }),
+    ]
+    const views = buildEntityViews(rows, {
+      sceneEntities: ['char_1', 'item_l'],
+      currentLocationId: null,
+    })
+    expect(views.byId.get('item_l')).toMatchObject({
+      holder: { name: 'Bex' },
+      location: { name: 'The Mill' },
+    })
+
+    const user = sceneOf(rows, ['char_1', 'item_l'])
+    expect(user).toContain('## Lantern\nStill lit.\n\n# Story so far')
+    expect(user).not.toContain('Held by:')
+    expect(user).not.toContain('Location:')
+  })
+
   it('prints no empty line under an entity with no description', () => {
     const user = sceneOf([makeEntity({ ...aria, description: null, state: null })], ['char_1'])
     expect(user).toContain('# In scene\n\n## Aria\n\n# Story so far')
