@@ -1,7 +1,7 @@
 import { jsonrepair } from 'jsonrepair'
 
 import type { StoryEntry } from '@/lib/db'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { foldStackableKey } from '@/lib/keyword-terms'
 
 import {
   isCreateHandle,
@@ -34,7 +34,7 @@ import type {
 // data-model.md → Stackable items: lowercase keys of at most 40 characters, and a
 // transfer moves a positive whole count (a negative `to` would store a debt).
 export function normalizeStackableTransfer(transfer: StackableTransfer): StackableTransfer | null {
-  const key = normalizeTerm(transfer.key)
+  const key = foldStackableKey(transfer.key)
   if (key === '' || key.length > 40) return null
   if (!Number.isSafeInteger(transfer.amount) || transfer.amount <= 0) return null
   return { ...transfer, key }

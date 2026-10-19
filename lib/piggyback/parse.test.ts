@@ -5,6 +5,7 @@ import { MAX_EMITTED_QUERIES } from '@/lib/retrieval'
 
 import {
   normalizeCreates,
+  normalizeStackableTransfer,
   parseStateBlock,
   parseSuggestionsBlock,
   stripTrailingBlocks,
@@ -66,6 +67,22 @@ describe('parseStateBlock', () => {
   </transfers>
 </state>`)
     expect(result.block.transfers?.stackables).toEqual([{ key: 'gold', amount: 5, to: 'c1' }])
+  })
+
+  it('folds whitespace runs in a stackable key to single spaces, for both producers', () => {
+    const result = parseStateBlock(`<state>
+  <transfers>
+    <stackable key=" Silver  coins " amount="5" to="c1" />
+  </transfers>
+</state>`)
+    expect(result.block.transfers?.stackables).toEqual([
+      { key: 'silver coins', amount: 5, to: 'c1' },
+    ])
+    expect(normalizeStackableTransfer({ key: 'Silver\ncoins', amount: 5, from: 'c1' })).toEqual({
+      key: 'silver coins',
+      amount: 5,
+      from: 'c1',
+    })
   })
 
   it('reports blockFound=false and no failures when no <state> tag exists', () => {
