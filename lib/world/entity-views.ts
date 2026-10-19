@@ -19,17 +19,17 @@ export type HoldingView = EntityRef & {
 export type StackableView = { key: string; amount: number }
 
 export type CharacterStateView = {
-  visual: Record<(typeof VISUAL_CATEGORIES)[number], string | null>
-  traits: string[]
-  drives: string[]
+  visual: Readonly<Record<(typeof VISUAL_CATEGORIES)[number], string | null>>
+  traits: readonly string[]
+  drives: readonly string[]
   voice: string | null
   faction: EntityRef | null
   /** In scene, the scene's location; out of it, the last place the character was seen. */
   location: EntityRef | null
   /** Inventory, then equipped items. */
-  holdings: HoldingView[]
+  holdings: readonly HoldingView[]
   /** Largest amount first. */
-  stackables: StackableView[]
+  stackables: readonly StackableView[]
 }
 
 export type LocationStateView = { condition: string | null; parent: EntityRef | null }
@@ -40,7 +40,11 @@ export type ItemStateView = {
   holder: (EntityRef & { equipped: boolean }) | null
 }
 
-export type FactionStateView = { standing: string | null; agenda: string[]; members: EntityRef[] }
+export type FactionStateView = {
+  standing: string | null
+  agenda: readonly string[]
+  members: readonly EntityRef[]
+}
 
 export type EntityStateViewByKind = {
   character: CharacterStateView
