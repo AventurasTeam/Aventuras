@@ -1434,10 +1434,11 @@ enters MMR's selected set.
 
 **Cascade** is off by default. Enabled, an injected row's own text is
 rescanned for further hits to `keywordRetrieval.cascadeMaxDepth`
-(default 2). An entity row's own text is its name and description: its
-state lines name the faction, members, places and held items the row
-already shows, and seating those again would spend the allowance on
-rows the prompt carries twice. Cascaded rows draw on the same keyword
+(default 2). An entity row's own text is its name and description, not
+its framing or its state lines: those name every entity the row relates
+to (its faction, members, places, holder and held items), and
+rescanning them would spend the allowance on whatever the row's state
+names rather than on what the prose raised. Cascaded rows draw on the same keyword
 allowance, and depth-1 rows seat before depth-2 rows so a dense keyword
 graph cannot spend the whole allowance on second-order matches.
 

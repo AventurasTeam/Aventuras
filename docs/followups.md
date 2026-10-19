@@ -24,9 +24,10 @@ for the placement rule.
   sit elsewhere, and, in the fallback, doesn't read a character the turn
   names as present
   ([`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)).
-  The visual-cut and shortfall warnings measure the first two; only
-  play shows the last two. Raised 2026-10-19 by the entity-state
-  implementation.
+  The visual-cut warning measures the first two; only play shows the
+  last two. The shortfall warning measures one more: that the writer
+  moves no more of a stackable than its payer holds. Raised 2026-10-19
+  by the entity-state implementation.
 
 - **Retrieval budget defaults.** The per-type budgets
   (`stories.settings.retrievalBudgets`, entities 1200) are

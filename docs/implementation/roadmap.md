@@ -713,9 +713,9 @@ code before it moved; resolve with the slice it names.
   `<scene_entities>` among them. Reasoned, not probed: the same read
   renders the fallback prompt's `Holds:` and `Here:` lines with the
   fold's transfers already applied, under the template's "the world as
-  it stands going into that turn"; once entity state reaches prompts,
-  the same read renders each holder's `Stackables:` balances too, and
-  the fallback is told not to move more than a payer holds
+  it stands going into that turn"; the same read renders each holder's
+  `Stackables:` balances too, and the fallback is told not to move more
+  than a payer holds
   ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
   Unreachable until this slice:
   `piggybackMode` defaults to `'off'` and only the dev seed turns it
