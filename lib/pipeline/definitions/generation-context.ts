@@ -374,8 +374,7 @@ export async function buildGenerationContext(
     summary: sceneSource?.metadata?.summary ?? '',
   }
 
-  // The places retrieval puts in the prompt, in render order. Ranked rows reach a template as
-  // RetrievedRow, which carries no EntityKind, so their kinds come off the retrieval outcome.
+  // The places retrieval puts in the prompt, in render order.
   const locationIds = [
     ...(floor?.sceneEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
     ...(floor?.currentLocation?.kind === 'location' ? [floor.currentLocation.id] : []),
