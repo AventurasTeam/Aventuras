@@ -228,15 +228,14 @@ const floorRowsOf = (
       null,
     )
   const here = floor.currentLocation?.id
-  const liesHere = (id: string): boolean =>
-    here !== undefined && views.of(id, 'item').location?.id === here
+  // `Here:` lists every item lying here, one an older write left held as well included.
+  const hereLines = (e: Pick<EntityRow, 'id' | 'name' | 'description'>): string[] =>
+    here !== undefined && views.of(e.id, 'item').location?.id === here ? [looseLine(e)] : []
 
   // An in-scene item a holder in the scene holds, or one lying here, renders as those lines alone.
   for (const e of floor.sceneEntities) {
-    const held = e.kind === 'item' ? heldLines(e.id) : []
-    if (held.length > 0) push('entity', e.id, ...held)
-    else if (e.kind === 'item' && liesHere(e.id)) push('entity', e.id, looseLine(e))
-    else push('entity', e.id, sceneEntityText(e, views))
+    const listed = e.kind === 'item' ? [...heldLines(e.id), ...hereLines(e)] : []
+    push('entity', e.id, ...(listed.length > 0 ? listed : [sceneEntityText(e, views)]))
   }
   if (floor.currentLocation) {
     const chain = listedAncestorNames(floor.currentLocation.id, storeEntities)
@@ -250,7 +249,7 @@ const floorRowsOf = (
   for (const e of floor.heldItems) {
     const held = heldLines(e.id)
     if (held.length === 0) throw new Error(`held item ${e.id} has no in-scene holder listing it`)
-    push('entity', e.id, ...held)
+    push('entity', e.id, ...held, ...hereLines(e))
   }
   for (const e of floor.looseItems) push('entity', e.id, looseLine(e))
   for (const t of floor.activeThreads) push('thread', t.id, activeThreadText(t))

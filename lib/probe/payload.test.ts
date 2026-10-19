@@ -190,11 +190,12 @@ const FLOOR_ENTITIES: EntityRow[] = FLOOR_WORLD.map(sourceRow)
 
 const FLOOR_SCENE = { sceneEntities: ['e_scene'], currentLocationId: 'e_loc' }
 
-const worldRow = (id: string): Entity => {
-  const row = FLOOR_WORLD.find((e) => e.id === id)
+const worldRowIn = (world: readonly Entity[], id: string): Entity => {
+  const row = world.find((e) => e.id === id)
   if (row === undefined) throw new Error(`no fixture row ${id}`)
   return row
 }
+const worldRow = (id: string): Entity => worldRowIn(FLOOR_WORLD, id)
 
 const FLOOR_LORE: LoreRow[] = [
   {
@@ -885,7 +886,14 @@ function renderFloor(
     structuralSceneFactions: withState(floor.sceneFactions),
     structuralPinnedLore: floor.alwaysLore,
     structuralPinnedThreads: floor.alwaysThreads,
-    looseItems: withState(floor.looseItems),
+    // As generation-context builds it: every item lying here, whatever else the floor seated it as.
+    looseItems: withState(
+      floor.currentLocation
+        ? floor.views
+            .looseAt(floor.currentLocation.id)
+            .map((id) => sourceRow(worldRowIn(world, id)))
+        : [],
+    ),
     retrievedEntities: [],
     retrievedLore: [],
     retrievedHappenings: [],
@@ -945,6 +953,24 @@ it.each([
   expect(floorTokens(floor, world)('e_key')).toEqual([
     countTokens(listings[0]!) + countTokens(listings[1]!),
   ])
+})
+
+// An older write can also leave a held item lying here, and `Here:` lists it beside the Holds line.
+it.each([
+  ['held', ['e_scene']],
+  ['held and in scene', ['e_scene', 'e_key']],
+])('prices a held item lying here, %s, under Holds and Here both', (_case, sceneEntities) => {
+  const world = worldWith([
+    { ...worldRow('e_key'), state: { at_location_id: 'e_loc', condition: 'tarnished' } },
+  ])
+  const floor = floorOver(world, { ...FLOOR_SCENE, sceneEntities })
+  const held = '- Brass key (equipped): opens the sluice gate. Condition: tarnished'
+  const loose = '- Brass key: opens the sluice gate. Condition: tarnished'
+
+  const rendered = renderFloor(false, { floor, world, sceneEntities })
+  expect(rendered).toContain(`Holds:\n${held}\n`)
+  expect(rendered).toContain(`Here:\n${loose}\n`)
+  expect(floorTokens(floor, world)('e_key')).toEqual([countTokens(held) + countTokens(loose)])
 })
 
 // Held items are seated off the in-scene holders' Holds, so one none lists has no line to price.
