@@ -412,6 +412,13 @@ describe('buildPiggybackActions', () => {
       expect(cut.length).toBeGreaterThan(450)
     })
 
+    it('takes no boundary from the first half of the bound, cutting at the last whitespace', () => {
+      const text = `Tall, ${'lean and weathered '.repeat(30)}`
+      const cut = visualText(fallbackBlock(text)) ?? ''
+      expect(cut.length).toBeGreaterThan(450)
+      expect(cut.startsWith('Tall, lean')).toBe(true)
+    })
+
     it('ignores a boundary past the bound, falling back to the last whitespace', () => {
       const text = `${'a '.repeat(240)}${'b'.repeat(40)}, more.`
       const cut = visualText(fallbackBlock(text))
