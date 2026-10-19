@@ -838,17 +838,23 @@ function renderFloor(piggybackFires: boolean): string {
 it('prices an in-scene item its holder lists, or one lying here, as its one line', () => {
   const scene = { sceneEntities: ['e_scene', 'e_key', 'e_lamp'], currentLocationId: 'e_loc' }
   // Equipped, so the held line costs more than a `## Brass key` scene row would: priced as
-  // either, the two would otherwise tokenize alike.
+  // either, the two would otherwise tokenize alike. The lamp's description spans two lines for
+  // the same reason, since only the loose line folds it onto one.
+  const lampDescription = 'a hooded lantern\nits glass cracked'
   const world = FLOOR_WORLD.map((e) =>
     e.id === 'e_scene'
       ? {
           ...e,
           state: { ...(e.state as object), inventory: [], equipped_items: ['e_key'] } as never,
         }
-      : e,
+      : e.id === 'e_lamp'
+        ? { ...e, description: lampDescription }
+        : e,
   )
   const floor = buildStructuralFloor({
-    entities: FLOOR_ENTITIES,
+    entities: FLOOR_ENTITIES.map((e) =>
+      e.id === 'e_lamp' ? { ...e, description: lampDescription } : e,
+    ),
     lore: [],
     threads: [],
     sceneEntityIds: scene.sceneEntities,
@@ -867,7 +873,11 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
   const held = '- Brass key (equipped): opens the sluice gate'
   expect(countTokens(held)).not.toBe(countTokens('## Brass key\nopens the sluice gate'))
   expect(rowsFor('e_key').map((r) => r.tokens)).toEqual([countTokens(held)])
-  expect(rowsFor('e_lamp').map((r) => r.tokens)).toEqual([countTokens(FLOOR_TEXTS.looseItem)])
+  const loose = '- Lamp: a hooded lantern its glass cracked. Condition: guttering'
+  expect(countTokens(loose)).not.toBe(
+    countTokens('## Lamp\na hooded lantern\nits glass cracked\nCondition: guttering'),
+  )
+  expect(rowsFor('e_lamp').map((r) => r.tokens)).toEqual([countTokens(loose)])
 })
 
 describe('structural-floor formulas match the templates that render them', () => {
