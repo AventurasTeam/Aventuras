@@ -1629,8 +1629,8 @@ describe('buildGenerationContext — location map and held items', () => {
     expect(perTurnPrompt(ctx)).toContain('## Mara\nHolds:\n- Silver Key\n')
   })
 
-  // ...and around the place the floor seats, though the scene row has moved on: the disabled
-  // region it lies in disables everything in it but the scene's own place.
+  // ...and around the place the floor seats, though the scene row has moved on: inside a disabled
+  // region, that place alone stays shown.
   it('lists an in-scene item lying where the floor seats the scene only under Here', async () => {
     const ctx = await buildContext({
       entities: [
