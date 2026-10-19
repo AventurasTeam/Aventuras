@@ -635,6 +635,38 @@ describe('buildPiggybackActions', () => {
     ])
   })
 
+  it('debits a stored key with a line break under the single-spaced key the prompt shows', () => {
+    const log = spyLog()
+    const result = buildPiggybackActions({
+      log,
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      turn: planned({
+        transfers: { items: [], stackables: [{ key: 'silver coins', amount: 5, from: 'char_1' }] },
+      }),
+      entities: [
+        mockEntity({
+          id: 'char_1',
+          state: { ...emptyEntityState('character'), stackables: { 'silver\ncoins': 7 } },
+        }),
+      ],
+      previousMetadata,
+      branchId: 'main',
+    })
+    expect(result.actions.filter((a) => a.kind === 'updateEntityStackables')).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'ai_classifier',
+        payload: { branchId: 'main', id: 'char_1', stackables: { 'silver coins': 2 } },
+      },
+    ])
+    expect(
+      vi
+        .mocked(log.warn)
+        .mock.calls.filter(([event]) => event === 'classifier.stackable_shortfall'),
+    ).toEqual([])
+  })
+
   describe('one position per item', () => {
     const holding = (id: string, over: Partial<CharacterState>) =>
       mockEntity({

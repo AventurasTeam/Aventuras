@@ -42,4 +42,10 @@ describe('foldStackables', () => {
     expect([...foldStackables({ Gold: 5, gold: 3, ' ': 4, rope: 0 })]).toEqual([['gold', 8]])
     expect(foldStackables(undefined).size).toBe(0)
   })
+
+  it('sums a key with a line break under its single-spaced spelling', () => {
+    expect([...foldStackables({ 'Silver\n coins': 3, 'silver coins': 4 })]).toEqual([
+      ['silver coins', 7],
+    ])
+  })
 })
