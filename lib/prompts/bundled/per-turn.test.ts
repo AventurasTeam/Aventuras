@@ -374,7 +374,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(rendered).not.toContain('Use an ID from Places')
     // Positive control: the ranked row and its own instruction still render, so
     // the exclusion above is not passing on an empty block.
-    expect(rendered).toContain('[char_9] Mira (currently elsewhere): A courier.')
+    expect(rendered).toContain('[char_9] Mira (not in the scene): A courier.')
     expect(rendered).toContain('enters the scene, include their ID')
   })
 
@@ -951,7 +951,7 @@ describe('bundled per-turn template — system and user halves', () => {
     },
     locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     retrievedEntities: [
-      { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
+      { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (not in the scene).' },
     ],
     suggestionsFire: true,
     suggestionCount: 2,

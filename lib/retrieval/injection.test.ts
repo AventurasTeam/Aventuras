@@ -286,7 +286,7 @@ describe('buildKeywordInjections — entity rows', () => {
       input({ entities: [entity()], entityViews, scanText: 'Kael waits.' }),
     )
     const [seat] = out.entities
-    expect(seat?.row.renderedText).toBe('Kael (currently elsewhere): A ferryman.\nVoice: clipped')
+    expect(seat?.row.renderedText).toBe('Kael (not in the scene): A ferryman.\nVoice: clipped')
     expect(seat?.row.kind === 'entity' && seat.row.entity.state).toBe(entityViews.byId.get('e1'))
   })
 

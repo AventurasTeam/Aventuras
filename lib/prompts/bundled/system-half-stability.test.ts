@@ -92,7 +92,7 @@ const TURN_A: Record<string, unknown> = {
   structuralPinnedThreads: [
     { id: 't2', status: 'pending', title: 'The debt', description: 'Owed to the guild.' },
   ],
-  retrievedEntities: [ranked('c2', 'Mora', 'Mora (currently elsewhere): last seen at the ford.')],
+  retrievedEntities: [ranked('c2', 'Mora', 'Mora (not in the scene): last seen at the ford.')],
   retrievedLore: [ranked('lo2', 'Veilstone', 'Veilstone\nA shard of the old moon.')],
   retrievedHappenings: [ranked('h1', 'The siege', 'The siege broke on the third night.')],
   retrievedThreads: [ranked('t3', 'The lost map', 'The lost map (resolved): torn in two.')],

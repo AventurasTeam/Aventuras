@@ -1135,7 +1135,7 @@ function retrievalIntermediate(
     },
     selected: {
       entities: over.entities ?? [
-        entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (currently elsewhere): a smuggler.'),
+        entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (not in the scene): a smuggler.'),
       ],
     },
     selectedLocationIds: over.selectedLocationIds,
@@ -1296,7 +1296,7 @@ describe('narrative fold — retrieval handoff', () => {
             entityCandidate(
               RETRIEVED_LOCATION_ID,
               'The Market',
-              'The Market (currently elsewhere): stalls under sailcloth.',
+              'The Market (not in the scene): stalls under sailcloth.',
             ),
           ],
           selectedLocationIds: [RETRIEVED_LOCATION_ID],

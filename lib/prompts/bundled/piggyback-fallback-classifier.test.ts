@@ -192,7 +192,7 @@ describe('bundled piggyback fallback classifier template', () => {
     expect(prompt).toContain('# Elsewhere in the world')
     // The whole line, not a substring: it has to lead with the id.
     expect(prompt.split('\n').find((l) => l.includes('Mora'))).toBe(
-      '[c7] Mora (currently elsewhere): last seen at the ford.',
+      '[c7] Mora (not in the scene): last seen at the ford.',
     )
     expect(prompt).not.toContain('include their ID (without brackets) in the trailing')
     expect(prompt).not.toContain('Use an ID from Places')

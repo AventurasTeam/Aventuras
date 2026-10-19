@@ -19,7 +19,7 @@ const NO_SCENE = { sceneEntities: [], currentLocationId: null }
 
 describe('entityFraming', () => {
   it('frames active and staged rows, and leaves a retired row and an active faction bare', () => {
-    expect(entityFraming('character', 'active')).toBe('currently elsewhere')
+    expect(entityFraming('character', 'active')).toBe('not in the scene')
     expect(entityFraming('faction', 'staged')).toBe('available to introduce')
     expect(entityFraming('faction', 'active')).toBeNull()
     expect(entityFraming('character', 'retired')).toBeNull()
@@ -179,7 +179,7 @@ describe('entityRenderedText', () => {
     const entity = measuredEntity(entities[0]!, buildEntityViews(entities, NO_SCENE))
     const text = entityRenderedText(entity)
     expect(text).toBe(
-      `Kael (currently elsewhere): A smuggler.\nHolds:\n- [${HELD_ITEM_ID_STAND_IN}] Sword (equipped)`,
+      `Kael (not in the scene): A smuggler.\nHolds:\n- [${HELD_ITEM_ID_STAND_IN}] Sword (equipped)`,
     )
     // substituteIds replaces whole-string ids only, so one inside the text would leak raw.
     expect(text).not.toMatch(/(char|item)_[0-9a-f]{8}-/)

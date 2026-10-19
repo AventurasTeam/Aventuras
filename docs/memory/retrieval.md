@@ -1181,7 +1181,7 @@ The retrieval pool per type after the structural floor is satisfied.
 
 Seating follows rendering: an entity the prompt shows in full in its
 structural sections is seated, so the ranker never offers it a second
-time as "currently elsewhere". Beside the floor, the per-turn prompt
+time as "not in the scene". Beside the floor, the per-turn prompt
 carries the location map, every listed location's name as a tree with
 the id of each one not retired
 ([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)).
@@ -1221,12 +1221,18 @@ The retrieval pool for entities splits by status:
 
 | Sub-pool             | Framing in prompt                                                        |
 | -------------------- | ------------------------------------------------------------------------ |
-| **Active off-scene** | "Currently elsewhere; available for retrieval reference"                 |
+| **Active off-scene** | "Not in the scene; available for retrieval reference"                    |
 | **Staged**           | "Available to introduce when narratively appropriate"                    |
 | **Retired**          | Default-excluded; opt-in via `injection_mode='always'` for ghosts/echoes |
 
+The active framing places a row against the scene, not the world: a
+character who steps out of the scene can still stand at the current
+location, and the row's `Location:` line says so
+([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
+which "currently elsewhere" would contradict.
+
 An active faction carries no framing: it is never in a scene, so
-"currently elsewhere" says nothing about it. A staged one keeps
+"not in the scene" says nothing about it. A staged one keeps
 "available to introduce".
 
 Active off-scene and staged compete for the entity-type token budget.

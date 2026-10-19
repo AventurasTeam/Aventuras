@@ -1297,7 +1297,7 @@ describe('runRetrieval — pools', () => {
     const ok = expectOk(out)
     expect(ok.bundles.entities.selected.map((c) => c.renderedText).sort()).toEqual([
       'Dalen (available to introduce): A smith.',
-      'Mira (currently elsewhere): A ranger.',
+      'Mira (not in the scene): A ranger.',
     ])
   })
 
@@ -1334,7 +1334,7 @@ describe('runRetrieval — pools', () => {
 
     const [row] = expectOk(out).bundles.entities.selected
     expect(row?.renderedText).toBe(
-      'Kael (currently elsewhere): A smuggler.\nAttire: a greatcoat\nHolds:\n- [i00] Sword (equipped)',
+      'Kael (not in the scene): A smuggler.\nAttire: a greatcoat\nHolds:\n- [i00] Sword (equipped)',
     )
     expect(row?.kind === 'entity' && row.entity.state).toBe(entityViews.byId.get(kael))
   })
@@ -1399,7 +1399,7 @@ describe('runRetrieval — pools', () => {
 
     const ok = expectOk(out)
     expect(ok.bundles.entities.selected.map((c) => c.renderedText)).toEqual([
-      'Mira (currently elsewhere)',
+      'Mira (not in the scene)',
     ])
     expect(ok.bundles.lore.selected.map((c) => c.renderedText)).toEqual(['The Concord'])
     expect(ok.bundles.threads.selected.map((c) => c.renderedText)).toEqual(['The debt (pending)'])

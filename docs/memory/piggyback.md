@@ -171,7 +171,7 @@ when it creates.
 
   The structural floor seats both
   ([`retrieval.md → Structural floor`](./retrieval.md#structural-floor--always-inject)),
-  so retrieval never offers either again as "currently elsewhere". An
+  so retrieval never offers either again as "not in the scene". An
   item in a holder's list, or under `Here:`, isn't repeated in the scene
   list. Its description and condition fold onto its one line; with no
   description the condition follows the name

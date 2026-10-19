@@ -12,7 +12,7 @@ filter on a for tag's collection.
 {% if mb_entities.size > 0 -%}
 # Elsewhere in the world
 {% for e in mb_entities %}
-{% if ids %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.status == 'staged' %} (available to introduce){% elsif e.status == 'active' and e.kind != 'faction' %} (currently elsewhere){% endif %}{% if e.description != blank %}: {{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: false, ids: ids %}
+{% if ids %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.status == 'staged' %} (available to introduce){% elsif e.status == 'active' and e.kind != 'faction' %} (not in the scene){% endif %}{% if e.description != blank %}: {{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: false, ids: ids %}
 {% endfor %}
 {% endif -%}
 {% if structuralPinnedLore.size > 0 or retrievedLore.size > 0 -%}

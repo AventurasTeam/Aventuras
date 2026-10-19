@@ -530,7 +530,7 @@ reference is still true, a disbanded faction or the place last seen,
 but mustn't read as current. A ranked character, with piggyback firing:
 
 ```
-[c3] Kael (currently elsewhere): A scarred ex-soldier turned smuggler.
+[c3] Kael (not in the scene): A scarred ex-soldier turned smuggler.
 Location: The Docks
 Physique: tall, broad-shouldered, a soldier's posture gone slack
 Hair: close-cropped, grey at the temples

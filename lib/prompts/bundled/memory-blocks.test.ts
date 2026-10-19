@@ -130,7 +130,7 @@ describe('memory-blocks macro — row content', () => {
     expect(quiet).not.toContain('[char_2]')
     expect(quiet).not.toContain('[char_9]')
     // Positive control: the rows themselves still render, only the ids drop.
-    expect(quiet).toContain('Mira (currently elsewhere): A courier.')
+    expect(quiet).toContain('Mira (not in the scene): A courier.')
     expect(quiet).toContain('Old Sesk')
   })
 
@@ -143,7 +143,7 @@ describe('memory-blocks macro — row content', () => {
     expect(out).not.toContain('<scene_entities>')
     expect(out).not.toContain('<current_location>')
     // Positive control: the rows the instructions would have referred to render.
-    expect(out).toContain('[char_2] Mira (currently elsewhere): A courier.')
+    expect(out).toContain('[char_2] Mira (not in the scene): A courier.')
   })
 
   it('renders happening awareness sources verbatim, newlines and all', () => {
@@ -189,7 +189,7 @@ describe('memory-blocks macro — row content', () => {
       retrievedEntities: [rankedMira],
     })
     expect(out).toBe(
-      '# Elsewhere in the world\n\n[char_9] Old Sesk: A ferryman long dead.\n\n[fact_1] The Silver Hand\n\n[char_2] Mira (currently elsewhere): A courier.\n\n',
+      '# Elsewhere in the world\n\n[char_9] Old Sesk: A ferryman long dead.\n\n[fact_1] The Silver Hand\n\n[char_2] Mira (not in the scene): A courier.\n\n',
     )
   })
 
