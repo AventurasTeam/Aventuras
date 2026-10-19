@@ -317,6 +317,20 @@ describe('buildEntityViews — who a reference names', () => {
   })
 })
 
+describe('buildEntityViews — of', () => {
+  it('reads a view by id and kind, and gives the empty view to a stranger or a kind mismatch', () => {
+    const entities = [
+      location('loc_a', 'The Anchor', null, {
+        state: { parent_location_id: null, condition: 'burned' },
+      }),
+    ]
+    const views = buildEntityViews(entities, NO_SCENE)
+    expect(views.of('loc_a', 'location').condition).toBe('burned')
+    expect(views.of('loc_a', 'item')).toEqual(emptyEntityView('item'))
+    expect(views.of('loc_gone', 'location')).toEqual(emptyEntityView('location'))
+  })
+})
+
 describe('buildEntityViews — looseAt', () => {
   it('lists the items lying at a place by name, leaving out disabled ones the scene does not seat', () => {
     const entities = [

@@ -107,6 +107,9 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     floor: {
       sceneEntities: [],
       currentLocation: null,
+      sceneFactions: [],
+      heldItems: [],
+      looseItems: [],
       activeThreads: [],
       alwaysEntities: [],
       alwaysLore: [],

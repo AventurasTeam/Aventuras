@@ -21,6 +21,7 @@ import type {
 } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import { emptyEntityView } from '@/lib/world'
 
 import { createPhaseDb, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
@@ -68,6 +69,26 @@ function sceneMetadata(currentLocationId: string | null, sceneEntities: string[]
 }
 
 function candidate(kind: CandidateKind, id: string, displayName: string): Candidate {
+  if (kind === 'entity')
+    return {
+      kind,
+      id,
+      displayName,
+      renderedText: `${displayName} rendered`,
+      sims: [0, 0, 0],
+      vector: new Float32Array([1, 0, 0]),
+      chaptersOld: 0,
+      pinSignal: 0,
+      keywordHits: [],
+      embeddingStale: false,
+      entity: {
+        kind: 'character',
+        name: displayName,
+        description: null,
+        status: 'active',
+        state: emptyEntityView('character'),
+      },
+    }
   return {
     kind,
     id,

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews } from '@/lib/world'
+
 import {
   buildStructuralFloor,
   filterEntityPool,
@@ -56,6 +60,7 @@ const loadedThread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): LoadedT
 })
 
 const NONE: ReadonlySet<string> = new Set()
+const NO_VIEWS = buildEntityViews([], { sceneEntities: [], currentLocationId: null })
 
 const floorOf = (over: Partial<Parameters<typeof buildStructuralFloor>[0]> = {}) =>
   buildStructuralFloor({
@@ -65,6 +70,7 @@ const floorOf = (over: Partial<Parameters<typeof buildStructuralFloor>[0]> = {})
     sceneEntityIds: [],
     currentLocationId: null,
     disabledPlaceIds: NONE,
+    views: NO_VIEWS,
     ...over,
   })
 
@@ -185,7 +191,7 @@ describe('buildStructuralFloor', () => {
     for (const id of floor.seatedIds) expect(ids(pool)).not.toContain(id)
   })
 
-  it('projects loaded rows down to the declared shape, on all six seated lists', () => {
+  it('projects loaded rows down to the declared shape, on all nine seated lists', () => {
     // Typed as Loaded*Row via the factories above, not EntityRow/LoreRow/ThreadRow:
     // annotating the fixture as the narrower type would trip excess-property
     // checking and force it narrow, proving nothing about the runtime widening.
@@ -196,6 +202,9 @@ describe('buildStructuralFloor', () => {
         loadedEntity({ id: 'char_1' }),
         loadedEntity({ id: 'loc_1', kind: 'location' }),
         loadedEntity({ id: 'char_2', injectionMode: 'always' }),
+        loadedEntity({ id: 'fact_1', kind: 'faction' }),
+        loadedEntity({ id: 'item_1', kind: 'item' }),
+        loadedEntity({ id: 'item_2', kind: 'item' }),
       ],
       lore: [loadedLore({ id: 'lo_1', injectionMode: 'always' })],
       threads: [
@@ -205,17 +214,40 @@ describe('buildStructuralFloor', () => {
       sceneEntityIds: ['char_1'],
       currentLocationId: 'loc_1',
       disabledPlaceIds: NONE,
+      views: buildEntityViews(
+        [
+          makeEntity({
+            id: 'char_1',
+            kind: 'character',
+            name: 'char_1',
+            state: { faction_id: 'fact_1', inventory: ['item_1'] } as Entity['state'],
+          }),
+          makeEntity({ id: 'loc_1', kind: 'location', name: 'loc_1' }),
+          makeEntity({ id: 'fact_1', kind: 'faction', name: 'fact_1' }),
+          makeEntity({ id: 'item_1', kind: 'item', name: 'item_1' }),
+          makeEntity({
+            id: 'item_2',
+            kind: 'item',
+            name: 'item_2',
+            state: { at_location_id: 'loc_1' },
+          }),
+        ],
+        { sceneEntities: ['char_1'], currentLocationId: 'loc_1' },
+      ),
     })
 
     expect(
       [
         floor.sceneEntities,
+        floor.sceneFactions,
+        floor.heldItems,
+        floor.looseItems,
         floor.alwaysEntities,
         floor.activeThreads,
         floor.alwaysThreads,
         floor.alwaysLore,
       ].map((l) => l.length),
-    ).toEqual([1, 1, 1, 1, 1])
+    ).toEqual([1, 1, 1, 1, 1, 1, 1, 1])
 
     const entityKeys = ['description', 'id', 'injectionMode', 'kind', 'name', 'status'].sort()
     const threadKeys = ['description', 'id', 'injectionMode', 'status', 'title'].sort()
@@ -224,9 +256,113 @@ describe('buildStructuralFloor', () => {
     expect(Object.keys(floor.sceneEntities[0]).sort()).toEqual(entityKeys)
     expect(Object.keys(floor.currentLocation ?? {}).sort()).toEqual(entityKeys)
     expect(Object.keys(floor.alwaysEntities[0]).sort()).toEqual(entityKeys)
+    for (const row of [floor.sceneFactions[0], floor.heldItems[0], floor.looseItems[0]])
+      expect(Object.keys(row).sort()).toEqual(entityKeys)
     expect(Object.keys(floor.activeThreads[0]).sort()).toEqual(threadKeys)
     expect(Object.keys(floor.alwaysThreads[0]).sort()).toEqual(threadKeys)
     expect(Object.keys(floor.alwaysLore[0]).sort()).toEqual(loreKeys)
+  })
+})
+
+// One world as both the store's rows, which the views read, and retrieval's source rows.
+function impliedFloor(
+  rows: Entity[],
+  scene: { sceneEntities: string[]; currentLocationId: string | null },
+) {
+  return buildStructuralFloor({
+    entities: rows.map((e) => entity(e)),
+    lore: [],
+    threads: [],
+    sceneEntityIds: scene.sceneEntities,
+    currentLocationId: scene.currentLocationId,
+    disabledPlaceIds: NONE,
+    views: buildEntityViews(rows, scene),
+  })
+}
+
+const character = (id: string, state: object, over: Partial<Entity> = {}) =>
+  makeEntity({ id, kind: 'character', name: id, state: state as Entity['state'], ...over })
+const thing = (id: string, over: Partial<Entity> = {}, state: object = {}) =>
+  makeEntity({ id, kind: 'item', name: id, state: { at_location_id: null, ...state }, ...over })
+const faction = (id: string, over: Partial<Entity> = {}) =>
+  makeEntity({ id, kind: 'faction', name: id, ...over })
+const place = (id: string) => makeEntity({ id, kind: 'location', name: id })
+
+describe('buildStructuralFloor — what the scene implies', () => {
+  const SCENE = { sceneEntities: ['char_a', 'char_b'], currentLocationId: 'loc_1' }
+
+  it("seats the in-scene characters' factions, their held items and the loose items, once each", () => {
+    const rows = [
+      character('char_a', { faction_id: 'fact_1', inventory: ['item_h'] }),
+      character('char_b', { faction_id: 'fact_1', equipped_items: ['item_e'] }),
+      faction('fact_1'),
+      thing('item_h'),
+      thing('item_e'),
+      thing('item_l', {}, { at_location_id: 'loc_1' }),
+      place('loc_1'),
+    ]
+    const floor = impliedFloor(rows, SCENE)
+    expect(ids(floor.sceneFactions)).toEqual(['fact_1'])
+    expect(ids(floor.heldItems)).toEqual(['item_h', 'item_e'])
+    expect(ids(floor.looseItems)).toEqual(['item_l'])
+    for (const id of ['fact_1', 'item_h', 'item_e', 'item_l']) expect(floor.seatedIds).toContain(id)
+    // Seated means never ranked or keyword-injected again: both read the pool filter.
+    const pool = filterEntityPool(
+      rows.map((e) => entity(e)),
+      {
+        floorIds: floor.seatedIds,
+        recentProse: '',
+        disabledPlaceIds: NONE,
+      },
+    )
+    expect(ids(pool)).toEqual([])
+  })
+
+  it('seats an `always` held item and faction once, as what the scene implies', () => {
+    const rows = [
+      character('char_a', { faction_id: 'fact_1', inventory: ['item_h'] }),
+      faction('fact_1', { injectionMode: 'always' }),
+      thing('item_h', { injectionMode: 'always' }),
+    ]
+    const floor = impliedFloor(rows, SCENE)
+    expect(ids(floor.sceneFactions)).toEqual(['fact_1'])
+    expect(ids(floor.heldItems)).toEqual(['item_h'])
+    expect(ids(floor.alwaysEntities)).toEqual([])
+  })
+
+  it('seats nothing retired or disabled, nor what an off-scene or staged character holds', () => {
+    const rows = [
+      character('char_a', { faction_id: 'fact_r', inventory: ['item_r', 'item_d'] }),
+      character('char_b', { faction_id: 'fact_d' }),
+      character('char_s', { inventory: ['item_s'] }, { status: 'staged' }),
+      character('char_o', { faction_id: 'fact_o', inventory: ['item_o'] }),
+      faction('fact_r', { status: 'retired' }),
+      faction('fact_d', { injectionMode: 'disabled' }),
+      faction('fact_o'),
+      thing('item_r', { status: 'retired' }),
+      thing('item_d', { injectionMode: 'disabled' }),
+      thing('item_s'),
+      thing('item_o'),
+      thing('item_x', { injectionMode: 'disabled' }, { at_location_id: 'loc_1' }),
+      place('loc_1'),
+    ]
+    const floor = impliedFloor(rows, { ...SCENE, sceneEntities: ['char_a', 'char_b', 'char_s'] })
+    expect(ids(floor.sceneFactions)).toEqual([])
+    expect(ids(floor.heldItems)).toEqual([])
+    expect(ids(floor.looseItems)).toEqual([])
+  })
+
+  it('leaves a disabled held item the scene names to the scene seat, not a second one', () => {
+    const rows = [
+      character('char_a', { inventory: ['item_d'] }),
+      thing('item_d', { injectionMode: 'disabled' }),
+    ]
+    const floor = impliedFloor(rows, {
+      sceneEntities: ['char_a', 'item_d'],
+      currentLocationId: null,
+    })
+    expect(ids(floor.sceneEntities)).toEqual(['char_a', 'item_d'])
+    expect(ids(floor.heldItems)).toEqual([])
   })
 })
 

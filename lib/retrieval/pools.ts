@@ -1,4 +1,5 @@
 import type { Entity, EntityKind, InjectionMode, Thread, VecTargetKind } from '@/lib/db'
+import type { EntityViews } from '@/lib/world'
 
 import { matchTerms, normalizeTerm } from './name-index'
 
@@ -30,6 +31,12 @@ export type ThreadRow = {
 export type StructuralFloor = {
   sceneEntities: readonly EntityRow[]
   currentLocation: EntityRow | null
+  /** The factions of the in-scene characters, in scene order. */
+  sceneFactions: readonly EntityRow[]
+  /** What the in-scene characters hold, rendered under each holder. */
+  heldItems: readonly EntityRow[]
+  /** What lies at the current location, rendered as `Here:`. */
+  looseItems: readonly EntityRow[]
   activeThreads: readonly ThreadRow[]
   alwaysEntities: readonly EntityRow[]
   alwaysLore: readonly LoreRow[]
@@ -46,6 +53,8 @@ export type StructuralFloorInput = {
   currentLocationId: string | null
   /** Places effectively disabled around the scene; never the current location. */
   disabledPlaceIds: ReadonlySet<string>
+  /** The branch's views over the same scene: which factions and items the scene implies. */
+  views: EntityViews
 }
 
 // The floor is built over loaded source rows, which carry `embeddingStale` (and
@@ -110,6 +119,24 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     ...activeThreads.map((t) => t.id),
   ])
 
+  // retrieval.md → Structural floor: what the scene implies, read off the views the template
+  // renders, so seating follows rendering. Seated ahead of `always`, which then skips them.
+  const byId = new Map(input.entities.map((e) => [e.id, e]))
+  const seat = (ids: readonly string[]): Required<EntityRow>[] =>
+    ids.flatMap((id) => {
+      const row = byId.get(id)
+      if (row === undefined || seatedIds.has(id)) return []
+      if (row.status === 'retired' || row.injectionMode === 'disabled') return []
+      seatedIds.add(id)
+      return [narrowEntity(row)]
+    })
+  const sceneCharacters = sceneEntities
+    .filter((e) => e.kind === 'character')
+    .map((e) => input.views.of(e.id, 'character'))
+  const sceneFactions = seat(sceneCharacters.flatMap((c) => (c.faction ? [c.faction.id] : [])))
+  const heldItems = seat(sceneCharacters.flatMap((c) => c.holdings.map((h) => h.id)))
+  const looseItems = seat(currentLocation ? input.views.looseAt(currentLocation.id) : [])
+
   // 'always' is a user-intent override across entities / lore / threads, and
   // deliberately status-blind: seating here is what exempts an `always` row from
   // the retired exclusion and from Layer-A same-name suppression, both of which
@@ -134,6 +161,9 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   return {
     sceneEntities,
     currentLocation,
+    sceneFactions,
+    heldItems,
+    looseItems,
     activeThreads,
     alwaysEntities,
     alwaysLore,

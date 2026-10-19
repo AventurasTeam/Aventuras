@@ -8,7 +8,7 @@ import {
 import {
   buildQueryStack,
   countTokens,
-  ENTITY_FRAMING,
+  entityHead,
   lines,
   TOKENIZER_IDENTITY,
   type CandidateTrace,
@@ -163,11 +163,8 @@ const currentLocationText = (e: Pick<EntityRow, 'name' | 'description'>): string
 const activeThreadText = (t: Pick<ThreadRow, 'title' | 'description'>): string =>
   lines(t.title, t.description)
 
-const alwaysEntityText = (e: Pick<EntityRow, 'name' | 'description' | 'status'>): string => {
-  const framing = ENTITY_FRAMING[e.status]
-  const head = framing === undefined ? e.name : `${e.name} (${framing})`
-  return nameWithDescription(head, e.description)
-}
+const alwaysEntityText = (e: Pick<EntityRow, 'kind' | 'name' | 'description' | 'status'>): string =>
+  entityHead(e)
 
 const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>): string =>
   lines(`${t.title} (${t.status})`, t.description)

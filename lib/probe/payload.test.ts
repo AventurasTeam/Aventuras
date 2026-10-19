@@ -19,6 +19,7 @@ import {
   type ThreadRow,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
+import { buildEntityViews } from '@/lib/world'
 
 import {
   loreBundle,
@@ -198,6 +199,7 @@ const floorFixture = () =>
     sceneEntityIds: ['e_scene'],
     currentLocationId: 'e_loc',
     disabledPlaceIds: new Set(),
+    views: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
   })
 
 describe('buildCapturePayload', () => {

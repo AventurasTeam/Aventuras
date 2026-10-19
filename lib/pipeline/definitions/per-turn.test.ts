@@ -23,6 +23,7 @@ import type { RenderedPrompt, TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
+import { emptyEntityView } from '@/lib/world'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -1107,6 +1108,13 @@ function entityCandidate(id: string, displayName: string, renderedText: string):
     pinSignal: 0,
     keywordHits: [],
     embeddingStale: false,
+    entity: {
+      kind: 'character',
+      name: displayName,
+      description: null,
+      status: 'active',
+      state: emptyEntityView('character'),
+    },
   }
 }
 

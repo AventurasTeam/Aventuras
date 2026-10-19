@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { EmbeddedFieldRow } from '@/lib/db'
 import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '@/lib/embedder'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews } from '@/lib/world'
 
 import { KNN_K, RANKER_DEFAULTS } from './constants'
 import {
@@ -213,6 +215,7 @@ const BASE: RetrievalParams = {
   sceneEntityIds: ['char_a'],
   currentLocationId: null,
   disabledPlaceIds: new Set(),
+  entityViews: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
   recentProse: '',
   scanText: 'I ask about the amulet.\nKara Vex drew the blade.',
   keywordRetrieval: { mode: 'boost', budgetShare: 0.5, cascade: false, cascadeMaxDepth: 2 },
@@ -1296,6 +1299,44 @@ describe('runRetrieval — pools', () => {
       'Dalen (available to introduce): A smith.',
       'Mira (currently elsewhere): A ranger.',
     ])
+  })
+
+  // retrieval.md → Token estimation: the row is measured from its view, and carries that view
+  // on to the template, so what renders is what was measured.
+  it('measures an entity from its view and carries the very view it measured', async () => {
+    const kael = 'char_00000000-0000-4000-8000-0000000000c1'
+    const sword = 'item_00000000-0000-4000-8000-0000000000d1'
+    const entityViews = buildEntityViews(
+      [
+        makeEntity({
+          id: kael,
+          kind: 'character',
+          name: 'Kael',
+          state: {
+            visual: { attire: 'a greatcoat' },
+            equipped_items: [sword],
+            inventory: [],
+          } as never,
+        }),
+        makeEntity({ id: sword, kind: 'item', name: 'Sword', state: { at_location_id: null } }),
+      ],
+      { sceneEntities: [], currentLocationId: null },
+    )
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow(kael, 'Kael', { description: 'A smuggler.' })],
+          knn: [hit(kael)],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [], entityViews }),
+    )
+
+    const [row] = expectOk(out).bundles.entities.selected
+    expect(row?.renderedText).toBe(
+      'Kael (currently elsewhere): A smuggler.\nAttire: a greatcoat\nHolds:\n- [i00] Sword (equipped)',
+    )
+    expect(row?.kind === 'entity' && row.entity.state).toBe(entityViews.byId.get(kael))
   })
 
   // renderedText is the only string the ranker measures, so anything a block

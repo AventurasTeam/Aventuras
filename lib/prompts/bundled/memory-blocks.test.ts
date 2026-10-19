@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { countTokens, ENTITY_FRAMING, RANKER_DEFAULTS, type RetrievalType } from '@/lib/retrieval'
+import { countTokens, entityFraming, RANKER_DEFAULTS, type RetrievalType } from '@/lib/retrieval'
 
 import { createEngine } from '../engine'
 import { MACRO_IDS } from '../ids'
@@ -172,8 +172,8 @@ describe('memory-blocks macro — row content', () => {
   // character reads as an existing off-scene figure rather than one the model
   // may introduce.
   it.each([
-    ['active', ENTITY_FRAMING.active],
-    ['staged', ENTITY_FRAMING.staged],
+    ['active', entityFraming('character', 'active')],
+    ['staged', entityFraming('character', 'staged')],
   ])('frames a pinned %s entity the same way the ranker frames a candidate', (status, framing) => {
     const out = renderMacro({
       ...EMPTY,

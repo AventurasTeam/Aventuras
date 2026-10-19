@@ -8,6 +8,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
+import type { EntityViews } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
@@ -30,7 +31,7 @@ import {
   type QueryStackInput,
 } from './queries'
 import { rankAll, rankPerType } from './ranker'
-import { entityRenderedText, lines, loreRenderedText } from './rendered-text'
+import { entityRenderedText, lines, loreRenderedText, measuredEntity } from './rendered-text'
 import {
   countStaleHappenings,
   loadChapterRanges,
@@ -83,6 +84,12 @@ export type RetrievalParams = {
    * seat and every pool. The caller computes it: source rows carry no parent to walk.
    */
   disabledPlaceIds: ReadonlySet<string>
+  /**
+   * The branch's state views over the same scene (lib/world buildEntityViews). Source rows carry
+   * no state: the floor reads the scene's factions and items off these, and an entity row is
+   * measured, and later rendered, from its view.
+   */
+  entityViews: EntityViews
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
   /**
@@ -317,6 +324,7 @@ async function runRetrievalPass(
     sceneEntityIds: params.sceneEntityIds,
     currentLocationId: params.currentLocationId,
     disabledPlaceIds: params.disabledPlaceIds,
+    views: params.entityViews,
   })
   partial.floor = floor
 
@@ -351,6 +359,7 @@ async function runRetrievalPass(
     awareness,
     recentProse: params.recentProse,
     disabledPlaceIds: params.disabledPlaceIds,
+    entityViews: params.entityViews,
     scanText: params.scanText,
   }
 
@@ -415,6 +424,7 @@ async function runRetrievalPass(
     floorIds: floor.seatedIds,
     recentProse: params.recentProse,
     disabledPlaceIds: params.disabledPlaceIds,
+    entityViews: params.entityViews,
     scanText: params.scanText,
     budgets: params.budgets,
     params: RANKER_DEFAULTS,
@@ -565,6 +575,7 @@ type PoolCtx = {
   awareness: readonly AwarenessRow[]
   recentProse: string
   disabledPlaceIds: ReadonlySet<string>
+  entityViews: EntityViews
   scanText: string
 }
 
@@ -766,12 +777,14 @@ function assembleCandidates(
       })
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
+        const entity = measuredEntity(r, ctx.entityViews)
         return {
           ...shared(),
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
-          renderedText: entityRenderedText(r),
+          renderedText: entityRenderedText(entity),
+          entity,
           sims: simsFor(vector),
           vector,
           pinSignal: 0,

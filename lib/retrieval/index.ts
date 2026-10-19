@@ -22,7 +22,18 @@ export {
 export type { QuerySource, QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType, tokenCost } from './ranker'
 export type { RankTypeInput } from './ranker'
-export { ENTITY_FRAMING, entityRenderedText, lines, loreRenderedText } from './rendered-text'
+export {
+  entityFraming,
+  entityHead,
+  entityRenderedText,
+  entityStateLines,
+  HELD_ITEM_ID_STAND_IN,
+  itemLine,
+  lines,
+  loreRenderedText,
+  measuredEntity,
+} from './rendered-text'
+export type { StateLineOptions } from './rendered-text'
 export { runRetrieval } from './run'
 export type {
   InjectedAwareness,
@@ -46,8 +57,10 @@ export type {
   CandidateKind,
   CandidateTrace,
   DropReason,
+  EntityCandidate,
   InjectedRow,
   KeywordInjection,
+  MeasuredEntity,
   PoolFunnel,
   QueryAll,
   QuerySlot,

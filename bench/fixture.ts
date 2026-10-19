@@ -5,8 +5,9 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { getLoadablePath } from 'sqlite-vec'
 
-import { STORY_SETTINGS_DEFAULTS } from '@/lib/db'
+import { STORY_SETTINGS_DEFAULTS, type Entity } from '@/lib/db'
 import type { QueryAll } from '@/lib/retrieval'
+import { buildEntityViews } from '@/lib/world'
 
 /**
  * The one synthetic branch every bench in this folder prices against, so
@@ -380,6 +381,27 @@ export function passInputs(
   }
   const userAction = prose(rand, 20)
   const recentNarrative = prose(rand, 150)
+  // The store's rows, which production builds the views from; the bench has only SQLite.
+  const storeRows = (
+    sqlite
+      .prepare(
+        'SELECT id, kind, name, description, status, injection_mode, state, created_at FROM entities WHERE branch_id = ?',
+      )
+      .all(BRANCH) as Record<string, unknown>[]
+  ).map(
+    (r) =>
+      ({
+        id: r.id,
+        kind: r.kind,
+        name: r.name,
+        description: r.description,
+        status: r.status,
+        injectionMode: r.injection_mode,
+        state: r.state === null ? null : JSON.parse(String(r.state)),
+        createdAt: r.created_at,
+      }) as Entity,
+  )
+  const currentLocationId = 'char_000000'
   const params = {
     branchId: BRANCH,
     modelId: MODEL_ID,
@@ -399,8 +421,12 @@ export function passInputs(
     },
     sceneCharacterIds,
     sceneEntityIds: sceneCharacterIds,
-    currentLocationId: 'char_000000',
+    currentLocationId,
     disabledPlaceIds: new Set<string>(),
+    entityViews: buildEntityViews(storeRows, {
+      sceneEntities: sceneCharacterIds,
+      currentLocationId,
+    }),
     recentProse: prose(rand, 200),
     // The default one-entry surface: the matchTerms cost measured is what a turn actually pays.
     scanText: `${userAction}\n${recentNarrative}`,

@@ -4,10 +4,12 @@ import {
   rankPerType,
   type Candidate,
   type KeywordInjection,
+  type MeasuredEntity,
   type QuerySlot,
   type RankedType,
   type RetrievalType,
 } from '@/lib/retrieval'
+import { emptyEntityView } from '@/lib/world'
 
 import { assertRankerParams, RankerParamsError } from './validate'
 
@@ -26,6 +28,16 @@ const capturedSlots = (payload: ProbeCapturePayload): QuerySlot[] =>
   })
 
 const entryIdOf = (row: CaptureRow): string => `entry_${row.target_id}`
+
+// A capture stores the measured text, not the entity it was measured from. Replay re-ranks and
+// never renders, so a seated entity row carries this placeholder in place of its view.
+const unrenderedEntity = (name: string): MeasuredEntity => ({
+  kind: 'character',
+  name,
+  description: null,
+  status: 'active',
+  state: emptyEntityView('character'),
+})
 
 export type ReplayOptions = {
   /**
@@ -104,6 +116,8 @@ export function replayType(
       keywordHits: r.kw_boost_value > 0 ? ['·'] : [],
       embeddingStale: r.embedding_stale,
     }
+    if (r.target_kind === 'entity')
+      return { ...base, kind: 'entity' as const, entity: unrenderedEntity(r.display_name) }
     if (r.target_kind !== 'happening') return { ...base, kind: r.target_kind }
     // Defaulting instead would re-score the row as decaying and pinnable — a
     // divergence no error marks, unlike the missing vector rejected above.
@@ -126,12 +140,21 @@ export function replayType(
   const keywordInjected: KeywordInjection[] = payload.keyword_injections
     .filter((i) => i.target_kind === injectedKind)
     .map((i) => ({
-      row: {
-        kind: i.target_kind as 'entity' | 'lore',
-        id: i.target_id,
-        displayName: i.display_name,
-        renderedText: '',
-      },
+      row:
+        i.target_kind === 'entity'
+          ? {
+              kind: 'entity' as const,
+              id: i.target_id,
+              displayName: i.display_name,
+              renderedText: '',
+              entity: unrenderedEntity(i.display_name),
+            }
+          : {
+              kind: 'lore' as const,
+              id: i.target_id,
+              displayName: i.display_name,
+              renderedText: '',
+            },
       terms: i.terms,
       priority: i.priority,
       tokensEstimated: i.tokens_estimated,

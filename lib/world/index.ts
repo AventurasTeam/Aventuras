@@ -108,6 +108,7 @@ export type {
   FactionStateView,
   HoldingView,
   ItemStateView,
+  KindedView,
   LocationStateView,
   StackableView,
   ViewScene,

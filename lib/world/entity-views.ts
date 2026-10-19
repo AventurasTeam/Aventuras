@@ -60,9 +60,19 @@ export type EntityStateViewByKind = {
 
 export type EntityStateView = EntityStateViewByKind[EntityKind]
 
+/** A kind with its own kind's view, narrowable on `kind`. */
+export type KindedView = {
+  [K in EntityKind]: { kind: K; state: EntityStateViewByKind[K] }
+}[EntityKind]
+
 export type EntityViews = {
   /** Every entity on the branch. */
   byId: ReadonlyMap<string, EntityStateView>
+  /**
+   * An entity's view as `kind`. A row these views weren't built from, or one of another kind,
+   * gets the empty view: retrieval reads its rows from SQLite, the views come from the store.
+   */
+  of: <K extends EntityKind>(id: string, kind: K) => EntityStateViewByKind[K]
   /** The items `Here:` lists at a place, by name; the floor seats exactly these. */
   looseAt: (locationId: string) => readonly string[]
 }
@@ -250,5 +260,9 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
       )
       .sort(byName)
       .map((e) => e.id)
-  return { byId, looseAt }
+  const of = <K extends EntityKind>(id: string, kind: K): EntityStateViewByKind[K] =>
+    byEntityId.get(id)?.kind === kind
+      ? (byId.get(id) as EntityStateViewByKind[K])
+      : emptyEntityView(kind)
+  return { byId, of, looseAt }
 }
