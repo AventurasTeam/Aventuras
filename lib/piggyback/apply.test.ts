@@ -409,7 +409,7 @@ describe('buildPiggybackActions', () => {
     })
 
     // piggyback.md → Trailing block format: back to the last sentence or clause boundary in the
-    // bound's second half, else the last whitespace, mid-word only as a last resort.
+    // bound's second half, else the last whitespace there, mid-word only as a last resort.
     it('cuts back to the last sentence end inside the bound, keeping the period', () => {
       const text = `${'a'.repeat(300)}. ${'b'.repeat(150)}. ${'c'.repeat(100)}`
       expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(300)}. ${'b'.repeat(150)}.`)
@@ -459,6 +459,22 @@ describe('buildPiggybackActions', () => {
       const text = `${'a '.repeat(240)}${'b'.repeat(40)}, more.`
       const cut = visualText(fallbackBlock(text))
       expect(cut).toBe('a '.repeat(240).trimEnd())
+    })
+
+    // The space sits at index 249, then at 250: either side of the midpoint.
+    it('takes no whitespace below the midpoint, cutting at the bound', () => {
+      const text = `${'a'.repeat(249)} ${'b'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(249)} ${'b'.repeat(250)}`)
+    })
+
+    it('takes whitespace at the midpoint', () => {
+      const text = `${'a'.repeat(250)} ${'b'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe('a'.repeat(250))
+    })
+
+    it('cuts a CJK note at the bound when its only whitespace sits in the first half', () => {
+      const text = `Akira は${'あ'.repeat(800)}`
+      expect(visualText(fallbackBlock(text))).toBe(`Akira は${'あ'.repeat(493)}`)
     })
 
     it("logs the cut on the run's logger with the entry, the producer, the entity, the category and both lengths", () => {

@@ -18,15 +18,16 @@ function normalizeRetrievalQueries(queries: readonly string[]): string[] {
 // Both producers arrive here uncapped. An over-long note fails the whole-state re-validation of
 // every later updateEntity carrying `state`, a delete's ref clear among them. piggyback.md →
 // Trailing block format: cut back to the last sentence or clause boundary in the bound's second
-// half, else the last whitespace, else mid-word. By UTF-16 unit (Zod's `.length`), never
+// half, else the last whitespace there, else mid-word. By UTF-16 unit (Zod's `.length`), never
 // mid-surrogate.
 function truncateVisualText(text: string): string {
   if (text.length <= VISUAL_TEXT_MAX) return text
   const head = text.slice(0, VISUAL_TEXT_MAX)
-  // A mark ends a clause only where whitespace follows it: "1.8 m" has none. Before the midpoint
-  // a clause end drops half the bound or more, too much to pay for a cleaner cut.
+  // Below the midpoint a cut drops half the bound or more, too much to pay for a cleaner one.
+  const floor = VISUAL_TEXT_MAX / 2
+  // A mark ends a clause only where whitespace follows it: "1.8 m" has none.
   let clause = -1
-  for (let i = head.length - 1; i >= VISUAL_TEXT_MAX / 2 && clause < 0; i--) {
+  for (let i = head.length - 1; i >= floor && clause < 0; i--) {
     if ('.;,'.includes(head[i]!) && /\s/.test(text[i + 1]!)) clause = i
   }
   // A period ends a sentence and stays; a dangling comma or semicolon goes.
@@ -34,7 +35,7 @@ function truncateVisualText(text: string): string {
   if (atClause.trim() !== '') return atClause.trimEnd()
   // Whitespace just past the bound still ends the head's last word.
   const space = text.slice(0, VISUAL_TEXT_MAX + 1).search(/\s\S*$/)
-  const atSpace = space < 0 ? '' : head.slice(0, space).trimEnd()
+  const atSpace = space < floor ? '' : head.slice(0, space).trimEnd()
   if (atSpace !== '') return atSpace
   const lastUnit = head.charCodeAt(head.length - 1)
   return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? head.slice(0, -1) : head
