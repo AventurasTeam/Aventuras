@@ -422,10 +422,8 @@ describe('buildPiggybackActions', () => {
 
     // A decimal point or an abbreviation's dot has no whitespace after it, and ends nothing.
     it('reads a mark with no whitespace after it as part of a word', () => {
-      const text = `Stands 1.8 m tall ${'and lean '.repeat(60)}`
-      const cut = visualText(fallbackBlock(text)) ?? ''
-      expect(cut.startsWith('Stands 1.8 m tall and lean')).toBe(true)
-      expect(cut.length).toBeGreaterThan(450)
+      const text = `${'a'.repeat(390)} stands 1.8 m tall ${'b'.repeat(120)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(390)} stands 1.8 m tall`)
     })
 
     it('takes no boundary from the first half of the bound, cutting at the last whitespace', () => {
@@ -433,6 +431,17 @@ describe('buildPiggybackActions', () => {
       const cut = visualText(fallbackBlock(text)) ?? ''
       expect(cut.length).toBeGreaterThan(450)
       expect(cut.startsWith('Tall, lean')).toBe(true)
+    })
+
+    // The period sits at index 249, then at 250: either side of the midpoint.
+    it('takes no boundary just below the midpoint, cutting at the last whitespace', () => {
+      const text = `${'a'.repeat(249)}. ${'b'.repeat(200)} ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(249)}. ${'b'.repeat(200)}`)
+    })
+
+    it('takes a boundary at the midpoint', () => {
+      const text = `${'a'.repeat(250)}. ${'b'.repeat(200)} ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(250)}.`)
     })
 
     it('ignores a boundary past the bound, falling back to the last whitespace', () => {
