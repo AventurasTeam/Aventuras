@@ -488,9 +488,23 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
         traits: ['quick\nto laugh', 'stubborn'],
         drives: ['find\nher brother', 'pay the debt'],
         voice: 'clipped\ncalls everyone friend',
-        inventory: [],
+        inventory: ['item_horn', 'item_chart'],
         equipped_items: [],
       } as never,
+    }),
+    makeEntity({
+      id: 'item_horn',
+      kind: 'item',
+      name: 'Horn',
+      description: 'loud enough to wake the dead!',
+      state: { at_location_id: null, condition: 'chipped\nat the rim' },
+    }),
+    makeEntity({
+      id: 'item_chart',
+      kind: 'item',
+      name: 'Chart',
+      description: 'but where does it lead?',
+      state: { at_location_id: null, condition: 'water-stained' },
     }),
     makeEntity({
       id: 'loc_weir',
@@ -502,7 +516,7 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       id: 'item_box',
       kind: 'item',
       name: 'Strongbox',
-      state: { at_location_id: null, condition: 'rusted\nshut' },
+      state: { at_location_id: 'loc_sunk', condition: 'rusted\nshut' },
     }),
     makeEntity({
       id: 'fact_tide',
@@ -516,10 +530,10 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
     measuredEntity(WORLD.find((e) => e.id === id)!, views)
 
   // Each kind, and each edge the macro and the mirror must agree on: empty fields, a blank or
-  // missing description, held items with and without a description or condition, one already
-  // ending a sentence, a multi-line one, a multi-line value under every label, members some
+  // missing description, held items with and without a description or condition, one ending each
+  // kind of sentence, a multi-line one, a multi-line value under every label, members some
   // retired, disabled references (a faction, an item, a parent place) and a retired item left
-  // out, framing per kind and status.
+  // out, retired references marked, framing per kind and status.
   const fixtures: [label: string, id: string][] = [
     ['a fully described character', 'char_k'],
     ['a character with a disabled faction and a blank description', 'char_o'],
@@ -534,9 +548,9 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
     ['a character whose faction and last-seen place are retired', 'char_drift'],
     ['a location whose parent is retired', 'loc_crypt'],
     ['an item whose holder is retired', 'item_oar'],
-    ['a character with multi-line values', 'char_wren'],
+    ['a character with multi-line values and held items ending ! and ?', 'char_wren'],
     ['a location with a multi-line condition', 'loc_weir'],
-    ['an item with a multi-line condition', 'item_box'],
+    ['an item with a multi-line condition, lying at a retired place', 'item_box'],
     ['a faction with a multi-line standing and agenda', 'fact_tide'],
   ]
   const lists = ['structuralPinnedEntities', 'structuralSceneFactions', 'retrievedEntities']
@@ -600,8 +614,10 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       'Voice: clipped calls everyone friend',
       'Traits: quick to laugh; stubborn',
       'Drives: find her brother; pay the debt',
+      `- [${HELD_ITEM_ID_STAND_IN}] Horn: loud enough to wake the dead! Condition: chipped at the rim`,
+      `- [${HELD_ITEM_ID_STAND_IN}] Chart: but where does it lead? Condition: water-stained`,
       'Condition: silted up',
-      'Condition: rusted shut',
+      'Condition: rusted shut\nLocation: Saltmere (retired)',
       'Standing: feared in the north',
       'Agenda: tax the river; keep the weir',
     ])
