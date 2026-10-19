@@ -12,12 +12,22 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateImage } from 'ai'
 import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
+import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 
 export function createGoogleProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL
-  const googleSDK = createGoogleGenerativeAI({ apiKey: config.apiKey, baseURL: baseUrl })
+  const googleSDK = createGoogleGenerativeAI({
+    apiKey: config.apiKey,
+    baseURL: baseUrl,
+    fetch: createSdkFetch({
+      serviceId: 'google-image',
+      timeoutMs: IMAGE_TIMEOUT_DEFAULT,
+      what: 'Image generation',
+    }),
+  })
 
   return {
     id: 'google',

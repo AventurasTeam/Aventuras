@@ -9,9 +9,16 @@ vi.mock('@ai-sdk/google', () => ({
 vi.mock('../../sdk/providers/fetch', () => ({
   createTimeoutFetch: vi.fn(),
 }))
+vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
+  createSdkFetch: vi.fn(() => 'SDK_FETCH'),
+}))
+// The real store is a rune module, which this suite cannot import.
+vi.mock('#lib/stores/debug.svelte.ts', () => ({ debug: {} }))
 
 import { generateImage } from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
+import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
 import { createGoogleProvider } from './google'
 import type { ImageGenerateOptions } from './types'
 
@@ -39,6 +46,21 @@ describe('Google adapter references', () => {
   it('sends the plain prompt when there are no references', async () => {
     await createGoogleProvider({ apiKey: 'k' }).generate(options({ referenceImages: undefined }))
     expect(sentPrompt()).toBe('a castle')
+  })
+})
+
+describe('Google transport', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('sends SDK requests through the shared Tauri fetch', () => {
+    createGoogleProvider({ apiKey: 'k' })
+
+    expect(createGoogleGenerativeAI).toHaveBeenCalledWith(
+      expect.objectContaining({ fetch: 'SDK_FETCH' }),
+    )
+    expect(createSdkFetch).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'google-image', what: 'Image generation' }),
+    )
   })
 })
 
