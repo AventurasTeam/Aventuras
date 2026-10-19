@@ -127,7 +127,7 @@ export const fallbackClassifierSchema = z.object({
         text: z
           .string()
           .describe(
-            'The FULL new value for the category named in `type` — this replaces whatever was there before, not a partial edit.',
+            'The category named in `type` as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words. It replaces the stored value whole.',
           ),
       }),
     )
@@ -162,8 +162,16 @@ export const fallbackClassifierSchema = z.object({
       stackables: z
         .array(
           z.object({
-            key: z.string().describe('Lowercase name of the stackable, e.g. gold.'),
-            amount: z.number().describe('Quantity moved, not the resulting total.'),
+            key: z
+              .string()
+              .describe(
+                "The key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet.",
+              ),
+            amount: z
+              .number()
+              .describe(
+                'Quantity moved, not the resulting total, and never more than the payer holds.',
+              ),
             to: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
             from: z.string().optional().describe(TRANSFER_PARTY_DESCRIPTION),
           }),

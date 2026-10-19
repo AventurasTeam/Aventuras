@@ -391,6 +391,39 @@ describe('buildPiggybackActions', () => {
       const emoji = '\u{1F600}' // 2 UTF-16 units; index 499 is the high surrogate
       expect(visualText(fallbackBlock('a'.repeat(499) + emoji))).toBe('a'.repeat(499))
     })
+
+    // piggyback.md → Trailing block format: back to the last sentence or clause boundary inside
+    // the bound, else the last whitespace, mid-word only as a last resort.
+    it('cuts back to the last sentence end inside the bound, keeping the period', () => {
+      const text = `${'a'.repeat(300)}. ${'b'.repeat(150)}. ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(300)}. ${'b'.repeat(150)}.`)
+    })
+
+    it.each([',', ';'])('cuts back to the last %s inside the bound, dropping it', (mark) => {
+      const text = `${'a'.repeat(200)}. ${'b'.repeat(250)}${mark} ${'c'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(200)}. ${'b'.repeat(250)}`)
+    })
+
+    it('ignores a boundary past the bound, falling back to the last whitespace', () => {
+      const text = `${'a '.repeat(240)}${'b'.repeat(40)}, more.`
+      const cut = visualText(fallbackBlock(text))
+      expect(cut).toBe('a '.repeat(240).trimEnd())
+    })
+
+    it('logs the cut with the entity, the category and both lengths', () => {
+      const warnSpy = vi.spyOn(logger, 'warn')
+      visualText(fallbackBlock(`${'a'.repeat(300)}. ${'b'.repeat(300)}`))
+      expect(warnSpy).toHaveBeenCalledWith('classifier.visual_truncated', {
+        entityId: 'char_1',
+        type: 'physique',
+        length: 602,
+        keptLength: 301,
+      })
+      warnSpy.mockClear()
+      visualText(fallbackBlock('b'.repeat(VISUAL_TEXT_MAX)))
+      expect(warnSpy).not.toHaveBeenCalledWith('classifier.visual_truncated', expect.anything())
+      warnSpy.mockRestore()
+    })
   })
 
   it('handles item transfers between characters', () => {
@@ -700,6 +733,48 @@ describe('buildPiggybackActions', () => {
         },
       },
     ])
+  })
+
+  // data-model.md → Stackable items: the prose stays true for the payee, and the shortfall shows.
+  it('credits the payee in full on a shortfall, clamps the payer at zero and logs it', () => {
+    const holder = (id: string, stackables: Record<string, number>) =>
+      mockEntity({ id, state: { ...emptyEntityState('character'), stackables } })
+    const warnSpy = vi.spyOn(logger, 'warn')
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_1',
+      turn: planned({
+        transfers: {
+          items: [],
+          stackables: [
+            { key: 'gold', amount: 20, from: 'char_1', to: 'char_2' },
+            { key: 'arrows', amount: 2, from: 'char_1' },
+          ],
+        },
+      }),
+      entities: [holder('char_1', { gold: 5, arrows: 6 }), holder('char_2', { gold: 1 })],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(
+      result.actions.flatMap((a) =>
+        a.kind === 'updateEntityStackables' ? [[a.payload.id, a.payload.stackables]] : [],
+      ),
+    ).toEqual([
+      ['char_1', { arrows: 4 }],
+      ['char_2', { gold: 21 }],
+    ])
+    const shortfalls = warnSpy.mock.calls.filter(
+      ([event]) => event === 'classifier.stackable_shortfall',
+    )
+    expect(shortfalls).toEqual([
+      [
+        'classifier.stackable_shortfall',
+        { entityId: 'char_1', key: 'gold', amount: 20, balance: 5 },
+      ],
+    ])
+    warnSpy.mockRestore()
   })
 
   describe('malformed block fixture matrix', () => {

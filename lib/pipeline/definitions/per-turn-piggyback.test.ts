@@ -15,6 +15,7 @@ import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import type { PhaseEmittedEvent, Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
+import { bundledPack, MACRO_IDS } from '@/lib/prompts'
 import type { EntityRow, LoreRow, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
@@ -3265,12 +3266,12 @@ describe('per-turn-piggyback', () => {
       ['newItems[].handle scope', ['newItems', '[]', 'handle'], 'only in transfers.items[].id'],
       ['currentLocation', ['currentLocation'], 'place this scene happens at'],
       ['currentLocation with no Places block', ['currentLocation'], 'when Places lists it'],
+      ['visualChanges[].text', ['visualChanges', '[]', 'text'], 'in about 60 words'],
       [
-        'visualChanges[].text',
-        ['visualChanges', '[]', 'text'],
-        'replaces whatever was there before',
+        'transfers.stackables[].key',
+        ['transfers', 'stackables', '[]', 'key'],
+        "exactly as the holder's Stackables line shows it",
       ],
-      ['transfers.stackables[].key', ['transfers', 'stackables', '[]', 'key'], 'Lowercase name'],
       [
         'transfers.stackables[].amount',
         ['transfers', 'stackables', '[]', 'amount'],
@@ -3519,5 +3520,23 @@ describe('per-turn-piggyback', () => {
       const result = runPreflight(testPipeline, snapshot)
       expect(result).toBeNull()
     })
+  })
+})
+
+// piggyback.md → Trailing block format: the two writers are one contract, so the fallback's schema
+// asks for what the emission prompt asks for, in the same words.
+describe("fallbackClassifierSchema — the emission prompt's rules", () => {
+  const emission = bundledPack.macros[MACRO_IDS.stateEmission]!.source
+  const json = JSON.stringify(z.toJSONSchema(fallbackClassifierSchema))
+
+  it.each([
+    'restated from its current value shown above',
+    'keep what still applies, drop what no longer does, in about 60 words',
+    "exactly as the holder's Stackables line shows it",
+    "only for something they don't hold yet",
+    'never more than the payer holds',
+  ])('says "%s" in both', (rule) => {
+    expect(emission).toContain(rule)
+    expect(json).toContain(rule.replaceAll('"', '\\"'))
   })
 })

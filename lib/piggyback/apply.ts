@@ -1,7 +1,7 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity, EntryMetadata, ItemState } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { foldStackables } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type PlannedTurn } from './types'
@@ -16,13 +16,21 @@ function normalizeRetrievalQueries(queries: readonly string[]): string[] {
 }
 
 // Both producers arrive here uncapped. An over-long note fails the whole-state re-validation of
-// every later updateEntity carrying `state`, a delete's ref clear among them. Cut by UTF-16 unit
-// (Zod's `.length`), never mid-surrogate.
+// every later updateEntity carrying `state`, a delete's ref clear among them. piggyback.md →
+// Trailing block format: cut back to the last sentence or clause boundary inside the bound, else
+// the last whitespace, else mid-word. By UTF-16 unit (Zod's `.length`), never mid-surrogate.
 function truncateVisualText(text: string): string {
   if (text.length <= VISUAL_TEXT_MAX) return text
-  const cut = text.slice(0, VISUAL_TEXT_MAX)
-  const lastUnit = cut.charCodeAt(cut.length - 1)
-  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? cut.slice(0, -1) : cut
+  const head = text.slice(0, VISUAL_TEXT_MAX)
+  const clause = Math.max(head.lastIndexOf('.'), head.lastIndexOf(';'), head.lastIndexOf(','))
+  // A period ends a sentence and stays; a dangling comma or semicolon goes.
+  const atClause = clause < 0 ? '' : head.slice(0, head[clause] === '.' ? clause + 1 : clause)
+  if (atClause.trim() !== '') return atClause.trimEnd()
+  const space = head.search(/\s\S*$/)
+  const atSpace = space < 0 ? '' : head.slice(0, space).trimEnd()
+  if (atSpace !== '') return atSpace
+  const lastUnit = head.charCodeAt(head.length - 1)
+  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? head.slice(0, -1) : head
 }
 
 type PreviousMetadata = {
@@ -137,6 +145,14 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
       const text = truncateVisualText(note.text)
+      // The writer is asked for about 60 words; a cut says it wrote far past that.
+      if (text !== note.text)
+        logger.warn('classifier.visual_truncated', {
+          entityId: note.id,
+          type: note.type,
+          length: note.text.length,
+          keptLength: text.length,
+        })
       actions.push({
         kind: 'updateEntityVisualState',
         source,
@@ -214,21 +230,26 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const currentStackables = (id: string): Map<string, number> => {
     const patched = stackablePatches.get(id)
     if (patched) return new Map(patched)
-    // A row written before keys were normalized can hold "Gold" beside "gold"; fold
-    // them here so the first transfer to touch the holder heals it.
+    // Folded as the prompt's view folds them, so the first transfer to touch a holder whose row
+    // holds "Gold" beside "gold" heals it, and debits the balance the writer was shown.
     const state = byId.get(id)?.state as CharacterState | undefined
-    const folded = new Map<string, number>()
-    for (const [raw, count] of Object.entries(state?.stackables ?? {})) {
-      const key = normalizeTerm(raw)
-      if (key !== '' && count > 0) folded.set(key, (folded.get(key) ?? 0) + count)
-    }
-    return folded
+    return foldStackables(state?.stackables)
   }
 
   for (const transfer of block.transfers?.stackables ?? []) {
     if (transfer.from !== undefined && isCharacter(transfer.from)) {
       const next = currentStackables(transfer.from)
-      const remaining = Math.max(0, (next.get(transfer.key) ?? 0) - transfer.amount)
+      const balance = next.get(transfer.key) ?? 0
+      // data-model.md → Stackable items: the payer clamps at zero while the payee still gains
+      // the full amount, so the prose stays true for whoever received it.
+      if (balance < transfer.amount)
+        logger.warn('classifier.stackable_shortfall', {
+          entityId: transfer.from,
+          key: transfer.key,
+          amount: transfer.amount,
+          balance,
+        })
+      const remaining = Math.max(0, balance - transfer.amount)
       if (remaining === 0) next.delete(transfer.key)
       else next.set(transfer.key, remaining)
       stackablePatches.set(transfer.from, next)
