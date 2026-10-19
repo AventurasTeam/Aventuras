@@ -176,7 +176,8 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
   }))
 
 // One read serves every variable built from the scene, so any of them keeps it. A state view
-// depends on the scene too (the in-scene location, the invariant's seat), so each carrier does.
+// depends on the scene too (the in-scene location, the invariant's seat), so each carrier built
+// here does.
 const SCENE_VARIABLES = [
   'sceneMetadata',
   'sceneEntities',
@@ -211,12 +212,14 @@ function heldItemsInScene(
   })
 }
 
-/** The floor pair: the entries a per-turn write extracts from. */
+/** readLastTurns' minimum, the action-plus-reply pair a per-turn write extracts from. */
 const NAMED_THIS_TURN = 2
 
 /**
  * piggyback.md → Fallback classifier context: a character this turn's entries name, whom no
- * other section shows with state, would otherwise be a roster id with no values behind it.
+ * other section shows with state, would otherwise be a roster id with no values behind it. A
+ * disabled one stays out: it is absent from every state the prompt shows (data-model.md →
+ * Injection modes).
  */
 function charactersNamed(
   turns: readonly StoryEntry[],
