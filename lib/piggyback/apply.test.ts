@@ -408,8 +408,8 @@ describe('buildPiggybackActions', () => {
       expect(visualText(fallbackBlock('a'.repeat(499) + emoji))).toBe('a'.repeat(499))
     })
 
-    // piggyback.md → Trailing block format: back to the last sentence or clause boundary inside
-    // the bound, else the last whitespace, mid-word only as a last resort.
+    // piggyback.md → Trailing block format: back to the last sentence or clause boundary in the
+    // bound's second half, else the last whitespace, mid-word only as a last resort.
     it('cuts back to the last sentence end inside the bound, keeping the period', () => {
       const text = `${'a'.repeat(300)}. ${'b'.repeat(150)}. ${'c'.repeat(100)}`
       expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(300)}. ${'b'.repeat(150)}.`)

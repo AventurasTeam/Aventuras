@@ -23,11 +23,11 @@ function normalizeRetrievalQueries(queries: readonly string[]): string[] {
 function truncateVisualText(text: string): string {
   if (text.length <= VISUAL_TEXT_MAX) return text
   const head = text.slice(0, VISUAL_TEXT_MAX)
-  // A mark ends a clause only where whitespace or the end follows it: "1.8 m" has none. An
-  // earlier one would keep less than the last whitespace does.
+  // A mark ends a clause only where whitespace follows it: "1.8 m" has none. Before the midpoint
+  // a clause end drops half the bound or more, too much to pay for a cleaner cut.
   let clause = -1
   for (let i = head.length - 1; i >= VISUAL_TEXT_MAX / 2 && clause < 0; i--) {
-    if ('.;,'.includes(head[i]!) && (i + 1 >= text.length || /\s/.test(text[i + 1]!))) clause = i
+    if ('.;,'.includes(head[i]!) && /\s/.test(text[i + 1]!)) clause = i
   }
   // A period ends a sentence and stays; a dangling comma or semicolon goes.
   const atClause = clause < 0 ? '' : head.slice(0, head[clause] === '.' ? clause + 1 : clause)
@@ -158,7 +158,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
       const text = truncateVisualText(note.text)
-      // The writer is asked for about 60 words; a cut says it wrote far past that.
+      // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
       if (text !== note.text)
         log.warn('classifier.visual_truncated', {
           entryId,
