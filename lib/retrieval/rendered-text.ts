@@ -84,6 +84,13 @@ export type StateLineOptions = {
 const labelled = (label: string, value: string | null | undefined): string[] =>
   value == null || isBlank(value) ? [] : [`${label}: ${value}`]
 
+// A line break in free text would start a line with no label for the writer to map to a type.
+const labelledText = (label: string, value: string | null): string[] =>
+  labelled(label, value === null ? null : oneLine(value))
+
+const labelledList = (label: string, values: readonly string[]): string[] =>
+  values.length === 0 ? [] : [`${label}: ${values.map(oneLine).join('; ')}`]
+
 // A retired target is still the fact (the last place seen, a disbanded faction), so it's named,
 // and marked so it doesn't read as current.
 const refName = (ref: EntityRef | null): string | null =>
@@ -107,11 +114,11 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
       return [
         ...(here ? [] : labelled('Location', refName(s.location))),
         ...Object.entries(VISUAL_LABELS).flatMap(([key, label]) =>
-          labelled(label, s.visual[key as keyof typeof VISUAL_LABELS]),
+          labelledText(label, s.visual[key as keyof typeof VISUAL_LABELS]),
         ),
-        ...labelled('Voice', s.voice),
-        ...(s.traits.length > 0 ? [`Traits: ${s.traits.join('; ')}`] : []),
-        ...(s.drives.length > 0 ? [`Drives: ${s.drives.join('; ')}`] : []),
+        ...labelledText('Voice', s.voice),
+        ...labelledList('Traits', s.traits),
+        ...labelledList('Drives', s.drives),
         ...labelled('Faction', refName(s.faction)),
         ...holds,
         ...(s.stackables.length > 0
@@ -121,20 +128,20 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
     }
     case 'location':
       return [
-        ...labelled('Condition', entity.state.condition),
+        ...labelledText('Condition', entity.state.condition),
         ...(here ? [] : labelled('Part of', refName(entity.state.parent))),
       ]
     case 'item':
       return [
-        ...labelled('Condition', entity.state.condition),
+        ...labelledText('Condition', entity.state.condition),
         ...(here ? [] : labelled('Location', refName(entity.state.location))),
         ...(here ? [] : labelled('Held by', refName(entity.state.holder))),
       ]
     case 'faction': {
       const members = entity.state.members.filter((m) => m.status !== 'retired')
       return [
-        ...labelled('Standing', entity.state.standing),
-        ...(entity.state.agenda.length > 0 ? [`Agenda: ${entity.state.agenda.join('; ')}`] : []),
+        ...labelledText('Standing', entity.state.standing),
+        ...labelledList('Agenda', entity.state.agenda),
         ...(members.length > 0 ? [`Members: ${members.map((m) => m.name).join(', ')}`] : []),
       ]
     }

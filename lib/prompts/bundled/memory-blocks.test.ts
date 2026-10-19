@@ -472,6 +472,44 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       state: { at_location_id: 'loc_docks', condition: 'dented' },
     }),
     makeEntity({ id: 'char_empty', kind: 'character', name: 'Nobody', state: null }),
+    makeEntity({
+      id: 'char_wren',
+      kind: 'character',
+      name: 'Wren',
+      state: {
+        visual: {
+          physique: 'lean,\nwiry',
+          face: 'freckled\n\nand sunburnt',
+          hair: 'red\nand braided',
+          eyes: 'green\r\nand narrow',
+          attire: 'oilskins\nand a knife belt',
+          distinguishing: 'a missing\nfinger',
+        },
+        traits: ['quick\nto laugh', 'stubborn'],
+        drives: ['find\nher brother', 'pay the debt'],
+        voice: 'clipped\ncalls everyone friend',
+        inventory: [],
+        equipped_items: [],
+      } as never,
+    }),
+    makeEntity({
+      id: 'loc_weir',
+      kind: 'location',
+      name: 'The Weir',
+      state: { parent_location_id: null, condition: 'silted\nup' },
+    }),
+    makeEntity({
+      id: 'item_box',
+      kind: 'item',
+      name: 'Strongbox',
+      state: { at_location_id: null, condition: 'rusted\nshut' },
+    }),
+    makeEntity({
+      id: 'fact_tide',
+      kind: 'faction',
+      name: 'The Tide Court',
+      state: { standing: 'feared\nin the north', agenda: ['tax\nthe river', 'keep the weir'] },
+    }),
   ]
   const views = buildEntityViews(WORLD, SCENE)
   const measured = (id: string): MeasuredEntity =>
@@ -479,8 +517,9 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
 
   // Each kind, and each edge the macro and the mirror must agree on: empty fields, a blank or
   // missing description, held items with and without a description or condition, one already
-  // ending a sentence, a multi-line one, members some retired, disabled references (a faction, an
-  // item, a parent place) and a retired item left out, framing per kind and status.
+  // ending a sentence, a multi-line one, a multi-line value under every label, members some
+  // retired, disabled references (a faction, an item, a parent place) and a retired item left
+  // out, framing per kind and status.
   const fixtures: [label: string, id: string][] = [
     ['a fully described character', 'char_k'],
     ['a character with a disabled faction and a blank description', 'char_o'],
@@ -495,6 +534,10 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
     ['a character whose faction and last-seen place are retired', 'char_drift'],
     ['a location whose parent is retired', 'loc_crypt'],
     ['an item whose holder is retired', 'item_oar'],
+    ['a character with multi-line values', 'char_wren'],
+    ['a location with a multi-line condition', 'loc_weir'],
+    ['an item with a multi-line condition', 'item_box'],
+    ['a faction with a multi-line standing and agenda', 'fact_tide'],
   ]
   const lists = ['structuralPinnedEntities', 'structuralSceneFactions', 'retrievedEntities']
   // The mirror measures every held item's id through the stand-in (retrieval.md → Token
@@ -548,6 +591,19 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       'Location: Saltmere (retired)',
       'Part of: Saltmere (retired)',
       'Held by: Zev (retired)',
+      'Physique: lean, wiry',
+      'Face: freckled and sunburnt',
+      'Hair: red and braided',
+      'Eyes: green and narrow',
+      'Attire: oilskins and a knife belt',
+      'Distinguishing: a missing finger',
+      'Voice: clipped calls everyone friend',
+      'Traits: quick to laugh; stubborn',
+      'Drives: find her brother; pay the debt',
+      'Condition: silted up',
+      'Condition: rusted shut',
+      'Standing: feared in the north',
+      'Agenda: tax the river; keep the weir',
     ])
       expect(text).toContain(line)
     // Left out as references: a disabled item and faction, a retired item, a disabled parent, a
