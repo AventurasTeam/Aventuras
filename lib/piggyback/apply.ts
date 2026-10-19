@@ -32,7 +32,8 @@ function truncateVisualText(text: string): string {
   // A period ends a sentence and stays; a dangling comma or semicolon goes.
   const atClause = clause < 0 ? '' : head.slice(0, head[clause] === '.' ? clause + 1 : clause)
   if (atClause.trim() !== '') return atClause.trimEnd()
-  const space = head.search(/\s\S*$/)
+  // Whitespace just past the bound still ends the head's last word.
+  const space = text.slice(0, VISUAL_TEXT_MAX + 1).search(/\s\S*$/)
   const atSpace = space < 0 ? '' : head.slice(0, space).trimEnd()
   if (atSpace !== '') return atSpace
   const lastUnit = head.charCodeAt(head.length - 1)

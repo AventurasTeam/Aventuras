@@ -444,6 +444,17 @@ describe('buildPiggybackActions', () => {
       expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(250)}.`)
     })
 
+    // The b-word ends at index 499, then at 500: inside the bound, then one past it.
+    it('keeps a last word that ends right at the bound', () => {
+      const text = `${'a'.repeat(250)} ${'b'.repeat(249)} ccc`
+      expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(250)} ${'b'.repeat(249)}`)
+    })
+
+    it('drops a last word that runs one past the bound', () => {
+      const text = `${'a'.repeat(250)} ${'b'.repeat(250)} ccc`
+      expect(visualText(fallbackBlock(text))).toBe('a'.repeat(250))
+    })
+
     it('ignores a boundary past the bound, falling back to the last whitespace', () => {
       const text = `${'a '.repeat(240)}${'b'.repeat(40)}, more.`
       const cut = visualText(fallbackBlock(text))
