@@ -272,6 +272,57 @@ describe('bundled piggyback fallback classifier template', () => {
       )
     })
 
+    // The current location keeps its chain, so its parent prints no Part of line.
+    it('gives the current location no parent line', () => {
+      const rows = [
+        makeEntity({ ...KEEP, state: { parent_location_id: 'l2' } as never }),
+        makeEntity({ id: 'l2', kind: 'location', name: 'The Marsh' }),
+        LANTERN,
+      ]
+      const ctx = context({}, rows)
+      expect(ctx.structuralLocation?.state).toMatchObject({ parent: { name: 'The Marsh' } })
+
+      expect(render(ctx)).toContain(
+        '[l1] The Drowned Keep — in The Marsh: Half sunk into the marsh.\nHere:\n- [i5] a rusted lantern\n',
+      )
+      expect(render(ctx)).not.toContain('Part of:')
+    })
+
+    it("carries a loose item's condition on its Here: line", () => {
+      const cracked = item('i5', 'a rusted lantern', {
+        state: { at_location_id: 'l1', condition: 'its glass cracked' },
+      })
+      expect(render(context({}, [KAEL, KEEP, SEAL, SWORD, cracked]))).toContain(
+        'Here:\n- [i5] a rusted lantern. Condition: its glass cracked\n',
+      )
+    })
+
+    // piggyback.md → What the writer sees: an item listed under Here: isn't listed again.
+    it('lists an in-scene item lying here under Here: only', () => {
+      const prompt = render(context({ sceneEntities: ['c1', 'l1', 'i5'] }))
+
+      expect(prompt).not.toContain('## a rusted lantern')
+      expect(prompt).toContain('Here:\n- [i5] a rusted lantern\n')
+      // A character's location is the current place too, and must not be skipped for it.
+      expect(prompt).toContain('## Kael [c1]\n')
+    })
+
+    // With no current location, an item lying nowhere would match it on nil == nil.
+    it('lists an in-scene item that lies nowhere when the scene has no current location', () => {
+      const rope = item('i7', 'a coil of rope')
+      const prompt = render(
+        context({ sceneEntities: ['c1', 'i7'], structuralLocation: null, looseItems: [] }, [
+          KAEL,
+          KEEP,
+          SEAL,
+          SWORD,
+          rope,
+        ]),
+      )
+
+      expect(prompt).toContain('## a coil of rope [i7]\n')
+    })
+
     it('lists what an in-scene character holds, and does not repeat a held item in the scene list', () => {
       const prompt = render(context({ sceneEntities: ['c1', 'i3'] }))
 
@@ -341,6 +392,29 @@ describe('bundled piggyback fallback classifier template', () => {
 
     it('leaves the block out when there are none', () => {
       expect(render(context({ namedCharacters: [] }))).not.toContain('# Named in this turn')
+    })
+
+    // Off-scene, so the last place it was seen is news; its holdings carry ids a write can name.
+    it("shows a named character's last-seen place and its holdings' ids", () => {
+      const ilse = makeEntity({
+        id: 'c8',
+        kind: 'character',
+        name: 'Ilse',
+        description: 'A ferrywoman.',
+        status: 'staged',
+        state: { inventory: ['i10'], equipped_items: [], current_location_id: 'l2' } as never,
+      })
+      const rows = [
+        ...WORLD,
+        makeEntity({ id: 'l2', kind: 'location', name: 'The Marsh' }),
+        ilse,
+        item('i10', 'a bone flute'),
+      ]
+      const namedCharacters = project(rows, ['c1', 'l1']).filter((e) => e.id === 'c8')
+
+      expect(render(context({ namedCharacters }, rows))).toContain(
+        '\n[c8] Ilse: A ferrywoman.\nLocation: The Marsh\nHolds:\n- [i10] a bone flute\n',
+      )
     })
   })
 
