@@ -26,7 +26,7 @@ shares its caller's scope.
 {%- if es_state.drives.size > 0 %}{{ es_nl }}Drives: {% for d in es_state.drives %}{{ d | one_line }}{% unless forloop.last %}; {% endunless %}{% endfor %}{% endif -%}
 {%- if es_state.faction %}{{ es_nl }}Faction: {{ es_state.faction.name }}{% if es_state.faction.status == 'retired' %} (retired){% endif %}{% endif -%}
 {%- if es_state.holdings.size > 0 %}{{ es_nl }}Holds:{% for h in es_state.holdings %}{% include 'macro_item_line', item: h, condition: h.condition, ids: ids %}{% endfor %}{% endif -%}
-{%- if es_state.stackables.size > 0 %}{{ es_nl }}Stackables: {% for s in es_state.stackables %}{{ s.key }} {{ s.amount }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif -%}
+{%- if es_state.stackables.size > 0 %}{{ es_nl }}Stackables: {% for s in es_state.stackables %}{{ s.key | one_line }} {{ s.amount }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif -%}
 {%- elsif e.kind == 'location' -%}
 {%- if es_state.condition != blank %}{{ es_nl }}Condition: {{ es_state.condition | one_line }}{% endif -%}
 {%- unless here %}{% if es_state.parent %}{{ es_nl }}Part of: {{ es_state.parent.name }}{% if es_state.parent.status == 'retired' %} (retired){% endif %}{% endif %}{% endunless -%}
