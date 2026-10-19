@@ -361,6 +361,33 @@ describe('buildStructuralFloor — what the scene implies', () => {
   })
 })
 
+describe("buildStructuralFloor — the current location's chain", () => {
+  const nested = (id: string, name: string, parent: string | null, over: Partial<Entity> = {}) =>
+    makeEntity({ id, kind: 'location', name, state: { parent_location_id: parent }, ...over })
+  const WORLD = [
+    nested('loc_back', 'The back room', 'loc_anchor'),
+    nested('loc_anchor', 'The Rusty Anchor', 'loc_docks'),
+    nested('loc_docks', 'The Docks', 'loc_vellis', { injectionMode: 'disabled' }),
+    nested('loc_vellis', 'Port Vellis', 'loc_eldra'),
+    nested('loc_eldra', 'Eldra', null),
+  ]
+
+  it('lists the listed ancestors, nearest first, leaving out a disabled one', () => {
+    const floor = impliedFloor(WORLD, { sceneEntities: [], currentLocationId: 'loc_back' })
+    expect(floor.currentLocationChain).toEqual(['The Rusty Anchor', 'Port Vellis', 'Eldra'])
+  })
+
+  it.each([
+    ['no location', null],
+    ['an inactive one', 'loc_gone'],
+  ])('is empty when the scene names %s', (_case, currentLocationId) => {
+    const rows = [...WORLD, nested('loc_gone', 'The old mill', 'loc_eldra', { status: 'retired' })]
+    const floor = impliedFloor(rows, { sceneEntities: [], currentLocationId })
+    expect(floor.currentLocation).toBeNull()
+    expect(floor.currentLocationChain).toEqual([])
+  })
+})
+
 type EntityDestination = 'scene' | 'location' | 'always' | 'pool'
 
 // Every entities row lands in exactly one place, hand-derived from

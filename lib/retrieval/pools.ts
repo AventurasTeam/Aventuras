@@ -1,5 +1,5 @@
 import type { Entity, EntityKind, InjectionMode, Thread, VecTargetKind } from '@/lib/db'
-import { buildEntityViews, type EntityViews } from '@/lib/world'
+import { buildEntityViews, listedAncestorNames, type EntityViews } from '@/lib/world'
 
 import { matchTerms, normalizeTerm } from './name-index'
 
@@ -31,6 +31,8 @@ export type ThreadRow = {
 export type StructuralFloor = {
   sceneEntities: readonly EntityRow[]
   currentLocation: EntityRow | null
+  /** The current location's listed ancestors' names, nearest first; empty with no location. */
+  currentLocationChain: readonly string[]
   /** The factions of the in-scene characters. */
   sceneFactions: readonly EntityRow[]
   /** What the in-scene characters hold, rendered under each holder, less items the scene seats. */
@@ -49,7 +51,7 @@ export type StructuralFloor = {
 
 export type StructuralFloorInput = {
   entities: readonly EntityRow[]
-  /** The branch's rows from the store, which the views read: source rows carry no state. */
+  /** The branch's store rows, which the views and the chain read: source rows carry no state. */
   storeEntities: readonly Entity[]
   lore: readonly LoreRow[]
   threads: readonly ThreadRow[]
@@ -109,6 +111,9 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   const currentLocationRow =
     input.entities.find((e) => e.id === input.currentLocationId && e.status === 'active') ?? null
   const currentLocation = currentLocationRow ? narrowEntity(currentLocationRow) : null
+  const currentLocationChain = currentLocation
+    ? listedAncestorNames(currentLocation.id, input.storeEntities)
+    : []
 
   // Scene presence is kind-aware (data-model.md → Entry metadata shape):
   // sceneEntities carries characters and items, so a location should never
@@ -167,6 +172,7 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   return {
     sceneEntities,
     currentLocation,
+    currentLocationChain,
     sceneFactions,
     heldItems,
     looseItems,
