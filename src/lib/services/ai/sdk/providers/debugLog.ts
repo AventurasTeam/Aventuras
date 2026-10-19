@@ -7,63 +7,64 @@ const BINARY_CONTENT_TYPE = /^(image|audio)\/|^application\/octet-stream/
 const SCRUB_MIN_LENGTH = 1024
 const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/
 
-function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
-  if (!headers) return {}
-  if (headers instanceof Headers || Array.isArray(headers)) {
-    return Object.fromEntries(headers)
-  }
-  return headers as Record<string, string>
+// Not `new Headers(init)`: it lowercases names, and the panel shows them as sent.
+function headerEntries(headers: HeadersInit | undefined): Iterable<[string, string]> {
+  if (!headers) return []
+  if (headers instanceof Headers || Array.isArray(headers)) return headers
+  return Object.entries(headers)
 }
 
-export function redactHeaders(headers: RequestInit['headers']): Record<string, string> {
-  const redacted: Record<string, string> = {}
-  for (const [key, value] of Object.entries(normalizeHeaders(headers))) {
-    redacted[key] =
+export function redactHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  return Object.fromEntries(
+    Array.from(headerEntries(headers), ([key, value]) => [
+      key,
       SENSITIVE_HEADERS.has(key.toLowerCase()) && value.length > 8
         ? value.slice(0, 4) + '...' + value.slice(-4)
-        : value
-  }
-  return redacted
+        : value,
+    ]),
+  )
+}
+
+interface ProviderMetadata {
+  promptFeedback?: unknown
+  safetyRatings?: unknown
 }
 
 /** The Gemini safety fields worth surfacing next to a response body. */
-export function providerMetadataOf(payload: unknown): Record<string, unknown> | undefined {
+export function providerMetadataOf(payload: unknown): ProviderMetadata | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined
-  const { promptFeedback, candidates } = payload as {
-    promptFeedback?: unknown
-    candidates?: { safetyRatings?: unknown }[]
+  // A key with no value stays absent: `Object.assign` across stream chunks would let an
+  // explicit `undefined` wipe the value from an earlier chunk.
+  const metadata: ProviderMetadata = {}
+  if ('promptFeedback' in payload && payload.promptFeedback) {
+    metadata.promptFeedback = payload.promptFeedback
   }
-  const metadata: Record<string, unknown> = {}
-  if (promptFeedback) metadata.promptFeedback = promptFeedback
-  if (Array.isArray(candidates) && candidates[0]?.safetyRatings) {
-    metadata.safetyRatings = candidates[0].safetyRatings
+  if ('candidates' in payload && Array.isArray(payload.candidates)) {
+    const first: unknown = payload.candidates[0]
+    if (typeof first === 'object' && first !== null && 'safetyRatings' in first) {
+      if (first.safetyRatings) metadata.safetyRatings = first.safetyRatings
+    }
   }
-  return Object.keys(metadata).length > 0 ? metadata : undefined
+  return metadata.promptFeedback || metadata.safetyRatings ? metadata : undefined
 }
 
 export function isBinaryContentType(contentType: string): boolean {
   return BINARY_CONTENT_TYPE.test(contentType)
 }
 
-/** Replaces any large `data:` URI or bare base64 string, so the payload stays small enough to show. */
-export function scrubBinary(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return value.length >= SCRUB_MIN_LENGTH &&
-      (value.startsWith('data:') || BASE64_BODY.test(value))
-      ? `[base64, ${value.length} chars]`
-      : value
-  }
-  if (Array.isArray(value)) return value.map(scrubBinary)
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, scrubBinary(v)]))
-  }
-  return value
+/** Replaces a large `data:` URI or bare base64 string, so the payload stays small enough to show. */
+export function scrubBase64(value: unknown): unknown {
+  return typeof value === 'string' &&
+    value.length >= SCRUB_MIN_LENGTH &&
+    (value.startsWith('data:') || BASE64_BODY.test(value))
+    ? `[base64, ${value.length} chars]`
+    : value
 }
 
 export function describeRequestBody(body: RequestInit['body']): unknown {
   if (typeof body === 'string') {
     try {
-      return scrubBinary(JSON.parse(body))
+      return JSON.parse(body, (_key, value) => scrubBase64(value))
     } catch {
       return { raw: body.slice(0, 200) }
     }
@@ -106,16 +107,16 @@ export async function logJsonResponse(
 ): Promise<void> {
   try {
     const text = await response.text()
-    let payload: unknown
+    let body: unknown
     try {
-      payload = JSON.parse(text)
+      body = JSON.parse(text, (_key, value) => scrubBase64(value))
     } catch {
-      payload = text
+      body = scrubBase64(text)
     }
     debug.addDebugResponse(
       debugId,
       serviceId,
-      { body: scrubBinary(payload), providerMetadata: providerMetadataOf(payload) },
+      { body, providerMetadata: providerMetadataOf(body) },
       startTime,
     )
   } catch (err) {

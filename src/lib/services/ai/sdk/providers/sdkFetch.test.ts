@@ -11,7 +11,7 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({ debug }))
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { scrubBinary } from './debugLog'
+import { describeRequestBody, scrubBase64 } from './debugLog'
 import { createSdkFetch } from './sdkFetch'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
@@ -260,18 +260,35 @@ describe('debug logging', () => {
   })
 })
 
-describe('scrubBinary', () => {
+describe('scrubBase64', () => {
   it('replaces long base64 and data URIs', () => {
-    expect(scrubBinary('A'.repeat(1024))).toBe('[base64, 1024 chars]')
-    expect(scrubBinary('data:image/png;base64,' + 'A'.repeat(1024))).toMatch(
+    expect(scrubBase64('A'.repeat(1024))).toBe('[base64, 1024 chars]')
+    expect(scrubBase64('data:image/png;base64,' + 'A'.repeat(1024))).toMatch(
       /^\[base64, \d+ chars\]$/,
     )
   })
 
-  it('leaves short strings and long prose alone', () => {
+  it('leaves short strings, long prose and non-strings alone', () => {
     const prose = 'The quick brown fox jumps over the lazy dog. '.repeat(40)
-    expect(scrubBinary('iVBORw0KGgo=')).toBe('iVBORw0KGgo=')
-    expect(scrubBinary(prose)).toBe(prose)
-    expect(scrubBinary({ n: 1, ok: true, none: null })).toEqual({ n: 1, ok: true, none: null })
+    expect(scrubBase64('iVBORw0KGgo=')).toBe('iVBORw0KGgo=')
+    expect(scrubBase64(prose)).toBe(prose)
+    expect(scrubBase64(7)).toBe(7)
+    expect(scrubBase64(null)).toBe(null)
+  })
+})
+
+describe('describeRequestBody', () => {
+  it('scrubs nested strings and keeps other values', () => {
+    const body = JSON.stringify({ n: 1, ok: true, none: null, list: [{ data: 'A'.repeat(1024) }] })
+    expect(describeRequestBody(body)).toEqual({
+      n: 1,
+      ok: true,
+      none: null,
+      list: [{ data: '[base64, 1024 chars]' }],
+    })
+  })
+
+  it('falls back to a raw excerpt for a body that is not JSON', () => {
+    expect(describeRequestBody('not json')).toEqual({ raw: 'not json' })
   })
 })
