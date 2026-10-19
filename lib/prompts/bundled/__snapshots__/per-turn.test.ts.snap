@@ -152,7 +152,9 @@ A wary scout.
 
 # Elsewhere in the world
 
-[char_2] 
+[char_2] Mira (not in the scene): A courier.
+Location: The Market
+Voice: quick and low
 
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 

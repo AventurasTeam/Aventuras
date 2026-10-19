@@ -951,7 +951,14 @@ describe('bundled per-turn template — system and user halves', () => {
     },
     locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     retrievedEntities: [
-      { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (not in the scene).' },
+      {
+        ...rankedRow('char_2', 'Mira', 'active', 'A courier.'),
+        state: {
+          ...emptyEntityView('character'),
+          voice: 'quick and low',
+          location: { id: 'loc_9', name: 'The Market', status: 'active' },
+        },
+      },
     ],
     suggestionsFire: true,
     suggestionCount: 2,

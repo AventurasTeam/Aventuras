@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
-import { buildEntityViews } from '@/lib/world'
+import { buildEntityViews, emptyEntityView } from '@/lib/world'
 
 import { createEngine, renderWith } from '../engine'
 import type { Pack } from '../types'
@@ -111,7 +111,8 @@ describe('non-structural rows reach the prompt only by winning budget', () => {
         {
           ...stagedEntity,
           displayName: 'Mira',
-          renderedText: 'Mira (available to introduce): A courier who owes the guild.',
+          renderedText: 'never rendered',
+          state: emptyEntityView('character'),
         },
       ],
     })
