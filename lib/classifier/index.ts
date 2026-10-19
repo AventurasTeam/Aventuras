@@ -11,19 +11,27 @@ export type {
   ClassifierExtraction,
   ClassifierPlacesExtraction,
   ClassifierReply,
+  Membership,
+  NewCharacter,
+  NewFaction,
   NewPlace,
 } from './schema'
 export { NEW_HANDLE_PREFIX, PLACEHOLDER_FIELDS, substituteClassifierIds } from './substitute'
 export {
   cosine,
   decideNewItem,
-  reconcileNewCharacter,
+  reconcileNewEntity,
   scoreDescriptions,
   TAU_HIGH,
   TAU_LOW,
 } from './reconcile'
-export type { EmbedDescriptions, ItemMatchFlag, ReconcileDecision } from './reconcile'
-export { buildClassifierActions, clampEmbeddedCharacter } from './plan'
+export type {
+  EmbedDescriptions,
+  ItemMatchFlag,
+  ReconciledKind,
+  ReconcileDecision,
+} from './reconcile'
+export { buildClassifierActions, clampEmbeddedCharacter, RECONCILED_KINDS } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
 export { createClassifierScheduler } from './scheduler'
 export type { ClassifierSchedulerDeps, RunNowOutcome, StartRunOutcome } from './scheduler'

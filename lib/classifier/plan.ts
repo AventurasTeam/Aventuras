@@ -2,6 +2,7 @@ import type { PipelineAction } from '@/lib/actions'
 import type { Entity } from '@/lib/db'
 import { dedupeTerms, newTerms } from '@/lib/keyword-terms'
 import {
+  characterFactionId,
   matchNewPlace,
   parentOfLocations,
   placeNewLocation,
@@ -11,8 +12,14 @@ import {
   type SettledNewPlace,
 } from '@/lib/world'
 
-import type { ReconcileDecision } from './reconcile'
-import { newPlacesOf, type ClassifierReply, type NewPlace } from './schema'
+import type { ReconciledKind, ReconcileDecision } from './reconcile'
+import {
+  newPlacesOf,
+  type ClassifierExtraction,
+  type ClassifierReply,
+  type Membership,
+  type NewPlace,
+} from './schema'
 import type { ClassifierWindow } from './window'
 
 /** A delta the phase will emit, with its own survival anchor. */
@@ -24,6 +31,12 @@ export type ParentDrop = { handle: string; parent: string; cause: ParentDropCaus
 /** A newPlaces entry that plans nothing: an earlier entry declared its handle, or it has no name. */
 export type DroppedPlace = { handle: string; name: string; cause: 'handle-taken' | 'blank-name' }
 
+/** A membership naming a faction retired before the reply: a misreading of a past membership. */
+export type DroppedMembership = Pick<Membership, 'character'> & {
+  faction: NonNullable<Membership['faction']>
+  cause: 'retired-faction'
+}
+
 export type PlanResult = {
   planned: readonly PlannedWrite[]
   /** Temp handle -> allocated or matched entity id, for refs later in the same reply. */
@@ -32,6 +45,7 @@ export type PlanResult = {
   unresolvedRefs: readonly string[]
   droppedPlaces: readonly DroppedPlace[]
   parentDrops: readonly ParentDrop[]
+  droppedMemberships: readonly DroppedMembership[]
 }
 
 export type PlanDeps = {
@@ -40,14 +54,32 @@ export type PlanDeps = {
   entities: readonly Entity[]
   /** Reconcile decision per newCharacters handle, resolved before planning. */
   decisions: Map<string, ReconcileDecision>
+  /** Per newFactions handle: kept apart, since one handle can name a character and a faction. */
+  factionDecisions: ReadonlyMap<string, ReconcileDecision>
   now: () => number
   // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
   // lib/actions/happenings/register-awareness.ts allocates the awareness id
   // itself, so the planner must not.
-  newId: (kind: 'hap' | 'char' | 'hinv' | 'loc') => string
+  newId: (kind: 'hap' | 'char' | 'fact' | 'hinv' | 'loc') => string
 }
 
 const SOURCE = 'periodic_classifier' as const
+
+/**
+ * A kind's reply field, decision map and id prefix. NewCharacter and NewFaction share one shape, so
+ * a hand-made pairing of them compiles swapped.
+ */
+export const RECONCILED_KINDS = {
+  character: { reply: 'newCharacters', decisions: 'decisions', idPrefix: 'char' },
+  faction: { reply: 'newFactions', decisions: 'factionDecisions', idPrefix: 'fact' },
+} as const satisfies Record<
+  ReconciledKind,
+  {
+    reply: keyof ClassifierExtraction
+    decisions: keyof PlanDeps
+    idPrefix: Parameters<PlanDeps['newId']>[0]
+  }
+>
 
 // An embedded pair composites as `${first} ${second}` and must clear the tightest catalog
 // window: MiniLM-L6's 512 tokens (the mobile default), ~4 chars/token, so ~330 per pair.
@@ -91,7 +123,7 @@ export function clampEmbeddedCharacter(candidate: { name: string; description: s
 }
 
 export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDeps): PlanResult {
-  const { branchId, window, entities, decisions, now, newId } = deps
+  const { branchId, window, entities, now, newId } = deps
   const planned: PlannedWrite[] = []
   const handleMap = new Map<string, string>()
   const unresolvedRefs: string[] = []
@@ -111,6 +143,7 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return fellBack ? oldestEntryId : entryId
   }
 
+  const rowById = new Map(entities.map((e) => [e.id, e]))
   // Mutable, not a frozen snapshot: rows this pass plans are visible to later
   // facts in the same reply, so the flip guards read post-plan status and a ref
   // to a just-created character resolves.
@@ -149,12 +182,11 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
-  // classifier.md → Mentioned places. After the characters, so the handle namespace they share
-  // keeps a character's binding; before anything that names a place by its handle.
+  // classifier.md → Mentioned places. After characters and factions, so the handle namespace
+  // they share keeps their bindings; before anything that names a place by its handle.
   const planNewPlaces = (): { droppedPlaces: DroppedPlace[]; parentDrops: ParentDrop[] } => {
     const droppedPlaces: DroppedPlace[] = []
     const parentDrops: ParentDrop[] = []
-    const byId = new Map(entities.map((e) => [e.id, e]))
     // The pass saw every place, so matching is over real children: nothing is hidden.
     const view = unhiddenLocationView(entities)
     const created: Pick<Entity, 'id' | 'kind' | 'state'>[] = []
@@ -168,7 +200,10 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
       else declared.push(place)
     }
 
-    const { order, duplicates } = settlingOrder(declared, (id) => byId.get(id)?.kind === 'location')
+    const { order, duplicates } = settlingOrder(
+      declared,
+      (id) => rowById.get(id)?.kind === 'location',
+    )
     for (const { handle, name } of duplicates)
       droppedPlaces.push({ handle, name, cause: 'handle-taken' })
     for (const settling of order) {
@@ -238,113 +273,122 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     return { droppedPlaces, parentDrops }
   }
 
-  // New characters first: later refs in the same reply resolve through handleMap,
-  // and involvements/awareness rows must not precede the row they point at.
-  for (const candidate of extraction.newCharacters) {
-    if (nonBlank(candidate.name) == null) {
-      unresolvedRefs.push(candidate.handle)
-      continue
-    }
-    const decision = decisions.get(candidate.handle)
-    if (!decision) {
-      unresolvedRefs.push(candidate.handle)
-      continue
-    }
-    // A handle reused for a second character would silently rebind every earlier
-    // ref to the later row. Keep the first binding and report the collision.
-    if (handleMap.has(candidate.handle)) {
-      unresolvedRefs.push(candidate.handle)
-      continue
-    }
-    const entryId = anchor(candidate.sourceTurn)
-    const proseEntryId = proseSource(candidate.sourceTurn)
-    // New terms only, so a term the row already holds plans no write.
-    if (decision.kind === 'promote') {
-      handleMap.set(candidate.handle, decision.entityId)
-      const promoted = index.get(decision.entityId)
-      const added = newTerms(promoted?.keywords ?? [], candidate.keywords)
-      if (promoted != null)
-        index.set(decision.entityId, {
-          ...promoted,
-          status: 'active',
-          keywords: [...promoted.keywords, ...added],
+  // classifier.md → Disambiguation and → Factions: absorb, promote or create, by the decision.
+  const planNewEntities = (kind: ReconciledKind): void => {
+    const { reply, decisions, idPrefix } = RECONCILED_KINDS[kind]
+    const decisionOf = deps[decisions]
+    for (const candidate of extraction[reply]) {
+      if (nonBlank(candidate.name) == null) {
+        unresolvedRefs.push(candidate.handle)
+        continue
+      }
+      const decision = decisionOf.get(candidate.handle)
+      if (!decision) {
+        unresolvedRefs.push(candidate.handle)
+        continue
+      }
+      // A handle reused for a second row would silently rebind every earlier
+      // ref to the later row. Keep the first binding and report the collision.
+      if (handleMap.has(candidate.handle)) {
+        unresolvedRefs.push(candidate.handle)
+        continue
+      }
+      const entryId = anchor(candidate.sourceTurn)
+      const proseEntryId = proseSource(candidate.sourceTurn)
+      // New terms only, so a term the row already holds plans no write.
+      if (decision.kind === 'promote') {
+        handleMap.set(candidate.handle, decision.entityId)
+        const promoted = index.get(decision.entityId)
+        const added = newTerms(promoted?.keywords ?? [], candidate.keywords)
+        if (promoted != null)
+          index.set(decision.entityId, {
+            ...promoted,
+            status: 'active',
+            keywords: [...promoted.keywords, ...added],
+          })
+        planned.push({
+          action: {
+            kind: 'promoteStagedEntity',
+            source: SOURCE,
+            payload: { branchId, id: decision.entityId, proseEntryId },
+          },
+          entryId,
         })
+        if (added.length > 0)
+          planned.push({
+            action: {
+              kind: 'appendEntityKeywords',
+              source: SOURCE,
+              payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
+            },
+            entryId,
+          })
+        continue
+      }
+      if (decision.kind === 'known') {
+        handleMap.set(candidate.handle, decision.entityId)
+        const known = index.get(decision.entityId)
+        const added = newTerms(known?.keywords ?? [], candidate.keywords)
+        if (added.length > 0) {
+          if (known != null)
+            index.set(decision.entityId, { ...known, keywords: [...known.keywords, ...added] })
+          planned.push({
+            action: {
+              kind: 'appendEntityKeywords',
+              source: SOURCE,
+              payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
+            },
+            entryId,
+          })
+        }
+        continue
+      }
+      const id = newId(idPrefix)
+      const timestamp = now()
+      const keywords = dedupeTerms(candidate.keywords)
+      const stored = clampEmbeddedCharacter(candidate)
+      handleMap.set(candidate.handle, id)
+      index.set(id, { kind, status: 'active', keywords })
       planned.push({
         action: {
-          kind: 'promoteStagedEntity',
+          kind: 'createEntity',
           source: SOURCE,
-          payload: { branchId, id: decision.entityId, proseEntryId },
+          payload: {
+            entry: {
+              id,
+              branchId,
+              kind,
+              name: stored.name,
+              // First introduction is the classifier's one description write; it
+              // never amends a description afterwards (authorship contract).
+              description: stored.description,
+              keywords,
+              status: 'active',
+              injectionMode: 'auto',
+              nameCollisionFlag: decision.flag == null ? 0 : 1,
+              nameCollisionPartnerId: decision.flag?.partnerId ?? null,
+              nameCollisionReason: decision.flag?.reason ?? null,
+              // Nothing embeds on the write path: the sync stage owns the vector.
+              embeddingStale: 1,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            },
+          },
         },
         entryId,
       })
-      if (added.length > 0)
-        planned.push({
-          action: {
-            kind: 'appendEntityKeywords',
-            source: SOURCE,
-            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
-          },
-          entryId,
-        })
-      continue
     }
-    if (decision.kind === 'known') {
-      handleMap.set(candidate.handle, decision.entityId)
-      const known = index.get(decision.entityId)
-      const added = newTerms(known?.keywords ?? [], candidate.keywords)
-      if (added.length > 0) {
-        if (known != null)
-          index.set(decision.entityId, { ...known, keywords: [...known.keywords, ...added] })
-        planned.push({
-          action: {
-            kind: 'appendEntityKeywords',
-            source: SOURCE,
-            payload: { branchId, id: decision.entityId, keywords: added, proseEntryId },
-          },
-          entryId,
-        })
-      }
-      continue
-    }
-    const id = newId('char')
-    const timestamp = now()
-    const keywords = dedupeTerms(candidate.keywords)
-    const stored = clampEmbeddedCharacter(candidate)
-    handleMap.set(candidate.handle, id)
-    index.set(id, { kind: 'character', status: 'active', keywords })
-    planned.push({
-      action: {
-        kind: 'createEntity',
-        source: SOURCE,
-        payload: {
-          entry: {
-            id,
-            branchId,
-            kind: 'character',
-            name: stored.name,
-            // First introduction is the classifier's one description write; it
-            // never amends a description afterwards (authorship contract).
-            description: stored.description,
-            keywords,
-            status: 'active',
-            injectionMode: 'auto',
-            nameCollisionFlag: decision.flag == null ? 0 : 1,
-            nameCollisionPartnerId: decision.flag?.partnerId ?? null,
-            nameCollisionReason: decision.flag?.reason ?? null,
-            // Nothing embeds on the write path: the sync stage owns the vector.
-            embeddingStale: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        },
-      },
-      entryId,
-    })
   }
+
+  // New characters first: later refs in the same reply resolve through handleMap,
+  // and involvements/awareness rows must not precede the row they point at. Factions next,
+  // so a handle a character claimed stays the character's.
+  planNewEntities('character')
+  planNewEntities('faction')
 
   const { droppedPlaces, parentDrops } = planNewPlaces()
 
-  // Index is keyed by row id, so a newCharacters handle misses: its row already carries its
+  // Index is keyed by row id, so a handle this reply declares misses: its row already carries its
   // keywords. newTerms drops a term the snapshot or an earlier write in this reply holds.
   for (const alias of extraction.aliases) {
     if (!index.has(alias.ref)) unresolvedRefs.push(alias.ref)
@@ -468,6 +512,55 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     })
   }
 
+  // classifier.md → Factions → Memberships. Retired per the pre-reply `rowById`, not `index`, so
+  // the reply's own flips never count. Anchor-ordered: a head-turn reversal undoes only the latest.
+  const droppedMemberships: DroppedMembership[] = []
+  // Only the stored faction rules a fact out: the handler may refuse an earlier planned one.
+  const sentFor = new Set<string>()
+  const storedFaction = (id: string): string | null => {
+    const row = rowById.get(id)
+    return row == null ? null : characterFactionId(row)
+  }
+  const turnPosition = (turn: string | undefined): number => {
+    const { entryId } = window.resolveHandle(turn)
+    return window.turns.findIndex((t) => t.entryId === entryId)
+  }
+  const memberships = extraction.memberships
+    .map((fact, order) => ({ fact, order, at: turnPosition(fact.sourceTurn) }))
+    .sort((a, b) => a.at - b.at || a.order - b.order)
+  for (const { fact } of memberships) {
+    const characterId = resolveRef(fact.character, 'character')
+    if (characterId == null) continue
+    let factionId: string | null = null
+    if (fact.faction !== null) {
+      factionId = resolveRef(fact.faction, 'faction')
+      if (factionId == null) continue
+      if (rowById.get(factionId)?.status === 'retired') {
+        droppedMemberships.push({
+          character: fact.character,
+          faction: fact.faction,
+          cause: 'retired-faction',
+        })
+        continue
+      }
+    }
+    if (!sentFor.has(characterId) && storedFaction(characterId) === factionId) continue
+    sentFor.add(characterId)
+    planned.push({
+      action: {
+        kind: 'setCharacterFaction',
+        source: SOURCE,
+        payload: {
+          branchId,
+          id: characterId,
+          factionId,
+          proseEntryId: proseSource(fact.sourceTurn),
+        },
+      },
+      entryId: anchor(fact.sourceTurn),
+    })
+  }
+
   for (const flip of extraction.statusFlips) {
     const id = resolveRef(flip.ref)
     if (id == null) continue
@@ -510,5 +603,6 @@ export function buildClassifierActions(extraction: ClassifierReply, deps: PlanDe
     unresolvedRefs,
     droppedPlaces,
     parentDrops,
+    droppedMemberships,
   }
 }

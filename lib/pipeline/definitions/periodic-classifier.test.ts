@@ -33,6 +33,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
+  __resetDiagnosticsGate,
   clearBuffers,
   configureDiagnosticsGate,
   getDiagnosticsSnapshot,
@@ -218,6 +219,8 @@ const extraction = (over: Partial<Record<string, unknown>> = {}) => ({
   statusFlips: [],
   newCharacters: [],
   aliases: [],
+  newFactions: [],
+  memberships: [],
   ...over,
 })
 
@@ -238,6 +241,9 @@ const createdEntry = (events: unknown[]) =>
       | { action: { payload: { entry: Record<string, unknown> } } }
       | undefined
   )?.action.payload.entry
+
+// The log tests switch the gate on; without this, later tests would run under it.
+afterEach(() => __resetDiagnosticsGate())
 
 describe('periodicClassifierPhase', () => {
   beforeEach(() => {
@@ -299,6 +305,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Kael',
       status: 'active',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     const aria = {
       id: CHAR_ARIA,
@@ -307,6 +314,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Aria',
       status: 'active',
       description: 'His sister.',
+      keywords: [],
     } as unknown as Entity
     const h = await ctxWith({
       processedThrough: 0,
@@ -361,6 +369,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Kael',
       status: 'active',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     const h = await ctxWith({
       processedThrough: 0,
@@ -690,6 +699,7 @@ describe('periodicClassifierPhase', () => {
       name: 'Kael',
       status: 'active',
       description: 'A courier.',
+      keywords: [],
     } as unknown as Entity
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -1060,6 +1070,54 @@ describe('periodicClassifierPhase', () => {
     expect(kinds).not.toContain('createEntity')
   })
 
+  it('keeps the first declaration of a repeated newCharacters handle', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [
+          {
+            handle: 'new:k',
+            name: 'Kael',
+            description: 'A courier.',
+            keywords: ['the courier'],
+            sourceTurn: 't1',
+          },
+          {
+            handle: 'new:k',
+            name: 'Mara',
+            description: 'A smith.',
+            keywords: [],
+            sourceTurn: 't1',
+          },
+        ],
+      }),
+    })
+    configureClassifierEmbedder(
+      vi.fn(async () => ({
+        vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
+        dim: 2,
+      })),
+    )
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+      nameCollisionFlag: 0,
+      createdAt: 1,
+      state: { faction_id: null },
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
+    expect(actions.map((a) => a.kind)).toEqual(['appendEntityKeywords'])
+    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL, keywords: ['the courier'] })
+  })
+
   // The reconcile key must be bounded like the stored name, or an over-long name never
   // matches the row it created and the character is introduced again every pass.
   it('matches a stored name against the bounded form of an over-long candidate', async () => {
@@ -1166,6 +1224,227 @@ describe('periodicClassifierPhase', () => {
     })
     // Idempotent: bootstrap and tests both call it.
     expect(() => ensurePeriodicClassifierPipelineRegistered()).not.toThrow()
+  })
+
+  // classifier.md → Factions.
+  describe('factions', () => {
+    const FACT_CIRCLE = 'fact_33333333-3333-3333-3333-333333333333'
+    const row = (id: string, kind: Entity['kind'], name: string) =>
+      ({
+        id,
+        branchId: 'b1',
+        kind,
+        name,
+        status: 'active',
+        description: 'Smiths who answer to no lord.',
+        keywords: [],
+        nameCollisionFlag: 0,
+        createdAt: 1,
+        state: kind === 'character' ? { faction_id: null } : {},
+      }) as unknown as Entity
+    const actionsOf = (events: unknown[]) =>
+      events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
+    const orthogonal = () =>
+      configureClassifierEmbedder(
+        vi.fn(async (texts: string[]) => ({
+          vectors: texts.map((_, i) => Float32Array.from(i === 0 ? [1, 0] : [0, 1])),
+          dim: 2,
+        })),
+      )
+
+    it("never reads a faction's scene: a partial namesake in it below τ_low creates unflagged", async () => {
+      orthogonal()
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newFactions: [
+            {
+              handle: 'new:c',
+              name: 'Circle',
+              description: 'A gang.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [row(FACT_CIRCLE, 'faction', 'The Iron Circle')],
+        entryMetadata: {
+          1: { sceneEntities: [FACT_CIRCLE], currentLocationId: null, worldTime: 0 },
+        },
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(createdEntry(events)).toMatchObject({
+        kind: 'faction',
+        name: 'Circle',
+        nameCollisionFlag: 0,
+        nameCollisionReason: null,
+      })
+    })
+
+    it("keeps a character's decision apart from a faction's on the same handle", async () => {
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newCharacters: [
+            {
+              handle: 'new:x',
+              name: 'Mara',
+              description: 'A smith.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+          newFactions: [
+            {
+              handle: 'new:x',
+              name: 'The Iron Circle',
+              description: 'Smiths.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [row(FACT_CIRCLE, 'faction', 'The Iron Circle')],
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(actionsOf(events).map((a) => a.kind)).toEqual(['createEntity'])
+      expect(createdEntry(events)).toMatchObject({ kind: 'character', name: 'Mara' })
+    })
+
+    it('spends no embed call on a faction whose handle a character claimed', async () => {
+      const embed = vi.fn(async () => ({
+        vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
+        dim: 2,
+      }))
+      configureClassifierEmbedder(embed)
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newCharacters: [
+            {
+              handle: 'new:x',
+              name: 'Mara',
+              description: 'A smith.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+          newFactions: [
+            {
+              handle: 'new:x',
+              name: 'The Iron Circle',
+              description: 'Smiths.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [row(FACT_CIRCLE, 'faction', 'The Iron Circle')],
+      })
+      await drain(h.ctx)
+
+      expect(embed).not.toHaveBeenCalled()
+    })
+
+    it('binds a membership to the new faction when its handle collides with a live placeholder', async () => {
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          newFactions: [
+            {
+              handle: 'f1',
+              name: 'The Grey Hand',
+              description: 'Thieves.',
+              keywords: [],
+              sourceTurn: 't1',
+            },
+          ],
+          memberships: [{ character: 'c1', faction: 'f1', sourceTurn: 't1' }],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [
+          row(CHAR_KAEL, 'character', 'Kael'),
+          row(FACT_CIRCLE, 'faction', 'The Iron Circle'),
+        ],
+      })
+      const { events } = await drain(h.ctx)
+
+      const created = createdEntry(events) as { id: string; name: string }
+      expect(created.name).toBe('The Grey Hand')
+      const membership = actionsOf(events).find((a) => a.kind === 'setCharacterFaction')
+      expect(membership?.payload).toMatchObject({ id: CHAR_KAEL, factionId: created.id })
+    })
+
+    it("maps a membership's placeholders back to the character and faction ids", async () => {
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          memberships: [{ character: 'c1', faction: 'f1', sourceTurn: 't1' }],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [
+          row(CHAR_KAEL, 'character', 'Kael'),
+          row(FACT_CIRCLE, 'faction', 'The Iron Circle'),
+        ],
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(actionsOf(events)).toEqual([
+        {
+          kind: 'setCharacterFaction',
+          source: 'periodic_classifier',
+          payload: { branchId: 'b1', id: CHAR_KAEL, factionId: FACT_CIRCLE, proseEntryId: 'e1' },
+        },
+      ])
+    })
+
+    it('logs and drops a membership naming a faction retired before the reply', async () => {
+      clearBuffers()
+      configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+      vi.mocked(generateStructured).mockResolvedValue({
+        status: 'ok',
+        value: extraction({
+          memberships: [{ character: 'c1', faction: 'f1', sourceTurn: 't1' }],
+        }),
+      })
+      const h = await ctxWith({
+        processedThrough: 0,
+        headPosition: 2,
+        entities: [
+          row(CHAR_KAEL, 'character', 'Kael'),
+          { ...row(FACT_CIRCLE, 'faction', 'The Iron Circle'), status: 'retired' },
+        ],
+      })
+      const { events } = await drain(h.ctx)
+
+      expect(actionsOf(events)).toEqual([])
+      const logs = getDiagnosticsSnapshot().logEntries.filter(
+        (e) => e.kind === 'classifier.membership_dropped',
+      )
+      expect(logs.map((e) => [e.level, e.fields])).toEqual([
+        ['warn', { character: CHAR_KAEL, faction: FACT_CIRCLE, cause: 'retired-faction' }],
+      ])
+    })
   })
 })
 

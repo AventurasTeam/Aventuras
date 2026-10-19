@@ -101,10 +101,14 @@ describe('rowRefs', () => {
     expect(rowRefs('lore', { id: 'lore_1', title: 'Kael' })).toEqual([])
   })
 
-  it("reads a place's parent inside its state, and no other state field", () => {
+  it("reads a place's parent and a character's faction inside its state, and no other field", () => {
     expect(rowRefs('entities', { id: 'loc_1', state: { parent_location_id: 'loc_p' } })).toEqual([
       { table: 'entities', id: 'loc_p' },
     ])
+    expect(rowRefs('entities', { id: 'char_1', state: { faction_id: 'fact_f' } })).toEqual([
+      { table: 'entities', id: 'fact_f' },
+    ])
+    expect(rowRefs('entities', { id: 'char_1', state: { faction_id: null } })).toEqual([])
     expect(rowRefs('entities', { id: 'loc_1', state: { parent_location_id: null } })).toEqual([])
     expect(
       rowRefs('entities', { id: 'char_1', state: { current_location_id: 'loc_p', inventory: [] } }),
@@ -118,6 +122,7 @@ describe('referrersOf', () => {
     expect(referrersOf('entities').map(describeRef).sort()).toEqual([
       'character_relationships.aId',
       'character_relationships.bId',
+      'entities.state.faction_id',
       'entities.state.parent_location_id',
       'happening_awareness.characterId',
       'happening_involvements.entityId',
@@ -195,7 +200,7 @@ describe('missingRef', () => {
     __resetRegistry()
     try {
       await expect(missingRef(ctx, 'b1', [{ table: 'lore', id: 'lore_1' }])).rejects.toThrow(
-        'missingRef: lore is not a registered table',
+        'absentRefs: lore is not a registered table',
       )
     } finally {
       __resetRegistrationGuard()

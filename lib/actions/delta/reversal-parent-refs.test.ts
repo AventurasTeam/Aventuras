@@ -525,3 +525,23 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     await expect(prepared).rejects.toThrow('entities:loc_docks held by')
   })
 })
+
+describe('a parent a later user write changed', () => {
+  it('judges a place the user moved after the set did by where the user left it', async () => {
+    await act('act_old', create('loc_old', 'loc_quarter', 'piggyback_tagged_block'))
+    await act('act_pass', create('loc_varn', null, 'periodic_classifier'))
+    await act('act_pass', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'loc_old', patch: { state: { parent_location_id: null } } },
+    })
+    await act('act_user', move('loc_old', 'loc_varn'))
+
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
+
+    expect(clears(set)).toEqual(['entities:loc_old.parent_location_id -> loc_varn'])
+    await reverse(set)
+    expect(await entityIds()).toEqual(['loc_old', 'loc_quarter'])
+    expect(await parentOf('loc_old')).toBeNull()
+  })
+})

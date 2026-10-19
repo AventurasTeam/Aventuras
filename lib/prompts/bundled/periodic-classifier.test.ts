@@ -287,7 +287,7 @@ describe('periodic classifier template — places', () => {
     expect(on.system).toContain(`- New places. ${RULE}`)
     expect(on.system).toMatch(/newPlaces with a handle that starts with "new:"/)
     expect(on.system).toContain(
-      "A new place's handle must differ from every newCharacters handle and from every other new place's, even when a character shares its name.",
+      "A new place's handle must differ from every newCharacters and newFactions handle and from every other new place's, even when a character or a faction shares its name.",
     )
     expect(on.system).toMatch(/leave parent out when the turns don't say/)
     expect(on.user).not.toContain('newPlaces')
@@ -298,5 +298,68 @@ describe('periodic classifier template — places', () => {
     // The rule leaves no gap behind it either way.
     for (const { system } of [on, off]) expect(system).toMatch(/\n- Silence is valid\./)
     expect(off.system).toMatch(/already shows\.\n- Silence is valid\./)
+  })
+})
+
+// classifier.md → Factions.
+describe('periodic classifier template — factions', () => {
+  const FACTION_RULE =
+    'Add a faction when the prose establishes an organized group with its own identity in the story\'s world: a named one (a guild, an order, a noble house, a gang, a church, a government), or an unnamed one the story could come back to ("the smugglers who run the docks"). Not a loose crowd or a kind of person ("the guards", "the villagers"), not one that exists only in a hypothetical, a dream or a figure of speech, and not one already in Known entities, even under another name: use its ID and add the name form as an alias.'
+  const MEMBERSHIP_RULE =
+    'Set a character\'s faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn\'t change it. Emit a fact only when the turns establish one or change the faction their line shows.'
+
+  it.each([true, false])(
+    'carries both rules in the system half, whatever the places setting: %s',
+    (mentionedPlaces) => {
+      const { system, user } = render({ mentionedPlaces })
+      expect(system).toContain(`- New factions. ${FACTION_RULE}`)
+      expect(system).toContain(`- Memberships. ${MEMBERSHIP_RULE}`)
+      expect(system).toMatch(/newFactions with a handle that starts with "new:"/)
+      expect(system).toContain(
+        "A new faction's handle must differ from every newCharacters handle and from every other new faction's.",
+      )
+      expect(system).toMatch(
+        /faction set to the faction's ID, a new faction's handle, or null for none/,
+      )
+      expect(user).not.toContain('newFactions')
+      expect(user).not.toContain('memberships')
+    },
+  )
+
+  it("shows a character's faction on its line, and nothing when it has none", () => {
+    const { user } = render({
+      entities: [
+        {
+          id: 'c1',
+          name: 'Kael',
+          kind: 'character',
+          status: 'active',
+          description: 'A courier.',
+          keywords: [],
+          faction: 'f1',
+        },
+        {
+          id: 'c2',
+          name: 'Aria',
+          kind: 'character',
+          status: 'active',
+          description: 'His sister.',
+          keywords: [],
+          faction: null,
+        },
+        {
+          id: 'f1',
+          name: 'The Iron Circle',
+          kind: 'faction',
+          status: 'active',
+          description: null,
+          keywords: [],
+          faction: null,
+        },
+      ],
+    })
+    expect(user).toContain('- [c1] Kael (character) — A courier. (faction: [f1])')
+    expect(user).toContain('- [c2] Aria (character) — His sister.\n')
+    expect(user).toContain('- [f1] The Iron Circle (faction)\n')
   })
 })

@@ -13,33 +13,6 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement classifier factions.** The periodic classifier creates
-  the factions the prose establishes and sets and clears characters'
-  `faction_id`
-  ([`classifier.md → Factions`](./memory/classifier.md#factions)),
-  with the per-field user precedence and reversal rules it needs
-  ([`cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes),
-  [`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-  Designed 2026-10-18
-  ([exploration record](./explorations/2026-10-18-classifier-factions.md)).
-  The plan must check:
-  - that the reversal's per-sub-field keep, which covers every
-    schema-backed column (`story_entries.metadata` too), and its null
-    for a `state` reference naming a row that doesn't exist, the place
-    parent's later CTRL-Z of a move included, each have a test that
-    fails on the code before the change, since none is reachable
-    until a pass writes `state`; the code comments stating the old
-    rule go with them (`lib/actions/delta/reverse-replay.ts`,
-    `lib/actions/delta/row-closure.ts`);
-  - that World's delete builds its writes under the branch lock's
-    shared hold, as the collision merge does
-    (`applyDeltaActionGroupBuilt`), since its re-points come from a
-    store snapshot today (`lib/world/entity-delete.ts`);
-  - how History renders a classifier change to `state.faction_id`;
-  - whether the mock LLM can return a reply with `newFactions` and
-    `memberships`, for the E2E decision
-    ([`testing.md`](./testing.md)).
-
 - **Entity state in the narrator's prompt.** No entity `state`
   reaches the narrator but in-scene characters' held items, the items
   lying at the current location and the location map: an entity renders
@@ -100,8 +73,12 @@ for the placement rule.
     blank line under its heading;
   - the Gregorian calendar line reads "time in seconds (1 seconds per
     second)", now inside the cached system half;
-  - the periodic classifier's Known entities line ends on a dangling
-    dash for an entity whose description is the empty string;
+  - the periodic classifier's Known relationships and Known happenings
+    lines print a character's name, a view's kind and a happening's
+    title as stored, so a newline in one starts a line the model may
+    read as another fact (`classifier-context.ts`); Known entities and
+    Places already collapse theirs with `flat` / `oneLine` (raised
+    2026-10-18 by the classifier factions slice review);
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;
   - the suggestion refresh's In scene list prints an empty line under

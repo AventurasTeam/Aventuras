@@ -163,7 +163,10 @@ state fields, etc. Parse allocates a fresh `char_<uuid>` (or other
 kind-appropriate prefix). Any subsequent reference in the same
 response uses a temporary handle the LLM picks; the planner maps the
 temporary handle to the newly-allocated UUID for the rest of that
-reply, outside the idMap.
+reply, outside the idMap. A handle declared twice keeps its first
+declaration, and the later entry plans nothing; across the lists that
+share the namespace, `newCharacters` claim first, then `newFactions`,
+then `newPlaces`.
 
 This separation keeps the LLM's surface area small (no UUID
 copying) while preserving the existing disambiguation flow below
@@ -458,7 +461,7 @@ retirement keeps the faction, since retiring touches no member, and a
 faction the reply itself retires keeps the memberships from its turns.
 A staged faction takes members and stays staged. One character's facts
 are planned in source-turn order, ties in reply order, each against the
-faction the earlier ones left, and one matching it plans nothing: a
+faction the earlier ones left, and one matching it writes nothing: a
 character who joins at one turn and leaves at a later one writes twice,
 and reversing the later turn leaves the earlier membership the prose
 still holds. Each is planned after the reply's creates, so it can name

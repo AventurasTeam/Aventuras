@@ -696,10 +696,9 @@ wizard) or _when_ it was last touched. Two real costs:
   classifier could honor user-asserted values until prose
   explicitly contradicts.
 
-User-edit precedence for `status`, keywords and relationship views
-has landed without this sidecar, through the delta log's order. The
-factions design, not yet implemented, gives a character's faction the
-same precedence through the undo payload's per-field record
+User-edit precedence for `status`, keywords, relationship views and a
+character's faction has landed without this sidecar, through the delta
+log's order, the faction read from the undo payload's per-field record
 ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
 What remains here is stale detection, and honoring a user's other
 `entities.state` values until prose explicitly contradicts them. Ordering
@@ -1068,12 +1067,13 @@ gaining a synchronous subscriber or patch logic that can throw
 #### The reversal closure doesn't follow ids inside JSON columns
 
 `REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
-columns and, inside JSON, only a place's `state.parent_location_id`,
-which a reversal clears rather than follows
+columns and, inside JSON, only a place's `state.parent_location_id` and
+a character's `state.faction_id`, which a reversal clears rather than
+follows
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 so `selectReversalSet` in `lib/actions/delta/row-closure.ts` never
 reaches the other ids held inside JSON: `entities.state`'s
-`current_location_id`, `faction_id`, `at_location_id`,
+`current_location_id`, `at_location_id`,
 `lastSeenAt.locationId` and `lastSeenAt.entryId`, its `equipped_items`
 and `inventory` arrays (all in
 `lib/db/entities/entity-state-schema.ts`), and
@@ -1138,25 +1138,25 @@ flight. In the boot-recovery window above, an entry's
 recovery removes. A user's move of another place under it is cleared
 too, putting that place at the root
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-A move under it and back off it is not: the place stays where the user
-left it, but the later move's undo still names the removed place, so
-a later CTRL-Z of that move writes the dead id back. The `write-back`
-refusal checks only the groups of the deletes recovery prunes.
+A move under it and back off it was not: the place stayed where the
+user left it, but the later move's undo still named the removed place,
+so a later CTRL-Z of that move wrote the dead id back (closed
+2026-10-18, below). The `write-back` refusal checks only the groups of
+the deletes recovery prunes.
 
 Re-checked 2026-10-18 for the factions design
 ([`classifier.md → Factions`](./memory/classifier.md#factions)): a pass
 now writes a character's `faction_id`, and a membership can sit on an
 earlier turn than the faction it names, or name a faction the user
-created whose create CTRL-Z then undoes. So the design adds
-`faction_id` to the registry beside a place's parent, cleared when a
-reversal removes its faction, and an undo or a redo never leaves either
-reference naming a row that doesn't exist, writing null instead
+created whose create CTRL-Z then undoes. So `faction_id` joined the
+registry beside a place's parent, cleared when a reversal removes its
+faction, and an undo or a redo never leaves either reference naming a
+row that doesn't exist, writing null instead
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 That also closes the place case above: a later CTRL-Z of a move under
 a removed place and back off it writes null, not the dead id. Both
-land with the implementation entry in
-[`followups.md`](./followups.md). The fields left are the rest of the
-list above, which no pass writes.
+were implemented 2026-10-18. The fields left are the rest of the list
+above, which no pass writes.
 
 A fix adds these fields to the registry's JSON-path references, which
 the closure reads through `json_extract`; the arrays need `json_each`.
@@ -1166,13 +1166,14 @@ these fields outside a turn.
 
 The group runner's conflict check, the registry's second consumer, has
 the same blind spot: `rowRefs` (`lib/actions/delta/live-refs.ts`)
-covers link-row columns and a place's parent but not the other ref
-fields inside an entity's `state` or an entry's `metadata`, so
-`groupConflict` refuses a place written under a parent the same group
-deletes but can't refuse a write through another field that names such
-a row. Planners avoid it by discipline (4.2c's merge rewrites every ref
-to the loser before deleting it, and the entity delete clears the
-tail's scene fields); nothing checks it. Folded in from triage
+covers link-row columns, a place's parent and a character's faction
+but not the other ref fields inside an entity's `state` or an entry's
+`metadata`, so `groupConflict` refuses a place written under a parent,
+or a character given a faction, that the same group deletes, but can't
+refuse a write through another field that names such a row. Planners
+avoid it by discipline (4.2c's merge rewrites every ref to the loser
+before deleting it, and the entity delete clears the tail's scene
+fields); nothing checks it. Folded in from triage
 2026-10-09.
 
 Nor does the write path stop a dangling parent: the entity create and

@@ -1359,6 +1359,13 @@ by sub-field: its undo restores the sub-fields its delta changed except
 those a later user write changed, which the undo payload records field
 by field
 ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+That record can't tell one user write apart: removing a whole record,
+as World's Save drops an emptied `stackables`, records the record's old
+keys, the same as an edit of those keys, so the undo would restore a
+key the user removed with it. Nothing reaches that today, since the
+reversals that run after later user edits take only the periodic
+classifier's facts, whose one `state` write is a character's faction;
+it needs a guard once one of them takes a write to a record.
 The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row
@@ -2016,7 +2023,8 @@ Every `applyDeltaAction`, `applyDeltaActionGroup` and
 `applyDeltaActionGroupBuilt` takes a per-branch write lock in shared
 mode, inside the entry metadata lock and before its row keys. The
 built variant exists for a user write that plans from state a
-`no-gate` pass also writes, such as the collision merge: it builds
+`no-gate` pass also writes, such as the collision merge and World's
+entity delete: it builds
 its actions under the shared hold, so the plan can't predate a
 `no-gate` pass's writes. The merge reads both rows there, their link
 rows, `status`, tags and keywords included; the user's choice travels
@@ -2027,9 +2035,12 @@ write holds a row key mid-commit. Handlers re-read under the key,
 but a row that write adds is one the plan never saw: a link row it
 creates on the merge's non-canonical is cascaded with it rather
 than copied, held in the delete's `undo_payload` for CTRL-Z to
-restore. No path reaches that today: the resolve dialog is modal
-and opens only after the detail pane's dirty guard has awaited its
-Save, and Reader undo needs the Reader's focus. The build is
+restore. Likewise a Save that puts a character in the faction an
+entity delete removes is a write the plan never saw, so the character
+keeps naming it. No path reaches that today: the resolve
+dialog and the delete's confirm open only after the detail pane's
+dirty guard has awaited its Save, the confirm cancels when the screen
+loses focus, and Reader undo needs the Reader's focus. The build is
 synchronous, writes nothing and takes no lock, since the hold isn't
 reentrant. A `no-gate` run takes
 the lock exclusive before its first write — after its model

@@ -319,6 +319,37 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     })
   })
 
+  it('keeps the faction the user set on a held row while restoring the attire', async () => {
+    const state = { ...emptyEntityState('character'), visual: { attire: 'cloak' } }
+    await ctx.db.insert(entities).values(character('char_v', { state }))
+    await act('act_pass', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'char_v',
+        patch: { state: { ...state, visual: { attire: 'armor' }, faction_id: 'fact_pass' } },
+      },
+    })
+    await act('act_user', {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        id: 'char_v',
+        patch: { state: { ...state, visual: { attire: 'armor' }, faction_id: 'fact_user' } },
+      },
+    })
+    await act('act_del', deleteEntity('char_v'))
+
+    await reverseReplayDeltas('act_pass', ctx)
+
+    expect((await payloadOf('act_del')).state).toMatchObject({
+      visual: { attire: 'cloak' },
+      faction_id: 'fact_user',
+    })
+  })
+
   it('strips a held relationship that an update undo leaves with no view', async () => {
     await seedMentorPair(null, 'mentor')
     await act('act_pass', passView('char_x', 'char_y', 'rival'))

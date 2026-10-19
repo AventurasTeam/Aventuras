@@ -67,6 +67,38 @@ export const classifierExtractionSchema = z.object({
       }),
     )
     .default([]),
+  newFactions: z
+    .array(
+      z.object({
+        /** Temporary handle in the newCharacters namespace; later refs in the same reply use it. */
+        handle: z.string(),
+        name: z.string(),
+        description: z.string(),
+        keywords: z
+          .array(z.string())
+          .default([])
+          .describe(
+            'Other names, titles or epithets the prose used for this faction alongside its name. Not the name itself.',
+          ),
+        sourceTurn: z.string().optional(),
+      }),
+    )
+    .default([]),
+  memberships: z
+    .array(
+      z.object({
+        /** Character placeholder or a newCharacters handle. */
+        character: z.string(),
+        faction: z
+          .string()
+          .nullable()
+          .describe(
+            "ID of the faction from Known entities or a new faction's handle; null when they now belong to none.",
+          ),
+        sourceTurn: z.string().optional(),
+      }),
+    )
+    .default([]),
   aliases: z
     .array(
       z.object({
@@ -112,6 +144,9 @@ export const classifierExtractionWithPlacesSchema = classifierExtractionSchema.e
 export type ClassifierExtraction = z.infer<typeof classifierExtractionSchema>
 export type ClassifierPlacesExtraction = z.infer<typeof classifierExtractionWithPlacesSchema>
 export type NewPlace = ClassifierPlacesExtraction['newPlaces'][number]
+export type NewCharacter = ClassifierExtraction['newCharacters'][number]
+export type NewFaction = ClassifierExtraction['newFactions'][number]
+export type Membership = ClassifierExtraction['memberships'][number]
 /** A reply under either schema: newPlaces only when the pass read the setting on. */
 export type ClassifierReply = ClassifierExtraction | ClassifierPlacesExtraction
 

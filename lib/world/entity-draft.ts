@@ -196,6 +196,11 @@ export function stateOf<K extends EntityKind>(
   return { ...emptyEntityState(kind), ...(row?.state ?? {}) } as EntityStateByKind[K]
 }
 
+/** `state.faction_id` of a character; null for any other kind, whatever its state holds. */
+export function characterFactionId(row: Pick<Entity, 'kind' | 'state'>): string | null {
+  return row.kind === 'character' ? stateOf(row, 'character').faction_id : null
+}
+
 export function heldItems(state: Pick<CharacterState, 'equipped_items' | 'inventory'>): string[] {
   return [...(state.equipped_items ?? []), ...(state.inventory ?? [])]
 }

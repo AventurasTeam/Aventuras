@@ -51,6 +51,7 @@ describe('buildClassifierContext', () => {
           nameCollisionPartnerId: null,
           nameCollisionReason: null,
           state: { traits: ['wry'] },
+          keywords: [],
           tags: ['secret'],
           embeddingStale: 1,
           createdAt: 1,
@@ -64,7 +65,7 @@ describe('buildClassifierContext', () => {
     })
     const [entity] = context.entities as Record<string, unknown>[]
     expect(Object.keys(entity).sort()).toEqual(
-      ['description', 'id', 'keywords', 'kind', 'name', 'status'].sort(),
+      ['description', 'faction', 'id', 'keywords', 'kind', 'name', 'status'].sort(),
     )
   })
 
@@ -81,6 +82,7 @@ describe('buildClassifierContext', () => {
           kind: 'character',
           status: 'active',
           description: 'A courier.',
+          keywords: [],
         } as never,
       ],
       happenings: [
@@ -116,7 +118,14 @@ describe('buildClassifierContext', () => {
   const DEZ = 'char_dddddddd-dddd-dddd-dddd-dddddddddddd'
 
   function character(id: string, name: string): Entity {
-    return { id, kind: 'character', name, description: '', status: 'active' } as unknown as Entity
+    return {
+      id,
+      kind: 'character',
+      name,
+      description: '',
+      status: 'active',
+      keywords: [],
+    } as unknown as Entity
   }
 
   function relationship(
@@ -363,6 +372,82 @@ describe('buildClassifierContext', () => {
     it('carries the setting the pass read', () => {
       expect(build([], new IdBiMap(), true).mentionedPlaces).toBe(true)
       expect(build([]).mentionedPlaces).toBe(false)
+    })
+  })
+})
+
+// classifier.md → Factions → What the pass sees.
+describe('buildClassifierContext — factions', () => {
+  const KAEL = 'char_11111111-1111-1111-1111-111111111111'
+  const ARIA = 'char_22222222-2222-2222-2222-222222222222'
+  const CIRCLE = 'fact_33333333-3333-3333-3333-333333333333'
+  const GONE = 'fact_44444444-4444-4444-4444-444444444444'
+
+  const row = (id: string, kind: Entity['kind'], name: string, state: unknown = null) =>
+    ({
+      id,
+      kind,
+      name,
+      description: null,
+      status: 'active',
+      keywords: [],
+      state,
+    }) as unknown as Entity
+
+  const contextOf = (entities: Entity[], idMap = new IdBiMap()) =>
+    buildClassifierContext({
+      window: { turns: [] } as never,
+      entities,
+      happenings: [],
+      relationships: [],
+      mentionedPlaces: false,
+      idMap,
+    }).entities as { id: string; faction: string | null }[]
+
+  it("gives a character its faction's placeholder, a faction's prefix even when first met there", () => {
+    const entities = contextOf([
+      row(KAEL, 'character', 'Kael', { faction_id: CIRCLE }),
+      row(CIRCLE, 'faction', 'The Iron Circle'),
+    ])
+    expect(entities).toEqual([
+      expect.objectContaining({ id: 'c1', faction: 'f1' }),
+      expect.objectContaining({ id: 'f1', faction: null }),
+    ])
+  })
+
+  it('leaves out a faction id that names no listed faction', () => {
+    const idMap = new IdBiMap()
+    const entities = contextOf(
+      [
+        row(KAEL, 'character', 'Kael', { faction_id: GONE }),
+        row(ARIA, 'character', 'Aria', { faction_id: KAEL }),
+      ],
+      idMap,
+    )
+    expect(entities.map((e) => e.faction)).toEqual([null, null])
+    // Substituted, it would still reach the prompt: as a placeholder no line lists.
+    expect(idMap.getPlaceholderFor(GONE)).toBeUndefined()
+  })
+
+  it('collapses each entity onto one line', () => {
+    const [entity] = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [
+        {
+          ...row(KAEL, 'character', 'Kael\nthe  Grey'),
+          description: 'A courier.\n\nHunted.',
+          keywords: ['the\nwolf'],
+        } as Entity,
+      ],
+      happenings: [],
+      relationships: [],
+      mentionedPlaces: false,
+      idMap: new IdBiMap(),
+    }).entities as Record<string, unknown>[]
+    expect(entity).toMatchObject({
+      name: 'Kael the Grey',
+      description: 'A courier. Hunted.',
+      keywords: ['the wolf'],
     })
   })
 })

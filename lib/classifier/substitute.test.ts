@@ -19,7 +19,9 @@ function stringFieldsOf(schema: z.ZodType): string[] {
     const properties = record.properties as Record<string, unknown> | undefined
     if (properties) {
       for (const [name, child] of Object.entries(properties)) {
-        if ((child as { type?: string }).type === 'string') found.add(name)
+        const { type, anyOf } = child as { type?: string; anyOf?: { type?: string }[] }
+        // A nullable string is `anyOf [string, null]`.
+        if (type === 'string' || anyOf?.some((member) => member.type === 'string')) found.add(name)
         walk(child)
       }
       return

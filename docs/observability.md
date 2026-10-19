@@ -198,9 +198,8 @@ convention, and the expectation that subsystems route through
   in-flight, not-found, or (entity only) the lead or a tail race; the
   tail race (`tail moved`) is logged from
   `lib/actions/row-delete/delete-entity.ts`, every other refusal from
-  `delete-row.ts`; an entity's store-miss not-found (`delete-entity.ts`,
-  `target == null`) returns before this log fires, so it covers
-  not-found only on the handler path) /
+  `delete-row.ts`, an entity's store-miss not-found (`delete-entity.ts`,
+  `target == null`) included) /
   `entity_delete_failed` / `lore_delete_failed` / `thread_delete_failed` /
   `happening_delete_failed` (error: the delete's delta group threw) —
   `lib/actions/row-delete/delete-row.ts`; `collision_resolve_rejected`

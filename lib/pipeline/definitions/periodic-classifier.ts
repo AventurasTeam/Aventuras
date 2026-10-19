@@ -14,8 +14,10 @@ import {
   nextStatusOnSuccess,
   newPlacesOf,
   PERIODIC_CLASSIFIER_KIND,
-  reconcileNewCharacter,
+  RECONCILED_KINDS,
+  reconcileNewEntity,
   substituteClassifierIds,
+  type ReconciledKind,
   type ReconcileDecision,
 } from '@/lib/classifier'
 import {
@@ -244,6 +246,7 @@ export async function* periodicClassifierPhase(
     idMap,
     new Set([
       ...extraction.newCharacters.map((c) => c.handle),
+      ...extraction.newFactions.map((f) => f.handle),
       ...newPlacesOf(extraction).map((p) => p.handle),
     ]),
   )
@@ -261,23 +264,43 @@ export async function* periodicClassifierPhase(
   // snapshot misses a character the user created mid-call and still holds one deleted.
   const current = branchEntities(ctx.branchId)
   const embedDescriptions = classifierEmbedder()
-  const decisions = new Map<string, ReconcileDecision>()
-  for (const candidate of substituted.newCharacters) {
-    if (ctx.abortSignal.aborted) return discard(null)
-    // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
-    // fields, so a key built from an unbounded one measures text no row holds.
-    const stored = clampEmbeddedCharacter(candidate)
-    // The planner drops a blank name, yet its keywords can still name a row: reconciling
-    // it would spend an embed call on a decision nothing reads.
-    if (stored.name === '') continue
-    decisions.set(
-      candidate.handle,
-      await reconcileNewCharacter(
-        { ...stored, keywords: candidate.keywords },
-        { entities: current, embedDescriptions, scene: window.sceneOf(candidate.sourceTurn) },
-      ),
-    )
+  const reconcile = async (
+    kind: ReconciledKind,
+    // A handle a character already claimed plans nothing as a faction (plan.ts).
+    claimed: ReadonlySet<string> = new Set(),
+  ): Promise<Map<string, ReconcileDecision> | null> => {
+    const decided = new Map<string, ReconcileDecision>()
+    for (const candidate of substituted[RECONCILED_KINDS[kind].reply]) {
+      if (ctx.abortSignal.aborted) return null
+      // A repeated handle keeps its first declaration, as plan.ts keeps its first binding.
+      if (decided.has(candidate.handle) || claimed.has(candidate.handle)) continue
+      // Reconcile the clamped row, not the raw reply: plan.ts bounds both embedded
+      // fields, so a key built from an unbounded one measures text no row holds.
+      const stored = clampEmbeddedCharacter(candidate)
+      // The planner drops a blank name, yet its keywords can still name a row: reconciling
+      // it would spend an embed call on a decision nothing reads.
+      if (stored.name === '') continue
+      decided.set(
+        candidate.handle,
+        await reconcileNewEntity(
+          { ...stored, keywords: candidate.keywords },
+          kind === 'character'
+            ? {
+                kind,
+                entities: current,
+                embedDescriptions,
+                scene: window.sceneOf(candidate.sourceTurn),
+              }
+            : { kind, entities: current, embedDescriptions },
+        ),
+      )
+    }
+    return decided
   }
+  const decisions = await reconcile('character')
+  if (decisions === null) return discard(null)
+  const factionDecisions = await reconcile('faction', new Set(decisions.keys()))
+  if (factionDecisions === null) return discard(null)
 
   // generation-pipeline.md → No-gate write phase.
   if (!(await enterWritePhase(ctx))) return discard(null)
@@ -292,6 +315,7 @@ export async function* periodicClassifierPhase(
     window,
     entities: branchEntities(ctx.branchId),
     decisions,
+    factionDecisions,
     now: () => Date.now(),
     newId: (kind) => generateId(kind),
   })
@@ -299,6 +323,7 @@ export async function* periodicClassifierPhase(
     ctx.log.warn('classifier.window_head_fallback', { count: plan.fellBackCount })
   if (plan.unresolvedRefs.length > 0)
     ctx.log.warn('classifier.unresolved_refs', { refs: plan.unresolvedRefs })
+  for (const drop of plan.droppedMemberships) ctx.log.warn('classifier.membership_dropped', drop)
   // The per-turn writer's keys (per-turn-creates.ts).
   for (const drop of plan.droppedPlaces)
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })

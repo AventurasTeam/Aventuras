@@ -12,7 +12,7 @@ import {
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
-import { applyUndoPayload, isPayloadMetaKey } from './delta-encoding'
+import { applyUndoPayload, isPayloadMetaKey, pruneUndoPartial } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
@@ -26,7 +26,7 @@ import {
   type ReversalSet,
   type RowRef,
 } from './row-closure'
-import { userEditsOutliving, wroteColumn } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
 
 export {
   DeltaReplayError,
@@ -530,20 +530,39 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
+// A schema-backed column yields sub-field by sub-field, as its undo payload records them.
+function restorablePayload(
+  entry: TableEntry,
+  payload: Record<string, unknown>,
+  userEdits: readonly Delta[],
+): Record<string, unknown> {
+  const restorable: Record<string, unknown> = {}
+  for (const [col, partial] of Object.entries(payload)) {
+    if (isPayloadMetaKey(col)) continue
+    if (!Object.hasOwn(entry.columnSchemas, col)) {
+      if (!wroteColumn(userEdits, col)) restorable[col] = partial
+      continue
+    }
+    const kept = pruneUndoPartial(entry.columnSchemas[col], partial, (path) =>
+      wrotePath(userEdits, col, path),
+    )
+    if (kept !== undefined) restorable[col] = kept
+  }
+  return restorable
+}
+
 async function undoUpdate(
   walk: UndoWalk,
   target: UndoTarget,
   userEdits: readonly Delta[],
 ): Promise<void> {
   const { delta, entry } = target
-  const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
-  // A schema-backed column's undo restores sub-fields — a user write to one doesn't cover
-  // the others this delta changed.
-  const columns = Object.keys(payload).filter(
-    (col) =>
-      !isPayloadMetaKey(col) &&
-      (Object.hasOwn(entry.columnSchemas, col) || !wroteColumn(userEdits, col)),
+  const payload = restorablePayload(
+    entry,
+    (delta.undoPayload ?? {}) as Record<string, unknown>,
+    userEdits,
   )
+  const columns = Object.keys(payload)
   if (columns.length === 0) return
   const copy = await heldCopyOf(walk, target)
   if (copy) {
@@ -581,7 +600,7 @@ function undoHeldUpdate(
   copy.removed = keepsNothing(entry, copy.row)
 }
 
-// As World's delete of the named row leaves the row (stateWithRefRewritten): kept, at the root.
+// As World's delete of the named row leaves the row (stateWithRefRewritten): kept, the ref nulled.
 async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   const target = rowTargetOf(row.table, walk.set.branchId, row.id)
   const cleared = (column: unknown) => ({ ...(column as object), [ref.path]: null })

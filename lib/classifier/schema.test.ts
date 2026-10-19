@@ -15,7 +15,49 @@ describe('classifierExtractionSchema', () => {
       relationships: [],
       statusFlips: [],
       newCharacters: [],
+      newFactions: [],
+      memberships: [],
       aliases: [],
+    })
+  })
+
+  it('parses a new faction, defaulting its keywords', () => {
+    const parsed = classifierExtractionSchema.parse({
+      newFactions: [
+        { handle: 'new:circle', name: 'The Iron Circle', description: 'Smiths.', sourceTurn: 't1' },
+      ],
+    })
+    expect(parsed.newFactions).toEqual([
+      {
+        handle: 'new:circle',
+        name: 'The Iron Circle',
+        description: 'Smiths.',
+        keywords: [],
+        sourceTurn: 't1',
+      },
+    ])
+  })
+
+  it('parses a membership to a faction or to none, and requires the faction key', () => {
+    const parsed = classifierExtractionSchema.parse({
+      memberships: [
+        { character: 'c1', faction: 'new:circle', sourceTurn: 't1' },
+        { character: 'new:mara', faction: null },
+      ],
+    })
+    expect(parsed.memberships).toEqual([
+      { character: 'c1', faction: 'new:circle', sourceTurn: 't1' },
+      { character: 'new:mara', faction: null },
+    ])
+    expect(
+      classifierExtractionSchema.safeParse({ memberships: [{ character: 'c1' }] }).success,
+    ).toBe(false)
+  })
+
+  it('carries both lists in the places schema too', () => {
+    expect(classifierExtractionWithPlacesSchema.parse({})).toMatchObject({
+      newFactions: [],
+      memberships: [],
     })
   })
 

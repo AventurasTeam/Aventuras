@@ -125,6 +125,25 @@ describe('humanizeDelta', () => {
     })
   })
 
+  it("shows a classifier's membership as a faction change, naming no id", () => {
+    const view = humanizeDelta(
+      own(
+        delta({
+          source: 'periodic_classifier',
+          entryId: 'entry_47',
+          undoPayload: { state: { faction_id: 'fact_33333333-3333-3333-3333-333333333333' } },
+        }),
+      ),
+      context,
+    )
+    expect(view).toMatchObject({
+      fieldPath: 'state.faction_id',
+      summary: 'Modified Faction',
+      source: 'periodic_classifier',
+    })
+    expect(JSON.stringify(view)).not.toContain('fact_3333')
+  })
+
   it('renders a create and a delete as one-liners with no field path', () => {
     expect(humanizeDelta(own(delta({ op: 'create' })), context)).toMatchObject({
       summary: 'Created',

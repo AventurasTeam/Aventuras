@@ -12,6 +12,7 @@ import {
   type HeldRowIndex,
 } from './held-rows'
 import {
+  absentRefs,
   columnRefs,
   isPathRef,
   isRefTable,
@@ -25,15 +26,18 @@ import {
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { wroteColumn } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wrotePath } from './user-precedence'
 
 type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears'>
 
-/** A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a removed row. */
+/**
+ * A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a row the
+ * reversal removes, or one already gone when the undos write that value.
+ */
 export type RefClear = {
   readonly row: RowRef
   readonly ref: RefPath
-  /** The id of the removed `ref.refTable` row it names. */
+  /** The id of the removed or gone `ref.refTable` row it names. */
   readonly removedId: string
 }
 
@@ -151,7 +155,10 @@ async function liveReferrers(
   return found
 }
 
-/** A JSON-path ref's id once the set's undos have run, from the oldest set update that changed it. */
+/**
+ * A JSON-path ref's id once the set's undos have run, from the oldest set update that changed it
+ * and no later user write overrode.
+ */
 type RestoredRef = {
   readonly row: RowRef
   readonly ref: RefPath
@@ -173,12 +180,17 @@ function pathUndos(d: Delta): { ref: RefPath; id: string | null }[] {
   })
 }
 
-// The newest-first walk applies the oldest update's undo last, even over a later user write
-// (generation-pipeline.md → Reverse-replay).
-function restoredRefs(set: Iterable<Delta>): Map<string, RestoredRef> {
+// The newest-first walk applies the oldest update's undo last, unless a later user write changed
+// that field (generation-pipeline.md → Reverse-replay).
+function restoredRefs(
+  set: Iterable<Delta>,
+  laterUserEdits: ReadonlyMap<string, readonly Delta[]>,
+): Map<string, RestoredRef> {
   const restored = new Map<string, RestoredRef>()
   for (const d of set) {
+    const edits = laterUserEdits.get(d.id) ?? []
     for (const { ref, id } of pathUndos(d)) {
+      if (wrotePath(edits, ref.column, [ref.path])) continue
       const row = { table: d.targetTable, id: d.targetId }
       const key = restoredKey(row, ref)
       const seen = restored.get(key)
@@ -313,6 +325,29 @@ async function closeOver(
   return { rows: [...set.values()].sort((a, b) => b.logPosition - a.logPosition), removed }
 }
 
+type PathRefValue = { readonly row: RowRef; readonly ref: RefPath; readonly id: string | null }
+
+// generation-pipeline.md → Reverse-replay: a written ref never names a missing row, so a row
+// deleted outside the set counts as removed; a row a delete in the set puts back counts present.
+async function goneRows(
+  ctx: DbCtx,
+  branchId: string,
+  written: readonly PathRefValue[],
+  rows: readonly Delta[],
+  removed: ReadonlyMap<HeldKey, RowRef>,
+): Promise<ReadonlySet<HeldKey>> {
+  const reinserted = new Set(
+    rows.filter((d) => d.op === 'delete').map((d) => heldKey(d.targetTable, d.targetId)),
+  )
+  const candidates = written.flatMap(({ ref, id }) => {
+    if (id === null) return []
+    const key = heldKey(ref.refTable, id)
+    return removed.has(key) || reinserted.has(key) ? [] : [{ table: ref.refTable, id }]
+  })
+  const absent = await absentRefs(ctx, branchId, candidates)
+  return new Set(absent.map(({ table, id }) => heldKey(table, id)))
+}
+
 // Entities go only through their own create, so the fixed point never waits on a clear.
 async function refClearsOf(
   ctx: DbCtx,
@@ -320,11 +355,27 @@ async function refClearsOf(
   { rows, removed }: Closure,
   held: HeldRowIndex,
 ): Promise<RefClear[]> {
-  const restored = restoredRefs(rows)
+  const laterUserEdits = await userEditsOutliving(ctx, rows, (d) => pathUndos(d).length > 0)
+  const restored = restoredRefs(rows, laterUserEdits)
+  const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
+  // What the set's undos write: each moved ref's restored value, and each re-inserted row's refs.
+  const written: PathRefValue[] = [
+    ...restored.values(),
+    ...rows
+      .filter((d) => d.op === 'delete')
+      .flatMap((d) => {
+        const row = { table: d.targetTable, id: d.targetId }
+        return pathRefIds(d.targetTable, d.undoPayload ?? {})
+          .filter(({ ref }) => unmoved(row, ref))
+          .map(({ ref, id }) => ({ row, ref, id }))
+      }),
+  ]
+  const gone = await goneRows(ctx, branchId, written, rows, removed)
   const clears = new Map<string, RefClear>()
   const judge = (row: RowRef, ref: RefPath, id: string | null) => {
     if (id === null || removed.has(heldKey(row.table, row.id))) return
-    if (removed.has(heldKey(ref.refTable, id)))
+    const named = heldKey(ref.refTable, id)
+    if (removed.has(named) || gone.has(named))
       clears.set(restoredKey(row, ref), {
         row: { table: row.table, id: row.id },
         ref,
@@ -332,8 +383,7 @@ async function refClearsOf(
       })
   }
   // A row the set moved is judged by where its undos leave it, the rest by the value they hold.
-  for (const after of restored.values()) judge(after.row, after.ref, after.id)
-  const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
+  for (const { row, ref, id } of written) judge(row, ref, id)
   const named = [...removed.values()].filter((row): row is LiveRef => isRefTable(row.table))
   for (const hit of await liveReferrers(ctx, branchId, named, isPathRef))
     if (isPathRef(hit.ref) && unmoved(hit, hit.ref)) judge(hit, hit.ref, hit.named)

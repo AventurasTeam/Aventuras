@@ -1,6 +1,7 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import {
+  chunked,
   translations,
   type CharacterRelationship,
   type EntityId,
@@ -93,7 +94,10 @@ export const REF_COLUMNS: { readonly [T in ReferringTable]: readonly RefsByTable
     refTable: TRANSLATION_TARGET_TABLE[kind],
     when: { column: 'targetKind', value: kind },
   })),
-  entities: [{ column: 'state', path: 'parent_location_id', refTable: 'entities' }],
+  entities: [
+    { column: 'state', path: 'parent_location_id', refTable: 'entities' },
+    { column: 'state', path: 'faction_id', refTable: 'entities' },
+  ],
 }
 
 // The annotation above closes REF_COLUMNS' keys, so its entries are exactly these.
@@ -180,16 +184,36 @@ export function referrersOf(
   return REFERRERS.get(refTable) ?? []
 }
 
-async function exists(ctx: DbCtx, branchId: string, ref: LiveRef): Promise<boolean> {
-  const entry = resolveByTable(ref.table)
-  if (!entry) throw new Error(`missingRef: ${ref.table} is not a registered table`)
-  const { table, idCol, branchCol } = entry.descriptor
-  const [row] = await ctx.db
-    .select({ id: idCol })
-    .from(table)
-    .where(branchCol ? and(eq(branchCol, branchId), eq(idCol, ref.id)) : eq(idCol, ref.id))
-    .limit(1)
-  return row != null
+/** The refs among `refs` with no row on the branch, each once. */
+export async function absentRefs(
+  ctx: DbCtx,
+  branchId: string,
+  refs: readonly LiveRef[],
+): Promise<LiveRef[]> {
+  const byTable = new Map<RefTable, Set<string>>()
+  for (const { table, id } of refs) {
+    const ids = byTable.get(table) ?? new Set<string>()
+    ids.add(id)
+    byTable.set(table, ids)
+  }
+  const absent: LiveRef[] = []
+  for (const [table, ids] of byTable) {
+    const entry = resolveByTable(table)
+    if (!entry) throw new Error(`absentRefs: ${table} is not a registered table`)
+    const { table: target, idCol, branchCol } = entry.descriptor
+    const present = new Set<unknown>()
+    for (const chunk of chunked([...ids])) {
+      const rows = await ctx.db
+        .select({ id: idCol })
+        .from(target)
+        .where(
+          branchCol ? and(eq(branchCol, branchId), inArray(idCol, chunk)) : inArray(idCol, chunk),
+        )
+      for (const { id } of rows) present.add(id)
+    }
+    for (const id of ids) if (!present.has(id)) absent.push({ table, id })
+  }
+  return absent
 }
 
 /**
@@ -202,11 +226,8 @@ export async function missingRef(
   refs: readonly LiveRef[],
   group?: GroupScope,
 ): Promise<boolean> {
-  for (const ref of refs) {
-    if (group?.created.has(createdKey(ref.table, ref.id))) continue
-    if (!(await exists(ctx, branchId, ref))) return true
-  }
-  return false
+  const outsideGroup = refs.filter((ref) => !group?.created.has(createdKey(ref.table, ref.id)))
+  return (await absentRefs(ctx, branchId, outsideGroup)).length > 0
 }
 
 export const MISSING_REF = {
