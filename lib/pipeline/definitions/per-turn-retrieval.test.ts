@@ -24,6 +24,7 @@ import {
   RANKER_DEFAULTS,
   type CandidateTrace,
   type InjectedAwareness,
+  type KeywordInjection,
   type QueryStack,
   type RankedType,
   type RetrievalParams,
@@ -40,6 +41,7 @@ import {
   resetAllStores,
   storiesStore,
 } from '@/lib/stores'
+import { emptyEntityView } from '@/lib/world'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -89,6 +91,7 @@ function okOutcome({
   injectedAwareness?: InjectedAwareness[]
   timings?: RetrievalTimings
   bundleOverrides?: Partial<Record<RetrievalType, RankedType>>
+  keywordInjections?: KeywordInjection[]
 } = {}): RetrievalSuccess {
   return retrievalSuccess({ ...over, injectedAwareness, timings, bundles: bundleOverrides })
 }
@@ -867,6 +870,86 @@ describe('retrieval phase — diagnostics', () => {
     })
     // A signal, not a gate.
     expect(result).toEqual({ status: 'completed' })
+  })
+
+  // retrieval.md → Budget-fill termination: such a row is skipped permanently, and an entity's
+  // state makes the most fully described one the likeliest; the log is all that says so.
+  it('warns once per row larger than its whole type budget, ranked or keyword-seated', async () => {
+    seedOpenStory({
+      settings: {
+        retrievalBudgets: {
+          entities: 100,
+          lore: 50,
+          happenings: 1500,
+          threads: 400,
+          chapters: 600,
+        },
+      },
+    })
+    const cut = (id: string, tokens: number, seated = false): KeywordInjection => ({
+      row: {
+        kind: 'entity',
+        id,
+        displayName: 'Kael',
+        renderedText: 'Kael',
+        entity: {
+          kind: 'character',
+          name: 'Kael',
+          description: null,
+          status: 'active',
+          state: emptyEntityView('character'),
+        },
+      },
+      terms: ['kael'],
+      priority: 0,
+      tokensEstimated: tokens,
+      seated,
+    })
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({
+        bundleOverrides: {
+          lore: {
+            ...scoredBundle(),
+            traces: [
+              {
+                ...trace('lo_big', 0.5, 0),
+                dropReason: 'candidate_too_large',
+                tokensEstimated: 80,
+              },
+              { ...trace('lo_ok', 0.4, 1), dropReason: 'over_budget', tokensEstimated: 30 },
+            ],
+          },
+        },
+        keywordInjections: [
+          cut('char_big', 140),
+          cut('char_ok', 60, true),
+          // The same oversized lore row, matched by keyword too: one warning, not two.
+          {
+            row: {
+              kind: 'lore',
+              id: 'lo_big',
+              displayName: 'The drowned archive',
+              renderedText: '',
+            },
+            terms: ['archive'],
+            priority: 0,
+            tokensEstimated: 80,
+            seated: false,
+          },
+        ],
+      }),
+    )
+
+    const { log } = await runRetrievalPhase()
+
+    const warned = vi
+      .mocked(log.warn)
+      .mock.calls.filter(([event]) => event === 'retrieval.candidate_too_large')
+      .map(([, detail]) => detail)
+    expect(warned).toEqual([
+      { type: 'lore', id: 'lo_big', name: 'The drowned archive', tokens: 80, typeBudget: 50 },
+      { type: 'entities', id: 'char_big', name: 'Kael', tokens: 140, typeBudget: 100 },
+    ])
   })
 
   // The empty-pool case is a cold start, not a misconfiguration.

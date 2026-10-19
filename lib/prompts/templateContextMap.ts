@@ -2,14 +2,98 @@ import { TEMPLATE_IDS } from './ids'
 import type { TemplateId } from './ids'
 import type { ContextGroup } from './types'
 
+/** One nested field of a variable's items, a dotted path for a nested one. */
+export type InfoField = { name: string; type: string; description: string }
+
 export type VariableDef = {
   name: string
   type: string
   /** Must name a DISPLAY_GROUPS key; untyped, so a test carries the tie. */
   category: string
   description: string
+  /** The nested structure, for the editor's hover docs and autocomplete. */
+  infoFields?: readonly InfoField[]
   required?: boolean
 }
+
+// architecture.md → Entity state on the template surface. Shared by every variable whose rows
+// carry an entity's `state`, so the view is documented once.
+const ENTITY_STATE_INFO: readonly InfoField[] = [
+  {
+    name: 'state',
+    type: 'EntityStateView',
+    description:
+      "The entity's state as a view built per kind, never the stored column. A reference is { id, name, status }; a disabled target is left out (null, or absent from a list) unless the scene seats it, and a place counts as disabled when its own mode or an ancestor's is.",
+  },
+  {
+    name: 'state.visual',
+    type: '{ physique, face, hair, eyes, attire, distinguishing }',
+    description: 'Character. Each category a string or null, named as a visual change names it.',
+  },
+  { name: 'state.traits', type: 'string[]', description: 'Character.' },
+  { name: 'state.drives', type: 'string[]', description: 'Character.' },
+  { name: 'state.voice', type: 'string | null', description: 'Character.' },
+  { name: 'state.faction', type: 'EntityRef | null', description: 'Character: its faction.' },
+  {
+    name: 'state.location',
+    type: 'EntityRef | null',
+    description:
+      'Character: in scene the current location, out of it the last place it was seen. Item: the place it lies at.',
+  },
+  {
+    name: 'state.holdings',
+    type: '{ id, name, status, description, condition, equipped }[]',
+    description:
+      'Character: what it holds, inventory then equipped, an item in both once as equipped. Retired items are left out.',
+  },
+  {
+    name: 'state.stackables',
+    type: '{ key, amount }[]',
+    description: 'Character: currencies, ammunition and supplies by key, largest amount first.',
+  },
+  { name: 'state.condition', type: 'string | null', description: 'Location, item.' },
+  {
+    name: 'state.parent',
+    type: 'EntityRef | null',
+    description: 'Location: the place it is part of.',
+  },
+  {
+    name: 'state.holder',
+    type: '{ id, name, status, equipped } | null',
+    description: 'Item: the character holding it.',
+  },
+  { name: 'state.standing', type: 'string | null', description: 'Faction.' },
+  { name: 'state.agenda', type: 'string[]', description: 'Faction.' },
+  {
+    name: 'state.members',
+    type: 'EntityRef[]',
+    description: 'Faction: its members by name, retired ones kept and marked by status.',
+  },
+]
+
+const field = (name: string, type: string, description: string): InfoField => ({
+  name,
+  type,
+  description,
+})
+
+const ENTITY_FIELDS_INFO: readonly InfoField[] = [
+  field('id', 'string', 'Placeholder id (c1, l1, i1, f1).'),
+  field('kind', "'character' | 'location' | 'item' | 'faction'", 'Picks the shape of `state`.'),
+  field('name', 'string', 'The display name.'),
+  field('description', 'string | null', 'Free prose; null when none.'),
+  field(
+    'status',
+    "'active' | 'staged' | 'retired'",
+    'Lifecycle: staged rows are not yet in the story, retired ones gone from it.',
+  ),
+  field('injectionMode', "'always' | 'auto' | 'disabled'", 'Whether retrieval may inject the row.'),
+  ...ENTITY_STATE_INFO,
+]
+
+const FLOOR_ENTITY_INFO: readonly InfoField[] = ENTITY_FIELDS_INFO.filter(
+  (f) => f.name !== 'injectionMode',
+)
 
 // Pinned variable names per group. buildGenerationContext must emit these
 // exact names — parity-tested in lib/pipeline/definitions/generation-context.test.ts.
@@ -52,7 +136,9 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       name: 'entities',
       type: 'Entity[]',
       category: 'Entities',
-      description: 'Branch entities (id/kind/name/description/status/injectionMode).',
+      description:
+        'Branch entities (id/kind/name/description/status/injectionMode/state), whatever their status or mode. `state` is the per-kind view.',
+      infoFields: ENTITY_FIELDS_INFO,
       required: true,
     },
     {
@@ -90,15 +176,25 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ holderId: string; items: HeldItemLine[] }[]',
       category: 'Entities',
       description:
-        'What each active in-scene character holds: one entry per holder that holds anything, in scene order, `items` as { id, name, equipped } with the inventory before the equipped items. An id in both inventory and equipped shows once, as equipped. Retired items are left out. Match holderId against the in-scene entity ids. sceneEntities may also name a held item; the bundled template skips it in the scene list.',
+        "What each active in-scene character holds: one entry per holder that holds anything, in scene order, `items` as { id, name, equipped } with the inventory before the equipped items: the holder's `state.holdings`, shortened. An id in both inventory and equipped shows once, as equipped. Retired items, and disabled ones the scene doesn't seat, are left out. Match holderId against the in-scene entity ids. The bundled templates read `state.holdings` instead, and skip a held item in the scene list through its `state.holder`.",
       required: true,
     },
     {
       name: 'looseItems',
-      type: 'LooseItemLine[]',
+      type: 'Entity[]',
       category: 'Entities',
       description:
-        'Items lying at structuralLocation (their at_location_id), as { id, name }, sorted by name; retired items left out. Empty when structuralLocation is null.',
+        "Items lying at structuralLocation (their at_location_id), shaped like `entities`, sorted by name; retired items, and disabled ones the scene doesn't seat, left out. Empty when structuralLocation is null.",
+      infoFields: ENTITY_FIELDS_INFO,
+      required: true,
+    },
+    {
+      name: 'namedCharacters',
+      type: 'Entity[]',
+      category: 'Entities',
+      description:
+        'Active and staged characters, not disabled, whose name or a keyword appears in the last two non-system entries, leaving out the ones another section shows with state (active and in scene, pinned, ranked); shaped like `entities`, by name. A character this turn names can be written to by id, so this shows the values a write would replace. Empty unless the template reads it.',
+      infoFields: ENTITY_FIELDS_INFO,
       required: true,
     },
     {
@@ -126,10 +222,15 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'retrievedEntities',
-      type: 'RetrievedRow[]',
+      type: 'RetrievedEntityRow[]',
       category: 'Retrieval',
       description:
-        'Off-scene entities the ranker seated this turn, as { id, displayName, renderedText }. Empty when nothing scored or no retrieval ran.',
+        "Off-scene entities the ranker seated this turn, as { id, displayName, renderedText, kind, name, description, status, state }, `state` being the view the ranker measured the row with: render from these. `renderedText` is the string the type budget was charged for, the bundled row with a stand-in id (i00) on held items, so it isn't for rendering. Empty when nothing scored or no retrieval ran.",
+      infoFields: [
+        field('displayName', 'string', 'The name, as the probe shows it.'),
+        field('renderedText', 'string', 'The measured string; not for rendering.'),
+        ...FLOOR_ENTITY_INFO,
+      ],
       required: true,
     },
     {
@@ -167,9 +268,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     {
       name: 'structuralLocation',
       type: 'FloorEntity | null',
+      infoFields: FLOOR_ENTITY_INFO,
       category: 'Retrieval',
       description:
-        'The ACTIVE entity for currentLocationId, shaped { id, kind, status, name, description }. Null both when the scene names no location and when it names one that is staged, retired, or absent from the branch — so guard the location block on this variable, never on currentLocationId. Null when no retrieval ran.',
+        'The ACTIVE entity for currentLocationId, shaped { id, kind, status, name, description, state }. Null both when the scene names no location and when it names one that is staged, retired, or absent from the branch — so guard the location block on this variable, never on currentLocationId. Null when no retrieval ran.',
       required: true,
     },
     {
@@ -177,7 +279,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Retrieval',
       description:
-        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places: ranked entity rows arrive as RetrievedRow with no kind, so those IDs can be entirely characters. Not the set to offer for <current_location>: a move may name any listed place on the branch that isn't retired, so offer locationMap's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
+        "The ids of the places retrieval puts in the prompt: the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use it to tell which bracketed IDs in those blocks are places without testing each row's `kind`. Not the set to offer for <current_location>: a move may name any listed place on the branch that isn't retired, so offer locationMap's ids for that. Empty when retrieval shows no place, or no retrieval ran.",
       required: true,
     },
     {
@@ -193,7 +295,17 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'FloorEntity[]',
       category: 'Retrieval',
       description:
-        'Entities the user pinned with injection mode `always`, minus any already seated elsewhere in the floor. Empty when nothing is pinned, or no retrieval ran.',
+        'Entities the user pinned with injection mode `always`, minus any already seated elsewhere in the floor, as { id, kind, status, name, description, state }. Empty when nothing is pinned, or no retrieval ran.',
+      infoFields: FLOOR_ENTITY_INFO,
+      required: true,
+    },
+    {
+      name: 'structuralSceneFactions',
+      type: 'FloorEntity[]',
+      category: 'Retrieval',
+      description:
+        'The factions of the active in-scene characters, seated by the structural floor unless retired or disabled, in scene order; shaped like structuralPinnedEntities, and rendered with them. A faction is never in a scene, but its agenda shapes how its members act in one. Empty when no in-scene character has one, or no retrieval ran.',
+      infoFields: FLOOR_ENTITY_INFO,
       required: true,
     },
     {
@@ -418,6 +530,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'currentLocationChain',
     'heldItems',
     'looseItems',
+    'namedCharacters',
     'worldTimeDeltaBasis',
     'leadEntityId',
     'cast',
@@ -434,6 +547,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'locationIds',
     'structuralActiveThreads',
     'structuralPinnedEntities',
+    'structuralSceneFactions',
     'structuralPinnedLore',
     'structuralPinnedThreads',
     'lore',

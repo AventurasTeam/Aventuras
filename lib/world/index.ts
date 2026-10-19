@@ -82,10 +82,8 @@ export {
 export type { CarryingSummary, ChipPreview } from './overview'
 export {
   buildLocationMap,
-  heldItemLines,
   listedAncestorNames,
   locationMapView,
-  looseItemLines,
   placeTree,
   unhiddenLocationView,
 } from './location-map'
@@ -94,7 +92,6 @@ export type {
   LocationMapRow,
   LocationMapView,
   LocationMatchView,
-  LooseItemLine,
   MapAnchor,
   PlaceTreeRow,
 } from './location-map'

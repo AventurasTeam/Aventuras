@@ -165,6 +165,26 @@ describe('buildEntityViews — holdings, holder, members, stackables', () => {
     ])
   })
 
+  it('keeps a staged item, lists a repeated id once, and reads null arrays as holding nothing', () => {
+    const chart = item('item_c', 'sea chart', {}, { status: 'staged' })
+    expect(
+      characterOf([holder({ inventory: ['item_c', 'item_c'] }), chart], 'char_k').holdings,
+    ).toEqual([
+      {
+        id: 'item_c',
+        name: 'sea chart',
+        status: 'staged',
+        description: null,
+        condition: null,
+        equipped: false,
+      },
+    ])
+    const nulled = holder({ inventory: null, equipped_items: null })
+    expect(characterOf([nulled, chart], 'char_k').holdings).toEqual([])
+    const sparse = character('char_k', 'Kael', { inventory: ['item_c'] })
+    expect(characterOf([sparse, chart], 'char_k').holdings.map((h) => h.id)).toEqual(['item_c'])
+  })
+
   it('gives an item its holder, equipped or not, from the holder side', () => {
     const entities = [holder({ equipped_items: ['item_s'] }), item('item_s', 'Sabre')]
     expect(itemOf(entities, 'item_s').holder).toEqual({
@@ -339,13 +359,20 @@ describe('buildEntityViews — looseAt', () => {
       item('item_c', 'Crate', { at_location_id: 'loc_d' }),
       item('item_x', 'Secret', { at_location_id: 'loc_d' }, { injectionMode: 'disabled' }),
       item('item_e', 'Elsewhere', { at_location_id: 'loc_z' }),
+      item('item_s', 'Staged', { at_location_id: 'loc_d' }, { status: 'staged' }),
+      character('char_b', 'Bosun', { current_location_id: 'loc_d' }),
     ]
-    expect(buildEntityViews(entities, NO_SCENE).looseAt('loc_d')).toEqual(['item_c', 'item_r'])
+    expect(buildEntityViews(entities, NO_SCENE).looseAt('loc_d')).toEqual([
+      'item_c',
+      'item_r',
+      'item_s',
+    ])
     const scene = { sceneEntities: ['item_x'], currentLocationId: 'loc_d' }
     expect(buildEntityViews(entities, scene).looseAt('loc_d')).toEqual([
       'item_c',
       'item_r',
       'item_x',
+      'item_s',
     ])
   })
 })

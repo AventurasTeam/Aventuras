@@ -60,6 +60,36 @@ describe('templateContextMap', () => {
     expect(strayCategories([GHOST])).toEqual(['ghostVariable -> Bogus Group That Does Not Exist'])
   })
 
+  // Every variable whose rows carry an entity's `state` documents the view's structure.
+  it('documents the state view on every variable that carries one', () => {
+    const carriers = [
+      'entities',
+      'structuralLocation',
+      'structuralPinnedEntities',
+      'structuralSceneFactions',
+      'retrievedEntities',
+      'looseItems',
+      'namedCharacters',
+    ]
+    const defs = VARIABLES.generationContext.filter((v) => carriers.includes(v.name))
+    expect(defs.map((v) => v.name).sort()).toEqual([...carriers].sort())
+    for (const def of defs) {
+      expect(
+        def.infoFields?.map((f) => f.name),
+        def.name,
+      ).toContain('state.holdings')
+    }
+  })
+
+  it('gives every infoFields entry a name, a type and a description', () => {
+    const blanks = ALL_VARIABLES.flatMap((v) =>
+      (v.infoFields ?? [])
+        .filter((f) => !f.name.trim() || !f.type.trim() || !f.description.trim())
+        .map((f) => `${v.name}.${f.name}`),
+    )
+    expect(blanks).toEqual([])
+  })
+
   it('reports a dangling display variable', () => {
     const issues = validateRegistry(Object.values(TEMPLATE_IDS), { Bogus: ['nonexistent_var'] })
     expect(issues).toContainEqual({

@@ -5,10 +5,8 @@ import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
 import {
   buildLocationMap,
-  heldItemLines,
   listedAncestorNames,
   locationMapView,
-  looseItemLines,
   placeTree,
   unhiddenLocationView,
 } from './location-map'
@@ -330,93 +328,5 @@ describe('listedAncestorNames', () => {
   it('stops when the chain loops', () => {
     const loop = [location('loc_la', 'Ashgate', 'loc_lb'), location('loc_lb', 'Bellmoor', 'loc_la')]
     expect(listedAncestorNames('loc_la', loop)).toEqual(['Bellmoor'])
-  })
-})
-
-describe('heldItemLines', () => {
-  const KEY = item('item_key', 'Silver Key', null)
-  const SWORD = item('item_sword', 'worn sword', null)
-  const RING = item('item_ring', 'signet ring', null)
-
-  it("lists inventory, then equipped items, as canon's Holds line reads", () => {
-    const kael = holder({ inventory: ['item_key'], equipped_items: ['item_sword'] })
-    expect(heldItemLines(kael, [KEY, SWORD])).toEqual([
-      { id: 'item_key', name: 'Silver Key', equipped: false },
-      { id: 'item_sword', name: 'worn sword', equipped: true },
-    ])
-  })
-
-  it('shows an item in both arrays once, as equipped, in the equipped position', () => {
-    const kael = holder({
-      inventory: ['item_sword', 'item_key'],
-      equipped_items: ['item_ring', 'item_sword'],
-    })
-    expect(heldItemLines(kael, [KEY, SWORD, RING])).toEqual([
-      { id: 'item_key', name: 'Silver Key', equipped: false },
-      { id: 'item_ring', name: 'signet ring', equipped: true },
-      { id: 'item_sword', name: 'worn sword', equipped: true },
-    ])
-  })
-
-  it('skips an id that is missing, not an item, or a retired item', () => {
-    const kael = holder({ inventory: ['item_gone', 'loc_eldra', 'item_old', 'item_key'] })
-    const oldCoin = item('item_old', 'old coin', null, { status: 'retired' })
-    expect(heldItemLines(kael, [ELDRA, KEY, oldCoin])).toEqual([
-      { id: 'item_key', name: 'Silver Key', equipped: false },
-    ])
-  })
-
-  it('keeps a staged item, and lists a repeated id once', () => {
-    const chart = item('item_chart', 'sea chart', null, { status: 'staged' })
-    expect(heldItemLines(holder({ inventory: ['item_chart', 'item_chart'] }), [chart])).toEqual([
-      { id: 'item_chart', name: 'sea chart', equipped: false },
-    ])
-  })
-
-  it('is empty for a character holding nothing', () => {
-    expect(heldItemLines(holder({}), [KEY])).toEqual([])
-  })
-
-  it('reads a stored state whose arrays are null or missing as holding nothing', () => {
-    const nulled = { inventory: null, equipped_items: null } as unknown as Partial<CharacterState>
-    expect(heldItemLines(holder(nulled), [KEY])).toEqual([])
-    const sparse = makeEntity({
-      id: 'char_kael',
-      kind: 'character',
-      name: 'Kael',
-      state: { inventory: ['item_key'] } as unknown as Entity['state'],
-    })
-    expect(heldItemLines(sparse, [KEY])).toEqual([
-      { id: 'item_key', name: 'Silver Key', equipped: false },
-    ])
-  })
-})
-
-describe('looseItemLines', () => {
-  it('lists the unretired items lying at the location, by name', () => {
-    const bosun = makeEntity({
-      id: 'char_bosun',
-      kind: 'character',
-      name: 'Bosun',
-      state: { ...emptyEntityState('character'), current_location_id: 'loc_anchor' },
-    })
-    const entities = [
-      item('item_chest', 'the iron chest', 'loc_anchor'),
-      item('item_candle', 'a candle', 'loc_anchor'),
-      item('item_lamp', 'lamp', 'loc_anchor', { status: 'staged' }),
-      item('item_rope', 'rope', 'loc_anchor', { status: 'retired' }),
-      item('item_map', 'map', 'loc_market'),
-      item('item_key', 'key', null),
-      bosun,
-    ]
-    expect(looseItemLines('loc_anchor', entities)).toEqual([
-      { id: 'item_candle', name: 'a candle' },
-      { id: 'item_lamp', name: 'lamp' },
-      { id: 'item_chest', name: 'the iron chest' },
-    ])
-  })
-
-  it('is empty where nothing lies', () => {
-    expect(looseItemLines('loc_thorn', [item('item_key', 'key', 'loc_anchor')])).toEqual([])
   })
 })

@@ -21,7 +21,7 @@ import type {
 } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
-import { emptyEntityView } from '@/lib/world'
+import { emptyEntityView, type CharacterStateView } from '@/lib/world'
 
 import { createPhaseDb, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
@@ -760,6 +760,7 @@ describe('buildGenerationContext — structural floor', () => {
       'id',
       'kind',
       'name',
+      'state',
       'status',
     ])
     expect(keysOf(ctx.structuralActiveThreads)).toEqual([['description', 'id', 'status', 'title']])
@@ -1588,7 +1589,9 @@ describe('buildGenerationContext — location map and held items', () => {
         floor: { currentLocation: floorPlace(INN, 'The Rusty Anchor') },
       }),
     })
-    expect(ctx.looseItems).toEqual([{ id: 'i1', name: 'the iron chest' }])
+    const items = ctx.looseItems as Record<string, unknown>[]
+    expect(items.map((i) => [i.id, i.name])).toEqual([['i1', 'the iron chest']])
+    expect(Object.keys(items[0]!).sort()).toEqual([...PROMPT_ENTITY_FIELDS].sort())
   })
 
   it('leaves the chain and the loose items empty without a structural location', async () => {
@@ -1708,5 +1711,174 @@ describe('buildGenerationContext — location map and held items', () => {
     expect(ctx.heldItems).toEqual([
       { holderId: 'c1', items: [{ id: 'i1', name: 'Silver Key', equipped: false }] },
     ])
+  })
+})
+
+describe('buildGenerationContext — entity state', () => {
+  // No global restoreMocks: the templateReads stub below must not leak.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const KAEL = 'char_00000000-0000-4000-8000-0000000000f1'
+  const MIRA = 'char_00000000-0000-4000-8000-0000000000f2'
+  const ORIN = 'char_00000000-0000-4000-8000-0000000000f3'
+  const HAND = 'fact_00000000-0000-4000-8000-0000000000f4'
+  const SEFA = 'char_00000000-0000-4000-8000-0000000000f5'
+  const DAL = 'char_00000000-0000-4000-8000-0000000000f6'
+
+  const person = (id: string, name: string, state: object = {}, over: object = {}) => ({
+    id,
+    kind: 'character',
+    name,
+    description: null,
+    status: 'active',
+    injectionMode: 'auto',
+    keywords: [],
+    createdAt: 1,
+    state: { ...emptyEntityState('character'), ...state },
+    ...over,
+  })
+  const hand = {
+    id: HAND,
+    kind: 'faction',
+    name: 'The Silver Hand',
+    description: null,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    state: { agenda: ['take the port'] },
+  }
+  const sceneOf = (sceneEntities: string[], ...prose: string[]) =>
+    prose.map((content, i) => ({
+      ...entry(`e${i + 1}`, i + 1, content),
+      metadata: sceneMetadata(null, sceneEntities),
+    })) as never[]
+
+  it('gives every entity its state view, never the stored column', async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(KAEL, HAND),
+      entities: [
+        person(KAEL, 'Kael', {
+          faction_id: HAND,
+          lastSeenAt: { entryId: 'entry_seen', locationId: null, worldTime: 3 },
+        }),
+        hand,
+      ],
+    })
+    const [kael] = ctx.entities as { state: CharacterStateView }[]
+    expect(Object.keys(kael!.state).sort()).toEqual(
+      Object.keys(emptyEntityView('character')).sort(),
+    )
+    // References are entity ids, so substitution turns them into placeholders too.
+    expect(kael!.state.faction).toEqual({ id: 'f1', name: 'The Silver Hand', status: 'active' })
+    expect(JSON.stringify(ctx)).not.toContain('entry_seen')
+  })
+
+  // architecture.md → Entity state on the template surface: what's measured and what's rendered
+  // come from one object, so a ranked row never takes a view rebuilt from the store.
+  it('hands a ranked row the view it was measured with, not one rebuilt from the store', async () => {
+    const empty = emptyEntityView('character')
+    const measured: CharacterStateView = {
+      ...empty,
+      visual: { ...empty.visual, attire: 'a cloak' },
+    }
+    const ranked = {
+      ...candidate('entity', KAEL, 'Kael'),
+      entity: {
+        kind: 'character' as const,
+        name: 'Kael',
+        description: 'A smuggler.',
+        status: 'active' as const,
+        state: measured,
+      },
+    }
+    const ctx = await buildContext({
+      idMap: seededIdMap(KAEL),
+      entities: [person(KAEL, 'Kael', { visual: { attire: 'noble robes' } })],
+      retrieval: retrievalSuccess({ selected: { entities: [ranked] } }),
+    })
+    const [row] = ctx.retrievedEntities as Record<string, unknown>[]
+    expect((row!.state as CharacterStateView).visual.attire).toBe('a cloak')
+    expect(Object.keys(row!).sort()).toEqual([
+      'description',
+      'displayName',
+      'id',
+      'kind',
+      'name',
+      'renderedText',
+      'state',
+      'status',
+    ])
+    expect(row!.description).toBe('A smuggler.')
+  })
+
+  it("passes the floor's scene factions through with their views", async () => {
+    const ctx = await buildContext({
+      idMap: seededIdMap(HAND),
+      entities: [hand],
+      retrieval: retrievalSuccess({
+        floor: { sceneFactions: [{ ...entityRow(HAND, 'The Silver Hand'), kind: 'faction' }] },
+      }),
+    })
+    const [faction] = ctx.structuralSceneFactions as Record<string, unknown>[]
+    expect(faction!.id).toBe('f1')
+    expect((faction!.state as { agenda: string[] }).agenda).toEqual(['take the port'])
+  })
+
+  describe('namedCharacters', () => {
+    const readsNamed = async () => {
+      const prompts = await import('@/lib/prompts')
+      // The fallback reads lastTurns too, over a window wider than the pair the names come from.
+      vi.spyOn(prompts, 'templateReads').mockReturnValue(new Set(['namedCharacters', 'lastTurns']))
+    }
+    const namesOf = (ctx: Record<string, unknown>) =>
+      (ctx.namedCharacters as { name: string }[]).map((c) => c.name)
+
+    it('lists the characters the last two entries name, by name or keyword', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [
+          person(MIRA, 'Mira'),
+          person(ORIN, 'Orin', {}, { keywords: ['the ferryman'], status: 'staged' }),
+          person(DAL, 'Dalen'),
+        ],
+        entries: sceneOf([], 'Dalen left at dawn.', 'Mira waved.', 'The ferryman poled closer.'),
+        settings: storySettings({ classifierContextEntries: 5 }),
+      })
+      expect(ctx.lastTurns).toHaveLength(3)
+      expect(namesOf(ctx)).toEqual(['Mira', 'Orin'])
+      const [mira] = ctx.namedCharacters as Record<string, unknown>[]
+      expect(Object.keys(mira!).sort()).toEqual([...PROMPT_ENTITY_FIELDS].sort())
+    })
+
+    it('leaves out characters shown with state elsewhere, disabled ones and other kinds', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        idMap: seededIdMap(KAEL, MIRA, SEFA),
+        entities: [
+          person(KAEL, 'Kael'),
+          person(MIRA, 'Mira'),
+          person(SEFA, 'Sefa', {}, { injectionMode: 'disabled' }),
+          person(DAL, 'Dalen', {}, { status: 'retired' }),
+          person(ORIN, 'Orin'),
+          { ...hand, name: 'Hand' },
+        ],
+        entries: sceneOf([KAEL], 'Kael, Mira, Sefa, Dalen, Orin and the Hand.'),
+        retrieval: retrievalSuccess({
+          selected: { entities: [candidate('entity', MIRA, 'Mira')] },
+        }),
+      })
+      // Positive control: a character only the turn names is still listed.
+      expect(namesOf(ctx)).toEqual(['Orin'])
+    })
+
+    it('is empty for a template that does not read it', async () => {
+      const ctx = await buildContext({
+        entities: [person(MIRA, 'Mira')],
+        entries: sceneOf([], 'Mira waved.'),
+      })
+      expect(ctx.namedCharacters).toEqual([])
+    })
   })
 })
