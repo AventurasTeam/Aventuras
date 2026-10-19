@@ -114,10 +114,9 @@ describe('entityStateLines', () => {
     expect(entityStateLines(kael, { here: true, heldId: null })[0]).toBe('Physique: tall')
   })
 
-  it('leaves out the Holds block on request', () => {
-    const out = entityStateLines(kael, { here: true, heldId: null, holdings: false })
-    expect(out).not.toContain('Holds:')
-    expect(out.at(-1)).toBe('Stackables: gold 30, arrows 12')
+  it('keeps the Holds label but leaves out its item lines on request', () => {
+    const out = entityStateLines(kael, { here: true, heldId: null, heldLines: false })
+    expect(out.slice(-2)).toEqual(['Holds:', 'Stackables: gold 30, arrows 12'])
   })
 
   it('prints a location, an item and a faction, with nothing for an empty field', () => {

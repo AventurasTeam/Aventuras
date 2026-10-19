@@ -69,6 +69,7 @@ export { leadLabelFor, resolveLead } from './lead'
 export type { LeadLabel } from './lead'
 export {
   branchWorldTime,
+  byName,
   carryingSummary,
   charactersAt,
   chipPreview,
@@ -95,7 +96,7 @@ export type {
   MapAnchor,
   PlaceTreeRow,
 } from './location-map'
-export { buildEntityViews, emptyEntityView, VISUAL_CATEGORIES } from './entity-views'
+export { buildEntityViews, emptyEntityView } from './entity-views'
 export type {
   CharacterStateView,
   EntityRef,

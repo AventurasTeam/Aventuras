@@ -155,8 +155,9 @@ const nameWithDescription = (name: string, description: string | null): string =
 // rows for a scene's faction, a pinned row and the threads and lore. Every entity row leaves out
 // the `[id]` affixes the templates add when piggybackFires, which is decided after retrieval and
 // so unknowable here, and `# Current location` its chain, which isn't on the floor: on those
-// turns the floor cost reads as a lower bound. A held or loose item is its own row, its holder's
-// row priced without the Holds block, so the template's one rendering is counted once.
+// turns the floor cost reads as a lower bound. A held or loose item is its own row, its line
+// priced there and its holder's row or the location's carrying only the Holds or Here label, so
+// the template's one rendering is counted once.
 const NO_IDS = { heldId: null } as const satisfies Partial<StateLineOptions>
 
 const stateLinesOf = (
@@ -173,7 +174,7 @@ const sceneEntityText = (
   lines(
     `## ${e.name}`,
     e.description?.trim() ? e.description : null,
-    ...stateLinesOf(e, views, { ...NO_IDS, here: true, holdings: false }),
+    ...stateLinesOf(e, views, { ...NO_IDS, here: true, heldLines: false }),
   )
 
 const currentLocationText = (
@@ -183,6 +184,7 @@ const currentLocationText = (
   [
     nameWithDescription(e.name, e.description),
     ...stateLinesOf(e, views, { ...NO_IDS, here: true }),
+    ...(views.looseAt(e.id).length > 0 ? ['Here:'] : []),
   ].join('\n')
 
 // A pinned row and a scene's faction share memory-blocks.ts's one row shape.

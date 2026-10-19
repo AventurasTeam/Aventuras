@@ -404,6 +404,14 @@ describe('buildPiggybackActions', () => {
       expect(visualText(fallbackBlock(text))).toBe(`${'a'.repeat(200)}. ${'b'.repeat(250)}`)
     })
 
+    // A decimal point or an abbreviation's dot has no whitespace after it, and ends nothing.
+    it('reads a mark with no whitespace after it as part of a word', () => {
+      const text = `Stands 1.8 m tall ${'and lean '.repeat(60)}`
+      const cut = visualText(fallbackBlock(text)) ?? ''
+      expect(cut.startsWith('Stands 1.8 m tall and lean')).toBe(true)
+      expect(cut.length).toBeGreaterThan(450)
+    })
+
     it('ignores a boundary past the bound, falling back to the last whitespace', () => {
       const text = `${'a '.repeat(240)}${'b'.repeat(40)}, more.`
       const cut = visualText(fallbackBlock(text))

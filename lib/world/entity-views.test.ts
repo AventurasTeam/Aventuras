@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
-import { VISUAL_CHANGE_TYPES } from '@/lib/piggyback'
 
 import {
   buildEntityViews,
   emptyEntityView,
-  VISUAL_CATEGORIES,
   type CharacterStateView,
   type FactionStateView,
   type ItemStateView,
@@ -120,10 +118,6 @@ describe('buildEntityViews — every kind', () => {
       expect(buildEntityViews([row], NO_SCENE).byId.get('x_1')).toEqual(emptyEntityView(kind))
     },
   )
-
-  it('labels its visual lines in the order a visual change names them', () => {
-    expect([...VISUAL_CATEGORIES]).toEqual([...VISUAL_CHANGE_TYPES])
-  })
 })
 
 describe('buildEntityViews — holdings, holder, members, stackables', () => {

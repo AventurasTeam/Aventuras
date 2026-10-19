@@ -68,8 +68,8 @@ export type StateLineOptions = {
   here: boolean
   /** The id a held item is bracketed with, or null where the block brackets none. */
   heldId: ((id: string) => string) | null
-  /** False leaves out the `Holds:` block, for a caller that prices held items on their own. */
-  holdings?: boolean
+  /** False keeps the `Holds:` label but not its item lines, for a caller pricing each item apart. */
+  heldLines?: boolean
 }
 
 const labelled = (label: string, value: string | null | undefined): string[] =>
@@ -82,9 +82,14 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
     case 'character': {
       const s = entity.state
       const holds =
-        options.holdings === false || s.holdings.length === 0
+        s.holdings.length === 0
           ? []
-          : ['Holds:', ...s.holdings.map((h) => itemLine(h, heldId === null ? null : heldId(h.id)))]
+          : [
+              'Holds:',
+              ...(options.heldLines === false
+                ? []
+                : s.holdings.map((h) => itemLine(h, heldId === null ? null : heldId(h.id)))),
+            ]
       return [
         ...(here ? [] : labelled('Location', s.location?.name)),
         ...Object.entries(VISUAL_LABELS).flatMap(([key, label]) =>

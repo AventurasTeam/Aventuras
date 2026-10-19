@@ -144,7 +144,7 @@ const FLOOR_WORLD: Entity[] = [
     kind: 'faction',
     name: 'The Tidewardens',
     description: 'keepers of the sluices',
-    state: { standing: 'dwindling since the flood' },
+    state: { standing: 'dwindling since the great flood' },
   }),
   makeEntity({
     id: 'e_key',
@@ -208,11 +208,11 @@ const FLOOR_THREADS: ThreadRow[] = [
 // is distinct from every other's — a shared value would hide one branch's
 // formula silently taking another's.
 const FLOOR_TEXTS = {
-  // Its Holds block is priced on the held item's own row.
-  sceneEntity: '## Mira\na courier\nAttire: a grey cloak\nFaction: The Tidewardens',
-  currentLocation: 'The drowned archive: half-flooded stacks\nCondition: silted to the knee',
+  // Its held item's line is priced on that item's own row, the Holds label here.
+  sceneEntity: '## Mira\na courier\nAttire: a grey cloak\nFaction: The Tidewardens\nHolds:',
+  currentLocation: 'The drowned archive: half-flooded stacks\nCondition: silted to the knee\nHere:',
   sceneFaction:
-    'The Tidewardens: keepers of the sluices\nStanding: dwindling since the flood\nMembers: Mira',
+    'The Tidewardens: keepers of the sluices\nStanding: dwindling since the great flood\nMembers: Mira',
   heldItem: '- Brass key: opens the sluice gate',
   looseItem: '- Lamp. Condition: guttering',
   activeThread: 'Find the missing ledger\nMira needs it before the tide returns',
@@ -898,11 +898,17 @@ describe('structural-floor formulas match the templates that render them', () =>
       payload.structural_floor.find((r) => r.target_id === id)?.tokens
 
     for (const [id, affixed] of [
-      ['e_scene', '## Mira [e_scene]\na courier\nAttire: a grey cloak\nFaction: The Tidewardens'],
-      ['e_loc', '[e_loc] The drowned archive: half-flooded stacks\nCondition: silted to the knee'],
+      [
+        'e_scene',
+        '## Mira [e_scene]\na courier\nAttire: a grey cloak\nFaction: The Tidewardens\nHolds:',
+      ],
+      [
+        'e_loc',
+        '[e_loc] The drowned archive: half-flooded stacks\nCondition: silted to the knee\nHere:',
+      ],
       [
         'e_hand',
-        '[e_hand] The Tidewardens: keepers of the sluices\nStanding: dwindling since the flood\nMembers: Mira',
+        '[e_hand] The Tidewardens: keepers of the sluices\nStanding: dwindling since the great flood\nMembers: Mira',
       ],
       ['e_key', '- [e_key] Brass key: opens the sluice gate'],
       ['e_lamp', '- [e_lamp] Lamp. Condition: guttering'],

@@ -1,9 +1,10 @@
-import type { Entity, EntityKind } from '@/lib/db'
+import type { Entity, EntityKind, VISUAL_CATEGORIES } from '@/lib/db'
 import { foldStackables } from '@/lib/keyword-terms'
+import { collate } from '@/lib/list-modules'
 import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
-import { byName } from './overview'
+import { byName, itemsAt } from './overview'
 import { placeModes } from './place-modes'
 
 /** architecture.md → Entity state on the template surface: one shape for every reference. */
@@ -16,16 +17,6 @@ export type HoldingView = EntityRef & {
 }
 
 export type StackableView = { key: string; amount: number }
-
-/** The emission names a visual change writes, in the order the bundled macro prints them. */
-export const VISUAL_CATEGORIES = [
-  'physique',
-  'face',
-  'hair',
-  'eyes',
-  'attire',
-  'distinguishing',
-] as const
 
 export type CharacterStateView = {
   visual: Record<(typeof VISUAL_CATEGORIES)[number], string | null>
@@ -154,8 +145,11 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
   for (const e of [...entities].sort(byName)) {
     if (e.kind !== 'character' || !shown(e)) continue
     const state = stateOf(e, 'character')
-    if (state.faction_id != null)
-      membersOf.set(state.faction_id, [...(membersOf.get(state.faction_id) ?? []), e])
+    if (state.faction_id != null) {
+      const members = membersOf.get(state.faction_id) ?? []
+      members.push(e)
+      membersOf.set(state.faction_id, members)
+    }
     const equipped = new Set(state.equipped_items ?? [])
     for (const itemId of new Set([...(state.inventory ?? []), ...(state.equipped_items ?? [])])) {
       const holders = holdersOf.get(itemId) ?? []
@@ -205,7 +199,7 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
       holdings,
       stackables: [...foldStackables(state.stackables)]
         .map(([key, amount]) => ({ key, amount }))
-        .sort((a, b) => b.amount - a.amount || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+        .sort((a, b) => b.amount - a.amount || collate(a.key, b.key)),
     }
   }
 
@@ -251,14 +245,8 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
 
   const byId = new Map(entities.map((e) => [e.id, viewOf(e)]))
   const looseAt = (locationId: string): readonly string[] =>
-    entities
-      .filter(
-        (e) =>
-          e.kind === 'item' &&
-          stateOf(e, 'item').at_location_id === locationId &&
-          shownItem(e.id) !== null,
-      )
-      .sort(byName)
+    itemsAt(locationId, entities)
+      .filter((e) => shownItem(e.id) !== null)
       .map((e) => e.id)
   const of = <K extends EntityKind>(id: string, kind: K): EntityStateViewByKind[K] =>
     byEntityId.get(id)?.kind === kind

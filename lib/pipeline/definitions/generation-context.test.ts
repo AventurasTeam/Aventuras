@@ -1873,6 +1873,15 @@ describe('buildGenerationContext — entity state', () => {
       expect(namesOf(ctx)).toEqual(['Orin'])
     })
 
+    it('lists them by name the way every other prompt list sorts, not by code unit', async () => {
+      await readsNamed()
+      const ctx = await buildContext({
+        entities: [person(MIRA, 'Zed'), person(ORIN, 'alice')],
+        entries: sceneOf([], 'Zed and alice wave.'),
+      })
+      expect(namesOf(ctx)).toEqual(['alice', 'Zed'])
+    })
+
     it('is empty for a template that does not read it', async () => {
       const ctx = await buildContext({
         entities: [person(MIRA, 'Mira')],

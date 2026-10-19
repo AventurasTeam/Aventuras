@@ -18,6 +18,7 @@ import { currentStoryStore, entitiesStore } from '@/lib/stores'
 import {
   buildEntityViews,
   buildLocationMap,
+  byName,
   listedAncestorNames,
   type EntityStateView,
   type EntityViews,
@@ -221,7 +222,7 @@ function charactersNamed(
         !shownIds.has(e.id) &&
         matchTerms(text, [e.name, ...e.keywords].map(normalizeTerm)).length > 0,
     )
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : 1))
+    .sort(byName)
 }
 
 /**

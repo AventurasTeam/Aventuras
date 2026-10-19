@@ -22,7 +22,11 @@ function normalizeRetrievalQueries(queries: readonly string[]): string[] {
 function truncateVisualText(text: string): string {
   if (text.length <= VISUAL_TEXT_MAX) return text
   const head = text.slice(0, VISUAL_TEXT_MAX)
-  const clause = Math.max(head.lastIndexOf('.'), head.lastIndexOf(';'), head.lastIndexOf(','))
+  // A mark ends a clause only where whitespace or the end follows it: "1.8 m" has none.
+  let clause = -1
+  for (let i = head.length - 1; i >= 0 && clause < 0; i--) {
+    if ('.;,'.includes(head[i]!) && (i + 1 >= text.length || /\s/.test(text[i + 1]!))) clause = i
+  }
   // A period ends a sentence and stays; a dangling comma or semicolon goes.
   const atClause = clause < 0 ? '' : head.slice(0, head[clause] === '.' ? clause + 1 : clause)
   if (atClause.trim() !== '') return atClause.trimEnd()
