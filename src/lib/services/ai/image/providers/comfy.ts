@@ -21,6 +21,7 @@ import {
   type ImageInfo,
   type WebSocketInterface,
 } from '@saintno/comfyui-sdk'
+import { Buffer } from 'buffer'
 import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
@@ -29,6 +30,9 @@ import { httpFetch } from '#lib/utils/http.ts'
 import { imageGetFetch } from './fetchAdapter'
 import type { ComfyApiFetchInternals } from './comfyFetchMembers'
 import { TauriWebSocket } from './tauriWebSocket'
+
+// comfyui-sdk 0.3.1 tests `instanceof Buffer` unguarded on every socket message (comfyui-sdk#33).
+globalThis.Buffer ??= Buffer
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
