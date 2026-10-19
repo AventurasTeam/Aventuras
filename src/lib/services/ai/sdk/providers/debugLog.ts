@@ -143,6 +143,57 @@ export function logBinaryResponse(
   )
 }
 
+interface ToolCallDelta {
+  index: number
+  id?: string
+  type?: string
+  function?: { name?: string; arguments?: unknown }
+}
+
+interface ChoiceChunk {
+  index: number
+  delta?: {
+    role?: string
+    content?: string
+    reasoning?: string
+    tool_calls?: ToolCallDelta[]
+  }
+  finish_reason?: string | null
+}
+
+interface CompletionChunk {
+  id?: string
+  model?: string
+  choices: ChoiceChunk[]
+}
+
+interface AggregatedToolCall {
+  index: number
+  id: string
+  type: string
+  function: { name: string; arguments: string; parsed_arguments?: unknown }
+}
+
+interface AggregatedChoice {
+  index: number
+  message: {
+    role: string
+    content: string
+    reasoning?: string
+    tool_calls?: AggregatedToolCall[]
+  }
+  finish_reason: string | null
+}
+
+function isCompletionChunk(value: unknown): value is CompletionChunk {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'choices' in value &&
+    Array.isArray(value.choices)
+  )
+}
+
 export async function logStreamResponse(
   response: Response,
   debugId: string,
@@ -151,16 +202,16 @@ export async function logStreamResponse(
 ): Promise<void> {
   try {
     const text = await response.text()
-    let parsedBody: any = text
-    const providerMetadata: Record<string, any> = {}
+    let parsedBody: unknown = text
+    const providerMetadata: ProviderMetadata = {}
     try {
       const chunks = text.split('\n\n').filter((c) => c.trim())
-      const parsedChunks = chunks.map((chunk) => {
+      const parsedChunks = chunks.map((chunk): unknown => {
         if (chunk.startsWith('data: ')) {
           const dataStr = chunk.slice(6)
           if (dataStr === '[DONE]') return { done: true }
           try {
-            const parsed = JSON.parse(dataStr)
+            const parsed: unknown = JSON.parse(dataStr)
             Object.assign(providerMetadata, providerMetadataOf(parsed))
             return parsed
           } catch {
@@ -170,44 +221,44 @@ export async function logStreamResponse(
         return chunk
       })
 
-      // Aggregation logic for streaming choices...
-      const aggregatedChoices: Record<number, any> = {}
+      const aggregatedChoices = new Map<number, AggregatedChoice>()
       let aggregatedId = ''
       let aggregatedModel = ''
       let hasAggregation = false
 
       for (const chunk of parsedChunks) {
-        if (typeof chunk !== 'object' || !chunk || !chunk.choices) continue
+        if (!isCompletionChunk(chunk)) continue
         hasAggregation = true
         if (chunk.id) aggregatedId = chunk.id
         if (chunk.model) aggregatedModel = chunk.model
 
         for (const choice of chunk.choices) {
-          const idx = choice.index
-          aggregatedChoices[idx] ??= {
-            index: idx,
-            message: { role: 'assistant', content: '' },
-            finish_reason: null,
+          let agg = aggregatedChoices.get(choice.index)
+          if (!agg) {
+            agg = {
+              index: choice.index,
+              message: { role: 'assistant', content: '' },
+              finish_reason: null,
+            }
+            aggregatedChoices.set(choice.index, agg)
           }
-          const agg = aggregatedChoices[idx]
           const delta = choice.delta ?? {}
           if (delta.role) agg.message.role = delta.role
           if (delta.content) agg.message.content += delta.content
           if (delta.reasoning)
             agg.message.reasoning = (agg.message.reasoning || '') + delta.reasoning
           if (delta.tool_calls) {
-            agg.message.tool_calls ??= []
+            const toolCalls = (agg.message.tool_calls ??= [])
             for (const tc of delta.tool_calls) {
-              const tcIdx = tc.index
-              let aggTc = agg.message.tool_calls.find((t: any) => t.index === tcIdx)
+              let aggTc = toolCalls.find((t) => t.index === tc.index)
               if (!aggTc) {
                 aggTc = {
-                  index: tcIdx,
+                  index: tc.index,
                   id: '',
                   type: 'function',
                   function: { name: '', arguments: '' },
                 }
-                agg.message.tool_calls.push(aggTc)
+                toolCalls.push(aggTc)
               }
               if (tc.id) aggTc.id = tc.id
               if (tc.type) aggTc.type = tc.type
@@ -222,17 +273,14 @@ export async function logStreamResponse(
       }
 
       if (hasAggregation) {
-        const finalChoices = Object.values(aggregatedChoices).map((choice: any) => {
-          if (choice.message.tool_calls) {
-            choice.message.tool_calls = choice.message.tool_calls.map((tc: any) => {
-              try {
-                tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
-              } catch {}
-              return tc
-            })
+        const finalChoices = [...aggregatedChoices.values()]
+        for (const choice of finalChoices) {
+          for (const tc of choice.message.tool_calls ?? []) {
+            try {
+              tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
+            } catch {}
           }
-          return choice
-        })
+        }
 
         parsedBody = {
           _note: 'Aggregated from stream',
@@ -250,7 +298,10 @@ export async function logStreamResponse(
       serviceId,
       {
         body: parsedBody,
-        providerMetadata: Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
+        providerMetadata:
+          providerMetadata.promptFeedback || providerMetadata.safetyRatings
+            ? providerMetadata
+            : undefined,
         stream: true,
       },
       startTime,

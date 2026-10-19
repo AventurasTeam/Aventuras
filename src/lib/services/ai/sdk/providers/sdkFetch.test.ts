@@ -11,7 +11,7 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({ debug }))
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { describeRequestBody, scrubBase64 } from './debugLog'
+import { describeRequestBody, logStreamResponse, scrubBase64 } from './debugLog'
 import { createSdkFetch } from './sdkFetch'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
@@ -290,5 +290,98 @@ describe('describeRequestBody', () => {
 
   it('falls back to a raw excerpt for a body that is not JSON', () => {
     expect(describeRequestBody('not json')).toEqual({ raw: 'not json' })
+  })
+})
+
+describe('logStreamResponse', () => {
+  const sse = (...events: unknown[]) =>
+    new Response(
+      events.map((e) => `data: ${typeof e === 'string' ? e : JSON.stringify(e)}`).join('\n\n'),
+    )
+
+  it('aggregates tool-call deltas into one choice', async () => {
+    const response = sse(
+      {
+        id: 'c1',
+        model: 'm',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: 'assistant',
+              tool_calls: [
+                { index: 0, id: 'call_1', function: { name: 'lookup', arguments: '{"a":' } },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        choices: [
+          {
+            index: 0,
+            delta: { tool_calls: [{ index: 0, function: { arguments: '1}' } }] },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      },
+      '[DONE]',
+    )
+
+    await logStreamResponse(response, 'dbg', 'test', 0)
+
+    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      {
+        body: {
+          _note: 'Aggregated from stream',
+          id: 'c1',
+          model: 'm',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: '',
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"a":1}', parsed_arguments: { a: 1 } },
+                  },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        },
+        providerMetadata: undefined,
+        stream: true,
+      },
+      0,
+    )
+  })
+
+  it('keeps safetyRatings from an earlier chunk when a later one has only promptFeedback', async () => {
+    const response = sse(
+      { candidates: [{ safetyRatings: [{ category: 'X' }] }] },
+      { promptFeedback: { blockReason: 'SAFETY' } },
+    )
+
+    await logStreamResponse(response, 'dbg', 'test', 0)
+
+    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      expect.objectContaining({
+        providerMetadata: {
+          safetyRatings: [{ category: 'X' }],
+          promptFeedback: { blockReason: 'SAFETY' },
+        },
+      }),
+      0,
+    )
   })
 })
