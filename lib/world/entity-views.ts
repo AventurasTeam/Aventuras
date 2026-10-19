@@ -1,6 +1,6 @@
 import type { Entity, EntityKind, VISUAL_CATEGORIES } from '@/lib/db'
 import { foldStackables } from '@/lib/keyword-terms'
-import { collate } from '@/lib/list-modules'
+import { compareId } from '@/lib/list-modules'
 import { blankToNull } from '@/lib/text'
 
 import { stateOf } from './entity-draft'
@@ -202,9 +202,10 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
         'location',
       ),
       holdings,
+      // Code units, not a collator: the prompt's order mustn't follow the device's locale.
       stackables: [...foldStackables(state.stackables)]
         .map(([key, amount]) => ({ key, amount }))
-        .sort((a, b) => b.amount - a.amount || collate(a.key, b.key)),
+        .sort((a, b) => b.amount - a.amount || compareId(a.key, b.key)),
     }
   }
 

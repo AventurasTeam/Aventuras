@@ -234,6 +234,15 @@ describe('buildEntityViews — holdings, holder, members, stackables', () => {
       { key: 'gold', amount: 8 },
     ])
   })
+
+  // A collator puts "éclat" first; code units put "fig" (U+0066) before "é" (U+00E9).
+  it('breaks a tie on the key by code unit, whatever the locale', () => {
+    const entities = [holder({ stackables: { éclat: 5, fig: 5 } })]
+    expect(characterOf(entities, 'char_k').stackables).toEqual([
+      { key: 'fig', amount: 5 },
+      { key: 'éclat', amount: 5 },
+    ])
+  })
 })
 
 describe('buildEntityViews — who a reference names', () => {
