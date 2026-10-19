@@ -525,7 +525,9 @@ it. A field with nothing in it prints nothing, label included.
 Ids are bracketed only where a write uses them, on held and loose
 items, which a transfer moves, under the same condition as the rest of
 the block's ids. A faction, a location, a holder and members print a
-name. A ranked character, with piggyback firing:
+name, and a retired faction, place or holder is marked `(retired)`: the
+reference is still true, a disbanded faction or the place last seen,
+but mustn't read as current. A ranked character, with piggyback firing:
 
 ```
 [c3] Kael (currently elsewhere): A scarred ex-soldier turned smuggler.

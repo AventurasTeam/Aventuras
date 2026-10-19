@@ -6,14 +6,14 @@ An entity's state lines from its view, each opening on its own newline, so a cal
 head line and includes this right after it. Every include passes all three arguments: e, the
 entity; here, true where it is in scene or the current location, which leaves out Location,
 Part of and Held by; ids, true where a held item's id is bracketed. A field with nothing prints
-nothing, label included. Names assigned here carry an es_ prefix: an include shares its
+nothing, label included, and a retired reference is marked so. Names assigned here carry an es_ prefix: an include shares its
 caller's scope.
 {%- endcomment -%}
 {%- capture es_nl %}
 {% endcapture -%}
 {%- assign es = e.state -%}
 {%- if e.kind == 'character' -%}
-{%- unless here %}{% if es.location %}{{ es_nl }}Location: {{ es.location.name }}{% endif %}{% endunless -%}
+{%- unless here %}{% if es.location %}{{ es_nl }}Location: {{ es.location.name }}{% if es.location.status == 'retired' %} (retired){% endif %}{% endif %}{% endunless -%}
 {%- if es.visual.physique != blank %}{{ es_nl }}Physique: {{ es.visual.physique }}{% endif -%}
 {%- if es.visual.face != blank %}{{ es_nl }}Face: {{ es.visual.face }}{% endif -%}
 {%- if es.visual.hair != blank %}{{ es_nl }}Hair: {{ es.visual.hair }}{% endif -%}
@@ -23,15 +23,15 @@ caller's scope.
 {%- if es.voice != blank %}{{ es_nl }}Voice: {{ es.voice }}{% endif -%}
 {%- if es.traits.size > 0 %}{{ es_nl }}Traits: {{ es.traits | join: '; ' }}{% endif -%}
 {%- if es.drives.size > 0 %}{{ es_nl }}Drives: {{ es.drives | join: '; ' }}{% endif -%}
-{%- if es.faction %}{{ es_nl }}Faction: {{ es.faction.name }}{% endif -%}
+{%- if es.faction %}{{ es_nl }}Faction: {{ es.faction.name }}{% if es.faction.status == 'retired' %} (retired){% endif %}{% endif -%}
 {%- if es.holdings.size > 0 %}{{ es_nl }}Holds:{% for h in es.holdings %}{% include 'macro_item_line', item: h, condition: h.condition, ids: ids %}{% endfor %}{% endif -%}
 {%- if es.stackables.size > 0 %}{{ es_nl }}Stackables: {% for s in es.stackables %}{{ s.key }} {{ s.amount }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif -%}
 {%- elsif e.kind == 'location' -%}
 {%- if es.condition != blank %}{{ es_nl }}Condition: {{ es.condition }}{% endif -%}
-{%- unless here %}{% if es.parent %}{{ es_nl }}Part of: {{ es.parent.name }}{% endif %}{% endunless -%}
+{%- unless here %}{% if es.parent %}{{ es_nl }}Part of: {{ es.parent.name }}{% if es.parent.status == 'retired' %} (retired){% endif %}{% endif %}{% endunless -%}
 {%- elsif e.kind == 'item' -%}
 {%- if es.condition != blank %}{{ es_nl }}Condition: {{ es.condition }}{% endif -%}
-{%- unless here %}{% if es.location %}{{ es_nl }}Location: {{ es.location.name }}{% endif %}{% if es.holder %}{{ es_nl }}Held by: {{ es.holder.name }}{% endif %}{% endunless -%}
+{%- unless here %}{% if es.location %}{{ es_nl }}Location: {{ es.location.name }}{% if es.location.status == 'retired' %} (retired){% endif %}{% endif %}{% if es.holder %}{{ es_nl }}Held by: {{ es.holder.name }}{% if es.holder.status == 'retired' %} (retired){% endif %}{% endif %}{% endunless -%}
 {%- elsif e.kind == 'faction' -%}
 {%- if es.standing != blank %}{{ es_nl }}Standing: {{ es.standing }}{% endif -%}
 {%- if es.agenda.size > 0 %}{{ es_nl }}Agenda: {{ es.agenda | join: '; ' }}{% endif -%}

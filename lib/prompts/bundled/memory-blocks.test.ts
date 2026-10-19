@@ -420,7 +420,27 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       kind: 'character',
       name: 'Zev',
       status: 'retired',
-      state: { faction_id: 'fact_hand', inventory: [], equipped_items: [] } as never,
+      state: { faction_id: 'fact_hand', inventory: ['item_oar'], equipped_items: [] } as never,
+    }),
+    makeEntity({ id: 'item_oar', kind: 'item', name: 'Oar', state: { at_location_id: null } }),
+    makeEntity({ id: 'fact_old', kind: 'faction', name: 'The Old Guard', status: 'retired' }),
+    makeEntity({ id: 'loc_sunk', kind: 'location', name: 'Saltmere', status: 'retired' }),
+    makeEntity({
+      id: 'loc_crypt',
+      kind: 'location',
+      name: 'The Crypt',
+      state: { parent_location_id: 'loc_sunk' },
+    }),
+    makeEntity({
+      id: 'char_drift',
+      kind: 'character',
+      name: 'Dalen',
+      state: {
+        faction_id: 'fact_old',
+        current_location_id: 'loc_sunk',
+        inventory: [],
+        equipped_items: [],
+      } as never,
     }),
     makeEntity({
       id: 'char_o',
@@ -472,6 +492,9 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
     ['a held item', HELD_ITEM_ID_STAND_IN],
     ['an active faction, members some retired', 'fact_hand'],
     ['a staged faction', 'fact_veil'],
+    ['a character whose faction and last-seen place are retired', 'char_drift'],
+    ['a location whose parent is retired', 'loc_crypt'],
+    ['an item whose holder is retired', 'item_oar'],
   ]
   const lists = ['structuralPinnedEntities', 'structuralSceneFactions', 'retrievedEntities']
   // The mirror measures every held item's id through the stand-in (retrieval.md → Token
@@ -521,6 +544,10 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
       'Standing: embattled in the south',
       'Agenda: hold the docks; find the heir',
       'Members: Kael',
+      'Faction: The Old Guard (retired)',
+      'Location: Saltmere (retired)',
+      'Part of: Saltmere (retired)',
+      'Held by: Zev (retired)',
     ])
       expect(text).toContain(line)
     // Left out as references: a disabled item and faction, a retired item, a disabled parent, a

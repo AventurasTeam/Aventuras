@@ -1,6 +1,12 @@
 import type { EntityKind } from '@/lib/db'
 import { oneLine } from '@/lib/text'
-import type { CharacterStateView, EntityViews, HoldingView, KindedView } from '@/lib/world'
+import type {
+  CharacterStateView,
+  EntityRef,
+  EntityViews,
+  HoldingView,
+  KindedView,
+} from '@/lib/world'
 
 import type { EntityRow, LoreRow } from './pools'
 import type { MeasuredEntity } from './types'
@@ -75,6 +81,11 @@ export type StateLineOptions = {
 const labelled = (label: string, value: string | null | undefined): string[] =>
   value == null || isBlank(value) ? [] : [`${label}: ${value}`]
 
+// A retired target is still the fact (the last place seen, a disbanded faction), so it's named,
+// and marked so it doesn't read as current.
+const refName = (ref: EntityRef | null): string | null =>
+  ref === null ? null : ref.status === 'retired' ? `${ref.name} (retired)` : ref.name
+
 /** The lines the bundled entity-state macro prints for an entity, in its order; the macro is the spec. */
 export function entityStateLines(entity: KindedView, options: StateLineOptions): string[] {
   const { here, heldId } = options
@@ -91,14 +102,14 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
                 : s.holdings.map((h) => itemLine(h, heldId === null ? null : heldId(h.id)))),
             ]
       return [
-        ...(here ? [] : labelled('Location', s.location?.name)),
+        ...(here ? [] : labelled('Location', refName(s.location))),
         ...Object.entries(VISUAL_LABELS).flatMap(([key, label]) =>
           labelled(label, s.visual[key as keyof typeof VISUAL_LABELS]),
         ),
         ...labelled('Voice', s.voice),
         ...(s.traits.length > 0 ? [`Traits: ${s.traits.join('; ')}`] : []),
         ...(s.drives.length > 0 ? [`Drives: ${s.drives.join('; ')}`] : []),
-        ...labelled('Faction', s.faction?.name),
+        ...labelled('Faction', refName(s.faction)),
         ...holds,
         ...(s.stackables.length > 0
           ? [`Stackables: ${s.stackables.map((st) => `${st.key} ${st.amount}`).join(', ')}`]
@@ -108,13 +119,13 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
     case 'location':
       return [
         ...labelled('Condition', entity.state.condition),
-        ...(here ? [] : labelled('Part of', entity.state.parent?.name)),
+        ...(here ? [] : labelled('Part of', refName(entity.state.parent))),
       ]
     case 'item':
       return [
         ...labelled('Condition', entity.state.condition),
-        ...(here ? [] : labelled('Location', entity.state.location?.name)),
-        ...(here ? [] : labelled('Held by', entity.state.holder?.name)),
+        ...(here ? [] : labelled('Location', refName(entity.state.location))),
+        ...(here ? [] : labelled('Held by', refName(entity.state.holder))),
       ]
     case 'faction': {
       const members = entity.state.members.filter((m) => m.status !== 'retired')
