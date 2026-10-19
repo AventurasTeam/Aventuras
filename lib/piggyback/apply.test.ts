@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   emptyEntityState,
@@ -6,7 +6,7 @@ import {
   type CharacterState,
   type Entity,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import { logger, type Logger } from '@/lib/diagnostics'
 
 import { buildPiggybackActions } from './apply'
 import { parseStateBlock } from './parse'
@@ -44,6 +44,8 @@ function mockEntity(overrides: Partial<Entity>): Entity {
   } as Entity
 }
 
+const spyLog = (): Logger => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() })
+
 // Cast, not planned: the planner hands on a block that declared no creates unchanged.
 function planned(
   block: ParsedStateBlock,
@@ -74,6 +76,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -92,6 +95,7 @@ describe('buildPiggybackActions', () => {
 
   it('carries an emitted retrievalQueries onto the entry metadata', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [], retrievalQueries: ['marsh nobility'] }),
@@ -105,6 +109,7 @@ describe('buildPiggybackActions', () => {
 
   it('leaves retrievalQueries absent when the block emitted none', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [] }),
@@ -119,6 +124,7 @@ describe('buildPiggybackActions', () => {
   // The parser cannot produce [] today, but the fallback classifier's schema can.
   it('leaves retrievalQueries absent when the block emitted an empty array', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [], retrievalQueries: [] }),
@@ -134,6 +140,7 @@ describe('buildPiggybackActions', () => {
   // its .max() only counts, so blanks and repeats arrive here unfiltered.
   it('stores a repeated query once', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [], retrievalQueries: ['marsh nobility', 'marsh nobility'] }),
@@ -147,6 +154,7 @@ describe('buildPiggybackActions', () => {
 
   it('drops empty and whitespace-only queries', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [], retrievalQueries: ['', '   ', 'House Eldrin sigil'] }),
@@ -160,6 +168,7 @@ describe('buildPiggybackActions', () => {
 
   it('caps a four-query emission at MAX_RETRIEVAL_QUERIES', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [], retrievalQueries: ['one', 'two', 'three', 'four'] }),
@@ -173,6 +182,7 @@ describe('buildPiggybackActions', () => {
 
   it('leaves retrievalQueries absent when every emitted query is blank', () => {
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: [], retrievalQueries: ['', '  '] }),
@@ -193,6 +203,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -219,6 +230,7 @@ describe('buildPiggybackActions', () => {
     const stagedChar = mockEntity({ id: 'char_staged', status: 'staged' })
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({ sceneEntities: ['char_staged', 'char_1', 'char_staged'] }),
@@ -249,6 +261,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
       turn: planned(block),
@@ -283,6 +296,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
       turn: planned(block),
@@ -318,6 +332,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -344,8 +359,9 @@ describe('buildPiggybackActions', () => {
   // Truncate rather than drop: an over-long note would fail every later updateEntity that
   // re-validates the whole state, a delete's ref clear included.
   describe('visual text cap', () => {
-    const visualText = (block: ParsedStateBlock): string | undefined => {
+    const visualText = (block: ParsedStateBlock, log: Logger = logger): string | undefined => {
       const [action] = buildPiggybackActions({
+        log,
         source: 'per_turn_classifier',
         entryId: 'entry_1',
         turn: planned(block),
@@ -425,19 +441,20 @@ describe('buildPiggybackActions', () => {
       expect(cut).toBe('a '.repeat(240).trimEnd())
     })
 
-    it('logs the cut with the entity, the category and both lengths', () => {
-      const warnSpy = vi.spyOn(logger, 'warn')
-      visualText(fallbackBlock(`${'a'.repeat(300)}. ${'b'.repeat(300)}`))
-      expect(warnSpy).toHaveBeenCalledWith('classifier.visual_truncated', {
+    it("logs the cut on the run's logger with the entry, the producer, the entity, the category and both lengths", () => {
+      const log = spyLog()
+      visualText(fallbackBlock(`${'a'.repeat(300)}. ${'b'.repeat(300)}`), log)
+      expect(log.warn).toHaveBeenCalledWith('classifier.visual_truncated', {
+        entryId: 'entry_1',
+        source: 'per_turn_classifier',
         entityId: 'char_1',
         type: 'physique',
         length: 602,
         keptLength: 301,
       })
-      warnSpy.mockClear()
-      visualText(fallbackBlock('b'.repeat(VISUAL_TEXT_MAX)))
-      expect(warnSpy).not.toHaveBeenCalledWith('classifier.visual_truncated', expect.anything())
-      warnSpy.mockRestore()
+      vi.mocked(log.warn).mockClear()
+      visualText(fallbackBlock('b'.repeat(VISUAL_TEXT_MAX)), log)
+      expect(log.warn).not.toHaveBeenCalled()
     })
   })
 
@@ -480,6 +497,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -526,6 +544,7 @@ describe('buildPiggybackActions', () => {
       lastSeenAt: null,
     })
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({
@@ -577,6 +596,7 @@ describe('buildPiggybackActions', () => {
       },
     })
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({
@@ -614,6 +634,7 @@ describe('buildPiggybackActions', () => {
       })
     const run = (block: ParsedStateBlock, entities: Entity[]) =>
       buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned(block),
@@ -719,6 +740,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -754,8 +776,9 @@ describe('buildPiggybackActions', () => {
   it('credits the payee in full on a shortfall, clamps the payer at zero and logs it', () => {
     const holder = (id: string, stackables: Record<string, number>) =>
       mockEntity({ id, state: { ...emptyEntityState('character'), stackables } })
-    const warnSpy = vi.spyOn(logger, 'warn')
+    const log = spyLog()
     const result = buildPiggybackActions({
+      log,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned({
@@ -780,16 +803,22 @@ describe('buildPiggybackActions', () => {
       ['char_1', { arrows: 4 }],
       ['char_2', { gold: 21 }],
     ])
-    const shortfalls = warnSpy.mock.calls.filter(
-      ([event]) => event === 'classifier.stackable_shortfall',
-    )
+    const shortfalls = vi
+      .mocked(log.warn)
+      .mock.calls.filter(([event]) => event === 'classifier.stackable_shortfall')
     expect(shortfalls).toEqual([
       [
         'classifier.stackable_shortfall',
-        { entityId: 'char_1', key: 'gold', amount: 20, balance: 5 },
+        {
+          entryId: 'entry_1',
+          source: 'ai_classifier',
+          entityId: 'char_1',
+          key: 'gold',
+          amount: 20,
+          balance: 5,
+        },
       ],
     ])
-    warnSpy.mockRestore()
   })
 
   describe('malformed block fixture matrix', () => {
@@ -805,6 +834,7 @@ describe('buildPiggybackActions', () => {
       expect(parsed.failures).toHaveLength(1)
 
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned(parsed.block),
@@ -828,6 +858,7 @@ describe('buildPiggybackActions', () => {
       expect(parsed.blockFound).toBe(true)
 
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned(parsed.block),
@@ -850,6 +881,7 @@ describe('buildPiggybackActions', () => {
       const parsed = parseStateBlock(raw)
 
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned(parsed.block),
@@ -877,6 +909,7 @@ describe('buildPiggybackActions', () => {
     const item = mockEntity({ id: 'item_1', kind: 'item' })
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
       turn: planned({ sceneEntities: ['char_1'], currentLocation: 'item_1' }),
@@ -901,6 +934,7 @@ describe('buildPiggybackActions', () => {
     const loc2 = mockEntity({ id: 'loc_2', kind: 'location' })
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
       turn: planned({ sceneEntities: ['char_1'], currentLocation: 'loc_2' }),
@@ -920,6 +954,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const firstResult = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(firstBlock),
@@ -943,6 +978,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const secondResult = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_2',
       turn: planned(secondBlock),
@@ -969,6 +1005,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -1027,6 +1064,7 @@ describe('buildPiggybackActions', () => {
     }
 
     const result = buildPiggybackActions({
+      log: logger,
       source: 'ai_classifier',
       entryId: 'entry_1',
       turn: planned(block),
@@ -1058,8 +1096,10 @@ describe('buildPiggybackActions', () => {
   // are a no-op unless diagnostics is on. Returning them is what lets the report record
   // the cause instead of leaving the reader to guess it from a difference.
   describe('applied outcomes', () => {
-    it('reports the clamped delta while metadata carries the clamped total', () => {
+    it("reports the clamped delta while metadata carries the clamped total, warning on the run's logger", () => {
+      const log = spyLog()
       const result = buildPiggybackActions({
+        log,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned({ worldTimeDelta: -600 }),
@@ -1069,10 +1109,16 @@ describe('buildPiggybackActions', () => {
       })
       expect(result.applied.worldTimeDelta).toBe(0)
       expect(result.metadata.worldTime).toBe(previousMetadata.worldTime)
+      expect(log.warn).toHaveBeenCalledWith('classifier.delta_clamped', {
+        originalDelta: -600,
+        finalDelta: 0,
+        entryId: 'entry_1',
+      })
     })
 
     it('passes an unclamped delta through unchanged', () => {
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned({ worldTimeDelta: 30 }),
@@ -1087,6 +1133,7 @@ describe('buildPiggybackActions', () => {
     it('flags a location the model named that is not a location', () => {
       const sword = mockEntity({ id: 'item_sword', kind: 'item', name: 'Sword' })
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned({ currentLocation: 'item_sword' }),
@@ -1099,13 +1146,9 @@ describe('buildPiggybackActions', () => {
       expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
     })
 
-    afterEach(() => {
-      vi.restoreAllMocks()
-    })
-
     // piggyback.md → A bad ref in the two writers: a retired place can't be entered.
     it('rejects a retired location, logged, and keeps the previous one', () => {
-      const warnSpy = vi.spyOn(logger, 'warn')
+      const log = spyLog()
       const sunk = mockEntity({
         id: 'loc_sunk',
         kind: 'location',
@@ -1113,6 +1156,7 @@ describe('buildPiggybackActions', () => {
         status: 'retired',
       })
       const result = buildPiggybackActions({
+        log,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned({ currentLocation: 'loc_sunk' }),
@@ -1122,7 +1166,7 @@ describe('buildPiggybackActions', () => {
       })
       expect(result.applied.currentLocationRejected).toBe(true)
       expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
-      expect(warnSpy).toHaveBeenCalledWith('classifier.current_location_rejected', {
+      expect(log.warn).toHaveBeenCalledWith('classifier.current_location_rejected', {
         entryId: 'entry_1',
         currentLocation: 'loc_sunk',
         kind: 'location',
@@ -1133,6 +1177,7 @@ describe('buildPiggybackActions', () => {
     it('does not flag a location the model named correctly', () => {
       const keep = mockEntity({ id: 'loc_keep', kind: 'location', name: 'The Keep' })
       const result = buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         turn: planned({ currentLocation: 'loc_keep' }),
@@ -1174,6 +1219,7 @@ describe("buildPiggybackActions with this turn's creates", () => {
     reusedIds?: readonly string[]
   }) =>
     buildPiggybackActions({
+      log: logger,
       source: 'piggyback_tagged_block',
       entryId: 'entry_2',
       turn: planned(block, { createdRows, reusedIds }),
@@ -1304,6 +1350,7 @@ describe('buildPiggybackActions input', () => {
     const turn = { ...planned({}), block: { sceneEntities: ['char_1'] } }
     const build = () =>
       buildPiggybackActions({
+        log: logger,
         source: 'ai_classifier',
         entryId: 'entry_1',
         // @ts-expect-error a hand-built block was never planned

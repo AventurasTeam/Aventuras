@@ -1,6 +1,6 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity, EntryMetadata, ItemState } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import type { Logger } from '@/lib/diagnostics'
 import { foldStackables } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
@@ -57,6 +57,8 @@ type BuildArgs = {
   // Caller-supplied, not hardcoded: the two producers are distinct agents whose deltas'
   // provenance must say so (docs/memory/piggyback.md).
   source: DeltaSource
+  /** The phase's logger, so a warning carries the run's actionId. */
+  log: Logger
 }
 
 type BuildResult = {
@@ -71,13 +73,18 @@ type BuildResult = {
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
-  const { entryId, previousMetadata, branchId, source } = args
+  const { entryId, previousMetadata, branchId, source, log } = args
   const { block, createdRows, reusedIds } = args.turn
   const entities = [...args.entities, ...createdRows]
 
   const sceneEntities = dedupeSceneEntities(block.sceneEntities ?? previousMetadata.sceneEntities)
   const rawDelta = block.worldTimeDelta ?? 0
-  const appliedDelta = resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
+  const appliedDelta = resolvePiggybackWorldTimeDelta(
+    rawDelta,
+    entryId,
+    previousMetadata.worldTime,
+    log,
+  )
   const worldTime = previousMetadata.worldTime + appliedDelta
 
   const actions: PipelineAction[] = []
@@ -100,7 +107,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     named !== undefined && namedRow?.kind === 'location' && namedRow.status !== 'retired'
   const currentLocationRejected = named !== undefined && !namedIsLocation
   if (currentLocationRejected) {
-    logger.warn('classifier.current_location_rejected', {
+    log.warn('classifier.current_location_rejected', {
       entryId,
       currentLocation: named,
       kind: namedRow?.kind ?? null,
@@ -153,7 +160,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       const text = truncateVisualText(note.text)
       // The writer is asked for about 60 words; a cut says it wrote far past that.
       if (text !== note.text)
-        logger.warn('classifier.visual_truncated', {
+        log.warn('classifier.visual_truncated', {
+          entryId,
+          source,
           entityId: note.id,
           type: note.type,
           length: note.text.length,
@@ -249,7 +258,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
       // data-model.md → Stackable items: the payer clamps at zero while the payee still gains
       // the full amount, so the prose stays true for whoever received it.
       if (balance < transfer.amount)
-        logger.warn('classifier.stackable_shortfall', {
+        log.warn('classifier.stackable_shortfall', {
+          entryId,
+          source,
           entityId: transfer.from,
           key: transfer.key,
           amount: transfer.amount,

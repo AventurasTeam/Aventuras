@@ -751,8 +751,8 @@ describe('per-turn pipeline declaration', () => {
     )
   })
 
-  it('clamps negative worldTimeDelta to 0 and logs classifier.delta_clamped warning', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn')
+  it("clamps negative worldTimeDelta to 0 and logs classifier.delta_clamped on the run's logger", async () => {
+    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
 
     currentStoryStore.set({
       storyId: 's1',
@@ -809,7 +809,7 @@ describe('per-turn pipeline declaration', () => {
       actionId: 'act_1',
       abortSignal: new AbortController().signal,
       intermediates,
-      log: makeLogger('act_1'),
+      log,
       runInTransaction: async () => undefined,
       db: phaseDb.db,
       storyId: 's1',
@@ -821,7 +821,7 @@ describe('per-turn pipeline declaration', () => {
       next = await gen.next()
     }
 
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(log.warn).toHaveBeenCalledWith(
       'classifier.delta_clamped',
       expect.objectContaining({
         originalDelta: -30,

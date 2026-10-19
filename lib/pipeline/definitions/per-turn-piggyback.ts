@@ -424,6 +424,7 @@ export async function* piggybackFallbackClassifierPhase(
     },
     branchId: ctx.branchId,
     source: 'per_turn_classifier',
+    log: ctx.log,
   })
 
   // The narrative fold applies visual/transfer changes whenever it fires, parse failure

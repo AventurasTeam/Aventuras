@@ -2837,7 +2837,7 @@ describe('per-turn-piggyback', () => {
     })
 
     it("rejects a new item's handle as the location when the item isn't kept", async () => {
-      const warnSpy = vi.spyOn(logger, 'warn')
+      const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
       seedFallbackTurn()
       const { events } = await runFallback(
         fallbackClassifierSchema.parse({
@@ -2846,6 +2846,7 @@ describe('per-turn-piggyback', () => {
           worldTimeDelta: 30,
           newItems: [{ handle: 'new:docks', name: 'the Docks', description: 'a pier' }],
         }),
+        { log },
       )
       expect(createdEntries(events)).toEqual([])
       const patch = metadataPatch(events)
@@ -2855,7 +2856,7 @@ describe('per-turn-piggyback', () => {
         currentLocationRejected: true,
         newItems: [expect.objectContaining({ handle: 'new:docks', outcome: 'dropped' })],
       })
-      expect(warnSpy).toHaveBeenCalledWith('classifier.current_location_rejected', {
+      expect(log.warn).toHaveBeenCalledWith('classifier.current_location_rejected', {
         entryId: 'entry-2',
         currentLocation: 'new:docks',
         kind: null,
