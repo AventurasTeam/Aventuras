@@ -529,11 +529,8 @@ describe('memory-blocks macro — entity rows equal their measured mirror', () =
   const measured = (id: string): MeasuredEntity =>
     measuredEntity(WORLD.find((e) => e.id === id)!, views)
 
-  // Each kind, and each edge the macro and the mirror must agree on: empty fields, a blank or
-  // missing description, held items with and without a description or condition, one ending each
-  // kind of sentence, a multi-line one, a multi-line value under every label, members some
-  // retired, disabled references (a faction, an item, a parent place) and a retired item left
-  // out, retired references marked, framing per kind and status.
+  // One fixture per kind and per edge the macro and its mirror must agree on: empty, blank and
+  // multi-line values, held items, retired and disabled references, framing per kind and status.
   const fixtures: [label: string, id: string][] = [
     ['a fully described character', 'char_k'],
     ['a character with a disabled faction and a blank description', 'char_o'],

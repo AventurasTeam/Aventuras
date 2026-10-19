@@ -1555,8 +1555,7 @@ describe('retrieval phase — probe capture', () => {
     expect(payloadOf(rows[0]).queries.map((q) => q.text)).toEqual([...QUERY_TEXTS])
   })
 
-  // The pass's views come from the branch's store rows, and the chain the template prints beside
-  // `# Current location` from the same rows.
+  // The chain printed beside `# Current location` comes from the same store rows as the views.
   it("prices the current location's chain off the branch's store entities", async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)

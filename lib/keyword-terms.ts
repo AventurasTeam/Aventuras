@@ -25,9 +25,8 @@ export function newTerms(current: readonly string[], incoming: readonly string[]
 }
 
 /**
- * A holder's stackables by normalized key. A row written before keys were normalized can
- * hold "Gold" beside "gold"; the prompt's views and a transfer both read the summed
- * balance, so the one the writer is shown is the one a transfer debits.
+ * A holder's stackables by normalized key, summed: a pre-normalization row can hold "Gold"
+ * beside "gold", and the balance the writer is shown must be the one a transfer debits.
  */
 export function foldStackables(
   stackables: Readonly<Record<string, number>> | undefined,

@@ -110,9 +110,8 @@ const knnFailureOutcome = () =>
     { queries: queryStack(), bundles: { chapters: chapterBundle() } },
   )
 
-// The store's rows the views are built from; FLOOR_ENTITIES is retrieval's source-row side. Each
-// row carries what only its own pricing branch prints: Mira's key is equipped and worn, the
-// archive sits under a listed parent, the Warden has a last-seen place.
+// The store's rows the views read; FLOOR_ENTITIES is retrieval's source-row side. Each row holds
+// what only its own pricing branch prints: an equipped key, a listed parent, a last-seen place.
 const FLOOR_WORLD: Entity[] = [
   makeEntity({
     id: 'e_scene',

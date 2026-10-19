@@ -85,9 +85,8 @@ export type RetrievalParams = {
    */
   disabledPlaceIds: ReadonlySet<string>
   /**
-   * The branch's entities from the store. Source rows carry no state, so the floor builds the
-   * views over this pass's scene from these: it reads the scene's factions and items off them, and
-   * an entity row is measured, and later rendered, from its view.
+   * The branch's store entities: source rows carry no state, so the floor builds this pass's scene
+   * views from these, reading factions and items; entity rows are measured and rendered by them.
    */
   storeEntities: readonly Entity[]
   /** Un-classified buffer prose, for Layer-A suppression. */

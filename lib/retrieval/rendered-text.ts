@@ -19,9 +19,8 @@ import type { MeasuredEntity } from './types'
 export const HELD_ITEM_ID_STAND_IN = 'i00'
 
 /**
- * retrieval.md → Three-sub-pool entity model. A retired row has no framing, nor an active
- * faction, which is never in a scene. The memory-blocks macro repeats these words;
- * memory-blocks.test.ts pins the two together.
+ * retrieval.md → Three-sub-pool entity model. No framing for a retired row, nor an active faction
+ * (never in a scene). The memory-blocks macro repeats these words; memory-blocks.test.ts pins it.
  */
 export function entityFraming(kind: EntityKind, status: EntityRow['status']): string | null {
   if (status === 'staged') return 'available to introduce'

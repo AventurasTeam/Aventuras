@@ -145,10 +145,8 @@ const queriesOf = (
 ): ProbeCapturePayload['queries'] =>
   (stack ?? ABSENT_QUERY_STACK).specs.map((q, i) => queryOf(q, redundancy[i] ?? null))
 
-// The floor's rows priced as the bundled templates render them (probe.md → Structural floor),
-// less the `[id]` affixes piggybackFires adds, which is decided after retrieval: on those turns
-// the cost is a lower bound. A held or loose item is priced on its own row, so its holder's row
-// or the location's carries only the Holds or Here label and no line counts twice.
+// probe.md → Structural floor. Omits piggybackFires' `[id]` affixes, decided after retrieval, so
+// a lower bound on those turns. Item lines count on the item's own row only, never twice.
 const stateLinesOf = (
   e: Pick<EntityRow, 'id' | 'kind'>,
   views: EntityViews,
@@ -206,8 +204,7 @@ const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['struct
       tokens: texts.reduce((sum, text) => sum + countTokens(text), 0),
     })
 
-  // Every in-scene holder's Holds lists its items, so one an older write left with two holders
-  // prints under both.
+  // Each in-scene holder's Holds lists its items, so an older write's two-holder item prints twice.
   const sceneHoldings = floor.sceneEntities
     .filter((e) => e.kind === 'character')
     .flatMap((e) => views.of(e.id, 'character').holdings)

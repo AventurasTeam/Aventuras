@@ -297,7 +297,7 @@ describe('bundled piggyback fallback classifier template', () => {
       )
     })
 
-    // piggyback.md → What the writer sees: an item listed under Here: isn't listed again.
+    // piggyback.md → What the writer sees.
     it('lists an in-scene item lying here under Here: only', () => {
       const prompt = render(context({ sceneEntities: ['c1', 'l1', 'i5'] }))
 

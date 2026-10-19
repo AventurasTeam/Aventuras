@@ -22,8 +22,7 @@ const field = (name: string, type: string, description: string): InfoField => ({
   description,
 })
 
-// architecture.md → Entity state on the template surface. Shared by every variable whose rows
-// carry an entity's `state`, so the view is documented once.
+// architecture.md → Entity state on the template surface.
 const ENTITY_STATE_INFO: readonly InfoField[] = [
   field(
     'state',
@@ -84,10 +83,8 @@ const FLOOR_ENTITY_INFO: readonly InfoField[] = ENTITY_FIELDS_INFO.filter(
   (f) => f.name !== 'injectionMode',
 )
 
-// Pinned variable names per group. buildGenerationContext must emit these
-// exact names — parity-tested in lib/pipeline/definitions/generation-context.test.ts.
-// Entity fields follow the drizzle row shape (camelCase), except `state`: a per-kind view, not
-// the stored column.
+// buildGenerationContext must emit these exact names; generation-context.test.ts pins the parity.
+// Entity fields follow the drizzle row (camelCase); `state` is a per-kind view, not the column.
 export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   generationContext: [
     {

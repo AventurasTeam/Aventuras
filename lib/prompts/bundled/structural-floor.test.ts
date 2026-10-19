@@ -157,8 +157,7 @@ describe('structural-floor invariant — entity state', () => {
       sceneEntities,
     }
   }
-  // From the scene on: the fallback's roster lists every active and staged entity by name, a
-  // separate rule, and this suite is about state.
+  // Skips the fallback's roster: it names every active and staged entity, a rule apart from state.
   const fromScene = (out: string): string => out.slice(out.indexOf('# In scene'))
   const templates = [
     ['per-turn', PER_TURN_NARRATIVE.user],

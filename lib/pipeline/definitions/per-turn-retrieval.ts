@@ -151,8 +151,7 @@ export async function* retrievalPhase(
         sceneEntityIds: scene.sceneEntities,
         currentLocationId: scene.currentLocationId,
         disabledPlaceIds,
-        // The store generation-context builds its own views from, so a ranked row's measured view
-        // is the one the template would have built for it.
+        // Same store generation-context builds views from, so measured views match rendered ones.
         storeEntities: entities,
         // Layer A scans the recent un-classified buffer prose (edge-cases.md →
         // Layer A — retrieval-time same-name suppression); the prompt buffer only

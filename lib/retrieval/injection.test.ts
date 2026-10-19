@@ -290,7 +290,7 @@ describe('buildKeywordInjections — entity rows', () => {
     expect(seat?.row.kind === 'entity' && seat.row.entity.state).toBe(entityViews.byId.get('e1'))
   })
 
-  // retrieval.md → Keyword injection: an entity row's own text is its name and description.
+  // retrieval.md → Keyword injection.
   it('cascades from an entity’s name and description, never from its state lines', () => {
     const rows = [
       makeEntity({
