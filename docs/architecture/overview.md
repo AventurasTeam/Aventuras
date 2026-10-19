@@ -584,8 +584,7 @@ them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones 
 adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
 from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
 merely resolves to a private address is not caught. A reference that cannot be fetched is dropped
-and the image is generated without it. Google takes them on `gemini-*` image models only; the SDK sends any
-other id down the Imagen path, which rejects input images.
+and the image is generated without it. Google takes them on every image model it lists.
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see
