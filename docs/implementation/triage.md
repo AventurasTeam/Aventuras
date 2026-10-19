@@ -562,3 +562,15 @@ slice-planning gate forces its resolution before that slice is planned.
   of held and loose items in every generation prompt, so a container
   item named as a payer is likelier. Raised 2026-10-19 by the
   entity-state slice review.
+
+- **Retrieval takes its disabled places beside the scene they derive
+  from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
+  `placeModes` around the scene's location and passes it to
+  `runRetrieval` beside `sceneEntityIds` and `currentLocationId`, and
+  only the caller keeps the two in step. The pass now takes the store's
+  entities and builds its views over its own scene, so it could derive
+  the set itself and drop the parameter
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
+  an invariant kept by convention). Older than entity state, so its
+  slice review filed it rather than tightening it. Raised 2026-10-20 by
+  the entity-state slice review.
