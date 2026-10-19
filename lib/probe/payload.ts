@@ -28,7 +28,7 @@ import {
   type StateLineOptions,
   type ThreadRow,
 } from '@/lib/retrieval'
-import type { EntityViews, KindedView } from '@/lib/world'
+import type { EntityViews } from '@/lib/world'
 
 export type CapturePayloadInput = {
   branchId: string
@@ -164,8 +164,7 @@ const stateLinesOf = (
   e: Pick<EntityRow, 'id' | 'kind'>,
   views: EntityViews,
   options: StateLineOptions,
-): string[] =>
-  entityStateLines({ kind: e.kind, state: views.of(e.id, e.kind) } as KindedView, options)
+): string[] => entityStateLines(views.kinded(e.id, e.kind), options)
 
 const sceneEntityText = (
   e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,

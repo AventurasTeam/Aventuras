@@ -343,6 +343,22 @@ describe('buildEntityViews — of', () => {
     expect(views.of('loc_a', 'item')).toEqual(emptyEntityView('item'))
     expect(views.of('loc_gone', 'location')).toEqual(emptyEntityView('location'))
   })
+
+  it("kinded pairs each kind with that kind's own view, and nothing else", () => {
+    const entities = [
+      character('char_k', 'Kael', { voice: 'low' }),
+      location('loc_a', 'The Anchor', null),
+      item('item_s', 'Sabre'),
+      faction('fact_h', 'The Silver Hand'),
+    ]
+    const views = buildEntityViews(entities, NO_SCENE)
+    for (const e of entities) {
+      const paired = views.kinded(e.id, e.kind)
+      expect(paired).toEqual({ kind: e.kind, state: views.byId.get(e.id) })
+      expect(paired.state).toBe(views.byId.get(e.id))
+    }
+    expect(views.kinded('loc_a', 'item')).toEqual({ kind: 'item', state: emptyEntityView('item') })
+  })
 })
 
 describe('buildEntityViews — looseAt', () => {

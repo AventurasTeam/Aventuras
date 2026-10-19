@@ -146,12 +146,11 @@ export function measuredEntity(
   views: EntityViews,
 ): MeasuredEntity {
   return {
-    kind: row.kind,
+    ...views.kinded(row.id, row.kind),
     name: row.name,
     description: row.description,
     status: row.status,
-    state: views.of(row.id, row.kind),
-  } as MeasuredEntity
+  }
 }
 
 /**

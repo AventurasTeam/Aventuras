@@ -68,6 +68,8 @@ export type EntityViews = {
    * gets the empty view: retrieval reads its rows from SQLite, the views come from the store.
    */
   of: <K extends EntityKind>(id: string, kind: K) => EntityStateViewByKind[K]
+  /** `of` for a row whose kind is only known as `EntityKind`, paired so `kind` narrows `state`. */
+  kinded: (id: string, kind: EntityKind) => KindedView
   /** The items `Here:` lists at a place, by name; the floor seats exactly these. */
   looseAt: (locationId: string) => readonly string[]
 }
@@ -256,5 +258,18 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
     byEntityId.get(id)?.kind === kind
       ? (byId.get(id) as EntityStateViewByKind[K])
       : emptyEntityView(kind)
-  return { byId, of, looseAt }
+  // A case per kind: called with the union, `of` would pair any kind with any view.
+  const kinded = (id: string, kind: EntityKind): KindedView => {
+    switch (kind) {
+      case 'character':
+        return { kind, state: of(id, kind) }
+      case 'location':
+        return { kind, state: of(id, kind) }
+      case 'item':
+        return { kind, state: of(id, kind) }
+      case 'faction':
+        return { kind, state: of(id, kind) }
+    }
+  }
+  return { byId, of, kinded, looseAt }
 }

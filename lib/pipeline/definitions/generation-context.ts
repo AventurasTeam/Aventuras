@@ -20,9 +20,9 @@ import {
   buildLocationMap,
   byName,
   listedAncestorNames,
-  type EntityStateView,
   type EntityViews,
   type HeldItemLine,
+  type KindedView,
 } from '@/lib/world'
 
 import { readLastTurns, readSceneSource } from './entry-reads'
@@ -63,9 +63,7 @@ export type RetrievedRow = { id: string; displayName: string; renderedText: stri
 export type RetrievedEntityRow = RetrievedRow & MeasuredEntity
 
 /** A structural-floor row as a template sees it, per source type. */
-export type FloorEntity = Pick<EntityRow, 'id' | 'kind' | 'status' | 'name' | 'description'> & {
-  state: EntityStateView
-}
+export type FloorEntity = Pick<EntityRow, 'id' | 'status' | 'name' | 'description'> & KindedView
 export type FloorLore = Pick<LoreRow, 'id' | 'title' | 'body'>
 export type FloorThread = Pick<ThreadRow, 'id' | 'status' | 'title' | 'description'>
 
@@ -95,15 +93,17 @@ export const PROMPT_ENTITY_FIELDS = [
   'state',
 ] as const
 
-function promptEntity(entity: Entity, views: EntityViews) {
+type PromptEntity = Pick<Entity, 'id' | 'name' | 'description' | 'status' | 'injectionMode'> &
+  KindedView
+
+function promptEntity(entity: Entity, views: EntityViews): PromptEntity {
   return {
     id: entity.id,
-    kind: entity.kind,
+    ...views.kinded(entity.id, entity.kind),
     name: entity.name,
     description: entity.description,
     status: entity.status,
     injectionMode: entity.injectionMode,
-    state: views.of(entity.id, entity.kind) as EntityStateView,
   } satisfies Record<(typeof PROMPT_ENTITY_FIELDS)[number], unknown>
 }
 
@@ -117,22 +117,35 @@ function promptRows(selected: readonly SeatedRow[] | undefined): RetrievedRow[] 
   }))
 }
 
+// The pair alone, so a measured entity is projected rather than spread.
+function kindedOf(entity: MeasuredEntity): KindedView {
+  switch (entity.kind) {
+    case 'character':
+      return { kind: entity.kind, state: entity.state }
+    case 'location':
+      return { kind: entity.kind, state: entity.state }
+    case 'item':
+      return { kind: entity.kind, state: entity.state }
+    case 'faction':
+      return { kind: entity.kind, state: entity.state }
+  }
+}
+
 // The view the ranker measured the row with, never one rebuilt here: a fallback recovering a
 // failed fold renders after that fold's writes, and the budget was spent on the measured row.
 function promptEntityRows(selected: readonly SeatedRow[] | undefined): RetrievedEntityRow[] {
-  return (selected ?? []).flatMap((c) =>
+  return (selected ?? []).flatMap((c): RetrievedEntityRow[] =>
     c.kind === 'entity'
       ? [
           {
             id: c.id,
             displayName: c.displayName,
             renderedText: c.renderedText,
-            kind: c.entity.kind,
+            ...kindedOf(c.entity),
             name: c.entity.name,
             description: c.entity.description,
             status: c.entity.status,
-            state: c.entity.state,
-          } as RetrievedEntityRow,
+          },
         ]
       : [],
   )
@@ -143,11 +156,10 @@ function promptEntityRows(selected: readonly SeatedRow[] | undefined): Retrieved
 // its own field set.
 const floorEntity = (e: EntityRow, views: EntityViews): FloorEntity => ({
   id: e.id,
-  kind: e.kind,
+  ...views.kinded(e.id, e.kind),
   status: e.status,
   name: e.name,
   description: e.description,
-  state: views.of(e.id, e.kind),
 })
 
 const floorEntities = (rows: readonly EntityRow[] | undefined, views: EntityViews): FloorEntity[] =>
