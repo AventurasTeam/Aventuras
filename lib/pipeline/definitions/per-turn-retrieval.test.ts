@@ -953,6 +953,44 @@ describe('retrieval phase — diagnostics', () => {
     ])
   })
 
+  // Only keyword injection seats this row, so its type comes off the row alone.
+  it('warns of a keyword-seated lore row larger than the lore budget', async () => {
+    seedOpenStory({
+      settings: {
+        retrievalBudgets: {
+          entities: 100,
+          lore: 50,
+          happenings: 1500,
+          threads: 400,
+          chapters: 600,
+        },
+      },
+    })
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({
+        keywordInjections: [
+          {
+            row: { kind: 'lore', id: 'lo_kw', displayName: 'The Flood Accord', renderedText: '' },
+            terms: ['accord'],
+            priority: 0,
+            tokensEstimated: 80,
+            seated: false,
+          },
+        ],
+      }),
+    )
+
+    const { log } = await runRetrievalPhase()
+
+    const warned = vi
+      .mocked(log.warn)
+      .mock.calls.filter(([event]) => event === 'retrieval.candidate_too_large')
+      .map(([, detail]) => detail)
+    expect(warned).toEqual([
+      { type: 'lore', id: 'lo_kw', name: 'The Flood Accord', tokens: 80, typeBudget: 50 },
+    ])
+  })
+
   // The empty-pool case is a cold start, not a misconfiguration.
   it('stays quiet when a type had no candidates to seat', async () => {
     seedOpenStory()
