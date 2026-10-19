@@ -196,6 +196,33 @@ describe('structural-floor invariant — entity state', () => {
     )
   })
 
+  // The scene list leaves out a staged or retired holder, so its Holds line never shows the item.
+  it.each(
+    templates.flatMap(([name, source]) =>
+      (['staged', 'retired'] as const).map((status) => [name, status, source] as const),
+    ),
+  )('%s lists an in-scene item whose only holder is %s', (_, status, source) => {
+    const rows = [
+      makeEntity({ id: ARIA, kind: 'character', name: 'Aria' }),
+      makeEntity({
+        id: 'char_h',
+        kind: 'character',
+        name: 'Hollin',
+        status,
+        state: { inventory: ['item_l'], equipped_items: [] } as never,
+      }),
+      makeEntity({ id: 'item_l', kind: 'item', name: 'Lantern', state: { at_location_id: null } }),
+    ]
+    const ctx = contextOf(rows, [ARIA, 'char_h', 'item_l'])
+    expect(ctx.entities.find((e) => e.id === 'item_l')?.state).toMatchObject({
+      holder: { id: 'char_h', status },
+    })
+
+    const out = fromScene(render(source, ctx))
+    expect(out).toContain('## Lantern')
+    expect(out).not.toContain('Hollin')
+  })
+
   // LiquidJS drops a filter on a for tag's collection, which would let every status through.
   it.each(templates)('%s lists only active entities in scene', (_, source) => {
     const rows = [
