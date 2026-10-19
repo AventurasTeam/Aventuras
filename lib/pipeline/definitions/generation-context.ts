@@ -21,7 +21,6 @@ import {
   byName,
   listedAncestorNames,
   type EntityViews,
-  type HeldItemLine,
   type KindedView,
 } from '@/lib/world'
 
@@ -191,6 +190,9 @@ const SCENE_VARIABLES = [
   'looseItems',
   'namedCharacters',
 ]
+
+/** One of a holder's items in `heldItems`, from the holder's state view. */
+type HeldItemLine = { id: string; name: string; equipped: boolean }
 
 /** One entry per active in-scene character that holds anything, in scene order. */
 function heldItemsInScene(

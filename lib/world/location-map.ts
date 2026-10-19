@@ -9,8 +9,6 @@ import { placeModes } from './place-modes'
 export type LocationMapRow =
   | { retired: false; id: string; name: string; depth: number; retiredReason: null }
   | { retired: true; id: null; name: string; depth: number; retiredReason: string | null }
-/** One of a holder's items in `heldItems`, from the holder's state view. */
-export type HeldItemLine = { id: string; name: string; equipped: boolean }
 
 export type PlaceTreeRow = { entity: Entity; depth: number }
 

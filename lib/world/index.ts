@@ -89,7 +89,6 @@ export {
   unhiddenLocationView,
 } from './location-map'
 export type {
-  HeldItemLine,
   LocationMapRow,
   LocationMapView,
   LocationMatchView,
