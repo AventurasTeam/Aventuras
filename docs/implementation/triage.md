@@ -528,19 +528,6 @@ slice-planning gate forces its resolution before that slice is planned.
   factions slice review's simplifier pass, which skipped it as outside
   the slice.
 
-- **A probe capture's floor rows can't be grouped by source.** Each
-  `structural_floor` row is `{ target_kind, target_id, tokens }`, and the
-  seats entity state added (the in-scene characters' factions, their
-  held items, the items lying at the location) all carry `target_kind:
-'entity'` (`lib/probe/payload.ts`). The Selected tab's wireframe groups
-  "Their factions" and "Held and loose items" apart from the in-scene
-  entities
-  ([`memory-probe.md → Selected tab`](../ui/screens/memory-probe/memory-probe.md#selected-tab)),
-  and a capture written today can't be split later: the row carries no
-  source, and the entity it names may have changed since. A
-  `source` field means a `CAPTURE_VERSION` bump, which belongs with the
-  Selected-tab UI. Raised 2026-10-19 by the entity-state implementation.
-
 - **An ancestor of the current location is framed "not in the scene".**
   The floor seats the current location alone. Its ancestors appear only
   by name in its head ("The Drowned Market — in Veil's Hollow", from
@@ -554,6 +541,24 @@ slice-planning gate forces its resolution before that slice is planned.
   and the old "currently elsewhere" was as wrong. Both obvious fixes
   reach the ranker's mirror, which must keep rendering exactly what it
   measures: seat the chain on the
-  [structural floor](../memory/retrieval.md#structural-floor--always-inject),
-  or give an ancestor its own framing, which makes `entityFraming` read
-  the scene. Raised 2026-10-19 by the entity-state smoke check.
+  [structural floor](../memory/retrieval.md#structural-floor--always-inject)
+  and render it outside the memory blocks, since a seated row still
+  takes the memory blocks' framing (Veil's Hollow, `always`, is seated
+  already), or give an ancestor its own framing, which makes
+  `entityFraming` read the scene. Raised 2026-10-19 by the entity-state
+  smoke check.
+
+- **A transfer's holder is never kind-checked.** Canon has the fallback
+  drop a transfer whose item or holder is of the wrong kind, item and
+  stackable transfers alike, logging `classifier.transfer_dropped`, and
+  the tagged block fail the field
+  ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery)).
+  `lib/piggyback/substitute.ts` checks only an item transfer's item:
+  `resolveItemTransfer` never checks `to` or `from`, and
+  `resolveStackable` checks nothing. A probe through
+  `buildPiggybackActions` moved 30 gold from an item to a character, and
+  4 gold from a character to an item, which credited no one, with
+  nothing logged. Older than entity state, which now brackets the ids
+  of held and loose items in every generation prompt, so a container
+  item named as a payer is likelier. Raised 2026-10-19 by the
+  entity-state slice review.

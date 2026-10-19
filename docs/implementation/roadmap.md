@@ -1150,6 +1150,19 @@ code before it moved; resolve with the slice it names.
   built-in Gregorian calendar (`earth-gregorian`,
   [`calendar-systems/spec.md`](../calendar-systems/spec.md)). Developer
   decision on the 4.2b stack review (2026-09-30).
+- **M7.5 — A probe capture's floor rows can't be grouped by source.**
+  Each `structural_floor` row is `{ target_kind, target_id, tokens }`,
+  and the seats entity state added (the in-scene characters' factions,
+  their held items, the items lying at the location) all carry the
+  `entity` target kind (`lib/probe/payload.ts`). The Selected tab's
+  wireframe groups "Their factions" and "Held and loose items" apart
+  from the in-scene entities
+  ([`memory-probe.md → Selected tab`](../ui/screens/memory-probe/memory-probe.md#selected-tab)),
+  and a capture written today can't be split later: the row carries no
+  source, and the entity it names may have changed since. A `source`
+  field means a `CAPTURE_VERSION` bump, which belongs with the
+  Selected-tab UI. Raised 2026-10-19 by the entity-state implementation;
+  routed by its slice review.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
