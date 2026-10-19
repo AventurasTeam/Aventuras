@@ -3,6 +3,9 @@
 import { debug } from '#lib/stores/debug.svelte.ts'
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key'])
+const BINARY_CONTENT_TYPE = /^(image|audio)\/|^application\/octet-stream/
+const SCRUB_MIN_LENGTH = 1024
+const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -38,6 +41,37 @@ export function providerMetadataOf(payload: unknown): Record<string, unknown> | 
   return Object.keys(metadata).length > 0 ? metadata : undefined
 }
 
+export function isBinaryContentType(contentType: string): boolean {
+  return BINARY_CONTENT_TYPE.test(contentType)
+}
+
+/** Replaces any large `data:` URI or bare base64 string, so the payload stays small enough to show. */
+export function scrubBinary(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.length >= SCRUB_MIN_LENGTH &&
+      (value.startsWith('data:') || BASE64_BODY.test(value))
+      ? `[base64, ${value.length} chars]`
+      : value
+  }
+  if (Array.isArray(value)) return value.map(scrubBinary)
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, scrubBinary(v)]))
+  }
+  return value
+}
+
+export function describeRequestBody(body: RequestInit['body']): unknown {
+  if (typeof body === 'string') {
+    try {
+      return scrubBinary(JSON.parse(body))
+    } catch {
+      return { raw: body.slice(0, 200) }
+    }
+  }
+  if (body instanceof FormData) return { formData: [...body.keys()] }
+  return undefined
+}
+
 export async function logErrorResponse(
   response: Response,
   debugId: string,
@@ -62,6 +96,50 @@ export async function logErrorResponse(
   } catch (err) {
     console.warn('[Fetch] Failed to read error response for logging:', err)
   }
+}
+
+export async function logJsonResponse(
+  response: Response,
+  debugId: string,
+  serviceId: string,
+  startTime: number,
+): Promise<void> {
+  try {
+    const text = await response.text()
+    let payload: unknown
+    try {
+      payload = JSON.parse(text)
+    } catch {
+      payload = text
+    }
+    debug.addDebugResponse(
+      debugId,
+      serviceId,
+      { body: scrubBinary(payload), providerMetadata: providerMetadataOf(payload) },
+      startTime,
+    )
+  } catch (err) {
+    console.warn('[Fetch] Failed to read JSON response for logging:', err)
+  }
+}
+
+/** Logs the type and size without reading the body. */
+export function logBinaryResponse(
+  response: Response,
+  debugId: string,
+  serviceId: string,
+  startTime: number,
+): void {
+  const length = response.headers.get('content-length')
+  debug.addDebugResponse(
+    debugId,
+    serviceId,
+    {
+      contentType: response.headers.get('content-type'),
+      size: length === null ? undefined : Number(length),
+    },
+    startTime,
+  )
 }
 
 export async function logStreamResponse(
