@@ -97,7 +97,6 @@ export const captureInput = (overrides: Partial<CaptureWriteInput> = {}): Captur
   settings,
   promptBufferTokens: 0,
   scanText: '',
-  storeEntities: [],
   outcome: successOutcome(),
   ...overrides,
 })

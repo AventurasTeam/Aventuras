@@ -2,7 +2,6 @@ import {
   CAPTURE_VERSION,
   type CaptureCandidate,
   type CaptureKeywordInjection,
-  type Entity,
   type ProbeCapturePayload,
   type VecTargetKind,
 } from '@/lib/db'
@@ -29,7 +28,7 @@ import {
   type StateLineOptions,
   type ThreadRow,
 } from '@/lib/retrieval'
-import { listedAncestorNames, type EntityViews } from '@/lib/world'
+import type { EntityViews } from '@/lib/world'
 
 export type CapturePayloadInput = {
   branchId: string
@@ -50,8 +49,6 @@ export type CapturePayloadInput = {
   promptBufferTokens: number
   /** The scan surface the pass ran with (retrieval.md → Keyword scan surface). */
   scanText: string
-  /** The rows the pass built its floor's views from: `# Current location`'s chain reads them too. */
-  storeEntities: readonly Entity[]
   outcome: RetrievalOutcome
 }
 
@@ -201,10 +198,7 @@ const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>
 
 const alwaysLoreText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
 
-const floorRowsOf = (
-  floor: StructuralFloor | null,
-  storeEntities: readonly Entity[],
-): ProbeCapturePayload['structural_floor'] => {
+const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
   const { views } = floor
   const rows: ProbeCapturePayload['structural_floor'] = []
@@ -238,11 +232,10 @@ const floorRowsOf = (
     push('entity', e.id, ...(listed.length > 0 ? listed : [sceneEntityText(e, views)]))
   }
   if (floor.currentLocation) {
-    const chain = listedAncestorNames(floor.currentLocation.id, storeEntities)
     push(
       'entity',
       floor.currentLocation.id,
-      currentLocationText(floor.currentLocation, views, chain),
+      currentLocationText(floor.currentLocation, views, floor.currentLocationChain),
     )
   }
   for (const e of floor.sceneFactions) push('entity', e.id, memoryRowText(e, views))
@@ -299,7 +292,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       threads: funnelOf(bundles.threads),
       chapters: funnelOf(bundles.chapters),
     },
-    structural_floor: floorRowsOf(floor, input.storeEntities),
+    structural_floor: floorRowsOf(floor),
     keyword_injections: keywordInjections.map(injectionOf),
     prompt_buffer_tokens: input.promptBufferTokens,
     // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;

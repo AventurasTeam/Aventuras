@@ -40,7 +40,6 @@ const identity = {
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   promptBufferTokens: 0,
   scanText: '',
-  storeEntities: [] as Entity[],
 }
 
 const zeroFunnel = {
@@ -286,10 +285,9 @@ const floorOver = (world: readonly Entity[], scene = FLOOR_SCENE) =>
     storeEntities: world,
   })
 
-const floorTokens = (floor: StructuralFloor, world: Entity[]) => {
+const floorTokens = (floor: StructuralFloor) => {
   const payload = buildCapturePayload({
     ...identity,
-    storeEntities: world,
     mode: 'light',
     settings,
     params: RANKER_DEFAULTS,
@@ -392,7 +390,6 @@ describe('buildCapturePayload', () => {
       params: RANKER_DEFAULTS,
       promptBufferTokens: 0,
       scanText: '',
-      storeEntities: [],
       outcome: successOutcome(),
     })
 
@@ -739,7 +736,6 @@ describe('buildCapturePayload', () => {
     // field sourced from settings or summed off structural_floor reads wrong.
     const payload = buildCapturePayload({
       ...identity,
-      storeEntities: FLOOR_WORLD,
       promptBufferTokens: 1840,
       mode: 'light',
       settings,
@@ -801,7 +797,6 @@ describe('buildCapturePayload', () => {
   it('emits one structural-floor row per seat: scene, location, faction, held and loose items, threads, pins', () => {
     const payload = buildCapturePayload({
       ...identity,
-      storeEntities: FLOOR_WORLD,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
@@ -914,7 +909,6 @@ it('prices an in-scene item its holder lists, or one lying here, as its one line
   ])
   const tokensOf = floorTokens(
     floorOver(world, { ...FLOOR_SCENE, sceneEntities: ['e_scene', 'e_key', 'e_lamp'] }),
-    world,
   )
   const held = '- Brass key (equipped): opens the sluice gate. Condition: tarnished'
   expect(countTokens(held)).not.toBe(
@@ -950,7 +944,7 @@ it.each([
   const rendered = renderFloor(false, { floor, world, sceneEntities })
   for (const line of listings) expect(rendered).toContain(`\n${line}\n`)
   expect(rendered).not.toContain('## Brass key')
-  expect(floorTokens(floor, world)('e_key')).toEqual([
+  expect(floorTokens(floor)('e_key')).toEqual([
     countTokens(listings[0]!) + countTokens(listings[1]!),
   ])
 })
@@ -970,7 +964,7 @@ it.each([
   const rendered = renderFloor(false, { floor, world, sceneEntities })
   expect(rendered).toContain(`Holds:\n${held}\n`)
   expect(rendered).toContain(`Here:\n${loose}\n`)
-  expect(floorTokens(floor, world)('e_key')).toEqual([countTokens(held) + countTokens(loose)])
+  expect(floorTokens(floor)('e_key')).toEqual([countTokens(held) + countTokens(loose)])
 })
 
 // Held items are seated off the in-scene holders' Holds, so one none lists has no line to price.
@@ -980,7 +974,6 @@ it('refuses to price a held item no in-scene holder lists', () => {
   expect(() =>
     buildCapturePayload({
       ...identity,
-      storeEntities: FLOOR_WORLD,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
@@ -1014,7 +1007,7 @@ it('prices an in-scene item an off-scene character holds as its scene row', () =
   expect(countTokens(row)).not.toBe(
     countTokens('- Silver coin (equipped): stamped with a drowned crown'),
   )
-  expect(floorTokens(floor, world)('e_coin')).toEqual([countTokens(row)])
+  expect(floorTokens(floor)('e_coin')).toEqual([countTokens(row)])
 })
 
 describe('structural-floor formulas match the templates that render them', () => {
@@ -1030,7 +1023,7 @@ describe('structural-floor formulas match the templates that render them', () =>
       'The drowned archive — in The Low Quarter › Vellis\nCondition: silted to the knee\nHere:'
 
     expect(renderFloor(false, { floor, world })).toContain(`# Current location\n\n${text}\n`)
-    expect(floorTokens(floor, world)('e_loc')).toEqual([countTokens(text)])
+    expect(floorTokens(floor)('e_loc')).toEqual([countTokens(text)])
   })
 
   it('prices the chain without an ancestor the map leaves out', () => {
@@ -1040,7 +1033,7 @@ describe('structural-floor formulas match the templates that render them', () =>
       'The drowned archive — in Vellis: half-flooded stacks\nCondition: silted to the knee\nHere:'
 
     expect(renderFloor(false, { floor, world })).toContain(`# Current location\n\n${text}\n`)
-    expect(floorTokens(floor, world)('e_loc')).toEqual([countTokens(text)])
+    expect(floorTokens(floor)('e_loc')).toEqual([countTokens(text)])
   })
 
   // The gap probe.md → Structural floor records: piggyback firing is decided
@@ -1050,7 +1043,6 @@ describe('structural-floor formulas match the templates that render them', () =>
     const rendered = renderFloor(true)
     const payload = buildCapturePayload({
       ...identity,
-      storeEntities: FLOOR_WORLD,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,

@@ -21,6 +21,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
 import { __resetCaptureMode, armDeepCapture, decompressPayload } from '@/lib/probe'
 import {
+  buildStructuralFloor,
   countTokens,
   RANKER_DEFAULTS,
   type CandidateTrace,
@@ -1565,26 +1566,29 @@ describe('retrieval phase — probe capture', () => {
     })
     seedOpenStory({
       settings: { probe_mode_active: true },
-      entries: [entry(1, 'user_action', 'I draw the blade.', meta())],
+      entries: [
+        entry(1, 'opening', 'The tavern roars.', meta({ currentLocationId: 'loc_anchor' })),
+        entry(2, 'user_action', 'I draw the blade.', meta()),
+      ],
       entities: [
         place('loc_eldra', 'Eldra', null),
         place('loc_vellis', 'Port Vellis', 'loc_eldra'),
         place('loc_anchor', 'The Rusty Anchor', 'loc_vellis'),
       ],
     })
-    runRetrievalMock.mockResolvedValue(
+    // The pass's own floor, over the rows and scene the phase hands it.
+    runRetrievalMock.mockImplementation(async (_deps, params) =>
       retrievalSuccess({
         queries: queryStack(),
-        floor: {
-          currentLocation: {
-            id: 'loc_anchor',
-            kind: 'location',
-            status: 'active',
-            injectionMode: 'auto',
-            name: 'The Rusty Anchor',
-            description: null,
-          },
-        },
+        floor: buildStructuralFloor({
+          entities: params.storeEntities,
+          storeEntities: params.storeEntities,
+          lore: [],
+          threads: [],
+          sceneEntityIds: params.sceneEntityIds,
+          currentLocationId: params.currentLocationId,
+          disabledPlaceIds: params.disabledPlaceIds,
+        }),
       }),
     )
 
