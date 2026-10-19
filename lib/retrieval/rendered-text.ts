@@ -118,9 +118,7 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
         ...labelled('Faction', refName(s.faction)),
         ...holdsLines(s.holdings, held),
         ...(s.stackables.length > 0
-          ? [
-              `Stackables: ${s.stackables.map((st) => `${oneLine(st.key)} ${st.amount}`).join(', ')}`,
-            ]
+          ? [`Stackables: ${s.stackables.map((st) => `${st.key} ${st.amount}`).join(', ')}`]
           : []),
       ]
     }
