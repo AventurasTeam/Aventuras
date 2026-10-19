@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ProbeCapturePayload } from '@/lib/db'
+import { type Entity, type ProbeCapturePayload } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import { bundledPack } from '@/lib/prompts/bundled'
 import { PER_TURN_NARRATIVE } from '@/lib/prompts/bundled/per-turn'
 import { createEngine, renderWith } from '@/lib/prompts/engine'
@@ -38,6 +39,7 @@ const identity = {
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   promptBufferTokens: 0,
   scanText: '',
+  entityViews: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
 }
 
 const zeroFunnel = {
@@ -108,32 +110,68 @@ const knnFailureOutcome = () =>
     { queries: queryStack(), bundles: { chapters: chapterBundle() } },
   )
 
-const FLOOR_ENTITIES: EntityRow[] = [
-  {
+// The store's rows the views are built from; FLOOR_ENTITIES is retrieval's source-row side.
+const FLOOR_WORLD: Entity[] = [
+  makeEntity({
     id: 'e_scene',
     kind: 'character',
-    status: 'active',
-    injectionMode: 'auto',
     name: 'Mira',
     description: 'a courier',
-  },
-  {
+    state: {
+      visual: { attire: 'a grey cloak' },
+      inventory: ['e_key'],
+      equipped_items: [],
+      faction_id: 'e_hand',
+    } as never,
+  }),
+  makeEntity({
     id: 'e_loc',
     kind: 'location',
-    status: 'active',
-    injectionMode: 'auto',
     name: 'The drowned archive',
     description: 'half-flooded stacks',
-  },
-  {
+    state: { parent_location_id: null, condition: 'silted to the knee' },
+  }),
+  makeEntity({
     id: 'e_always',
     kind: 'character',
     status: 'retired',
     injectionMode: 'always',
     name: 'The Warden',
     description: 'a ghost who still audits the ledgers',
-  },
+  }),
+  makeEntity({
+    id: 'e_hand',
+    kind: 'faction',
+    name: 'The Tidewardens',
+    description: 'keepers of the sluices',
+    state: { standing: 'dwindling since the flood' },
+  }),
+  makeEntity({
+    id: 'e_key',
+    kind: 'item',
+    name: 'Brass key',
+    description: 'opens the sluice gate',
+    state: { at_location_id: null },
+  }),
+  makeEntity({
+    id: 'e_lamp',
+    kind: 'item',
+    name: 'Lamp',
+    state: { at_location_id: 'e_loc', condition: 'guttering' },
+  }),
 ]
+
+const FLOOR_ENTITIES: EntityRow[] = FLOOR_WORLD.map((e) => ({
+  id: e.id,
+  kind: e.kind,
+  status: e.status,
+  injectionMode: e.injectionMode,
+  name: e.name,
+  description: e.description,
+}))
+
+const FLOOR_SCENE = { sceneEntities: ['e_scene'], currentLocationId: 'e_loc' }
+const FLOOR_VIEWS = buildEntityViews(FLOOR_WORLD, FLOOR_SCENE)
 
 const FLOOR_LORE: LoreRow[] = [
   {
@@ -170,8 +208,13 @@ const FLOOR_THREADS: ThreadRow[] = [
 // is distinct from every other's — a shared value would hide one branch's
 // formula silently taking another's.
 const FLOOR_TEXTS = {
-  sceneEntity: '## Mira\na courier',
-  currentLocation: 'The drowned archive: half-flooded stacks',
+  // Its Holds block is priced on the held item's own row.
+  sceneEntity: '## Mira\na courier\nAttire: a grey cloak\nFaction: The Tidewardens',
+  currentLocation: 'The drowned archive: half-flooded stacks\nCondition: silted to the knee',
+  sceneFaction:
+    'The Tidewardens: keepers of the sluices\nStanding: dwindling since the flood\nMembers: Mira',
+  heldItem: '- Brass key: opens the sluice gate',
+  looseItem: '- Lamp. Condition: guttering',
   activeThread: 'Find the missing ledger\nMira needs it before the tide returns',
   alwaysEntity: 'The Warden: a ghost who still audits the ledgers',
   alwaysLore: 'The Flood Accord\nEvery archive keeps one drowned shelf.',
@@ -195,10 +238,10 @@ const floorFixture = () =>
     entities: FLOOR_ENTITIES,
     lore: FLOOR_LORE,
     threads: FLOOR_THREADS,
-    sceneEntityIds: ['e_scene'],
-    currentLocationId: 'e_loc',
+    sceneEntityIds: FLOOR_SCENE.sceneEntities,
+    currentLocationId: FLOOR_SCENE.currentLocationId,
     disabledPlaceIds: new Set(),
-    views: buildEntityViews([], { sceneEntities: [], currentLocationId: null }),
+    views: FLOOR_VIEWS,
   })
 
 describe('buildCapturePayload', () => {
@@ -295,6 +338,7 @@ describe('buildCapturePayload', () => {
       promptBufferTokens: 0,
       scanText: '',
       outcome: successOutcome(),
+      entityViews: identity.entityViews,
     })
 
     expect(payload).toMatchObject({
@@ -645,6 +689,7 @@ describe('buildCapturePayload', () => {
       settings,
       params: RANKER_DEFAULTS,
       outcome: retrievalSuccess({ floor: floorFixture() }),
+      entityViews: FLOOR_VIEWS,
     })
 
     expect(payload.prompt_buffer_tokens).toBe(1840)
@@ -698,13 +743,14 @@ describe('buildCapturePayload', () => {
     })
   })
 
-  it('emits one structural-floor row per seated entity, location, thread and always-row', () => {
+  it('emits one structural-floor row per seat: scene, location, faction, held and loose items, threads, pins', () => {
     const payload = buildCapturePayload({
       ...identity,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
       outcome: retrievalSuccess({ floor: floorFixture() }),
+      entityViews: FLOOR_VIEWS,
     })
 
     // Priced through the real tokenizer as an independent oracle; the strings
@@ -720,6 +766,13 @@ describe('buildCapturePayload', () => {
         target_id: 'e_loc',
         tokens: countTokens(FLOOR_TEXTS.currentLocation),
       },
+      {
+        target_kind: 'entity',
+        target_id: 'e_hand',
+        tokens: countTokens(FLOOR_TEXTS.sceneFaction),
+      },
+      { target_kind: 'entity', target_id: 'e_key', tokens: countTokens(FLOOR_TEXTS.heldItem) },
+      { target_kind: 'entity', target_id: 'e_lamp', tokens: countTokens(FLOOR_TEXTS.looseItem) },
       {
         target_kind: 'thread',
         target_id: 't_active',
@@ -747,7 +800,7 @@ describe('buildCapturePayload', () => {
   })
 })
 
-// payload.ts reimplements six Liquid render formulas by hand, so the assertion
+// payload.ts reimplements the Liquid render formulas by hand, so the assertion
 // above alone pins them only against themselves. Rendering the real bundled
 // templates over the same floor is what makes template drift fail a test.
 function renderFloor(piggybackFires: boolean): string {
@@ -759,17 +812,21 @@ function renderFloor(piggybackFires: boolean): string {
       [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
     },
   }
+  // What generation-context hands the template: every row with its view.
+  const withState = <T extends { id: string; kind: EntityRow['kind'] }>(rows: readonly T[]) =>
+    rows.map((e) => ({ ...e, state: FLOOR_VIEWS.of(e.id, e.kind) }))
   return renderWith(createEngine(pack), 't', {
     definition: { mode: 'adventure', genre: { promptBody: '' }, tone: { promptBody: '' } },
     entries: [],
-    entities: FLOOR_ENTITIES,
-    sceneEntities: ['e_scene'],
-    structuralLocation: floor.currentLocation,
+    entities: withState(FLOOR_ENTITIES),
+    sceneEntities: FLOOR_SCENE.sceneEntities,
+    structuralLocation: floor.currentLocation ? withState([floor.currentLocation])[0] : null,
     structuralActiveThreads: floor.activeThreads,
-    structuralPinnedEntities: floor.alwaysEntities,
-    structuralSceneFactions: floor.sceneFactions,
+    structuralPinnedEntities: withState(floor.alwaysEntities),
+    structuralSceneFactions: withState(floor.sceneFactions),
     structuralPinnedLore: floor.alwaysLore,
     structuralPinnedThreads: floor.alwaysThreads,
+    looseItems: withState(floor.looseItems),
     retrievedEntities: [],
     retrievedLore: [],
     retrievedHappenings: [],
@@ -780,15 +837,54 @@ function renderFloor(piggybackFires: boolean): string {
   }).user
 }
 
+// The scene list skips an item its in-scene holder lists, or one lying here, so the probe prices
+// such a seat as that one line, never also as a scene row.
+it('prices an in-scene item its holder lists, or one lying here, as its one line', () => {
+  const scene = { sceneEntities: ['e_scene', 'e_key', 'e_lamp'], currentLocationId: 'e_loc' }
+  // Equipped, so the held line costs more than a `## Brass key` scene row would: priced as
+  // either, the two would otherwise tokenize alike.
+  const world = FLOOR_WORLD.map((e) =>
+    e.id === 'e_scene'
+      ? {
+          ...e,
+          state: { ...(e.state as object), inventory: [], equipped_items: ['e_key'] } as never,
+        }
+      : e,
+  )
+  const views = buildEntityViews(world, scene)
+  const floor = buildStructuralFloor({
+    entities: FLOOR_ENTITIES,
+    lore: [],
+    threads: [],
+    sceneEntityIds: scene.sceneEntities,
+    currentLocationId: scene.currentLocationId,
+    disabledPlaceIds: new Set(),
+    views,
+  })
+  const payload = buildCapturePayload({
+    ...identity,
+    mode: 'light',
+    settings,
+    params: RANKER_DEFAULTS,
+    outcome: retrievalSuccess({ floor }),
+    entityViews: views,
+  })
+  const rowsFor = (id: string) => payload.structural_floor.filter((r) => r.target_id === id)
+  const held = '- Brass key (equipped): opens the sluice gate'
+  expect(countTokens(held)).not.toBe(countTokens('## Brass key\nopens the sluice gate'))
+  expect(rowsFor('e_key').map((r) => r.tokens)).toEqual([countTokens(held)])
+  expect(rowsFor('e_lamp').map((r) => r.tokens)).toEqual([countTokens(FLOOR_TEXTS.looseItem)])
+})
+
 describe('structural-floor formulas match the templates that render them', () => {
   it.each(Object.entries(FLOOR_TEXTS))('renders the %s row verbatim', (_branch, text) => {
     expect(renderFloor(false)).toContain(text)
   })
 
   // The gap probe.md → Structural floor records: piggyback firing is decided
-  // after retrieval, so a capture cannot know it, and the three entity rows
-  // below are priced without the id affix a piggyback turn adds.
-  it('undercounts the three entity rows on a piggyback turn', () => {
+  // after retrieval, so a capture cannot know it, and the entity rows below,
+  // held and loose items included, are priced without the id affix a piggyback turn adds.
+  it('undercounts the entity rows on a piggyback turn', () => {
     const rendered = renderFloor(true)
     const payload = buildCapturePayload({
       ...identity,
@@ -796,13 +892,20 @@ describe('structural-floor formulas match the templates that render them', () =>
       settings,
       params: RANKER_DEFAULTS,
       outcome: retrievalSuccess({ floor: floorFixture() }),
+      entityViews: FLOOR_VIEWS,
     })
     const tokensOf = (id: string) =>
       payload.structural_floor.find((r) => r.target_id === id)?.tokens
 
     for (const [id, affixed] of [
-      ['e_scene', '## Mira [e_scene]\na courier'],
-      ['e_loc', '[e_loc] The drowned archive: half-flooded stacks'],
+      ['e_scene', '## Mira [e_scene]\na courier\nAttire: a grey cloak\nFaction: The Tidewardens'],
+      ['e_loc', '[e_loc] The drowned archive: half-flooded stacks\nCondition: silted to the knee'],
+      [
+        'e_hand',
+        '[e_hand] The Tidewardens: keepers of the sluices\nStanding: dwindling since the flood\nMembers: Mira',
+      ],
+      ['e_key', '- [e_key] Brass key: opens the sluice gate'],
+      ['e_lamp', '- [e_lamp] Lamp. Condition: guttering'],
       ['e_always', '[e_always] The Warden: a ghost who still audits the ledgers'],
     ]) {
       expect(rendered).toContain(affixed)

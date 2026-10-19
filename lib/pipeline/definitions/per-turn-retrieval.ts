@@ -225,6 +225,7 @@ export async function* retrievalPhase(
         promptBufferTokens: countTokens(promptBuffer),
         scanText,
         outcome: probed,
+        entityViews,
       },
     )
     // A failed write leaves the arm loaded: the deep capture the user asked for

@@ -46,7 +46,11 @@ const medianOf = (fn: () => unknown): number => {
 const kb = (bytes: number): string =>
   bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)}MB` : `${Math.round(bytes / 1000)}KB`
 
-function captureInputFor(outcome: RetrievalOutcome, mode: 'light' | 'deep'): CapturePayloadInput {
+function captureInputFor(
+  outcome: RetrievalOutcome,
+  mode: 'light' | 'deep',
+  entityViews: CapturePayloadInput['entityViews'],
+): CapturePayloadInput {
   return {
     branchId: 'br_bench',
     targetEntryId: 'ent_0000000',
@@ -67,6 +71,7 @@ function captureInputFor(outcome: RetrievalOutcome, mode: 'light' | 'deep'): Cap
     // The default one-entry surface, so the payload is sized like a real one.
     scanText: 'What does the party do next?\nThe bridge fell during the third night of the siege.',
     outcome,
+    entityViews,
   }
 }
 
@@ -89,7 +94,7 @@ describe('probe capture cost', () => {
         const poolSize = Object.values(outcome.bundles).reduce((n, b) => n + b.funnel.poolSize, 0)
 
         for (const mode of ['light', 'deep'] as const) {
-          const input = captureInputFor(outcome, mode)
+          const input = captureInputFor(outcome, mode, params.entityViews)
           const encode = (): Uint8Array =>
             new TextEncoder().encode(JSON.stringify(buildCapturePayload(input)))
 

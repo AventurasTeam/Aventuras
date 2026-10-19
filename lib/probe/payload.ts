@@ -9,6 +9,8 @@ import {
   buildQueryStack,
   countTokens,
   entityHead,
+  entityStateLines,
+  itemLine,
   lines,
   TOKENIZER_IDENTITY,
   type CandidateTrace,
@@ -23,8 +25,10 @@ import {
   type RetrievalOutcome,
   type RetrievalType,
   type StructuralFloor,
+  type StateLineOptions,
   type ThreadRow,
 } from '@/lib/retrieval'
+import type { EntityViews, KindedView } from '@/lib/world'
 
 export type CapturePayloadInput = {
   branchId: string
@@ -46,6 +50,8 @@ export type CapturePayloadInput = {
   /** The scan surface the pass ran with (retrieval.md → Keyword scan surface). */
   scanText: string
   outcome: RetrievalOutcome
+  /** The views the pass seated the floor from, for the floor rows' state lines. */
+  entityViews: EntityViews
 }
 
 const candidateOf = (
@@ -144,45 +150,95 @@ const queriesOf = (
 const nameWithDescription = (name: string, description: string | null): string =>
   description ? `${name}: ${description}` : name
 
-// Six floor branches render through two template families and none of them
-// share a formula. per-turn.ts's in-scene/current-location rows and
-// memory-blocks.ts's active-threads row carry no framing or status — a
-// floor-seated row is present, so it never reads as "elsewhere" or
-// "introducible" the way a pooled row can. Only the memory-blocks.ts "always"
-// rows (structuralPinnedEntities/Lore/Threads) reuse the ranker's own
-// entity/lore/thread projections, ENTITY_FRAMING included.
-// The three entity branches omit the `[id]` affix the templates add when
-// piggybackFires, which is decided after retrieval and so unknowable here —
-// the floor cost is a lower bound on those turns (probe.md → Structural floor).
-const sceneEntityText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
-  lines(`## ${e.name}`, e.description)
+// The floor's rows priced as the bundled templates render them (probe.md → Structural floor):
+// per-turn.ts's scene and location sections, its Holds and Here lines, and memory-blocks.ts's
+// rows for a scene's faction, a pinned row and the threads and lore. Every entity row leaves out
+// the `[id]` affixes the templates add when piggybackFires, which is decided after retrieval and
+// so unknowable here, and `# Current location` its chain, which isn't on the floor: on those
+// turns the floor cost reads as a lower bound. A held or loose item is its own row, its holder's
+// row priced without the Holds block, so the template's one rendering is counted once.
+const NO_IDS = { heldId: null } as const satisfies Partial<StateLineOptions>
 
-const currentLocationText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
-  nameWithDescription(e.name, e.description)
+const stateLinesOf = (
+  e: Pick<EntityRow, 'id' | 'kind'>,
+  views: EntityViews,
+  options: StateLineOptions,
+): string[] =>
+  entityStateLines({ kind: e.kind, state: views.of(e.id, e.kind) } as KindedView, options)
+
+const sceneEntityText = (
+  e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
+  views: EntityViews,
+) =>
+  lines(
+    `## ${e.name}`,
+    e.description?.trim() ? e.description : null,
+    ...stateLinesOf(e, views, { ...NO_IDS, here: true, holdings: false }),
+  )
+
+const currentLocationText = (
+  e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description'>,
+  views: EntityViews,
+) =>
+  [
+    nameWithDescription(e.name, e.description),
+    ...stateLinesOf(e, views, { ...NO_IDS, here: true }),
+  ].join('\n')
+
+// A pinned row and a scene's faction share memory-blocks.ts's one row shape.
+const memoryRowText = (
+  e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description' | 'status'>,
+  views: EntityViews,
+) => [entityHead(e), ...stateLinesOf(e, views, { ...NO_IDS, here: false })].join('\n')
 
 const activeThreadText = (t: Pick<ThreadRow, 'title' | 'description'>): string =>
   lines(t.title, t.description)
-
-const alwaysEntityText = (e: Pick<EntityRow, 'kind' | 'name' | 'description' | 'status'>): string =>
-  entityHead(e)
 
 const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>): string =>
   lines(`${t.title} (${t.status})`, t.description)
 
 const alwaysLoreText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
 
-const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
+const floorRowsOf = (
+  floor: StructuralFloor | null,
+  views: EntityViews,
+): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
   const rows: ProbeCapturePayload['structural_floor'] = []
   const push = (kind: VecTargetKind, id: string, text: string) =>
     rows.push({ target_kind: kind, target_id: id, tokens: countTokens(text) })
 
-  for (const e of floor.sceneEntities) push('entity', e.id, sceneEntityText(e))
-  if (floor.currentLocation) {
-    push('entity', floor.currentLocation.id, currentLocationText(floor.currentLocation))
+  const inScene = new Set(floor.sceneEntities.map((e) => e.id))
+  const heldLine = (itemId: string): string | null => {
+    const holderId = views.of(itemId, 'item').holder?.id
+    if (holderId === undefined || !inScene.has(holderId)) return null
+    const held = views.of(holderId, 'character').holdings.find((h) => h.id === itemId)
+    return held === undefined ? null : itemLine(held, null)
   }
+  const looseLine = (e: Pick<EntityRow, 'id' | 'name' | 'description'>): string =>
+    itemLine(
+      { name: e.name, description: e.description, condition: views.of(e.id, 'item').condition },
+      null,
+    )
+  const here = floor.currentLocation?.id
+  const liesHere = (id: string): boolean =>
+    here !== undefined && views.of(id, 'item').location?.id === here
+
+  // An in-scene item a holder in the scene holds, or one lying here, renders as that one line.
+  for (const e of floor.sceneEntities) {
+    const held = e.kind === 'item' ? heldLine(e.id) : null
+    if (held !== null) push('entity', e.id, held)
+    else if (e.kind === 'item' && liesHere(e.id)) push('entity', e.id, looseLine(e))
+    else push('entity', e.id, sceneEntityText(e, views))
+  }
+  if (floor.currentLocation) {
+    push('entity', floor.currentLocation.id, currentLocationText(floor.currentLocation, views))
+  }
+  for (const e of floor.sceneFactions) push('entity', e.id, memoryRowText(e, views))
+  for (const e of floor.heldItems) push('entity', e.id, heldLine(e.id) ?? looseLine(e))
+  for (const e of floor.looseItems) push('entity', e.id, looseLine(e))
   for (const t of floor.activeThreads) push('thread', t.id, activeThreadText(t))
-  for (const e of floor.alwaysEntities) push('entity', e.id, alwaysEntityText(e))
+  for (const e of floor.alwaysEntities) push('entity', e.id, memoryRowText(e, views))
   for (const l of floor.alwaysLore) push('lore', l.id, alwaysLoreText(l))
   for (const t of floor.alwaysThreads) push('thread', t.id, alwaysThreadText(t))
   return rows
@@ -228,7 +284,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       threads: funnelOf(bundles.threads),
       chapters: funnelOf(bundles.chapters),
     },
-    structural_floor: floorRowsOf(floor),
+    structural_floor: floorRowsOf(floor, input.entityViews),
     keyword_injections: keywordInjections.map(injectionOf),
     prompt_buffer_tokens: input.promptBufferTokens,
     // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;
