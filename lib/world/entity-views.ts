@@ -127,8 +127,7 @@ export function buildEntityViews(entities: readonly Entity[], scene: ViewScene):
   const inScene = new Set(scene.sceneEntities)
   const modes = placeModes(entities, scene.currentLocationId)
 
-  const seatedByScene = (e: Entity): boolean =>
-    e.status === 'active' && (inScene.has(e.id) || e.id === scene.currentLocationId)
+  const seatedByScene = (e: Entity): boolean => e.status === 'active' && inScene.has(e.id)
   const disabled = (e: Entity): boolean =>
     e.kind === 'location' ? modes.isDisabled(e.id) : e.injectionMode === 'disabled'
   const shown = (e: Entity): boolean => !disabled(e) || seatedByScene(e)
