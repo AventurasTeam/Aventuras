@@ -157,7 +157,7 @@ describe('structural-floor invariant — entity state', () => {
     }
   }
   // From the scene on: the fallback's roster lists every active and staged entity by name, a
-  // separate rule (its own triage entry), and this suite is about state.
+  // separate rule, and this suite is about state.
   const fromScene = (out: string): string => out.slice(out.indexOf('# In scene'))
   const templates = [
     ['per-turn', PER_TURN_NARRATIVE.user],
@@ -195,7 +195,7 @@ describe('structural-floor invariant — entity state', () => {
     )
   })
 
-  // LiquidJS drops a filter on a for tag's collection, which once let every status through.
+  // LiquidJS drops a filter on a for tag's collection, which would let every status through.
   it.each(templates)('%s lists only active entities in scene', (_, source) => {
     const rows = [
       makeEntity({ id: ARIA, kind: 'character', name: 'Aria' }),

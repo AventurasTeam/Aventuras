@@ -31,7 +31,8 @@ LiquidJS drops a filter on a for tag's collection, so the list is assigned first
 half of the scene test de-dupes the row the classifier named as both in-scene and the location;
 it is nil-safe, since a null structuralLocation makes it "e.id != nil", which is true. An item
 its in-scene holder's Holds lists, or one listed under Here:, is not listed again
-(piggyback.md → What the writer sees); each test guards its left side, since nil == nil.
+(piggyback.md → What the writer sees). The Here: test checks for a location first: with no
+current location, a null one's id would match, since nil == nil.
 {%- endcomment -%}
 {%- assign activeEntities = entities | active -%}
 {%- assign inScene = '' | split: ',' -%}

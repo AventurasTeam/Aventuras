@@ -109,7 +109,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(system).not.toContain('# Tone')
   })
 
-  // A single blank line after the scene list, which once left two before the next heading.
+  // Whitespace control around the scene list sets this gap; one stray newline doubles it.
   it('leaves one blank line between the scene list and the next heading', () => {
     expect(out).toContain('A wary scout.\n\n# Story so far')
   })
