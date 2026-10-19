@@ -51,6 +51,47 @@ describe('engine', () => {
   })
 })
 
+// The bundled templates include a macro once per row, so an uncached engine re-parses it per row.
+describe('parse cache', () => {
+  const looped = (macroSource: string): Pack => ({
+    templates: {
+      t: {
+        group: 'generationContext',
+        system: '',
+        user: "{% for r in rows %}{% include 'm', r: r %}{% endfor %}",
+      },
+    },
+    macros: { m: { group: 'staticContent', source: macroSource } },
+  })
+
+  it('parses an included macro once across rows and renders', () => {
+    const engine = createEngine(looped('{% probe %}{{ r }}'))
+    let parses = 0
+    engine.registerTag('probe', {
+      parse() {
+        parses += 1
+      },
+      render() {
+        return ''
+      },
+    })
+
+    expect(renderWith(engine, 't', { rows: ['a', 'b', 'c'] }).user).toBe('abc')
+    expect(renderWith(engine, 't', { rows: ['a', 'b', 'c'] }).user).toBe('abc')
+    expect(renderWith(engine, 't', { rows: ['d'] }).user).toBe('d')
+    expect(parses).toBe(1)
+  })
+
+  it("keeps each engine's cache to its own pack", () => {
+    const first = createEngine(looped('<{{ r }}>'))
+    const second = createEngine(looped('[{{ r }}]'))
+
+    expect(renderWith(first, 't', { rows: ['a'] }).user).toBe('<a>')
+    expect(renderWith(second, 't', { rows: ['a'] }).user).toBe('[a]')
+    expect(renderWith(first, 't', { rows: ['b'] }).user).toBe('<b>')
+  })
+})
+
 // architecture.md → System and user halves.
 describe('template halves', () => {
   const halves: Pack = {

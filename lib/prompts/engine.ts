@@ -28,7 +28,8 @@ export function createEngine(pack: Pack): Liquid {
     templates[id] = entry.source
   }
 
-  const engine = new Liquid({ templates })
+  // Safe to cache: `templates` is this engine's own copy, fixed once built.
+  const engine = new Liquid({ templates, cache: true })
   registerFilters(engine)
   return engine
 }
