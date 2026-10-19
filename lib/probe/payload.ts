@@ -158,8 +158,6 @@ const nameWithDescription = (name: string, description: string | null): string =
 // turns the floor cost reads as a lower bound. A held or loose item is its own row, its line
 // priced there and its holder's row or the location's carrying only the Holds or Here label, so
 // the template's one rendering is counted once.
-const NO_IDS = { heldId: null } as const satisfies Partial<StateLineOptions>
-
 const stateLinesOf = (
   e: Pick<EntityRow, 'id' | 'kind'>,
   views: EntityViews,
@@ -173,7 +171,7 @@ const sceneEntityText = (
   lines(
     `## ${e.name}`,
     e.description?.trim() ? e.description : null,
-    ...stateLinesOf(e, views, { ...NO_IDS, here: true, heldLines: false }),
+    ...stateLinesOf(e, views, { here: true, held: 'label' }),
   )
 
 const currentLocationText = (
@@ -182,7 +180,7 @@ const currentLocationText = (
 ) =>
   [
     nameWithDescription(e.name, e.description),
-    ...stateLinesOf(e, views, { ...NO_IDS, here: true }),
+    ...stateLinesOf(e, views, { here: true, held: null }),
     ...(views.looseAt(e.id).length > 0 ? ['Here:'] : []),
   ].join('\n')
 
@@ -190,7 +188,7 @@ const currentLocationText = (
 const memoryRowText = (
   e: Pick<EntityRow, 'id' | 'kind' | 'name' | 'description' | 'status'>,
   views: EntityViews,
-) => [entityHead(e), ...stateLinesOf(e, views, { ...NO_IDS, here: false })].join('\n')
+) => [entityHead(e), ...stateLinesOf(e, views, { here: false, held: null })].join('\n')
 
 const activeThreadText = (t: Pick<ThreadRow, 'title' | 'description'>): string =>
   lines(t.title, t.description)

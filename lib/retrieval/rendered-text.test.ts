@@ -98,7 +98,7 @@ describe('entityStateLines', () => {
   const kael = { kind: 'character' as const, state: views.of('char_k', 'character') }
 
   it('prints a character in canon’s example order, Location only out of scene', () => {
-    expect(entityStateLines(kael, { here: false, heldId: (id) => id })).toEqual([
+    expect(entityStateLines(kael, { here: false, held: (id) => id })).toEqual([
       'Location: The Docks',
       'Physique: tall',
       'Attire: a greatcoat',
@@ -111,11 +111,16 @@ describe('entityStateLines', () => {
       '- [item_s] Sword (equipped): glows near the dead. Condition: cracked',
       'Stackables: gold 30, arrows 12',
     ])
-    expect(entityStateLines(kael, { here: true, heldId: null })[0]).toBe('Physique: tall')
+    const plain = entityStateLines(kael, { here: true, held: null })
+    expect(plain[0]).toBe('Physique: tall')
+    expect(plain.filter((line) => line.startsWith('- '))).toEqual([
+      '- Key',
+      '- Sword (equipped): glows near the dead. Condition: cracked',
+    ])
   })
 
   it('keeps the Holds label but leaves out its item lines on request', () => {
-    const out = entityStateLines(kael, { here: true, heldId: null, heldLines: false })
+    const out = entityStateLines(kael, { here: true, held: 'label' })
     expect(out.slice(-2)).toEqual(['Holds:', 'Stackables: gold 30, arrows 12'])
   })
 
@@ -126,7 +131,7 @@ describe('entityStateLines', () => {
           kind: 'location',
           state: { condition: 'half-burned', parent: { id: 'l', name: 'Port', status: 'active' } },
         },
-        { here: false, heldId: null },
+        { here: false, held: null },
       ),
     ).toEqual(['Condition: half-burned', 'Part of: Port'])
     expect(
@@ -139,7 +144,7 @@ describe('entityStateLines', () => {
             holder: { id: 'c', name: 'Kael', status: 'active', equipped: true },
           },
         },
-        { here: false, heldId: null },
+        { here: false, held: null },
       ),
     ).toEqual(['Held by: Kael'])
     expect(
@@ -155,7 +160,7 @@ describe('entityStateLines', () => {
             ],
           },
         },
-        { here: false, heldId: null },
+        { here: false, held: null },
       ),
     ).toEqual(['Agenda: take the port; hold it', 'Members: Aria'])
   })

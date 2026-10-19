@@ -74,10 +74,11 @@ const VISUAL_LABELS = {
 export type StateLineOptions = {
   /** Shown in scene or as the current location: no `Location:`, `Part of:` or `Held by:`. */
   here: boolean
-  /** The id a held item is bracketed with, or null where the block brackets none. */
-  heldId: ((id: string) => string) | null
-  /** False keeps the `Holds:` label but not its item lines, for a caller pricing each item apart. */
-  heldLines?: boolean
+  /**
+   * The `Holds:` lines: each item bracketed with the id this returns, each with no id (null), or
+   * the label alone ('label', for a caller pricing each item apart).
+   */
+  held: ((id: string) => string) | null | 'label'
 }
 
 const labelled = (label: string, value: string | null | undefined): string[] =>
@@ -90,7 +91,7 @@ const refName = (ref: EntityRef | null): string | null =>
 
 /** The lines the bundled entity-state macro prints for an entity, in its order; the macro is the spec. */
 export function entityStateLines(entity: KindedView, options: StateLineOptions): string[] {
-  const { here, heldId } = options
+  const { here, held } = options
   switch (entity.kind) {
     case 'character': {
       const s = entity.state
@@ -99,9 +100,9 @@ export function entityStateLines(entity: KindedView, options: StateLineOptions):
           ? []
           : [
               'Holds:',
-              ...(options.heldLines === false
+              ...(held === 'label'
                 ? []
-                : s.holdings.map((h) => itemLine(h, heldId === null ? null : heldId(h.id)))),
+                : s.holdings.map((h) => itemLine(h, held === null ? null : held(h.id)))),
             ]
       return [
         ...(here ? [] : labelled('Location', refName(s.location))),
@@ -162,7 +163,7 @@ export function measuredEntity(
 export function entityRenderedText(entity: MeasuredEntity): string {
   return [
     entityHead(entity),
-    ...entityStateLines(entity, { here: false, heldId: () => HELD_ITEM_ID_STAND_IN }),
+    ...entityStateLines(entity, { here: false, held: () => HELD_ITEM_ID_STAND_IN }),
   ].join('\n')
 }
 
