@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dedupeTerms, newTerms } from './keyword-terms'
+import { dedupeTerms, foldStackables, newTerms } from './keyword-terms'
 
 describe('dedupeTerms', () => {
   it('collapses case variants to the first spelling', () => {
@@ -34,5 +34,12 @@ describe('newTerms', () => {
 
   it('matches the current list under the same normalization as incoming', () => {
     expect(newTerms([' The Grey Wolf ', 'Café'], ['the grey wolf', 'Café'])).toEqual([])
+  })
+})
+
+describe('foldStackables', () => {
+  it('sums case variants under one key and drops blank keys and empty balances', () => {
+    expect([...foldStackables({ Gold: 5, gold: 3, ' ': 4, rope: 0 })]).toEqual([['gold', 8]])
+    expect(foldStackables(undefined).size).toBe(0)
   })
 })

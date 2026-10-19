@@ -98,6 +98,20 @@ export type {
   MapAnchor,
   PlaceTreeRow,
 } from './location-map'
+export { buildEntityViews, emptyEntityView, VISUAL_CATEGORIES } from './entity-views'
+export type {
+  CharacterStateView,
+  EntityRef,
+  EntityStateView,
+  EntityStateViewByKind,
+  EntityViews,
+  FactionStateView,
+  HoldingView,
+  ItemStateView,
+  LocationStateView,
+  StackableView,
+  ViewScene,
+} from './entity-views'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
 export {
