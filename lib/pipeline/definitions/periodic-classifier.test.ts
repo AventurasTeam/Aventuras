@@ -1538,7 +1538,6 @@ describe('periodicClassifierPhase', () => {
   })
 })
 
-// Not drain(): it skips the action layer, the only place apply-time rejection happens.
 // Not drain(): it skips the action layer and the orchestrator's abort reversal.
 describe('periodicClassifierPhase via runPipeline', () => {
   beforeEach(() => {
