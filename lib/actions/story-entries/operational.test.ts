@@ -1149,7 +1149,7 @@ describe('rollback over the closed set', () => {
     error.mockRestore()
   })
 
-  it("selects the preview's set only once a no-gate run's abort reversal has committed", async () => {
+  it("selects the preview's set only once an interruptible run's abort reversal has committed", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedLateLink(db, ctx, true)

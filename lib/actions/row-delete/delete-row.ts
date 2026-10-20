@@ -4,9 +4,7 @@ import { generationStore } from '@/lib/stores'
 
 import {
   applyDeltaActionGroup,
-  applyDeltaActionGroupBuilt,
   DELTA_REJECTION,
-  type BuiltGroup,
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
@@ -43,10 +41,7 @@ function rejectionCode(code: string | undefined): RowDeleteRejectionCode {
 export type RowDeleteKind = 'entity' | 'lore' | 'thread' | 'happening'
 
 /** generation-pipeline.md → Action rejection — defense in depth: the UI disables first. */
-function rowDeleteGateRefusal(): Extract<
-  BuiltGroup<RowDeleteRejectionCode>,
-  { status: 'rejected' }
-> | null {
+function rowDeleteGateRefusal(): Extract<RowDeleteResult, { status: 'rejected' }> | null {
   return generationStore.isUserEditBlocked()
     ? { status: 'rejected', reason: 'generation in flight', code: ROW_DELETE_REJECTION.inFlight }
     : null
@@ -102,28 +97,6 @@ export async function commitRowDelete(
   if (gated) return gated
   return settleRowDelete(kind, branchId, id, () =>
     applyDeltaActionGroup(actions, { actionId: generateId('act'), branchId }, ctx),
-  )
-}
-
-/**
- * commitRowDelete, with `build` run under the branch lock's shared hold through the commit, behind
- * the gate again: a hard-gate run can start while the delete waits for the hold.
- */
-export async function commitRowDeleteBuilt(
-  kind: RowDeleteKind,
-  branchId: string,
-  id: string,
-  build: () => BuiltGroup<RowDeleteRejectionCode>,
-  ctx: DbCtx,
-): Promise<RowDeleteResult> {
-  const gated = loggedGateRefusal(kind, branchId, id)
-  if (gated) return gated
-  return settleRowDelete(kind, branchId, id, () =>
-    applyDeltaActionGroupBuilt(
-      () => rowDeleteGateRefusal() ?? build(),
-      { actionId: generateId('act'), branchId },
-      ctx,
-    ),
   )
 }
 
