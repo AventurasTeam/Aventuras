@@ -61,6 +61,7 @@ export type PipelineEvent =
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string }
   | PhaseEmittedEvent
 
 // Caller-supplied run parameters, keyed by kind. Only kinds that REQUIRE inputs
@@ -147,8 +148,11 @@ export type Pipeline = {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate'
+  /** A head reversal or Cancel ends me and defers me to the branch's next Send. */
+  interruptible?: boolean
   concurrencyPolicy: ConcurrencyPolicy
-  chainsTo?: (run: RunState) => string | null
+  /** Awaited at commit while the run still holds the gate; the swap after it stays synchronous. */
+  chainsTo?: (run: RunState, ctx: DbCtx) => string | null | Promise<string | null>
   onPreflightFailure?: PreflightFailureHook
   onPhaseException?: PhaseExceptionHook
 }

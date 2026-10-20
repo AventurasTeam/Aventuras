@@ -53,6 +53,8 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
+  /** Send's deferred work: shown as "before your turn", cancelled with the Send. */
+  beforeTurn?: boolean
   /** Called once the run is in txState, before any await; not for a chain's successor. */
   onReserved?: () => void
 } & DbCtx
@@ -63,17 +65,25 @@ export type RunCtx = {
 export type RunCtxFor<K extends string> = RunCtx &
   (K extends keyof PipelineInputMap ? { inputs: PipelineInputMap[K] } : { inputs?: unknown })
 
+export type PipelineStart = {
+  /** The starting run's result, or the refusal; settles at its commit or abort. */
+  origin: Promise<TxResult | RejectedStart>
+  /** Settles when the chain's last run ends; never rejects. */
+  chain: Promise<void>
+}
+
 function newRunState(kind: string, ctx: RunCtx): RunState {
   let resolveTerminal!: () => void
   const terminal = new Promise<void>((resolve) => {
     resolveTerminal = resolve
   })
+  const pipeline = getPipeline(kind)
   return {
     runId: generateId('run'),
     kind,
-    gateBehavior: getPipeline(kind).gateBehavior,
-    interruptible: false,
-    beforeTurn: false,
+    gateBehavior: pipeline.gateBehavior,
+    interruptible: pipeline.interruptible ?? false,
+    beforeTurn: ctx.beforeTurn ?? false,
     actionId: ctx.actionId ?? generateId('act'),
     storyId: ctx.storyId,
     branchId: ctx.branchId,
@@ -271,14 +281,30 @@ async function startChainedSuccessor(run: RunState, ctx: RunCtx): Promise<void> 
   })
 }
 
+// Awaited while the run is still in txState, so the gate stays up across the read. A throw
+// chains nothing: the run's own writes are done and must still commit.
+async function nextKindOf(run: RunState, ctx: RunCtx): Promise<string | null> {
+  const chainsTo = getPipeline(run.kind).chainsTo
+  if (!chainsTo) return null
+  try {
+    return await chainsTo(run, ctx)
+  } catch (e) {
+    logger.error(
+      'pipeline.chain_eval_failed',
+      { runId: run.runId, kind: run.kind, error: e instanceof Error ? e.message : String(e) },
+      { actionId: run.actionId },
+    )
+    return null
+  }
+}
+
 async function commitRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
   // Every phase, parallel branches included, has returned: no write of this run is still to come.
   endWritePhase(run)
-  const pipeline = getPipeline(run.kind)
-  const nextKind = pipeline.chainsTo?.(run) ?? null
+  const nextKind = await nextKindOf(run, ctx)
   // chainsTo may name an unregistered kind (authoring bug); resolve it without
   // throwing so a bad chain can't strand the just-committed run in txState.runs.
   const nextPipeline = nextKind ? getPipelineSafe(nextKind) : undefined
@@ -288,10 +314,15 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  // A chained kind gets its own context, so the predecessor's inputs stop here
-  // (generation-pipeline.md → Run-scoped state); nothing supplies the successor's.
+  // A chained run gets its own context: no inputs, its own actionId, never Send's deferred work
+  // (generation-pipeline.md → chainsTo on predecessor).
   const successor = nextPipeline
-    ? newRunState(nextPipeline.kind, { ...ctx, inputs: undefined })
+    ? newRunState(nextPipeline.kind, {
+        ...ctx,
+        inputs: undefined,
+        actionId: undefined,
+        beforeTurn: undefined,
+      })
     : undefined
   generationStore.finishRun(run.runId, successor)
   try {
@@ -383,7 +414,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   // Must precede generationStore.abortRun below — that release drops the gate serializing this.
   if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
     await runPhaseExceptionHook(run, ctx, cause.error)
-  generationStore.abortRun(run.runId)
+  const newlyDeferred = generationStore.abortRun(run.runId, outcome)
   // A straggler that wrote while the run was still registered (during the hook) may have taken a
   // fresh hold since the release above.
   endWritePhase(run)
@@ -413,6 +444,13 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     outcome,
     ...(error ? { error } : {}),
   })
+  if (newlyDeferred)
+    pipelineEventBus.emit({
+      type: 'run_deferred',
+      runId: run.runId,
+      kind: run.kind,
+      branchId: run.branchId,
+    })
   run.resolveTerminal()
   return { runId: run.runId, actionId: run.actionId, outcome, ...(error ? { error } : {}) }
 }
@@ -457,10 +495,57 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   return { kind: 'completed' }
 }
 
-export async function runPipeline<K extends string>(
-  kind: K,
-  ctx: RunCtxFor<K>,
-): Promise<TxResult | RejectedStart> {
+// Pre-flight, phases, then commit or abort. A throwing resolver predicate (or any pre-flight
+// error) winds the run down through the normal abort path: rejecting here would orphan the
+// registered run and its unresolved terminal, blocking edits and deadlocking awaitRunTerminal.
+async function driveRun(
+  run: RunState,
+  ctx: RunCtx,
+): Promise<{ tx: TxResult; successor?: RunState }> {
+  let preflightError: PipelineError | null
+  try {
+    preflightError = runPreflight(getPipeline(run.kind), {
+      appSettings: appSettingsStore.getAppSettings(),
+      storySettings: currentStoryStore.getCurrentStory()?.settings,
+    })
+  } catch (e) {
+    preflightError = { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
+  }
+  if (preflightError) {
+    logger.error(
+      'pipeline.preflight_failed',
+      {
+        runId: run.runId,
+        errorKind: preflightError.kind,
+        errorDetail: preflightError.detail,
+      },
+      { actionId: run.actionId },
+    )
+    // Before abortRun: that releases the run, and releasing it drops the gate
+    // that serializes this write against the phases' own status writes.
+    const onPreflightFailure = getPipeline(run.kind).onPreflightFailure
+    if (onPreflightFailure) {
+      try {
+        await onPreflightFailure(ctx, preflightError)
+      } catch (e) {
+        logger.error(
+          'pipeline.preflight_hook_failed',
+          { runId: run.runId, error: e instanceof Error ? e.message : String(e) },
+          { actionId: run.actionId },
+        )
+      }
+    }
+    return { tx: await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError }) }
+  }
+  const outcome = await runPhases(run, ctx)
+  if (outcome.kind === 'aborted') return { tx: await abortRun(run, ctx, outcome.cause) }
+  return commitRun(run, ctx)
+}
+
+async function driveOrigin(
+  kind: string,
+  ctx: RunCtx,
+): Promise<{ result: TxResult | RejectedStart; successor?: RunState }> {
   // Loop so a yield-wait can't act on a stale decision: after aborting + awaiting the
   // yielding runs, re-check; a blocking run may have started during the wait.
   for (;;) {
@@ -468,7 +553,7 @@ export async function runPipeline<K extends string>(
     const decision = checkConcurrencyContract(kind, txState.runs, txState.reversalInProgress)
     if (decision.kind === 'blocked') {
       logger.debug('pipeline.run_rejected', { kind, blockedBy: decision.by })
-      return { outcome: 'rejected', blockedBy: decision.by }
+      return { result: { outcome: 'rejected', blockedBy: decision.by } }
     }
     if (decision.kind === 'start') break
     await Promise.all(
@@ -481,65 +566,78 @@ export async function runPipeline<K extends string>(
   }
   // reserveRun registers synchronously right after the loop's 'start' (race-free for
   // the common path); beginRun then persists the marker and emits run_start.
-  let run = reserveRun(kind, ctx)
+  const run = reserveRun(kind, ctx)
   await beginRun(run, ctx)
   // A user write checks the gate before queueing on its row locks, so one that passed just before
   // reserveRun raised it could still commit under this run's reads. A chain's successor needs no
   // settle: the gate stayed up across the handoff.
   if (run.gateBehavior === 'hard-gate') await settleUserWrites()
-  // Drive the run; on a chained commit, drive the successor too. The whole chain is
-  // awaited, but the caller gets the ORIGIN run's result — downstream chain outcomes
-  // are observed on the event bus, not the return value.
-  let originResult: TxResult | undefined
-  for (;;) {
-    // A throwing resolver predicate (or any preflight error) must wind the run down
-    // through the normal abort path — rejecting here would orphan the registered run
-    // and its unresolved terminal, blocking edits and deadlocking awaitRunTerminal.
-    let preflightError: PipelineError | null
+  const { tx, successor } = await driveRun(run, ctx)
+  return { result: tx, successor }
+}
+
+// Each successor is already in txState, swapped in at its predecessor's commit. Nothing here
+// rejects: the origin's caller has its result, and a successor's failure is its own.
+async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promise<void> {
+  let run = first
+  while (run) {
+    const current = run
     try {
-      preflightError = runPreflight(getPipeline(run.kind), {
-        appSettings: appSettingsStore.getAppSettings(),
-        storySettings: currentStoryStore.getCurrentStory()?.settings,
-      })
+      await startChainedSuccessor(current, ctx)
     } catch (e) {
-      preflightError = { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
-    }
-    if (preflightError) {
+      // As beginRun's unwind: a half-registered successor must not keep the gate up.
+      generationStore.abortRun(current.runId)
+      current.resolveTerminal()
       logger.error(
-        'pipeline.preflight_failed',
+        'pipeline.chain_start_failed',
         {
-          runId: run.runId,
-          errorKind: preflightError.kind,
-          errorDetail: preflightError.detail,
+          runId: current.runId,
+          kind: current.kind,
+          error: e instanceof Error ? e.message : String(e),
         },
-        { actionId: run.actionId },
+        { actionId: current.actionId },
       )
-      // Before abortRun: that releases the run, and releasing it drops the gate
-      // that serializes this write against the phases' own status writes.
-      const onPreflightFailure = getPipeline(run.kind).onPreflightFailure
-      if (onPreflightFailure) {
-        try {
-          await onPreflightFailure(ctx, preflightError)
-        } catch (e) {
-          logger.error(
-            'pipeline.preflight_hook_failed',
-            { runId: run.runId, error: e instanceof Error ? e.message : String(e) },
-            { actionId: run.actionId },
-          )
-        }
-      }
-      const tx = await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError })
-      return originResult ?? tx
+      return
     }
-    const outcome = await runPhases(run, ctx)
-    if (outcome.kind === 'aborted') {
-      const tx = await abortRun(run, ctx, outcome.cause)
-      return originResult ?? tx
+    try {
+      run = (await driveRun(current, ctx)).successor
+    } catch (e) {
+      logger.error(
+        'pipeline.chain_run_failed',
+        {
+          runId: current.runId,
+          kind: current.kind,
+          error: e instanceof Error ? e.message : String(e),
+        },
+        { actionId: current.actionId },
+      )
+      return
     }
-    const { tx, successor } = await commitRun(run, ctx)
-    originResult ??= tx
-    if (!successor) return originResult
-    await startChainedSuccessor(successor, ctx)
-    run = successor
   }
+}
+
+/**
+ * Starts `kind` and drives its chain. `origin` settles at the starting run's commit or abort (or
+ * its refusal) and rejects only on a throw during that run's own drive; `chain` settles once the
+ * chain's last run ends.
+ */
+export function startPipeline<K extends string>(kind: K, ctx: RunCtxFor<K>): PipelineStart {
+  const started = driveOrigin(kind, ctx)
+  return {
+    origin: started.then((s) => s.result),
+    chain: started.then(
+      (s) => driveSuccessors(s.successor, ctx),
+      () => undefined,
+    ),
+  }
+}
+
+/** Starts `kind` and resolves with the origin run's result once the whole chain has ended. */
+export async function runPipeline<K extends string>(
+  kind: K,
+  ctx: RunCtxFor<K>,
+): Promise<TxResult | RejectedStart> {
+  const { origin, chain } = startPipeline(kind, ctx)
+  const [result] = await Promise.all([origin, chain])
+  return result
 }
