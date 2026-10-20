@@ -17,7 +17,8 @@ import {
   toRawBase64,
   generatePortrait as sdkGeneratePortrait,
   isImageGenerationEnabled,
-  hasRequiredCredentials,
+  missingCredential,
+  type MissingCredential,
 } from '#lib/services/ai/image/index.ts'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '#lib/services/ai/image/constants.ts'
 import { database } from '#lib/services/database.ts'
@@ -64,8 +65,14 @@ function unknownImageError(generatedImages: Map<string, string>, imageId: string
   return `Image with ID "${imageId}" not found. It may be from a previous session or hallucinated. Available IDs right now: [${available || 'none'}].`
 }
 
-function missingCredentialsError(slot: string): string {
-  return `The ${slot} image profile has no API key configured. Please tell the user to add credentials in Settings → Images.`
+const MISSING_CREDENTIAL_REASONS: Record<MissingCredential, string> = {
+  profile: 'is missing or its provider is unsupported',
+  apiKey: 'has no API key configured',
+  baseUrl: 'has no base URL configured',
+}
+
+function missingCredentialsError(slot: string, missing: MissingCredential): string {
+  return `The ${slot} image profile ${MISSING_CREDENTIAL_REASONS[missing]}. Please tell the user to fix it in Settings → Images.`
 }
 
 const NO_IMAGE = { success: false, error: 'The image provider returned no image.' }
@@ -96,9 +103,8 @@ function resolveImageProfile(
       error: `The configured ${slot} image profile is missing or its provider is unsupported. Please tell the user to check Settings → Images.`,
     }
   }
-  if (!hasRequiredCredentials(slot)) {
-    return { error: missingCredentialsError(slot) }
-  }
+  const missing = missingCredential(slot)
+  if (missing) return { error: missingCredentialsError(slot, missing) }
 
   const model = settings.getImageProfile(profileId)?.model
   if (!model) {
@@ -223,11 +229,12 @@ export function createImageTools(context: ImageToolContext) {
             }
           }
 
-          if (!hasRequiredCredentials('portrait')) {
+          const missing = missingCredential('portrait')
+          if (missing) {
             return {
               success: false,
               characterName: character.name,
-              error: missingCredentialsError('portrait'),
+              error: missingCredentialsError('portrait', missing),
             }
           }
 

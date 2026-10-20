@@ -582,7 +582,9 @@ NanoGPT and Pollinations share one hand-written OpenAI-style request (`openaiCom
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
 key optional) and Google call the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only
 429s. Each adapter keeps its own model discovery and size handling; discovery throws on a failed
-request rather than substituting a list. The registry hands references only to the providers that send
+request rather than substituting a list. Whether a provider takes an API key or a base URL is
+declared per provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings
+form and `hasRequiredCredentials` read those tables. The registry hands references only to the providers that send
 them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
 adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
 from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that

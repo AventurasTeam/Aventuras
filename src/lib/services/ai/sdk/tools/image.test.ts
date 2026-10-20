@@ -25,7 +25,7 @@ vi.mock('#lib/services/ai/image/index.ts', () => ({
   supportsReferenceImages: vi.fn(),
   toRawBase64: vi.fn(),
   isImageGenerationEnabled: vi.fn(),
-  hasRequiredCredentials: vi.fn(),
+  missingCredential: vi.fn(),
 }))
 
 vi.mock('#lib/services/database.ts', () => ({
@@ -40,7 +40,7 @@ import {
   supportsReferenceImages,
   toRawBase64,
   isImageGenerationEnabled,
-  hasRequiredCredentials,
+  missingCredential,
 } from '#lib/services/ai/image/index.ts'
 import { database } from '#lib/services/database.ts'
 import type { VaultCharacter } from '#lib/types/index.ts'
@@ -74,7 +74,7 @@ beforeEach(() => {
   profiles.std = { model: 'std-model' }
   profiles.ref = { model: 'ref-model' }
   vi.mocked(isImageGenerationEnabled).mockReturnValue(true)
-  vi.mocked(hasRequiredCredentials).mockReturnValue(true)
+  vi.mocked(missingCredential).mockReturnValue(undefined)
   vi.mocked(supportsReferenceImages).mockResolvedValue(true)
   vi.mocked(generateImage).mockResolvedValue({ base64: 'RESULT' })
 })
@@ -128,10 +128,13 @@ describe('edit_image', () => {
     const { edit, generatedImages } = makeTools()
     generatedImages.set('a', 'data:image/png;base64,AAAA')
 
-    vi.mocked(hasRequiredCredentials).mockReturnValue(false)
+    vi.mocked(missingCredential).mockReturnValue('apiKey')
     expect((await edit({ instruction: 'x', imageId: 'a' })).error).toContain('API key')
 
-    vi.mocked(hasRequiredCredentials).mockReturnValue(true)
+    vi.mocked(missingCredential).mockReturnValue('baseUrl')
+    expect((await edit({ instruction: 'x', imageId: 'a' })).error).toContain('base URL')
+
+    vi.mocked(missingCredential).mockReturnValue(undefined)
     profiles.ref = { model: '' }
     expect((await edit({ instruction: 'x', imageId: 'a' })).error).toContain('no model')
   })
@@ -206,7 +209,7 @@ describe('generate_standard_image', () => {
   it.each([
     ['generation is disabled', () => (imageSettings.profileId = null)],
     ['the profile is unusable', () => vi.mocked(isImageGenerationEnabled).mockReturnValue(false)],
-    ['credentials are missing', () => vi.mocked(hasRequiredCredentials).mockReturnValue(false)],
+    ['credentials are missing', () => vi.mocked(missingCredential).mockReturnValue('apiKey')],
     ['the profile has no model', () => (profiles.std = { model: '' })],
   ])('fails when %s', async (_name, arrange) => {
     arrange()
@@ -244,7 +247,9 @@ describe('generate_standard_image', () => {
 describe('generate_portrait', () => {
   it('fails when the portrait profile has no credentials', async () => {
     const { portrait } = makeTools([{ id: 'c1', name: 'Ann' }])
-    vi.mocked(hasRequiredCredentials).mockImplementation((slot) => slot !== 'portrait')
+    vi.mocked(missingCredential).mockImplementation((slot) =>
+      slot === 'portrait' ? 'apiKey' : undefined,
+    )
 
     const result = await portrait({ characterId: 'c1' })
 

@@ -43,6 +43,7 @@ import {
   supportsImageGeneration,
   requiresApiKey,
   takesApiKey,
+  baseUrlMode,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   generateImage,
@@ -147,6 +148,33 @@ describe('Image Provider Registry', () => {
       for (const { value, label } of IMAGE_PROVIDER_OPTIONS) {
         expect(label).toBe(IMAGE_PROVIDER_LABELS[value])
       }
+    })
+  })
+
+  describe('baseUrlMode', () => {
+    it('requires one for OpenAI Compatible, which has no endpoint of its own', () => {
+      expect(baseUrlMode('openai-compatible')).toBe('required')
+    })
+
+    it.each(['openai', 'zhipu', 'comfyui', 'a1111'] satisfies ImageProviderType[])(
+      'makes it optional for %s',
+      (providerType) => {
+        expect(baseUrlMode(providerType)).toBe('optional')
+      },
+    )
+
+    it.each([
+      'nanogpt',
+      'openrouter',
+      'chutes',
+      'pollinations',
+      'google',
+    ] satisfies ImageProviderType[])('offers none for the fixed endpoint of %s', (providerType) => {
+      expect(baseUrlMode(providerType)).toBe('none')
+    })
+
+    it('offers none for an unknown provider', () => {
+      expect(baseUrlMode('unknown-provider')).toBe('none')
     })
   })
 

@@ -26,6 +26,7 @@ export {
   listLoras,
   requiresApiKey,
   takesApiKey,
+  baseUrlMode,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,
@@ -35,6 +36,9 @@ export {
 export {
   isImageGenerationEnabled,
   hasRequiredCredentials,
+  missingCredential,
+  portraitCredentialError,
+  type MissingCredential,
   type ImageProfileSlot,
   getProviderDisplayName,
   retryImageGeneration,

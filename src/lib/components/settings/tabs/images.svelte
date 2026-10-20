@@ -15,6 +15,7 @@
     listLoras,
     generateImage,
     takesApiKey,
+    baseUrlMode,
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
@@ -1175,10 +1176,10 @@
       </div>
     {/if}
 
-    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'openai-compatible' || profileProviderType === 'zhipu' || profileProviderType === 'a1111'}
+    {#if baseUrlMode(profileProviderType) !== 'none'}
       <div class="space-y-2">
         <Label>
-          {profileProviderType === 'openai-compatible' ? 'Base URL' : 'Base URL (optional)'}
+          {baseUrlMode(profileProviderType) === 'required' ? 'Base URL' : 'Base URL (optional)'}
         </Label>
         <Input bind:value={profileBaseUrl} placeholder="Custom base URL" />
       </div>

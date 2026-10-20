@@ -1,6 +1,7 @@
 import { settings } from '#lib/stores/settings.svelte.ts'
 import {
-  hasRequiredCredentials,
+  missingCredential,
+  portraitCredentialError,
   getProviderDisplayName,
   generatePortrait as sdkGeneratePortrait,
   resolveStylePromptForPack,
@@ -65,10 +66,11 @@ export class ImageStore {
       styleId: imageSettings.portraitStyleId,
     })
 
-    if (!hasRequiredCredentials()) {
+    const missing = missingCredential()
+    if (missing) {
       const providerName = getProviderDisplayName()
-      log('Missing credentials for provider', { provider: providerName })
-      this.portraitError = `${providerName} API key required for portrait generation`
+      log('Missing credentials for provider', { provider: providerName, missing })
+      this.portraitError = portraitCredentialError(providerName, missing)
       return
     }
 
@@ -130,10 +132,11 @@ export class ImageStore {
       styleId: imageSettings.portraitStyleId,
     })
 
-    if (!hasRequiredCredentials()) {
+    const missing = missingCredential()
+    if (missing) {
       const providerName = getProviderDisplayName()
-      log('Missing credentials for provider', { provider: providerName })
-      this.portraitError = `${providerName} API key required for portrait generation`
+      log('Missing credentials for provider', { provider: providerName, missing })
+      this.portraitError = portraitCredentialError(providerName, missing)
       return
     }
 

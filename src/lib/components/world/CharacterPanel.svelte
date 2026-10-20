@@ -22,7 +22,8 @@
   import type { Character } from '#lib/types/index.ts'
   import type { RuntimeVariable, RuntimeVarsMap } from '#lib/services/packs/types.ts'
   import {
-    hasRequiredCredentials,
+    missingCredential,
+    portraitCredentialError,
     getProviderDisplayName,
     generatePortrait as sdkGeneratePortrait,
   } from '#lib/services/ai/image/index.ts'
@@ -379,10 +380,11 @@
     })
 
     // Validate credentials
-    if (!hasRequiredCredentials()) {
+    const missing = missingCredential()
+    if (missing) {
       const providerName = getProviderDisplayName()
-      log('Missing credentials for provider', { provider: providerName })
-      portraitError = `${providerName} API key required for portrait generation`
+      log('Missing credentials for provider', { provider: providerName, missing })
+      portraitError = portraitCredentialError(providerName, missing)
       return
     }
 

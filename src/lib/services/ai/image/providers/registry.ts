@@ -88,6 +88,20 @@ const PROVIDER_API_KEY: Record<ImageProviderType, FieldMode> = {
   a1111: 'none',
 }
 
+/** Whether a provider takes a base URL: `required` when it has no endpoint of its own to default to. */
+const PROVIDER_BASE_URL: Record<ImageProviderType, FieldMode> = {
+  nanogpt: 'none',
+  openai: 'optional',
+  'openai-compatible': 'required',
+  openrouter: 'none',
+  chutes: 'none',
+  google: 'none',
+  zhipu: 'optional',
+  pollinations: 'none',
+  comfyui: 'optional',
+  a1111: 'optional',
+}
+
 /** Whether the adapter sends reference images; the rest would only waste the download. */
 const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
   nanogpt: true,
@@ -135,7 +149,7 @@ export const IMAGE_PROVIDER_OPTIONS = Object.entries(IMAGE_PROVIDER_LABELS).flat
   ([value, label]) => (supportsImageGeneration(value) ? [{ value, label }] : []),
 )
 
-// An unknown provider is assumed to need a key.
+// An unknown provider is assumed to need a key and to take no base URL.
 function apiKeyMode(providerType: string): FieldMode {
   return supportsImageGeneration(providerType) ? PROVIDER_API_KEY[providerType] : 'required'
 }
@@ -148,6 +162,11 @@ export function requiresApiKey(providerType: string): boolean {
 /** Whether a profile of this provider has an API key field at all. */
 export function takesApiKey(providerType: string): boolean {
   return apiKeyMode(providerType) !== 'none'
+}
+
+/** Whether a profile of this provider needs, may take, or has no base URL. */
+export function baseUrlMode(providerType: string): FieldMode {
+  return supportsImageGeneration(providerType) ? PROVIDER_BASE_URL[providerType] : 'none'
 }
 
 /**
