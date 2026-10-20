@@ -670,9 +670,9 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     async listModels(): Promise<ImageModelInfo[]> {
       const [checkpoints, diffusionModels, textEncoders, vaeModels] = await Promise.all([
         api.getCheckpoints(),
-        fetchModels('diffusion_models').catch(() => [] as string[]),
-        fetchModels('text_encoders').catch(() => [] as string[]),
-        fetchModels('vae').catch(() => [] as string[]),
+        fetchModels('diffusion_models').catch(() => []),
+        fetchModels('text_encoders').catch(() => []),
+        fetchModels('vae').catch(() => []),
       ])
 
       // Cache auto-detected clip/vae for this baseUrl
