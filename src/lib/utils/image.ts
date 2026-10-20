@@ -19,7 +19,7 @@ export function normalizeImageDataUrl(imageData: string | null | undefined): str
  * Image size is stored as an intent — orientation + size tier — not as pixels.
  *
  * The backends disagree on what a size even is: Google takes an aspect ratio from a closed
- * list and has no pixel parameter, OpenRouter takes ratio + `1K`/`2K`/`4K`, NanoGPT
+ * list and has no pixel parameter, OpenRouter takes a ratio + a resolution tier, NanoGPT
  * publishes a per-model list of accepted values, and only ComfyUI/A1111/Pollinations take
  * arbitrary dimensions. There is no pixel size they all accept, so each adapter resolves
  * the intent into whatever its backend takes.

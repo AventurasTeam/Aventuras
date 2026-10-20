@@ -1,22 +1,13 @@
 /**
  * OpenRouter Image Provider
  *
- * Uses OpenRouter's chat/completions endpoint with modalities: ["image"]
- * to generate images. OpenRouter wraps multiple image models (Flux, Gemini,
- * Sourceful, etc.) behind a single API.
- *
- * - txt2img: POST /chat/completions with modalities + image_config
- * - img2img: Same endpoint with base64 image in user message content
- * - Model discovery: GET /models, filter by output_modalities includes "image"
+ * Generates through `@openrouter/ai-sdk-provider` (POST /images). Models come from GET /models,
+ * filtered on image output.
  */
 
 import * as z from 'zod'
-import {
-  specToAspectRatio,
-  base64ImageMime,
-  type ImageSpec,
-  type ImageSizeTier,
-} from '#lib/utils/image.ts'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { specToAspectRatio, type ImageSizeTier } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -24,8 +15,9 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { imageGetFetch } from './fetchAdapter'
 import { parseModelList } from './parseModelList'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 const MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models'
@@ -51,37 +43,52 @@ function positivePrice(value: string | undefined): number | undefined {
   return parsed > 0 ? parsed : undefined
 }
 
-/** The aspect ratios OpenRouter documents. */
+/** The aspect ratios the `/images` API lists; OpenRouter clamps one to what the model supports. */
 const OPENROUTER_ASPECT_RATIOS = [
   '1:1',
+  '1:2',
+  '1:4',
+  '1:8',
+  '2:1',
   '2:3',
+  '2.35:1',
   '3:2',
   '3:4',
+  '4:1',
   '4:3',
   '4:5',
+  '5:2',
   '5:4',
+  '5:7',
+  '7:5',
+  '8:1',
   '9:16',
   '16:9',
+  '9:19.5',
+  '19.5:9',
+  '9:20',
+  '20:9',
+  '9:21',
   '21:9',
 ] as const
 
-/** `0.5K` is accepted by a single model, so `1K` is the floor and `tiny` collapses onto it. */
-const OPENROUTER_IMAGE_SIZE: Record<ImageSizeTier, string> = {
-  tiny: '1K',
-  small: '1K',
-  medium: '2K',
-  large: '4K',
-}
+type OpenRouterResolution = '512' | '768' | '1K' | '1.5K' | '2K' | '4K'
 
-function specToImageConfig(spec: ImageSpec): Record<string, string> {
-  return {
-    aspect_ratio: specToAspectRatio(spec, OPENROUTER_ASPECT_RATIOS),
-    image_size: OPENROUTER_IMAGE_SIZE[spec.size],
-  }
+/** Each tier's resolution matches its pixel long edge. */
+const OPENROUTER_IMAGE_SIZE: Record<ImageSizeTier, OpenRouterResolution> = {
+  tiny: '512',
+  small: '1K',
+  medium: '1.5K',
+  large: '2K',
 }
 
 export function createOpenRouterProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL
+  const openrouter = createOpenRouter({
+    apiKey: config.apiKey,
+    baseURL: baseUrl,
+    fetch: createImageSdkFetch('openrouter-image'),
+  })
 
   return {
     id: 'openrouter',
@@ -90,66 +97,14 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, referenceImages, signal } = options
 
-      // Build user message content
-      const contentParts: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
-
-      // img2img: attach reference images as image_url content parts
-      if (referenceImages?.length) {
-        for (const img of referenceImages) {
-          contentParts.push({
-            type: 'image_url',
-            image_url: { url: `data:${base64ImageMime(img)};base64,${img}` },
-          })
-        }
-      }
-
-      const imageConfig = specToImageConfig(spec)
-
-      const body: Record<string, unknown> = {
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: contentParts,
-          },
-        ],
-        modalities: ['image'],
-        stream: false,
-      }
-
-      if (Object.keys(imageConfig).length > 0) {
-        body.image_config = imageConfig
-      }
-
-      const response = await imageFetch({
-        url: `${baseUrl}/chat/completions`,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify(body),
+      return generateSdkImage({
+        model: openrouter.imageModel(model),
+        prompt,
+        referenceImages,
+        aspectRatio: specToAspectRatio(spec, OPENROUTER_ASPECT_RATIOS) as `${number}:${number}`,
+        providerOptions: { openrouter: { resolution: OPENROUTER_IMAGE_SIZE[spec.size] } },
         signal,
-        serviceId: 'openrouter-image',
       })
-
-      const data = await response.json()
-
-      // Extract image from response
-      const message = data?.choices?.[0]?.message
-      if (!message) throw new Error('No message in OpenRouter image response')
-
-      // Images come in message.images array
-      const images = message.images
-      if (images?.length) {
-        const imageUrl = images[0]?.image_url?.url
-        if (imageUrl) {
-          // Strip data URL prefix to get raw base64
-          const base64 = imageUrl.replace(/^data:image\/[^;]+;base64,/, '')
-          return { base64, revisedPrompt: message.content || undefined }
-        }
-      }
-
-      throw new Error('No image data in OpenRouter response')
     },
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {

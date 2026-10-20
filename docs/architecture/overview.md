@@ -572,16 +572,17 @@ Ten backends live under `src/lib/services/ai/image/providers/` — NanoGPT, Open
 OpenRouter, Google, Chutes, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
-steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google and
-OpenRouter, the model's own published resolution list for NanoGPT, real dimensions for
-ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
-it does not offer answers with the nearest thing it does, which is not the same picture.
+steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google, a
+ratio plus a resolution tier matched to the pixel tier for OpenRouter, the model's own published
+resolution list for NanoGPT, real dimensions for ComfyUI/A1111/Pollinations
+(`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
+with the nearest thing it does, which is not the same picture.
 
 NanoGPT alone keeps a hand-written OpenAI-style request (`openaiCompatible.ts`):
 `/images/generations`, or `/images/edits` as multipart when there are references. OpenAI
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
-key optional), Pollinations and Google call the SDK through `generateSdkImage` (`sdkImage.ts`),
-which retries only 429s. Pollinations reuses the OpenAI Compatible helper
+key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations and Google call
+the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations reuses the OpenAI Compatible helper
 (`generateOpenAICompatibleImage`) with its fixed base URL and `safe: false`. Each adapter keeps its
 own model discovery and size handling; discovery throws on a failed request rather than
 substituting a list. Whether a provider takes an API key or a base URL is declared per provider in
