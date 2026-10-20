@@ -45,6 +45,8 @@ function run(id: string): RunState {
     runId: id,
     kind: 'per-turn',
     gateBehavior: 'no-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: `act_${id}`,
     storyId: 's1',
     branchId: 'br_1',

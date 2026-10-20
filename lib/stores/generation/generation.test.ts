@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+
 import {
   awaitRunTerminal,
   backgroundClassifierRunning,
+  cancelStoryRuns,
+  deferredWorkKindOf,
   generationStore,
+  interruptMemoryRuns,
   isForegroundGenerating,
+  isHeadReversalBlocked,
+  isStoryBusy,
   isUserEditBlocked,
   type RunState,
   type TxState,
@@ -14,7 +21,9 @@ function run(id: string, kind = 'synthetic'): RunState {
   return {
     runId: id,
     kind,
-    gateBehavior: 'no-gate',
+    gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: `act_${id}`,
     storyId: 's1',
     branchId: 'b1',
@@ -26,35 +35,240 @@ function run(id: string, kind = 'synthetic'): RunState {
   }
 }
 
+// An interruptible pass on b1, as the orchestrator reserves it.
+function pass(id: string, over: Partial<RunState> = {}): RunState {
+  return { ...run(id, PERIODIC_CLASSIFIER_KIND), interruptible: true, ...over }
+}
+
+function tx(runs: RunState[], over: Partial<TxState> = {}): TxState {
+  return {
+    runs: new Map(runs.map((r) => [r.runId, r])),
+    reversalInProgress: false,
+    pendingTurns: new Set(),
+    deferred: new Map(),
+    ...over,
+  }
+}
+
+const deferredOn = (branchId: string) => generationStore.getTxState().deferred.get(branchId)
+
 describe('isUserEditBlocked', () => {
   it('blocks only when a hard-gate run is in flight', () => {
     const mk = (kind: string, gate: 'hard-gate' | 'no-gate') => ({
       ...run(kind),
       gateBehavior: gate,
     })
-    const tx = (runs: ReturnType<typeof mk>[], reversalInProgress = false): TxState => ({
-      runs: new Map(runs.map((r) => [r.runId, r])),
-      reversalInProgress,
-      pendingTurns: new Set(),
-    })
     expect(isUserEditBlocked(tx([]))).toBe(false)
     expect(isUserEditBlocked(tx([mk('bg', 'no-gate')]))).toBe(false)
     expect(isUserEditBlocked(tx([mk('bg', 'no-gate'), mk('fg', 'hard-gate')]))).toBe(true)
-    expect(isUserEditBlocked(tx([], true))).toBe(true)
+    expect(isUserEditBlocked(tx([], { reversalInProgress: true }))).toBe(true)
   })
 
   // generation-pipeline.md → No-gate write phase: a reversal opened between a Send and its run's
   // registration would have the turn's queued user_action refused.
   it('blocks while a turn is pending, on any branch', () => {
     const blocked = (pendingTurns: TxState['pendingTurns']) =>
-      isUserEditBlocked({ runs: new Map(), reversalInProgress: false, pendingTurns })
+      isUserEditBlocked(tx([], { pendingTurns }))
     expect(blocked(new Set([{ branchId: 'b2' }]))).toBe(true)
     expect(blocked(new Set())).toBe(false)
   })
 })
 
+describe('isHeadReversalBlocked', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  const refresh = (): RunState => run('run_refresh', 'suggestion-refresh')
+
+  it('lets a head reversal through when only an interruptible run on the branch holds the gate', () => {
+    expect(isHeadReversalBlocked(tx([]), 'b1')).toBe(false)
+    expect(isHeadReversalBlocked(tx([pass('run_pass')]), 'b1')).toBe(false)
+    // The plain gate stays closed for everything else.
+    expect(isUserEditBlocked(tx([pass('run_pass')]))).toBe(true)
+  })
+
+  it('blocks while a refresh runs beside the pass', () => {
+    expect(isHeadReversalBlocked(tx([pass('run_pass'), refresh()]), 'b1')).toBe(true)
+  })
+
+  it('blocks while a turn is pending or a reversal runs', () => {
+    expect(
+      isHeadReversalBlocked(
+        tx([pass('run_pass')], { pendingTurns: new Set([{ branchId: 'b1' }]) }),
+        'b1',
+      ),
+    ).toBe(true)
+    expect(isHeadReversalBlocked(tx([pass('run_pass')], { reversalInProgress: true }), 'b1')).toBe(
+      true,
+    )
+  })
+
+  it('blocks when the interruptible run is on another branch', () => {
+    expect(isHeadReversalBlocked(tx([pass('run_pass', { branchId: 'b2' })]), 'b1')).toBe(true)
+  })
+
+  it('blocks on a hard-gate run that is not interruptible', () => {
+    expect(isHeadReversalBlocked(tx([run('run_turn', 'per-turn')]), 'b1')).toBe(true)
+    const background: RunState = { ...run('run_bg'), gateBehavior: 'no-gate' }
+    expect(isHeadReversalBlocked(tx([background]), 'b1')).toBe(false)
+  })
+
+  it('reads the live state through the store namespace', () => {
+    generationStore.startRun(pass('run_pass'))
+    expect(generationStore.isHeadReversalBlocked('b1')).toBe(false)
+    expect(generationStore.isHeadReversalBlocked('b2')).toBe(true)
+    generationStore.startRun(refresh())
+    expect(generationStore.isHeadReversalBlocked('b1')).toBe(true)
+  })
+})
+
+describe('isStoryBusy', () => {
+  it('is busy with a run on the story, a turn pending on its branch, or a reversal', () => {
+    expect(isStoryBusy(tx([]), 's1', 'b1')).toBe(false)
+    expect(isStoryBusy(tx([run('run_turn', 'per-turn')]), 's1', 'b1')).toBe(true)
+    expect(isStoryBusy(tx([{ ...run('run_other'), storyId: 's2' }]), 's1', 'b1')).toBe(false)
+    expect(isStoryBusy(tx([], { pendingTurns: new Set([{ branchId: 'b1' }]) }), 's1', 'b1')).toBe(
+      true,
+    )
+    expect(isStoryBusy(tx([], { pendingTurns: new Set([{ branchId: 'b2' }]) }), 's1', 'b1')).toBe(
+      false,
+    )
+    expect(isStoryBusy(tx([], { reversalInProgress: true }), 's1', 'b1')).toBe(true)
+  })
+})
+
+describe('deferredWorkKindOf', () => {
+  it('maps the pass and the close, and nothing else', () => {
+    expect(deferredWorkKindOf(PERIODIC_CLASSIFIER_KIND)).toBe('pass')
+    expect(deferredWorkKindOf('chapter-close')).toBe('close')
+    expect(deferredWorkKindOf('per-turn')).toBeNull()
+    expect(deferredWorkKindOf('suggestion-refresh')).toBeNull()
+    expect(deferredWorkKindOf('toString')).toBeNull()
+  })
+})
+
+describe('deferred work', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it('records an aborted pass on its branch in the same update that removes the run', () => {
+    generationStore.startRun(pass('run_pass'))
+    const seen: { registered: boolean; deferred: unknown }[] = []
+    const off = generationStore.subscribe(() => {
+      const state = generationStore.getTxState()
+      seen.push({ registered: state.runs.has('run_pass'), deferred: state.deferred.get('b1') })
+    })
+    let recorded: boolean
+    try {
+      recorded = generationStore.abortRun('run_pass', 'aborted')
+    } finally {
+      off()
+    }
+    expect(recorded).toBe(true)
+    expect(seen).toEqual([{ registered: false, deferred: { pass: true } }])
+  })
+
+  it('returns false when the work was already deferred, and keeps the record', () => {
+    generationStore.startRun(pass('run_first'))
+    generationStore.abortRun('run_first', 'aborted')
+    generationStore.startRun(pass('run_send', { beforeTurn: true }))
+    expect(generationStore.abortRun('run_send', 'aborted')).toBe(false)
+    expect(deferredOn('b1')).toEqual({ pass: true })
+  })
+
+  it('clears the record when a pass commits, with or without a successor', () => {
+    generationStore.startRun(pass('run_first'))
+    generationStore.abortRun('run_first', 'aborted')
+    generationStore.startRun(pass('run_send'))
+    generationStore.finishRun('run_send')
+    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
+
+    generationStore.startRun(pass('run_again'))
+    generationStore.abortRun('run_again', 'aborted')
+    generationStore.startRun(pass('run_chained'))
+    generationStore.finishRun('run_chained', run('run_next'))
+    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
+  })
+
+  it('clears the record when a pass fails, and records nothing new', () => {
+    generationStore.startRun(pass('run_first'))
+    generationStore.abortRun('run_first', 'aborted')
+    generationStore.startRun(pass('run_send'))
+    expect(generationStore.abortRun('run_send', 'failed')).toBe(false)
+    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
+
+    generationStore.startRun(pass('run_fresh'))
+    expect(generationStore.abortRun('run_fresh', 'failed')).toBe(false)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+
+  it('leaves the record alone when the abort names no outcome (a marker-insert unwind)', () => {
+    generationStore.startRun(pass('run_first'))
+    generationStore.abortRun('run_first', 'aborted')
+    generationStore.startRun(pass('run_unwound'))
+    expect(generationStore.abortRun('run_unwound')).toBe(false)
+    expect(generationStore.getTxState().runs.has('run_unwound')).toBe(false)
+    expect(deferredOn('b1')).toEqual({ pass: true })
+
+    generationStore.startRun(pass('run_clean', { branchId: 'b2' }))
+    generationStore.abortRun('run_clean')
+    expect(generationStore.getTxState().deferred.has('b2')).toBe(false)
+  })
+
+  it('keeps a pass and a close side by side and clears each on its own', () => {
+    generationStore.startRun(pass('run_pass'))
+    generationStore.abortRun('run_pass', 'aborted')
+    generationStore.startRun(pass('run_close', { kind: 'chapter-close' }))
+    expect(generationStore.abortRun('run_close', 'aborted')).toBe(true)
+    expect(deferredOn('b1')).toEqual({ pass: true, close: true })
+
+    generationStore.startRun(pass('run_send'))
+    generationStore.finishRun('run_send')
+    expect(deferredOn('b1')).toEqual({ close: true })
+  })
+
+  it('keys the record by the run branch', () => {
+    generationStore.startRun(pass('run_b1'))
+    generationStore.abortRun('run_b1', 'aborted')
+    generationStore.startRun(pass('run_b2', { branchId: 'b2' }))
+    generationStore.abortRun('run_b2', 'aborted')
+    generationStore.startRun(pass('run_b2_send', { branchId: 'b2' }))
+    generationStore.finishRun('run_b2_send')
+    expect(deferredOn('b1')).toEqual({ pass: true })
+    expect(generationStore.getTxState().deferred.has('b2')).toBe(false)
+  })
+
+  it('records nothing for an interruptible run of an unmapped kind', () => {
+    generationStore.startRun(pass('run_other', { kind: 'some-interruptible' }))
+    expect(generationStore.abortRun('run_other', 'aborted')).toBe(false)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+
+  it('records nothing for a pass-kind run that is not interruptible', () => {
+    generationStore.startRun(pass('run_plain', { interruptible: false }))
+    expect(generationStore.abortRun('run_plain', 'aborted')).toBe(false)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+
+  it('records nothing for an unknown run id', () => {
+    expect(generationStore.abortRun('run_missing', 'aborted')).toBe(false)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+
+  it('__reset empties the record', () => {
+    generationStore.startRun(pass('run_pass'))
+    generationStore.abortRun('run_pass', 'aborted')
+    generationStore.__reset()
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+})
+
 describe('pending turns', () => {
-  beforeEach(() => generationStore.__reset())
+  beforeEach(() => {
+    generationStore.__reset()
+  })
 
   const pending = () => [...generationStore.getTxState().pendingTurns].map((t) => t.branchId)
 
@@ -131,7 +345,9 @@ describe('pending turns', () => {
 })
 
 describe('generation store', () => {
-  beforeEach(() => generationStore.__reset())
+  beforeEach(() => {
+    generationStore.__reset()
+  })
 
   it('startRun adds, abortRun removes', () => {
     generationStore.startRun(run('run_1'))
@@ -151,7 +367,9 @@ describe('generation store', () => {
 })
 
 describe('settleCount', () => {
-  beforeEach(() => generationStore.__reset())
+  beforeEach(() => {
+    generationStore.__reset()
+  })
 
   it('does not bump on startRun', () => {
     generationStore.startRun(run('run_1'))
@@ -170,10 +388,13 @@ describe('settleCount', () => {
     expect(generationStore.getSettleCount()).toBe(1)
   })
 
-  it('bumps by one on abortRun', () => {
+  it('bumps by one on abortRun, with or without an outcome', () => {
     generationStore.startRun(run('run_1'))
     generationStore.abortRun('run_1')
     expect(generationStore.getSettleCount()).toBe(1)
+    generationStore.startRun(pass('run_2'))
+    generationStore.abortRun('run_2', 'aborted')
+    expect(generationStore.getSettleCount()).toBe(2)
   })
 
   it('bumps by one when reversalInProgress settles true -> false', () => {
@@ -200,7 +421,9 @@ describe('settleCount', () => {
 })
 
 describe('isForegroundGenerating', () => {
-  beforeEach(() => generationStore.__reset())
+  beforeEach(() => {
+    generationStore.__reset()
+  })
 
   function runFor(kind: string, branchId = 'branch_1'): RunState {
     return { ...run(`run_${kind}`, kind), branchId }
@@ -232,22 +455,194 @@ describe('isForegroundGenerating', () => {
   })
 })
 
+// A run with a real terminal. By default an abort ends it the way the orchestrator does: the run
+// leaves txState, then its terminal resolves.
+function liveRun(over: Partial<RunState> & { runId: string }, onAbort?: (r: RunState) => void) {
+  let resolveTerminal!: () => void
+  const terminal = new Promise<void>((resolve) => {
+    resolveTerminal = resolve
+  })
+  const r: RunState = { ...run(over.runId), ...over, terminal, resolveTerminal }
+  r.abortController.signal.addEventListener('abort', () => {
+    if (onAbort) return onAbort(r)
+    generationStore.abortRun(r.runId)
+    r.resolveTerminal()
+  })
+  return r
+}
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+describe('interruptMemoryRuns', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it('aborts every interruptible run on the branch and resolves once each has ended', async () => {
+    const passRun = liveRun(pass('run_pass'), () => {})
+    const closeRun = liveRun(pass('run_close', { kind: 'chapter-close' }), () => {})
+    const refresh = liveRun({ runId: 'run_refresh', kind: 'suggestion-refresh' })
+    const elsewhere = liveRun(pass('run_b2', { branchId: 'b2' }))
+    for (const r of [passRun, closeRun, refresh, elsewhere]) generationStore.startRun(r)
+
+    let done = false
+    const interrupted = interruptMemoryRuns('b1').then(() => {
+      done = true
+    })
+    expect(passRun.abortController.signal.aborted).toBe(true)
+    expect(closeRun.abortController.signal.aborted).toBe(true)
+    expect(refresh.abortController.signal.aborted).toBe(false)
+    expect(elsewhere.abortController.signal.aborted).toBe(false)
+
+    passRun.resolveTerminal()
+    await flush()
+    expect(done).toBe(false)
+    closeRun.resolveTerminal()
+    await interrupted
+    expect(done).toBe(true)
+  })
+
+  it('records no deferral itself', async () => {
+    generationStore.startRun(liveRun(pass('run_pass')))
+    await interruptMemoryRuns('b1')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+
+  it('resolves at once when no interruptible run is on the branch', async () => {
+    await expect(interruptMemoryRuns('b1')).resolves.toBeUndefined()
+  })
+})
+
+describe('cancelStoryRuns', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it('aborts every run on the story, whatever its kind, and leaves other stories alone', async () => {
+    const turn = liveRun({ runId: 'run_turn', kind: 'per-turn' })
+    const memory = liveRun(pass('run_pass', { branchId: 'b2' }))
+    const other = liveRun({ runId: 'run_other', storyId: 's2' })
+    for (const r of [turn, memory, other]) generationStore.startRun(r)
+
+    await cancelStoryRuns('s1', 'b1')
+    expect(turn.abortController.signal.aborted).toBe(true)
+    expect(memory.abortController.signal.aborted).toBe(true)
+    expect(other.abortController.signal.aborted).toBe(false)
+    expect([...generationStore.getTxState().runs.keys()]).toEqual(['run_other'])
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+  })
+
+  it('catches a run registered while it waited, as a turn that commits and chains a pass', async () => {
+    const chained = liveRun(pass('run_chained'))
+    // Past its last abort check, the turn commits anyway and swaps its successor in.
+    const turn = liveRun({ runId: 'run_turn', kind: 'per-turn' }, (r) => {
+      generationStore.finishRun(r.runId, chained)
+      r.resolveTerminal()
+    })
+    generationStore.startRun(turn)
+
+    await cancelStoryRuns('s1', 'b1')
+    expect(chained.abortController.signal.aborted).toBe(true)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  // A Send admitted on the branch but not yet reserved holds only its pending mark; its run
+  // registers after the mark, as the branch queue's onReserved ends it.
+  it('waits for a pending turn, aborts the run it reserves, then resolves', async () => {
+    let reserve!: () => void
+    const reserved = new Promise<void>((resolve) => {
+      reserve = resolve
+    })
+    const turnRun = liveRun({ runId: 'run_turn', kind: 'per-turn' })
+    const turn = generationStore.bracketPendingTurn('b1', async (endMark) => {
+      await reserved
+      generationStore.startRun(turnRun)
+      endMark()
+      await turnRun.terminal
+    })
+
+    let done = false
+    const cancelled = cancelStoryRuns('s1', 'b1').then(() => {
+      done = true
+    })
+    await flush()
+    expect(done).toBe(false)
+
+    reserve()
+    await cancelled
+    expect(turnRun.abortController.signal.aborted).toBe(true)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    await turn
+  })
+
+  it('resolves once a pending turn ends without reserving a run', async () => {
+    let refuse!: () => void
+    const refused = new Promise<void>((resolve) => {
+      refuse = resolve
+    })
+    const turn = generationStore.bracketPendingTurn('b1', () => refused)
+
+    let done = false
+    const cancelled = cancelStoryRuns('s1', 'b1').then(() => {
+      done = true
+    })
+    await flush()
+    expect(done).toBe(false)
+
+    refuse()
+    await turn
+    await cancelled
+    expect(done).toBe(true)
+  })
+
+  it('waits for a reversal to finish', async () => {
+    generationStore.setReversalInProgress(true)
+
+    let done = false
+    const cancelled = cancelStoryRuns('s1', 'b1').then(() => {
+      done = true
+    })
+    await flush()
+    expect(done).toBe(false)
+
+    generationStore.setReversalInProgress(false)
+    await cancelled
+    expect(done).toBe(true)
+  })
+
+  it('resolves at once when nothing on the story is busy', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    generationStore.startRun(liveRun({ runId: 'run_other', storyId: 's2' }))
+    const elsewhere = generationStore.bracketPendingTurn('b2', () => held)
+
+    let done = false
+    void cancelStoryRuns('s1', 'b1').then(() => {
+      done = true
+    })
+    // Nothing changes in the store meanwhile, so a wait for a change would never wake.
+    await flush()
+    expect(done).toBe(true)
+
+    release()
+    await elsewhere
+  })
+})
+
 describe('awaitRunTerminal', () => {
-  function runFor(kind: string, branchId = 'branch_1') {
+  function runFor(kind: string, branchId = 'branch_1'): RunState {
     let resolveTerminal!: () => void
     const terminal = new Promise<void>((r) => {
       resolveTerminal = r
     })
     return {
-      runId: `run_${kind}_${branchId}`,
-      kind,
-      gateBehavior: 'no-gate' as const,
+      ...run(`run_${kind}_${branchId}`, kind),
       actionId: 'act_1',
       storyId: 'story_1',
       branchId,
-      abortController: new AbortController(),
-      currentPhase: '',
-      intermediates: {},
       terminal,
       resolveTerminal,
     }

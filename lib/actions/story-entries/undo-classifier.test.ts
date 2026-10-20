@@ -378,6 +378,8 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
       runId: 'run_c',
       kind: 'periodic-classifier',
       gateBehavior: 'no-gate',
+      interruptible: false,
+      beforeTurn: false,
       actionId: 'act_c',
       storyId: 's1',
       branchId: 'b1',

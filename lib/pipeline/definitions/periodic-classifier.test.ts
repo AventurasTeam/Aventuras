@@ -1771,6 +1771,8 @@ describe('periodicClassifierPhase — the write phase', () => {
     runId: 'run_turn',
     kind: PER_TURN_KIND,
     gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: 'act_turn',
     storyId: 's1',
     branchId: 'b1',

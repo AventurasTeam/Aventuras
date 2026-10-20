@@ -292,6 +292,8 @@ function startHardGateRun(): void {
     runId: 'r1',
     kind: 'turn',
     gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: 'act_r1',
     storyId: 's1',
     branchId: 'b1',

@@ -19,6 +19,8 @@ function runOf(kind: string, branchId = 'b1'): RunState {
     runId: `run_${kind}_${branchId}`,
     kind,
     gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: `act_${kind}`,
     storyId: 's1',
     branchId,

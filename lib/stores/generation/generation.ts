@@ -7,6 +7,10 @@ export type RunState = {
   runId: string
   kind: string
   gateBehavior: 'hard-gate' | 'no-gate'
+  /** Copied from the pipeline at reserve: a head reversal or Cancel ends this run and defers it. */
+  interruptible: boolean
+  /** Started by Send to run deferred work before the turn (generation-pipeline.md → chainsTo on predecessor). */
+  beforeTurn: boolean
   actionId: string
   storyId: string | null
   branchId: string
@@ -26,6 +30,9 @@ export type RunState = {
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
 
+export type DeferredWork = { readonly pass?: true; readonly close?: true }
+export type DeferredWorkKind = keyof DeferredWork
+
 // reversalInProgress brackets a prose-reversal's wait->sweep window, blocking REVERSAL_BLOCKED
 // scheduling (concurrency.ts) and user dispatch. pendingTurns: generation-pipeline.md → No-gate
 // write phase. ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
@@ -33,6 +40,8 @@ export type TxState = {
   runs: ReadonlyMap<string, RunState>
   reversalInProgress: boolean
   pendingTurns: ReadonlySet<PendingTurn>
+  /** Interrupted runs, run before that branch's next turn; in memory only. */
+  deferred: ReadonlyMap<string, DeferredWork>
 }
 
 // A pending turn counts: it is about to raise the hard gate, and a reversal opened in the gap
@@ -40,6 +49,56 @@ export type TxState = {
 export function isUserEditBlocked(txState: TxState): boolean {
   if (txState.reversalInProgress || txState.pendingTurns.size > 0) return true
   return [...txState.runs.values()].some((r) => r.gateBehavior === 'hard-gate')
+}
+
+// generation-pipeline.md → Gate derivation as a selector: the gate a pass or a close holds on
+// this branch is the one a head reversal passes through by interrupting it.
+export function isHeadReversalBlocked(txState: TxState, branchId: string): boolean {
+  if (txState.reversalInProgress || txState.pendingTurns.size > 0) return true
+  return [...txState.runs.values()].some(
+    (r) => r.gateBehavior === 'hard-gate' && !(r.interruptible && r.branchId === branchId),
+  )
+}
+
+// A turn pending on the branch and a reversal hold no run yet (a regenerate's mark spans its
+// sweep), so leaving the story must wait for them too.
+export function isStoryBusy(txState: TxState, storyId: string, branchId: string): boolean {
+  if (txState.reversalInProgress) return true
+  for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
+  return [...txState.runs.values()].some((r) => r.storyId === storyId)
+}
+
+const DEFERRED_WORK_KIND: ReadonlyMap<string, DeferredWorkKind> = new Map([
+  [PERIODIC_CLASSIFIER_KIND, 'pass'],
+  ['chapter-close', 'close'],
+])
+
+export function deferredWorkKindOf(kind: string): DeferredWorkKind | null {
+  return DEFERRED_WORK_KIND.get(kind) ?? null
+}
+
+// Only an interruptible pass or close touches the record; any other run leaves it alone.
+function deferralKeyOf(run: RunState | undefined): DeferredWorkKind | null {
+  return run?.interruptible ? deferredWorkKindOf(run.kind) : null
+}
+
+// An emptied record is deleted, not left as {}: readers test `deferred.has(branchId)`.
+function withDeferral(
+  deferred: ReadonlyMap<string, DeferredWork>,
+  branchId: string,
+  key: DeferredWorkKind,
+  on: boolean,
+): ReadonlyMap<string, DeferredWork> {
+  const prev = deferred.get(branchId)
+  if ((prev?.[key] === true) === on) return deferred
+  const pass = key === 'pass' ? on : prev?.pass === true
+  const close = key === 'close' ? on : prev?.close === true
+  const next = new Map(deferred)
+  if (pass && close) next.set(branchId, { pass: true, close: true })
+  else if (pass) next.set(branchId, { pass: true })
+  else if (close) next.set(branchId, { close: true })
+  else next.delete(branchId)
+  return next
 }
 
 type GenerationState = {
@@ -54,8 +113,14 @@ type GenerationState = {
     phase: string,
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
+  /** Removes the run and swaps in `successor` atomically; a pass or close clears its deferral. */
   finishRun: (runId: string, successor?: RunState) => void
-  abortRun: (runId: string) => void
+  /**
+   * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
+   * branch and `'failed'` clears that record; no outcome leaves the record alone. Returns true
+   * only when this call newly recorded the deferral.
+   */
+  abortRun: (runId: string, outcome?: 'aborted' | 'failed') => boolean
   setReversalInProgress: (value: boolean) => void
   /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
   bracketPendingTurn: <T>(
@@ -69,6 +134,7 @@ const emptyTxState = (): TxState => ({
   runs: new Map(),
   reversalInProgress: false,
   pendingTurns: new Set(),
+  deferred: new Map(),
 })
 
 const store = createStore<GenerationState>()((set) => ({
@@ -96,17 +162,31 @@ const store = createStore<GenerationState>()((set) => ({
     }),
   finishRun: (runId, successor) =>
     set((s) => {
+      const run = s.txState.runs.get(runId)
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
       if (successor) runs.set(successor.runId, successor)
-      return { txState: { ...s.txState, runs }, settleCount: s.settleCount + 1 }
+      const key = deferralKeyOf(run)
+      const deferred =
+        run && key ? withDeferral(s.txState.deferred, run.branchId, key, false) : s.txState.deferred
+      return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
     }),
-  abortRun: (runId) =>
+  abortRun: (runId, outcome) => {
+    let recorded = false
     set((s) => {
+      const run = s.txState.runs.get(runId)
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
-      return { txState: { ...s.txState, runs }, settleCount: s.settleCount + 1 }
-    }),
+      const key = deferralKeyOf(run)
+      let deferred = s.txState.deferred
+      if (run && key && outcome) {
+        recorded = outcome === 'aborted' && deferred.get(run.branchId)?.[key] !== true
+        deferred = withDeferral(deferred, run.branchId, key, outcome === 'aborted')
+      }
+      return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
+    })
+    return recorded
+  },
   setReversalInProgress: (value) =>
     set((s) => ({
       txState: { ...s.txState, reversalInProgress: value },
@@ -158,6 +238,7 @@ export const generationStore = {
   getTxState,
   getSettleCount,
   isUserEditBlocked: () => isUserEditBlocked(getTxState()),
+  isHeadReversalBlocked: (branchId: string) => isHeadReversalBlocked(getTxState(), branchId),
   hasActiveRun: () => getTxState().runs.size > 0,
   startRun: api.startRun,
   setCurrentPhase: api.setCurrentPhase,
@@ -213,4 +294,40 @@ export function awaitRunTerminal(
   if (!run) return Promise.resolve()
   if (disposition === 'cancel') run.abortController.abort()
   return run.terminal
+}
+
+/** Aborts every interruptible run on the branch; resolves once each has ended. Records nothing. */
+export async function interruptMemoryRuns(branchId: string): Promise<void> {
+  const runs = [...getTxState().runs.values()].filter(
+    (r) => r.interruptible && r.branchId === branchId,
+  )
+  for (const r of runs) r.abortController.abort()
+  await Promise.all(runs.map((r) => r.terminal))
+}
+
+function nextStoreChange(): Promise<void> {
+  return new Promise((resolve) => {
+    const off = store.subscribe(() => {
+      off()
+      resolve()
+    })
+  })
+}
+
+/**
+ * Aborts every run on the story until `isStoryBusy` is false: a turn ending during the wait can
+ * chain a pass, and a pending turn or a reversal registers its run later. Records nothing.
+ */
+export async function cancelStoryRuns(storyId: string, branchId: string): Promise<void> {
+  for (;;) {
+    const txState = getTxState()
+    if (!isStoryBusy(txState, storyId, branchId)) return
+    const runs = [...txState.runs.values()].filter((r) => r.storyId === storyId)
+    if (runs.length === 0) {
+      await nextStoreChange()
+      continue
+    }
+    for (const r of runs) r.abortController.abort()
+    await Promise.all(runs.map((r) => r.terminal))
+  }
 }

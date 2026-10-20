@@ -28,6 +28,8 @@ function runState(kind: string): RunState {
     runId: `r_${kind}`,
     kind,
     gateBehavior: 'no-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: 'a',
     storyId: null,
     branchId: 'b',

@@ -72,6 +72,8 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     runId: generateId('run'),
     kind,
     gateBehavior: getPipeline(kind).gateBehavior,
+    interruptible: false,
+    beforeTurn: false,
     actionId: ctx.actionId ?? generateId('act'),
     storyId: ctx.storyId,
     branchId: ctx.branchId,

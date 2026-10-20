@@ -44,6 +44,8 @@ describe('bracketProseReversal', () => {
       runId: 'run_c',
       kind: 'periodic-classifier',
       gateBehavior: 'no-gate',
+      interruptible: false,
+      beforeTurn: false,
       actionId: 'act_c',
       storyId: 'story_1',
       branchId: 'branch_1',

@@ -337,6 +337,8 @@ describe('regenerateTurn', () => {
       runId: 'run_c',
       kind: PERIODIC_CLASSIFIER_KIND,
       gateBehavior: 'no-gate',
+      interruptible: false,
+      beforeTurn: false,
       actionId: 'act_live',
       storyId: 's1',
       branchId: 'b1',
