@@ -4528,7 +4528,10 @@ class StoryStore {
       createdAt: Date.now(),
     }
 
-    await database.createCheckpoint(record, { branchId: lastEntry.branchId ?? null })
+    // Marked on the open branch: its last entry can be inherited, and the state is this branch's.
+    await database.createCheckpoint(record, {
+      branchId: this.currentStory.currentBranchId ?? null,
+    })
 
     const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
     const checkpoint: Checkpoint = {

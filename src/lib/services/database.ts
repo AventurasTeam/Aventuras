@@ -1634,8 +1634,8 @@ class DatabaseService {
   }
 
   /**
-   * `mark` places a checkpoint of the live state in the write order, on the branch owning its
-   * entry. One rebuilt from the records gets none: it holds no state the records lack.
+   * `mark` places a checkpoint of the live state in the write order, on the branch whose state it
+   * holds. One rebuilt from the records gets none: it holds no state the records lack.
    */
   async createCheckpoint(
     checkpoint: CheckpointRecord,
