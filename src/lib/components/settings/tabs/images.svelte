@@ -241,6 +241,7 @@
       profileModels = models
     } catch (error) {
       if (reqId !== profileModelsReqId) return
+      profileModels = []
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
       if (reqId === profileModelsReqId) isLoadingProfileModels = false
