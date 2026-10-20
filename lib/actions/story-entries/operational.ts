@@ -287,12 +287,8 @@ export async function rollbackToEntry(
   targetId: string,
   ctx: DbCtx,
 ): Promise<{ status: 'ok'; counts: RollbackCounts } | StoryEntryRejection> {
-  if (generationStore.isUserEditBlocked())
-    return {
-      status: 'rejected',
-      reason: 'generation in flight',
-      code: STORY_ENTRY_REJECTION.inFlight,
-    }
+  // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
+  if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
 
   return bracketProseReversal(branchId, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)

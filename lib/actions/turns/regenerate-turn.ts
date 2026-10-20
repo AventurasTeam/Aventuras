@@ -56,6 +56,12 @@ const SWAP_REJECTION = {
   reason: 'embedder-swap',
 } as const
 
+const IN_FLIGHT_REJECTION = {
+  status: 'rejected',
+  code: 'generation-in-flight',
+  reason: 'generation in flight',
+} as const
+
 async function sweepFrom(
   branchId: string,
   targetId: string,
@@ -84,12 +90,8 @@ export async function regenerateTurn(
       ids.storyId,
       async (): Promise<RegenerateTurnResult> => {
         if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
-        if (generationStore.isUserEditBlocked())
-          return {
-            status: 'rejected',
-            code: 'generation-in-flight',
-            reason: 'generation in flight',
-          }
+        // Every regenerate is a head reversal: a pass or a close holding the gate is interrupted.
+        if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
         if (entriesStore.getLoadedBranch() !== ids.branchId)
           return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
 
@@ -122,7 +124,9 @@ export async function regenerateTurn(
         if (origin == null || origin.kind !== 'user_action')
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
-        // After this action's own gate check above, which a pending turn would fail.
+        // Re-checked past the reads, synchronously with the mark and the bracket below: a reversal
+        // opened during them would otherwise throw this one out of its bracket as re-entry.
+        if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
           let swept: { status: 'ok' } | StoryEntryRejection
           try {

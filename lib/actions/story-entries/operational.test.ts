@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction, DeltaReplayError, reverseReplayDeltas, type DbCtx } from '@/lib/actions'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   deltas,
@@ -16,6 +17,12 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
+import {
+  __resetBus,
+  __resetRegistry as resetPipelineRegistry,
+  startPipeline,
+  SUGGESTION_REFRESH_KIND,
+} from '@/lib/pipeline'
 import {
   entriesStore,
   generationStore,
@@ -33,9 +40,17 @@ import {
   releaseBranchWriteExclusive,
 } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
+import {
+  recordDeferrals,
+  registerStandInPass,
+  registerStoreOnlyRun,
+  runningPass,
+} from '../turns/__tests__/stand-in-pass'
 
 afterEach(() => {
   __resetBranchWriteLocks()
+  __resetBus()
+  resetPipelineRegistry()
   entriesStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -1310,5 +1325,63 @@ describe('content edit refusals', () => {
     expect(row.content).toBe('old')
     expect(await db.select().from(deltas)).toEqual(before)
     expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+})
+
+function startStandInPass(ctx: DbCtx) {
+  return startPipeline(PERIODIC_CLASSIFIER_KIND, { storyId: 's1', branchId: 'b1', ...ctx })
+}
+
+describe('rollback during a pass', () => {
+  it('interrupts the pass, reversing its write and deferring it, then rolls back', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const pass = registerStandInPass({ anchorEntryId: 't1' })
+    const deferrals = recordDeferrals()
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+
+    expect(result).toEqual({
+      status: 'ok',
+      counts: { entries: 2, chapters: 0, worldStateChanges: 2 },
+    })
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    // The pass's happening anchors to the surviving t1, so only the abort can have removed it.
+    expect(await db.select().from(happenings)).toEqual([])
+    expect((await db.select().from(deltas)).map((d) => d.actionId)).toEqual(['turn1'])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(deferrals).toEqual([
+      {
+        type: 'run_deferred',
+        runId: expect.any(String),
+        kind: PERIODIC_CLASSIFIER_KIND,
+        branchId: 'b1',
+      },
+    ])
+  })
+
+  it('refuses while a suggestion refresh runs beside the pass, interrupting nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const pass = registerStandInPass({ anchorEntryId: 't1' })
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'in-flight-gated' })
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 })
