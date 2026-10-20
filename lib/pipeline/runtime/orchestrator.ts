@@ -66,7 +66,10 @@ export type RunCtxFor<K extends string> = RunCtx &
   (K extends keyof PipelineInputMap ? { inputs: PipelineInputMap[K] } : { inputs?: unknown })
 
 export type PipelineStart = {
-  /** The starting run's result, or the refusal; settles at its commit or abort. */
+  /**
+   * The starting run's result, or the refusal; settles at its commit or abort. Rejects on the
+   * origin's own throws, so a caller that keeps only `chain` must still handle it.
+   */
   origin: Promise<TxResult | RejectedStart>
   /** Settles when the chain's last run ends; never rejects. */
   chain: Promise<void>

@@ -100,22 +100,24 @@ describe('deferred work', () => {
     const seen = recordTerminalEvents()
 
     const { start } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
-    expect([...generationStore.getTxState().runs.values()][0].interruptible).toBe(true)
+    const [held] = generationStore.getTxState().runs.values()
+    expect(held.interruptible).toBe(true)
     expect(await db.select().from(storyEntries)).toHaveLength(1)
 
     await interruptMemoryRuns('b1')
 
     // The interrupt's waiter sees the record and the event once the terminal resolves.
     expect(deferredOnB1()).toEqual({ pass: true })
-    const tx = expectRan(await start.origin)
-    expect(tx.outcome).toBe('aborted')
     expect(seen.map((e) => e.type)).toEqual(['run_complete', 'run_deferred'])
     expect(seen[1]).toEqual({
       type: 'run_deferred',
-      runId: tx.runId,
+      runId: held.runId,
       kind: PERIODIC_CLASSIFIER_KIND,
       branchId: 'b1',
     })
+    const tx = expectRan(await start.origin)
+    expect(tx.outcome).toBe('aborted')
+    expect(tx.runId).toBe(held.runId)
     expect(await db.select().from(storyEntries)).toHaveLength(0)
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
@@ -164,6 +166,58 @@ describe('deferred work', () => {
     expect(expectRan(await start.origin).outcome).toBe('failed')
     expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
     expect(seen.filter((e) => e.type === 'run_deferred')).toHaveLength(1)
+  })
+
+  // A cancel whose reversal fails settles as 'failed': its writes are still on disk, so the next
+  // Send must not run the pass on top of them.
+  it('records nothing and emits no run_deferred when the interrupted pass cannot be reversed', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: PERIODIC_CLASSIFIER_KIND,
+      phases: [
+        {
+          name: 'pass',
+          run: async function* (phase: PhaseContext): AsyncGenerator<never, PhaseResult> {
+            // target_table resolves through the runtime registry, so an unregistered name makes
+            // this run's own reversal throw for real.
+            await phase.db.insert(deltas).values({
+              id: 'd_poison',
+              branchId: 'b1',
+              entryId: null,
+              actionId: phase.actionId,
+              logPosition: 900,
+              source: 'ai_classifier',
+              targetTable: 'not_a_registered_table',
+              targetId: 'x',
+              op: 'create',
+              undoPayload: null,
+              encodingVersion: 1,
+              createdAt: 1,
+            })
+            return await new Promise<PhaseResult>((resolve) => {
+              phase.abortSignal.addEventListener('abort', () => resolve({ status: 'aborted' }), {
+                once: true,
+              })
+              onHold(resolve)
+            })
+          },
+        },
+      ],
+      affordance: 'pill-and-banner',
+      gateBehavior: 'hard-gate',
+      interruptible: true,
+      concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND] },
+    })
+    const seen = recordTerminalEvents()
+
+    const { start } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
+    await interruptMemoryRuns('b1')
+
+    const tx = expectRan(await start.origin)
+    expect(tx.outcome).toBe('failed')
+    expect(tx.error?.detail).toMatch(/^reverse-replay failed/)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    expect(seen.map((e) => e.type)).toEqual(['run_complete'])
   })
 
   it('records nothing for an interruptible run of a kind that maps to no deferred work', async () => {
