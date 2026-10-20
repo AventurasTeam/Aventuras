@@ -1,4 +1,4 @@
-import type { LanguageModelMiddleware } from 'ai'
+import type { ImageModelMiddleware, LanguageModelMiddleware } from 'ai'
 import { settings } from '#lib/stores/settings.svelte.ts'
 
 const RETRY_DELAYS_MS = [10_000, 20_000, 30_000]
@@ -136,5 +136,12 @@ export function retryOn429Middleware(hooks: RetryHooks = {}): LanguageModelMiddl
       withRetry(() => doGenerate(), params.abortSignal, hooks),
     wrapStream: async ({ doStream, params }) =>
       withRetry(() => doStream(), params.abortSignal, hooks),
+  }
+}
+
+export function retryOn429ImageMiddleware(hooks: RetryHooks = {}): ImageModelMiddleware {
+  return {
+    wrapGenerate: async ({ doGenerate, params }) =>
+      withRetry(() => doGenerate(), params.abortSignal, hooks),
   }
 }

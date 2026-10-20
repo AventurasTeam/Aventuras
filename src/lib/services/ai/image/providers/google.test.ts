@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('ai', () => ({
-  generateImage: vi.fn(async () => ({ images: [{ base64: 'RESULT' }] })),
+vi.mock('./sdkImage', () => ({
+  createImageSdkFetch: vi.fn(() => 'SDK_FETCH'),
+  generateSdkImage: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 vi.mock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: vi.fn(() => ({ image: (id: string) => ({ id }) })),
@@ -9,16 +10,10 @@ vi.mock('@ai-sdk/google', () => ({
 vi.mock('../../sdk/providers/fetch', () => ({
   createTimeoutFetch: vi.fn(),
 }))
-vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
-  createSdkFetch: vi.fn(() => 'SDK_FETCH'),
-}))
-// The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debug.svelte.ts', () => ({ debug: {} }))
 
-import { generateImage } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
-import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import { createGoogleProvider } from './google'
 import type { ImageGenerateOptions } from './types'
 
@@ -30,22 +25,23 @@ const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions
   ...over,
 })
 
-const sentPrompt = () => vi.mocked(generateImage).mock.lastCall![0].prompt
+const sent = () => vi.mocked(generateSdkImage).mock.lastCall![0]
 
 describe('Google adapter references', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('sends references to a Gemini image model', async () => {
     await createGoogleProvider({ apiKey: 'k' }).generate(options())
-    expect(sentPrompt()).toEqual({
-      text: 'a castle',
-      images: ['iVBORw0KGgo=', '/9j/4AAQSkZJRg=='],
+    expect(sent()).toMatchObject({
+      prompt: 'a castle',
+      referenceImages: ['iVBORw0KGgo=', '/9j/4AAQSkZJRg=='],
+      aspectRatio: '1:1',
     })
   })
 
   it('sends the plain prompt when there are no references', async () => {
     await createGoogleProvider({ apiKey: 'k' }).generate(options({ referenceImages: undefined }))
-    expect(sentPrompt()).toBe('a castle')
+    expect(sent().referenceImages).toBeUndefined()
   })
 })
 
@@ -58,9 +54,7 @@ describe('Google transport', () => {
     expect(createGoogleGenerativeAI).toHaveBeenCalledWith(
       expect.objectContaining({ fetch: 'SDK_FETCH' }),
     )
-    expect(createSdkFetch).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceId: 'google-image', what: 'Image generation' }),
-    )
+    expect(createImageSdkFetch).toHaveBeenCalledWith('google-image')
   })
 })
 
