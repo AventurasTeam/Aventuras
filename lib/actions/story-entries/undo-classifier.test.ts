@@ -390,6 +390,8 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
     })
 
     const done = undoLastAction('b1', ctx)
+    // Synchronous with the bracket's entry: the interrupt precedes the settle (prose reversals).
+    expect(aborted).toBe(true)
     // The sweep waits for the terminal, not merely a macrotask: an unbracketed sweep would have
     // finished within this flush (in-memory SQLite, no real I/O).
     await new Promise((r) => setTimeout(r, 0))
