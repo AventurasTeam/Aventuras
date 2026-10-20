@@ -396,8 +396,10 @@ describe('regenerateTurn', () => {
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
     spy.mockRestore()
+    const gateResults = gate.mock.results.map((r) => r.value)
+    gate.mockRestore()
 
-    expect(gate.mock.results.map((r) => r.value)).toEqual([false, true])
+    expect(gateResults).toEqual([false, true])
     expect(regen).toEqual({
       status: 'rejected',
       code: 'generation-in-flight',
