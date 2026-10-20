@@ -1,9 +1,20 @@
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { branches, stories, type ClassifierStatus } from '@/lib/db'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { branches, happenings, stories, type ClassifierStatus } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { generationStore } from '@/lib/stores'
+import {
+  definePipeline,
+  pipelineEventBus,
+  startPipeline,
+  type PhaseContext,
+  type PhaseEmittedEvent,
+  type PhaseResult,
+  type PipelineEvent,
+} from '@/lib/pipeline'
+import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
+import { generationStore, interruptMemoryRuns } from '@/lib/stores'
 
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { __resetBranchWriteLocks, withBranchWriteShared } from '../delta/branch-write-lock'
@@ -30,38 +41,6 @@ describe('bracketProseReversal', () => {
       }),
     ).rejects.toThrow('sweep failed')
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
-  })
-
-  it('cancels an in-flight classifier before running the body', async () => {
-    const order: string[] = []
-    let resolveTerminal!: () => void
-    const terminal = new Promise<void>((r) => {
-      resolveTerminal = r
-    })
-    const abortController = new AbortController()
-    abortController.signal.addEventListener('abort', () => order.push('aborted'))
-    generationStore.startRun({
-      runId: 'run_c',
-      kind: 'periodic-classifier',
-      gateBehavior: 'no-gate',
-      interruptible: false,
-      beforeTurn: false,
-      actionId: 'act_c',
-      storyId: 'story_1',
-      branchId: 'branch_1',
-      abortController,
-      currentPhase: '',
-      intermediates: {},
-      terminal,
-      resolveTerminal,
-    })
-    const done = bracketProseReversal('branch_1', async () => {
-      order.push('swept')
-    })
-    expect(order).toEqual(['aborted'])
-    resolveTerminal()
-    await done
-    expect(order).toEqual(['aborted', 'swept'])
   })
 
   // A rollback preview selects its set under a shared hold across several reads; a reversal
@@ -126,6 +105,159 @@ describe('bracketProseReversal', () => {
       }),
     ).rejects.toThrow('not re-entrant')
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
+  })
+})
+
+// generation-pipeline.md → Prose reversals and the interrupt.
+describe('bracketProseReversal — the interrupt', () => {
+  beforeEach(() => {
+    resetSingletons()
+  })
+  afterEach(() => {
+    resetSingletons()
+  })
+
+  // An interruptible stand-in: it writes one fact, then waits until it is cancelled.
+  function defineInterruptible(
+    kind: string,
+    onAbort: () => void = () => {},
+  ): { landed: Promise<void> } {
+    let land!: () => void
+    const landed = new Promise<void>((resolve) => {
+      land = resolve
+    })
+    async function* writeThenWait(
+      ctx: PhaseContext,
+    ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+      yield {
+        type: 'delta_emitted',
+        action: {
+          kind: 'createHappening',
+          source: 'periodic_classifier',
+          payload: {
+            entry: {
+              id: `hap_${ctx.actionId}`,
+              branchId: ctx.branchId,
+              title: 'A fact',
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        },
+      }
+      land()
+      await new Promise<void>((resolve) => {
+        if (ctx.abortSignal.aborted) {
+          resolve()
+        } else {
+          ctx.abortSignal.addEventListener(
+            'abort',
+            () => {
+              onAbort()
+              resolve()
+            },
+            { once: true },
+          )
+        }
+      })
+      return { status: 'aborted' }
+    }
+    definePipeline({
+      kind,
+      phases: [{ name: 'run', run: writeThenWait }],
+      affordance: 'pill-and-banner',
+      gateBehavior: 'hard-gate',
+      interruptible: true,
+      concurrencyPolicy: {},
+    })
+    return { landed }
+  }
+
+  it('interrupts a pass in flight before the body, reversing its writes and deferring it', async () => {
+    const { db, ctx } = await makeHarness()
+    const flagAtAbort: boolean[] = []
+    const { landed } = defineInterruptible(PERIODIC_CLASSIFIER_KIND, () =>
+      flagAtAbort.push(generationStore.getTxState().reversalInProgress),
+    )
+    const deferrals: PipelineEvent[] = []
+    const off = pipelineEventBus.subscribe('run_deferred', (e) => deferrals.push(e))
+    const pass = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    await landed
+    expect(await db.select().from(happenings)).toHaveLength(1)
+
+    const seen: unknown[] = []
+    await bracketProseReversal('b1', async () => {
+      const txState = generationStore.getTxState()
+      seen.push({
+        runs: txState.runs.size,
+        deferred: txState.deferred.get('b1'),
+        facts: (await db.select().from(happenings)).length,
+      })
+    })
+    off()
+
+    // The flag is up before the interrupt, so no pass can start between it and the sweep.
+    expect(flagAtAbort).toEqual([true])
+    expect(seen).toEqual([{ runs: 0, deferred: { pass: true }, facts: 0 }])
+    expect(await pass.origin).toMatchObject({ outcome: 'aborted' })
+    await pass.chain
+    expect(deferrals).toEqual([
+      expect.objectContaining({
+        type: 'run_deferred',
+        kind: PERIODIC_CLASSIFIER_KIND,
+        branchId: 'b1',
+      }),
+    ])
+  })
+
+  it('interrupts a chapter close the same way, recording a deferred close', async () => {
+    const { ctx } = await makeHarness()
+    const { landed } = defineInterruptible('chapter-close')
+    const close = startPipeline('chapter-close', ctx)
+    await landed
+
+    let deferredInBody: unknown
+    await bracketProseReversal('b1', async () => {
+      deferredInBody = generationStore.getTxState().deferred.get('b1')
+    })
+
+    expect(deferredInBody).toEqual({ close: true })
+    expect(await close.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
+  it('runs the body at once and records nothing when no pass is in flight', async () => {
+    await makeHarness()
+    const deferrals: PipelineEvent[] = []
+    const off = pipelineEventBus.subscribe('run_deferred', (e) => deferrals.push(e))
+    let ran = false
+
+    await bracketProseReversal('b1', async () => {
+      ran = true
+    })
+    off()
+
+    expect(ran).toBe(true)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    expect(deferrals).toEqual([])
+  })
+
+  it('leaves an interruptible run on another branch running', async () => {
+    const { db, ctx } = await makeHarness()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
+    const { landed } = defineInterruptible(PERIODIC_CLASSIFIER_KIND)
+    const other = startPipeline(PERIODIC_CLASSIFIER_KIND, { ...ctx, branchId: 'b2' })
+    await landed
+    const [run] = [...generationStore.getTxState().runs.values()]
+
+    await bracketProseReversal('b1', async () => {})
+
+    expect(run.abortController.signal.aborted).toBe(false)
+    expect(generationStore.getTxState().runs.has(run.runId)).toBe(true)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+
+    await interruptMemoryRuns('b2')
+    expect(await other.origin).toMatchObject({ outcome: 'aborted' })
+    await other.chain
   })
 })
 

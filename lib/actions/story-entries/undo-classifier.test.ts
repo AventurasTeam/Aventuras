@@ -354,7 +354,7 @@ describe('AC6 — undo floor in a wizard-created story', () => {
 })
 
 describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
-  it('aborts the run and holds the sweep until its terminal resolves', async () => {
+  it('interrupts the run and holds the sweep until its terminal resolves', async () => {
     const { db, ctx } = await seedBranch([
       entry('e_opening', 1, 'opening'),
       entry('e_t1', 2, 'ai_reply'),
@@ -372,13 +372,12 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
     abortController.signal.addEventListener('abort', () => {
       aborted = true
     })
-    // A no-gate classifier run: does not block user edits, so undo proceeds
-    // and must drain it via the C3 bracket.
+    // No-gate so undo's own gate check passes; the bracket must still interrupt the run.
     generationStore.startRun({
       runId: 'run_c',
       kind: 'periodic-classifier',
       gateBehavior: 'no-gate',
-      interruptible: false,
+      interruptible: true,
       beforeTurn: false,
       actionId: 'act_c',
       storyId: 's1',
@@ -391,14 +390,14 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
     })
 
     const done = undoLastAction('b1', ctx)
-    // The bracket aborts the doomed run synchronously, before any sweep work…
-    expect(aborted).toBe(true)
-    // …and the sweep waits for the terminal, not merely a microtask turn: an
-    // unbracketed sweep would have finished within this flush (in-memory SQLite,
-    // no real I/O), so the entry still standing is the barrier's own evidence.
+    // The sweep waits for the terminal, not merely a macrotask: an unbracketed sweep would have
+    // finished within this flush (in-memory SQLite, no real I/O).
     await new Promise((r) => setTimeout(r, 0))
+    expect(aborted).toBe(true)
     expect(entriesStore.getById('e_t1')).toBeDefined()
 
+    // As the orchestrator does: the run leaves txState, then its terminal resolves.
+    generationStore.abortRun('run_c')
     resolveTerminal()
     expect((await done).status).toBe('ok')
     expect(entriesStore.getById('e_t1')).toBeUndefined()
