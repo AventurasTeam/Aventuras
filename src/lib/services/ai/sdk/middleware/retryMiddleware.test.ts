@@ -122,6 +122,27 @@ describe('retryOn429ImageMiddleware', () => {
     expect(doGenerate).toHaveBeenCalledTimes(2)
   })
 
+  it('waits out a Retry-After longer than the LLM timeout', async () => {
+    const doGenerate = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimited('90'))
+      .mockResolvedValueOnce({ images: ['AAA'] })
+
+    const result = generateImage(doGenerate)
+    await vi.advanceTimersByTimeAsync(90_000)
+
+    await expect(result).resolves.toEqual({ images: ['AAA'] })
+    expect(doGenerate).toHaveBeenCalledTimes(2)
+  })
+
+  it('rethrows at once when Retry-After exceeds the image timeout', async () => {
+    const error = rateLimited('600')
+    const doGenerate = vi.fn().mockRejectedValue(error)
+
+    await expect(generateImage(doGenerate)).rejects.toBe(error)
+    expect(doGenerate).toHaveBeenCalledTimes(1)
+  })
+
   it('stops waiting when the abort signal in params fires', async () => {
     const controller = new AbortController()
     const doGenerate = vi.fn().mockRejectedValue(rateLimited())
