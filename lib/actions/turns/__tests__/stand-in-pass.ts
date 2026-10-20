@@ -88,6 +88,8 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     return { status: 'completed' }
   }
 
+  // Mirrors the real pass's gate, interruptible flag and blockedBy
+  // (lib/pipeline/definitions/periodic-classifier.ts).
   registerPipeline({
     kind: PERIODIC_CLASSIFIER_KIND,
     phases: [{ name: 'classify', run: phase }],

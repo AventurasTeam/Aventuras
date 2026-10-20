@@ -22,7 +22,8 @@ import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 export type StoryEntryRejection = {
   status: 'rejected'
   reason: string
-  code: StoryEntryRejectionCode
+  // Only `CountsChangedRejection` carries this code, so it alone narrows to the fresh counts.
+  code: Exclude<StoryEntryRejectionCode, typeof STORY_ENTRY_REJECTION.countsChanged>
 }
 
 export function logReversalRefused(branchId: string, e: ReversalIntegrityError): void {

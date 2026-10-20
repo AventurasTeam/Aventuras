@@ -163,7 +163,7 @@ export async function regenerateTurn(
             throw error
           }
           if (swept.status === 'rejected')
-            return 'counts' in swept
+            return swept.code === STORY_ENTRY_REJECTION.countsChanged
               ? {
                   status: 'rejected',
                   code: 'counts-changed',

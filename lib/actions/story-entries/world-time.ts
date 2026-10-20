@@ -9,11 +9,11 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import type { DbCtx } from '../types'
 import { withEntryMetadataLock } from './entry-metadata-lock'
 import type { StoryEntryRejection } from './operational'
-import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
+import { STORY_ENTRY_REJECTION } from './register'
 
 export type UpdateWorldTimeResult = { status: 'ok' } | StoryEntryRejection
 
-function rejected(code: StoryEntryRejectionCode, reason: string): StoryEntryRejection {
+function rejected(code: StoryEntryRejection['code'], reason: string): StoryEntryRejection {
   return { status: 'rejected', reason, code }
 }
 

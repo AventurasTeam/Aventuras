@@ -378,13 +378,14 @@ describe('regenerateTurn', () => {
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
-  // A reversal opened during the two reads used to throw this one out of its bracket as re-entry.
+  // A reversal opened during the two reads would throw this one out of its bracket as re-entry.
   it('re-checks the gate past its reads, refusing a run that rose during them', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
     // The target read is regenerate's first select: the gate rises after its first check.
+    const gate = vi.spyOn(generationStore, 'isHeadReversalBlocked')
     const select = ctx.db.select.bind(ctx.db)
     const spy = vi.spyOn(ctx.db, 'select').mockImplementationOnce(((
       ...args: Parameters<typeof select>
@@ -396,6 +397,7 @@ describe('regenerateTurn', () => {
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
     spy.mockRestore()
 
+    expect(gate.mock.results.map((r) => r.value)).toEqual([false, true])
     expect(regen).toEqual({
       status: 'rejected',
       code: 'generation-in-flight',
@@ -996,5 +998,52 @@ describe('regenerateTurn', () => {
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('completed')
+  })
+
+  // The interrupt reverses the pass's write, so the set the sweep reverses is the one confirmed.
+  it('regenerates when the interrupt reverses the only change since the confirm', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+    const pass = registerStandInPass({ anchorEntryId: 'e_r2' })
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    await pass.nextHeld()
+    expect(await shownCounts(ctx, 'e_r2')).toEqual({ ...shown, worldStateChanges: 2 })
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
+  // The user consented to the regenerate, not to the unwind, so the follow-up sweep takes no counts.
+  it('unwinds a failed regenerate given confirmed counts', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('failed')
+    expect(regen.converged).toBe(true)
+    expect(entriesStore.getById('e_u2')).toBeUndefined()
   })
 })

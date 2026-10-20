@@ -1,7 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { applyDeltaAction, DeltaReplayError, reverseReplayDeltas, type DbCtx } from '@/lib/actions'
+import {
+  applyDeltaAction,
+  DeltaReplayError,
+  reverseReplayDeltas,
+  STORY_ENTRY_REJECTION,
+  type DbCtx,
+} from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
@@ -1433,6 +1439,9 @@ describe('rollback confirm counts', () => {
       reason: expect.any(String),
       counts: { entries: 2, chapters: 0, worldStateChanges: 3 },
     })
+    // Compile-time: the code alone narrows to the rejection that carries the fresh counts.
+    if (result.status === 'rejected' && result.code === STORY_ENTRY_REJECTION.countsChanged)
+      expect(result.counts.worldStateChanges).toBe(3)
     expect(await db.select().from(deltas)).toEqual(before)
     expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
     expect(undoRedoStore.hasRedo()).toBe(true)
@@ -1450,6 +1459,25 @@ describe('rollback confirm counts', () => {
 
     expect(result).toEqual({ status: 'ok', counts: shown })
     expect(await entryIds(db)).toEqual(['op', 't1'])
+  })
+
+  // The interrupt reverses the pass's write, so the set the commit reverses is the one confirmed.
+  it('rolls back when the interrupt reverses the only change since the confirm', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts(ctx, 't2')
+    const pass = registerStandInPass({ anchorEntryId: 't3' })
+    const start = startStandInPass(ctx)
+    await pass.nextHeld()
+    expect(await shownCounts(ctx, 't2')).toEqual({ ...shown, worldStateChanges: 3 })
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({ status: 'ok', counts: shown })
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
   })
 })
 
