@@ -42,6 +42,7 @@ import {
 import { entityLinkRows } from '@/lib/world'
 
 import { resolveCollision, type CollisionResolution } from './resolve-collision'
+import { reserveRunAfterGateCheck } from '../delta/__tests__/gate-race'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { withKeyLock } from '../delta/key-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
@@ -684,6 +685,28 @@ describe('resolveCollision — merge', () => {
       code: 'in-flight',
     })
     expect(await deltaRows()).toEqual([])
+  })
+})
+
+// A run reserving right after the build's gate check settles the writes dispatched so far: the
+// resolution must already be among them (generation-pipeline.md → Gate derivation as a selector).
+describe('resolveCollision — dispatches in the tick of its gate check', () => {
+  it.each([
+    ['merge', MERGE_B_INTO_A],
+    ['keep', KEEP_A_B],
+  ])('%s: a run reserving right after the check waits for the write', async (_, resolution) => {
+    // Check 1 is resolveCollision's own; check 2 is the build's, right before the dispatch.
+    const race = reserveRunAfterGateCheck(2, startHardGateRun)
+    try {
+      const resolving = resolveCollision('b1', resolution, ctx)
+      await race.settled
+      // Read as the run's wait ends: a write dispatched after that has no deltas yet.
+      expect((await deltaRows()).length).toBeGreaterThan(0)
+      expect(race.checks()).toBe(2)
+      expect(await resolving).toEqual({ status: 'ok' })
+    } finally {
+      race.restore()
+    }
   })
 })
 

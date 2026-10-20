@@ -6,6 +6,7 @@ import {
   releaseBranchWriteExclusive,
   withBranchWriteShared,
 } from '@/lib/actions/delta/branch-write-lock'
+import { DeltaReplayError } from '@/lib/actions/delta/replay-errors'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { happenings } from '@/lib/db'
@@ -23,6 +24,37 @@ import { generationStore } from '@/lib/stores'
 import { makeHarness, resetSingletons } from './harness'
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+// A hold that never ends fails with a name, not by vitest's timeout.
+async function within<T>(promise: Promise<T>, what: string, ms = 1000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what}: still pending after ${ms}ms`)), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function configurePort(over: Partial<DeltaActionPort>): void {
+  configureDeltaActionPort({
+    applyDeltaAction,
+    reverseReplayDeltas,
+    describeReplayError: describeDeltaReplayError,
+    settleUserWrites,
+    holdBranchWriteExclusive,
+    releaseBranchWriteExclusive,
+    ...over,
+  })
+}
+
+const grantedWithin = (what: string) =>
+  within(
+    withBranchWriteShared('b1', 'probe', async () => 'granted' as const),
+    what,
+  )
 
 // A stand-in run that writes one fact, then waits until it is cancelled.
 function defineRun(kind: string, interruptible: boolean): { landed: Promise<void> } {
@@ -104,8 +136,8 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     expect(await db.select().from(happenings)).toHaveLength(1)
 
     preview.end()
-    await preview.done
-    expect(await run.origin).toMatchObject({ outcome: 'aborted' })
+    await within(preview.done, 'preview')
+    expect(await within(run.origin, 'abort')).toMatchObject({ outcome: 'aborted' })
     expect(await db.select().from(happenings)).toEqual([])
   })
 
@@ -124,14 +156,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
       await finished
       return reverseReplayDeltas(...args)
     }
-    configureDeltaActionPort({
-      applyDeltaAction,
-      reverseReplayDeltas: slowReverse,
-      describeReplayError: describeDeltaReplayError,
-      settleUserWrites,
-      holdBranchWriteExclusive,
-      releaseBranchWriteExclusive,
-    })
+    configurePort({ reverseReplayDeltas: slowReverse })
     const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
@@ -146,8 +171,8 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     expect(seen).toEqual([])
 
     finish()
-    await run.origin
-    await preview
+    await within(run.origin, 'abort')
+    await within(preview, 'preview')
     expect(seen).toEqual([0])
   })
 
@@ -159,10 +184,46 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     const preview = openPreview()
 
     abortRuns()
-    expect(await run.origin).toMatchObject({ outcome: 'aborted' })
+    expect(await within(run.origin, 'abort behind a preview')).toMatchObject({
+      outcome: 'aborted',
+    })
     expect(await db.select().from(happenings)).toEqual([])
 
     preview.end()
-    await preview.done
+    await within(preview.done, 'preview')
+  })
+
+  // A leaked exclusive hold stalls every write to the branch until boot.
+  it('releases the hold when the reversal fails and boot recovery owns the run', async () => {
+    const { ctx } = await makeHarness()
+    configurePort({
+      reverseReplayDeltas: (actionId) =>
+        Promise.reject(
+          new DeltaReplayError('Reverse-replay failed', {
+            cause: new Error('forced'),
+            actionId,
+            stage: 'transaction',
+          }),
+        ),
+    })
+    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
+    const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    await landed
+
+    abortRuns()
+    expect(await within(run.origin, 'abort')).toMatchObject({ outcome: 'failed' })
+    expect(await grantedWithin('a write after the failed reversal')).toBe('granted')
+  })
+
+  it('releases the hold when the reversal throws something the orchestrator does not recognise', async () => {
+    const { ctx } = await makeHarness()
+    configurePort({ reverseReplayDeltas: () => Promise.reject(new Error('not a replay error')) })
+    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
+    const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    await landed
+
+    abortRuns()
+    await expect(within(run.origin, 'abort')).rejects.toThrow('not a replay error')
+    expect(await grantedWithin('a write after the thrown reversal')).toBe('granted')
   })
 })
