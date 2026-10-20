@@ -84,13 +84,6 @@ export function formatImageSize(res: ImageResolution): `${number}x${number}` {
   return `${res.width}x${res.height}`
 }
 
-/** MIME type of raw base64 image data, from its magic bytes. Unrecognised data is treated as PNG. */
-export function base64ImageMime(b64: string): 'image/png' | 'image/jpeg' | 'image/webp' {
-  if (b64.startsWith('/9j/')) return 'image/jpeg'
-  if (b64.startsWith('UklGR')) return 'image/webp'
-  return 'image/png'
-}
-
 export type SniffedImageMime =
   | 'image/png'
   | 'image/apng'
@@ -131,7 +124,7 @@ const u32 = (bytes: Uint8Array, pos: number): number =>
 
 /**
  * MIME type of raw base64 image data, from its magic bytes, or `null` when it is not a
- * recognised image. Unlike `base64ImageMime`, nothing is assumed to be PNG.
+ * recognised image. Nothing is assumed to be PNG.
  */
 export function sniffImageMime(b64: string): SniffedImageMime | null {
   let bytes: Uint8Array

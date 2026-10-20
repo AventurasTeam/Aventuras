@@ -7,7 +7,6 @@ import {
   specToRatioString,
   expectedPixels,
   normalizeImageDataUrl,
-  base64ImageMime,
   sniffImageMime,
   bytesToBase64,
   base64ToBytes,
@@ -207,17 +206,6 @@ describe('storyImageMode', () => {
     ['settings without a mode', {}],
   ])('treats %s as Text Only', (_, settings) => {
     expect(storyImageMode(settings)).toBe('none')
-  })
-})
-
-describe('base64ImageMime', () => {
-  it.each([
-    ['iVBORw0KGgo', 'image/png'],
-    ['/9j/4AAQSkZJRg', 'image/jpeg'],
-    ['UklGRiQAAABXRUJQ', 'image/webp'],
-    ['AAAA', 'image/png'],
-  ])('sniffs %s as %s', (b64, mime) => {
-    expect(base64ImageMime(b64)).toBe(mime)
   })
 })
 

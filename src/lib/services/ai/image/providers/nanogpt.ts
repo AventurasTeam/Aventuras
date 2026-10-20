@@ -6,12 +6,11 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { generateOpenAICompatible } from './openaiCompatible'
+import { createNanoGPTImage } from './nanogptImage'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '#lib/utils/image.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
-// The text provider's default host, copied onto image profiles migrated from an API profile.
-const LEGACY_BASE_URL = 'https://nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
 
 // Known img2img capable models/tags
@@ -19,7 +18,12 @@ const IMG2IMG_TAGS = new Set(['image-to-image', 'image-edit'])
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
   const configured = config.baseUrl?.trim().replace(/\/+$/, '')
-  const baseUrl = !configured || configured === LEGACY_BASE_URL ? DEFAULT_BASE_URL : configured
+  const baseUrl = configured || DEFAULT_BASE_URL
+  const nanogpt = createNanoGPTImage({
+    apiKey: config.apiKey,
+    baseURL: baseUrl,
+    fetch: createImageSdkFetch('nanogpt-image'),
+  })
 
   return {
     id: 'nanogpt',
@@ -28,15 +32,14 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, modelInfo, referenceImages, signal } = options
 
-      return generateOpenAICompatible({
-        baseUrl,
-        apiKey: config.apiKey,
-        model,
+      return generateSdkImage({
+        model: nanogpt.imageModel(model),
         prompt,
-        size: resolveSize(spec, modelInfo?.supportedResolutions),
         referenceImages,
+        providerOptions: {
+          nanogpt: { resolution: resolveSize(spec, modelInfo?.supportedResolutions) },
+        },
         signal,
-        serviceId: 'nanogpt-image',
       })
     },
 

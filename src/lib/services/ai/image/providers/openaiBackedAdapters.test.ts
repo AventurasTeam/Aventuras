@@ -3,20 +3,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./fetchAdapter', () => ({
   imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
+  fetchImageBase64: vi.fn(),
 }))
-vi.mock('./openaiCompatible', () => ({
-  generateOpenAICompatible: vi.fn(async () => ({ base64: 'RESULT' })),
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
+  settings: { apiSettings: { llmTimeoutMs: 60_000 } },
 }))
 vi.mock('./openaiCompatibleProvider', () => ({
   generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 
+const sdkFetch = vi.hoisted(() => vi.fn())
+vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
+  createSdkFetch: vi.fn(() => sdkFetch),
+}))
+
 import { imageGetFetch } from './fetchAdapter'
-import { generateOpenAICompatible } from './openaiCompatible'
+import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
 import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
 import { createNanoGPTProvider } from './nanogpt'
 import { createPollinationsProvider } from './pollinations'
-import type { ImageGenerateOptions } from './types'
+import type { ImageGenerateOptions, ImageModelInfo } from './types'
 
 const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
   model: 'm1',
@@ -26,47 +32,76 @@ const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions
   ...over,
 })
 
-const lastCall = () => vi.mocked(generateOpenAICompatible).mock.lastCall![0]
-
 const modelsResponse = (body: unknown) =>
   ({ ok: true, json: async () => body }) as unknown as Response
 
+const modelInfo = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
+  id: 'm1',
+  name: 'm1',
+  supportsImg2Img: true,
+  ...over,
+})
+
+function sentRequest() {
+  const [url, init] = sdkFetch.mock.calls[0] as [string, RequestInit]
+  return {
+    url,
+    headers: new Headers(init.headers),
+    body: JSON.parse(init.body as string) as Record<string, unknown>,
+  }
+}
+
 describe('NanoGPT adapter', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('defaults to the api.nano-gpt.com host', async () => {
-    await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
-    expect(lastCall().baseUrl).toBe('https://api.nano-gpt.com/api/v1')
-    expect(lastCall().serviceId).toBe('nanogpt-image')
-  })
-
-  it.each(['https://nano-gpt.com/api/v1', 'https://nano-gpt.com/api/v1/'])(
-    'treats the legacy host %s as unset',
-    async (baseUrl) => {
-      await createNanoGPTProvider({ apiKey: 'k', baseUrl }).generate(options())
-      expect(lastCall().baseUrl).toBe('https://api.nano-gpt.com/api/v1')
-    },
-  )
-
-  it('keeps a custom base URL', async () => {
-    await createNanoGPTProvider({ apiKey: 'k', baseUrl: 'https://proxy.test/v1' }).generate(
-      options(),
+  beforeEach(() => {
+    vi.clearAllMocks()
+    sdkFetch.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ data: [{ b64_json: 'RESULT' }] }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
     )
-    expect(lastCall().baseUrl).toBe('https://proxy.test/v1')
   })
 
-  it("picks the size from the model's supported resolutions", async () => {
+  it('posts to /images on the api.nano-gpt.com host and returns the image', async () => {
+    const result = await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
+    const { url, headers, body } = sentRequest()
+    expect(url).toBe('https://api.nano-gpt.com/api/v1/images')
+    expect(headers.get('Authorization')).toBe('Bearer k')
+    expect(body).toMatchObject({ model: 'm1', prompt: 'a castle', n: 1 })
+    expect(result).toEqual({ base64: 'RESULT' })
+  })
+
+  it('labels its fetch nanogpt-image', () => {
+    createNanoGPTProvider({ apiKey: 'k' })
+    expect(createSdkFetch).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'nanogpt-image' }),
+    )
+  })
+
+  it.each([
+    'https://nano-gpt.com/api/v1',
+    'https://nano-gpt.com/api/v1/',
+    'https://proxy.test/v1',
+  ])('keeps the configured base URL %s', async (baseUrl) => {
+    await createNanoGPTProvider({ apiKey: 'k', baseUrl }).generate(options())
+    expect(sentRequest().url).toBe(`${baseUrl.replace(/\/+$/, '')}/images`)
+  })
+
+  it("picks the resolution from the model's supported resolutions", async () => {
     await createNanoGPTProvider({ apiKey: 'k' }).generate(
-      options({
-        modelInfo: {
-          id: 'm1',
-          name: 'm1',
-          supportsImg2Img: true,
-          supportedResolutions: ['square_hd', 'landscape_16_9'],
-        },
-      }),
+      options({ modelInfo: modelInfo({ supportedResolutions: ['square_hd', 'landscape_16_9'] }) }),
     )
-    expect(lastCall().size).toBe('square_hd')
+    expect(sentRequest().body.resolution).toBe('square_hd')
+  })
+
+  it('sends canonical pixels when the model lists no resolutions', async () => {
+    await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
+    expect(sentRequest().body.resolution).toBe('1536x1536')
+  })
+
+  it('sends references as data URLs', async () => {
+    await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
+    expect(sentRequest().body.input_references).toEqual(['data:image/png;base64,iVBORw0KGgo='])
   })
 })
 

@@ -578,10 +578,12 @@ resolution list for NanoGPT, real dimensions for ComfyUI/A1111/Pollinations
 (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 
-NanoGPT alone keeps a hand-written OpenAI-style request (`openaiCompatible.ts`):
-`/images/generations`, or `/images/edits` as multipart when there are references. OpenAI
+NanoGPT calls its unified `POST /images` through a small custom `ImageModelV4`
+(`nanogptImage.ts`): one JSON request for text-to-image and edits, references as `input_references`
+data URLs, and the model's resolution tier (`1k`, `1344*576`) in `providerOptions.nanogpt` because the
+SDK's `size` takes only `WxH`. Chutes, Zhipu and A1111 still keep hand-written requests. OpenAI
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
-key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations and Google call
+key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, NanoGPT and Google call
 the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations reuses the OpenAI Compatible helper
 (`generateOpenAICompatibleImage`) with its fixed base URL and `safe: false`. Each adapter keeps its
 own model discovery and size handling; discovery throws on a failed request rather than
@@ -618,8 +620,8 @@ user-configured, so CORS, Android's cleartext block and iOS ATS (above) would ea
 them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
 any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
 AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google, OpenAI, OpenAI Compatible and Pollinations use it), `imageFetch` (NanoGPT,
-the one hand-written generation adapter) / `imageGetFetch` / `fetchPublicImageBase64` for model
+debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, OpenRouter and NanoGPT use it),
+`imageFetch` (Chutes, Zhipu and A1111, the hand-written generation adapters) / `imageGetFetch` / `fetchPublicImageBase64` for model
 discovery and reference fetching, `corsFetch` for discovery.
 
 What the plugin changes for the server on the other end:
