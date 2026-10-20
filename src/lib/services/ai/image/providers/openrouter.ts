@@ -23,7 +23,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch } from './fetchAdapter'
+import { imageFetch, imageGetFetch } from './fetchAdapter'
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 const MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models'
@@ -145,98 +145,57 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     },
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
-      try {
-        const headers: Record<string, string> = {}
-        const key = apiKey || config.apiKey
-        if (key) headers['Authorization'] = `Bearer ${key}`
+      const headers: Record<string, string> = {}
+      const key = apiKey || config.apiKey
+      if (key) headers['Authorization'] = `Bearer ${key}`
 
-        const response = await fetch(MODELS_ENDPOINT, { headers })
-        if (!response.ok) return getFallbackModels()
+      const response = await imageGetFetch(MODELS_ENDPOINT, headers, {
+        serviceId: 'openrouter-image-models',
+      })
+      const data = await response.json()
+      const models = data?.data || []
 
-        const data = await response.json()
-        const models = data?.data || []
+      // Filter for models that have "image" in output_modalities
+      const imageModels = models.filter((m: OpenRouterModel) =>
+        m.architecture?.output_modalities?.includes('image'),
+      )
 
-        // Filter for models that have "image" in output_modalities
-        const imageModels = models.filter((m: OpenRouterModel) =>
-          m.architecture?.output_modalities?.includes('image'),
-        )
+      return imageModels.map((m: OpenRouterModel): ImageModelInfo => {
+        const inputMods = m.architecture?.input_modalities || []
+        const outputMods = m.architecture?.output_modalities || []
+        const supportsImg2Img = inputMods.includes('image') && outputMods.includes('image')
 
-        if (imageModels.length === 0) return getFallbackModels()
+        // Parse cost from pricing.image if available
+        let costPerImage: number | undefined
+        if (m.pricing?.image) {
+          const parsed = parseFloat(m.pricing.image)
+          if (!isNaN(parsed) && parsed > 0) costPerImage = parsed
+        }
 
-        return imageModels.map((m: OpenRouterModel): ImageModelInfo => {
-          const inputMods = m.architecture?.input_modalities || []
-          const outputMods = m.architecture?.output_modalities || []
-          const supportsImg2Img = inputMods.includes('image') && outputMods.includes('image')
+        let costPerTextToken: number | undefined
+        if (m.pricing?.prompt) {
+          const parsed = parseFloat(m.pricing.prompt)
+          if (!isNaN(parsed) && parsed > 0) costPerTextToken = parsed
+        }
 
-          // Parse cost from pricing.image if available
-          let costPerImage: number | undefined
-          if (m.pricing?.image) {
-            const parsed = parseFloat(m.pricing.image)
-            if (!isNaN(parsed) && parsed > 0) costPerImage = parsed
-          }
+        let costPerImageToken: number | undefined
+        if (m.pricing?.completion) {
+          const parsed = parseFloat(m.pricing.completion)
+          if (!isNaN(parsed) && parsed > 0) costPerImageToken = parsed
+        }
 
-          let costPerTextToken: number | undefined
-          if (m.pricing?.prompt) {
-            const parsed = parseFloat(m.pricing.prompt)
-            if (!isNaN(parsed) && parsed > 0) costPerTextToken = parsed
-          }
-
-          let costPerImageToken: number | undefined
-          if (m.pricing?.completion) {
-            const parsed = parseFloat(m.pricing.completion)
-            if (!isNaN(parsed) && parsed > 0) costPerImageToken = parsed
-          }
-
-          return {
-            id: m.id,
-            name: m.name || m.id,
-            description: m.description,
-            supportsImg2Img,
-            costPerImage,
-            costPerTextToken,
-            costPerImageToken,
-            inputModalities: inputMods,
-            outputModalities: outputMods,
-          }
-        })
-      } catch {
-        return getFallbackModels()
-      }
+        return {
+          id: m.id,
+          name: m.name || m.id,
+          description: m.description,
+          supportsImg2Img,
+          costPerImage,
+          costPerTextToken,
+          costPerImageToken,
+          inputModalities: inputMods,
+          outputModalities: outputMods,
+        }
+      })
     },
   }
-}
-
-function getFallbackModels(): ImageModelInfo[] {
-  return [
-    {
-      id: 'google/gemini-2.5-flash-image',
-      name: 'Gemini 2.5 Flash Image (Nano Banana)',
-      description: 'Google Gemini with image generation capabilities',
-      supportsImg2Img: true,
-    },
-    {
-      id: 'google/gemini-3.1-flash-image-preview',
-      name: 'Gemini 3.1 Flash Image Preview (Nano Banana 2)',
-      description: 'Next-gen Gemini image generation with extended aspect ratios',
-      supportsImg2Img: true,
-    },
-    {
-      id: 'bytedance-seed/seedream-4.5',
-      name: 'Seedream 4.5',
-      description: 'ByteDance Seed high-quality image generation',
-      supportsImg2Img: true,
-    },
-    {
-      id: 'black-forest-labs/flux.2-pro',
-      name: 'FLUX.2 Pro',
-      description: 'Professional quality image generation',
-      supportsImg2Img: true,
-    },
-    {
-      id: 'openai/gpt-5-image',
-      name: 'GPT-5 Image',
-      description: 'OpenAI image generation via OpenRouter',
-      supportsImg2Img: true,
-    },
-  ]
 }

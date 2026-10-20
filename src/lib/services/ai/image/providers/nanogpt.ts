@@ -41,68 +41,43 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     },
 
     async listModels(): Promise<ImageModelInfo[]> {
-      try {
-        const response = await imageGetFetch(MODELS_ENDPOINT)
-        if (!response.ok) return getFallbackModels()
+      const response = await imageGetFetch(MODELS_ENDPOINT)
+      const data = await response.json()
+      const imageModels = data?.models?.image || {}
+      const entries = Object.values(imageModels) as Array<{
+        name?: string
+        model?: string
+        description?: string
+        cost?: Record<string, number>
+        resolutions?: Array<{ value: string; comment?: string }>
+        tags?: string[]
+        supportsMultipleImg2Img?: boolean
+      }>
 
-        const data = await response.json()
-        const imageModels = data?.models?.image || {}
-        const entries = Object.values(imageModels) as Array<{
-          name?: string
-          model?: string
-          description?: string
-          cost?: Record<string, number>
-          resolutions?: Array<{ value: string; comment?: string }>
-          tags?: string[]
-          supportsMultipleImg2Img?: boolean
-        }>
+      return entries.map((m) => {
+        const supportsImg2Img =
+          m.tags?.some((t) => IMG2IMG_TAGS.has(t)) || m.supportsMultipleImg2Img || false
 
-        if (entries.length === 0) return getFallbackModels()
+        let costPerImage: number | undefined
+        if (m.cost && typeof m.cost === 'object') {
+          const costs = Object.values(m.cost).filter((c) => typeof c === 'number')
+          if (costs.length > 0) costPerImage = costs.reduce((a, b) => a + b, 0) / costs.length
+        }
 
-        return entries.map((m) => {
-          const supportsImg2Img =
-            m.tags?.some((t) => IMG2IMG_TAGS.has(t)) || m.supportsMultipleImg2Img || false
+        const resolutions = m.resolutions?.map((r) => r.value).filter(Boolean) ?? []
 
-          let costPerImage: number | undefined
-          if (m.cost && typeof m.cost === 'object') {
-            const costs = Object.values(m.cost).filter((c) => typeof c === 'number')
-            if (costs.length > 0) costPerImage = costs.reduce((a, b) => a + b, 0) / costs.length
-          }
-
-          const resolutions = m.resolutions?.map((r) => r.value).filter(Boolean) ?? []
-
-          return {
-            id: m.model || m.name || '',
-            name: m.name || m.model || '',
-            description: m.description,
-            supportsImg2Img,
-            maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
-            costPerImage,
-            supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
-          }
-        })
-      } catch {
-        return getFallbackModels()
-      }
+        return {
+          id: m.model || m.name || '',
+          name: m.name || m.model || '',
+          description: m.description,
+          supportsImg2Img,
+          maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
+          costPerImage,
+          supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
+        }
+      })
     },
   }
-}
-
-function getFallbackModels(): ImageModelInfo[] {
-  return [
-    {
-      id: 'z-image-turbo',
-      name: 'Image Turbo',
-      description: 'Fast, efficient image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: 'flux-kontext',
-      name: 'Flux Kontext',
-      description: 'Context-aware image generation',
-      supportsImg2Img: true,
-    },
-  ]
 }
 
 /** Symbolic values NanoGPT models use in place of dimensions, and what they mean. */

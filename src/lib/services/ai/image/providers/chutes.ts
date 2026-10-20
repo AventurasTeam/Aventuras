@@ -14,7 +14,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch } from './fetchAdapter'
+import { imageFetch, imageGetFetch } from './fetchAdapter'
 
 const DEFAULT_BASE_URL = 'https://api.chutes.ai/v1'
 const CHUTES_API_ENDPOINT = 'https://api.chutes.ai/chutes/?include_public=true&limit=200'
@@ -57,60 +57,54 @@ export function createChutesProvider(config: ImageProviderConfig): ImageProvider
     },
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
-      try {
-        const headers: Record<string, string> = {}
-        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+      const headers: Record<string, string> = {}
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
 
-        const response = await fetch(CHUTES_API_ENDPOINT, { headers })
-        if (!response.ok) return getFallbackModels()
+      const response = await imageGetFetch(CHUTES_API_ENDPOINT, headers, {
+        serviceId: 'chutes-image-models',
+      })
+      const data = await response.json()
+      const items = data.items || []
 
-        const data = await response.json()
-        const items = data.items || []
+      const imageModels = items.filter(
+        (item: { standard_template?: string | null; name?: string }) => {
+          if (item.standard_template === 'diffusion') return true
+          if (item.standard_template === null) {
+            const name = item.name?.toLowerCase() || ''
+            return name.includes('image') || name.includes('z-image')
+          }
+          return false
+        },
+      )
 
-        const imageModels = items.filter(
-          (item: { standard_template?: string | null; name?: string }) => {
-            if (item.standard_template === 'diffusion') return true
-            if (item.standard_template === null) {
-              const name = item.name?.toLowerCase() || ''
-              return name.includes('image') || name.includes('z-image')
-            }
-            return false
-          },
-        )
+      const models: ImageModelInfo[] = imageModels.map(
+        (item: { name: string; tagline?: string }) => {
+          const name = item.name
+          const nameLower = name.toLowerCase()
+          const supportsImg2Img =
+            nameLower.includes('edit') ||
+            (nameLower.includes('qwen-image') && !nameLower.includes('turbo'))
 
-        if (imageModels.length === 0) return getFallbackModels()
+          return {
+            id: name,
+            name: formatName(name),
+            description: item.tagline || undefined,
+            supportsImg2Img,
+          }
+        },
+      )
 
-        const models: ImageModelInfo[] = imageModels.map(
-          (item: { name: string; tagline?: string }) => {
-            const name = item.name
-            const nameLower = name.toLowerCase()
-            const supportsImg2Img =
-              nameLower.includes('edit') ||
-              (nameLower.includes('qwen-image') && !nameLower.includes('turbo'))
+      models.sort((a, b) => {
+        const aL = a.id.toLowerCase()
+        const bL = b.id.toLowerCase()
+        if (aL === 'z-image-turbo') return -1
+        if (bL === 'z-image-turbo') return 1
+        if (aL.includes('qwen') && !bL.includes('qwen')) return -1
+        if (bL.includes('qwen') && !aL.includes('qwen')) return 1
+        return a.name.localeCompare(b.name)
+      })
 
-            return {
-              id: name,
-              name: formatName(name),
-              description: item.tagline || undefined,
-              supportsImg2Img,
-            }
-          },
-        )
-
-        models.sort((a, b) => {
-          const aL = a.id.toLowerCase()
-          const bL = b.id.toLowerCase()
-          if (aL === 'z-image-turbo') return -1
-          if (bL === 'z-image-turbo') return 1
-          if (aL.includes('qwen') && !bL.includes('qwen')) return -1
-          if (bL.includes('qwen') && !aL.includes('qwen')) return 1
-          return a.name.localeCompare(b.name)
-        })
-
-        return models
-      } catch {
-        return getFallbackModels()
-      }
+      return models
     },
   }
 }
@@ -123,21 +117,4 @@ function formatName(name: string): string {
     .split(/[-_/]/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
-}
-
-function getFallbackModels(): ImageModelInfo[] {
-  return [
-    {
-      id: 'z-image-turbo',
-      name: 'Z Image Turbo',
-      description: 'Fast, efficient image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: 'qwen-image-edit-2511',
-      name: 'Qwen Image Edit',
-      description: 'Image editing with reference images',
-      supportsImg2Img: true,
-    },
-  ]
 }

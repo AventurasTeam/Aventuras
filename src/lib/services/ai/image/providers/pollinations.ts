@@ -15,9 +15,8 @@ import type {
 import { imageGetFetch } from './fetchAdapter'
 import { generateOpenAICompatible } from './openaiCompatible'
 
-import { POLLINATIONS_DEFAULT_MODEL_ID, POLLINATIONS_REFERENCE_MODEL_ID } from '../constants'
+import { POLLINATIONS_DEFAULT_MODEL_ID } from '../constants'
 const DEFAULT_MODEL = POLLINATIONS_DEFAULT_MODEL_ID
-const REFERENCE_MODEL = POLLINATIONS_REFERENCE_MODEL_ID
 const GENERATION_BASE_URL = 'https://gen.pollinations.ai/v1'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
 
@@ -65,55 +64,26 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
     },
 
     async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
-      try {
-        const headers: Record<string, string> = { Accept: 'application/json' }
-        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
 
-        const response = await imageGetFetch(MODELS_ENDPOINT, headers)
-        if (!response.ok) return getFallbackModels()
+      const response = await imageGetFetch(MODELS_ENDPOINT, headers)
+      const data = await response.json()
+      if (!Array.isArray(data)) throw new Error('Pollinations returned an unexpected model list')
 
-        const data = await response.json()
-        if (!Array.isArray(data) || data.length === 0) return getFallbackModels()
-
-        return (data as PollinationsImageModelResponse[])
-          .filter((model) => model.output_modalities?.includes('image') ?? false)
-          .map((model) => ({
-            id: model.name,
-            name: model.name,
-            description: model.description,
-            supportsImg2Img: model.input_modalities?.includes('image') ?? false,
-            costPerImage: parseOptionalNumber(model.pricing?.completionImageTokens),
-            costPerTextToken: parseOptionalNumber(model.pricing?.promptTextTokens),
-            costPerImageToken: parseOptionalNumber(model.pricing?.promptImageTokens),
-            inputModalities: model.input_modalities,
-            outputModalities: model.output_modalities,
-          }))
-      } catch {
-        return getFallbackModels()
-      }
+      return (data as PollinationsImageModelResponse[])
+        .filter((model) => model.output_modalities?.includes('image') ?? false)
+        .map((model) => ({
+          id: model.name,
+          name: model.name,
+          description: model.description,
+          supportsImg2Img: model.input_modalities?.includes('image') ?? false,
+          costPerImage: parseOptionalNumber(model.pricing?.completionImageTokens),
+          costPerTextToken: parseOptionalNumber(model.pricing?.promptTextTokens),
+          costPerImageToken: parseOptionalNumber(model.pricing?.promptImageTokens),
+          inputModalities: model.input_modalities,
+          outputModalities: model.output_modalities,
+        }))
     },
   }
-}
-
-function getFallbackModels(): ImageModelInfo[] {
-  return [
-    {
-      id: DEFAULT_MODEL,
-      name: 'Z Image',
-      description: 'Default fast image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: 'flux',
-      name: 'Flux',
-      description: 'High quality image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: REFERENCE_MODEL,
-      name: 'Flux Kontext',
-      description: 'In-context editing & generation',
-      supportsImg2Img: true,
-    },
-  ]
 }

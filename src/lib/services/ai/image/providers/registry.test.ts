@@ -44,6 +44,8 @@ import {
   requiresApiKey,
   generateImage,
   supportsReferenceImages,
+  listImageModels,
+  listImageModelsByProvider,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageProviderType } from '#lib/types/index.ts'
@@ -314,6 +316,44 @@ describe('Image Provider Registry', () => {
     it('is false for an unknown profile', async () => {
       vi.mocked(settings.getImageProfile).mockReturnValue(undefined)
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+  })
+  describe('model listing failures', () => {
+    function failingProvider() {
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate: vi.fn(),
+        listModels: vi.fn(async () => {
+          throw new Error('Image API error 401: bad key')
+        }),
+      })
+    }
+
+    it('rethrows from listImageModelsByProvider so the profile form can show it', async () => {
+      failingProvider()
+      await expect(listImageModelsByProvider('openai', 'sk-fail-a', true)).rejects.toThrow(
+        'bad key',
+      )
+    })
+
+    it('swallows in listImageModels and does not cache the failure', async () => {
+      failingProvider()
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        providerType: 'openai',
+        apiKey: 'sk-fail-b',
+      } as ReturnType<typeof settings.getImageProfile>)
+      expect(await listImageModels('p')).toEqual([])
+
+      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate: vi.fn(),
+        listModels,
+      })
+      expect(await listImageModels('p')).toHaveLength(1)
+      expect(listModels).toHaveBeenCalledTimes(1)
     })
   })
 })

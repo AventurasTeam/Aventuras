@@ -79,20 +79,16 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       const headers: Record<string, string> = {}
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`
 
-      try {
-        const response = await imageGetFetch(`${baseUrl}/sdapi/v1/sd-models`, headers, {
-          serviceId: 'a1111-models',
-        })
-        const data: { title?: string; model_name?: string; name?: string }[] = await response.json()
+      const response = await imageGetFetch(`${baseUrl}/sdapi/v1/sd-models`, headers, {
+        serviceId: 'a1111-models',
+      })
+      const data: { title?: string; model_name?: string; name?: string }[] = await response.json()
 
-        return (Array.isArray(data) ? data : []).map((m) => ({
-          id: m.title || m.model_name || m.name || '',
-          name: m.title || m.model_name || m.name || '',
-          supportsImg2Img: false,
-        }))
-      } catch {
-        return []
-      }
+      return (Array.isArray(data) ? data : []).map((m) => ({
+        id: m.title || m.model_name || m.name || '',
+        name: m.title || m.model_name || m.name || '',
+        supportsImg2Img: false,
+      }))
     },
 
     async getSamplerInfo(): Promise<ComfySamplerInfo> {

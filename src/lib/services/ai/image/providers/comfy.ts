@@ -668,38 +668,34 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     },
 
     async listModels(): Promise<ImageModelInfo[]> {
-      try {
-        const [checkpoints, diffusionModels, textEncoders, vaeModels] = await Promise.all([
-          api.getCheckpoints().catch(() => [] as string[]),
-          fetchModels('diffusion_models'),
-          fetchModels('text_encoders'),
-          fetchModels('vae'),
-        ])
+      const [checkpoints, diffusionModels, textEncoders, vaeModels] = await Promise.all([
+        api.getCheckpoints(),
+        fetchModels('diffusion_models').catch(() => [] as string[]),
+        fetchModels('text_encoders').catch(() => [] as string[]),
+        fetchModels('vae').catch(() => [] as string[]),
+      ])
 
-        // Cache auto-detected clip/vae for this baseUrl
-        if (textEncoders[0]) autoClipCache.set(baseUrl, textEncoders[0])
-        if (vaeModels[0]) autoVaeCache.set(baseUrl, vaeModels[0])
+      // Cache auto-detected clip/vae for this baseUrl
+      if (textEncoders[0]) autoClipCache.set(baseUrl, textEncoders[0])
+      if (vaeModels[0]) autoVaeCache.set(baseUrl, vaeModels[0])
 
-        // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
-        unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
+      // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
+      unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
 
-        const toInfo =
-          (prefix: string, description: string) =>
-          (m: string): ImageModelInfo => ({
-            id: `${prefix}:${m}`,
-            name: m,
-            description,
-            supportsImg2Img: false,
-            costPerImage: 0,
-          })
+      const toInfo =
+        (prefix: string, description: string) =>
+        (m: string): ImageModelInfo => ({
+          id: `${prefix}:${m}`,
+          name: m,
+          description,
+          supportsImg2Img: false,
+          costPerImage: 0,
+        })
 
-        return [
-          ...checkpoints.map(toInfo('checkpoint', 'Checkpoint')),
-          ...diffusionModels.map(toInfo('unet', 'Diffusion Model')),
-        ]
-      } catch {
-        return []
-      }
+      return [
+        ...checkpoints.map(toInfo('checkpoint', 'Checkpoint')),
+        ...diffusionModels.map(toInfo('unet', 'Diffusion Model')),
+      ]
     },
 
     async listLoras(): Promise<string[]> {

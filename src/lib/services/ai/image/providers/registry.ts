@@ -239,7 +239,8 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
 
 /**
  * List image models by provider type directly (without needing a profile).
- * Used during profile creation to preview available models.
+ * Used during profile creation to preview available models. A failed fetch rethrows so the
+ * form can show it.
  */
 export async function listImageModelsByProvider(
   providerType: ImageProviderType,
@@ -267,7 +268,7 @@ export async function listImageModelsByProvider(
     return models
   } catch (error) {
     log('Error listing models by provider', { providerType, error })
-    return []
+    throw error
   }
 }
 
