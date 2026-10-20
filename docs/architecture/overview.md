@@ -577,17 +577,19 @@ OpenRouter, the model's own published resolution list for NanoGPT, real dimensio
 ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
 it does not offer answers with the nearest thing it does, which is not the same picture.
 
-NanoGPT and Pollinations share one hand-written OpenAI-style request (`openaiCompatible.ts`):
+NanoGPT alone keeps a hand-written OpenAI-style request (`openaiCompatible.ts`):
 `/images/generations`, or `/images/edits` as multipart when there are references. OpenAI
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
-key optional) and Google call the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only
-429s. Each adapter keeps its own model discovery and size handling; discovery throws on a failed
-request rather than substituting a list. Whether a provider takes an API key or a base URL is
-declared per provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings
-form and `hasRequiredCredentials` read those tables. Migration `041` moved existing `openai`
-profiles that point at a proxy over to OpenAI Compatible. The registry hands references only to the providers that send
-them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
-adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
+key optional), Pollinations and Google call the SDK through `generateSdkImage` (`sdkImage.ts`),
+which retries only 429s. Pollinations reuses the OpenAI Compatible helper
+(`generateOpenAICompatibleImage`) with its fixed base URL and `safe: false`. Each adapter keeps its
+own model discovery and size handling; discovery throws on a failed request rather than
+substituting a list. Whether a provider takes an API key or a base URL is declared per provider in
+the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
+`hasRequiredCredentials` read those tables. Migration `041` moved existing `openai` profiles that
+point at a proxy over to OpenAI Compatible. The registry hands references only to the providers
+that send them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to
+base64, so every adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
 from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
 merely resolves to a private address is not caught. A reference that cannot be fetched is dropped
 and the image is generated without it. Google takes them on every image model it lists.
@@ -615,8 +617,9 @@ user-configured, so CORS, Android's cleartext block and iOS ATS (above) would ea
 them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
 any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
 AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google, OpenAI and OpenAI Compatible use it), `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64`
-for the hand-written image adapters and for model discovery, `corsFetch` for discovery.
+debug logging; Google, OpenAI, OpenAI Compatible and Pollinations use it), `imageFetch` (NanoGPT,
+the one hand-written generation adapter) / `imageGetFetch` / `fetchPublicImageBase64` for model
+discovery and reference fetching, `corsFetch` for discovery.
 
 What the plugin changes for the server on the other end:
 

@@ -1,10 +1,10 @@
 /**
  * Pollinations Image Provider
  *
- * Generates against gen.pollinations.ai/v1; model discovery uses Pollinations' own catalogue.
+ * Generates through the OpenAI Compatible SDK path against gen.pollinations.ai/v1; model discovery
+ * uses Pollinations' own catalogue.
  */
 
-import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -13,10 +13,8 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { generateOpenAICompatible } from './openaiCompatible'
+import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
 
-import { POLLINATIONS_DEFAULT_MODEL_ID } from '../constants'
-const DEFAULT_MODEL = POLLINATIONS_DEFAULT_MODEL_ID
 const GENERATION_BASE_URL = 'https://gen.pollinations.ai/v1'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
 
@@ -50,16 +48,16 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         throw new Error('Pollinations API key is required to bypass Turnstile protection.')
       }
 
-      return generateOpenAICompatible({
+      return generateOpenAICompatibleImage({
         baseUrl: GENERATION_BASE_URL,
         apiKey: config.apiKey,
-        model: model || DEFAULT_MODEL,
-        prompt,
-        size: formatImageSize(specToPixels(spec)),
-        referenceImages,
-        extraFields: { safe: false, nologo: true },
-        signal,
         serviceId: 'pollinations-image',
+        model,
+        prompt,
+        spec,
+        referenceImages,
+        extraFields: { safe: false },
+        signal,
       })
     },
 

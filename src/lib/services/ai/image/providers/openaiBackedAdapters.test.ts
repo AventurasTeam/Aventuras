@@ -7,12 +7,15 @@ vi.mock('./fetchAdapter', () => ({
 vi.mock('./openaiCompatible', () => ({
   generateOpenAICompatible: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
+vi.mock('./openaiCompatibleProvider', () => ({
+  generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
+}))
 
 import { imageGetFetch } from './fetchAdapter'
 import { generateOpenAICompatible } from './openaiCompatible'
+import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
 import { createNanoGPTProvider } from './nanogpt'
 import { createPollinationsProvider } from './pollinations'
-import { POLLINATIONS_DEFAULT_MODEL_ID } from '../constants'
 import type { ImageGenerateOptions } from './types'
 
 const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
@@ -70,23 +73,26 @@ describe('NanoGPT adapter', () => {
 describe('Pollinations adapter', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('calls /v1 with the content filter off', async () => {
-    await createPollinationsProvider({ apiKey: 'k' }).generate(options())
-    expect(lastCall().baseUrl).toBe('https://gen.pollinations.ai/v1')
-    expect(lastCall().extraFields).toEqual({ safe: false, nologo: true })
-    expect(lastCall().size).toBe('1536x1536')
-  })
+  const lastImageCall = () => vi.mocked(generateOpenAICompatibleImage).mock.lastCall![0]
 
-  it('falls back to the default model', async () => {
-    await createPollinationsProvider({ apiKey: 'k' }).generate(options({ model: '' }))
-    expect(lastCall().model).toBe(POLLINATIONS_DEFAULT_MODEL_ID)
+  it('generates against /v1 with the content filter off', async () => {
+    await createPollinationsProvider({ apiKey: 'k' }).generate(options())
+    expect(lastImageCall()).toMatchObject({
+      baseUrl: 'https://gen.pollinations.ai/v1',
+      apiKey: 'k',
+      serviceId: 'pollinations-image',
+      model: 'm1',
+      prompt: 'a castle',
+      referenceImages: ['iVBORw0KGgo='],
+      extraFields: { safe: false },
+    })
   })
 
   it('requires an API key', async () => {
     await expect(createPollinationsProvider({ apiKey: '' }).generate(options())).rejects.toThrow(
       'API key',
     )
-    expect(generateOpenAICompatible).not.toHaveBeenCalled()
+    expect(generateOpenAICompatibleImage).not.toHaveBeenCalled()
   })
 })
 
