@@ -135,7 +135,7 @@ function branchEntities(branchId: string): Entity[] {
 }
 
 async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
-  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
+  const status = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
   await writeStatus(ctx, status)
 }
 
@@ -228,7 +228,7 @@ export async function* periodicClassifierPhase(
           ? result.kind
           : result.detail
     const timedOut = result.status === 'aborted'
-    const { status: next } = nextStatusOnFailure(status, { error: detail, at: Date.now() })
+    const next = nextStatusOnFailure(status, { error: detail, at: Date.now() })
     await writeStatus(ctx, next)
     return {
       status: 'failed',

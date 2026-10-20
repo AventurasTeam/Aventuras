@@ -6,18 +6,26 @@ import {
   __resetBranchWriteLocks,
   withBranchWriteShared,
 } from '@/lib/actions/delta/branch-write-lock'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   branches,
   deltas,
+  happenings,
   pipelineRuns,
   stories,
   storyEntries,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
+import { embedClassifierDescriptions } from '@/lib/embedder-swap'
+import { __resetRegistry as __resetPipelineRegistry, getPipeline } from '@/lib/pipeline'
+import {
+  __resetClassifierEmbedder,
+  classifierEmbedder,
+} from '@/lib/pipeline/definitions/description-embedder'
 import {
   __resetDeltaActionPort,
   holdWritePhase,
@@ -190,6 +198,80 @@ describe('runBootstrap', () => {
     expect(recoveryReportStore.getSnapshot().pendingRecoveryReport?.reversed).toMatchObject([
       { runId: 'r1', storyId: 's1', deltas: 1 },
     ])
+  })
+
+  it('wires the classifier embedder and registers the pass, which per-turn chains to', async () => {
+    __resetClassifierEmbedder()
+    __resetPipelineRegistry()
+    await seedRow()
+
+    await runBootstrap(ctx)
+
+    expect(classifierEmbedder()).toBe(embedClassifierDescriptions)
+    expect(getPipeline(PERIODIC_CLASSIFIER_KIND).kind).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('reverses an orphaned pass at boot and hands its branch back to the cadence', async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({
+      id: 'b1',
+      storyId: 's1',
+      name: 'm',
+      createdAt: 1,
+      classifierStatus: {
+        state: 'running',
+        lastSuccessAt: null,
+        lastError: null,
+        retryCount: 0,
+        processedThrough: 2,
+      },
+    })
+    await ctx.db.insert(happenings).values({
+      id: 'hap_orphan',
+      branchId: 'b1',
+      title: 'landed before the crash',
+      commonKnowledge: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert(pipelineRuns).values({
+      runId: 'r_pass',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      actionId: 'act_pass',
+      storyId: 's1',
+      startedAt: 1,
+      finishedAt: null,
+      outcome: null,
+    })
+    await ctx.db.insert(deltas).values({
+      id: 'd_pass',
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'act_pass',
+      logPosition: 1,
+      source: 'periodic_classifier',
+      targetTable: 'happenings',
+      targetId: 'hap_orphan',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    expect(await runBootstrap(ctx)).toEqual({ status: 'ok' })
+
+    expect(await ctx.db.select().from(happenings)).toEqual([])
+    const [marker] = await ctx.db
+      .select()
+      .from(pipelineRuns)
+      .where(eq(pipelineRuns.runId, 'r_pass'))
+    expect(marker.outcome).toBe('recovered')
+    const [branch] = await ctx.db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status).toMatchObject({ state: 'idle', processedThrough: 2 })
   })
 })
 

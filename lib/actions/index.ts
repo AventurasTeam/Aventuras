@@ -6,11 +6,7 @@ export {
   type ImportRejectionCode,
   type ImportRowResult,
 } from './avts/import-rows'
-export {
-  readClassifierStatus,
-  resetStuckClassifierRunState,
-  unprocessedEntryCount,
-} from './classifier/deps'
+export { resetStuckClassifierRunState } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
 export {
   applyDeltaAction,
