@@ -41,10 +41,19 @@ export function providerMetadataOf(payload: unknown): ProviderMetadata | undefin
   }
   if ('candidates' in payload && Array.isArray(payload.candidates)) {
     const first: unknown = payload.candidates[0]
-    if (typeof first === 'object' && first !== null && 'safetyRatings' in first) {
-      if (first.safetyRatings) metadata.safetyRatings = first.safetyRatings
+    if (
+      typeof first === 'object' &&
+      first !== null &&
+      'safetyRatings' in first &&
+      first.safetyRatings
+    ) {
+      metadata.safetyRatings = first.safetyRatings
     }
   }
+  return nonEmpty(metadata)
+}
+
+function nonEmpty(metadata: ProviderMetadata): ProviderMetadata | undefined {
   return metadata.promptFeedback || metadata.safetyRatings ? metadata : undefined
 }
 
@@ -298,10 +307,7 @@ export async function logStreamResponse(
       serviceId,
       {
         body: parsedBody,
-        providerMetadata:
-          providerMetadata.promptFeedback || providerMetadata.safetyRatings
-            ? providerMetadata
-            : undefined,
+        providerMetadata: nonEmpty(providerMetadata),
         stream: true,
       },
       startTime,
