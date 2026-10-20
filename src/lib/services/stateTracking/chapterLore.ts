@@ -44,6 +44,22 @@ export function loreOwners(
   })
 }
 
+/**
+ * The snapshots a chapter-lore undo deletes: those marked after the first record it reverts, which
+ * hold that record's effect, on entries of the open line. An ancestor branch's snapshot past the
+ * fork is marked on that branch but sits on an entry the line does not have, and is left alone.
+ */
+export function snapshotsHolding(
+  marks: WorldStateMark[],
+  reverted: WorldStateRecord[],
+  lineEntryIds: ReadonlySet<string>,
+): WorldStateMark[] {
+  const since = Math.min(...reverted.map((r) => r.seq))
+  return marks.filter(
+    (m) => m.entityType === 'snapshot' && m.seq > since && lineEntryIds.has(m.entryId),
+  )
+}
+
 /** Why a chapter's lore cannot be undone: none was recorded, or what came after may not be. */
 export type ChapterLoreRefusal = 'nothing' | 'untracked' | 'interrupted'
 

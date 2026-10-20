@@ -1735,28 +1735,22 @@ class DatabaseService {
     return statements
   }
 
-  /** Snapshots on these branches marked after `sinceSeq`, which hold what was written since. */
-  deleteWorldStateSnapshotsSinceStatements(
-    storyId: string,
-    branchIds: (string | null)[],
-    sinceSeq: number,
-  ): DbStatement[] {
-    const named = branchIds.filter((b): b is string => b !== null)
-    const branches = [
-      ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
-      ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
-    ]
-    const marks = `story_id = ? AND kind = 'mark' AND entity_type = 'snapshot' AND seq > ?
-       AND (${branches.join(' OR ') || '0'})`
-    const params = [storyId, sinceSeq, ...named]
-    return [
-      statement(
-        `DELETE FROM world_state_snapshots
-         WHERE id IN (SELECT entity_id FROM world_state_changes WHERE ${marks})`,
-        params,
-      ),
-      statement(`DELETE FROM world_state_changes WHERE ${marks}`, params),
-    ]
+  /** These snapshots, with their marks. */
+  deleteWorldStateSnapshotsStatements(ids: string[]): DbStatement[] {
+    const statements: DbStatement[] = []
+    for (let i = 0; i < ids.length; i += 500) {
+      const slice = ids.slice(i, i + 500)
+      const list = slice.map(() => '?').join(', ')
+      statements.push(
+        statement(
+          `DELETE FROM world_state_changes
+           WHERE kind = 'mark' AND entity_type = 'snapshot' AND entity_id IN (${list})`,
+          slice,
+        ),
+        statement(`DELETE FROM world_state_snapshots WHERE id IN (${list})`, slice),
+      )
+    }
+    return statements
   }
 
   /** Records written on the given branches, in write order. */

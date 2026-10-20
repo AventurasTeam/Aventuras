@@ -142,8 +142,9 @@ after its mark, leaving those of a chapter deleted earlier on the same entry, an
 on the same lorebook entries, an override's included, and undoes them all, the
 reader's and Tidy's later changes included, which the modal lists by origin. It acts on the live
 lorebook, so the records it undoes are invalidated, not answered with records of the undo: they are
-deleted, in the transaction that deletes the chapter, and so are the snapshots on the branch line
-marked after the first of them, which hold their effect. A later revert or chapter delete never
+deleted, in the transaction that deletes the chapter, and so are the snapshots on the open line's
+entries marked after the first of them, which hold their effect (`snapshotsHolding`, which the
+confirmation lists too). A later revert or chapter delete never
 lists them again, and a past state is rebuilt from a later full state, the live one at worst. A past
 checkpoint only reads records, and invalidates nothing. The undo is refused unless everything
 since was recorded (tracking on since before the chapter's records, and no break or non-continuous

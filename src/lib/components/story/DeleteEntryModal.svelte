@@ -188,7 +188,7 @@
             variant="outline"
             onclick={confirm}
             class="can-hover:text-foreground flex-1 text-red-500 hover:text-red-500 sm:flex-none"
-            disabled={(rollsBack && preview === null) || deleting}
+            disabled={preview === null || deleting}
           >
             {#if deleting}
               <Loader2 class="h-4 w-4 animate-spin" />

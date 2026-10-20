@@ -47,6 +47,7 @@ import {
   chapterMark,
   loreOwners,
   planChapterLoreRevert,
+  snapshotsHolding,
   planReversal,
   refusalMessage,
   resolveOverride,
@@ -4011,13 +4012,14 @@ class StoryStore {
       // Nothing kept: a record is removed with the change it undid, so none may be applied again.
       const revert = await this.chapterLoreRevert(chapter, KEEP_NONE)
       if (!revert.ok) throw new Error("This chapter's lore can no longer be undone.")
+      const snapshots = await this.snapshotsHoldingLore(revert.reverted)
       await database.transaction([
         ...database.deleteChapterStatements(chapterId),
         ...chapterLoreStatements({
           storyId: this.currentStory.id,
           plan: revert.plan,
           reverted: revert.reverted,
-          lineBranchIds: this.lineBranchIds(),
+          snapshotIds: snapshots.map((m) => m.entityId),
         }),
       ])
       this.lorebookEntries = revert.plan.state.lorebookEntries
@@ -4054,6 +4056,12 @@ class StoryStore {
     })
   }
 
+  /** The snapshots on the open line a chapter-lore undo of these records deletes. */
+  private async snapshotsHoldingLore(reverted: WorldStateRecord[]): Promise<WorldStateMark[]> {
+    const line = new Set(this.entries.map((e) => e.id))
+    return snapshotsHolding(await this.lineMarks(), reverted, line)
+  }
+
   async previewChapterLoreUndo(chapterId: string): Promise<ChapterLorePreview> {
     const chapter = this.chapters.find((ch) => ch.id === chapterId)
     const none = {
@@ -4067,10 +4075,7 @@ class StoryStore {
     if (!chapter || !this.currentStory) return { refusal: 'nothing', ...none }
     const revert = await this.chapterLoreRevert(chapter)
     if (!revert.ok) return { refusal: revert.reason, ...none }
-    // As `chapterLoreStatements` selects them.
-    const since = Math.min(...revert.reverted.map((r) => r.seq))
-    const snapshots = (await this.lineMarks()).flatMap((m) => {
-      if (m.entityType !== 'snapshot' || m.seq <= since) return []
+    const snapshots = (await this.snapshotsHoldingLore(revert.reverted)).flatMap((m) => {
       const entry = this.entries.find((e) => e.id === m.entryId)
       return entry ? [entryNumber(entry)] : []
     })

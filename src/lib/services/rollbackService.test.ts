@@ -37,8 +37,8 @@ vi.mock('./database', () => ({
     clearTombstoneStatement: tag('clearTombstone'),
     worldStateRecordStatement: tag('record'),
     deleteWorldStateRecordsStatements: (ids: string[]) => [{ sql: 'deleteRecords', params: [ids] }],
-    deleteWorldStateSnapshotsSinceStatements: (...params: unknown[]) => [
-      { sql: 'deleteSnapshotsSince', params },
+    deleteWorldStateSnapshotsStatements: (ids: string[]) => [
+      { sql: 'deleteSnapshots', params: [ids] },
     ],
   },
 }))
@@ -272,7 +272,7 @@ describe('undoing a chapter lore', () => {
       storyId: 'story-1',
       plan: revert.plan,
       reverted: revert.reverted,
-      lineBranchIds: [null],
+      snapshotIds: ['snap'],
     }) as never[]
     return { revert, sql }
   }
@@ -299,10 +299,7 @@ describe('undoing a chapter lore', () => {
     // The undone records leave the history, and the snapshots since that hold them go too.
     expect(sql.filter((x: { sql: string }) => x.sql === 'record')).toEqual([])
     expect(sql).toContainEqual({ sql: 'deleteRecords', params: [records.map((r) => r.id)] })
-    expect(sql).toContainEqual({
-      sql: 'deleteSnapshotsSince',
-      params: ['story-1', [null], Math.min(...records.map((r) => r.seq))],
-    })
+    expect(sql).toContainEqual({ sql: 'deleteSnapshots', params: [['snap']] })
   })
 
   it('takes a later hand edit out of the history with the chapter, so it is not listed again', () => {

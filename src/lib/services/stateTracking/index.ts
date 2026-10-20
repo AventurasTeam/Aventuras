@@ -61,6 +61,7 @@ export {
   chapterMark,
   loreOwners,
   planChapterLoreRevert,
+  snapshotsHolding,
   type ChapterLoreQuery,
   type ChapterLoreRefusal,
   type ChapterLoreRevert,

@@ -44,8 +44,15 @@
     if (!entry) return
     const position = retry ? ui.retryBackup?.entryCountBeforeAction : entry.position
     let preview: RevertPreview | null = null
+    // Removing the entries takes their snapshots with them; worth saying, not worth asking about.
+    let snapshots: number[] = []
     try {
-      if (position !== undefined) preview = await story.previewRegenerate(position)
+      if (position !== undefined) {
+        ;[preview, snapshots] = await Promise.all([
+          story.previewRegenerate(position),
+          story.snapshotsRemovedFrom(position),
+        ])
+      }
     } catch (error) {
       console.error('[RegenerateEntryModal] Could not preview the regenerate:', error)
       ui.showToast(`Could not check what regenerating undoes: ${errMessage(error)}`, 'error')
@@ -59,8 +66,6 @@
       regenerate(entryId, retry, KEEP_NONE)
       return
     }
-    // Removing the entries takes their snapshots with them; worth saying, not worth asking about.
-    const snapshots = position !== undefined ? await story.snapshotsRemovedFrom(position) : []
     pending = { entry, retry, preview, chapters, snapshots }
   }
 

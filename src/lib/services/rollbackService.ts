@@ -183,14 +183,13 @@ export function chapterLoreStatements(input: {
   storyId: string
   plan: ReversalPlan
   reverted: WorldStateRecord[]
-  lineBranchIds: (string | null)[]
+  /** The snapshots holding the undone records' effect (`snapshotsHolding`). */
+  snapshotIds: string[]
 }): DbStatement[] {
-  // Marked after the first record undone, a snapshot holds its effect.
-  const since = Math.min(...input.reverted.map((r) => r.seq))
   return [
     ...input.plan.ops.flatMap((op) => statementsFor(input.storyId, op)),
     ...database.deleteWorldStateRecordsStatements(input.reverted.map((r) => r.id)),
-    ...database.deleteWorldStateSnapshotsSinceStatements(input.storyId, input.lineBranchIds, since),
+    ...database.deleteWorldStateSnapshotsStatements(input.snapshotIds),
   ]
 }
 
