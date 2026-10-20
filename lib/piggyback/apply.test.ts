@@ -477,6 +477,51 @@ describe('buildPiggybackActions', () => {
       expect(visualText(fallbackBlock(text))).toBe(`Akira は${'あ'.repeat(493)}`)
     })
 
+    // The bound's last mark is the 、 at index 499, after the 。 at 490: the last mark wins.
+    it('cuts a Japanese note back to its last clause mark, which needs no whitespace after it', () => {
+      const text = `Akira は${'黒い外套をまとい、腰には古い剣を下げている。'.repeat(30)}`
+      expect(visualText(fallbackBlock(text))).toBe(
+        `Akira は${'黒い外套をまとい、腰には古い剣を下げている。'.repeat(22)}黒い外套をまとい`,
+      )
+    })
+
+    it('cuts a Chinese note back to its last full-width comma, dropping it', () => {
+      const text = `李明${'他身穿黑色长袍，腰间挂着一把古老的长剑。'.repeat(30)}`
+      expect(visualText(fallbackBlock(text))).toBe(
+        `李明${'他身穿黑色长袍，腰间挂着一把古老的长剑。'.repeat(24)}他身穿黑色长袍`,
+      )
+    })
+
+    it.each(['。', '！', '？'])('cuts back to the last %s inside the bound, keeping it', (mark) => {
+      const text = `${'あ'.repeat(300)}${mark}${'い'.repeat(150)} ${'う'.repeat(100)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'あ'.repeat(300)}${mark}`)
+    })
+
+    it.each(['、', '，', '；'])(
+      'cuts back to the last %s inside the bound, dropping it',
+      (mark) => {
+        const text = `${'あ'.repeat(300)}${mark}${'い'.repeat(150)} ${'う'.repeat(100)}`
+        expect(visualText(fallbackBlock(text))).toBe('あ'.repeat(300))
+      },
+    )
+
+    it('takes no CJK mark from the first half of the bound, cutting at the bound', () => {
+      expect(visualText(fallbackBlock(`黒髪、${'あ'.repeat(800)}`))).toBe(
+        `黒髪、${'あ'.repeat(497)}`,
+      )
+    })
+
+    // The mark sits at index 249, then at 250: either side of the midpoint.
+    it('takes no CJK mark just below the midpoint, cutting at the bound', () => {
+      const text = `${'あ'.repeat(249)}。${'い'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'あ'.repeat(249)}。${'い'.repeat(250)}`)
+    })
+
+    it('takes a CJK mark at the midpoint', () => {
+      const text = `${'あ'.repeat(250)}。${'い'.repeat(400)}`
+      expect(visualText(fallbackBlock(text))).toBe(`${'あ'.repeat(250)}。`)
+    })
+
     it("logs the cut on the run's logger with the entry, the producer, the entity, the category and both lengths", () => {
       const log = spyLog()
       visualText(fallbackBlock(`${'a'.repeat(300)}. ${'b'.repeat(300)}`), log)

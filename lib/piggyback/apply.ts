@@ -15,6 +15,9 @@ function normalizeRetrievalQueries(queries: readonly string[]): string[] {
   return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
 }
 
+const CJK_CLAUSE_MARKS = '。、，；！？'
+const SENTENCE_ENDS = '.。！？'
+
 // Both producers arrive here uncapped. An over-long note fails the whole-state re-validation of
 // every later updateEntity carrying `state`, a delete's ref clear among them. piggyback.md →
 // Trailing block format: cut back to the last sentence or clause boundary in the bound's second
@@ -25,13 +28,16 @@ function truncateVisualText(text: string): string {
   const head = text.slice(0, VISUAL_TEXT_MAX)
   // Below the midpoint a cut drops half the bound or more, too much to pay for a cleaner one.
   const floor = VISUAL_TEXT_MAX / 2
-  // A mark ends a clause only where whitespace follows it: "1.8 m" has none.
+  // An ASCII mark ends a clause only where whitespace follows it ("1.8 m" has none); CJK text
+  // puts no whitespace after its marks.
   let clause = -1
   for (let i = head.length - 1; i >= floor && clause < 0; i--) {
-    if ('.;,'.includes(head[i]!) && /\s/.test(text[i + 1]!)) clause = i
+    const mark = head[i]!
+    if (CJK_CLAUSE_MARKS.includes(mark) || ('.;,'.includes(mark) && /\s/.test(text[i + 1]!)))
+      clause = i
   }
-  // A period ends a sentence and stays; a dangling comma or semicolon goes.
-  const atClause = clause < 0 ? '' : head.slice(0, head[clause] === '.' ? clause + 1 : clause)
+  const atClause =
+    clause < 0 ? '' : head.slice(0, SENTENCE_ENDS.includes(head[clause]!) ? clause + 1 : clause)
   if (atClause.trim() !== '') return atClause.trimEnd()
   // Whitespace just past the bound still ends the head's last word.
   const space = text.slice(0, VISUAL_TEXT_MAX + 1).search(/\s\S*$/)

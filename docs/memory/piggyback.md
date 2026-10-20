@@ -77,10 +77,12 @@ schema state the bound in words, which a model counts better than
 characters, and 60 leaves a margin under the 500-character bound
 ([`data-model.md → Soft caps + compaction discipline`](../data-model.md#soft-caps--compaction-discipline)).
 A longer value is cut back to its last sentence or clause boundary
-in the bound's second half (`.`, `;` or `,` followed by whitespace),
-else to its last whitespace in that half, and mid-word only as a last
-resort, never mid-surrogate; the cut logs a diagnostics warning with
-the entity, the category and both lengths.
+in the bound's second half (`.`, `;` or `,` followed by whitespace, or
+a CJK `。`, `、`, `，`, `；`, `！` or `？`), else to its last whitespace
+in that half, and mid-word only as a last resort, never mid-surrogate.
+The cut keeps a sentence end (`.`, `。`, `！`, `？`) and drops a clause
+mark; it logs a diagnostics warning with the entity, the category and
+both lengths.
 
 **`transfers` is structured, not free text** — both sub-tags
 reference existing entities, apart from an `<item>` the same block
