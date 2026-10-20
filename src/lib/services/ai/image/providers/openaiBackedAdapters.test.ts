@@ -12,7 +12,6 @@ import { imageGetFetch } from './fetchAdapter'
 import { generateOpenAICompatible } from './openaiCompatible'
 import { createNanoGPTProvider } from './nanogpt'
 import { createPollinationsProvider } from './pollinations'
-import { createOpenAIProvider } from './openai'
 import { POLLINATIONS_DEFAULT_MODEL_ID } from '../constants'
 import type { ImageGenerateOptions } from './types'
 
@@ -88,27 +87,6 @@ describe('Pollinations adapter', () => {
       'API key',
     )
     expect(generateOpenAICompatible).not.toHaveBeenCalled()
-  })
-})
-
-describe('OpenAI adapter', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('generates against the OpenAI host', async () => {
-    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ model: 'gpt-image-1' }))
-    expect(lastCall().baseUrl).toBe('https://api.openai.com/v1')
-    expect(lastCall().serviceId).toBe('openai-image')
-  })
-
-  it('limits dall-e models to one reference', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(
-      modelsResponse({ data: [{ id: 'dall-e-2' }, { id: 'gpt-image-1' }, { id: 'gpt-4o' }] }),
-    )
-    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
-    expect(models.map((m) => [m.id, m.maxReferenceImages])).toEqual([
-      ['dall-e-2', 1],
-      ['gpt-image-1', undefined],
-    ])
   })
 })
 

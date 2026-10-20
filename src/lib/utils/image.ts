@@ -80,7 +80,7 @@ export function specToPixels(spec: ImageSpec): ImageResolution {
 }
 
 /** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
-export function formatImageSize(res: ImageResolution): string {
+export function formatImageSize(res: ImageResolution): `${number}x${number}` {
   return `${res.width}x${res.height}`
 }
 

@@ -1,5 +1,5 @@
 /**
- * OpenAI-compatible image request, shared by OpenAI, NanoGPT and Pollinations.
+ * Hand-written OpenAI-style image request, shared by NanoGPT and Pollinations.
  * - no references: POST {baseUrl}/images/generations (JSON)
  * - references:    POST {baseUrl}/images/edits (multipart, `image` or repeated `image[]`)
  */

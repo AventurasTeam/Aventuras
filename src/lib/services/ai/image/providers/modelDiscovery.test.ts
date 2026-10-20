@@ -4,6 +4,7 @@ vi.mock('./fetchAdapter', () => ({
   imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
 }))
+vi.mock('./sdkImage', () => ({ createImageSdkFetch: vi.fn(), generateSdkImage: vi.fn() }))
 
 import { imageGetFetch } from './fetchAdapter'
 import { createNanoGPTProvider } from './nanogpt'
