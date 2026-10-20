@@ -25,6 +25,7 @@ export {
   getProviderSamplerInfo,
   listLoras,
   requiresApiKey,
+  takesApiKey,
   type ImageModelInfo,
 } from './providers/registry'
 

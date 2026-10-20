@@ -60,9 +60,8 @@ It listens on `http://localhost:4010/v1`; `npm run fake-provider -- 4020` picks 
    the schema travels inside the prompt. One on `ok` for every task; one on `ok-fill` for **Image
    Gen** and **BG Image generation analyzer**, so scenes are found and the background is judged
    changed; one whose model is set to the failure under test, to move a single task onto.
-3. Settings → Images: a profile with provider _OpenAI_, the same base URL, model `img-ok`, and **any
-   API key** — the OpenAI image provider requires one even with a custom URL, and without it every
-   story's image settings stay on Text Only.
+3. Settings → Images: a profile with provider _OpenAI Compatible_, the same base URL and model
+   `img-ok`. No API key is needed; without a profile every story's image settings stay on Text Only.
 
 **Chat models.** Append `-slow` to any of them for a 4 s delay before the answer starts.
 

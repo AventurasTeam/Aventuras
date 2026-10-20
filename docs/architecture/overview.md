@@ -568,8 +568,8 @@ its own lore management refused.
 
 ## Images
 
-Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenRouter,
-Google, Chutes, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111.
+Ten backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenAI Compatible,
+OpenRouter, Google, Chutes, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
 steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google and
@@ -577,9 +577,12 @@ OpenRouter, the model's own published resolution list for NanoGPT, real dimensio
 ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
 it does not offer answers with the nearest thing it does, which is not the same picture.
 
-OpenAI, NanoGPT and Pollinations share one OpenAI-compatible request (`openaiCompatible.ts`):
-`/images/generations`, or `/images/edits` as multipart when there are references. Each keeps its own
-model discovery and size handling. The registry hands references only to the providers that send
+NanoGPT and Pollinations share one hand-written OpenAI-style request (`openaiCompatible.ts`):
+`/images/generations`, or `/images/edits` as multipart when there are references. OpenAI
+(`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
+key optional) and Google call the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only
+429s. Each adapter keeps its own model discovery and size handling; discovery throws on a failed
+request rather than substituting a list. The registry hands references only to the providers that send
 them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
 adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
 from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
@@ -608,8 +611,9 @@ Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: t
 user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
 them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
 any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
-AI SDK providers, `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64` for images,
-`corsFetch` for discovery.
+AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
+debug logging; Google and OpenAI use it), `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64`
+for the hand-written image adapters and for model discovery, `corsFetch` for discovery.
 
 What the plugin changes for the server on the other end:
 

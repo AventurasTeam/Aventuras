@@ -21,6 +21,7 @@ import { fetchPublicImageBase64 } from './fetchAdapter'
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
 import { createOpenAIProvider } from './openai'
+import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createChutesProvider } from './chutes'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider } from './google'
@@ -40,6 +41,7 @@ type ProviderFactory = (config: ImageProviderConfig) => ImageProvider
 const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   nanogpt: createNanoGPTProvider,
   openai: createOpenAIProvider,
+  'openai-compatible': createOpenAICompatibleProvider,
   openrouter: createOpenRouterProvider,
   chutes: createChutesProvider,
   pollinations: createPollinationsProvider,
@@ -50,29 +52,32 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
 }
 
 /**
- * Whether a provider authenticates with an API key. Only the ones that run on the user's
- * own machine do not. Exhaustive by type, so a new provider has to declare which it is.
+ * How a provider uses an API key: `required` for the hosted ones, `optional` for an endpoint
+ * the user runs or fronts themselves, `none` for the ones that run on the user's own machine.
+ * Exhaustive by type, so a new provider has to declare which it is.
  *
  * Pollinations counts as requiring one: the model list is served without it, but
  * generation is not, and a profile that can list and cannot draw is the worse failure —
  * it looks configured.
  */
-const PROVIDER_REQUIRES_API_KEY: Record<ImageProviderType, boolean> = {
-  nanogpt: true,
-  openai: true,
-  openrouter: true,
-  chutes: true,
-  google: true,
-  zhipu: true,
-  pollinations: true,
-  comfyui: false,
-  a1111: false,
+const PROVIDER_API_KEY: Record<ImageProviderType, 'required' | 'optional' | 'none'> = {
+  nanogpt: 'required',
+  openai: 'required',
+  'openai-compatible': 'optional',
+  openrouter: 'required',
+  chutes: 'required',
+  google: 'required',
+  zhipu: 'required',
+  pollinations: 'required',
+  comfyui: 'none',
+  a1111: 'none',
 }
 
 /** Whether the adapter sends reference images; the rest would only waste the download. */
 const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
   nanogpt: true,
   openai: true,
+  'openai-compatible': true,
   openrouter: true,
   pollinations: true,
   google: true,
@@ -113,7 +118,12 @@ export function supportsImageGeneration(providerType: string): boolean {
 
 /** Whether a profile of this provider needs an API key to be usable. */
 export function requiresApiKey(providerType: string): boolean {
-  return PROVIDER_REQUIRES_API_KEY[providerType as ImageProviderType] ?? true
+  return (PROVIDER_API_KEY[providerType as ImageProviderType] ?? 'required') === 'required'
+}
+
+/** Whether a profile of this provider has an API key field at all. */
+export function takesApiKey(providerType: string): boolean {
+  return (PROVIDER_API_KEY[providerType as ImageProviderType] ?? 'required') !== 'none'
 }
 
 /**

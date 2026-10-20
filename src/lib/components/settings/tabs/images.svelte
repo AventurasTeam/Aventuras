@@ -14,7 +14,7 @@
     getProviderSamplerInfo,
     listLoras,
     generateImage,
-    requiresApiKey,
+    takesApiKey,
     ComfyMode,
     type ImageModelInfo,
   } from '#lib/services/ai/image/index.ts'
@@ -45,6 +45,7 @@
   const providerTypes: { value: ImageProviderType; label: string }[] = [
     { value: 'nanogpt', label: 'NanoGPT' },
     { value: 'openai', label: 'OpenAI' },
+    { value: 'openai-compatible', label: 'OpenAI Compatible' },
     { value: 'openrouter', label: 'OpenRouter' },
     { value: 'chutes', label: 'Chutes' },
     { value: 'pollinations', label: 'Pollinations' },
@@ -1134,7 +1135,7 @@
       />
     </div>
 
-    {#if requiresApiKey(profileProviderType)}
+    {#if takesApiKey(profileProviderType)}
       <div class="space-y-2">
         <Label>API Key</Label>
         <div class="flex gap-2">
@@ -1187,9 +1188,11 @@
       </div>
     {/if}
 
-    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'zhipu' || profileProviderType === 'a1111'}
+    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'openai-compatible' || profileProviderType === 'zhipu' || profileProviderType === 'a1111'}
       <div class="space-y-2">
-        <Label>Base URL (optional)</Label>
+        <Label>
+          {profileProviderType === 'openai-compatible' ? 'Base URL' : 'Base URL (optional)'}
+        </Label>
         <Input bind:value={profileBaseUrl} placeholder="Custom base URL" />
       </div>
     {/if}

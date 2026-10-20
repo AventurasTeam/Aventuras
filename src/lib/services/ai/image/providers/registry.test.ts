@@ -42,6 +42,7 @@ import type { ImageModelInfo } from './types'
 import {
   supportsImageGeneration,
   requiresApiKey,
+  takesApiKey,
   generateImage,
   supportsReferenceImages,
   listImageModels,
@@ -62,6 +63,7 @@ describe('Image Provider Registry', () => {
     const ALL_PROVIDERS: Record<ImageProviderType, true> = {
       nanogpt: true,
       openai: true,
+      'openai-compatible': true,
       openrouter: true,
       chutes: true,
       pollinations: true,
@@ -104,8 +106,32 @@ describe('Image Provider Registry', () => {
       expect(requiresApiKey(providerType)).toBe(true)
     })
 
+    it('does not require a key for OpenAI Compatible, which a proxy may leave open', () => {
+      expect(requiresApiKey('openai-compatible')).toBe(false)
+    })
+
     it('assumes an unknown provider needs a key', () => {
       expect(requiresApiKey('unknown-provider')).toBe(true)
+    })
+  })
+
+  describe('takesApiKey', () => {
+    it.each(['comfyui', 'a1111'] as ImageProviderType[])(
+      'is false for the self-hosted provider %s',
+      (providerType) => {
+        expect(takesApiKey(providerType)).toBe(false)
+      },
+    )
+
+    it.each(['openai', 'openai-compatible', 'google', 'pollinations'] as ImageProviderType[])(
+      'is true for %s',
+      (providerType) => {
+        expect(takesApiKey(providerType)).toBe(true)
+      },
+    )
+
+    it('assumes an unknown provider takes a key', () => {
+      expect(takesApiKey('unknown-provider')).toBe(true)
     })
   })
 

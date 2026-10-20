@@ -90,6 +90,7 @@ export function getProviderDisplayName(): string {
 
   const names: Record<string, string> = {
     openai: 'OpenAI',
+    'openai-compatible': 'OpenAI Compatible',
     openrouter: 'OpenRouter',
     nanogpt: 'NanoGPT',
     chutes: 'Chutes',
