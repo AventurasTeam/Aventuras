@@ -11,9 +11,9 @@ details the sketch glossed, and traces the integration.
 The substrate this builds on was already pinned: the
 [concurrency model](../generation-pipeline.md#concurrency-model)
 (`gateBehavior`, `concurrencyPolicy`, `checkConcurrencyContract`), the
-[classifier's background-task framing](../memory/classifier.md#background-task-framing),
+[classifier's background-task framing](../memory/classifier.md#pipeline-framing),
 chapter-close's
-[`drainRunningPeriodicClassifier()` precedent](../memory/chapter-close.md#phase-0--catch-up-classifier-pass),
+[`drainRunningPeriodicClassifier()` precedent](../memory/chapter-close.md#phase-0--catch-up-passes),
 and positional rollback in
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback).
 
@@ -50,7 +50,7 @@ first-introduction descriptions) at the end of its run — one LLM
 call, one JSON response, one burst. Its deltas carry their own
 `actionId`, disjoint at field granularity from the per-turn pipeline,
 which is why forward coexistence is safe and its
-[`yieldsTo` stays empty](../memory/classifier.md#background-task-framing).
+[`yieldsTo` stays empty](../memory/classifier.md#pipeline-framing).
 
 That safety argument inverts for a **reversal**. Regenerate,
 entry-delete rollback, and swipe-switch all reverse a contiguous delta

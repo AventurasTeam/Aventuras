@@ -179,7 +179,11 @@ treatment used by `retired_reason` (visible only when
 - Status pill + location icon
 - Description prose
 - Parent chain — breadcrumb (`Shop in Town Square in City`) per
-  [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape)
+  [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape);
+  none for a top-level place, and `Location unknown` for an unplaced
+  one, known to exist but not where. Its parent picker shows
+  `Unknown` until the user picks a parent or `Top level`, either of
+  which places it.
 - `condition` — single line if populated
 - "Characters here" count + first 3 names (portraits once the
   asset gallery lands)
@@ -304,8 +308,8 @@ when the char→char schema landed — see
 [`patterns/entity.md`](../../patterns/entity.md#entity-detail-pane-composition).
 The Relationships sub-section (below) is that landing.
 
-`lastSeenAt` is classifier-only per the
-[authorship contract](../../../data-model.md#authorship-contract);
+`lastSeenAt` is the per-turn writer's, re-derived by a scene edit, per
+the [authorship contract](../../../data-model.md#authorship-contract);
 read-only on the UI.
 
 #### Relationships — character-to-character
@@ -364,22 +368,22 @@ are referenced.
   view the classifier changed meanwhile, and the user left alone,
   keeps its stored value.
 
-**Edits and memory updates.** A memory update never overwrites a
-status, a removed alias, a character's faction or a relationship view
-the user saved after the prose it processes, whether the save came before the pass started or
-while it ran, and it does not re-create a pair the user deleted after
-that prose
+**Edits and memory updates.** A memory update never overwrites a field
+the user saved after the prose it processes (a status, a removed
+alias, a character's faction, a relationship view, a description), and
+it does not re-create a pair the user deleted after that prose
 ([`cadence.md → User edits and classifier writes`](../../../memory/cadence.md#user-edits-and-classifier-writes)).
 Prose written after the user's edit can still revise it, per the
-authoring contract below. A Save leaves a pass's writes alone the same
+authoring contract below. A pass holds the gate, so World's Saves wait
+while it runs, and the generation status pill and banner read
+`updating memory…`
+([`generation-status-pill.md → Memory phases`](../../patterns/generation-status-pill.md#memory-phases)).
+A pane left dirty across a pass leaves the pass's writes alone the same
 way: keywords, like relationships, merge three-way, so the Save applies
 only the terms the user added or removed to the stored list, and an
-alias a pass appended while the list was dirty stays. A faction a pass
-set while the pane was open stays unless the user changed the faction:
-the pane refreshes every field the user hasn't touched. The generation
-status pill reads
-`updating memory…` while a pass runs
-([`generation-status-pill.md → Non-blocking phases`](../../patterns/generation-status-pill.md#non-blocking-phases)).
+alias a pass appended stays. A faction a pass set stays unless the user
+changed the faction: the pane refreshes every field the user hasn't
+touched.
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint
@@ -445,8 +449,9 @@ Same fields for every kind:
   alongside `name` by the keyword retrieval pathway. Same TagInput
   shape as `tags`, but distinct in purpose: tags are user-meaningful
   labels, keywords are retrieval-targeted strings. The periodic
-  classifier also appends here when it observes a new reference; it
-  never removes, so user-authored entries survive.
+  classifier also appends here when it observes a new reference, and
+  chapter close adds and may remove keywords an AI added, never one
+  the user wrote, so user-authored entries survive.
 - `priority` (integer input, narrow; range `0..100`). Default `0`.
   Orders which keyword-matched rows seat first when more match than
   the keyword budget admits. **Unlike lore's `priority`, it does not
@@ -508,7 +513,7 @@ Undo last action in its menu, or Cmd/Ctrl-Z," naming the reader's own
 undo label so the copy can't drift from the reader's menu — one shared
 string (`common:deleteUndoHint`) across every kind. What else it lists
 is per kind: an entity's awareness, involvement and relationship
-counts, other entities losing their link to it, items left unplaced,
+counts, other entities losing their link to it, items and places left unplaced,
 and "Removed from the current scene" when the tail scene names it; a
 happening's involvement and awareness counts; nothing beyond the title
 for lore or a thread. The CTA is per kind too — `Delete character`,
@@ -531,7 +536,9 @@ cascade covers:
     `parent_location_id`, `at_location_id`, `faction_id`,
     `equipped_items[]`, `inventory[]` — cleared in one `state` patch
     per entity. Items at a deleted location, or held by a deleted
-    character, are left unplaced (no position is invented). A
+    character, are left unplaced (no position is invented), and so are
+    the places inside a deleted location: the same patch marks each
+    `unplaced`, since a cleared parent alone means top-level. A
     character's `lastSeenAt` is a snapshot, not a ref, and keeps a
     deleted location's id; the Last-seen line drops a location it
     can't resolve.
@@ -1148,7 +1155,7 @@ non-canonical's counts:
   rewritten to canonical. A ref between the two rows doesn't
   count: it collapses rather than moves, and when it is the
   canonical's (a location parented under the non-canonical) a
-  footnote says the canonical loses it. A holder of a
+  footnote says the canonical loses it and becomes unplaced. A holder of a
   non-canonical item drops it instead when the canonical item
   already has a position ([Reversibility](#reversibility)), and
   still counts here.
@@ -1406,8 +1413,8 @@ clears. Both unwind as one step, like the merge.
 
 The resolve dialog is a write surface; per
 [`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation),
-the `Resolve →` button is disabled while narrative or
-chapter-close generation is running, with the same disabled-
+the `Resolve →` button is disabled while a turn, a memory update or
+a chapter close is running, with the same disabled-
 tooltip language as the entity save bar. A dialog already open
 when generation starts stays open, with every submit disabled and
 that reason under its footer; the write refuses while generation
@@ -1418,12 +1425,13 @@ discovery isn't gated, only the write.
 
 Resolution writes deltas with `source = user_edit`. The classifier
 or the per-turn writer sets the flag, with its partner and reason, at
-create
+create; a pass also sets it when a rename meets a name another row
+holds, and chapter close on a row it judges a duplicate
 ([authorship contract](../../../data-model.md#authorship-contract));
 clearing it is always a user write, delta-logged, so CTRL-Z
 re-flags the row. Where
 [user precedence](../../../memory/cadence.md#user-edits-and-classifier-writes)
-applies (status, keywords, relationship views), what a resolution
+applies (every field a pass or a close updates), what a resolution
 writes counts as the user's: a classifier fact from prose older than
 the resolution doesn't overwrite it. That includes a relationship
 view the merge carries over from the non-canonical, though the

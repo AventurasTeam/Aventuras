@@ -134,10 +134,10 @@ expandable to its **run children**. Default **collapsed**.
   out-of-place failure is spotted on a scan; expand to see which run.
   An aborted per-turn run that never produced an entry has no
   `anchorEntryId` and renders as a singleton turn keyed on its
-  `actionId`. A turn whose per-turn capture is absent (a background
-  pass anchored to the opening, or a turn whose per-turn capture
-  evicted) is a **background-only turn** — a normal parent with only
-  its background child.
+  `actionId`. A turn whose per-turn capture is absent (a pass
+  anchored to the opening, or a turn whose per-turn capture
+  evicted) is a **memory-only turn** — a normal parent with only the
+  runs that followed it.
 - **Run child row** — five fields: outcome dot, kind, duration,
   one-line summary, and (right edge) the run's short `actionId`.
   - **Outcome dot** — 8px circle, **per run**: `completed` →
@@ -260,8 +260,8 @@ narrative  ░░░░░▓▓▓▓▓▓▓░░░░░░░░░░░
   turn-scope**, the axis spans the turn's runs end to end and bars are
   grouped by run (a thin run label per group), so the whole turn's
   pipeline activity reads on one axis. Within a turn the concurrency
-  model sequentializes the runs (a chained close drains the in-flight
-  classifier first), so bars don't pile into unreadable overlap.
+  model sequentializes the runs (the turn, its pass and a close chain
+  one after another), so bars don't pile into unreadable overlap.
 - **In-flight** = open-ended bar with a pulsing leading edge; axis
   spans `[startedAt, now]` recomputed ~200ms (coarse tick).
 - **Failed phase** styled danger; **aborted-mid-phase** renders the
@@ -311,7 +311,7 @@ table-prefixed unscoped variant, same as Tab 5).
   **positionally** to the turn (a user-source delta whose
   `log_position` falls in the turn's span; "tied to the latest turn").
 
-Each row shows its `source` (`user` / `background classifier` /
+Each row shows its `source` (`user` / `periodic classifier` /
 `chapter close` / …) and `entry #N` provenance, so a classifier fact
 about an _earlier_ entry is visible-but-labeled, not hidden — the
 attribution is by _when_ the write happened (this turn), the target

@@ -206,7 +206,7 @@ Out of scope:
 ### Where the spec lives
 
 The lock is specified in
-[`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase);
+[`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#branch-write-lock);
 the closure, the reversal of rows a delete holds, both refusals and
 the redo labels in
 [`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay);

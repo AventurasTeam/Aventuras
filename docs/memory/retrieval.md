@@ -161,14 +161,14 @@ Branched (forks with the branch like every other branch-scoped table).
 
 ### What gets embedded per type
 
-| Type             | Field                                                | Stability                                             |
-| ---------------- | ---------------------------------------------------- | ----------------------------------------------------- |
-| **Entity**       | `name + description`                                 | Stable; re-embed only on user edit of either          |
-| **Lore**         | `title + body`                                       | Stable; re-embed on user edit                         |
-| **Happening**    | `title + description`                                | Stable after creation; re-embed on user edit          |
-| **Thread**       | `title + description`                                | Stable; re-embed on user edit                         |
-| **Chapter**      | `summary + theme`                                    | Stable after Phase 2 generates; re-embed on user edit |
-| **Scene digest** | composite of structural fields plus optional summary | Per-turn ephemeral; not stored                        |
+| Type             | Field                                                | Stability                                                                                     |
+| ---------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Entity**       | `name + description`                                 | Stable; re-embed on an edit of either: the user's, a pass's rename, a chapter close's rewrite |
+| **Lore**         | `title + body`                                       | Stable; re-embed on an edit, the user's or a chapter close's                                  |
+| **Happening**    | `title + description`                                | Stable after creation; re-embed on an edit, the user's or a chapter close's merge             |
+| **Thread**       | `title + description`                                | Stable; re-embed on an edit, the user's or a chapter close's                                  |
+| **Chapter**      | `summary + theme`                                    | Stable after Phase 2 generates; re-embed on user edit                                         |
+| **Scene digest** | composite of structural fields plus optional summary | Per-turn ephemeral; not stored                                                                |
 
 **Entity state is excluded from embeddings.** `visual.*`,
 `equipped_items`, etc. mutate per turn; including them in entity
@@ -1331,12 +1331,12 @@ them.
 
 ### Keywords schema
 
-| Type         | Keyword surface                            | Source                                                                                                             |
-| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `lore`       | `keywords TEXT` (JSON `string[]`)          | User-authored at create time, OR lore-mgmt agent emits at chapter close                                            |
-| `entities`   | `name` + `keywords TEXT` (JSON `string[]`) | Name implicit; keywords user-authored, OR periodic classifier emits at entity creation and appends on later passes |
-| `happenings` | `awareness.source` strings                 | Implicit (per-row, not per-happening)                                                                              |
-| `threads`    | (none)                                     | —                                                                                                                  |
+| Type         | Keyword surface                            | Source                                                                                                                                                                       |
+| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lore`       | `keywords TEXT` (JSON `string[]`)          | User-authored at create time, OR lore-mgmt agent emits at chapter close                                                                                                      |
+| `entities`   | `name` + `keywords TEXT` (JSON `string[]`) | Name implicit; keywords user-authored, OR periodic classifier emits at entity creation and appends on later passes, OR chapter close adds, and removes only ones an AI added |
+| `happenings` | `awareness.source` strings                 | Implicit (per-row, not per-happening)                                                                                                                                        |
+| `threads`    | (none)                                     | —                                                                                                                                                                            |
 
 Lore's `keywords` field is added; `lore.tags` stays separate (tags are
 user-meaningful labels; keywords are retrieval-targeted strings). The
@@ -1362,7 +1362,10 @@ differs.
 authored aliases have to survive every later classifier pass; a
 full-replace write would silently discard them. Appends de-duplicate
 against the existing set under the normalization `matchTerms` uses, so
-a re-observed epithet does not accumulate.
+a re-observed epithet does not accumulate. Chapter close may remove a
+keyword an AI added that the chapter shows no longer fits, never one
+the user wrote, which the delta log tells apart
+([`chapter-close.md → 3f — world upkeep`](./chapter-close.md#3f--world-upkeep)).
 
 ### `auto` injection mode
 
@@ -1511,10 +1514,13 @@ Decay model: salience decays per chapter, scaled by
   rejected as a positive feedback loop. Pinned items get retrieved
   more, prose references them more, pin grows, monopolizes budget. No
   clean cap. Dropped.
-- **Common-knowledge auto-emission by classifier** — was rejected as
-  too risky. "Is this widely known" requires social-spread reasoning
-  the prose doesn't reliably encode. `common_knowledge` stays
-  user-only; classifier never auto-emits.
+- **Common-knowledge auto-emission by the periodic classifier** — was
+  rejected as too risky. "Is this widely known" requires social-spread
+  reasoning a window of turns doesn't reliably encode. Chapter close
+  sets `common_knowledge` instead, on explicit spread across the
+  chapter
+  ([`chapter-close.md → 3f — world upkeep`](./chapter-close.md#3f--world-upkeep)),
+  and the user does.
 
 ### Pin contradiction reconciliation
 

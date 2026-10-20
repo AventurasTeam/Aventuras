@@ -3,8 +3,7 @@
 How code is organized for LLM-driven work in the app: phases under
 a transaction, the orchestrator that drives them, the action layer
 that persists their writes, the event bus that surfaces their
-progress, the concurrency model that lets background work coexist
-with foreground generation.
+progress, the concurrency model that keeps writers apart.
 
 Companion to [`data-model.md`](./data-model.md) (what's stored),
 [`architecture.md`](./architecture.md) (cross-cutting code shape,
@@ -22,14 +21,13 @@ pipeline concern in `architecture.md`).
 
 ## Pipelines, unified
 
-The framework drives three foreground pipeline kinds in v1 —
-`per-turn`, `chapter-close`, and `suggestion-refresh` (user-triggered
-chip re-roll from the reader; full contract at
+The framework drives the v1 pipeline kinds — `per-turn`,
+`periodic-classifier`, `chapter-close`, `suggestion-refresh`
+(user-triggered chip re-roll from the reader; full contract at
 [`reader-composer.md → Next-turn suggestions`](./ui/screens/reader-composer/reader-composer.md#next-turn-suggestions))
-— and is structured so that background work (the periodic
-classifier first; later style-review, etc.) uses the same shape.
-Background pipelines and foreground pipelines share the framework;
-what distinguishes them is the concurrency contract.
+and `translation-retry` — all of them gated, and is structured so that
+later work (style review, etc.) uses the same shape. What distinguishes
+kinds is the concurrency contract.
 
 The wizard is **not** pipeline-adjacent. It's a screen flow that
 issues one-shot LLM calls per user click and commits its results
@@ -56,10 +54,11 @@ type ConcurrencyPolicy = {
 }
 
 interface Pipeline {
-  kind: string // 'per-turn' | 'chapter-close' | 'suggestion-refresh' in v1
+  kind: string // 'per-turn' | 'periodic-classifier' | 'chapter-close' | 'suggestion-refresh' | 'translation-retry' in v1
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
-  gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred
+  gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
+  interruptible?: boolean // a head reversal or Cancel ends me and defers me to the next turn; see Prose reversals and the interrupt
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState) => string | null // consulted at commit; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
@@ -140,7 +139,7 @@ type PipelineEvent =
 - **One parameter — the run's `PhaseContext`.** The orchestrator builds
   each phase's context from its `RunState` and passes it in; phases do
   NOT read a process-global active run. This is what lets concurrent runs
-  (per-turn ∥ periodic-classifier) coexist without reading each other's
+  (a pass ∥ suggestion refresh, or runs on two branches) coexist without reading each other's
   `abortSignal` / intermediates. No other deps bundle is threaded through
   composition.
 - **Returns a status, not a result.** The phase's real output lives
@@ -510,8 +509,10 @@ export const pipelineEventBus: PipelineEventBus
 ```ts
 type TxState = {
   runs: ReadonlyMap<string /* runId */, RunState>
-  reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates classifier starts + user edits + user-originated delta dispatch
-  pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see No-gate write phase
+  reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates memory-run starts + user edits + user-originated delta dispatch
+  pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see Gate derivation as a selector
+  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only
+  pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string | null }> // a close owed once phase 0's passes catch up; null end = boundary selection
 }
 
 type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
@@ -526,7 +527,7 @@ type RunState = {
   currentPhase: string // name of declared phase or parallel group
   intermediates: Record<string, unknown> // phase outputs threaded through the run
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
-  terminal: Promise<void> // resolves at commit/abort; awaited by chainsTo / drain / reversal
+  terminal: Promise<void> // resolves at commit/abort; awaited by chainsTo / the interrupt
   resolveTerminal: () => void
 }
 ```
@@ -540,15 +541,19 @@ const isUserEditBlocked = (s: TxState): boolean =>
   [...s.runs.values()].some((r) => pipelines.get(r.kind)!.gateBehavior === 'hard-gate')
 ```
 
-Per-turn / chapter-close declare `hard-gate`; periodic classifier
-declares `no-gate`. Classifier alone → gate open. Per-turn running
-→ gate closed. A turn closes the gate earlier still, from its
-admission inside the branch queue until its run registers (its
-pending mark, see [No-gate write phase](#no-gate-write-phase)), so a
-reversal opened in that gap can't get a Send's queued user_action
-refused. A prose reversal also closes the gate for its brief
-duration via `reversalInProgress` (see
-[Prose reversals and the classifier barrier](#prose-reversals-and-the-classifier-barrier)).
+Every v1 kind declares `hard-gate`, so any run in flight closes the
+gate. A turn closes it earlier still, from its admission inside the
+branch queue until its run registers: Submit and regenerate raise a
+**pending mark** in `txState.pendingTurns` when they admit a turn inside
+the branch queue (regenerate after its own gate check, which the mark
+would fail), and the mark ends the moment the turn's run is in
+`txState`, or when the turn returns without one, refused or thrown. So
+a reversal opened in that gap can't get a Send's queued user_action
+refused. A prose reversal also closes the gate for its brief duration
+via `reversalInProgress` (see
+[Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
+The gate a pass or a close holds is the one a head reversal may pass
+through, by interrupting it.
 
 The user-facing contract for what specifically the gate blocks
 lives in
@@ -590,7 +595,7 @@ pre-flight; the dedicated `suggestion` agent belongs to the
 `suggestion-refresh` pipeline kind and is pre-flighted independently
 when that pipeline runs. The chapter-close pipeline validates the
 chapter-close agent's resolved config; the periodic classifier
-validates classifier's config at its scheduled fire time. The memory
+validates classifier's config at the start of each pass. The memory
 probe is not a pipeline — it captures as a side-effect of the
 per-turn pipeline's retrieval phase, covered by that pipeline's
 pre-flight.
@@ -607,9 +612,11 @@ broken references).
 (per-turn, chapter-close) emits a system-kind entry
 into the affected story per
 [`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
-Pre-flight failure on **background pipelines** (periodic
-classifier) emits a sticky pill error variant per
-[`generation-status-pill.md`](./ui/patterns/generation-status-pill.md).
+Pre-flight failure on **the periodic classifier** is a failed pass,
+retried at the next turn's commit, and emits a sticky pill error
+variant per
+[`generation-status-pill.md`](./ui/patterns/generation-status-pill.md)
+rather than a system entry every few turns.
 
 **Runtime resolver failure is the safety net.** A race between
 pre-flight pass and the actual LLM call (config changed mid-turn)
@@ -657,11 +664,10 @@ Then forwards every event to the bus (see [Event fan-out](#event-fan-out)).
 
 ### Pill `currentPhase` — foreground-first
 
-Pill is a single UI element; multiple runs can't all own it. Rule:
-prefer the foreground (hard-gate) run's `currentPhase`; if no
-foreground run, fall back to the highest-priority background run
-whose affordance includes pill display. Pill renders read via a
-Zustand selector over `txState`.
+Pill is a single UI element; multiple runs can't all own it. Rule: a
+pass or a close owns it over a suggestion refresh running beside it;
+otherwise the one run in flight does. Pill renders read via a Zustand
+selector over `txState`.
 
 ---
 
@@ -1129,8 +1135,8 @@ action and kind-aware copy naming the affected story:
   `{storyName}`. The chapter-close pass was reverted; your story
   content is intact."_
 - `periodic-classifier` → _"An interrupted shutdown was detected
-  in `{storyName}`. A background memory update was reverted; your
-  story content is intact."_
+  in `{storyName}`. A memory update was reverted; your story content
+  is intact."_
 
 `{storyName}` resolves from the orphan's `story_id`; if NULL,
 copy substitutes a non-named variant. Multi-orphan modals
@@ -1188,10 +1194,9 @@ case, which that work resolves),
 and
 [a reversal refused as an integrity error](./parked.md#a-boot-recovery-refused-as-an-integrity-error-never-settles).
 Reaching either of the first two takes a build and data from
-different versions. The third needs a `no-gate` run whose abort's own
-reversal failed: the
-[no-gate write phase](#no-gate-write-phase) ends the run's hold even
-then, so a user write can land that the reversal would break, and
+different versions. The third needs a run whose abort's own reversal
+failed: the orchestrator lifts the run's gate even then, so a user
+write can land that the reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
 on each boot. The orphan's writes stay, and so does its branch's
 pause.
@@ -1199,35 +1204,80 @@ pause.
 ### `chainsTo` on predecessor
 
 ```ts
+// Shared by per-turn's and the classifier's chainsTo; every read is
+// synchronous, from in-memory mirrors of the cadence count and the
+// open-region tokens.
+function nextMemoryRun(branchId: string, story: Story): 'periodic-classifier' | 'chapter-close' | null {
+  if (deferred.has(branchId)) return null // interrupted work waits for the next Send
+  const passable = unprocessedEntries(branchId) > 0 && !classifierFailedPersistent(branchId)
+  if (closeOwed(branchId, story)) return passable ? 'periodic-classifier' : 'chapter-close'
+  return passable && unprocessedEntries(branchId) >= story.settings.classifierCadence
+    ? 'periodic-classifier'
+    : null
+}
+
+// A close the user asked for, or the open region past the threshold
+// with auto-close on.
+const closeOwed = (branchId: string, story: Story): boolean =>
+  pendingClose.has(branchId) ||
+  (story.settings.chapterAutoClose &&
+    openRegionTokens(branchId) >= story.settings.chapterTokenThreshold)
+
 const perTurnPipeline: Pipeline = {
   kind: 'per-turn',
   phases: [...],
   gateBehavior: 'hard-gate',
   affordance: 'pill-and-banner',
-  concurrencyPolicy: { blockedBy: ['per-turn', 'chapter-close'] },
+  concurrencyPolicy: { blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close'] },
+  chainsTo: (run) => nextMemoryRun(run.branchId, getStory(run.storyId)),
+}
+
+const periodicClassifierPipeline: Pipeline = {
+  kind: 'periodic-classifier',
+  // ...
+  // Passes chain one another only to catch up for a close (phase 0).
   chainsTo: (run) => {
     const story = getStory(run.storyId)
-    const tokens = openRegionTokens(run.branchId)
-    return tokens >= story.settings.chapterTokenThreshold && story.settings.chapterAutoClose
-      ? 'chapter-close'
-      : null
+    return closeOwed(run.branchId, story) ? nextMemoryRun(run.branchId, story) : null
   },
 }
 ```
 
-Reading per-turn's declaration tells you what it chains to. The
-predicate takes only `run` and sources its own dependencies (story
-settings, the open-region token count) at the definition site, read
-synchronously at commit — the orchestrator passes nothing but `run`
-and stays agnostic to app state. `chapterAutoClose = false` makes it
-return `null` even past threshold (the close is surfaced as a manual
-affordance instead); manual close is a direct `chapter-close` dispatch,
-not a chain.
+Reading a declaration tells you what it chains to. The predicate takes
+only `run` and sources its own dependencies (story settings, the
+cadence count, the open-region token count) at the definition site,
+read synchronously at commit — the orchestrator passes nothing but
+`run` and stays agnostic to app state. A turn chains a pass when the
+cadence comes due, a close when one is owed and nothing is
+unprocessed, and a pass first when a close is owed and something is
+([`memory/chapter-close.md → Phase 0`](./memory/chapter-close.md#phase-0--catch-up-passes)).
+`chapterAutoClose = false` owes no close past the threshold (the close
+is surfaced as a manual affordance instead). A manual close records
+`pendingClose` with the user's end entry and starts the same way: a
+pass first when entries are unprocessed, the close otherwise.
 
-The chained chapter-close generates its **own fresh `actionId`** —
-per-turn's deltas and chapter-close's deltas are independently
-undoable; first user CTRL-Z reverses chapter-close, second reverses
-per-turn. No intermediates inherit.
+Every chained run generates its **own fresh `actionId`**; the
+orchestrator never carries the predecessor's into the successor. A
+turn's deltas, each pass's and the close's are independently
+undoable: CTRL-Z skips a pass's group, its first press reverses the
+close, its second the turn. No intermediates inherit.
+
+**Work deferred to the next Send.** A pass or a close a head reversal
+interrupted is recorded in `txState.deferred` for its branch
+([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
+Until then no commit chains memory work on that branch, so a
+regenerated reply doesn't bring the interrupted pass straight back.
+The next Send on that branch runs it before the turn: submit, inside
+the branch queue, starts the deferred pass through `runPipeline` and
+awaits its terminal, then the deferred close (which chains its own
+catch-up passes as above), then writes the user_action and starts the
+turn. Each is its own run with its own `actionId`, committing before
+the turn's first write. Cancel during them cancels the whole Send; the
+work stays deferred and the composer keeps the user's text. A deferred
+run that fails lets the turn go ahead. A pass or a close that commits
+some other way, Run now or a manual close, clears its record. The record is in memory only:
+after a restart, the next turn's commit finds the pass due or the close
+owed anyway.
 
 ### Chained transition — "no user-edit window"
 
@@ -1363,9 +1413,11 @@ That record can't tell one user write apart: removing a whole record,
 as World's Save drops an emptied `stackables`, records the record's old
 keys, the same as an edit of those keys, so the undo would restore a
 key the user removed with it. Nothing reaches that today, since the
-reversals that run after later user edits take only the periodic
-classifier's facts, whose one `state` write is a character's faction;
-it needs a guard once one of them takes a write to a record.
+reversals that run after later user edits take only a pass's or a
+close's facts, whose `state` writes are all whole values (a
+character's faction, a faction's standing, a place's parent, unplaced
+mark and condition, an item's condition); it needs a guard once one of
+them takes a write to a record.
 The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row
@@ -1444,8 +1496,8 @@ JSON column, which `missingRef` doesn't guard: a place names its parent
 through `state.parent_location_id`, and a character its faction through
 `state.faction_id`. A row left naming a removed row through one isn't
 taken: the reversal clears that field in the same transaction, in its
-row or in the copy a delete holds, putting a place at the root and
-leaving a character with no faction, as
+row or in the copy a delete holds, leaving a place unplaced and a
+character with no faction, as
 [World's delete](./ui/screens/world/world.md#delete) of the named row
 does. The places inside it stay under it, and its facts stay. The
 clear isn't a writer's write: it logs no delta, like the views the
@@ -1456,9 +1508,9 @@ are undone: the pre-value of the oldest update in the set that changed
 it, which the newest-first walk restores last unless a later user write
 changed it, else its live value, or the held copy's for a row a delete
 holds. A place the user moved under a removed parent so returns to its
-old parent, and one the set moved off a removed parent goes to the
-root, since the reversal puts it back under that parent first. One a
-write outside the set moved under a removed parent goes to the root
+old parent, and one the set moved off a removed parent becomes
+unplaced, since the reversal puts it back under that parent first. One
+a write outside the set moved under a removed parent becomes unplaced
 too, and the move stays in the log. A place whose own `create` the set
 holds goes anyway. A row the set doesn't remove but that is gone
 anyway, deleted by a write outside it, counts as removed too: an undo
@@ -1528,15 +1580,14 @@ import. And a pair a CTRL-Z leaves absent whose other writes the prune
 above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
 reporting an undo that changed nothing. Only `write-back`
-is reachable today, and only at boot recovery of a `no-gate` run
-whose abort's own reversal failed: the
-[no-gate write phase](#no-gate-write-phase) ends the hold then, so
-the user can delete a row the pass created, in an entity delete whose
-tail-scene update names it, before recovery reverses the create. Each
+is reachable today, and only at boot recovery of a pass or a close
+whose abort's own reversal failed: the run's gate lifts then, so the
+user can delete a row it created, in an entity delete whose tail-scene
+update names it, before recovery reverses the create. Each
 boot refuses it again, a failure a restart can't heal
 ([Recovery-failure policy](#recovery-failure-policy)). Otherwise an
 entity's create is never reversed while a delete holds it, given the
-no-gate write phase, newest-first
+gate, newest-first
 undo, every window holding a delete with the create it follows, and
 sweeps sparing entity creates. A writer outside the log names only
 rows it made itself, which lack a `create` too, and a place the user
@@ -1767,11 +1818,20 @@ to `detail` alone otherwise.
 `gateBehavior` controls user-edit gating:
 
 - `'hard-gate'` — all user-source writes blocked while I'm running.
-- `'no-gate'` — user-source writes proceed; my deltas land alongside,
-  except that every other write waits out my write phase
-  ([No-gate write phase](#no-gate-write-phase)).
+  Every v1 kind declares it.
+- `'no-gate'` — user-source writes proceed beside my deltas. No v1 kind
+  declares it: every v1 writer assumes the others aren't running, so a
+  `no-gate` kind would need its own design for writes landing beside
+  its own, as [`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)
+  explains.
 - `'scoped-gate'` — deferred (would gate only user writes
   overlapping my `writeSet`; ships when `writeSet` does).
+
+`interruptible` — a head reversal (regenerate, swipe, an edit of the
+head reply, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
+before the branch's next turn instead
+([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
+The periodic classifier and chapter-close declare it.
 
 `concurrencyPolicy`:
 
@@ -1779,8 +1839,8 @@ to `detail` alone otherwise.
   block me from starting." Orchestrator consults on
   `runPipeline(kind)` entry.
 - `yieldsTo` — running run's perspective: "if any of these kinds
-  tries to start, I abort." V1 doesn't use it; kept on the
-  interface for future cases.
+  tries to start, I abort." Only suggestion refresh declares it, as a
+  backstop.
 
 ### V1 declarations
 
@@ -1796,14 +1856,27 @@ starts the run).
 const perTurnPipeline: Pipeline = {
   kind: 'per-turn',
   gateBehavior: 'hard-gate',
-  concurrencyPolicy: { blockedBy: ['per-turn', 'chapter-close'] },
-  // ...
+  concurrencyPolicy: { blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close'] },
+  // chainsTo: a pass or a close; see chainsTo on predecessor
+}
+
+const periodicClassifierPipeline: Pipeline = {
+  kind: 'periodic-classifier',
+  gateBehavior: 'hard-gate',
+  interruptible: true,
+  concurrencyPolicy: {
+    blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
+  },
+  // started by a chain, by Send for deferred work, or by Run now
 }
 
 const chapterClosePipeline: Pipeline = {
   kind: 'chapter-close',
   gateBehavior: 'hard-gate',
-  concurrencyPolicy: { blockedBy: ['per-turn', 'chapter-close'] },
+  interruptible: true,
+  concurrencyPolicy: {
+    blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
+  },
   // chained start bypasses (orchestrator-internal)
 }
 
@@ -1816,72 +1889,66 @@ const suggestionRefreshPipeline: Pipeline = {
   },
   // The gate is what keeps a reversal from racing the write: undo, redo,
   // edit and rollback all reject on `isUserEditBlocked` for the run's
-  // duration. The post-call re-read of the target can only prove the row
-  // survived — not that an undone edit or a redo appending past it left
-  // the context the chips describe intact. Escapable rather than blocking:
-  // the strip swaps its ⟳ for a ✕ for exactly as long as the gate is held.
+  // duration, and a head reversal interrupts a pass or a close only once
+  // no refresh is running. The post-call re-read of the target can only
+  // prove the row survived — not that an undone edit or a redo appending
+  // past it left the context the chips describe intact. Escapable rather
+  // than blocking: the strip swaps its ⟳ for a ✕ for exactly as long as
+  // the gate is held.
+  // It runs beside a pass or a close: it writes only the head entry's
+  // chips, which neither reads or writes, and they never move the tail.
   // per-turn and self-block are framework backstops; the UI also gates the
   // re-roll affordance during a turn or while one is already loading.
-  // yieldsTo is a backstop too, now that the gate disables Send and the
-  // failure card's Retry — per-turn's own blockedBy still lacks this kind,
-  // so a non-UI caller could otherwise start a turn mid-refresh.
-}
-
-const periodicClassifierPipeline: Pipeline = {
-  kind: 'periodic-classifier',
-  gateBehavior: 'no-gate',
-  concurrencyPolicy: { blockedBy: ['periodic-classifier', 'chapter-close'] },
 }
 
 const translationRetryPipeline: Pipeline = {
   kind: 'translation-retry',
   gateBehavior: 'hard-gate',
   concurrencyPolicy: {
-    blockedBy: ['per-turn', 'chapter-close', 'translation-retry'],
+    blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
   // reuses display-translation phase against an explicit work-list
   // populated from the outstanding-miss selector at run-start; see
-  // architecture.md → Graceful degradation contract.
+  // architecture.md → Graceful degradation contract. Waits for a close,
+  // whose happening merges delete rows a retry might translate.
 }
 ```
 
 ### Resolution table
 
-| Running               | Wants to start          | Resolution                                                                                                                                                                                                                                                       |
-| --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| (idle)                | per-turn                | starts                                                                                                                                                                                                                                                           |
-| per-turn              | periodic-classifier     | classifier's blockedBy lacks per-turn → starts; its writes wait for the turn ([No-gate write phase](#no-gate-write-phase))                                                                                                                                       |
-| periodic-classifier   | per-turn                | per-turn's blockedBy lacks classifier → starts; both run, and the classifier's writes wait for the turn                                                                                                                                                          |
-| per-turn              | chapter-close (manual)  | chapter-close's blockedBy includes per-turn → blocked                                                                                                                                                                                                            |
-| per-turn (committing) | chapter-close (chained) | chained path bypasses concurrencyPolicy → starts                                                                                                                                                                                                                 |
-| chapter-close         | periodic-classifier     | classifier's blockedBy includes chapter-close → blocked                                                                                                                                                                                                          |
-| chapter-close         | per-turn                | gate blocks user trigger; defense in depth blocks regardless                                                                                                                                                                                                     |
-| periodic-classifier   | periodic-classifier     | blockedBy includes self → blocked                                                                                                                                                                                                                                |
-| classifier (running)  | chapter-close (chains)  | chapter-close starts; phase 0 drains the in-flight classifier (`await awaitRunTerminal('periodic-classifier', 'finish')`) before doing its own classifier work — see [`chapter-close.md → Phase 0`](./memory/chapter-close.md#phase-0--catch-up-classifier-pass) |
-| per-turn              | translation-retry       | retry's blockedBy includes per-turn → blocked                                                                                                                                                                                                                    |
-| chapter-close         | translation-retry       | retry's blockedBy includes chapter-close → blocked                                                                                                                                                                                                               |
-| translation-retry     | per-turn                | per-turn user-trigger gated by retry's hard-gate; user can't submit                                                                                                                                                                                              |
-| translation-retry     | chapter-close (manual)  | chapter-close user-trigger gated by retry's hard-gate                                                                                                                                                                                                            |
-| translation-retry     | chapter-close (chained) | chained start originates from per-turn commit; per-turn can't run during retry, so chain can't fire                                                                                                                                                              |
-| translation-retry     | periodic-classifier     | classifier's blockedBy lacks translation-retry → starts; both run (classifier doesn't write translation rows)                                                                                                                                                    |
-| translation-retry     | translation-retry       | blockedBy includes self → blocked                                                                                                                                                                                                                                |
-| per-turn              | suggestion-refresh      | refresh's blockedBy includes per-turn → blocked (the strip also locks its ⟳ for the turn's duration)                                                                                                                                                             |
-| suggestion-refresh    | suggestion-refresh      | blockedBy includes self → blocked; the strip's ⟳ is swapped for ✕ while loading, so a second re-roll isn't offered                                                                                                                                               |
-| suggestion-refresh    | per-turn                | refresh's hard-gate disables Send and the failure card's Retry, so the UI cannot get here; a non-UI caller hits yieldsTo → refresh aborts, turn starts                                                                                                           |
-| suggestion-refresh    | chapter-close (chained) | chained start bypasses concurrencyPolicy → starts; the chain originates from a per-turn commit, which the gate already prevented starting                                                                                                                        |
+| Running               | Wants to start          | Resolution                                                                                                                                             |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| (idle)                | per-turn                | starts; deferred memory work runs first ([chainsTo on predecessor](#chainsto-on-predecessor))                                                          |
+| per-turn (committing) | periodic-classifier     | chained path bypasses concurrencyPolicy → starts                                                                                                       |
+| per-turn (committing) | chapter-close (chained) | chained path bypasses concurrencyPolicy → starts                                                                                                       |
+| per-turn              | periodic-classifier     | Run now: classifier's blockedBy includes per-turn → blocked                                                                                            |
+| per-turn              | chapter-close (manual)  | chapter-close's blockedBy includes per-turn → blocked                                                                                                  |
+| periodic-classifier   | per-turn                | the gate disables Send; per-turn's blockedBy includes the classifier as a backstop                                                                     |
+| periodic-classifier   | periodic-classifier     | blockedBy includes self → blocked; a chained pass starts after the first commits                                                                       |
+| periodic-classifier   | chapter-close (chained) | the pass's `chainsTo` starts it after the pass commits                                                                                                 |
+| chapter-close         | periodic-classifier     | classifier's blockedBy includes chapter-close → blocked                                                                                                |
+| chapter-close         | per-turn                | gate blocks user trigger; defense in depth blocks regardless                                                                                           |
+| periodic-classifier   | suggestion-refresh      | refresh's blockedBy lacks the classifier → starts; both run, refresh writing only the head entry's chips                                               |
+| chapter-close         | suggestion-refresh      | refresh's blockedBy lacks chapter-close → starts; both run                                                                                             |
+| suggestion-refresh    | periodic-classifier     | Run now: classifier's blockedBy lacks refresh → starts; both run                                                                                       |
+| per-turn              | translation-retry       | retry's blockedBy includes per-turn → blocked                                                                                                          |
+| periodic-classifier   | translation-retry       | retry's blockedBy includes the classifier → blocked                                                                                                    |
+| chapter-close         | translation-retry       | retry's blockedBy includes chapter-close → blocked                                                                                                     |
+| translation-retry     | per-turn                | per-turn user-trigger gated by retry's hard-gate; user can't submit                                                                                    |
+| translation-retry     | periodic-classifier     | classifier's blockedBy includes translation-retry → blocked; a chain can't fire, since no turn runs during a retry                                     |
+| translation-retry     | chapter-close (manual)  | chapter-close user-trigger gated by retry's hard-gate                                                                                                  |
+| translation-retry     | translation-retry       | blockedBy includes self → blocked                                                                                                                      |
+| per-turn              | suggestion-refresh      | refresh's blockedBy includes per-turn → blocked (the strip also locks its ⟳ for the turn's duration)                                                   |
+| suggestion-refresh    | suggestion-refresh      | blockedBy includes self → blocked; the strip's ⟳ is swapped for ✕ while loading, so a second re-roll isn't offered                                     |
+| suggestion-refresh    | per-turn                | refresh's hard-gate disables Send and the failure card's Retry, so the UI cannot get here; a non-UI caller hits yieldsTo → refresh aborts, turn starts |
 
 `blockedBy` prevents NEW starts; it does NOT kill running pipelines.
-The architectural premise (`memory/cadence.md → Concurrency`) is that
-the periodic classifier and the per-turn pipeline write disjoint
-field sets at SQLite row granularity (with the documented
-`entities.status` monotonic-overlap caveat), so concurrent runs don't
-clobber each other. Creating places is the one overlap disjointness
-can't cover, so it is sequenced instead: a pass writes only when no
-turn is in flight on its branch
-([No-gate write phase](#no-gate-write-phase)). The classifier + chapter-close case is not
-covered by field disjointness — chapter-close phase 0 instead drains
-the in-flight classifier explicitly before doing its own classifier
-work.
+The architectural premise
+([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency))
+is that the writers of story state run one at a time: the gated kinds
+block one another, a chain starts its successor only once the
+predecessor has committed, and the one overlap is suggestion refresh
+beside a pass or a close, which writes only the head entry's chips.
 
 ### `runPipeline` entry algorithm
 
@@ -1895,8 +1962,8 @@ function checkConcurrencyContract(
   const blockedBy = pipeline.concurrencyPolicy.blockedBy ?? []
 
   // A prose reversal brackets its sweep with reversalInProgress; no
-  // periodic-classifier run may start inside that window.
-  if (kind === 'periodic-classifier' && reversalInProgress) {
+  // pass or close may start inside that window.
+  if (pipeline.interruptible && reversalInProgress) {
     return { kind: 'blocked', by: 'reversal' }
   }
 
@@ -1918,222 +1985,128 @@ function checkConcurrencyContract(
 }
 ```
 
-### Prose reversals and the classifier barrier
+### Prose reversals and the interrupt
 
-Reversing prose — regenerate, entry-delete rollback, swipe-switch, and
-CTRL-Z of a turn (see
+Reversing prose — regenerate, entry-delete rollback, swipe-switch, an
+edit of the head reply, and CTRL-Z of a turn (see
 [`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback))
-— must not leave the periodic classifier deriving structured rows from
-prose that is about to vanish. A reversal is a synchronous, destructive
-log operation, not a pipeline run, so it does not flow through
+— must not leave a pass or a close deriving rows from prose that is
+about to vanish. A reversal is a synchronous, destructive log
+operation, not a pipeline run, so it does not flow through
 `checkConcurrencyContract`; instead it brackets its positional sweep
 with two cheap mechanisms.
 
-The framework primitive is **`awaitRunTerminal(kind, disposition)`** — find
-the in-flight run of `kind`, optionally abort it, and await its terminal
-(no-op when none is running). It is classifier-agnostic — the classifier
-waits are `awaitRunTerminal('periodic-classifier', disposition)`, subsuming
-chapter-close's former `drainRunningPeriodicClassifier()`. The waiter need
-not have started the run — each `RunState` carries a `terminal` deferred the
-orchestrator resolves at commit/abort. Dispositions:
+**The interrupt.** A reversal is refused while the gate is closed,
+with one exception: when the only runs holding it are `interruptible`
+ones, a pass or a close, it ends them first. While a suggestion
+refresh runs beside one, the reversal waits for the refresh, or for its
+✕, as it does when the refresh runs alone. The pill's Cancel, and
+leaving the story through its confirm, interrupt a pass or a close the
+same way, with no reversal after.
 
-- `'finish'` — await the natural commit (chapter-close phase 0 wants
-  the classification done).
+The framework primitive is **`awaitRunTerminal(kind, branchId, disposition)`**
+— find the in-flight run of `kind` on the branch, optionally abort it,
+and await its terminal (no-op when none is running). The waiter need
+not have started the run — each `RunState` carries a `terminal`
+deferred the orchestrator resolves at commit/abort. Dispositions:
+
 - `'cancel'` — fire `signal.abort()` first, then await terminal,
-  cancelling the doomed LLM call so the user is not made to wait it out.
+  cancelling the doomed LLM call so the user is not made to wait it
+  out. What the interrupt uses.
+- `'finish'` — await the natural commit. No v1 caller.
 
-This is safe because the classifier's commit burst is an abort-free
-critical section: it never returns `aborted` holding committed deltas
-(see [`classifier.md → Background-task framing`](./memory/classifier.md#background-task-framing)),
-so `'cancel'` either discards a not-yet-committed run or lets a
-committed burst stand for the positional sweep to reverse.
+An interrupted run takes the standard abort path: a pass or a close
+cancelled before its writes has committed nothing, and one cancelled
+during them reverse-replays its own group. Under the gate nothing else
+wrote meanwhile, so that reversal never meets a user write. The
+interrupt then records the run in `txState.deferred` for its branch,
+so the next Send runs it before the turn
+([chainsTo on predecessor](#chainsto-on-predecessor)), and raises a
+toast saying the memory update, or the chapter close, moved to the
+next turn. An interrupted pass restores its pre-run status, uses no
+retry and leaves the watermark where it was.
 
-**`reversalInProgress`** (a `txState` flag) brackets the wait→sweep
-window: a reversal sets it before
-`awaitRunTerminal('periodic-classifier', 'cancel')` and clears it after
-the sweep commits. While set, `checkConcurrencyContract`
-blocks a `periodic-classifier` start (otherwise a freshly-scheduled run
-could slip in between the wait and the sweep, read pre-sweep prose, and
-commit doomed rows after), `isUserEditBlocked` returns true (a
-concurrent edit can't insert a delta into the sweep's DB-await windows),
-and `applyDeltaAction` — the [action layer](./code-conventions.md#action-layer)'s
+**`reversalInProgress`** (a `txState` flag) brackets the
+interrupt→sweep window: a reversal sets it before the interrupt and
+clears it after the sweep commits. While set, `checkConcurrencyContract`
+blocks an `interruptible` start (otherwise a pass could slip in between
+the interrupt and the sweep, read pre-sweep prose, and commit doomed
+rows after), `isUserEditBlocked` returns true (a concurrent edit can't
+insert a delta into the sweep's DB-await windows), and
+`applyDeltaAction` — the [action layer](./code-conventions.md#action-layer)'s
 delta choke point — rejects any dispatch whose `source` classifies as
-user-originated. Pipeline-sourced writes are deliberately exempt from
-that last check: the in-flight classifier burst this barrier drains
-(the `'cancel'` abort never reaches the commit burst — see above) must
-still reach `applyDeltaAction` and commit. A rejection there instead
-throws inside the phase; the orchestrator reverse-replays the burst's
-deltas and, once that rollback commits, `onPhaseException`
-(see [Pipeline declaration](#pipeline-declaration) and
-[Run state transitions](#run-state-transitions)) records the failure
-through the classifier's ordinary retry status
-([`classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy))
-— a failed run like any other, backed off the same way. A failed
-attempt at that record lands nothing, so the hook makes one more. The
-branch stays at `'running'` only when the rollback itself cannot
-commit or both attempts fail, left for boot recovery
-(`resetStuckClassifierRunState`) rather than the ordinary backoff.
-The synchronous-`setState` invariant (see [Invariants](#invariants))
-closes the check-vs-register race the same way it does for chained
-transitions.
+user-originated. The synchronous-`setState` invariant (see
+[Invariants](#invariants)) closes the check-vs-register race the same
+way it does for chained transitions.
 
 `applyDeltaAction` reads the flag once it holds the row lock, so a
 user write can pass it just before the flag rises and commit after.
 The bracket therefore also settles every dispatched user write
-(`settleUserWrites`) after the classifier drain and before the sweep
-reads the log. A Save that races CTRL-Z either lands first, and CTRL-Z
-undoes it, or is refused. Without the settle, the undo would choose its
-target from a log the Save is still writing to, and restore over it
-once the Save frees its lock.
+(`settleUserWrites`) after the interrupt and before the sweep reads the
+log. A Save that races CTRL-Z either lands first, and CTRL-Z undoes it,
+or is refused. Without the settle, the undo would choose its target
+from a log the Save is still writing to, and restore over it once the
+Save frees its lock.
 
-The bracket then takes the branch write lock
-([No-gate write phase](#no-gate-write-phase)) exclusive around the
-sweep, so the sweep cannot commit between a rollback preview's closure
-reads, which hold it shared. The drain and the settle have already
-emptied the branch of other writers, so the hold waits on a preview at
-most.
+The bracket then takes the [branch write lock](#branch-write-lock)
+exclusive around the sweep, so the sweep cannot commit between a
+rollback preview's closure reads, which hold it shared. The interrupt
+and the settle have already emptied the branch of other writers, so
+the hold waits on a preview at most.
 
-**`yieldsTo` stays unused in v1.** Modelling reversal as a `'reversal'`
-pipeline kind with `periodic-classifier` declaring
+**`yieldsTo` doesn't model the interrupt.** Modelling reversal as a
+`'reversal'` pipeline kind with the memory kinds declaring
 `yieldsTo: ['reversal']` was considered and rejected: a reversal writes
 no forward deltas under its own `actionId` (it deletes other groups'
 deltas), so it would opt out of the framework's reverse-replay-on-abort
 invariant and hand crash recovery a zero-delta orphan to reason about.
-The `reversalInProgress` gate is a few lines in the entry algorithm —
-cheaper than a pipeline that disables what makes it a pipeline.
+The `interruptible` flag and the `reversalInProgress` gate are a few
+lines in the entry algorithm — cheaper than a pipeline that disables
+what makes it a pipeline.
 
-**Committed-delta over-reversal is handled separately.** The barrier above
-guards the _in-flight_ classifier; a lagging classifier's
-_already-committed_ facts about surviving turns are spared by the
-survival-anchor predicate in
+**Committed-delta over-reversal is handled separately.** The interrupt
+cancels an _in-flight_ pass or close; a pass's _already-committed_
+facts about surviving turns are spared by the survival-anchor
+predicate in
 [`data-model.md → Entry mutability & rollback → Survival anchor`](./data-model.md#survival-anchor),
-not here. The two are orthogonal — barrier for racing runs, anchor for
-committed positions.
+not here. The two are orthogonal — the interrupt for running work, the
+anchor for committed positions.
 
-### No-gate write phase
+### Branch write lock
 
-A `no-gate` run's writes must not interleave with any other write to
-its branch. The periodic classifier commits each planned action as its
-own transaction, so a user's delete of a row that predates the pass
-could otherwise commit between two of them by timing alone, and a later
-failure in the same run would reverse the pass around it, pruning a
-link the delete's `undo_payload` still holds.
+Every `applyDeltaAction` and `applyDeltaActionGroup` takes a per-branch
+write lock in shared mode, inside the entry metadata lock and before
+its row keys. A prose reversal takes it exclusive around its sweep,
+once the interrupt has ended any pass or close, and boot recovery runs
+before any branch loads. The rollback preview writes nothing but takes
+the lock shared around its set selection, so no reversal can land
+between the closure's reads. A write arriving meanwhile waits a few
+milliseconds; nothing is disabled or refused.
 
-Every `applyDeltaAction`, `applyDeltaActionGroup` and
-`applyDeltaActionGroupBuilt` takes a per-branch write lock in shared
-mode, inside the entry metadata lock and before its row keys. The
-built variant exists for a user write that plans from state a
-`no-gate` pass also writes, such as the collision merge and World's
-entity delete: it builds
-its actions under the shared hold, so the plan can't predate a
-`no-gate` pass's writes. The merge reads both rows there, their link
-rows, `status`, tags and keywords included; the user's choice travels
-as the scalars to take and the tags and keywords to drop, never as
-final lists, so a keyword a pass appends to either row while the
-merge waits is kept. The build can still run while another user
-write holds a row key mid-commit. Handlers re-read under the key,
-but a row that write adds is one the plan never saw: a link row it
-creates on the merge's non-canonical is cascaded with it rather
-than copied, held in the delete's `undo_payload` for CTRL-Z to
-restore. Likewise a Save that puts a character in the faction an
-entity delete removes is a write the plan never saw, so the character
-keeps naming it. No path reaches that today: the resolve
-dialog and the delete's confirm open only after the detail pane's
-dirty guard has awaited its Save, the confirm cancels when the screen
-loses focus, and Reader undo needs the Reader's focus. The build is
-synchronous, writes nothing and takes no lock, since the hold isn't
-reentrant. A `no-gate` run takes
-the lock exclusive before its first write — after its model
-call, embedding and reconciliation, so World stays editable through
-those, and after the wait for a turn below — and waits for every
-shared holder, so a write already in flight lands first. The run's own writes go through
-inside the hold, which ends when the run settles: after the watermark
-write on success, after the abort's reversal on failure, whether it
-commits or leaves the run to boot recovery. Ending it on an
-uncommitted reversal keeps a held lock from stalling every write to
-the branch until the next boot, at a cost: a user's delete of a row
-the run created can then land first, and recovery refuses to reverse
-the create as `write-back` on each boot
-([Reverse-replay](#reverse-replay),
-[Recovery-failure policy](#recovery-failure-policy)). A write
-arriving meanwhile waits a few milliseconds; nothing is disabled
-or refused. A prose reversal takes the lock exclusive around its
-sweep, once the barrier above has waited a burst out, and boot recovery
-runs before any branch loads. The rollback preview writes nothing but
-takes the lock shared around its set selection, so neither a pass's
-abort reversal nor a prose reversal can land between the closure's
-reads. The lock order holds because a burst
-never asks for the metadata lock: only the scene-field, world-time,
-entity-delete and collision-merge actions take it, and the
-orchestrator commits a pass's writes through `applyDeltaAction`
-directly.
-
-**A pass writes only when no turn is in flight on its branch.** Both
-writers create places
-([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
-and the per-turn writer matches its creates against the entities it
-read when its narrative phase started, so a place a pass created
-mid-stream would be one the turn never saw, and the turn would create
-it again. Before taking the lock exclusive, a pass waits until its
-branch has no `per-turn` run in flight and no turn admitted but not
-yet running, then plans its places inside the hold, against the rows
-as they stand. The check and the lock request share one tick, so a
-turn admitted after the check queues behind the hold and starts after
-the burst, a few milliseconds later; it is never refused.
-
-The admitted turn needs a marker of its own. A Send's user_action
-commits under the shared branch lock before its run registers, so a
-check of runs alone would find none in that gap, take the hold once
-the user_action landed, and plan while the turn read its entities.
-Submit and regenerate therefore raise a **pending mark** in
-`txState.pendingTurns` when they admit a turn inside the branch queue
-(regenerate after its own gate check, which the mark would fail). The
-mark ends the moment the turn's run is in `txState`, or when the turn
-returns without one, refused or thrown. It closes the user-edit gate
-too ([Gate derivation as a selector](#gate-derivation-as-a-selector)).
-
-A `'cancel'` during the wait discards the run, which has committed
-nothing. So does a story or branch switch: the entity stores hold one
-branch, and when they no longer hold the pass's, checked before
-reconciliation and again inside the hold, the pass discards rather
-than reconcile and plan against another roster. It restores its
-pre-run status, uses no retry and leaves the watermark where it was.
-The wait is on turns only: chapter close's phase 0 drains the pass
-with `'finish'`, and a chained close starts once the turn has left
-`txState`, so waiting on chapter close too would deadlock. For the
-same reason a Send queued behind a turn raises no mark until the
-branch queue reaches it, after that turn's chained close. While a turn
-is in flight, nothing but the turn writes a column a pass plans from
-on its branch's entities: its hard gate holds off user writes, every
-other kind is blocked by `per-turn` or chained after it, and a pass
-waits. The background embed drain still clears `embedding_stale` and
-writes vector rows without the lock, but a pass plans from neither.
-The cost is a pass's writes landing up to one turn late, a bound that
-holds while turns leave a gap between them, as the user's next action
-always does.
+The writers of story state otherwise never meet: every kind holds the
+gate, chains start a successor only after the predecessor commits, and
+a pass runs after the turn whose places it matches against
+([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)).
 
 ### Chained start bypasses concurrencyPolicy
 
-Per-turn's `chainsTo` returning `'chapter-close'` triggers a
-chained transition (in `commitRun`) that directly creates the next
-`RunState` without going through `runPipeline`'s entry check.
-`blockedBy` reflects external start requests (UI, scheduler);
-chains aren't external.
+A `chainsTo` returning a kind (per-turn's pass or close, a pass's next
+pass or close) triggers a chained transition (in `commitRun`) that
+directly creates the next `RunState` without going through
+`runPipeline`'s entry check. `blockedBy` reflects external start
+requests (UI, Run now, Send's deferred work); chains aren't external.
 
-### Background scheduler — out of framework scope
+### Cadence chain
 
-Pipelines like the periodic classifier aren't user-triggered. The
-framework doesn't ship the scheduler itself; a small layer on top
-reads each pipeline's trigger declaration (out of scope here;
-tracked with the periodic-classifier design in
-[`memory/classifier.md`](./memory/classifier.md)).
-
-What the scheduler does:
-
-- On interval (per `stories.settings.classifierCadence`): call
-  `runPipeline('periodic-classifier')`.
-- If `runPipeline` returns `outcome: 'rejected'`, wait for the
-  next interval — no retry queue. Classifier is best-effort.
+No scheduler runs beside the framework. The cadence is checked at each
+turn's commit by per-turn's `chainsTo`
+([chainsTo on predecessor](#chainsto-on-predecessor)), against an
+in-memory mirror of each branch's unprocessed-entry count, kept in step
+with `branches.classifier_status` and with every entry write and
+reversal on the branch. `[Run classifier now]` calls
+`runPipeline('periodic-classifier')`; deferred work starts from Send. A
+rejected start waits for the next turn — no retry queue, no timers
+([`memory/classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy)).
 
 ---
 
@@ -2156,17 +2129,17 @@ to any of these alongside whatever causes the relaxation.
 - **Phase functions are zero-parameter.** Forced by the
   single-run-per-kind invariant — phases identify "their" run via
   the kind-keyed `generationContext` getter.
-- **Disjoint write sets between concurrent pipelines.** Per-turn
-  (and its piggyback / fallback-classifier variants) writes a
-  different field set from the periodic classifier. Both create
-  places, but never at once: a pass writes only when no turn is in
-  flight on its branch
-  ([No-gate write phase](#no-gate-write-phase)). Prose-enforced
-  via narrow action functions named for their field-set scope. Any
-  new action function should be reviewed for write-set overlap
-  with concurrent pipelines.
+- **Writers of story state run one at a time.** Per-turn, the
+  periodic classifier and chapter-close hold the gate and never
+  overlap, so a field may have several writers and the later write
+  wins ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)).
+  Suggestion refresh may run beside a pass or a close, writing only
+  the head entry's chips. A new kind that writes story state must hold
+  the gate, or show its writes disjoint from every gated writer's.
 - **One `actionId` per pipeline run.** Including chapter-close's
-  five phases. Atomic CTRL-Z is the contract.
+  phases 1–4; phase 0's passes are runs of their own, and a chained
+  run never inherits its predecessor's. Atomic CTRL-Z is the
+  contract.
 - **Side-channel actions are pipeline-internal.** No `source`
   field; not exported as part of the public store action surface.
   Only the orchestrator calls them.
@@ -2175,10 +2148,10 @@ to any of these alongside whatever causes the relaxation.
 
 ## Open / deferred
 
-- **`scoped-gate` + structural `writeSet`.** V1 ships `hard-gate`
-  and `no-gate` only; the third value lands when the first
-  pipeline benefits from per-field gating rather than global. The
-  `writeSet` declaration ships with it.
+- **`scoped-gate` + structural `writeSet`.** V1 kinds declare
+  `hard-gate` only, and `no-gate` has no v1 user; the third value
+  lands when the first pipeline benefits from per-field gating rather
+  than global. The `writeSet` declaration ships with it.
 - **Smarter mid-pipeline data error recovery.** V1 retry strategy
   is "same call, retry N times." Future direction: re-prompt with
   the failed response embedded, adjust call parameters per retry,

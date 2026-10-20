@@ -470,7 +470,7 @@ id ID substitution doesn't cover, bare id arrays and caches.
 | Kind      | `state`                                                                                                                                                                                                                                                                                                                                                           |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (the current place for an active character in the scene, else the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
-| location  | `condition`, `parent`                                                                                                                                                                                                                                                                                                                                             |
+| location  | `condition`, `parent`, `unplaced` (true for a place known to exist but not where; its `parent` is null)                                                                                                                                                                                                                                                           |
 | item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                                                   |
 | faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                                            |
 
@@ -519,7 +519,8 @@ value with line breaks in it keeps to its one line (`one_line`).
   line (`macro_item_line`, as `Here:` prints a loose item); `Stackables:`
   as `gold 30, arrows 12`, largest first.
 - **Location.** `Condition:`, and `Part of:` with the parent's name,
-  except the current location, which keeps its chain.
+  except the current location, which keeps its chain. An unplaced
+  place prints no `Part of:`.
 - **Item.** `Condition:`, and out of scene `Location:` and `Held by:`.
 - **Faction.** `Standing:`, `Agenda:` joined with `; `, and `Members:`,
   the names of the members not retired.
@@ -713,18 +714,21 @@ shape for templates to consume.
 Memory-state writes split across three time scales per the cadence
 stratification in [`memory/cadence.md`](./memory/cadence.md):
 
-| Layer                      | Trigger                                                                 | Scope                                                                                                                                                                                                                       |
-| -------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)         | Scene-local fast-mutating state — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, item transfers, and the new locations and items they name                                                            |
-| **Periodic classifier**    | Background, configurable cadence (`stories.settings.classifierCadence`) | Multi-turn batch extractions — happenings, involvements, awareness, new characters and factions and (by story setting) mentioned places, faction memberships, entity status flips, keyword appends, character relationships |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                               | 5-phase pipeline: catch-up classifier, boundary, metadata, lore-mgmt (5 sub-jobs), lifecycle review                                                                                                                         |
+| Layer                      | Trigger                                                                                   | Scope                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)                           | Physical state a turn changes — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, conditions, item transfers and drops, and the new locations and items they name                                                                                                                 |
+| **Periodic classifier**    | Chained after a turn every `stories.settings.classifierCadence` entries; blocks the story | Facts evidenced across turns — happenings, involvements, awareness, threads, new characters and factions with their first profiles and (by story setting) mentioned places, names, where places sit, faction standing and memberships, entity status flips, keyword appends, character relationships |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                                                 | 5-phase pipeline: catch-up passes, boundary, metadata, lore-mgmt (six sub-jobs in one tool loop), lifecycle review                                                                                                                                                                                   |
 
 The periodic classifier is itself a Pipeline (per
 [`generation-pipeline.md`](./generation-pipeline.md)) — same
-declaration shape as per-turn and chapter-close, with
-`gateBehavior: 'no-gate'` and a `concurrencyPolicy` that lets it run
-alongside per-turn while blocking it from starting during
-chapter-close. Detailed contracts for each layer in
+declaration shape as per-turn and chapter-close, gated like them and
+chained after the turn that brings it due; the writers run one after
+another, never at once
+([`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)).
+Who writes which field is the
+[authorship contract](./data-model.md#authorship-contract). Detailed
+contracts for each layer in
 [`memory/piggyback.md`](./memory/piggyback.md),
 [`memory/classifier.md`](./memory/classifier.md), and
 [`memory/chapter-close.md`](./memory/chapter-close.md).
@@ -740,12 +744,12 @@ Two agents from the prior design were collapsed:
 - **Per-reply classifier** split into piggyback (when
   `piggybackMode='on'` and the narrative model is capability-flagged
   reliable at tagged blocks), its per-turn fallback classifier, and the
-  periodic classifier (background; handles the larger multi-turn
-  batch). Parity holds between **piggyback and its per-turn fallback**,
-  which cover the same write set — the periodic classifier's set
-  covers none of their fields and could never recover them, which is why
-  a failed parse falls back to a per-turn pass rather than waiting for
-  the background one (see
+  periodic classifier (chained every few turns; handles the larger
+  multi-turn batch). Parity holds between **piggyback and its per-turn
+  fallback**, which cover the same write set — the periodic classifier
+  covers none of their per-turn fields and could never recover them,
+  which is why a failed parse falls back to a per-turn pass rather than
+  waiting for the next periodic one (see
   [`memory/piggyback.md → Parse strategy and failure recovery`](./memory/piggyback.md#parse-strategy-and-failure-recovery)).
   Mode toggle is at `stories.settings.piggybackMode`.
 
@@ -830,15 +834,14 @@ the full opening contract.
 
 ### Chapter-close pipeline
 
-Chapter-close is its own pipeline kind. Five phases under one
-`actionId` (catch-up classifier, boundary selection, metadata,
-lore-mgmt with five sub-jobs, lifecycle review). A single CTRL-Z
-from the user reverses the entire chapter-close. Full design in
+Chapter-close is its own pipeline kind: catch-up passes chained ahead
+of it, then boundary selection, metadata, lore-mgmt (six sub-jobs in
+one tool loop) and lifecycle review under one `actionId`. A single
+CTRL-Z from the user reverses the entire chapter-close. Full design in
 [`memory/chapter-close.md`](./memory/chapter-close.md). Chapter-close
-holds the user-edit gate via `gateBehavior: 'hard-gate'`; the periodic
-classifier is blocked from starting a new pass while chapter-close
-is in flight (one-direction lock via the classifier's
-`concurrencyPolicy.blockedBy`). The framework-level transaction +
+holds the user-edit gate via `gateBehavior: 'hard-gate'`, and a head
+reversal or Cancel interrupts it and defers it to the next turn, as
+for a pass. The framework-level transaction +
 gate mechanism lives in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle).
 

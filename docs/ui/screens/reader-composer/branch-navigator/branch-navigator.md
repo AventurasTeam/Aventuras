@@ -113,14 +113,17 @@ and putting the answer first costs nothing.
 
 While the
 [generation-status pill](../../../principles.md#top-bar-design-rule)
-is active (any pipeline phase: reasoning, generating, classifying,
-chapter-closing), branch lifecycle operations are **paused**:
+is active (any phase it shows, a memory update and a chapter close
+included), branch lifecycle operations are **paused**:
 
 - **Switch** — row body click is non-interactive. Rows render at
   reduced opacity. A small banner at the top of the navigator
   reads `Generation in progress — switching paused.` with no
-  action — the user dismisses it by waiting or by cancelling the
-  generation from the composer's `Send → Cancel` transform.
+  action — the user dismisses it by waiting or by cancelling: a turn
+  from the composer's `Send → Cancel` transform, a memory update or a
+  chapter close from the pill's Cancel, which moves it to the next
+  turn. Switching isn't a head reversal, so it doesn't interrupt one
+  ([`principles.md → Edit restrictions during in-flight generation`](../../../principles.md#edit-restrictions-during-in-flight-generation)).
 - **Delete** — `×` icon hidden across all rows during generation
   (same hide rule used for root + current).
 - **Create** — the per-entry

@@ -2,11 +2,11 @@
 
 Three agents touch memory state at different time scales.
 
-| Layer                      | Trigger                                            | Scope                                                                          |
-| -------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **Piggyback**              | Every AI reply, inline on the narrative call       | Scene-local fast-mutating state                                                |
-| **Periodic classifier**    | Background, every N entries (checked per turn; v1) | Multi-turn batch extractions                                                   |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered          | 5 phases: catch-up classifier, boundary, metadata, lore-mgmt, lifecycle review |
+| Layer                      | Trigger                                                                  | Scope                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| **Piggyback**              | Every AI reply, inline on the narrative call                             | Physical state a turn changes: scene, positions, holdings, visuals, condition               |
+| **Periodic classifier**    | Chained after a turn, every N entries; blocks the story while it runs    | Facts evidenced across turns, and the first profile of what it creates                      |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered; chained after the turn's pass | 5 phases: catch-up passes, boundary, metadata, lore management and upkeep, lifecycle review |
 
 Two architectural drivers shape the stratification:
 
@@ -60,7 +60,7 @@ Five knobs per story. Defaults copied from
 | `fullChapterInBuffer` (boolean)      | Two-mode axis. `true` = full current chapter verbatim. `false` = last `partialChapterBuffer` entries of current chapter.                                                                                                | UI shows token cost at chapter threshold when on ("at the chapter threshold this consumes ~X tokens"). Off-mode token cost is bounded by `partialChapterBuffer`.                                                                   |
 | `partialChapterBuffer` (entries)     | Size of the current-chapter slice when `fullChapterInBuffer = false`. Ignored in full mode.                                                                                                                             | Interacts with `classifierCadence` — see Buffer-aware cadence indicator below.                                                                                                                                                     |
 | `protectedBuffer` (entries)          | Chapter-boundary spillover floor. Applies in **both** modes. If the current chapter has fewer entries than this floor, fill from the previous chapter to satisfy.                                                       | Floor for fresh-chapter "the LLM has no recent history" risk; keeps writing style consistent across boundaries. Set too low and a fresh chapter starts threadbare.                                                                 |
-| `classifierCadence` (entries)        | When the periodic classifier runs in the background.                                                                                                                                                                    | UI warns in partial mode when the cadence plus one exceeds `partialChapterBuffer` (unclassified entries slide out of the window before classifier catches up) — see Buffer-aware cadence indicator below. Suppressed in full mode. |
+| `classifierCadence` (entries)        | How many entries apart the periodic classifier runs.                                                                                                                                                                    | UI warns in partial mode when the cadence plus one exceeds `partialChapterBuffer` (unclassified entries slide out of the window before classifier catches up) — see Buffer-aware cadence indicator below. Suppressed in full mode. |
 | `classifierContextEntries` (entries) | How many trailing entries the per-turn fallback classifier sees. Minimum 2 — the fixed action-plus-reply pair it extracts from, which this knob must never be able to cut. Entries beyond the pair are background only. | Raising it widens what the classifier can reason over and raises the fallback's input cost on every turn it fires.                                                                                                                 |
 
 ### Composition rule
@@ -124,13 +124,12 @@ regenerate, rollback) leaves an odd number of entries unprocessed.
 The indicator subtracts that worst case, cadence + 1, whatever the
 parity: cadence 8 against a buffer of 10 is 1 entry of overlap.
 
-A turn that completes while a pass is running is checked once the
-pass settles, against the watermark the pass moved: a pass holds its
-writes until an overlapping turn has left
-([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)),
-so that turn's own check always finds it running. Only a pass that
-spans more than one turn can leave the next one firing past
-cadence + 1.
+A pass never spans turns: it chains from the turn's commit and holds
+the gate, so no turn starts under it, and one a reversal interrupts
+runs before the next turn instead
+([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
+So cadence + 1 is the bound while passes succeed; a failed pass is
+retried at the next turn's commit, two entries later.
 
 **Full mode suppresses the warning.** Full mode keeps the entire
 current chapter in context, and chapter-close phase 0 catches up
@@ -165,132 +164,82 @@ bias prompts more rigorously.
 
 ## Concurrency
 
-The piggyback agent and the periodic classifier write to disjoint
-field sets, with one documented overlap on `entities.status`. Both
-create entities: piggyback the locations and items its state names
-([`piggyback.md → New locations and items`](./piggyback.md#new-locations-and-items)),
-the classifier characters, factions and, with the story's setting on,
-the places the prose mentions without entering
-([`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
-Places are the one kind both create, so the two never write at once: a
-pass writes only when no turn is in flight on its branch
-([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)),
-and the turn's read of the entities stays current for its whole run.
+The AI writers never run at once on a branch. The per-turn writer runs
+inside its turn; a due pass chains from the turn's commit; a close
+chains from the pass, or from the turn when no pass is due, and phase
+0 chains passes ahead of it until the classifier is caught up
+([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
+All of them hold the user-edit gate, so World edits and Send wait for
+them. A head reversal (regenerate, swipe, an edit of the head reply,
+CTRL-Z of the turn, rollback) and Cancel interrupt a pass or a close,
+which then runs before the next turn instead
+([`generation-pipeline.md → Prose reversals and the interrupt`](../generation-pipeline.md#prose-reversals-and-the-interrupt)).
+The one run that overlaps a pass or a close is suggestion refresh,
+which writes only the head entry's chips, a field neither reads.
 
-| Field                                                                                     | Piggyback                                                                                               | Classifier                                                         |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `story_entries.metadata` (current entry)                                                  | ✓                                                                                                       | —                                                                  |
-| `entities.state.visual.*`                                                                 | ✓                                                                                                       | —                                                                  |
-| `entities.state` (location, equipped, inventory, stackables, lastSeenAt)                  | ✓                                                                                                       | —                                                                  |
-| `entities.state.faction_id`                                                               | —                                                                                                       | ✓ (memberships)                                                    |
-| `entities.status`                                                                         | ✓ (staged → active only, on a `sceneEntities` or `<current_location>` ID hit, or a reused staged place) | ✓ (staged → active slow path; active → retired)                    |
-| `entities` creates (name, description, a place's parent, collision flag, partner, reason) | ✓ (locations and items)                                                                                 | ✓ (characters and factions; mentioned places, never during a turn) |
-| `entities.description`                                                                    | ✓ (its own creates only)                                                                                | ✓ (first introduction only; see authorship contract)               |
-| `entities.keywords`                                                                       | —                                                                                                       | ✓ (append-only; new characters, factions and places, later passes) |
-| `entities.retired_reason`                                                                 | —                                                                                                       | ✓ (with active → retired)                                          |
-| `happenings`                                                                              | —                                                                                                       | ✓                                                                  |
-| `happening_involvements`                                                                  | —                                                                                                       | ✓                                                                  |
-| `happening_awareness`                                                                     | —                                                                                                       | ✓                                                                  |
-| `character_relationships`                                                                 | —                                                                                                       | ✓                                                                  |
+Because they run in sequence, a field can have more than one AI
+writer: the later write wins, except where a user edit stands
+([User edits and classifier writes](#user-edits-and-classifier-writes)).
+Who writes what is the
+[authorship contract](../data-model.md#authorship-contract). Both the
+per-turn writer and a pass create places, and a pass runs after the
+turn, so it matches against the turn's creates.
 
-**Field-overlap invariant.** `entities.status` is the only field
-both writers touch. They never collide on the same entity at the
-same time because the staged→active transition is monotonic:
-whichever writer arrives first lands `status='active'`; the other
-reads `active` and no-ops. Piggyback never writes active→retired
-(classifier-only). So while concurrent runs CAN write the same
-field, they cannot write the same row to different values.
-
-The only shared row is `entities`, and field-level disjointness
-holds for everything except the `status`-overlap above. Each action
-writes only the columns it changes but computes them from a read of
-the row, so every delta-logged write to an existing `entities` row,
-and every reversal of one, serializes on a lock keyed by that row: one
-writer's read and commit never straddle another's, whether that is
-the piggyback, the classifier or a user edit. A World Save builds its
-values from the row as the pane rendered it, not from that read, so it
-can still overwrite a classifier write that landed after the render
-(see [User edits and classifier writes](#user-edits-and-classifier-writes)).
-A World delete and a collision merge build their writes under the
-branch lock's shared hold, from the rows as they stand, so a pass's
-write can't land between their read and their commit: a delete's
-re-pointing of members' factions never overwrites a membership or
-misses a character a pass just put in the deleted faction.
-`character_relationships` writes serialize on one key per branch,
-since a delete names a row id, not a pair. Involvement and awareness
-writes and a happening delete serialize on one per-branch
-`happening_links` key, for the same reason. An entity delete holds
-both link-family keys as well as its row key, and every reversal or
-redo of these tables takes the same keys. A shared JSON column no row
-lock covers, such as `branches.classifier_status`, which the reversal
-clamp and the
+Writes that can still meet serialize per row: a user write against an
+undo or redo, or against a reversal. Each action writes only the
+columns it changes but computes them from a read of the row, so every
+delta-logged write to an existing `entities` row, and every reversal of
+one, serializes on a lock keyed by that row: one writer's read and
+commit never straddle another's. `character_relationships` writes
+serialize on one key per branch, since a delete names a row id, not a
+pair. Involvement and awareness writes and a happening delete
+serialize on one per-branch `happening_links` key, for the same reason.
+An entity delete holds both link-family keys as well as its row key,
+and every reversal or redo of these tables takes the same keys. A
+shared JSON column no row lock covers, such as
+`branches.classifier_status`, which the reversal clamp and the
 classifier pipeline both write, is written with key-scoped `json_set`,
 never a whole-blob read-modify-write.
 
-### Single-writer-per-write-set in v1
-
-The background classifier is the first agent that runs concurrent
-with the per-turn pipeline. The user-edit gate (UI-side disabling of
-controls during `hard-gate` pipeline runs) does **not** relax. The
-classifier itself is `no-gate`, and its write set is not disjoint from
-user edits: both write entity status (with its retired reason),
-keywords, a character's faction and character relationships. [User edits and classifier writes](#user-edits-and-classifier-writes)
-covers how those overlaps resolve.
-
-`'concurrent-allowed'` was previously theoretical in
-[`architecture.md`](../architecture.md); the periodic classifier is its
-first real consumer and triggers documenting the value.
-
 ### User edits and classifier writes
 
-The periodic classifier is `no-gate`, so World stays editable while a
-pass runs. A user edit can meet a classifier write in two ways. It can
-land during the pass: the pass reads its entity snapshot before the
-model call and writes only after the model call and reconciliation
-return, which can be minutes later. It cannot land inside those writes,
-which hold the branch's write lock for their few milliseconds
-([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)).
-Or it can predate the pass but
-postdate the prose the pass processes, since a pass works through the
-backlog of turns written since the last one. The classifier's writes
-to an existing entity's status and keywords, to a character's faction
-and to a relationship view resolve both. Each decides and commits under the lock a World
-Save takes too ([Concurrency](#concurrency)), so a Save cannot land
-between a write's check and its commit.
+A pass and a close run under the gate, so no user edit lands while
+they run. A user edit can still predate a pass but postdate the prose
+it processes, since a pass works through the backlog of turns written
+since the last one, and a close reads the whole chapter. Their writes
+to existing rows resolve that, field by field, by the precedence below.
+The per-turn writer needs none of it: its prose is always newer than
+any user edit.
 
-**Live-row guards.** Status, keyword, faction and link writes check the
-row or rows as they stand when the write lands, not only the pass's
-snapshot:
+**Idempotent writes.** Status, keyword, faction and link writes check
+the row or rows as they stand when the write lands:
 
-- Promotion goes through `promoteStagedEntity`. The pass plans it only
-  for a row its snapshot holds as `staged`, and the handler no-ops
-  unless the live row is still `staged` when the write lands.
-- Retirement goes through `retireEntity`. The pass plans it only for a
-  row active in its snapshot or made active earlier in the same pass,
-  and the handler no-ops unless the live row is still `active` when
-  the write lands, so a user's own status and retired reason stand.
-- Keywords go through `appendEntityKeywords`, in two parts. The pass
-  sends only terms new against its snapshot, so an alias the user
-  removed mid-pass is not re-sent; the handler appends only terms the
-  live list lacks, so one the user added is not duplicated.
+- Promotion goes through `promoteStagedEntity`, a no-op unless the row
+  is still `staged`; retirement through `retireEntity`, a no-op unless
+  it is still `active`; a return from retirement is a no-op unless it
+  is still `retired`. So a status the user changed since stands.
+- Keywords go through `appendEntityKeywords`, which appends only terms
+  the list lacks.
 - A membership goes through `setCharacterFaction`, which writes
-  `state.faction_id` alone. The handler no-ops when the live row isn't
-  a character, when a faction it names isn't a faction live or created
+  `state.faction_id` alone. The handler no-ops when the row isn't a
+  character, when a faction it names isn't a faction live or created
   earlier in the same action group (none needs no row), and when the
-  live faction already matches.
+  faction already matches.
 - Link rows go through `createHappeningInvolvement`,
   `upsertHappeningAwareness` and `upsertCharacterRelationship`. A create
   re-reads the rows it names — the entity and the happening, or both
-  ends of a pair — and no-ops when one is gone, so a delete landing
-  after the pass's post-call re-read leaves no orphan row; a row the
-  same action group creates counts as present, in either order. A new
-  character or faction reconciled to a row deleted in that window is
-  dropped for the pass. Lock keys: [Concurrency](#concurrency).
+  ends of a pair — and no-ops when one is gone; a row the same action
+  group creates counts as present, in either order. Lock keys:
+  [Concurrency](#concurrency).
 
 **User precedence.** A field the user wrote after the prose a fact
-came from keeps the user's value. The classifier's status, keyword,
-faction and relationship writes carry the fact's source entry, and the
-delta log already orders both writers, so nothing new is stored:
+came from keeps the user's value. Every write a pass or a close makes
+to an existing row carries the fact's source entry, a close's the
+latest entry it cites, and the delta log already orders both writers,
+so nothing new is stored. That covers each field they update: status,
+keywords, a name, a description, the identity fields, a place's parent
+and condition, a faction's standing and agenda, a membership, link
+rows, threads and lore:
 
 - The prose's position is the log position of the entry's latest
   create or content-edit delta. An entry with neither predates the
@@ -365,17 +314,10 @@ What stays open:
   happening on abort or recovery or a happening on a prose edit,
   deletes the user's edits to it too, and prunes their deltas with it
   ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
-- A World Save merges keywords and relationships three-way against
-  the stored row, so a classifier write made while the pane was open
-  survives unless the user changed the same term or view. What it
-  merges against is the row as the pane rendered it at Save, so a
-  classifier write landing in the milliseconds between that render and
-  the Save's commit is still overwritten: a keyword appended then, or
-  the untouched view of an edited pair. `entities.state` is rebuilt
-  from the row as the pane rendered it, with only the fields the user
-  changed, and the pane refreshes a field the user hasn't touched when
-  a pass writes it. A membership landing between that render and the
-  Save's commit, as when the Save waits on the lock while a pass's
-  burst holds it, is overwritten with the older faction, and the
-  Save's delta records the change as the user's, so the precedence
-  above then keeps that membership from prose older than the Save.
+- A World pane left dirty across a pass Saves against the row as it
+  rendered it. Keywords and relationships merge three-way, so a pass's
+  write survives unless the user changed the same term or view;
+  `entities.state` is rebuilt with only the fields the user changed,
+  and the pane refreshes a field the user hasn't touched when a pass
+  writes it. A pass holds the gate, so none of its writes lands between
+  a Save's render and its commit.

@@ -31,10 +31,11 @@ the shape.
   across a story.
 - **[classifier.md](./classifier.md)** — periodic classifier
   contract: what it reads, write set, disambiguation on new-character
-  mentions, mentioned places, factions, background-task framing.
+  mentions, mentioned places, factions, threads, pipeline framing.
 - **[chapter-close.md](./chapter-close.md)** — 5-phase chapter-close
-  pipeline: catch-up, boundary selection, metadata, lore-mgmt
-  (5 sub-jobs), lifecycle review, failure modes, manual close.
+  pipeline: catch-up passes, boundary selection, metadata, lore-mgmt
+  (six sub-jobs, one tool loop), lifecycle review, failure modes,
+  manual close.
 - **[retrieval.md](./retrieval.md)** — embedding infrastructure,
   query construction, candidate pools, hybrid retrieval per type,
   pinning (`decay_resistance`), per-type budgets, the ranker

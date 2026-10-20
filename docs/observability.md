@@ -571,14 +571,13 @@ cases, stamped generically so every pipeline kind groups for free
   branch's **head reply/opening entry at run start**, passed to
   `beginTurn`.
 
-A chained chapter-close fires at the per-turn's commit, so at its
-run start the head _is_ that per-turn's reply entry — it inherits the
+A chained pass or chapter close starts after the turn's commit, so at
+its run start the head _is_ that turn's reply entry — it inherits the
 right turn with no chain-threading. **The head is read once at run
-start and frozen** on the capture, never recomputed: a classifier
-triggered at turn N that runs concurrently into N+1 keeps anchor N; a
-scheduler-delayed classifier that begins after N+1 landed anchors to
-N+1, correctly, because its `(processedThrough, head]` window then
-covers through N+1. The wizard is exempt — it is not a pipeline, so
+start and frozen** on the capture, never recomputed. A pass holds the
+gate, so no turn lands while it runs; one deferred to the next Send
+runs before that turn and anchors to the head it finds then, which its
+`(processedThrough, head]` window covers. The wizard is exempt — it is not a pipeline, so
 it produces no captures (see
 [`generation-pipeline.md → Wizard exemption`](./generation-pipeline.md#wizard-exemption)).
 
@@ -630,8 +629,8 @@ construction.
 "current `actionId`" at `beginRun` and cleared it at `commitRun` /
 `abortRun`, with sinks reading from it. A single global slot breaks under
 **any two concurrent runs** — not just cross-branch ones. The concurrency
-model invites exactly that on a single branch (per-turn ∥
-periodic-classifier, the disjoint-write-set premise): the later run
+model invites exactly that on a single branch (a pass or a close ∥
+suggestion refresh): the later run
 overwrites the slot, the other run's calls mis-attribute, then orphan when
 it clears to null. `AsyncLocalStorage` — the standard request-context fix
 — isn't available on Hermes or the Node-less Electron renderer, so

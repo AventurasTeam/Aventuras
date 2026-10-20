@@ -1,13 +1,15 @@
 # Periodic classifier contract
 
-A background pipeline that runs on a configurable cadence (see
-[`cadence.md → classifierCadence`](./cadence.md#user-tunable-knobs))
-and reads the recent prose window not yet covered by piggyback's
-per-turn writes. Its job is populating the structured graph that
-retrieval queries against. Declares against the framework's Pipeline
-shape per [`generation-pipeline.md`](../generation-pipeline.md); see
-[Background-task framing](#background-task-framing) below for its
-declaration values.
+A pipeline that runs every N entries (see
+[`cadence.md → classifierCadence`](./cadence.md#user-tunable-knobs)),
+chained after the turn that brings it due, and blocks the story while
+it runs. It reads the recent prose window not yet covered by
+piggyback's per-turn writes. Its job is populating the structured
+graph that retrieval queries against, and the first profile of
+everything it creates. Declares against the framework's Pipeline shape
+per [`generation-pipeline.md`](../generation-pipeline.md); see
+[Pipeline framing](#pipeline-framing) below for its declaration
+values.
 
 ## What the classifier reads
 
@@ -19,19 +21,24 @@ branch's world as lists the classifier addresses by placeholder id
 ([ID handling](#id-handling-in-classifier-output)), then the turns:
 
 - **Known entities** — every character, item and faction on the
-  branch, of any status, with its description and keywords, and a
-  character with its faction's id when it has one
+  branch, of any status, with its description and keywords, a
+  character with its faction's id when it has one, and a faction with
+  its standing
   ([Factions](#factions)). The
   classifier sees the whole roster, so the
   [reconciliation](#disambiguation-on-new-character-mentions)
   below is a backstop for a row the model missed, not a lookup the
   model can't do.
 - **Places** — every place on the branch, of any status and mode, as
-  a tree with the same details per line
+  a tree with the same details per line, and the unplaced places in a
+  group of their own
   ([Mentioned places](#mentioned-places)).
 - **Known relationships** — the stored views, as the relationships
   bullet below describes.
-- **Known happenings** — the branch's happenings by title.
+- **Known happenings** — the branch's happenings by id and title, so a
+  character can learn of one the pass didn't create.
+- **Threads** — the branch's threads by id, title and status
+  ([Threads](#threads)).
 - **Turns to classify** — the window's entries by turn handle, each
   with its prose and the scene saved on it: the entry's
   `sceneEntities` and `currentLocationId`
@@ -53,8 +60,12 @@ alias list (the keywords bullet below).
 
 - **Happenings** — `happenings`, `happening_involvements`,
   `happening_awareness`. New rows for events extracted from the prose
-  window, with `decay_resistance` set per awareness row from the
-  model's per-character severity judgment at extraction time.
+  window, each with a free-form `category` and an `icon` from the
+  catalog, and `decay_resistance` set per awareness row from the
+  model's per-character severity judgment at extraction time. An
+  awareness row may also name a happening Known happenings lists, when
+  the turns show a character learning of it ("Kael tells Aria about
+  the massacre").
 - **Status transitions** — `entities.status` flips:
   - `staged → active` when prose mentions a staged entity in scene
     (the slow path; see
@@ -65,11 +76,14 @@ alias list (the keywords bullet below).
     only the user retires a place
     ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
 
-  Both are checked against the pass's view — its snapshot plus what
+  - `retired → active` when the turns put a retired character in the
+    scene now: not a memory, a flashback, a vision or someone's report
+    of them. Never a place.
+
+  Each is checked against the pass's view — its snapshot plus what
   earlier facts in the same reply changed — when planned, and against
-  the row as it stands when the write lands, so a status the user
-  changed mid-pass stands. A status the user wrote after the flip's
-  prose stands too, even when written before the pass started (see
+  the row as it stands when the write lands. A status the user wrote
+  after the flip's prose stands (see
   [`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
 
 - **Mentioned places** — with the story's setting on, the places the
@@ -78,15 +92,36 @@ alias list (the keywords bullet below).
 - **Factions and memberships** — the factions the turns establish, and
   each character's `faction_id`, set and cleared from prose
   ([Factions](#factions)).
-- **First-introduction descriptions** — when the classifier creates
-  a character or a faction, one the
+- **First profiles** — when the classifier creates a character or a
+  faction, one the
   [reconciliation](#disambiguation-on-new-character-mentions) didn't
   absorb into an existing row, or a mentioned place, it authors the
-  initial `description` from prose. After
-  first introduction, the classifier never amends `description` (the
-  authorship contract in
-  [`data-model.md → World-state storage`](../data-model.md#world-state-storage)
-  remains intact).
+  initial `description` from prose, and the profile the window shows:
+  a character's visual categories, `traits`, `drives` and `voice`, a
+  faction's `standing` and `agenda`, a place's `condition`. Within the
+  [soft caps](../data-model.md#soft-caps--compaction-discipline), and
+  empty where the prose says nothing. After first introduction it
+  never amends the description, traits, drives, voice or agenda;
+  chapter close does
+  ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+- **Names** — a listed entity's name, when the turns establish it as
+  the entity's own: a reveal ("the hooded stranger is Kael"), not an
+  alias, a title or a disguise, which go to its keywords. The old name
+  joins the keywords, so retrieval still finds it. A name another row
+  of the kind already holds isn't written: the pass flags the entity
+  with that row as its partner, for the user to merge.
+- **Where a place sits** — a listed place's parent, when the turns
+  place one the Places list shows unplaced or move one; and the
+  top-level mark for an unplaced place nothing on the map could
+  contain
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+  A parent that would close a cycle, or names a retired place, is
+  dropped and logged.
+- **A faction's standing** — when the turns establish a change in a
+  listed faction's position: it declares war, is outlawed, comes to
+  power.
+- **Threads** — the threads the turns set up, and the status of listed
+  ones ([Threads](#threads)).
 - **Entity keywords** — the same brand-new-entity object carries
   `keywords`: the titles, epithets and relational references the prose
   used for the character alongside its name ("the Grey Wolf", "the
@@ -184,8 +219,8 @@ Nothing embeds on the classifier's write path; the dirty rows are
 picked up by the opportunistic background worker between turns and,
 as a backstop, by the next retrieving pipeline's sync stage — so the
 embed cost stays off the user-facing critical path, decoupled from
-the write. (The classifier itself runs as a background pipeline; see
-[Background-task framing](#background-task-framing) below.)
+the write. (The classifier itself runs as a gated pipeline; see
+[Pipeline framing](#pipeline-framing) below.)
 
 If the embedder is still unavailable when that sync stage runs
 (local model initializing, provider mode network down), the row
@@ -346,16 +381,20 @@ that name it
 
 **Parent.** Parents resolve top-down, so the child of a new place hangs
 under whatever row that place resolved to. A place whose parent the
-turns don't give goes to the root and stays there, since only the user
-moves a place after its first write
-([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+turns don't give is top-level when nothing on the map could contain it,
+and unplaced when something could and the turns don't say which; when
+unsure, unplaced
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+The schema makes the choice explicit: a parent, `top-level`, or none
+for unplaced. A later pass places it when the prose does, or moves a
+placed one ([What the classifier writes](#what-the-classifier-writes)).
 A retired parent, a parent that names nothing, or one whose chain is
-already broken above it puts the place at the root too, logged, as it
-does for the per-turn writer
+already broken above it leaves the place unplaced, logged, as it does
+for the per-turn writer
 ([`piggyback.md → Creating a place or an item`](./piggyback.md#creating-a-place-or-an-item)).
 The create handler refuses a place under a retired parent that slips
 through, which fails the whole pass. A place created under a parent
-anchored on a later turn moves to the root when that turn is reversed,
+anchored on a later turn becomes unplaced when that turn is reversed,
 keeping its facts, since its own turn survives
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 
@@ -363,21 +402,22 @@ keeping its facts, since its own turn survives
 sibling rule
 ([`piggyback.md → Matching before creating`](./piggyback.md#matching-before-creating)),
 with its parent's real children as the candidates, since the pass saw
-every place. An exact name reuses an active or staged sibling, never a
-retired one; an exact retired namesake or a partial match creates the
-row with `name_collision_flag = 1`, reason `same-parent`, the partner
-picked in that rule's order; places under different parents are never
-compared. A reused sibling keeps its description and its status, since
-a mention doesn't enter a staged place, gains the entry's new keywords,
-and stands for the handle in the rest of the reply. Two new places with
-one name and parent map to the first.
+every place, and with unplaced places by exact name; a top-level place
+is matched against the top-level places, and an unplaced one against
+every place
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+An exact name reuses an active or staged sibling, never a retired one;
+an exact retired namesake or a partial match creates the row with
+`name_collision_flag = 1`, reason `same-parent`, the partner picked in
+that rule's order. A reused place keeps its description and its
+status, since a mention doesn't enter a staged place, gains the
+entry's new keywords, takes the parent the entry gave when it was
+unplaced, and stands for the handle in the rest of the reply. Two new
+places with one name and parent map to the first.
 
-**When it writes.** The pass plans its places inside its write lock,
-against the rows as they stand, and takes that lock only once no turn
-is in flight on its branch
-([`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)).
-So when a turn and a pass both create a place, the turn, which wrote
-from the newer prose, commits first, and the pass reuses its row.
+**After the turn.** A pass runs after the turn that brought it due, so
+a place the turn created is already a row it matches against, and the
+pass reuses it.
 
 ## Factions
 
@@ -392,7 +432,8 @@ prompt does, and each faction's members
 ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
 
 **What the pass sees.** Factions are in Known entities with every
-other kind. A character's line also shows its faction's placeholder id;
+other kind, each with its standing. A character's line also shows its
+faction's placeholder id;
 a `faction_id` naming no faction is left out, so no raw id reaches the
 prompt. Without it a pass couldn't tell a change of side from a repeat,
 the reason relationship views are listed too.
@@ -400,10 +441,12 @@ the reason relationship views are listed too.
 **What it emits.** Two lists, always in the schema, and both rules
 below in the system half. A `newFactions` entry has a handle starting
 `new:`, in the namespace the `newCharacters` and `newPlaces` handles
-share, a name, a description, keywords and a `sourceTurn`. It carries
-no `standing` or `agenda`, as a pass's new character carries no traits;
-chapter close and the user fill them in later
+share, a name, a description, keywords, a `sourceTurn`, and the
+`standing` and `agenda` the turns show, if any, as a new character
+carries its traits; chapter close revises them over the chapter
 ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+A `standings` entry names a listed faction, its new standing and a
+`sourceTurn`, emitted only when the turns change it.
 The handle stands wherever a listed faction's id would: in a
 happening's involvements and in a membership. A `memberships` entry
 has a character (an id or a new character's handle), a faction (an id,
@@ -452,7 +495,8 @@ character is.
 **The row.** `active`, mode `auto`, the entry's keywords and its
 description, clamped to a new character's bounds, the flag columns from
 the table, landing `embedding_stale = 1` with `sourceTurn` as its
-survival anchor. Its `state` holds no `standing` or `agenda`.
+survival anchor. Its `state` holds the entry's `standing` and
+`agenda`, empty when the turns gave none.
 
 **Memberships.** A fact's character must resolve to a character and its
 faction to a faction or null; one resolving to nothing or the wrong
@@ -475,79 +519,103 @@ A reversal that removes a faction clears it from its members, which
 keep their facts, as World's delete of a faction does
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 
-## Background-task framing
+## Threads
 
-The periodic classifier runs as a background pipeline — a Pipeline
-declaration in the framework's registry, same shape as per-turn and
-chapter-close but with different concurrency / gating values:
+A pass tracks the story's threads: the goals, quests, mysteries and
+threats the turns set up. The narrator's prompt carries a thread while
+it is active
+([`retrieval.md → Structural floor`](./retrieval.md#structural-floor--always-inject)),
+chapter close consolidates them over the chapter
+([`chapter-close.md`](./chapter-close.md)), and the user audits them in
+[Plot](../ui/screens/plot/plot.md).
 
-| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes; they wait out its write phase ([no-gate write phase](../generation-pipeline.md#no-gate-write-phase))                                                                                                                                                                                                                                                                          |
-| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close                                                                                                                                                                                                                                                                                                      |
-| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                                                                                                                                                                                                                                                                                                                               |
-| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, new character and faction entities and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent, collision flag with its partner and reason), a character's `state.faction_id`, entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates and reused places), character relationships |
+**What the pass sees.** The Threads list: every thread on the branch by
+id, title and status, the user's included.
 
-Write-set boundaries between the classifier and the piggyback / per-turn
-pipeline are enforced via narrow action functions named for field-set
-scope (see
-[`generation-pipeline.md → Narrow action functions over write-set declarations`](../generation-pipeline.md#narrow-action-functions-over-write-set-declarations)),
-not a typed declaration. The single-writer invariant relaxes to
-**single-writer-per-write-set** in v1; piggyback's write-set and the
-classifier's write-set are disjoint at the row-and-field granularity,
-apart from the monotonic `entities.status` overlap, and both create
-places, the classifier only with the mentioned-places setting on. They
-never write at once: a pass writes only when no turn is in flight on
-its branch (see
-[`cadence.md → Concurrency`](./cadence.md#concurrency)).
+**What it emits.** A `newThreads` entry has a title, a description, a
+free-form category, an icon from the catalog, a status and a
+`sourceTurn`: `pending` when the story knows of the thread but no one
+pursues it, `active` when someone does. A `threadStatuses` entry names
+a listed thread, its new status and a `sourceTurn`: `active` when it is
+taken up, `resolved` when it is achieved, `failed` when it is made
+impossible. The rule:
 
-If the user starts a new turn while the classifier is mid-run, both
-run, and the pass's writes wait for the turn to finish
-([no-gate write phase](../generation-pipeline.md#no-gate-write-phase)).
-The classifier holds its own `actionId` for its writes; the
-user-turn pipeline holds its own. That `actionId` is stamped
+> Add a thread when the turns set up something the story will follow
+> past the current scene: a goal a character commits to, a quest given,
+> a mystery raised, a threat that looms. Not a passing intention, and
+> not one already in the Threads list, even worded differently: change
+> its status instead. Emit a status only when the turns establish the
+> change.
+
+**The row.** Mode `auto`, `triggered_at_entry_id` its `sourceTurn`,
+landing `embedding_stale = 1` with `sourceTurn` as its survival anchor.
+A change to `resolved` or `failed` sets `resolved_at_entry_id` to its
+`sourceTurn`; one back to `pending` or `active` clears it. A status the
+user wrote after the change's prose stands
+([`cadence.md → User edits and classifier writes`](./cadence.md#user-edits-and-classifier-writes)).
+
+**The cost.** An active thread is injected every turn, outside the
+budgets, so a thread the pass activates grows the narrator's prompt
+until it resolves. The rule leans against creating, and chapter close
+resolves or fails stale threads.
+
+## Pipeline framing
+
+The periodic classifier is a Pipeline declaration in the framework's
+registry, gated like per-turn and chapter-close:
+
+| Field                           | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `gateBehavior`                  | `'hard-gate'` — user-source writes wait for it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `concurrencyPolicy`             | `{ blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'] }` — a chain or Run now starts it, never under another run but suggestion refresh                                                                                                                                                                                                                                                                                                                                                                                           |
+| `affordance`                    | `'pill-and-banner'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, threads, new character and faction entities with their first profiles and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent or unplaced mark, collision flag with its partner and reason), names, a place's parent and top-level mark, a faction's standing, a character's `state.faction_id`, entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates, reused places and replaced names), character relationships |
+
+**When it runs.** Per-turn's `chainsTo` starts a pass when the turn's
+commit brings the cadence due — the unprocessed entries reach
+`classifierCadence` — unless the classifier is `failed-persistent`
+([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
+The pass runs while the user reads the reply. A pass's own `chainsTo`
+returns another pass while a chapter close is pending and entries
+remain unprocessed, then the close
+([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)).
+`[Run classifier now]` starts one directly.
+
+**Interrupted, then deferred.** A head reversal — regenerate, swipe, an
+edit of the head reply, CTRL-Z of the turn, rollback — and the pill's
+Cancel interrupt a pass: it is cancelled and waited out, and the
+reversal goes ahead
+([`generation-pipeline.md → Prose reversals and the interrupt`](../generation-pipeline.md#prose-reversals-and-the-interrupt)).
+Leaving the story interrupts it too, through the story-leave confirm
+([`principles.md → Edit restrictions during in-flight generation`](../ui/principles.md#edit-restrictions-during-in-flight-generation)).
+A toast says the memory
+update moved to the next turn, and the pass is marked deferred for its
+branch. At the next Send it runs before the turn, as its own run,
+committing before the turn's first write; Cancel then cancels the
+whole Send and keeps the user's text in the composer. The mark lives
+in memory: after a restart, the next turn's commit finds the pass due
+anyway. A pass cancelled before its writes commits nothing; one
+cancelled during them reverses its own group, as any aborted run does.
+
+**Undo.** A pass holds its own `actionId`, stamped
 `source = periodic_classifier` (distinct from per-turn piggyback's
-`piggyback_tagged_block`) and is **never an undo target** — CTRL-Z's
+`piggyback_tagged_block`), and is **never an undo target** — CTRL-Z's
 head-selection skips it (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)).
-It survives only for crash recovery.
+A deferred pass keeps its own group too: sharing the turn's would let a
+regenerate of that turn sweep facts about turns already settled.
 
-The classifier's `concurrencyPolicy.yieldsTo` stays empty — it does
-NOT abort itself when a foreground _forward_ pipeline starts.
-Discarding in-flight classifier work that doesn't conflict with the
-new turn's writes is wasteful; the pass's model call runs alongside
-the turn and its writes wait for it, so coexistence is safe.
+**Alongside.** Suggestion refresh runs beside a pass: it writes only
+the head entry's chips, which a pass neither reads nor writes.
+Translation retry and chapter close wait for it.
 
-A _reversal_ is the exception, handled outside `yieldsTo`. Regenerate,
-entry-delete rollback, swipe-switch, and CTRL-Z of a turn reverse prose
-the classifier may be mid-consuming, so each brackets its positional
-sweep with `await awaitRunTerminal('periodic-classifier', 'cancel')` plus a
-`reversalInProgress` start-block (see
-[`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)).
-The classifier's part of that contract is one **abort-free critical
-section**: its commit burst — one LLM response, one burst of deltas —
-ignores `signal.aborted` once it holds its write lock and never returns
-`aborted` holding committed deltas. So `'cancel'` either discards a
-not-yet-committed run (the LLM stream is cancelled, or the
-reconciliation or the wait for a turn is cut short, keeping the
-reversal near-instant) or lets a committed burst stand for the
-positional sweep to reverse; the standard abort path needs no special
-disposition. A story or branch switch also discards a not-yet-committed
-run, caught before reconciliation or inside the hold before planning:
-its pre-run status is restored, no retry is used and the watermark
-stays put
-([no-gate write phase](../generation-pipeline.md#no-gate-write-phase)).
-
-**Pill priority.** The classifier surfaces on the existing
-generation indicator pill with low priority — user-initiated
-narrative wins when both are in flight; the classifier pill shows
-when nothing higher is running. No ETA in the popover (run length
-isn't predictable). Chapter-close uses `'pill-and-banner'`
-(blocking workload, separate visual treatment); periodic classifier
-shares the pill, not the banner. The pill is unconditional — if
-something's generating it shows, no fail-only or quiet-success
-mode.
+**Pill.** A pass shows on the generation indicator pill with the
+banner, as chapter close does, reading `Updating memory…`, and
+`Updating memory before your turn…` when it runs deferred. No ETA,
+since run length isn't predictable; the 300-second cap bounds the
+whole structured call, retries included. The pill's popover carries
+Cancel.
 
 ## Settings · Memory · Classifier panel
 
@@ -569,25 +637,31 @@ Reflects the classifier's current state:
 
 - **Idle** — `Last run N turns ago, processed P happenings + Q awareness rows.`
 - **Running** — `Running... processed N of M turns.` Mirrors the pill.
-- **Retrying** — `⚠ Last run failed (X of 3 attempts), retrying in N minutes.` Visible to users who look in Settings; doesn't escalate elsewhere.
+- **Retrying** — `⚠ Last run failed (X of 3 attempts), retrying after your next turn.` Visible to users who look in Settings; doesn't escalate elsewhere.
 - **Failed-persistent** — `⚠ Classifier failed after 3 attempts: [reason].` Inline `[Retry]` + `[View error details]`. Also surfaces as a top-bar error pill in the affected story — same visual vocabulary as the cluster-1 staleness pill; tap routes back here. Two different reasons, one UX pattern: error pill is the discovery channel, Settings panel is the resolution channel.
 
 ### Manual override
 
 `[Run classifier now]` triggers an immediate pass over unprocessed
-turns. Disabled while a run is actively in flight; enabled in
-**idle** and **retrying** states (lets the user preempt the
-auto-retry backoff). The **failed-persistent** inline `[Retry]`
-is the equivalent action surfaced from the loud-error path.
+turns, gated like any pass. Disabled while a run is actively in
+flight; enabled in **idle** and **retrying** states (lets the user
+retry without taking a turn). The **failed-persistent** inline
+`[Retry]` is the equivalent action surfaced from the loud-error path.
 
 ### Auto-retry policy
 
-A failed run schedules auto-retry with exponential backoff: **30
-seconds → 2 minutes → 5 minutes**. After 3 retries exhausted, the
-classifier enters **failed-persistent** state. Cadence-triggered
-runs suspend in that state — no point spamming a broken provider
-on every cadence tick — until the user explicitly retries. Cadence
-resumes from the next normal trigger after a retry succeeds.
+A failed pass leaves the watermark where it was, so the next turn's
+commit finds the cadence due and runs it again; a deferred pass that
+fails lets its turn go ahead, and is retried at that turn's commit.
+Retries ride on turns rather than timers: a pass holds the gate, and a
+timer would raise it at a random moment, in the middle of a World
+edit. A user who stops taking turns has nothing new to classify. After
+3 retries exhausted, the classifier enters **failed-persistent**
+state. Cadence-triggered runs suspend in that state — no point
+spamming a broken provider on every turn — until the user explicitly
+retries. Cadence resumes from the next normal trigger after a retry
+succeeds. Each failing attempt holds the story for at most the
+300-second cap.
 
 The retry policy applies to whatever caused the failure (rate
 limit, network drop, provider 5xx). Errors that aren't transient
@@ -597,7 +671,7 @@ just like any other; the user resolves at the source (re-key,
 swap profile, etc.) rather than waiting for retries to magically
 succeed. A failure while the pass applies its planned writes (a
 rejected write rolls the whole pass back) is a failed run too and
-takes the same backoff.
+retries the same way.
 
 ### Persistence
 

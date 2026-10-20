@@ -42,9 +42,9 @@ the reader keybinding behavior.
 - [`data-model.md → Survival anchor`](../../../../data-model.md#survival-anchor)
   — the predicate, the clamp, and the redo re-derive tolerance
   ("redo does not restore `processedThrough`").
-- [`classifier.md → Background-task framing`](../../../../memory/classifier.md#background-task-framing)
+- [`classifier.md → Pipeline framing`](../../../../memory/classifier.md#pipeline-framing)
   — why classifier `action_id`s are never undo targets.
-- [`generation-pipeline.md → Prose reversals and the classifier barrier`](../../../../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)
+- [`generation-pipeline.md → Prose reversals and the interrupt`](../../../../generation-pipeline.md#prose-reversals-and-the-interrupt)
   — the bracket this slice's reversals must run inside (via C3).
 
 ## Scope: in

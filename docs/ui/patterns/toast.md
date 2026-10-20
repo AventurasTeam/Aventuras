@@ -25,6 +25,9 @@ Used by:
   [`display-translation` phase](../../architecture.md#display-translation-post-narrative)
   ended with missing rows — warning severity + Retry action firing
   the `translation-retry` pipeline.
+- [Reader](../screens/reader-composer/reader-composer.md#during-a-memory-update)
+  — a pass or a chapter close interrupted and moved to the next turn,
+  info severity, no action.
 
 Toasts deliberately do **not** cover:
 

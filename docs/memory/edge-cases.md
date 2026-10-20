@@ -85,6 +85,11 @@ live in
 A new faction is compared with the branch's factions the same way,
 without the scene signal
 ([`classifier.md → Factions`](./classifier.md#factions)).
+Two later writers raise the same flag on an existing row: a pass whose
+rename meets a name another row of the kind holds
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)),
+and chapter close on a row it judges a duplicate
+([`chapter-close.md → 3f`](./chapter-close.md#3f--world-upkeep)).
 
 ### Schema
 
@@ -217,13 +222,18 @@ evidence ("character mentioned once in 50 turns; last seen leaving the
 kingdom permanently") that single-prose-line periodic classifier would
 (correctly) skip. Never a location, for the reason above.
 
-### Retired → active is user-only in v1
+### Returning from retirement
 
 Resurrection / fake-death-reveal / return-from-exile are
-story-significant moments where the user explicitly toggles via the
-World panel. Agent-driven `retired → active` is parked-until-signal:
-auto-resurrecting on weak prose has a much worse failure mode than
-requiring a user click.
+story-significant moments. The periodic classifier brings a retired
+character back when the turns put them in the scene now
+([`classifier.md → What the classifier writes`](./classifier.md#what-the-classifier-writes)),
+since without that a returning character comes back as a duplicate.
+The bar is presence, not mention: a memory, a flashback, a vision or
+someone's report of them leaves the character retired. Auto-resurrecting
+on weak prose fails badly, so the user's own retirement written after
+that prose stands, and the World panel stays the place to toggle it by
+hand. Only the user brings back a place.
 
 ---
 
@@ -265,8 +275,9 @@ Known limitations the design accepts and documents rather than chases:
   manual rename.
 - **Multi-scene / cutaway entries** — not first-class; meanwhile-style
   prose degrades the structural model gracefully.
-- **Auto retired → active** — user-only in v1; agent-driven path is
-  parked-until-signal.
+- **Returning from retirement on presence alone** — a character the
+  scene shows alive comes back; one the prose only says is alive,
+  offstage, waits for the user.
 - **Single-axis `decay_resistance`** — one number can't capture
   orthogonal relevance dimensions ("emotionally resonant" vs.
   "plot-relevant" vs. "character-defining"). v1 floor; multi-axis is

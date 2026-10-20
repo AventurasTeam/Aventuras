@@ -159,7 +159,7 @@ M9.3.
 **Goal.** Chapter timeline ships as a real surface; chapter-close
 pipeline runs at chapter boundaries doing the
 [`memory/chapter-close.md`](../memory/chapter-close.md) phase
-sequence (3a–3e). Threads management lands. Reader gains chapter
+sequence (3a–3f). Threads management lands. Reader gains chapter
 management affordances (insert break, view chapter context, etc.).
 
 **Why now.** Chapter-close is the second-largest piece of memory-
@@ -179,26 +179,28 @@ companions.
   primitive surface) — reinstated because a thin gate is the
   intended gate-then-parallel milestone shape, and the absorption
   made the close pipeline gate every UI slice in the milestone.
-- M5.2 — Chapter-close pipeline: phases 3a–3e, agent invocations,
-  delta writes. Chapter-close consolidates `threads` rows that
-  M3's classifier wrote sparsely; surface (plot panel threads
-  tab) already exists from M4.3. Per-chapter `retrieval_count`
+- M5.2 — Chapter-close pipeline: phases 3a–3f, agent invocations,
+  delta writes. Chapter-close consolidates the `threads` rows the
+  periodic classifier writes once the AI writer map is implemented
+  (`followups.md`); surface (plot panel threads tab) already exists
+  from M4.3. Per-chapter `retrieval_count`
   reset under the chapter-close `action_id` (paired with M3.4's
   per-injection increment). Extends the M1.5 awareness upsert arm
   with an earliest-wins `learned_at_entry_id` merge path — the
   shipped arm keeps-first with no write path to that column
   (forward seam named in the M1.5 happenings slice), and the
-  lore-mgmt phase needs it. This is the first real `chainsTo`
-  consumer (per-turn → chapter-close): M5.2 declares per-turn's
-  `chainsTo` predicate and builds the chapter-close pipeline. The
-  orchestrator's chained-execution capability (driving the successor
-  through its own commit, threading its fresh `actionId` and
-  active-run pointer) already landed in 1.5a during post-M1
-  reconciliation, so M5.2 needs no orchestrator change.
+  lore-mgmt phase needs it. M5.2 extends the `chainsTo` predicates of
+  per-turn and the pass to start a close, and builds the chapter-close
+  pipeline. The orchestrator's chained-execution capability (driving
+  the successor through its own commit and active-run pointer) landed
+  in 1.5a during post-M1 reconciliation, but a successor inherits its
+  predecessor's `actionId` in code; the gated classifier's
+  implementation fixes that first (`followups.md`) and is the first
+  `chainsTo` consumer, chaining the turn to its pass.
   Slice-authoring note: the reader's regenerate confirm resolves its
   cascade counts when the modal opens and never re-resolves them
   (M3.10). No M3 writer can widen the window while the modal sits
-  open, but a background chapter close can — so this slice must
+  open, but a chapter close committing meanwhile can — so this slice must
   re-derive the counts under the branch queue at confirm time, or
   invalidate an open modal when a close lands.
   Slice-authoring note: `orchestrator.handleEvent` stamps
@@ -340,22 +342,13 @@ DB-backed `openRegionTokens` resolves all of them.
   checks no user precedence: a re-emit overwrites `source` and
   `decay_resistance` whoever wrote them. User rows exist since 4.2a's
   Plot editor and 4.2c's collision merge, whose copied awareness is a
-  user create. Today only the periodic classifier writes awareness, and
-  only for happenings it creates in the same pass. The close's
-  happening-cluster merge
-  ([`memory/chapter-close.md`](../memory/chapter-close.md)) will rewrite
-  awareness on rows it didn't create (max decay resistance, sources
-  concatenated), so M5.2 decides whether a user-written awareness row
-  keeps its values. Found in 4.2c's slice review (2026-10-07).
-- **M5.2 — A lore row with a null body exports a file its own import
-  refuses.** `lore.body` is nullable (`lib/db/lore/lore.table.ts`),
-  `loreExport` writes it as `''`, and the import refuses a lore file
-  without a body. No writer stores a null body today (the lore pane, the
-  wizard and the seed all require one), so a new lore writer is what
-  would surface it, and the close's lore-mgmt phase is the first. Either
-  that writer requires a body, or export and import agree on an empty
-  one. Split from a Slice 4.6 review entry; routed from triage
-  2026-10-09.
+  user create. Canon now settles it: a user-written row keeps its
+  values when the user wrote them after the cited prose
+  ([`memory/chapter-close.md → 3e`](../memory/chapter-close.md#3e--happenings-consolidation)).
+  A pass's awareness of listed happenings, from the AI writer map
+  (`followups.md`), reaches user rows before the close's cluster merge
+  does, so the check lands with whichever ships first. Found in 4.2c's
+  slice review (2026-10-07).
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
@@ -485,22 +478,14 @@ verified against the code first. Resolve with the slice each names.
   switching write `currentBranchId`, which `openStory` already routes
   through. Raised by Slice 4.2a against M7.2; routed from triage
   2026-09-27, retargeted to the slice that makes it reachable.
-- **M6.3 — Whether `updating-memory` blocks branch switching.**
-  [`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)
-  pauses switch, delete and create while the pill is active ("any
-  pipeline phase", line 116) and sends the user to wait or cancel from
-  `Send → Cancel` (lines 120-123). Its phase list doesn't name the
-  periodic classifier's `updating-memory`, which the pill now shows and
-  which can't be cancelled, so the rule either parks switching behind
-  an uncancellable pass or doesn't cover it. The list is stale beyond
-  that — it lacks `recalling-memory` and `refreshing-suggestions`, and
-  its `classifying` is the per-turn piggyback fallback — and a pass can
-  hold the pill for five minutes or more (`CALL_TIMEOUT_MS`, then
-  apply). Two shapes: exempt background phases, since the pass writes
-  only its own branch; or cancel it the way prose reversal does
-  (`awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')`),
-  which discards a pass before its commit burst and lets one already
-  committing land. Routed from triage 2026-09-27.
+- **M6.3 — Branch switching during a pass or a close.** Settled
+  2026-10-20: switching waits like any gated branch operation, and the
+  way out is the pill's Cancel, which moves the pass or close to the
+  next turn
+  ([`branch-navigator.md → During generation`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)).
+  M6.3 builds the navigator's paused state and banner to that rule. A
+  pass can hold the story for five minutes or more (`CALL_TIMEOUT_MS`,
+  then apply). Routed from triage 2026-09-27.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
@@ -1109,9 +1094,11 @@ code before it moved; resolve with the slice it names.
   first long-story prompt-size or cost signal. Routed from triage
   2026-09-27.
 - **M7.2 — A recurring classifier failure reaches `failed-persistent`
-  invisibly.** The backoff
-  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
-  exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
+  invisibly.** The code's backoff, which canon has replaced with
+  retries at the next three turns' commits
+  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy);
+  the gated classifier in `followups.md` implements it, removing the
+  scheduler and its timers), exhausts in about 7.5 minutes (30s + 2m + 5m) against a repeating
   apply-time rejection, and `failed-persistent` survives a restart —
   boot recovery (`resetStuckClassifierRunState`) resets only
   `'running'`. Nothing in `app/`, `components/` or `hooks/` reads

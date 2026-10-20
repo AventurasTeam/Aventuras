@@ -481,8 +481,8 @@ Full design in
 this section captures what the screen renders.
 
 - **Cadence config** — in-place edit of
-  `stories.settings.classifierCadence` (entries, checked per
-  turn), `classifierContextEntries` (entries, min 2), and the
+  `stories.settings.classifierCadence` (entries, checked at each
+  turn's commit), `classifierContextEntries` (entries, min 2), and the
   `piggybackMode` toggle. Buffer-aware cadence indicator from
   [`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs)
   renders inline.
@@ -494,7 +494,8 @@ this section captures what the screen renders.
   the gate (`Requires a narrative model with structured-output
 capability`), and the **per-turn fallback classifier** covers the
   work on every turn — not the periodic classifier, whose write set
-  covers none of piggyback's fields and could never supply them (see
+  covers none of piggyback's per-turn fields and could never supply
+  them (see
   [`memory/piggyback.md → Capability gate`](../../../memory/piggyback.md#capability-gate)).
   Swapping the narrative model to a capable profile re-enables the
   toggle automatically.
@@ -508,12 +509,14 @@ capability`), and the **per-turn fallback classifier** covers the
   from the next pass; prose already classified isn't revisited.
 - **Status block** — current state for the active branch, one of
   _idle / running / retrying / failed-persistent_. Each state
-  carries its own copy and inline actions; failed-persistent
+  carries its own copy and inline actions (retrying reads
+  "retrying after your next turn"); failed-persistent
   additionally surfaces as a top-bar error pill in the reader,
   parallel to the cluster-1 staleness pill.
 - **`Run classifier now`** button. Disabled while a run is
   actively in flight; enabled in idle and retrying states (lets
-  the user preempt the auto-retry backoff).
+  the user retry without taking a turn). The pass it starts holds
+  the story like any other.
 
 ### Embedder
 

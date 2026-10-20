@@ -475,10 +475,11 @@ sync. Pending — revisit when a real story hits the wall.
 [`generation-pipeline.md → Pipeline declaration`](./generation-pipeline.md#pipeline-declaration)
 defines the Pipeline shape every future background pipeline picks
 values for at its own design pass — `gateBehavior`,
-`concurrencyPolicy`, `affordance`. The periodic classifier is the
-first consumer (see [`memory/classifier.md → Background-task framing`](./memory/classifier.md#background-task-framing));
-future style-review or any agent that splits out of chapter-close is
-another candidate. Each pipeline's design pass picks values with
+`concurrencyPolicy`, `affordance`. No v1 pipeline runs in the
+background: the periodic classifier holds the gate (see
+[`memory/classifier.md → Pipeline framing`](./memory/classifier.md#pipeline-framing)).
+Future style-review or any agent that splits out of chapter-close is
+a candidate. Each pipeline's design pass picks values with
 reasoning; the framework doesn't prescribe defaults.
 
 #### Smarter mid-pipeline data-error recovery
@@ -666,9 +667,9 @@ are built.
 - **`entry_swipes` shape**, and whether takes carry across a branch
   fork or are pruned at the fork point.
 - **Classifier concurrency** is resolved: prose reversals — including
-  regenerate and swipe — cancel the in-flight periodic classifier via
-  the classifier barrier (see
-  [`generation-pipeline.md → Prose reversals and the classifier barrier`](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier)),
+  regenerate and swipe — interrupt an in-flight pass or close and
+  defer it to the next turn (see
+  [`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)),
   so swipe inherits the contract for free. The residual log-position
   over-reversal is spared by the survival-anchor predicate (see
   [`data-model.md → Survival anchor`](./data-model.md#survival-anchor)).
@@ -696,16 +697,16 @@ wizard) or _when_ it was last touched. Two real costs:
   classifier could honor user-asserted values until prose
   explicitly contradicts.
 
-User-edit precedence for `status`, keywords, relationship views and a
-character's faction has landed without this sidecar, through the delta
-log's order, the faction read from the undo payload's per-field record
+User-edit precedence over a pass's and a close's writes needs no
+sidecar: it rides the delta log's order, for every field they update
 ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
 What remains here is stale detection, and honoring a user's other
 `entities.state` values until prose explicitly contradicts them. Ordering
 alone can't do that for state: piggyback, its per-turn writer, always
-reads the newest prose. Chapter-close identity compaction, once built,
-is the exception, since it reads a whole chapter whose prose can
-predate the user's edit.
+reads the newest prose. Chapter close reads a whole chapter whose prose
+can predate the user's edit, so each of its writes rests on the latest
+entry it cites, and ordering covers it too
+([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
 
 Sketch shape (v1.5):
 
@@ -845,7 +846,7 @@ description demand emerges.
 #### Token-trigger classifier cadence mode
 
 `stories.settings.classifierCadence` ships v1 as a single number
-(entries between background classifier runs). The original schema
+(entries between periodic classifier runs). The original schema
 was a discriminated union — `{ mode: 'turns' | 'token-trigger',
 value: number }` — but the token-trigger variant was dropped from
 v1 because the buffer-aware overlap UX
@@ -932,11 +933,12 @@ fixed:
   reversal failure is transient and the next boot's retry clears it,
   or is
   [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
-  which boot meets only for a `no-gate` orphan, whose branch it holds
-  back. Either way the branch is reconciled or already held back.
-- **In-session it needs a later successful turn.** The scheduler ticks
-  only on `kind === PER_TURN_KIND && outcome === 'completed'`, so the
-  failed run does not fire it.
+  which boot meets only for a pass's or a close's orphan, whose branch
+  it holds back. Either way the branch is reconciled or already held back.
+- **In-session it needs a later successful turn.** The cadence is
+  checked only at a completed turn (today's scheduler ticks only on
+  `kind === PER_TURN_KIND && outcome === 'completed'`), so the failed
+  run does not start a pass.
 - **What is stranded is not duplicate material.** A failed reversal
   leaves the aborted run's own entry and its piggyback facts on disk
   _and_ on screen — the patchers never ran either, so the store keeps
@@ -948,7 +950,7 @@ fixed:
 The obvious remedy is wrong and is recorded so it is not re-proposed:
 a run-start gate goes through `checkConcurrencyContract`, which gates
 **every** kind including `per-turn`, so it would block the user from
-submitting a turn to protect a background pass. A correct version has
+submitting a turn to protect a pass that isn't running. A correct version has
 to be scoped to the kinds that re-derive from a window, and needs the
 concurrency contract to learn about orphans.
 
@@ -958,9 +960,9 @@ signal to revisit.
 
 #### A boot recovery refused as an integrity error never settles
 
-A `no-gate` run whose abort's own reversal fails leaves its writes to
-boot recovery, and its hold ends anyway
-([`generation-pipeline.md → No-gate write phase`](./generation-pipeline.md#no-gate-write-phase)),
+A pass or a close whose abort's own reversal fails leaves its writes
+to boot recovery, and its gate lifts anyway
+([`generation-pipeline.md → Recovery-failure policy`](./generation-pipeline.md#recovery-failure-policy)),
 so the user can write to the branch before recovery runs. If the
 latest scene names a character the pass created and the user deletes
 it in World, the delete's tail-scene update still names it. Recovery
@@ -977,7 +979,7 @@ abort's reversal, then that delete.
 
 The remedy is to settle such an orphan at recovery: on an integrity
 refusal, close its `pipeline_runs` row as `failed` and keep its writes
-as ordinary history, which CTRL-Z steps over as a background pass.
+as ordinary history, which CTRL-Z steps over as it does any pass.
 Memory updates resume, at a cost: the pass's partial facts stay, and
 the next pass may derive some of them again, so duplicates are
 possible.
@@ -1084,10 +1086,10 @@ Not reachable for `state`, verified by reading in the 2026-10-05
 triage pass: the periodic classifier created only characters then
 (`lib/classifier/plan.ts`), and no `state` field names a character;
 CTRL-Z is newest-first, and rollback and regenerate windows take every
-later write; prose-edit sweeps spare entity creates; and a no-gate
-run's abort holds the branch lock exclusive. Inferred, not verified:
-in the boot-recovery window after an abort's own reversal failed
-([no-gate write phase](./generation-pipeline.md#no-gate-write-phase)),
+later write; prose-edit sweeps spare entity creates; and a pass's
+abort runs under its gate. Inferred, not verified: in the
+boot-recovery window after an abort's own reversal failed
+([Recovery-failure policy](./generation-pipeline.md#recovery-failure-policy)),
 a later turn's piggyback or a tail scene edit can name the pass's new
 character in `sceneEntities`, and recovery then reverses the create
 with no refusal. A dangling id never crashes, but the same state
@@ -1119,7 +1121,7 @@ pass anchors each place on its own turn, so a child can sit on an
 earlier turn than its parent, and a rollback or regenerate that removed
 the parent's turn spared the child, left naming a parent that existed
 nowhere. Since 2026-10-17 the reversal clears that parent instead, so
-the child goes to the root and keeps its facts.
+the child keeps its facts, unplaced since 2026-10-20.
 
 Re-checked 2026-10-17 for the remaining fields, by reading the reversal
 canon and code: still not reachable outside the boot-recovery window.
@@ -1136,7 +1138,7 @@ flight. In the boot-recovery window above, an entry's
 `currentLocationId`, a character's `current_location_id` or
 `lastSeenAt` and an item's `at_location_id` can still name a place
 recovery removes. A user's move of another place under it is cleared
-too, putting that place at the root
+too, leaving that place unplaced
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 A move under it and back off it was not: the place stayed where the
 user left it, but the later move's undo still named the removed place,
@@ -1348,10 +1350,6 @@ underfills lands post-v1.
 Schema-level support for two distinct entities with the same name
 (without one being renamed).
 
-#### Auto-promotion `retired → active`
-
-Agent-driven path; v1 is user-only.
-
 #### Per-type query pools
 
 Different queries per candidate type (e.g. lore retrieved against
@@ -1525,9 +1523,8 @@ exclusive; only the metadata lock is skipped. The scene editor, the
 world-time edit and the entity delete re-check the gate and register
 their write with no await between, so a reversal refuses or outwaits
 them. Only the collision merge reads the tail outside the branch lock,
-and canon already calls that path unreachable
-([no-gate write phase](./generation-pipeline.md#no-gate-write-phase):
-the resolve dialog is modal, and Reader undo needs the Reader's focus).
+and that path is unreachable: the resolve dialog is modal, and Reader
+undo needs the Reader's focus.
 The lock order now lives in `withTailMetadataLock`
 (`lib/actions/story-entries/entry-metadata-lock.ts`). Parked
 2026-10-09; the signal is a non-modal merge, or any surface where Reader
@@ -1550,33 +1547,28 @@ named `__proto__`, which the pane and piggyback store deliberately:
 zod's record skips that key. Parked 2026-10-09; the signal is a writer
 that can emit model-shaped state, such as an agentic classifier.
 
-#### Placing a mentioned place later
+#### Merging any two rows of one kind
 
-A place the periodic classifier creates from a mention goes to the root
-when the turns don't say where it is, and stays there, since only the
-user moves a place after its first write
-([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)).
-When the story later places it ("Varn, in the Eastern Reach"), nothing
-moves it, and a turn that goes there under the Eastern Reach without
-using Varn's id creates a second Varn: places under different parents
-are never compared. World can't merge the two either, since merge
-exists only inside the collision dialog, so delete or rename is the
-only fix. Two ideas from the developer for when it bites: a step that
-re-parents a place from the root once the prose places it, in a pass
-or at chapter close, with user precedence and reversal handling for
-`parent_location_id`, which the authorship contract keeps user-only
-after the first write; and a kind of place that sits outside the tree,
-for mentioned places nobody can locate yet. A merge of any two rows of
-one kind would cover what both miss. Parked 2026-10-16 by the mentioned
-places design; the signal is duplicates of root-level mentioned places
-in real stories.
+World merges two rows only inside the collision dialog, which pairs a
+row with the partner a collision flag names. Duplicates no flag pairs,
+such as two places both placed under the wrong parents, can only be
+fixed by delete or rename. A merge of any two rows of one kind would
+cover them. Split 2026-10-20 from "Placing a mentioned place later",
+which unplaced places resolved
+([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape));
+the signal is duplicates in real stories that no flag pairs.
 
-That kind of place outside the tree has a second use. A place whose parent a
-reversal removes lands at the root today, such as a pass's child of a
-place a later turn created, once that turn is rolled back or
-regenerated
-([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay));
-it would go to that place instead. Added 2026-10-17.
+#### Confirm-mode queue for chapter-close rewrites
+
+Chapter close rewrites a description, and the other slow identity
+fields, directly, as one of the close's undoable writes
+([`data-model.md → Description vs state boundary`](./data-model.md#description-vs-state-boundary)).
+A user who wants to approve each rewrite first would need a queue of
+proposed rewrites with accept and reject in World, and a rule for what
+a pending proposal means to the next close and to retrieval. Today a
+user edit made after the cited prose stands, and CTRL-Z of the close
+reverses all of it. Parked 2026-10-20 with the AI writer map; the
+signal is users undoing whole closes to keep one description.
 
 ### UX (parked)
 
@@ -2052,8 +2044,8 @@ Decision lands at scoped-gate's own design pass.
 Two future background pipelines running simultaneously
 (style-review + standalone memory-compaction or similar). The
 cascading `concurrencyPolicy` interactions when multiple background
-pipelines overlap aren't covered by the periodic classifier alone
-(which is the v1 single background consumer). Owned by the first
+pipelines overlap aren't covered in v1, which has no background
+pipeline: the periodic classifier holds the gate. Owned by the first
 design pass that introduces a second concurrent background pipeline.
 Foundation in
 [`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency).
@@ -3017,9 +3009,9 @@ concurrent write added. It also re-creates a row a concurrent write
 deleted, since a draft row whose id left the baseline reads as new.
 
 Unreachable today. Every writer that can link an existing happening is
-`hard-gate`, which blocks the Plot pane while it runs, and the periodic
-classifier, the one `no-gate` writer, links only happenings it creates
-in the same pass. Chapter-close does rewrite links on existing
+`hard-gate`, which blocks the Plot pane while it runs: the periodic
+classifier, which links a character's awareness to a happening it
+lists, and chapter-close, which rewrites links on existing
 happenings
 ([awareness pin tuning](./memory/chapter-close.md#3d--awareness-pin-tuning),
 [happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation)),
@@ -3029,11 +3021,8 @@ onto the latest rows — about 60–100 lines across the hook and the
 draft builder.
 
 Parked 2026-09-23. Revisit when a `no-gate` writer links an existing
-happening —
-[`classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
-already describes a character learning of an old happening, which
-today's schema cannot express — or when a gated run becomes startable
-while a Plot session is dirty. Raised 2026-09-22 by Slice 4.3.
+happening, or when a gated run becomes startable while a Plot session
+is dirty. Raised 2026-09-22 by Slice 4.3.
 
 #### Select's dropdown popover is pinned to its trigger's width
 

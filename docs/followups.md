@@ -44,21 +44,113 @@ for the placement rule.
   error reaches the user is unverified. Raised 2026-10-19 by the
   entity-state design.
 
-- **Chapter-close agent design.** Chapter close is designed in
-  [`memory/chapter-close.md`](./memory/chapter-close.md), but not
-  concretely enough to implement. Promoted from the developer's notes
-  2026-10-10, with an addition: upkeep of the locations and items the
-  per-turn writer creates with only a name, a short description and a
-  parent, and of the places a pass creates from mentions
-  ([`classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
-  meaning their state (`condition`), keywords and a
-  description refresh. A refresh reverses the authorship contract's
-  user-only description
-  ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)),
-  so the design decides whether chapter close may rewrite one. It
-  never retires a place: a destroyed place stays active, its
-  destruction a `condition`
+- **Implement the gated periodic classifier.** A pass holds the gate,
+  chained after the turn that brings it due, and a head reversal or
+  Cancel interrupts it and defers it to the next Send, with a toast
+  ([`classifier.md → Pipeline framing`](./memory/classifier.md#pipeline-framing),
+  [`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)).
+  Designed 2026-10-20
+  ([exploration record](./explorations/2026-10-20-ai-writers.md)).
+  The plan must check:
+  - the chained successor inheriting its predecessor's `actionId`
+    (`newRunState` in `lib/pipeline/runtime/orchestrator.ts` takes it
+    from the context, which `submit-turn.ts` sets), with a chain test
+    that passes one;
+  - the in-memory cadence and open-region mirrors `chainsTo` reads,
+    kept in step with every entry write, reversal and watermark move;
+  - the `deferred` and `pendingClose` records, the interrupt's gate
+    exception for an `interruptible` run, and the toasts;
+  - retries moved from backoff timers to the next turn's commit;
+  - each mechanism canon no longer describes, removed or kept for a
+    stated reason: the no-gate write phase and its wait for turns,
+    `applyDeltaActionGroupBuilt`, the abort-free burst, the post-call
+    re-read, reconciliation outside the lock, `tickDeferred`, the
+    non-blocking `updating-memory` phase and their comments
+    (`register-awareness.ts` still describes a pass reversing mid-turn);
+  - whether a World pane can stay dirty across a pass, which decides
+    whether its three-way merges stay;
+  - a rollback or regenerate confirm opened while a pass or a close
+    runs, whose counts go stale if it commits before the user confirms;
+  - the triage items the gate closes, and the real-provider smoke,
+    which waits on the backoff's retry;
+  - a pass's duration on the dev models, now the user's wait;
+  - the E2E decision ([`testing.md`](./testing.md)).
+
+- **Implement the AI writer map.** The per-turn writer and the
+  periodic classifier gain the writes the authorship contract gives
+  them
+  ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)):
+  the per-turn writer's conditions, drops, and `top` or unplaced
+  parents
+  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format));
+  a pass's first profiles, names, place moves, faction standing,
+  threads, happening category and icon, returns from retirement, and
+  awareness of listed happenings
+  ([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes));
+  and unplaced places with their matching
   ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
+  Follows the gated classifier, without which a pass and a turn can't
+  share a field. The plan must check:
+  - that each new update's current value reaches its writer's prompt
+    first: standing, threads and happening ids in a pass's lists;
+  - a pass's parse-failure rate under the larger schema, splitting the
+    pass into two calls if it rises;
+  - the translation of a renamed entity and a rewritten field;
+  - every reader of a null parent, which now means top-level only (the
+    location map, `placeModes`, the state view, World, the merge
+    rules);
+  - the collision reasons the enum lacks, which the CHECK requires: a
+    pass's rename clash, a flag chapter close raises, and a
+    cross-parent unplaced match;
+  - the awareness upsert's user-precedence check, which a pass's
+    awareness of listed happenings reaches first;
+  - the `stateReport` additions;
+  - the E2E decision.
+
+  Once it runs, a play check of what rides on the models: the per-turn
+  writer writes a condition only when the prose changes it and puts
+  `top` only where nothing could contain a place; a pass tells a reveal
+  from an alias and a return from a memory.
+
+- **Periodic classifier context grows with the story.** A pass lists
+  every entity, place, relationship view and happening on the branch
+  ([`classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)),
+  and threads and happening ids now join them. A pass blocks the story,
+  so its call is the user's wait, and at the projected thousands of
+  happenings
+  ([`retrieval.md → Scale assumptions`](./memory/retrieval.md#scale-assumptions))
+  the lists alone may outgrow a Fast model's window. Bounding them, to
+  the window's cast and region, say, needs a design: a pass can't link
+  what it can't see, and may not update a field it wasn't shown. Raised
+  2026-10-20 by the AI writers design.
+
+- **Chapter-close agent design.** Chapter close's write set is fixed
+  by the
+  [authorship contract](./data-model.md#authorship-contract), and
+  [`memory/chapter-close.md`](./memory/chapter-close.md) specs its
+  phases and sub-jobs: a tool loop that hands rejections back, chained
+  behind the turn's pass under the gate, interruptible and deferred to
+  the next Send, its phase 0 a chain of ordinary passes. Its agent
+  isn't designed concretely enough to implement. The design decides:
+  - the tool set and what each tool returns, the loop's budget and
+    stopping rule on a long chapter;
+  - a tool-calling capability flag, detected and user-overridable, and
+    what a close does when the `lore-mgmt` model lacks it;
+  - the boundary and metadata calls (entries by position, structured
+    output);
+  - how the close logs and anchors its writes: `story_entries.chapter_id`
+    stamped in its own group, anchored on its end entry (the roadmap's
+    M5 notes);
+  - the actions it needs and lacks: a happening merge, an earliest-wins
+    awareness merge, the per-chapter `retrieval_count` reset;
+  - whether a cluster it can't decide gets a review flag (happenings
+    have no column for one), and what it does with a row already
+    flagged;
+  - its failure policy past phase 0, and how the user reviews what a
+    close changed.
+
+  Promoted from the developer's notes 2026-10-10; write set fixed
+  2026-10-20.
 
 - **Prompt content pass.** The
   [system and user halves](./architecture.md#system-and-user-halves)

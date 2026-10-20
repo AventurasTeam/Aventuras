@@ -257,15 +257,40 @@ reply alone (no chained chapter close), regenerate fires
 immediately; discarding that take is the point of the action, and
 prompting every time would nag.
 
+**While the chained pass or close still runs**, regenerate
+interrupts it instead, with no confirm: nothing of it has committed to
+re-run. The pass or close moves to the next turn, and a toast says so
+([During a memory update](#during-a-memory-update)).
+
 **Confirm when the turn closed a chapter.** If the turn chained a
-chapter close, its lore-management writes (the chapter-close
-sub-jobs) reverse and re-run. The gate is cost, not data loss —
+chapter close that committed, its lore-management writes (the
+chapter-close sub-jobs) reverse and re-run. The gate is cost, not data loss —
 regenerate owns the loss of the prior take intrinsically; what
 warrants consent is re-running the expensive sub-jobs, a boundary
 rare enough that the confirm never turns routine. It reuses the
 [rollback confirmation](./rollback-confirm/rollback-confirm.md#cross-chapter-case)
 cross-chapter copy, reframed as re-run rather than re-open: the
 chapter returns to in-progress and regenerates.
+
+### During a memory update
+
+Every few turns a pass chains after the turn, and a chapter close
+after the turn that crosses the threshold. Both hold the gate while
+the user reads the reply, and the head reversals, regenerate among
+them, interrupt them
+([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)).
+In the reader the banner shows `Updating memory… [Cancel]` or the
+close's progress, and the composer stays live while Send waits. An
+interrupt or the pill's Cancel shows an info
+[toast](../../patterns/toast.md):
+
+- `Memory update moved to your next turn.`
+- `Chapter close moved to your next turn.`
+
+At the next Send the deferred work runs first, the banner reading
+`Updating memory before your turn…`, and the turn follows; Cancel then
+cancels the whole Send and keeps the text in the composer
+([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
 
 ### Save and regenerate on a content edit
 
@@ -550,15 +575,15 @@ dismissed by the next turn:
   an available embedder also produces (a cancelled swap re-flags every
   row).
 - **Failed-persistent classifier** (per
-  [`memory/classifier.md → Pill priority`](../../../memory/classifier.md#background-task-framing)).
+  [`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
   Pill copy: `Classifier offline — retrieval coverage thinning`.
   Tap → routes to Story Settings · Memory · Classifier panel.
 
 Pill state precedence: blocking phase > error state > background
 phase > hidden, per
 [`generation-status-pill.md → Priority resolution`](../../patterns/generation-status-pill.md#priority-resolution).
-The background classifier pass is the one phase that yields, so a
-sticky error survives it rather than being blanked on its cadence.
+A pass blocks like a turn, so a sticky error hides while it runs and
+shows again when it ends.
 Sticky errors stay visible between turns; once resolved, the pill
 collapses back to hidden until the next event.
 

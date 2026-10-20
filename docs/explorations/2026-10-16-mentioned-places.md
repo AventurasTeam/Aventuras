@@ -13,7 +13,7 @@ The spec now lives in
 [`classifier.md → Mentioned places`](../memory/classifier.md#mentioned-places)
 (the setting, what the pass sees and emits, the row and its parent, the
 matcher),
-[`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#no-gate-write-phase)
+[`generation-pipeline.md → No-gate write phase`](../generation-pipeline.md#branch-write-lock)
 (a pass writes only when no turn is in flight) and
 [`cadence.md → Concurrency`](../memory/cadence.md#concurrency). What
 follows is why.

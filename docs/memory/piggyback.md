@@ -6,19 +6,20 @@ fast-mutating subset of state mutations.
 
 ## What piggyback writes
 
-| Surface                                                      | Source       | Notes                                                                                                                                                                                                                                                                                                              |
-| ------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `story_entries.metadata.sceneEntities`                       | LLM-emitted  | Entity IDs present in this entry's scene (characters, items). Bracketed-ID prompt format gives the LLM stable handles.                                                                                                                                                                                             |
-| `story_entries.metadata.currentLocationId`                   | LLM-emitted  | The singleton location entity that IS the current scene: an id from the prompt's location map, or the handle of a location this turn creates ([New locations and items](#new-locations-and-items)). A turn that names none, or names a row that isn't a location or is a retired one, keeps the previous location. |
-| `entities` (location, item)                                  | LLM-emitted  | Created when the scene moves to a new place, or someone takes or receives a new item: a name, a short description and, for a location, its parent. Matched against existing rows first; see [New locations and items](#new-locations-and-items).                                                                   |
-| `story_entries.metadata.worldTime`                           | LLM-emitted  | Seconds delta added to previous entry's `worldTime`.                                                                                                                                                                                                                                                               |
-| `story_entries.metadata.summary`                             | LLM-emitted  | Optional one sentence; the next turn's [Q3 retrieval query](./retrieval.md#q3-piggyback-summary). Absent on parse failure or restart is fine.                                                                                                                                                                      |
-| `story_entries.metadata.retrievalQueries`                    | LLM-emitted  | Up to three strings the model wants retrieved next turn — the [Q4 slot](./retrieval.md#q4-classifier-emitted-queries). Optional; never inherited; excluded from `stateReport`.                                                                                                                                     |
-| `story_entries.metadata.stateReport`                         | **Computed** | The full parsed block as emitted, plus the producing layer and any parse failure. Written on every generating turn — the record of what this turn reported, distinct from the inherited absolute fields above. See [Persistence and stripping](#persistence-and-stripping).                                        |
-| `entities.state.visual.*`                                    | LLM-emitted  | One full-replace value per visual category (`physique` / `face` / `hair` / `eyes` / `attire` / `distinguishing`), restated from the current value the prompt shows — never a partial edit of the category's existing text.                                                                                         |
-| `entities.state.equipped_items` / `inventory` / `stackables` | LLM-emitted  | Structured item / stackable transfers between holders — see the tagged format below, not free text.                                                                                                                                                                                                                |
-| `entities.state.current_location_id` (per-character)         | **Computed** | If character ∈ `sceneEntities`, set to scene's `currentLocationId`. Otherwise preserve `lastSeenAt.locationId`. No LLM extraction needed.                                                                                                                                                                          |
-| `entities.state.lastSeenAt`                                  | **Computed** | When a character was in `sceneEntities` last turn but isn't this turn, update `lastSeenAt` from the previous entry's metadata.                                                                                                                                                                                     |
+| Surface                                                      | Source       | Notes                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `story_entries.metadata.sceneEntities`                       | LLM-emitted  | Entity IDs present in this entry's scene (characters, items). Bracketed-ID prompt format gives the LLM stable handles.                                                                                                                                                                                                                                   |
+| `story_entries.metadata.currentLocationId`                   | LLM-emitted  | The singleton location entity that IS the current scene: an id from the prompt's location map, or the handle of a location this turn creates ([New locations and items](#new-locations-and-items)). A turn that names none, or names a row that isn't a location or is a retired one, keeps the previous location.                                       |
+| `entities` (location, item)                                  | LLM-emitted  | Created when the scene moves to a new place, or someone takes or receives a new item: a name, a short description, a condition when the prose shows one and, for a location, its parent, top-level, or none when it is unplaced. Matched against existing rows first, unplaced places included; see [New locations and items](#new-locations-and-items). |
+| `story_entries.metadata.worldTime`                           | LLM-emitted  | Seconds delta added to previous entry's `worldTime`.                                                                                                                                                                                                                                                                                                     |
+| `story_entries.metadata.summary`                             | LLM-emitted  | Optional one sentence; the next turn's [Q3 retrieval query](./retrieval.md#q3-piggyback-summary). Absent on parse failure or restart is fine.                                                                                                                                                                                                            |
+| `story_entries.metadata.retrievalQueries`                    | LLM-emitted  | Up to three strings the model wants retrieved next turn — the [Q4 slot](./retrieval.md#q4-classifier-emitted-queries). Optional; never inherited; excluded from `stateReport`.                                                                                                                                                                           |
+| `story_entries.metadata.stateReport`                         | **Computed** | The full parsed block as emitted, plus the producing layer and any parse failure. Written on every generating turn — the record of what this turn reported, distinct from the inherited absolute fields above. See [Persistence and stripping](#persistence-and-stripping).                                                                              |
+| `entities.state.visual.*`                                    | LLM-emitted  | One full-replace value per visual category (`physique` / `face` / `hair` / `eyes` / `attire` / `distinguishing`), when the prose changes it or first describes it, restated from the current value the prompt shows — never a partial edit of the category's existing text.                                                                              |
+| `entities.state.condition` (location, item)                  | LLM-emitted  | One full-replace value per place or item the prompt shows with its state, when the prose changes it: the tavern burns, the sword notches. See the tagged format below.                                                                                                                                                                                   |
+| `entities.state.equipped_items` / `inventory` / `stackables` | LLM-emitted  | Structured item / stackable transfers between holders, and an item put down at the current place (its `at_location_id`) — see the tagged format below, not free text.                                                                                                                                                                                    |
+| `entities.state.current_location_id` (per-character)         | **Computed** | If character ∈ `sceneEntities`, set to scene's `currentLocationId`. Otherwise preserve `lastSeenAt.locationId`. No LLM extraction needed.                                                                                                                                                                                                                |
+| `entities.state.lastSeenAt`                                  | **Computed** | When a character was in `sceneEntities` last turn but isn't this turn, update `lastSeenAt` from the previous entry's metadata.                                                                                                                                                                                                                           |
 
 State that doesn't need an LLM to compute, shouldn't. Per-character
 `current_location_id` and `lastSeenAt` derive cleanly from
@@ -42,8 +43,12 @@ substitution layer swaps both directions; see
   <visual_changes>
     <entity id="c2" type="attire">a grey travel cloak muddied to the waist over a linen shirt; riding boots</entity>
   </visual_changes>
+  <conditions>
+    <entity id="i4">snapped in two at the hilt</entity>
+  </conditions>
   <transfers>
     <item id="i1" to="c1" from="c3" slot="inventory" />
+    <drop id="i4" from="c1" />
     <stackable key="gold" amount="50" to="c1" from="c3" />
   </transfers>
   <summary>Aria pushed into the marshes; met an exiled noble who recognized House Eldrin's sigil.</summary>
@@ -84,8 +89,19 @@ The cut keeps a sentence end (`.`, `。`, `！`, `？`) and drops a clause
 mark; it logs a diagnostics warning with the entity, the category and
 both lengths.
 
-**`transfers` is structured, not free text** — both sub-tags
-reference existing entities, apart from an `<item>` the same block
+**`conditions` is full-replace, one entry per changed place or
+item.** `id` names a place or an item the prompt shows with its state
+([What the writer sees](#what-the-writer-sees)): the current location,
+an item held in the scene or lying there, a retrieved place or item.
+The text replaces its `condition` wholesale, written as it is now, under
+the same bound and cut as a visual value. Like a visual category, a
+condition is written only when the prose changes it, never restated
+unchanged. A condition is the running consequence, not the event
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)):
+"burned to the ground", not "the fire".
+
+**`transfers` is structured, not free text** — every sub-tag
+references existing entities, apart from an `<item>` the same block
 creates ([New locations and items](#new-locations-and-items)):
 
 - `<item id="..." to="..." from="..." slot="equipped_items | inventory" />`
@@ -94,6 +110,12 @@ creates ([New locations and items](#new-locations-and-items)):
   up loose). Taking an item moves it from wherever else it sits,
   whatever `from` names, per
   [`data-model.md → ItemState`](../data-model.md#itemstate-shape).
+- `<drop id="..." from="..." />` puts a held item down where the
+  scene is: the turn's `<current_location>`, or the previous location
+  when the turn names none. It leaves every holder and its
+  `at_location_id` becomes that place; `from` is optional, as on
+  `<item>`. An item put down somewhere else than the scene, thrown into
+  a river, stays prose.
 - `<stackable key="..." amount="..." to="..." from="..." />` moves a
   quantity (gold, arrows, supplies) between characters' `stackables`
   records. Either `to` or `from` may be omitted (gained from
@@ -121,9 +143,8 @@ introductions the periodic classifier makes
 as are, with the story's setting on, the places the prose mentions
 without entering
 ([`classifier.md → Mentioned places`](./classifier.md#mentioned-places)).
-A pass never writes while a turn is in flight on its branch, so the
-entities this writer read at the turn's start are still the branch's
-when it creates.
+No pass or close runs during a turn, so the entities this writer read
+at the turn's start are still the branch's when it creates.
 
 ### What the writer sees
 
@@ -153,7 +174,10 @@ when it creates.
   ```
 
   A retired place with no reason reads `Saltmere (retired)`, and a
-  retired place that is effectively disabled is left out. A move to
+  retired place that is effectively disabled is left out. Unplaced
+  places, known to exist but not where
+  ([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)),
+  follow the tree under `Unplaced:`, with their ids. A move to
   any known place can name it, not only one retrieval offered. Names only: the current location keeps its
   description under `# Current location`, which renders its chain of
   listed ancestors (`The Rusty Anchor — in Port Vellis › Eldra`), and a
@@ -201,7 +225,7 @@ and the system half must not.
 ### Creating a place or an item
 
 ```xml
-<new_location handle="new:saltmere" name="Saltmere">a fishing town under chalk cliffs</new_location>
+<new_location handle="new:saltmere" parent="top" name="Saltmere">a fishing town under chalk cliffs</new_location>
 <new_location handle="new:docks" parent="new:saltmere" name="the Smuggler's Docks">a rotting pier below the eastern cliffs</new_location>
 <current_location>new:docks</current_location>
 <new_item handle="new:key" name="rusted key">an iron key, flaked with rust</new_item>
@@ -212,9 +236,13 @@ and the system half must not.
 
 A handle starts with `new:`, so it can't be mistaken for a listed id.
 A create carries a name, a short description clamped to the bounds a
-classifier character create uses, and for a location an optional
-`parent`: an id from the map or another new location's handle. Nothing
-else is written; later upkeep of places and items isn't this writer's.
+classifier character create uses, an optional `condition` attribute
+when the prose shows one, and for a location a `parent`: an id from the
+map, another new location's handle, `top` for a top-level place, or
+none for an unplaced one. Nothing else is written at create. Later, the
+writer changes a condition through `<conditions>`; descriptions and
+keywords are chapter close's
+([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
 
 **Where a handle is used.** The prompt asks for a new place's handle
 only as the `<current_location>` or another new place's `parent`, and
@@ -230,7 +258,7 @@ fallback drops the transfer and rejects the location
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery));
 a place and an item declaring one handle leave it the place's, the
 item dropped as malformed. A `parent` that names nothing resolvable
-doesn't fail: the location goes to the root, as under Parent below. A
+doesn't fail: the location lands unplaced, as under Parent below. A
 bracketed handle (`[new:a]`) reads as the bare handle.
 
 **Create tag format.** A create's attribute text must be entirely
@@ -274,18 +302,20 @@ as empty: it fails `state`, the fallback fires, and its creates report
 > a relic. Not food eaten on the spot, not money (use a stackable), not
 > scenery.
 
-**Parent.** No parent puts the location at the root, for the story's
-first place or a new region. A new row has no children, so it can't
-close a cycle; the planner still walks the parent's chain against the
-depth cap
-([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)),
-and a chain already broken above it creates the location at the root,
-logged, rather than failing the turn. A retired parent, which a place
-pinned `always` can still put in the prompt with its id, also creates
-the location at the root, logged, since nothing active may sit inside
-a retired place. Parents resolve top-down, so the
-child of a new location hangs under whatever row that location
-resolved to.
+**Parent.** `top` makes the location top-level, and no parent leaves
+it unplaced. The prompt asks for `top` only when nothing on the map
+could contain the place (the story's first place, a city when the map
+holds only cities), and for no parent when something could and the
+prose doesn't say which; when unsure, no parent
+([`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)).
+A new row has no children, so it can't close a cycle; the planner
+still walks the parent's chain against the depth cap, and a chain
+already broken above it creates the location unplaced, logged, rather
+than failing the turn. A retired parent, which a place pinned `always`
+can still put in the prompt with its id, also creates the location
+unplaced, logged, since nothing active may sit inside a retired place.
+Parents resolve top-down, so the child of a new location hangs under
+whatever row that location resolved to.
 
 **Writes.** The creates follow the reply row and precede every other
 write that names them. The narrative fold writes them right after the
@@ -298,8 +328,8 @@ Logged after it, undoing or regenerating the turn removes the new row
 with every write naming it. A new row lands `embedding_stale = 1` for
 the sync stage, like the classifier's. `stateReport` records each
 create as emitted with what became of it, `created`, `reused` or
-`dropped`, the id it resolved to, and whether its parent was dropped
-to the root; the report's other fields carry that id in place of the
+`dropped`, the id it resolved to, and whether its parent was dropped,
+leaving it unplaced; the report's other fields carry that id in place of the
 handle
 ([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)).
 
@@ -320,7 +350,8 @@ namesake rule
 under a rule per kind:
 
 - **A location** is reused by what the map showed and flagged by its
-  real siblings, the root counting as one more parent:
+  real siblings, the top level counting as one more parent, and is
+  compared with the unplaced places too:
   - **Reuse.** The candidates under the parent the create names are
     the active and staged places the map would have hung there had it
     listed every place it left out: its real children, whatever their
@@ -346,7 +377,12 @@ under a rule per kind:
     A retired place is never reused, so it comes back only through
     review. Places under different real parents, outside the map's
     hiding, are distinct by construction and never compared, so a
-    parentless copy of a nested place goes uncaught.
+    top-level copy of a nested place goes uncaught.
+  - **Unplaced.** A create under a parent, or top-level, also reuses an
+    unplaced place of exactly its name, and places it there. A create
+    with no parent is compared by exact name with the unplaced places
+    and every placed one: one match is reused, several create it
+    unplaced with `name_collision_flag = 1`.
 - **An item** is never reused: a "sword" picked up while another exists
   elsewhere is usually a different sword. Only its exact namesakes
   anywhere on the branch are compared, by embedding the descriptions as
@@ -393,11 +429,11 @@ field inside it failing — the same synchronous per-turn classifier
 pass described in [Capability gate](#capability-gate) fires for this
 turn, in the same pipeline run as the narrative call that produced
 the malformed block (same `action_id`, same hard gate — never a
-separate background pass). This replaces an earlier draft of this
+separate pass). This replaces an earlier draft of this
 doc's claim that "the periodic classifier eventually picks up the
 prose mention": the periodic classifier covers none of piggyback's
-fields (see
-[`cadence.md → Concurrency`](./cadence.md#concurrency)), so it could
+per-turn fields (see the
+[authorship contract](../data-model.md#authorship-contract)), so it could
 never have recovered them — a parse failure needs the per-turn
 classifier, not the periodic one, exactly like a `piggybackMode='off'`
 turn does.
@@ -457,8 +493,8 @@ reaches the column. What the block carried is persisted structurally
 instead — the scene fields fold into `metadata`'s absolute triple, and
 the full parsed block lands on
 [`metadata.stateReport`](../data-model.md#entry-metadata-shape),
-including the `visual_changes` and `transfers` that otherwise survive
-only as deltas.
+including the `visual_changes`, `conditions` and `transfers` that
+otherwise survive only as deltas.
 
 **The cut excises each block's own span** rather than truncating the
 reply at it, and it is keyed on the closing tag, not on position. So a
@@ -560,9 +596,9 @@ fills is a question for whoever builds the detection pipeline.
 **Delta provenance distinguishes the two paths.** The direct
 tagged-block path stamps its deltas `source = piggyback_tagged_block`;
 the per-turn fallback classifier stamps `source = per_turn_classifier` —
-a distinct value from the periodic (background) classifier's
+a distinct value from the periodic classifier's
 `source = periodic_classifier`, since it's neither the narrative
-model's own inline emission nor a lagging background pass. It always
+model's own inline emission nor a pass over a batch of turns. It always
 shares the triggering turn's `action_id`, so CTRL-Z sweeps it with
 the rest of the turn like any foreground delta (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)).
@@ -639,7 +675,8 @@ cannot narrow below the fixed pair.
 
 It also gets the location map's tree and the held-item lines, and its
 structured output carries the creates as `newLocations[]` and
-`newItems[]`, under the same rules as the tags
+`newItems[]`, and conditions and drops beside the visual changes and
+transfers, under the same rules as the tags
 ([New locations and items](#new-locations-and-items)), apart from a
 transfer with a bad ref, which it drops rather than fails
 ([Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).

@@ -62,10 +62,10 @@ because it is load-bearing from the first write of the watermark
   and [`Retirement`](../../../../memory/edge-cases.md#retirement)
   — Layer B reconciliation, `name_collision_flag`, hard-finality
   retirement bias.
-- [`generation-pipeline.md → Prose reversals and the classifier barrier`](../../../../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)
+- [`generation-pipeline.md → Prose reversals and the interrupt`](../../../../generation-pipeline.md#prose-reversals-and-the-interrupt)
   — `awaitRunTerminal` dispositions, `reversalInProgress`, the
   abort-free commit burst.
-- [`generation-pipeline.md → Background scheduler`](../../../../generation-pipeline.md#background-scheduler--out-of-framework-scope)
+- [`generation-pipeline.md → Cadence chain`](../../../../generation-pipeline.md#cadence-chain)
   and [`V1 declarations`](../../../../generation-pipeline.md#v1-declarations)
   — the declaration values and the scheduler's out-of-framework
   placement.

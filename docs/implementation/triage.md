@@ -293,7 +293,11 @@ slice-planning gate forces its resolution before that slice is planned.
   attempt) draw on the same budget. The numbers aren't chosen. This is
   the only `*.smoke.spec.ts` under `e2e/tests/` today. Raised
   2026-10-11 by the developer's smoke runs for that PR, recorded in its
-  description under "Developer checks before merge".
+  description under "Developer checks before merge". The gated
+  classifier (`followups.md`) changes the premise: a timed-out pass
+  retries at the next turn's commit, not after a backoff, so once it
+  lands the smoke must take another turn to see the retry, whatever
+  its timeouts.
 
 - **The `anthropic` provider can't reach Anthropic from the desktop
   app.** The renderer calls `api.anthropic.com` directly, and
@@ -430,7 +434,7 @@ slice-planning gate forces its resolution before that slice is planned.
   classified (`lib/pipeline/definitions/periodic-classifier.ts`, the
   window read and the watermark write). The prose-reversal barrier
   doesn't cover a failed turn's own reversal
-  ([`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier)).
+  ([`generation-pipeline.md → Prose reversals and the interrupt`](../generation-pipeline.md#prose-reversals-and-the-interrupt)).
   Trigger: the scheduler's retry timer, or the gap in `noteTurnCommitted`,
   starts a pass while a turn streams, and the turn then fails or the
   user presses Cancel. Probed with a scratch test: the end state is the
@@ -592,3 +596,13 @@ slice-planning gate forces its resolution before that slice is planned.
   `item` and `faction` builders. Both want a shared test-helper home no
   module boundary objects to. Raised 2026-10-20 by the entity-state
   slice review's simplifier pass, which skipped them for want of one.
+
+- **Era flips have no writer.** Canon has the user create a flip from
+  the reader's entry card ("Flip era") and the wizard's era picker
+  write one at world time 0
+  ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)),
+  but nothing dispatches a `branch_era_flips` write: the entry card's
+  `onFlipEra` prop is unwired, and the wizard's Finish steps
+  (`wizard.md`) omit the flip its era picker promises. Found 2026-10-20
+  by the AI writers design's inventory; not reproduced in the running
+  app.

@@ -64,8 +64,8 @@ type ErrorState =
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
   error?: ErrorState
-  // Optional: ignored for phases `cancelCopy` marks cancel-less, so a caller
-  // that cannot tell which phase is up may pass it unconditionally.
+  // Optional: ignored while the phase is uncancellable for its own reasons
+  // (a committing transaction, say), so a caller may pass it unconditionally.
   onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }
@@ -90,12 +90,12 @@ else                                  → return null            (idle-hide)
 A **blocking** phase is one the user is waiting on, and it also owns the
 cancel affordance — replacing it with a warning would take away the only
 way to stop a running generation, so it keeps the slot unconditionally.
-A **non-blocking** phase (see [below](#non-blocking-phases)) yields to
-any error: nothing is lost by waiting for background work, and the error
-may be the thing waiting on the user. `swap-paused` is the case that
-forces this — its remedy is a decision, not waiting, so a periodic
-classifier pass blanking it on a cadence is the failure mode this rule
-exists to prevent.
+A **non-blocking** phase would yield to any error: nothing is lost by
+waiting for background work, and the error may be the thing waiting on
+the user. No v1 phase is non-blocking: the periodic classifier's pass
+holds the gate ([below](#memory-phases)), so the user waits on it as on
+a turn, and an error it hides, `swap-paused` included, shows again when
+it ends. The rule stays for a future background phase.
 
 Deliberately a blocking/non-blocking split rather than a rank on
 `ErrorState`. The two resolve identically in every combination except
@@ -113,15 +113,15 @@ shifts into the gap on transitions.
 
 The compound owns phase → copy and error → copy:
 
-| Phase                    | Label                     |
-| ------------------------ | ------------------------- |
-| `reasoning`              | `reasoning…`              |
-| `recalling-memory`       | `recalling memory…`       |
-| `generating-narrative`   | `generating narrative…`   |
-| `classifying`            | `classifying…`            |
-| `updating-memory`        | `updating memory…`        |
-| `closing-chapter`        | `closing chapter…`        |
-| `refreshing-suggestions` | `refreshing suggestions…` |
+| Phase                    | Label                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `reasoning`              | `reasoning…`                                                                     |
+| `recalling-memory`       | `recalling memory…`                                                              |
+| `generating-narrative`   | `generating narrative…`                                                          |
+| `classifying`            | `classifying…`                                                                   |
+| `updating-memory`        | `updating memory…`, or `updating memory before your turn…` when it runs deferred |
+| `closing-chapter`        | `closing chapter…`                                                               |
+| `refreshing-suggestions` | `refreshing suggestions…`                                                        |
 
 | Error code           | Label                                              |
 | -------------------- | -------------------------------------------------- |
@@ -134,8 +134,8 @@ The compound owns phase → copy and error → copy:
 
 Periodic-classifier
 [config pre-flight failures](../../generation-pipeline.md#config-pre-flight-validation)
-— a broken provider or profile reference caught at the scheduled fire
-time — currently surface through `classifier-offline` alongside
+— a broken provider or profile reference caught when a pass starts
+— currently surface through `classifier-offline` alongside
 transient runtime failures: different cause, same consequence framing.
 Splitting them into their own codes is unbuilt.
 
@@ -152,36 +152,37 @@ Tap opens a `Popover` anchored to the tag. Body is a single button:
 - `Cancel generation` — for `reasoning` / `recalling-memory` /
   `generating-narrative` / `classifying`.
 - `Cancel chapter close` — for `closing-chapter`.
+- `Cancel memory update` — for `updating-memory`.
 - `Cancel suggestion refresh` — for `refreshing-suggestions`.
-- None — for `updating-memory`. The phase is cancel-less, so the tag
-  carries no popover trigger and a passed `onCancel` is ignored.
 
 Clicking the button fires `onCancel()` and closes the popover.
 Esc / outside-tap closes the popover without firing `onCancel`.
 
-### Non-blocking phases
+### Memory phases
 
-`updating-memory` — the periodic classifier's background pass — is the
-only phase that doesn't hold the turn up. It drops the accent fill for
-`tone="default"` (the header's own `bg-base` plus a border) and a
-`--fg-muted` spinner, and it yields the slot to any error per
-[Priority resolution](#priority-resolution). Copy alone can't carry the
-distinction, because the phone variant is icon-only.
+`updating-memory` is the periodic classifier's pass and
+`closing-chapter` a chapter close. Both are blocking: they hold the
+gate, keep the accent fill and own the cancel, and the in-story banner
+shows beside them
+([`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation)).
+Cancelling either doesn't drop the work: it runs before the next turn
+instead, and a toast says so
+([`memory/classifier.md → Pipeline framing`](../../memory/classifier.md#pipeline-framing)).
+A pass that runs before a deferred turn reads
+`updating memory before your turn…`.
 
-It is deliberately a separate phase from `classifying`, which is the
-per-turn piggyback fallback: same work, opposite answer to "can I keep
-writing?".
+`updating-memory` stays a separate phase from `classifying`, which is
+the per-turn piggyback fallback: one is the turn's own work, the other
+the pass chained after it.
 
 World, Plot and Story Settings resolve it too, not only the reader:
 World and Plot while their branch's periodic-classifier run is in
-flight, Story Settings while any of the story's is, each only when
-no foreground run holds the pill.
+flight, Story Settings while any of the story's is.
 
 Blocking is tracked per phase rather than inferred from a phase having
-no cancel label. The two coincide today only because the one background
-phase is also the one nothing can cancel; a blocking phase that is
-uncancellable for its own reasons (a committing transaction, say) would
-otherwise inherit the wrong priority.
+a cancel label: a blocking phase that is uncancellable for its own
+reasons (a committing transaction, say) would otherwise inherit the
+wrong priority.
 
 Pill dimensions stay stable — the popover is an overlay, never an
 inline expansion. The active label renders regardless of popover
@@ -199,15 +200,16 @@ No popover. Tap fires `onErrorTap(error.code)` directly and the
 consumer decides what a code is worth routing to. Per
 [`reader-composer.md → Persistent state — top-bar status pill error variant`](../screens/reader-composer/reader-composer.md#persistent-state--top-bar-status-pill-error-variant):
 
-| Error code           | Consumer response                                 |
-| -------------------- | ------------------------------------------------- |
-| `memory-incomplete`  | Route to Story Settings · Memory.                 |
-| `swap-paused`        | Route to Story Settings · Memory.                 |
-| `classifier-offline` | No route — the pass retries on its own next fire. |
+| Error code           | Consumer response                 |
+| -------------------- | --------------------------------- |
+| `memory-incomplete`  | Route to Story Settings · Memory. |
+| `swap-paused`        | Route to Story Settings · Memory. |
+| `classifier-offline` | Route to Story Settings · Memory. |
 
-`classifier-offline` is deliberately inert: it reports a background
-pass that will retry unprompted, so routing the user somewhere to act
-on it would imply an action that is not theirs to take.
+`classifier-offline` reports passes stopped after three failed
+retries, which resume only when the user retries, so it routes to the
+`[Retry]` in
+[`memory/classifier.md → Status block`](../../memory/classifier.md#status-block).
 
 ## Tier-aware render
 
@@ -261,7 +263,7 @@ props on every render.
   pill; the reader reads the hook's swap half again for its composer
   gate. `classifier-offline` from failed-persistent classifier state
   per
-  [`memory/classifier.md → Pill priority`](../../memory/classifier.md#background-task-framing)
+  [`memory/classifier.md → Pipeline framing`](../../memory/classifier.md#pipeline-framing)
   is still unobserved. Consumer collapses simultaneous errors to one
   (embedder > classifier).
 - **Top-bar consumer wiring.** Render the pill on Reader, World,
