@@ -584,7 +584,8 @@ key optional) and Google call the SDK through `generateSdkImage` (`sdkImage.ts`)
 429s. Each adapter keeps its own model discovery and size handling; discovery throws on a failed
 request rather than substituting a list. Whether a provider takes an API key or a base URL is
 declared per provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings
-form and `hasRequiredCredentials` read those tables. The registry hands references only to the providers that send
+form and `hasRequiredCredentials` read those tables. Migration `041` moved existing `openai`
+profiles that point at a proxy over to OpenAI Compatible. The registry hands references only to the providers that send
 them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
 adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
 from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
