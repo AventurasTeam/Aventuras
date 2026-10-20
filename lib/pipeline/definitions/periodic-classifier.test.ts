@@ -1590,8 +1590,8 @@ describe('periodicClassifierPhase via runPipeline', () => {
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
       settleUserWrites,
-      holdWritePhase: holdBranchWriteExclusive,
-      releaseWritePhase: releaseBranchWriteExclusive,
+      holdBranchWriteExclusive,
+      releaseBranchWriteExclusive,
     })
   }
 

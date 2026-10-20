@@ -52,8 +52,8 @@ export function ensureDeltaActionPort(): void {
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,
-    holdWritePhase: holdBranchWriteExclusive,
-    releaseWritePhase: releaseBranchWriteExclusive,
+    holdBranchWriteExclusive,
+    releaseBranchWriteExclusive,
   })
 }
 

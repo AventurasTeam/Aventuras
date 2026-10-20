@@ -28,8 +28,8 @@ import {
 } from '@/lib/pipeline/definitions/description-embedder'
 import {
   __resetDeltaActionPort,
-  holdWritePhase,
-  releaseWritePhase,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
 } from '@/lib/pipeline/runtime/action-port'
 import { appSettingsStore, recoveryReportStore, resetAllStores } from '@/lib/stores'
 
@@ -275,7 +275,7 @@ describe('runBootstrap', () => {
   })
 })
 
-// Every pipeline test configures its own port, so only this pins the production write phase.
+// Every pipeline test configures its own port, so only this pins the production wiring.
 describe('ensureDeltaActionPort', () => {
   // The lock advances over microtasks; a macrotask hop runs every queued continuation.
   const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -289,15 +289,15 @@ describe('ensureDeltaActionPort', () => {
     __resetBranchWriteLocks()
   })
 
-  it("holds the branch's writes from the run's write phase until it is released", async () => {
+  it("wires the lock's exclusive hold: a shared write waits until it is released", async () => {
     ensureDeltaActionPort()
-    await holdWritePhase('b1', 'act_run')
+    await holdBranchWriteExclusive('b1', 'act_run')
     const run = vi.fn(async () => {})
     const write = withBranchWriteShared('b1', 'act_user', run)
     await flush()
     expect(run).not.toHaveBeenCalled()
 
-    releaseWritePhase('b1', 'act_run')
+    releaseBranchWriteExclusive('b1', 'act_run')
     await flush()
     // Checked before awaiting, so a release that frees nothing fails here, not by timeout.
     expect(run).toHaveBeenCalledOnce()
