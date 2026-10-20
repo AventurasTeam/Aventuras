@@ -11,10 +11,10 @@
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { Loader2, Trash2 } from '@lucide/svelte'
+  import { Trash2 } from '@lucide/svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
   import ChangeList from './ChangeList.svelte'
 
   let entry = $state<StoryEntry | null>(null)
@@ -50,12 +50,12 @@
     onlyThisEntry = false
     snapshots = { fromHere: [], here: [] }
     try {
-      const [fromHere, here] = await Promise.all([
-        story.snapshotsRemovedFrom(target.position),
+      const [removed, revert] = await Promise.all([
         story.snapshotsRemovedFrom(target.position, target.id),
+        story.previewRevert(target.id),
       ])
-      snapshots = { fromHere, here }
-      preview = await story.previewRevert(target.id)
+      snapshots = removed
+      preview = revert
     } catch (error) {
       console.error('[DeleteEntryModal] Could not preview the revert:', error)
       entry = null
@@ -164,41 +164,25 @@
               <p class="text-muted-foreground text-sm">These changes will be reverted too:</p>
               {#if preview.manual.length > 0}
                 <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-                <ChangeList changes={preview.manual} unkeepable={[]} />
+                <ChangeList changes={preview.manual} />
               {/if}
               {#if preview.tidy.length > 0}
                 <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-                <ChangeList changes={preview.tidy} unkeepable={[]} />
+                <ChangeList changes={preview.tidy} />
               {/if}
             </div>
           {/if}
         {/if}
       </div>
-      <ResponsiveModal.Footer class="border-t px-6 py-4">
-        <span class="flex w-full gap-2 sm:w-auto">
-          <Button
-            variant="outline"
-            class="flex-1 sm:flex-none"
-            onclick={cancel}
-            disabled={deleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            onclick={confirm}
-            class="can-hover:text-foreground flex-1 text-red-500 hover:text-red-500 sm:flex-none"
-            disabled={preview === null || deleting}
-          >
-            {#if deleting}
-              <Loader2 class="h-4 w-4 animate-spin" />
-            {:else}
-              <Trash2 class="h-4 w-4" />
-            {/if}
-            Delete
-          </Button>
-        </span>
-      </ResponsiveModal.Footer>
+      <ModalActions
+        label="Delete"
+        icon={Trash2}
+        tone="danger"
+        onCancel={cancel}
+        onConfirm={confirm}
+        busy={deleting}
+        disabled={preview === null}
+      />
     </div>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

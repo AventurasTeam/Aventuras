@@ -86,3 +86,9 @@ describe('mark rows', () => {
     expect(rowToMark({ ...row, seq: mark.seq })).toEqual(mark)
   })
 })
+
+describe('reading a row as a record', () => {
+  it('refuses a mark', () => {
+    expect(() => rowToRecord({ id: 'm', kind: 'mark', seq: 1, created_at: 1 })).toThrow('kind mark')
+  })
+})

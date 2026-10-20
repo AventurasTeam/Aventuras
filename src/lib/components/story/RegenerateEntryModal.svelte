@@ -13,9 +13,9 @@
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { RotateCcw } from '@lucide/svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
   import ChangeList from './ChangeList.svelte'
 
   // Set only while the reader decides: a regenerate with nothing to decide runs at once.
@@ -48,10 +48,12 @@
     let snapshots: number[] = []
     try {
       if (position !== undefined) {
-        ;[preview, snapshots] = await Promise.all([
+        const [revert, removed] = await Promise.all([
           story.previewRegenerate(position),
           story.snapshotsRemovedFrom(position),
         ])
+        preview = revert
+        snapshots = removed.fromHere
       }
     } catch (error) {
       console.error('[RegenerateEntryModal] Could not preview the regenerate:', error)
@@ -122,26 +124,21 @@
               <p class="text-muted-foreground text-sm">These changes will be reverted too:</p>
               {#if preview.manual.length > 0}
                 <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-                <ChangeList changes={preview.manual} unkeepable={[]} />
+                <ChangeList changes={preview.manual} />
               {/if}
               {#if preview.tidy.length > 0}
                 <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-                <ChangeList changes={preview.tidy} unkeepable={[]} />
+                <ChangeList changes={preview.tidy} />
               {/if}
             </div>
           {/if}
         </div>
-        <ResponsiveModal.Footer class="border-t px-6 py-4">
-          <span class="flex w-full gap-2 sm:w-auto">
-            <Button variant="outline" class="flex-1 sm:flex-none" onclick={() => (pending = null)}>
-              Cancel
-            </Button>
-            <Button onclick={confirm} class="flex-1 sm:flex-none">
-              <RotateCcw class="h-4 w-4" />
-              Regenerate
-            </Button>
-          </span>
-        </ResponsiveModal.Footer>
+        <ModalActions
+          label="Regenerate"
+          icon={RotateCcw}
+          onCancel={() => (pending = null)}
+          onConfirm={confirm}
+        />
       </div>
     {/if}
   </ResponsiveModal.Content>

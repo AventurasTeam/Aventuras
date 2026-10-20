@@ -256,14 +256,17 @@ describe('planReconciliation: world-state snapshots', () => {
     })
     const statements = reconciliationStatements(plan, entries)
     expect(statements.some((s) => s.sql.startsWith('DELETE'))).toBe(false)
-    expect(
-      statements
-        .filter((s) => s.sql.startsWith('UPDATE world_state_snapshots'))
-        .map((s) => [JSON.parse(String(s.params![0])), s.params![1]]),
-    ).toEqual([
-      [t(4), 'B'],
-      [t(6), 'C'],
+    // One statement for the range, matching only the entries that have a snapshot.
+    const updates = statements.filter((s) => s.sql.startsWith('UPDATE world_state_snapshots'))
+    expect(updates).toHaveLength(1)
+    const [b, bEnd, c, cEnd, ...matched] = updates[0].params!
+    expect([b, JSON.parse(String(bEnd)), c, JSON.parse(String(cEnd))]).toEqual([
+      'B',
+      t(4),
+      'C',
+      t(6),
     ])
+    expect(matched).toEqual(['B', 'C'])
   })
 
   it('writes no snapshot clock when nothing was reconciled', () => {

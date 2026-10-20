@@ -185,10 +185,17 @@ export function reconciliationStatements(
     })
   }
 
-  for (const update of plan.snapshotClocks) {
+  // One statement per chunk, touching only the entries that have a snapshot.
+  for (let i = 0; i < plan.snapshotClocks.length; i += 300) {
+    const chunk = plan.snapshotClocks.slice(i, i + 300)
     statements.push({
-      sql: 'UPDATE world_state_snapshots SET time_tracker_snapshot = ? WHERE entry_id = ?',
-      params: [JSON.stringify(update.timeTracker), update.entryId],
+      sql: `UPDATE world_state_snapshots SET time_tracker_snapshot = CASE entry_id
+              ${chunk.map(() => 'WHEN ? THEN ?').join(' ')} END
+            WHERE entry_id IN (${chunk.map(() => '?').join(', ')})`,
+      params: [
+        ...chunk.flatMap((u) => [u.entryId, JSON.stringify(u.timeTracker)]),
+        ...chunk.map((u) => u.entryId),
+      ],
     })
   }
 

@@ -265,7 +265,6 @@ describe('undoing a chapter lore', () => {
       entryPositions: positions,
       state,
       tracking,
-      keep: { manual: false, tidy: false },
     })
     if (!revert.ok) throw new Error(revert.reason)
     const sql = chapterLoreStatements({
@@ -273,6 +272,7 @@ describe('undoing a chapter lore', () => {
       plan: revert.plan,
       reverted: revert.reverted,
       snapshotIds: ['snap'],
+      checkpointMarkIds: ['cp-mark'],
     }) as never[]
     return { revert, sql }
   }
@@ -300,6 +300,8 @@ describe('undoing a chapter lore', () => {
     expect(sql.filter((x: { sql: string }) => x.sql === 'record')).toEqual([])
     expect(sql).toContainEqual({ sql: 'deleteRecords', params: [records.map((r) => r.id)] })
     expect(sql).toContainEqual({ sql: 'deleteSnapshots', params: [['snap']] })
+    // A checkpoint holding the undone lore stays, but no past checkpoint is rebuilt from it.
+    expect(sql).toContainEqual({ sql: 'deleteRecords', params: [['cp-mark']] })
   })
 
   it('takes a later hand edit out of the history with the chapter, so it is not listed again', () => {
@@ -373,7 +375,6 @@ describe('undoing a chapter lore', () => {
       entryPositions: positions,
       state: loreState(lore('kept', { description: 'edited' })),
       tracking,
-      keep: { manual: false, tidy: false },
     })
     if (!revert.ok) throw new Error(revert.reason)
     expect(revert.plan.manual.map((r) => r.id)).toEqual([records[1].id])

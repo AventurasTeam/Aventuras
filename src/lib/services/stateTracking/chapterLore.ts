@@ -1,5 +1,5 @@
 import type { WorldStateChangeRecord, WorldStateMark, WorldStateRecord } from '#lib/types/index.ts'
-import { KEEP_ALL, planReversal, type ReversalPlan, type RevertKeep } from './reverse'
+import { KEEP_NONE, planReversal, type ReversalPlan } from './reverse'
 import type { TrackedState } from './state'
 
 export interface ChapterLoreQuery {
@@ -15,8 +15,6 @@ export interface ChapterLoreQuery {
   entryPositions: Map<string, number>
   state: TrackedState
   tracking: { on: boolean; enabledSince: number | null }
-  /** Which later changes to the same entries are applied again; all of them unless given. */
-  keep?: RevertKeep
 }
 
 /** A chapter's mark; -Infinity for one without, every record on its entry then being its own. */
@@ -45,23 +43,25 @@ export function loreOwners(
 }
 
 /**
- * The snapshots a chapter-lore undo deletes: those marked after the first record it reverts, which
- * hold that record's effect, on entries of the open line. An ancestor branch's snapshot past the
- * fork is marked on that branch but sits on an entry the line does not have, and is left alone.
+ * The snapshots or checkpoints whose saved state holds what a chapter-lore undo reverts: those
+ * marked after the first record it reverts, on entries of the open line. An ancestor branch's mark
+ * past the fork sits on an entry the line does not have, and is left alone.
  */
-export function snapshotsHolding(
+export function marksHolding(
   marks: WorldStateMark[],
   reverted: WorldStateRecord[],
   lineEntryIds: ReadonlySet<string>,
+  type: 'snapshot' | 'checkpoint',
 ): WorldStateMark[] {
   const since = Math.min(...reverted.map((r) => r.seq))
-  return marks.filter(
-    (m) => m.entityType === 'snapshot' && m.seq > since && lineEntryIds.has(m.entryId),
-  )
+  return marks.filter((m) => m.entityType === type && m.seq > since && lineEntryIds.has(m.entryId))
 }
 
-/** Why a chapter's lore cannot be undone: none was recorded, or what came after may not be. */
-export type ChapterLoreRefusal = 'nothing' | 'untracked' | 'interrupted'
+/**
+ * Why a chapter's lore cannot be undone: none was recorded, what came after may not be, or the
+ * chapter belongs to the branch it was cut on, whose records the open branch only inherits.
+ */
+export type ChapterLoreRefusal = 'nothing' | 'untracked' | 'interrupted' | 'inherited'
 
 export type ChapterLoreRevert =
   | { ok: false; reason: ChapterLoreRefusal }
@@ -77,10 +77,9 @@ export type ChapterLoreRevert =
     }
 
 /**
- * Undoing what a chapter's lore sessions wrote, with the later changes to the same lorebook
- * entries the reader keeps applied again on top. A kept change writes back its fields whole, the
- * chapter's text included where the reader edited over it. Refused unless everything since was
- * recorded: an unrecorded edit would be overwritten.
+ * Undoing what a chapter's lore sessions wrote, and every later change to the same lorebook
+ * entries with it: a record holds whole field values, so none can be applied again on top.
+ * Refused unless everything since was recorded: an unrecorded edit would be overwritten.
  */
 export function planChapterLoreRevert(query: ChapterLoreQuery): ChapterLoreRevert {
   const undone = query.records.filter(
@@ -118,7 +117,7 @@ export function planChapterLoreRevert(query: ChapterLoreQuery): ChapterLoreRever
     state: query.state,
     records: [...undone, ...later],
     entryPositions: query.entryPositions,
-    keep: query.keep ?? KEEP_ALL,
+    keep: KEEP_NONE,
   })
   return {
     ok: true,

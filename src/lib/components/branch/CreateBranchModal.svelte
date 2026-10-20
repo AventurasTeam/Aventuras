@@ -4,10 +4,10 @@
   import { errMessage } from '#lib/utils/error.ts'
   import type { Checkpoint } from '#lib/types/index.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { GitBranch, Loader2 } from '@lucide/svelte'
+  import { GitBranch } from '@lucide/svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
 
   let {
     open = $bindable(false),
@@ -81,24 +81,14 @@
         }}
       />
     </div>
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <span class="flex w-full gap-2 sm:w-auto">
-        <Button variant="outline" class="flex-1 sm:flex-none" onclick={cancel} disabled={saving}>
-          Cancel
-        </Button>
-        <Button
-          onclick={() => void create()}
-          disabled={!name.trim() || saving || !checkpoint}
-          class="flex-1 bg-amber-500 text-white hover:bg-amber-600 sm:flex-none"
-        >
-          {#if saving}
-            <Loader2 class="h-4 w-4 animate-spin" />
-          {:else}
-            <GitBranch class="h-4 w-4" />
-          {/if}
-          Create Branch
-        </Button>
-      </span>
-    </ResponsiveModal.Footer>
+    <ModalActions
+      label="Create Branch"
+      icon={GitBranch}
+      tone="branch"
+      onCancel={cancel}
+      onConfirm={() => void create()}
+      busy={saving}
+      disabled={!name.trim() || !checkpoint}
+    />
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

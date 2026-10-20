@@ -177,19 +177,24 @@ export function addRowStatement(
 /**
  * The writes undoing a chapter's lore on the live lorebook. The undone records are removed from
  * the history rather than answered with records of the undo, so a later revert or chapter delete
- * never lists them again; the snapshots taken since hold their effect and go with them.
+ * never lists them again. The snapshots marked since hold their effect and go with them; the
+ * checkpoints marked since hold it too, and lose their marks, so no past checkpoint is rebuilt
+ * from them while the checkpoint itself stays.
  */
 export function chapterLoreStatements(input: {
   storyId: string
   plan: ReversalPlan
   reverted: WorldStateRecord[]
-  /** The snapshots holding the undone records' effect (`snapshotsHolding`). */
+  /** The snapshots holding the undone records' effect (`marksHolding`). */
   snapshotIds: string[]
+  /** The marks of the checkpoints holding it. */
+  checkpointMarkIds: string[]
 }): DbStatement[] {
   return [
     ...input.plan.ops.flatMap((op) => statementsFor(input.storyId, op)),
     ...database.deleteWorldStateRecordsStatements(input.reverted.map((r) => r.id)),
     ...database.deleteWorldStateSnapshotsStatements(input.snapshotIds),
+    ...database.deleteWorldStateRecordsStatements(input.checkpointMarkIds),
   ]
 }
 

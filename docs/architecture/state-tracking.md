@@ -143,13 +143,16 @@ on the same lorebook entries, an override's included, and undoes them all, the
 reader's and Tidy's later changes included, which the modal lists by origin. It acts on the live
 lorebook, so the records it undoes are invalidated, not answered with records of the undo: they are
 deleted, in the transaction that deletes the chapter, and so are the snapshots on the open line's
-entries marked after the first of them, which hold their effect (`snapshotsHolding`, which the
-confirmation lists too). A later revert or chapter delete never
-lists them again, and a past state is rebuilt from a later full state, the live one at worst. A past
-checkpoint only reads records, and invalidates nothing. The undo is refused unless everything
-since was recorded (tracking on since before the chapter's records, and no break or non-continuous
-header after them), since an unrecorded edit would be overwritten; that also means no closing
-snapshot lies in the span it deletes.
+entries marked after the first of them, which hold their effect (`marksHolding`; the confirmation
+lists them). The checkpoints marked after it hold that effect too: they stay, since the reader made
+them, but lose their marks, so no past checkpoint is rebuilt from them. A later revert or chapter
+delete never lists the undone records again, and a past state is rebuilt from a later full state,
+the live one at worst. A past checkpoint only reads records, and invalidates nothing. The undo is
+refused unless everything since was recorded (tracking on since before the chapter's records, and
+no break or non-continuous header after them), since an unrecorded edit would be overwritten; that
+also means no closing snapshot lies in the span it deletes. It is refused, too, for a chapter the
+open branch inherits: the records reached through the line belong to the branch it was cut on, whose
+lorebook they would revert instead of this one's.
 
 ## Tracked runs
 

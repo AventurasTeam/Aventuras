@@ -96,7 +96,6 @@ function statement(sql: string, params: unknown[]): DbStatement {
   return { sql, params }
 }
 
-/** `DELETE ... IN (...)` split into chunks that stay under SQLite's bound-parameter limit. */
 /** Removes the marks of the snapshots `where` selects; run before deleting the snapshots. */
 function snapshotMarksStatement(where: string, params: unknown[]): DbStatement {
   return statement(
@@ -113,21 +112,25 @@ function markDeleteStatement(entityType: WorldStateMarkType, entityId: string): 
   )
 }
 
-function deleteInStatements(
-  table: string,
-  column: string,
+/** Statements over `ids` in chunks that stay under SQLite's bound-parameter limit. */
+function chunkedStatements(
   ids: string[],
-): { sql: string; params: unknown[] }[] {
+  build: (slice: string[], placeholders: string) => DbStatement[],
+): DbStatement[] {
   const CHUNK = 500
-  const statements: { sql: string; params: unknown[] }[] = []
+  const statements: DbStatement[] = []
   for (let i = 0; i < ids.length; i += CHUNK) {
     const slice = ids.slice(i, i + CHUNK)
-    statements.push({
-      sql: `DELETE FROM ${table} WHERE ${column} IN (${slice.map(() => '?').join(',')})`,
-      params: slice,
-    })
+    statements.push(...build(slice, slice.map(() => '?').join(',')))
   }
   return statements
+}
+
+/** `DELETE ... IN (...)`, chunked. */
+function deleteInStatements(table: string, column: string, ids: string[]): DbStatement[] {
+  return chunkedStatements(ids, (slice, list) => [
+    statement(`DELETE FROM ${table} WHERE ${column} IN (${list})`, slice),
+  ])
 }
 
 /**
@@ -1701,56 +1704,39 @@ class DatabaseService {
 
   // ===== World State Change Records =====
 
-  /** Appends a record; `seq` continues the story's write order inside the same statement. */
-  worldStateRecordStatement(record: WorldStateRecord): DbStatement {
+  /** Appends a row; `seq` continues the story's write order inside the same statement. */
+  private worldStateRowStatement(storyId: string, row: unknown[]): DbStatement {
     return statement(
       `INSERT INTO world_state_changes (${RECORD_COLUMNS.join(', ')}, seq)
        VALUES (${RECORD_COLUMNS.map(() => '?').join(', ')},
          (SELECT COALESCE(MAX(seq), 0) + 1 FROM world_state_changes WHERE story_id = ?))`,
-      [...recordToRow(record), record.storyId],
+      [...row, storyId],
     )
+  }
+
+  worldStateRecordStatement(record: WorldStateRecord): DbStatement {
+    return this.worldStateRowStatement(record.storyId, recordToRow(record))
   }
 
   worldStateMarkStatement(mark: WorldStateMark): DbStatement {
-    return statement(
-      `INSERT INTO world_state_changes (${RECORD_COLUMNS.join(', ')}, seq)
-       VALUES (${RECORD_COLUMNS.map(() => '?').join(', ')},
-         (SELECT COALESCE(MAX(seq), 0) + 1 FROM world_state_changes WHERE story_id = ?))`,
-      [...markToRow(mark), mark.storyId],
-    )
+    return this.worldStateRowStatement(mark.storyId, markToRow(mark))
   }
 
-  /** Removes records from the history, as when a live revert invalidates them. */
+  /** Removes rows from the history by id, as when a live revert invalidates them. */
   deleteWorldStateRecordsStatements(ids: string[]): DbStatement[] {
-    const statements: DbStatement[] = []
-    for (let i = 0; i < ids.length; i += 500) {
-      const slice = ids.slice(i, i + 500)
-      statements.push(
-        statement(
-          `DELETE FROM world_state_changes WHERE id IN (${slice.map(() => '?').join(', ')})`,
-          slice,
-        ),
-      )
-    }
-    return statements
+    return deleteInStatements('world_state_changes', 'id', ids)
   }
 
   /** These snapshots, with their marks. */
   deleteWorldStateSnapshotsStatements(ids: string[]): DbStatement[] {
-    const statements: DbStatement[] = []
-    for (let i = 0; i < ids.length; i += 500) {
-      const slice = ids.slice(i, i + 500)
-      const list = slice.map(() => '?').join(', ')
-      statements.push(
-        statement(
-          `DELETE FROM world_state_changes
-           WHERE kind = 'mark' AND entity_type = 'snapshot' AND entity_id IN (${list})`,
-          slice,
-        ),
-        statement(`DELETE FROM world_state_snapshots WHERE id IN (${list})`, slice),
-      )
-    }
-    return statements
+    return chunkedStatements(ids, (slice, list) => [
+      statement(
+        `DELETE FROM world_state_changes
+         WHERE kind = 'mark' AND entity_type = 'snapshot' AND entity_id IN (${list})`,
+        slice,
+      ),
+      statement(`DELETE FROM world_state_snapshots WHERE id IN (${list})`, slice),
+    ])
   }
 
   /** Records written on the given branches, in write order. */
@@ -2884,17 +2870,15 @@ class DatabaseService {
      */
     recordsTo?: string
   }): Promise<void> {
-    const moves: DbStatement[] = []
-    for (let i = 0; recordsTo && i < entryIds.length; i += 500) {
-      const slice = entryIds.slice(i, i + 500)
-      moves.push(
-        statement(
-          `UPDATE world_state_changes SET entry_id = ?
-           WHERE kind IN ('change', 'break') AND entry_id IN (${slice.map(() => '?').join(', ')})`,
-          [recordsTo, ...slice],
-        ),
-      )
-    }
+    const moves = recordsTo
+      ? chunkedStatements(entryIds, (slice, list) => [
+          statement(
+            `UPDATE world_state_changes SET entry_id = ?
+             WHERE kind IN ('change', 'break') AND entry_id IN (${list})`,
+            [recordsTo, ...slice],
+          ),
+        ])
+      : []
     await this.transaction([
       ...moves,
       // Chapters first: `start_entry_id` and `end_entry_id` are foreign keys to story_entries.

@@ -6,21 +6,13 @@
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { canCreateCheckpointAt, entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import {
-    Bookmark,
-    Check,
-    ChevronDown,
-    ChevronRight,
-    Loader2,
-    TriangleAlert,
-    X,
-  } from '@lucide/svelte'
+  import { Bookmark, Check, ChevronDown, ChevronRight, TriangleAlert, X } from '@lucide/svelte'
   import ChangeList from './ChangeList.svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
 
   let entry = $state<StoryEntry | null>(null)
   let name = $state('')
@@ -358,14 +350,14 @@
                   <p class="text-muted-foreground text-xs">
                     Changes you made by hand after this entry will not be in the checkpoint:
                   </p>
-                  <ChangeList changes={pastCheckpoint.manual} unkeepable={[]} />
+                  <ChangeList changes={pastCheckpoint.manual} />
                 {/if}
                 {#if pastCheckpoint.tidy.length > 0}
                   <p class="text-muted-foreground text-xs">
                     Changes from lore management you ran after this entry will not be in the
                     checkpoint:
                   </p>
-                  <ChangeList changes={pastCheckpoint.tidy} unkeepable={[]} />
+                  <ChangeList changes={pastCheckpoint.tidy} />
                 {/if}
               </div>
             {/if}
@@ -376,30 +368,15 @@
             {/if}
           {/if}
         </div>
-        <ResponsiveModal.Footer class="border-t px-6 py-4">
-          <span class="flex w-full gap-2 sm:w-auto">
-            <Button
-              variant="outline"
-              class="flex-1 sm:flex-none"
-              onclick={cancel}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button
-              onclick={create}
-              disabled={!name.trim() || blocked || saving}
-              class="flex-1 bg-blue-500 text-white hover:bg-blue-600 sm:flex-none"
-            >
-              {#if saving}
-                <Loader2 class="h-4 w-4 animate-spin" />
-              {:else}
-                <Bookmark class="h-4 w-4" />
-              {/if}
-              Create Checkpoint
-            </Button>
-          </span>
-        </ResponsiveModal.Footer>
+        <ModalActions
+          label="Create Checkpoint"
+          icon={Bookmark}
+          tone="checkpoint"
+          onCancel={cancel}
+          onConfirm={create}
+          busy={saving}
+          disabled={!name.trim() || blocked}
+        />
       </div>
     {/if}
   </ResponsiveModal.Content>

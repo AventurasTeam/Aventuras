@@ -141,24 +141,30 @@ SELECT 'mark:chapter:' || ch.id, ch.story_id, ch.branch_id, ch.end_entry_id, 0, 
 FROM chapters ch
 WHERE EXISTS (SELECT 1 FROM story_entries e WHERE e.id = ch.end_entry_id);
 
-WITH keyed AS (
-    SELECT w.id, w.story_id, w.seq AS k, 0 AS m, w.created_at AS t
+-- Each mark's key is a running maximum over the story's rows: among rows written since, in time
+-- order; among converted rows, in entry order. One pass each, not a lookup per mark.
+WITH placed AS (
+    SELECT w.id, w.story_id, w.seq, w.created_at, e.position,
+           CASE WHEN w.kind = 'mark' THEN 1 ELSE 0 END AS m
     FROM world_state_changes w
-    WHERE w.kind <> 'mark'
-    UNION ALL
-    SELECT w.id, w.story_id,
-           COALESCE(
-               (SELECT MAX(r.seq) FROM world_state_changes r
-                WHERE r.story_id = w.story_id AND r.kind <> 'mark' AND r.seq > 0
-                  AND r.created_at <= w.created_at),
-               (SELECT MAX(r.seq) FROM world_state_changes r
-                JOIN story_entries re ON re.id = r.entry_id
-                WHERE r.story_id = w.story_id AND r.kind <> 'mark' AND r.seq <= 0
-                  AND re.position <= (SELECT e.position FROM story_entries e WHERE e.id = w.entry_id)),
-               -9223372036854775807),
-           1, w.created_at
-    FROM world_state_changes w
-    WHERE w.kind = 'mark'
+    LEFT JOIN story_entries e ON e.id = w.entry_id
+),
+reached AS (
+    SELECT id, story_id, seq, created_at, m,
+           MAX(CASE WHEN m = 0 AND seq > 0 THEN seq END) OVER (
+               PARTITION BY story_id ORDER BY created_at, m
+               ROWS UNBOUNDED PRECEDING) AS by_time,
+           MAX(CASE WHEN m = 0 AND seq <= 0 THEN seq END) OVER (
+               PARTITION BY story_id ORDER BY position, m
+               ROWS UNBOUNDED PRECEDING) AS by_entry
+    FROM placed
+),
+keyed AS (
+    SELECT id, story_id,
+           CASE WHEN m = 0 THEN seq
+                ELSE COALESCE(by_time, by_entry, -9223372036854775807) END AS k,
+           m, created_at AS t
+    FROM reached
 ),
 ordered AS (
     SELECT id, ROW_NUMBER() OVER (PARTITION BY story_id ORDER BY k, m, t, id) AS rn

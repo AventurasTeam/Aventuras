@@ -47,7 +47,7 @@ import {
   chapterMark,
   loreOwners,
   planChapterLoreRevert,
-  snapshotsHolding,
+  marksHolding,
   planReversal,
   refusalMessage,
   resolveOverride,
@@ -233,7 +233,6 @@ export interface PastCheckpointPreview {
   manual: WorldStateChangeRecord[]
   /** Changes from lore management the reader ran, likewise. */
   tidy: WorldStateChangeRecord[]
-  unkeepable: WorldStateChangeRecord[]
   /** The chapters whose lore management the rebuild undoes. */
   lore: LoreChapter[]
   /** Whether the rebuild undoes any of the classifier's changes. */
@@ -252,7 +251,6 @@ export interface PastCheckpointPreview {
 export interface RevertPreview {
   manual: WorldStateChangeRecord[]
   tidy: WorldStateChangeRecord[]
-  unkeepable: WorldStateChangeRecord[]
   /** The chapters whose lore management the revert undoes. */
   lore: LoreChapter[]
   /** Whether the revert undoes any of the classifier's changes. */
@@ -262,7 +260,6 @@ export interface RevertPreview {
 const NO_REVERT: RevertPreview = {
   manual: [],
   tidy: [],
-  unkeepable: [],
   lore: [],
   classifier: false,
 }
@@ -279,8 +276,6 @@ export interface ChapterLorePreview {
   tidy: WorldStateChangeRecord[]
   /** Later changes from the lore management of chapters since deleted, likewise. */
   deletedChapters: WorldStateChangeRecord[]
-  /** Later changes to those entries that cannot be applied again, their entry being gone. */
-  unkeepable: WorldStateChangeRecord[]
   /** Entry numbers of the snapshots the undo deletes, since they hold what it reverts. */
   snapshots: number[]
 }
@@ -1374,22 +1369,31 @@ class StoryStore {
 
   private async previewRewind(position: number): Promise<RevertPreview> {
     if (!this.currentStory) return NO_REVERT
+    const [records, marks] = await Promise.all([
+      this.lineRecords(undefined, position),
+      this.lineMarks(),
+    ])
     const plan = planRollback({
       storyId: this.currentStory.id,
       branchId: this.currentStory.currentBranchId ?? null,
       fromPosition: position,
       entries: this.entries,
       state: this.trackedState(),
-      records: await this.lineRecords(undefined, position),
-      keep: KEEP_ALL,
+      records,
+      keep: KEEP_NONE,
     })
     return {
       manual: plan.manual,
       tidy: plan.tidy,
-      unkeepable: plan.unkeepable,
-      lore: this.loreChaptersFor(plan.chapter, await this.lineMarks()),
+      lore: this.loreChaptersFor(plan.chapter, marks),
       classifier: plan.classifier,
     }
+  }
+
+  /** The number an entry on the open line is shown with, or null when it is not on it. */
+  entryNumberOf(entryId: string): number | null {
+    const entry = this.entries.find((e) => e.id === entryId)
+    return entry ? entryNumber(entry) : null
   }
 
   /**
@@ -1398,35 +1402,38 @@ class StoryStore {
    */
   chaptersRemovedFrom(position: number): LoreChapter[] {
     const removed = new Set(this.entries.filter((e) => e.position >= position).map((e) => e.id))
-    const numberOf = (id: string) => {
-      const e = this.entries.find((x) => x.id === id)
-      return e ? entryNumber(e) : null
-    }
     return this.chapters
       .filter((ch) => removed.has(ch.startEntryId) || removed.has(ch.endEntryId))
       .flatMap((ch): LoreChapter[] => {
-        const first = numberOf(ch.startEntryId)
-        const last = numberOf(ch.endEntryId)
+        const first = this.entryNumberOf(ch.startEntryId)
+        const last = this.entryNumberOf(ch.endEntryId)
         return first !== null && last !== null ? [{ number: ch.number, first, last }] : []
       })
   }
 
   /**
    * Entry numbers of the branch's world-state snapshots that removing the entries from
-   * `position` on deletes with them (or the snapshots at `onlyEntryId`, deleting that alone).
+   * `position` on deletes with them, and of those at `entryId` alone, which deleting only that
+   * entry deletes.
    */
-  async snapshotsRemovedFrom(position: number, onlyEntryId?: string): Promise<number[]> {
-    if (!this.currentStory) return []
+  async snapshotsRemovedFrom(
+    position: number,
+    entryId?: string,
+  ): Promise<{ fromHere: number[]; here: number[] }> {
+    if (!this.currentStory) return { fromHere: [], here: [] }
     const snapshots = await database.getWorldStateSnapshotTimes(
       this.currentStory.id,
       this.currentStory.currentBranchId ?? null,
     )
-    return snapshots
-      .filter((s) => (onlyEntryId ? s.entryId === onlyEntryId : s.entryPosition >= position))
-      .flatMap((s) => {
-        const entry = this.entries.find((e) => e.id === s.entryId)
-        return entry ? [entryNumber(entry)] : []
+    const numbers = (keep: (s: (typeof snapshots)[number]) => boolean) =>
+      snapshots.filter(keep).flatMap((s) => {
+        const number = this.entryNumberOf(s.entryId)
+        return number === null ? [] : [number]
       })
+    return {
+      fromHere: numbers((s) => s.entryPosition >= position),
+      here: numbers((s) => s.entryId === entryId),
+    }
   }
 
   /** The chapters whose lore these records are, or the entry alone where a deleted one's is. */
@@ -1434,17 +1441,14 @@ class StoryStore {
     records: WorldStateChangeRecord[],
     marks: WorldStateMark[],
   ): LoreChapter[] {
-    const numberOf = (id: string) => {
-      const e = this.entries.find((x) => x.id === id)
-      return e ? entryNumber(e) : null
-    }
     return loreOwners(records, marks, this.chapters).flatMap(
       ({ entryId, chapterId }): LoreChapter[] => {
-        const last = numberOf(entryId)
+        const last = this.entryNumberOf(entryId)
         const chapter = this.chapters.find((ch) => ch.id === chapterId)
         if (last === null) return []
         if (!chapter) return [{ number: null, first: last, last }]
-        return [{ number: chapter.number, first: numberOf(chapter.startEntryId) ?? last, last }]
+        const first = this.entryNumberOf(chapter.startEntryId) ?? last
+        return [{ number: chapter.number, first, last }]
       },
     )
   }
@@ -4009,17 +4013,17 @@ class StoryStore {
 
     const chapter = this.chapters.find((ch) => ch.id === chapterId)
     if (opts.undoLore && chapter) {
-      // Nothing kept: a record is removed with the change it undid, so none may be applied again.
-      const revert = await this.chapterLoreRevert(chapter, KEEP_NONE)
-      if (!revert.ok) throw new Error("This chapter's lore can no longer be undone.")
-      const snapshots = await this.snapshotsHoldingLore(revert.reverted)
+      const undo = await this.chapterLoreUndo(chapter)
+      if (!undo.revert.ok) throw new Error("This chapter's lore can no longer be undone.")
+      const { revert } = undo
       await database.transaction([
         ...database.deleteChapterStatements(chapterId),
         ...chapterLoreStatements({
           storyId: this.currentStory.id,
           plan: revert.plan,
           reverted: revert.reverted,
-          snapshotIds: snapshots.map((m) => m.entityId),
+          snapshotIds: undo.snapshots.map((m) => m.entityId),
+          checkpointMarkIds: undo.checkpoints.map((m) => m.id),
         }),
       ])
       this.lorebookEntries = revert.plan.state.lorebookEntries
@@ -4037,12 +4041,23 @@ class StoryStore {
     return true
   }
 
-  private async chapterLoreRevert(
-    chapter: Chapter,
-    keep: RevertKeep = KEEP_ALL,
-  ): Promise<ChapterLoreRevert> {
+  /**
+   * What undoing a chapter's lore does, as its delete runs it and its confirmation shows it: the
+   * plan, and the snapshots and checkpoints on the open line whose saved state holds what it
+   * reverts. A chapter inherited from the branch it was cut on is refused: the records reached
+   * through the line are that branch's, and would revert its lorebook, not this one's.
+   */
+  private async chapterLoreUndo(chapter: Chapter): Promise<{
+    revert: ChapterLoreRevert
+    snapshots: WorldStateMark[]
+    checkpoints: WorldStateMark[]
+  }> {
+    const none = { snapshots: [], checkpoints: [] }
+    if ((chapter.branchId ?? null) !== (this.currentStory?.currentBranchId ?? null)) {
+      return { revert: { ok: false, reason: 'inherited' }, ...none }
+    }
     const [records, marks] = await Promise.all([this.lineRecords(), this.lineMarks()])
-    return planChapterLoreRevert({
+    const revert = planChapterLoreRevert({
       endEntryId: chapter.endEntryId,
       chapterSeq: chapterMark(marks, chapter.id),
       records,
@@ -4052,41 +4067,32 @@ class StoryStore {
         on: settings.experimentalFeatures.stateTracking,
         enabledSince: settings.experimentalFeatures.trackingEnabledSince,
       },
-      keep,
     })
-  }
-
-  /** The snapshots on the open line a chapter-lore undo of these records deletes. */
-  private async snapshotsHoldingLore(reverted: WorldStateRecord[]): Promise<WorldStateMark[]> {
+    if (!revert.ok) return { revert, ...none }
     const line = new Set(this.entries.map((e) => e.id))
-    return snapshotsHolding(await this.lineMarks(), reverted, line)
+    return {
+      revert,
+      snapshots: marksHolding(marks, revert.reverted, line, 'snapshot'),
+      checkpoints: marksHolding(marks, revert.reverted, line, 'checkpoint'),
+    }
   }
 
   async previewChapterLoreUndo(chapterId: string): Promise<ChapterLorePreview> {
     const chapter = this.chapters.find((ch) => ch.id === chapterId)
-    const none = {
-      undone: [],
-      manual: [],
-      tidy: [],
-      deletedChapters: [],
-      unkeepable: [],
-      snapshots: [],
-    }
+    const none = { undone: [], manual: [], tidy: [], deletedChapters: [], snapshots: [] }
     if (!chapter || !this.currentStory) return { refusal: 'nothing', ...none }
-    const revert = await this.chapterLoreRevert(chapter)
+    const { revert, snapshots } = await this.chapterLoreUndo(chapter)
     if (!revert.ok) return { refusal: revert.reason, ...none }
-    const snapshots = (await this.snapshotsHoldingLore(revert.reverted)).flatMap((m) => {
-      const entry = this.entries.find((e) => e.id === m.entryId)
-      return entry ? [entryNumber(entry)] : []
-    })
     return {
       refusal: null,
       undone: revert.undone,
       manual: revert.plan.manual,
       tidy: revert.plan.tidy,
       deletedChapters: revert.deletedChapters,
-      unkeepable: revert.plan.unkeepable,
-      snapshots,
+      snapshots: snapshots.flatMap((m) => {
+        const number = this.entryNumberOf(m.entryId)
+        return number === null ? [] : [number]
+      }),
     }
   }
 
@@ -4675,7 +4681,6 @@ class StoryStore {
       diagnosis: null,
       manual: [],
       tidy: [],
-      unkeepable: [],
       lore: [],
       classifier: false,
       source: null,
@@ -4693,13 +4698,12 @@ class StoryStore {
     const run = resolveRun(query)
 
     if (run.ok) {
-      const plan = await this.planPast(entry, run, KEEP_ALL)
+      const plan = await this.planPast(entry, run, KEEP_NONE)
       return {
         ...refused(''),
         refusal: null,
         manual: plan.manual,
         tidy: plan.tidy,
-        unkeepable: plan.unkeepable,
         lore: this.loreChaptersFor(plan.chapter, src.marks),
         classifier: plan.classifier,
         source: this.anchorLabel(run.anchor),
@@ -4717,14 +4721,13 @@ class StoryStore {
     const next = resolveOverride(query, 'nextAsIs')
     const previous = resolveOverride(query, 'previousAsIs')
     const undo = resolveOverride(query, 'undoRecorded')
-    const undoPlan = undo.ok ? await this.planPast(entry, undo, KEEP_ALL).catch(() => null) : null
+    const undoPlan = undo.ok ? await this.planPast(entry, undo, KEEP_NONE).catch(() => null) : null
     return {
       ...refused(refusalMessage(run.reason)),
       reason: run.reason,
       diagnosis: diagnosis ?? null,
       manual: undoPlan?.manual ?? [],
       tidy: undoPlan?.tidy ?? [],
-      unkeepable: undoPlan?.unkeepable ?? [],
       lore: undoPlan ? this.loreChaptersFor(undoPlan.chapter, src.marks) : [],
       classifier: undoPlan?.classifier ?? false,
       skipped,

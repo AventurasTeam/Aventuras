@@ -69,7 +69,7 @@ export function rowToRecord(row: Record<string, unknown>): WorldStateRecord {
       }
     case 'break':
       return { ...base, kind: 'break' }
-    default:
+    case 'change':
       return {
         ...base,
         kind: 'change',
@@ -80,6 +80,9 @@ export function rowToRecord(row: Record<string, unknown>): WorldStateRecord {
         before: parse(row.before),
         after: parse(row.after),
       }
+    default:
+      // A mark read as a record would be planned as a change.
+      throw new Error(`Not a world-state record: kind ${String(row.kind)}`)
   }
 }
 

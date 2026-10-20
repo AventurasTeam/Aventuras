@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorldStateChangeRecord, WorldStateMark } from '#lib/types/index.ts'
-import { chapterMark, loreOwners, snapshotsHolding } from '.'
+import { chapterMark, loreOwners, marksHolding } from '.'
 
 const lore = (entryId: string, seq: number) =>
   ({ id: `r${seq}`, entryId, seq, kind: 'change', origin: 'chapter' }) as WorldStateChangeRecord
@@ -38,7 +38,7 @@ describe('loreOwners', () => {
   })
 })
 
-describe('snapshotsHolding', () => {
+describe('marksHolding', () => {
   const snap = (entityId: string, seq: number, entryId: string) =>
     ({ entityType: 'snapshot', entityId, seq, entryId }) as WorldStateMark
 
@@ -50,11 +50,12 @@ describe('snapshotsHolding', () => {
       snap('parent', 6, 'p9'),
       { ...snap('chapter', 7, 'e4'), entityType: 'chapter' } as WorldStateMark,
     ]
-    const held = snapshotsHolding(
-      marks,
-      [lore('e3', 3), lore('e3', 4)],
-      new Set(['e1', 'e3', 'e4']),
-    )
+    const line = new Set(['e1', 'e3', 'e4'])
+    const held = marksHolding(marks, [lore('e3', 3), lore('e3', 4)], line, 'snapshot')
     expect(held.map((m) => m.entityId)).toEqual(['after'])
+    const checkpoint = { ...snap('cp', 8, 'e4'), entityType: 'checkpoint' } as WorldStateMark
+    expect(marksHolding([...marks, checkpoint], [lore('e3', 3)], line, 'checkpoint')).toEqual([
+      checkpoint,
+    ])
   })
 })

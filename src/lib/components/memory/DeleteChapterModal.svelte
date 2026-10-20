@@ -3,12 +3,11 @@
   import { deletedSnapshotsLine } from '#lib/services/stateTracking/index.ts'
   import { story, type ChapterLorePreview } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
-  import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { Loader2, Trash2 } from '@lucide/svelte'
+  import { Trash2 } from '@lucide/svelte'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
   import ChangeList from '#lib/components/story/ChangeList.svelte'
 
   let chapter = $state<Chapter | null>(null)
@@ -20,12 +19,8 @@
   const offered = $derived(preview?.refusal === null)
   const span = $derived.by(() => {
     if (!chapter) return ''
-    const at = (id: string) => {
-      const entry = story.entries.find((e) => e.id === id)
-      return entry ? entryNumber(entry) : null
-    }
-    const first = at(chapter.startEntryId)
-    const last = at(chapter.endEntryId)
+    const first = story.entryNumberOf(chapter.startEntryId)
+    const last = story.entryNumberOf(chapter.endEntryId)
     return first !== null && last !== null ? ` (entries ${first}–${last})` : ''
   })
 
@@ -113,7 +108,7 @@
             {#if gone}
               <p class="text-muted-foreground text-sm">{gone}</p>
             {/if}
-            <ChangeList changes={preview.undone} unkeepable={[]} />
+            <ChangeList changes={preview.undone} />
           </div>
           {#if preview.manual.length + preview.tidy.length + preview.deletedChapters.length > 0}
             <div class="space-y-1">
@@ -122,17 +117,17 @@
               </p>
               {#if preview.manual.length > 0}
                 <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-                <ChangeList changes={preview.manual} unkeepable={[]} />
+                <ChangeList changes={preview.manual} />
               {/if}
               {#if preview.tidy.length > 0}
                 <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-                <ChangeList changes={preview.tidy} unkeepable={[]} />
+                <ChangeList changes={preview.tidy} />
               {/if}
               {#if preview.deletedChapters.length > 0}
                 <p class="text-muted-foreground text-xs">
                   Changes from a deleted chapter's lore management:
                 </p>
-                <ChangeList changes={preview.deletedChapters} unkeepable={[]} />
+                <ChangeList changes={preview.deletedChapters} />
               {/if}
             </div>
           {/if}
@@ -141,41 +136,27 @@
             <p class="text-muted-foreground text-sm">
               Lore management changes of chapter {chapter?.number}{span} will stay in the lorebook:
             </p>
-            <ChangeList changes={preview.undone} unkeepable={[]} />
+            <ChangeList changes={preview.undone} />
           </div>
         {:else}
           <p class="text-muted-foreground text-sm">
             {preview.refusal === 'interrupted' || preview.refusal === 'untracked'
               ? "The chapter's lore will stay in the lorebook: changes made since it may not have been recorded."
-              : 'No lore management changes were recorded for this chapter.'}
+              : preview.refusal === 'inherited'
+                ? "The chapter's lore will stay in the lorebook: the chapter was cut on another branch, and only that branch can undo it."
+                : 'No lore management changes were recorded for this chapter.'}
           </p>
         {/if}
       </div>
-      <ResponsiveModal.Footer class="border-t px-6 py-4">
-        <span class="flex w-full gap-2 sm:w-auto">
-          <Button
-            variant="outline"
-            class="flex-1 sm:flex-none"
-            onclick={cancel}
-            disabled={deleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            onclick={confirm}
-            class="can-hover:text-foreground flex-1 text-red-500 hover:text-red-500 sm:flex-none"
-            disabled={preview === null || deleting}
-          >
-            {#if deleting}
-              <Loader2 class="h-4 w-4 animate-spin" />
-            {:else}
-              <Trash2 class="h-4 w-4" />
-            {/if}
-            Delete
-          </Button>
-        </span>
-      </ResponsiveModal.Footer>
+      <ModalActions
+        label="Delete"
+        icon={Trash2}
+        tone="danger"
+        onCancel={cancel}
+        onConfirm={confirm}
+        busy={deleting}
+        disabled={preview === null}
+      />
     </div>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

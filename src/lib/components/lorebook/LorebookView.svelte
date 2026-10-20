@@ -46,6 +46,14 @@
       )
       return
     }
+    // A later chapter changes what the session reads after it; its lore would not be this one's.
+    if (!story.isLastChapter(chapter.id)) {
+      ui.showToast(
+        `Chapter ${chapter.number} is no longer the last one, so its lore management cannot be run again.`,
+        'warning',
+      )
+      return
+    }
     void chapterCards.restartLore(chapter, { readAfterChapter: retry.readAfterChapter })
   }
 

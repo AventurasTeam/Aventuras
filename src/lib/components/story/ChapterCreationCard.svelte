@@ -152,7 +152,10 @@
           variant="text"
           size="sm"
           class="h-7 gap-1 px-2 text-xs"
-          disabled={busy}
+          disabled={busy || !isLast}
+          title={isLast
+            ? undefined
+            : 'A later chapter exists; only the last chapter can run its lore management again'}
           onclick={restart}
         >
           <RotateCcw />
