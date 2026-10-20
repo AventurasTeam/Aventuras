@@ -47,8 +47,8 @@ import {
   generationStore,
   happeningsStore,
   hydrateAppSettings,
+  interruptMemoryRuns,
   resetAllStores,
-  type RunState,
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -60,7 +60,7 @@ import {
   periodicClassifierPhase,
 } from './periodic-classifier'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
-import { configureDeltaActionPort } from '../runtime/action-port'
+import { configureDeltaActionPort, type DeltaActionPort } from '../runtime/action-port'
 import { runPipeline, type RunCtx } from '../runtime/orchestrator'
 import type { PhaseContext, TxResult } from '../types'
 
@@ -252,8 +252,6 @@ describe('periodicClassifierPhase', () => {
     vi.resetAllMocks()
     __resetRegistry()
     __resetClassifierEmbedder()
-    // The phase driven directly takes its hold through the global port and nothing ends it.
-    __resetBranchWriteLocks()
   })
 
   it('completes without emitting when the window is empty', async () => {
@@ -508,8 +506,12 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('is abort-free once it holds its write lock: an abort mid-burst still commits', async () => {
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+  it('returns aborted on a cancel between its writes, restoring the pre-run status', async () => {
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      seedStatus: { state: 'retrying', retryCount: 1, lastError: 'rate limited' },
+    })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       value: extraction({
@@ -522,23 +524,42 @@ describe('periodicClassifierPhase', () => {
     const controller = new AbortController()
     h.ctx.abortSignal = controller.signal
     const gen = periodicClassifierPhase(h.ctx)
-    const first = await gen.next()
-    expect(first.done).toBe(false)
+    expect((await gen.next()).done).toBe(false)
+
     controller.abort()
-    const events = [first.value]
-    for (let next = await gen.next(); ; next = await gen.next()) {
-      if (next.done) {
-        expect(next.value).toEqual({ status: 'completed' })
-        break
-      }
-      events.push(next.value)
-    }
-    expect(events).toHaveLength(2)
-    expect(h.status()?.processedThrough).toBe(2)
+
+    expect(await gen.next()).toEqual({ done: true, value: { status: 'aborted' } })
+    expect(h.watermarks).toEqual([])
+    expect(h.status()).toEqual({
+      state: 'retrying',
+      lastSuccessAt: null,
+      lastError: 'rate limited',
+      retryCount: 1,
+      processedThrough: 0,
+    })
   })
 
-  // classifier.md → Background-task framing: abort-free starts at the write lock, not the call.
-  it('discards on a cancel after the model call, before the hold', async () => {
+  it('returns aborted on a cancel after its last write, leaving the watermark', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+    const controller = new AbortController()
+    h.ctx.abortSignal = controller.signal
+    const gen = periodicClassifierPhase(h.ctx)
+    expect((await gen.next()).done).toBe(false)
+
+    controller.abort()
+
+    expect(await gen.next()).toEqual({ done: true, value: { status: 'aborted' } })
+    expect(h.watermarks).toEqual([])
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+  })
+
+  it('returns aborted on a cancel after the model call, before its first write', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     vi.mocked(generateStructured).mockImplementation(async () => {
       h.ctx.abortSignal = AbortSignal.abort()
@@ -565,11 +586,46 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
   })
 
-  // A provider that accepts the request and never answers used to leave
-  // 'running' persisted forever: the cadence guard and runNow's in-flight guard
-  // both read it, so the pass was dead until the next boot. The expiry must land
-  // as a failure, not an abort, or the backoff never arms and every later tick
-  // rediscovers the same dead provider.
+  it('returns aborted on a cancel during the character reconciliation, cutting it short', async () => {
+    const controller = new AbortController()
+    const embedder = vi.fn(async () => {
+      controller.abort()
+      const v = Float32Array.from([1, 0, 0])
+      return { vectors: [v, v], dim: 3 }
+    })
+    configureClassifierEmbedder(embedder)
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [
+          { handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] },
+          { handle: 'nc2', name: 'kael', description: 'The courier.', keywords: [] },
+        ],
+      }),
+    })
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'Kael, described.',
+      keywords: [],
+      state: null,
+      createdAt: 1,
+    } as unknown as Entity
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    h.ctx.abortSignal = controller.signal
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 0 })
+    expect(embedder).toHaveBeenCalledTimes(1)
+  })
+
+  // A provider that accepts the request and never answers would hold the gate until the cap. The
+  // expiry must land as a failure, not an abort: an abort burns no retry, so every later turn
+  // would rediscover the same dead provider.
   it('treats a call that outlives the timeout as a retryable failure', async () => {
     vi.useFakeTimers()
     try {
@@ -686,6 +742,15 @@ describe('periodicClassifierPhase', () => {
   it('fails when no story is open for the branch', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     currentStoryStore.clear()
+    const { result } = await drain(h.ctx)
+    expect(result).toMatchObject({ status: 'failed', error: { kind: 'orchestrator' } })
+    expect(generateStructured).not.toHaveBeenCalled()
+  })
+
+  // The entity stores are global: prompting against another branch's roster would plan wrong rows.
+  it('fails when the entity stores hold another branch, before any LLM call', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    entitiesStore.hydrate('b2', [])
     const { result } = await drain(h.ctx)
     expect(result).toMatchObject({ status: 'failed', error: { kind: 'orchestrator' } })
     expect(generateStructured).not.toHaveBeenCalled()
@@ -813,28 +878,20 @@ describe('periodicClassifierPhase', () => {
     expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
-  describe('entities that change during the model call', () => {
-    const character = (id: string, name: string) =>
-      ({
-        id,
+  // Under the gate nothing writes the roster during the call, so the pass never re-reads it.
+  describe('the roster it prompted with', () => {
+    it('reconciles against it: a namesake added to the store during the call is not seen', async () => {
+      const mara = {
+        id: 'char_user',
         branchId: 'b1',
         kind: 'character',
-        name,
+        name: 'Mara',
         status: 'active',
-        description: `${name}, described.`,
+        description: 'Mara, described.',
         keywords: [],
-      }) as unknown as Entity
-
-    it('flags a new character against a namesake the user created mid-call', async () => {
-      // Orthogonal vectors: a distinct namesake, which reconcile creates with a flag.
-      configureClassifierEmbedder(
-        vi.fn(async () => ({
-          vectors: [Float32Array.from([1, 0, 0]), Float32Array.from([0, 1, 0])],
-          dim: 3,
-        })),
-      )
+      } as unknown as Entity
       vi.mocked(generateStructured).mockImplementation(async () => {
-        entitiesStore.hydrate('b1', [character('char_user', 'Mara')])
+        entitiesStore.hydrate('b1', [mara])
         return {
           status: 'ok',
           value: extraction({
@@ -846,32 +903,60 @@ describe('periodicClassifierPhase', () => {
       const { events } = await drain(h.ctx)
 
       expect(createdEntry(events)).toMatchObject({
-        nameCollisionFlag: 1,
-        nameCollisionPartnerId: 'char_user',
-        nameCollisionReason: 'distinct',
+        name: 'Mara',
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
       })
     })
 
-    it('drops a fact about a character the user deleted mid-call', async () => {
+    it('plans against it: a place added to the store during the call is created, not reused', async () => {
+      const varn = {
+        id: 'loc_varn',
+        branchId: 'b1',
+        kind: 'location',
+        name: 'Varn',
+        status: 'active',
+        description: 'Varn, described.',
+        keywords: [],
+        state: { parent_location_id: null },
+        createdAt: 1,
+      } as unknown as Entity
       vi.mocked(generateStructured).mockImplementation(async () => {
-        entitiesStore.hydrate('b1', [])
+        entitiesStore.hydrate('b1', [varn])
         return {
           status: 'ok',
           value: extraction({
-            statusFlips: [{ ref: 'char_gone', to: 'retired', sourceTurn: 't1' }],
+            newPlaces: [
+              {
+                handle: 'new:varn',
+                name: 'Varn',
+                description: 'A salt town.',
+                keywords: [],
+                sourceTurn: 't1',
+              },
+            ],
+            happenings: [
+              {
+                title: 'The fleet sails',
+                sourceTurn: 't1',
+                involvements: [{ ref: 'new:varn', role: 'site' }],
+                awareness: [],
+              },
+            ],
           }),
         }
       })
-      const h = await ctxWith({
-        processedThrough: 0,
-        headPosition: 2,
-        entities: [character('char_gone', 'Oswin')],
-      })
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
       const { events, result } = await drain(h.ctx)
 
-      const kinds = events.map((e) => (e as { action?: { kind: string } }).action?.kind)
-      expect(kinds).not.toContain('retireEntity')
       expect(result).toEqual({ status: 'completed' })
+      const created = createdEntry(events)
+      expect(created).toMatchObject({ kind: 'location', name: 'Varn' })
+      expect(created?.id).not.toBe('loc_varn')
+      const involvement = events
+        .map((e) => (e as { action: PipelineAction }).action)
+        .find((a) => a.kind === 'createHappeningInvolvement')
+      expect(involvement?.payload).toMatchObject({ entry: { entityId: created?.id } })
     })
   })
 
@@ -1214,14 +1299,19 @@ describe('periodicClassifierPhase', () => {
     expect(PERIODIC_CLASSIFIER_RESOLVES).toEqual([{ target: 'classifier' }])
   })
 
-  it('declares no-gate, self- and chapter-close-blocked, pill-only', () => {
+  it('declares a gated, interruptible pass with the banner and its blockers', () => {
     ensurePeriodicClassifierPipelineRegistered()
     const pipeline = getPipeline(PERIODIC_CLASSIFIER_KIND)
     expect(pipeline).toMatchObject({
-      gateBehavior: 'no-gate',
-      affordance: 'pill-only',
-      concurrencyPolicy: { blockedBy: ['periodic-classifier', 'chapter-close'] },
+      gateBehavior: 'hard-gate',
+      interruptible: true,
+      affordance: 'pill-and-banner',
+      concurrencyPolicy: {
+        blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
+      },
     })
+    // Passes chain one another only for a pending close (M5.2); none chains here.
+    expect(pipeline.chainsTo).toBeUndefined()
     // Idempotent: bootstrap and tests both call it.
     expect(() => ensurePeriodicClassifierPipelineRegistered()).not.toThrow()
   })
@@ -1449,7 +1539,8 @@ describe('periodicClassifierPhase', () => {
 })
 
 // Not drain(): it skips the action layer, the only place apply-time rejection happens.
-describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
+// Not drain(): it skips the action layer and the orchestrator's abort reversal.
+describe('periodicClassifierPhase via runPipeline', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     __resetRegistry()
@@ -1457,16 +1548,20 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     __resetBranchWriteLocks()
   })
 
-  afterEach(() => {
+  function configurePort(
+    applyDeltaAction: DeltaActionPort['applyDeltaAction'] = realApplyDeltaAction,
+  ): void {
     configureDeltaActionPort({
-      applyDeltaAction: realApplyDeltaAction,
+      applyDeltaAction,
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
       settleUserWrites,
       holdWritePhase: holdBranchWriteExclusive,
       releaseWritePhase: releaseBranchWriteExclusive,
     })
-  })
+  }
+
+  afterEach(() => configurePort())
 
   type TestDb = Awaited<ReturnType<typeof createTestDb>>
   type Seeded = Pick<TestDb, 'db' | 'runInTransaction'>
@@ -1504,17 +1599,10 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
   }
 
   function rejectCreateHappening(onReject?: () => void): void {
-    configureDeltaActionPort({
-      applyDeltaAction: (args, applyCtx) => {
-        if (args.action.kind !== 'createHappening') return realApplyDeltaAction(args, applyCtx)
-        onReject?.()
-        return Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
-      },
-      reverseReplayDeltas,
-      describeReplayError: describeDeltaReplayError,
-      settleUserWrites,
-      holdWritePhase: holdBranchWriteExclusive,
-      releaseWritePhase: releaseBranchWriteExclusive,
+    configurePort((args, applyCtx) => {
+      if (args.action.kind !== 'createHappening') return realApplyDeltaAction(args, applyCtx)
+      onReject?.()
+      return Promise.resolve({ status: 'rejected', reason: 'forced test rejection' })
     })
   }
 
@@ -1541,6 +1629,18 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     return row.status
+  }
+
+  const RETRYING: ClassifierStatus = {
+    state: 'retrying',
+    lastSuccessAt: null,
+    lastError: 'rate limited',
+    retryCount: 1,
+    processedThrough: 0,
+  }
+
+  async function seedStatus(db: TestDb['db'], status: ClassifierStatus): Promise<void> {
+    await db.update(branches).set({ classifierStatus: status }).where(eq(branches.id, 'b1'))
   }
 
   it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
@@ -1633,8 +1733,8 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
     })
   })
 
-  // A failed reversal leaves the write on disk, so arming a retry would race a pass into
-  // re-reading it. `running` stays for boot's resetStuckClassifierRunState, not the backoff.
+  // A failed reversal leaves the write on disk, so a retry at the next turn would re-read it.
+  // `running` stays, holding the cadence, for boot's resetStuckClassifierRunState.
   it('leaves running when the reversal itself cannot commit, deferring to boot recovery', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     const fixedActionId = 'act_classifier_poison'
@@ -1757,199 +1857,61 @@ describe('periodicClassifierPhase apply-time failure (via runPipeline)', () => {
       lastError: null,
     })
   })
-})
-
-describe('periodicClassifierPhase — the write phase', () => {
-  beforeEach(() => {
-    vi.resetAllMocks()
-    __resetRegistry()
-    __resetClassifierEmbedder()
-    __resetBranchWriteLocks()
-  })
-
-  const turnRun = (): RunState => ({
-    runId: 'run_turn',
-    kind: PER_TURN_KIND,
-    gateBehavior: 'hard-gate',
-    interruptible: false,
-    beforeTurn: false,
-    actionId: 'act_turn',
-    storyId: 's1',
-    branchId: 'b1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  })
-
-  const place = (id: string, name: string, parent: string | null = null) =>
-    ({
-      id,
-      branchId: 'b1',
-      kind: 'location',
-      name,
-      status: 'active',
-      description: `${name}, described.`,
-      keywords: [],
-      state: { parent_location_id: parent },
-      createdAt: 1,
-    }) as unknown as Entity
-
-  const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
-
-  // Drives the phase in the background, so a test can act while it waits.
-  function start(ctx: PhaseContext) {
-    let settled: Awaited<ReturnType<typeof drain>> | undefined
-    const done = drain(ctx).then((value) => (settled = value))
-    return { done, settled: () => settled }
-  }
-
-  const varnReply = () =>
-    extraction({
-      newPlaces: [
-        {
-          handle: 'new:varn',
-          name: 'Varn',
-          description: 'A salt town.',
-          keywords: [],
-          sourceTurn: 't1',
-        },
-      ],
-      happenings: [
-        {
-          title: 'The fleet sails',
-          sourceTurn: 't1',
-          involvements: [{ ref: 'new:varn', role: 'site' }],
-          awareness: [],
-        },
-      ],
+  it('commits nothing and keeps its pre-run status when interrupted during the model call', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    await seedStatus(db, RETRYING)
+    ensurePeriodicClassifierPipelineRegistered()
+    let calling!: () => void
+    const inCall = new Promise<void>((resolve) => {
+      calling = resolve
     })
-
-  // generation-pipeline.md → No-gate write phase; the race the setting's places would lose.
-  it('waits out a turn on its branch, then reuses the place the turn created meanwhile', async () => {
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: varnReply() })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
-    generationStore.startRun(turnRun())
-    const pass = start(h.ctx)
-    await flush()
-    expect(pass.settled()).toBeUndefined()
-
-    // The turn creates the place the pass's reply names, then leaves txState.
-    entitiesStore.hydrate('b1', [place('loc_varn', 'Varn')])
-    generationStore.finishRun('run_turn')
-    const { events, result } = await pass.done
-
-    expect(result).toEqual({ status: 'completed' })
-    const actions = events.map((e) => (e as { action: PipelineAction }).action)
-    expect(actions.map((a) => a.kind)).toEqual(['createHappening', 'createHappeningInvolvement'])
-    expect(actions[1].payload).toMatchObject({ entry: { entityId: 'loc_varn' } })
-  })
-
-  it('discards on a cancel while it waits for a turn', async () => {
-    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: varnReply() })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
-    const controller = new AbortController()
-    h.ctx.abortSignal = controller.signal
-    generationStore.startRun(turnRun())
-    const pass = start(h.ctx)
-    await flush()
-    controller.abort()
-    const { events, result } = await pass.done
-    expect(events).toEqual([])
-    expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
-  })
-
-  it('discards on a cancel during the character reconciliation, cutting it short', async () => {
-    const controller = new AbortController()
-    const embedder = vi.fn(async () => {
-      controller.abort()
-      const v = Float32Array.from([1, 0, 0])
-      return { vectors: [v, v], dim: 3 }
-    })
-    configureClassifierEmbedder(embedder)
-    vi.mocked(generateStructured).mockResolvedValue({
-      status: 'ok',
-      value: extraction({
-        newCharacters: [
-          { handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] },
-          { handle: 'nc2', name: 'kael', description: 'The courier.', keywords: [] },
-        ],
-      }),
-    })
-    const h = await ctxWith({
-      processedThrough: 0,
-      headPosition: 2,
-      entities: [
-        { ...place(CHAR_KAEL, 'Kael'), kind: 'character', state: null } as unknown as Entity,
-      ],
-    })
-    h.ctx.abortSignal = controller.signal
-    const { events, result } = await drain(h.ctx)
-    expect(events).toEqual([])
-    expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 0 })
-    expect(embedder).toHaveBeenCalledTimes(1)
-  })
-
-  // Back on the branch by planning, but the reconciliation ran against another branch's roster.
-  it('discards when the stores were away at the reconciliation read, even once back', async () => {
-    const kael = {
-      id: CHAR_KAEL,
-      branchId: 'b1',
-      kind: 'character',
-      name: 'Kael',
-      status: 'active',
-      description: 'A courier.',
-      keywords: [],
-    } as unknown as Entity
-    vi.mocked(generateStructured).mockImplementation(async () => {
-      entitiesStore.hydrate('b2', [])
-      return {
-        status: 'ok',
-        value: extraction({
-          newCharacters: [{ handle: 'nc1', name: 'Kael', description: 'A courier.', keywords: [] }],
-        }),
-      }
-    })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
-    generationStore.startRun(turnRun())
-    const pass = start(h.ctx)
-    await flush()
-    entitiesStore.hydrate('b1', [kael])
-    generationStore.finishRun('run_turn')
-    const { events, result } = await pass.done
-    expect(events).toEqual([])
-    expect(result).toEqual({ status: 'aborted' })
-  })
-
-  it.each([
-    ['during the model call', 'call'],
-    ['while it waits for a turn', 'wait'],
-  ] as const)('discards when the stores moved to another branch %s', async (_label, when) => {
-    clearBuffers()
-    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
-    vi.mocked(generateStructured).mockImplementation(async () => {
-      if (when === 'call') entitiesStore.hydrate('b2', [])
-      return { status: 'ok', value: varnReply() }
-    })
-    const h = await ctxWith({ processedThrough: 0, headPosition: 2, mentionedPlaces: true })
-    if (when === 'wait') generationStore.startRun(turnRun())
-    const pass = start(h.ctx)
-    await flush()
-    if (when === 'wait') {
-      entitiesStore.hydrate('b2', [])
-      generationStore.finishRun('run_turn')
-    }
-    const { events, result } = await pass.done
-    expect(events).toEqual([])
-    expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
-    const log = getDiagnosticsSnapshot().logEntries.find(
-      (e) => e.kind === 'classifier.pass_discarded',
+    vi.mocked(generateStructured).mockImplementation(
+      (...args: unknown[]) =>
+        new Promise((resolve) => {
+          const signal = args[4] as AbortSignal
+          signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
+          calling()
+        }) as never,
     )
-    expect(log?.fields).toEqual({ reason: 'branch-unloaded' })
+
+    const pass = runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })
+    await inCall
+    await interruptMemoryRuns('b1')
+
+    expect(await pass).toBe('aborted')
+    expect(await db.select().from(deltas)).toEqual([])
+    expect(await storedStatus(db)).toEqual(RETRYING)
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  it('reverses what it wrote when interrupted mid-burst, keeping its status, watermark and retry count', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    await seedStatus(db, RETRYING)
+    let interrupted = false
+    configurePort(async (args, applyCtx) => {
+      const result = await realApplyDeltaAction(args, applyCtx)
+      // Awaiting the interrupt here would deadlock: the run waits on this write.
+      if (!interrupted && args.action.kind === 'createHappening') {
+        interrupted = true
+        for (const run of generationStore.getTxState().runs.values()) run.abortController.abort()
+      }
+      return result
+    })
+    registerWithReply({
+      happenings: [
+        { title: 'A', sourceTurn: 't1', involvements: [], awareness: [] },
+        { title: 'B', sourceTurn: 't1', involvements: [], awareness: [] },
+      ],
+    })
+
+    expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe(
+      'aborted',
+    )
+    expect(interrupted).toBe(true)
+    expect(await db.select().from(happenings)).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+    expect(await storedStatus(db)).toEqual(RETRYING)
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 })
 
