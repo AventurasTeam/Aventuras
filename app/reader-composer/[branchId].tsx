@@ -121,12 +121,13 @@ import { resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
-// The three classes differ in what the user can do about it: wait for the turn,
-// resume the swap, or nothing (the last three are invariant violations, where
-// inviting a retry sends them into a loop that cannot succeed).
+// The classes differ in what the user can do about it: wait for the turn, resume the swap, check
+// the counts again, or nothing (the rest are invariant violations, where inviting a retry sends
+// them into a loop that cannot succeed).
 const REGENERATE_REJECTION_COPY = {
   'embedder-swap': 'reader:actions.blockedWhileSwapping',
   'generation-in-flight': 'reader:actions.blockedWhileGenerating',
+  'counts-changed': 'reader:rollbackCountsChanged',
   'branch-not-loaded': 'reader:regenerateUnavailable',
   'not-an-ai-reply': 'reader:regenerateUnavailable',
   'no-origin': 'reader:regenerateUnavailable',

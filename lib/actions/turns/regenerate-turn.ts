@@ -15,16 +15,21 @@ import {
 import {
   resolveSweep,
   reversalRefused,
+  rollbackCountsOf,
+  sameRollbackCounts,
+  type CountsChangedRejection,
+  type RollbackCounts,
   type StoryEntryRejection,
 } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
+import { STORY_ENTRY_REJECTION } from '../story-entries/register'
 import type { DbCtx } from '../types'
 import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 /**
  * Why a regenerate refused. Distinct from `reason` (a diagnostic string): the
  * host picks user-facing copy from this, and the classes differ in what the
- * user can do — wait, resume a swap, or nothing at all.
+ * user can do — wait, resume a swap, check the counts again, or nothing at all.
  */
 export type RegenerateRejectionCode =
   | 'embedder-swap'
@@ -33,9 +38,16 @@ export type RegenerateRejectionCode =
   | 'not-an-ai-reply'
   | 'no-origin'
   | 'sweep-refused'
+  | 'counts-changed'
 
 export type RegenerateTurnResult =
-  | { status: 'rejected'; code: RegenerateRejectionCode; reason: string }
+  | {
+      status: 'rejected'
+      code: RegenerateRejectionCode
+      reason: string
+      /** With `counts-changed`: the set as it stands now, for the confirm to show. */
+      counts?: RollbackCounts
+    }
   | {
       status: 'ran'
       result: TxResult | RejectedStart
@@ -66,9 +78,21 @@ async function sweepFrom(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ status: 'ok' } | StoryEntryRejection> {
+  expectedCounts?: RollbackCounts,
+): Promise<{ status: 'ok' } | StoryEntryRejection | CountsChangedRejection> {
   const swept = await resolveSweep(branchId, targetId, ctx)
   if ('status' in swept) return swept
+  // Compared with the set this sweep reverses, so the consent covers exactly what goes.
+  if (expectedCounts) {
+    const counts = rollbackCountsOf(swept.set)
+    if (!sameRollbackCounts(counts, expectedCounts))
+      return {
+        status: 'rejected',
+        code: STORY_ENTRY_REJECTION.countsChanged,
+        reason: 'regenerate counts changed since the confirm opened',
+        counts,
+      }
+  }
   try {
     await reverseAndPruneDeltaRows(swept.set, ctx, { keepRedoExact: false }, swept.clampOps)
   } catch (e) {
@@ -82,6 +106,7 @@ export async function regenerateTurn(
   ids: { storyId: string; branchId: string },
   replyEntryId: string,
   ctx: DbCtx,
+  opts?: { expectedCounts?: RollbackCounts },
 ): Promise<RegenerateTurnResult> {
   ensurePerTurnPipelineRegistered()
 
@@ -128,17 +153,24 @@ export async function regenerateTurn(
         // opened during them would otherwise throw this one out of its bracket as re-entry.
         if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
-          let swept: { status: 'ok' } | StoryEntryRejection
+          let swept: { status: 'ok' } | StoryEntryRejection | CountsChangedRejection
           try {
             swept = await bracketProseReversal(ids.branchId, () =>
-              sweepFrom(ids.branchId, replyEntryId, ctx),
+              sweepFrom(ids.branchId, replyEntryId, ctx, opts?.expectedCounts),
             )
           } catch (error) {
             if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
             throw error
           }
           if (swept.status === 'rejected')
-            return { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
+            return 'counts' in swept
+              ? {
+                  status: 'rejected',
+                  code: 'counts-changed',
+                  reason: swept.reason,
+                  counts: swept.counts,
+                }
+              : { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
           // A regenerate is a new unrelated action (data-model.md); the discarded
           // take is not redo-restorable.
           undoRedoStore.clear()

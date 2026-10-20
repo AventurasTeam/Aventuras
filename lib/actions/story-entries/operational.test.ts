@@ -33,7 +33,13 @@ import {
 } from '@/lib/stores'
 
 import { isContentEditDelta } from './classifier-facts'
-import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
+import {
+  getRollbackCounts,
+  rollbackToEntry,
+  sameRollbackCounts,
+  updateStoryEntryContent,
+  type RollbackCounts,
+} from './operational'
 import {
   __resetBranchWriteLocks,
   holdBranchWriteExclusive,
@@ -1384,4 +1390,80 @@ describe('rollback during a pass', () => {
     held.finish('completed')
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
+})
+
+async function shownCounts(ctx: DbCtx, targetId: string): Promise<RollbackCounts> {
+  const counts = await getRollbackCounts('b1', targetId, ctx)
+  if ('status' in counts) throw new Error(`preview refused: ${counts.reason}`)
+  return counts
+}
+
+describe('rollback confirm counts', () => {
+  it('refuses with the fresh counts when a pass committed since the confirm opened, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts(ctx, 't2')
+    expect(shown).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
+    // A pass's fact about a turn the rollback removes, committed while the modal is open.
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappening',
+          source: 'periodic_classifier',
+          payload: {
+            entry: { id: 'hap_late', branchId: 'b1', title: 'Late', createdAt: 1, updatedAt: 1 },
+          },
+        },
+        actionId: 'act_late',
+        branchId: 'b1',
+        entryId: 't3',
+      },
+      ctx,
+    )
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    const before = await db.select().from(deltas)
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      counts: { entries: 2, chapters: 0, worldStateChanges: 3 },
+    })
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(generationStore.getTxState().reversalInProgress).toBe(false)
+  })
+
+  it('rolls back when the confirmed counts still hold', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts(ctx, 't2')
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({ status: 'ok', counts: shown })
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+  })
+})
+
+describe('sameRollbackCounts', () => {
+  const counts: RollbackCounts = { entries: 2, chapters: 1, worldStateChanges: 3 }
+
+  it('matches equal counts', () => {
+    expect(sameRollbackCounts(counts, { ...counts })).toBe(true)
+  })
+
+  it.each(['entries', 'chapters', 'worldStateChanges'] as const)(
+    'tells counts apart by %s',
+    (field) => {
+      expect(sameRollbackCounts(counts, { ...counts, [field]: counts[field] + 1 })).toBe(false)
+    },
+  )
 })

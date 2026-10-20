@@ -43,7 +43,11 @@ import {
   ReversalIntegrityError,
   type reverseAndPruneDeltaRows,
 } from '../delta/reverse-replay'
-import { updateStoryEntryContent } from '../story-entries/operational'
+import {
+  getRollbackCounts,
+  updateStoryEntryContent,
+  type RollbackCounts,
+} from '../story-entries/operational'
 import { undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 
@@ -922,5 +926,75 @@ describe('regenerateTurn', () => {
     expect(places).toEqual([{ id: 'loc_docks', state: { parent_location_id: null } }])
     expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
     expect(entitiesStore.getById('loc_varn')).toBeUndefined()
+  })
+
+  async function shownCounts(
+    ctx: Awaited<ReturnType<typeof makeHarness>>['ctx'],
+    targetId: string,
+  ): Promise<RollbackCounts> {
+    const counts = await getRollbackCounts('b1', targetId, ctx)
+    if ('status' in counts) throw new Error(`preview refused: ${counts.reason}`)
+    return counts
+  }
+
+  // rollback-confirm.md → Counts: the confirm consents to what it showed, and a pass may commit
+  // while it is open.
+  it('refuses with the fresh counts when a pass committed since the confirm opened', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+    expect(shown).toEqual({ entries: 1, chapters: 0, worldStateChanges: 1 })
+    const late: PipelineAction = {
+      kind: 'createHappening',
+      source: 'periodic_classifier',
+      payload: {
+        entry: { id: 'h_late', branchId: 'b1', title: 'Late', createdAt: 7, updatedAt: 7 },
+      },
+    }
+    expect(
+      (
+        await applyDeltaAction(
+          { action: late, actionId: 'act_late', branchId: 'b1', entryId: 'e_r2' },
+          ctx,
+        )
+      ).status,
+    ).toBe('ok')
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    const before = await ctx.db.select().from(deltas)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      counts: { entries: 1, chapters: 0, worldStateChanges: 2 },
+    })
+    expect(await ctx.db.select().from(deltas)).toEqual(before)
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+  })
+
+  it('regenerates when the confirmed counts still hold', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const shown = await shownCounts(ctx, 'e_r2')
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
   })
 })

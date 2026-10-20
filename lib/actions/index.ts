@@ -106,8 +106,11 @@ export {
 export { storyHasTurns } from './story-entries/has-turns'
 export {
   getRollbackCounts,
+  rollbackCountsOf,
   rollbackToEntry,
+  sameRollbackCounts,
   updateStoryEntryContent,
+  type CountsChangedRejection,
   type RollbackCounts,
   type StoryEntryRejection,
 } from './story-entries/operational'

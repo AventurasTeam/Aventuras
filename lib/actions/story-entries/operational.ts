@@ -161,6 +161,14 @@ async function updateStoryEntryContentBracketed(
 
 export type RollbackCounts = { entries: number; chapters: number; worldStateChanges: number }
 
+/** The set moved since the confirm showed its counts; `counts` is the set as it stands now. */
+export type CountsChangedRejection = {
+  status: 'rejected'
+  code: typeof STORY_ENTRY_REJECTION.countsChanged
+  reason: string
+  counts: RollbackCounts
+}
+
 async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
@@ -251,7 +259,7 @@ export async function resolveSweep(
 // entry is being deleted, so counting one here would charge the user twice for a loss
 // the entries line already reports.
 // A cleared parent logs no delta but still moves a place, so it counts as a change.
-function countBuckets({ rows, refClears }: ReversalSet): RollbackCounts {
+export function rollbackCountsOf({ rows, refClears }: ReversalSet): RollbackCounts {
   let entries = 0
   let chapters = 0
   let worldStateChanges = refClears.length
@@ -262,6 +270,14 @@ function countBuckets({ rows, refClears }: ReversalSet): RollbackCounts {
     else worldStateChanges++
   }
   return { entries, chapters, worldStateChanges }
+}
+
+export function sameRollbackCounts(a: RollbackCounts, b: RollbackCounts): boolean {
+  return (
+    a.entries === b.entries &&
+    a.chapters === b.chapters &&
+    a.worldStateChanges === b.worldStateChanges
+  )
 }
 
 const ROLLBACK_PREVIEW_LOCK_ID = 'rollback-preview'
@@ -279,21 +295,32 @@ export async function getRollbackCounts(
     resolveSweep(branchId, targetId, ctx),
   )
   if ('status' in swept) return swept
-  return countBuckets(swept.set)
+  return rollbackCountsOf(swept.set)
 }
 
 export async function rollbackToEntry(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ status: 'ok'; counts: RollbackCounts } | StoryEntryRejection> {
+  opts?: { expectedCounts?: RollbackCounts },
+): Promise<
+  { status: 'ok'; counts: RollbackCounts } | StoryEntryRejection | CountsChangedRejection
+> {
   // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
   if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
 
   return bracketProseReversal(branchId, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
-    const counts = countBuckets(swept.set)
+    const counts = rollbackCountsOf(swept.set)
+    // Compared with the set the commit reverses, so the consent covers exactly what goes.
+    if (opts?.expectedCounts && !sameRollbackCounts(counts, opts.expectedCounts))
+      return {
+        status: 'rejected',
+        code: STORY_ENTRY_REJECTION.countsChanged,
+        reason: 'rollback counts changed since the confirm opened',
+        counts,
+      }
     try {
       await commitNewAction(swept.set, ctx, swept.clampOps)
     } catch (e) {

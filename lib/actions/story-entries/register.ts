@@ -20,6 +20,7 @@ export const STORY_ENTRY_REJECTION = {
   notTailEntry: 'not-tail-entry',
   retiredPlace: PLACE_REFUSAL.retiredPlace,
   deltaFailed: 'delta-failed',
+  countsChanged: 'counts-changed',
 } as const
 export type StoryEntryRejectionCode =
   (typeof STORY_ENTRY_REJECTION)[keyof typeof STORY_ENTRY_REJECTION]
