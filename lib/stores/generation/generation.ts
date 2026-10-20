@@ -105,8 +105,8 @@ function withDeferral(
 
 type GenerationState = {
   txState: TxState
-  // Turns from admission until their body settles, past the pending mark (which ends at
-  // reservation): a regenerate's follow-up sweep runs in this tail with no run and no mark.
+  // Each bracketPendingTurn body, from its mark until it settles, past the mark's end at
+  // reservation: a regenerate's follow-up sweep runs in this tail with no run and no mark.
   turnBodies: ReadonlySet<PendingTurn>
   // Monotonic; bumps when a run leaves txState (finish, successor swap, abort)
   // or a reversal settles — the points where a run's writes are final.
