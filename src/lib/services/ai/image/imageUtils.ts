@@ -4,7 +4,12 @@
  * Helper functions for image generation using the standalone provider registry.
  */
 
-import { generateImage, supportsImageGeneration, requiresApiKey } from './providers/registry'
+import {
+  generateImage,
+  supportsImageGeneration,
+  requiresApiKey,
+  IMAGE_PROVIDER_LABELS,
+} from './providers/registry'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { EmbeddedImage, StorySettings } from '#lib/types/index.ts'
@@ -88,19 +93,7 @@ export function getProviderDisplayName(): string {
   const profile = settings.getImageProfile(profileId)
   if (!profile) return 'Unknown'
 
-  const names: Record<string, string> = {
-    openai: 'OpenAI',
-    'openai-compatible': 'OpenAI Compatible',
-    openrouter: 'OpenRouter',
-    nanogpt: 'NanoGPT',
-    chutes: 'Chutes',
-    pollinations: 'Pollinations.ai',
-    google: 'Google',
-    zhipu: 'Zhipu',
-    comfyui: 'ComfyUI',
-  }
-
-  return names[profile.providerType] || profile.providerType
+  return IMAGE_PROVIDER_LABELS[profile.providerType] ?? profile.providerType
 }
 
 /**

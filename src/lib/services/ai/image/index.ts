@@ -26,6 +26,8 @@ export {
   listLoras,
   requiresApiKey,
   takesApiKey,
+  IMAGE_PROVIDER_LABELS,
+  IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,
 } from './providers/registry'
 

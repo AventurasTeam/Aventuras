@@ -43,6 +43,8 @@ import {
   supportsImageGeneration,
   requiresApiKey,
   takesApiKey,
+  IMAGE_PROVIDER_LABELS,
+  IMAGE_PROVIDER_OPTIONS,
   generateImage,
   supportsReferenceImages,
   listImageModels,
@@ -86,7 +88,7 @@ describe('Image Provider Registry', () => {
   })
 
   describe('requiresApiKey', () => {
-    it.each(['comfyui', 'a1111'] as ImageProviderType[])(
+    it.each(['comfyui', 'a1111'] satisfies ImageProviderType[])(
       'returns false for the self-hosted provider %s',
       (providerType) => {
         expect(requiresApiKey(providerType)).toBe(false)
@@ -102,7 +104,7 @@ describe('Image Provider Registry', () => {
       'zhipu',
       // Its model list is open, its generation is not.
       'pollinations',
-    ] as ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
+    ] satisfies ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
       expect(requiresApiKey(providerType)).toBe(true)
     })
 
@@ -116,22 +118,35 @@ describe('Image Provider Registry', () => {
   })
 
   describe('takesApiKey', () => {
-    it.each(['comfyui', 'a1111'] as ImageProviderType[])(
+    it.each(['comfyui', 'a1111'] satisfies ImageProviderType[])(
       'is false for the self-hosted provider %s',
       (providerType) => {
         expect(takesApiKey(providerType)).toBe(false)
       },
     )
 
-    it.each(['openai', 'openai-compatible', 'google', 'pollinations'] as ImageProviderType[])(
-      'is true for %s',
-      (providerType) => {
-        expect(takesApiKey(providerType)).toBe(true)
-      },
-    )
+    it.each([
+      'openai',
+      'openai-compatible',
+      'google',
+      'pollinations',
+    ] satisfies ImageProviderType[])('is true for %s', (providerType) => {
+      expect(takesApiKey(providerType)).toBe(true)
+    })
 
     it('assumes an unknown provider takes a key', () => {
       expect(takesApiKey('unknown-provider')).toBe(true)
+    })
+  })
+
+  describe('IMAGE_PROVIDER_OPTIONS', () => {
+    it('offers every provider once, under its label', () => {
+      expect(IMAGE_PROVIDER_OPTIONS.map((o) => o.value).toSorted()).toEqual(
+        Object.keys(IMAGE_PROVIDER_LABELS).toSorted(),
+      )
+      for (const { value, label } of IMAGE_PROVIDER_OPTIONS) {
+        expect(label).toBe(IMAGE_PROVIDER_LABELS[value])
+      }
     })
   })
 

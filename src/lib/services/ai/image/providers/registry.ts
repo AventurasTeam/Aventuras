@@ -51,6 +51,21 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   a1111: createA1111Provider,
 }
 
+export const IMAGE_PROVIDER_LABELS: Record<ImageProviderType, string> = {
+  nanogpt: 'NanoGPT',
+  openai: 'OpenAI',
+  'openai-compatible': 'OpenAI Compatible',
+  openrouter: 'OpenRouter',
+  chutes: 'Chutes',
+  pollinations: 'Pollinations',
+  google: 'Google AI Studio',
+  zhipu: 'Zhipu CogView',
+  comfyui: 'ComfyUI',
+  a1111: 'A1111 / SD.cpp / Kobold',
+}
+
+type FieldMode = 'required' | 'optional' | 'none'
+
 /**
  * How a provider uses an API key: `required` for the hosted ones, `optional` for an endpoint
  * the user runs or fronts themselves, `none` for the ones that run on the user's own machine.
@@ -60,7 +75,7 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
  * generation is not, and a profile that can list and cannot draw is the worse failure —
  * it looks configured.
  */
-const PROVIDER_API_KEY: Record<ImageProviderType, 'required' | 'optional' | 'none'> = {
+const PROVIDER_API_KEY: Record<ImageProviderType, FieldMode> = {
   nanogpt: 'required',
   openai: 'required',
   'openai-compatible': 'optional',
@@ -112,18 +127,27 @@ function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?:
 /**
  * Check if a provider type supports image generation.
  */
-export function supportsImageGeneration(providerType: string): boolean {
+export function supportsImageGeneration(providerType: string): providerType is ImageProviderType {
   return providerType in PROVIDER_FACTORIES
+}
+
+export const IMAGE_PROVIDER_OPTIONS = Object.entries(IMAGE_PROVIDER_LABELS).flatMap(
+  ([value, label]) => (supportsImageGeneration(value) ? [{ value, label }] : []),
+)
+
+// An unknown provider is assumed to need a key.
+function apiKeyMode(providerType: string): FieldMode {
+  return supportsImageGeneration(providerType) ? PROVIDER_API_KEY[providerType] : 'required'
 }
 
 /** Whether a profile of this provider needs an API key to be usable. */
 export function requiresApiKey(providerType: string): boolean {
-  return (PROVIDER_API_KEY[providerType as ImageProviderType] ?? 'required') === 'required'
+  return apiKeyMode(providerType) === 'required'
 }
 
 /** Whether a profile of this provider has an API key field at all. */
 export function takesApiKey(providerType: string): boolean {
-  return (PROVIDER_API_KEY[providerType as ImageProviderType] ?? 'required') !== 'none'
+  return apiKeyMode(providerType) !== 'none'
 }
 
 /**

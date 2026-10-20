@@ -26,6 +26,7 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 }))
 
 vi.mock('./providers/registry', () => ({
+  IMAGE_PROVIDER_LABELS: { openai: 'OpenAI' },
   supportsImageGeneration: (providerType: string) => providerType !== 'no-backend',
   requiresApiKey: (providerType: string) => providerType === 'openai',
 }))
