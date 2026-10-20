@@ -5,6 +5,8 @@ import type {
   WorldStateBreakRecord,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
+  WorldStateMark,
+  WorldStateMarkType,
 } from '#lib/types/index.ts'
 import { TRACKED_ENTITY_TYPES, canonicalId, rowsOf, type TrackedState } from './state'
 
@@ -54,6 +56,21 @@ export function headerRecord(
     kind: 'header',
     ...fields,
     coverage: 'full',
+  }
+}
+
+export function markRecord(
+  scope: RecordScope,
+  entityType: WorldStateMarkType,
+  entityId: string,
+): WorldStateMark {
+  return {
+    id: crypto.randomUUID(),
+    ...scope,
+    seq: 0,
+    entityType,
+    entityId,
+    createdAt: Date.now(),
   }
 }
 

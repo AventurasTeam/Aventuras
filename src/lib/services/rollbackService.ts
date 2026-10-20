@@ -3,8 +3,7 @@
  *
  * The plan comes from the reversal engine (`services/stateTracking`) over the live state, so
  * every recorded change is undone newest first, and is applied in one transaction: a revert
- * lands whole or not at all. Entries recorded before change records existed are read from
- * their `world_state_delta`.
+ * lands whole or not at all.
  */
 
 import type {
@@ -16,7 +15,6 @@ import type {
 import { database, type DbStatement } from './database'
 import {
   clockAfter,
-  withLegacyRecords,
   planReversal,
   type ReversalOp,
   type ReversalPlan,
@@ -52,14 +50,12 @@ export interface RollbackSummary {
   restoredTimeTracker: boolean
 }
 
-/** The records to undo for a revert from `fromPosition`, older delta documents included. */
+/** The records to undo for a revert from `fromPosition`. */
 function recordsFrom(input: RollbackInput): WorldStateRecord[] {
-  const reverted = input.entries.filter((e) => e.position >= input.fromPosition)
-  const ids = new Set(reverted.map((e) => e.id))
-  return withLegacyRecords(
-    reverted,
-    input.records.filter((r) => ids.has(r.entryId)),
+  const ids = new Set(
+    input.entries.filter((e) => e.position >= input.fromPosition).map((e) => e.id),
   )
+  return input.records.filter((r) => ids.has(r.entryId))
 }
 
 export function planRollback(
@@ -176,6 +172,26 @@ export function addRowStatement(
     case 'lorebook_entry':
       return database.addEntryStatement(row as never, replace)
   }
+}
+
+/**
+ * The writes undoing a chapter's lore on the live lorebook. The undone records are removed from
+ * the history rather than answered with records of the undo, so a later revert or chapter delete
+ * never lists them again; the snapshots taken since hold their effect and go with them.
+ */
+export function chapterLoreStatements(input: {
+  storyId: string
+  plan: ReversalPlan
+  reverted: WorldStateRecord[]
+  lineBranchIds: (string | null)[]
+}): DbStatement[] {
+  // Marked after the first record undone, a snapshot holds its effect.
+  const since = Math.min(...input.reverted.map((r) => r.seq))
+  return [
+    ...input.plan.ops.flatMap((op) => statementsFor(input.storyId, op)),
+    ...database.deleteWorldStateRecordsStatements(input.reverted.map((r) => r.id)),
+    ...database.deleteWorldStateSnapshotsSinceStatements(input.storyId, input.lineBranchIds, since),
+  ]
 }
 
 class RollbackService {

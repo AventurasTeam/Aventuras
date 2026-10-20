@@ -2,6 +2,7 @@ import type {
   StoryEntry,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
+  WorldStateMark,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 
@@ -36,6 +37,23 @@ export function lastCompletedEntry<E extends Pick<StoryEntry, 'type'>>(
   return last >= 0 ? entries[last] : null
 }
 
+/**
+ * Where the records of an entry deleted without a rollback go, its changes staying live. A
+ * narration's go to the entry after it, so the state before it still leaves them out. A user
+ * action's were made before the narration answering it, so they go to the entry before, where
+ * regenerating that narration keeps them. Either takes the other side when there is no entry on
+ * its own; undefined when the deleted entry was the only one.
+ */
+export function recordsHolder<E extends Pick<StoryEntry, 'position' | 'type'>>(
+  line: E[],
+  deleted: E,
+): E | undefined {
+  const sorted = [...line].sort((a, b) => a.position - b.position)
+  const after = sorted.find((e) => e.position > deleted.position)
+  const before = sorted.reverse().find((e) => e.position < deleted.position)
+  return deleted.type === 'user_action' ? (before ?? after) : (after ?? before)
+}
+
 /** The last header on the line before `position`, and whether a break follows it. */
 export function lastHeaderOnLine(
   records: WorldStateRecord[],
@@ -57,6 +75,8 @@ export interface AnchorCandidate {
   id: string | null
   /** Position of the entry the state was taken at. */
   position: number
+  /** Its mark: the state holds every record before it. Infinity for the live state. */
+  seq: number
   takenAt: number
 }
 
@@ -218,7 +238,7 @@ export function resolveRun(query: RunQuery): RunResult {
   const targetHeader = target ? headersByEntry.get(target.id) : undefined
   const candidates = query.candidates
     .filter((c) => c.position >= query.target)
-    .sort((a, b) => a.takenAt - b.takenAt)
+    .sort((a, b) => a.seq - b.seq)
 
   const checked = candidates.map((anchor) => ({ anchor, gaps: checkAnchor(anchor) }))
   const passed = checked.find((c) => c.gaps.length === 0)
@@ -296,7 +316,7 @@ export function resolveOverride(query: RunQuery, override: GapOverride): RunResu
   if (override === 'previousAsIs') {
     const previous = query.candidates
       .filter((c) => c.position <= query.target)
-      .sort((a, b) => b.position - a.position || b.takenAt - a.takenAt)[0]
+      .sort((a, b) => b.position - a.position || b.seq - a.seq)[0]
     return previous
       ? { ok: true, anchor: previous, records: [], late: [] }
       : { ok: false, reason: 'noAnchor' }
@@ -304,7 +324,7 @@ export function resolveOverride(query: RunQuery, override: GapOverride): RunResu
 
   const next = query.candidates
     .filter((c) => c.position >= query.target)
-    .sort((a, b) => a.takenAt - b.takenAt)[0]
+    .sort((a, b) => a.seq - b.seq)[0]
   if (!next) return { ok: false, reason: 'noAnchor' }
   if (override === 'nextAsIs') return { ok: true, anchor: next, records: [], late: [] }
   return { ok: true, ...rebuildFrom(query, next) }
@@ -312,7 +332,7 @@ export function resolveOverride(query: RunQuery, override: GapOverride): RunResu
 
 /**
  * What rebuilding `query.target` from `anchor` takes: the records it holds for later entries,
- * to undo, and the changes for the target or earlier written after it was saved, to apply.
+ * to undo, and the changes for the target or earlier written after its mark, to apply.
  */
 function rebuildFrom(
   query: RunQuery,
@@ -321,14 +341,11 @@ function rebuildFrom(
   const positions = new Map(query.line.map((e) => [e.id, e.position]))
   const positionOf = (r: WorldStateRecord) => positions.get(r.entryId) ?? -Infinity
   const records = query.records.filter(
-    (r) =>
-      positionOf(r) > query.target &&
-      positionOf(r) <= anchor.position &&
-      r.createdAt <= anchor.takenAt,
+    (r) => positionOf(r) > query.target && positionOf(r) <= anchor.position && r.seq < anchor.seq,
   )
   const late = query.records.filter(
     (r): r is WorldStateChangeRecord =>
-      r.kind === 'change' && positionOf(r) <= query.target && r.createdAt > anchor.takenAt,
+      r.kind === 'change' && positionOf(r) <= query.target && r.seq > anchor.seq,
   )
   return { anchor, records, late }
 }
@@ -342,13 +359,15 @@ export function recordsForExport(
   records: WorldStateRecord[],
   tracking: { on: boolean; enabledSince: number | null },
   now: number,
+  /** The marks exported with them, which the breaks come after too. */
+  marks: WorldStateMark[] = [],
 ): WorldStateRecord[] {
   const lastByBranch = new Map<string | null, WorldStateRecord>()
   for (const r of records) {
     const last = lastByBranch.get(r.branchId)
     if (!last || r.seq > last.seq) lastByBranch.set(r.branchId, r)
   }
-  const maxSeq = records.reduce((max, r) => Math.max(max, r.seq), 0)
+  const maxSeq = [...records, ...marks].reduce((max, r) => Math.max(max, r.seq), 0)
   const breaks: WorldStateRecord[] = []
   for (const last of lastByBranch.values()) {
     const vouched =
@@ -365,4 +384,9 @@ export function recordsForExport(
     })
   }
   return [...records, ...breaks]
+}
+
+/** The marks to put in a story file: snapshots stay behind, so theirs do too. */
+export function marksForExport(marks: WorldStateMark[]): WorldStateMark[] {
+  return marks.filter((m) => m.entityType !== 'snapshot')
 }

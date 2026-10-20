@@ -21,6 +21,7 @@ const calls = {
   items: [] as any[],
   storyBeats: [] as any[],
   checkpoints: [] as any[],
+  records: [] as any[],
 }
 let failOnCreateStory = false
 
@@ -43,6 +44,9 @@ vi.mock('#lib/services/database.ts', () => ({
     createCheckpoint: vi.fn(async (c: any) => void calls.checkpoints.push(c)),
     updateBranch: vi.fn(async () => {}),
     setStoryCurrentBranch: vi.fn(async () => {}),
+    worldStateRecordStatement: (record: any) => record,
+    worldStateMarkStatement: (mark: any) => mark,
+    transaction: vi.fn(async (statements: any[]) => void calls.records.push(...statements)),
   },
 }))
 
@@ -59,6 +63,7 @@ beforeEach(() => {
   calls.items.length = 0
   calls.storyBeats.length = 0
   calls.checkpoints.length = 0
+  calls.records.length = 0
   failOnCreateStory = false
   invoke.mockReset()
 })
@@ -198,45 +203,75 @@ describe('runImport — rollback', () => {
 })
 
 describe('runImport — entry fields', () => {
-  it('carries reasoning, suggestedActions and worldStateDelta through to addStoryEntry', async () => {
+  const change = (entityType: string, op = 'update') =>
+    calls.records.find((r) => r.kind === 'change' && r.entityType === entityType && r.op === op)
+
+  const header = (entryId: string) => ({
+    id: 'h',
+    storyId: 'story-old',
+    branchId: null,
+    entryId,
+    seq: 1,
+    createdAt: 1,
+    kind: 'header',
+    continuous: true,
+    coverage: 'full',
+  })
+
+  const checkpointOf = (entry: unknown) => ({
+    id: 'cp-1',
+    storyId: 'story-old',
+    name: 'before the cave',
+    lastEntryId: 'entry-1',
+    lastEntryPreview: 'c',
+    entryCount: 1,
+    entriesSnapshot: [entry],
+    charactersSnapshot: [],
+    locationsSnapshot: [],
+    itemsSnapshot: [],
+    storyBeatsSnapshot: [],
+    chaptersSnapshot: [],
+    timeTrackerSnapshot: null,
+    createdAt: 1,
+  })
+
+  it('carries reasoning and suggestedActions to addStoryEntry, and the delta into records', async () => {
     const result = await runImport(sampleExport())
 
     expect(result.success).toBe(true)
     expect(calls.entries[0].reasoning).toBe('because the hero hesitated')
     expect(calls.entries[0].suggestedActions).toBe('[{"text":"Fight","type":"action"}]')
-    expect(calls.entries[0].worldStateDelta).not.toBeNull()
+    expect('worldStateDelta' in calls.entries[0]).toBe(false)
+    expect(calls.records[0]).toMatchObject({
+      kind: 'header',
+      coverage: 'classifier',
+      entryId: calls.entries[0].id,
+      storyId: calls.stories[0].id,
+    })
   })
 
-  it('remaps every entity id inside worldStateDelta', async () => {
+  it('remaps every entity id in the records an old delta becomes', async () => {
     const result = await runImport(sampleExport())
     expect(result.success).toBe(true)
 
-    const delta = calls.entries[0].worldStateDelta
     const [charOld, charCreated] = calls.characters
     const [locOld] = calls.locations
     const [itemOld] = calls.items
     const [beatOld] = calls.storyBeats
 
     // Every id must be the freshly minted one, never the exporting install's.
-    expect(delta.previousState.characters[0].id).toBe(charOld.id)
-    expect(delta.previousState.locations[0].id).toBe(locOld.id)
-    expect(delta.previousState.items[0].id).toBe(itemOld.id)
-    expect(delta.previousState.storyBeats[0].id).toBe(beatOld.id)
-    expect(delta.createdEntities.characterIds).toEqual([charCreated.id])
-
+    expect(change('character').entityId).toBe(charOld.id)
+    expect(change('location').entityId).toBe(locOld.id)
+    expect(change('item').entityId).toBe(itemOld.id)
+    expect(change('story_beat').entityId).toBe(beatOld.id)
+    expect(change('character', 'create').entityId).toBe(charCreated.id)
     // An item's `location` is a location id too.
-    expect(delta.previousState.items[0].location).toBe(locOld.id)
+    expect(change('item').before.location).toBe(locOld.id)
 
-    // The one that actually corrupts state when missed: `setCurrentLocation` clears `current` on
-    // every location before matching this, so a stale id leaves the story with no location at all.
-    expect(delta.previousState.currentLocationId).toBe(locOld.id)
-
-    expect(JSON.stringify(delta)).not.toContain('-old')
-    expect(JSON.stringify(delta)).not.toContain('char-created')
-
-    // Non-id payload is carried through untouched.
-    expect(delta.classificationResult).toEqual({ summary: 'the hero drew a blade' })
-    expect(delta.previousState.timeTracker).toEqual({ years: 0, days: 1, hours: 2, minutes: 0 })
+    expect(JSON.stringify(calls.records)).not.toContain('-old')
+    expect(JSON.stringify(calls.records)).not.toContain('char-created')
+    // The raw classifier output is not carried.
+    expect(JSON.stringify(calls.records)).not.toContain('the hero drew a blade')
   })
 
   it("keeps the 'inventory' sentinel out of the delta's id remapping", async () => {
@@ -246,7 +281,7 @@ describe('runImport — entry fields', () => {
     const result = await runImport(data)
 
     expect(result.success).toBe(true)
-    expect(calls.entries[0].worldStateDelta.previousState.items[0].location).toBe('inventory')
+    expect(change('item').before.location).toBe('inventory')
   })
 
   it('normalises a delta whose sub-objects are missing instead of failing the import', async () => {
@@ -256,10 +291,7 @@ describe('runImport — entry fields', () => {
     const result = await runImport(data)
 
     expect(result.success).toBe(true)
-    const delta = calls.entries[0].worldStateDelta
-    expect(delta.previousState.characters).toEqual([])
-    expect(delta.previousState.currentLocationId).toBeNull()
-    expect(delta.createdEntities.itemIds).toEqual([])
+    expect(calls.records.map((r) => r.kind)).toEqual(['header'])
   })
 
   it('imports an entry lacking all three fields without inventing values', async () => {
@@ -271,11 +303,11 @@ describe('runImport — entry fields', () => {
     const result = await runImport(data)
 
     expect(result.success).toBe(true)
-    // `reasoning` is optional-undefined on StoryEntry; the other two are nullable. Either way
+    // `reasoning` is optional-undefined on StoryEntry; `suggestedActions` is nullable. Either way
     // `addStoryEntry` writes NULL, and regeneration still fires for a story with no choices.
     expect(calls.entries[0].reasoning).toBeUndefined()
     expect(calls.entries[0].suggestedActions).toBeNull()
-    expect(calls.entries[0].worldStateDelta).toBeNull()
+    expect(calls.records).toEqual([])
   })
 
   it('preserves the fields on entries belonging to a non-main branch', async () => {
@@ -329,49 +361,110 @@ describe('runImport — entry fields', () => {
     expect(calls.entries[0].branchId).not.toBeNull()
     expect(calls.entries[0].reasoning).toBe('branch reasoning')
     expect(calls.entries[0].suggestedActions).toBe('[{"text":"Explore","type":"move"}]')
-    // The remap is not skipped just because the entry sits on a branch.
-    expect(calls.entries[0].worldStateDelta.previousState.currentLocationId).toBe(
-      calls.locations[0].id,
-    )
+    // The scene the entry left, remapped and on the entry's branch.
+    expect(change('location')).toMatchObject({
+      entityId: calls.locations[0].id,
+      before: { current: true },
+      branchId: calls.entries[0].branchId,
+    })
   })
 
-  it('remaps the delta inside a checkpoint entriesSnapshot too', async () => {
-    // A checkpoint snapshot carries whole entry rows, deltas included. Restoring one writes those
-    // rows back, so a stale-id delta surviving in a snapshot puts the bug back after the live
-    // rows have already shed it — and it would keep returning every time that checkpoint is used.
+  it('drops the delta inside a checkpoint entriesSnapshot', async () => {
     const data = sampleExport()
-    data.checkpoints = [
+    data.checkpoints = [checkpointOf(structuredClone(data.entries[0]))]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.checkpoints).toHaveLength(1)
+    expect('worldStateDelta' in calls.checkpoints[0].entriesSnapshot[0]).toBe(false)
+    // The snapshot's own entry id is remapped as well, or it points at no live row.
+    expect(calls.checkpoints[0].entriesSnapshot[0].id).toBe(calls.entries[0].id)
+  })
+
+  it('refuses a file carrying both deltas and change records, writing nothing', async () => {
+    const data = sampleExport()
+    data.worldStateRecords = [header('entry-1')]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('development build')
+    expect(calls.stories).toEqual([])
+  })
+
+  it('imports a file whose deltas sit only inside checkpoints, next to its records', async () => {
+    const data = sampleExport()
+    data.checkpoints = [checkpointOf(structuredClone(data.entries[0]))]
+    delete data.entries[0].worldStateDelta
+    data.worldStateRecords = [header('entry-1')]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect('worldStateDelta' in calls.checkpoints[0].entriesSnapshot[0]).toBe(false)
+  })
+
+  const marks = () => calls.records.filter((r) => r.entityType === 'checkpoint')
+
+  it('places a mark after the records for a checkpoint from a file without marks', async () => {
+    const data = sampleExport()
+    delete data.entries[0].worldStateDelta
+    data.checkpoints = [{ ...checkpointOf(structuredClone(data.entries[0])), createdAt: 5 }]
+    data.worldStateRecords = [header('entry-1')]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.records.map((r) => r.kind ?? r.entityType)).toEqual(['header', 'checkpoint'])
+    expect(marks()[0]).toMatchObject({
+      entityId: calls.checkpoints[0].id,
+      entryId: calls.entries[0].id,
+    })
+  })
+
+  it("places a checkpoint among an older file's converted records by its entry", async () => {
+    const data = sampleExport()
+    // A sync re-created both entries after the checkpoint was made.
+    data.entries[0].createdAt = 2000
+    data.entries.push({ ...structuredClone(data.entries[0]), id: 'entry-2', position: 1 })
+    data.checkpoints = [{ ...checkpointOf(structuredClone(data.entries[0])), createdAt: 5 }]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    const [first, second] = calls.entries.map((e) => e.id)
+    const at = calls.records.findIndex((r) => r.entityType === 'checkpoint' && !r.kind)
+    const on = (entryId: string) =>
+      calls.records.flatMap((r, i) => (r.kind && r.entryId === entryId ? [i] : []))
+    expect(Math.max(...on(first))).toBeLessThan(at)
+    expect(Math.min(...on(second))).toBeGreaterThan(at)
+  })
+
+  it("re-keys a file's own marks and places none of its own", async () => {
+    const data = sampleExport()
+    delete data.entries[0].worldStateDelta
+    data.checkpoints = [checkpointOf(structuredClone(data.entries[0]))]
+    data.worldStateRecords = [{ ...header('entry-1'), seq: 2 }]
+    data.worldStateMarks = [
       {
-        id: 'cp-1',
+        id: 'm',
         storyId: 'story-old',
-        name: 'before the cave',
-        lastEntryId: 'entry-1',
-        lastEntryPreview: 'c',
-        entryCount: 1,
-        entriesSnapshot: [structuredClone(data.entries[0])],
-        charactersSnapshot: [],
-        locationsSnapshot: [],
-        itemsSnapshot: [],
-        storyBeatsSnapshot: [],
-        chaptersSnapshot: [],
-        timeTrackerSnapshot: null,
-        createdAt: 1,
+        branchId: null,
+        entryId: 'entry-1',
+        seq: 1,
+        entityType: 'checkpoint',
+        entityId: 'cp-1',
+        createdAt: 99,
       },
     ]
 
     const result = await runImport(data)
 
     expect(result.success).toBe(true)
-    expect(calls.checkpoints).toHaveLength(1)
-
-    const snapshotDelta = calls.checkpoints[0].entriesSnapshot[0].worldStateDelta
-    expect(snapshotDelta.previousState.currentLocationId).toBe(calls.locations[0].id)
-    expect(snapshotDelta.previousState.characters[0].id).toBe(calls.characters[0].id)
-    expect(snapshotDelta.createdEntities.characterIds).toEqual([calls.characters[1].id])
-    expect(JSON.stringify(snapshotDelta)).not.toContain('-old')
-
-    // The snapshot's own entry id is remapped as well, or it points at no live row.
-    expect(calls.checkpoints[0].entriesSnapshot[0].id).toBe(calls.entries[0].id)
+    expect(calls.records.map((r) => r.kind ?? r.entityType)).toEqual(['checkpoint', 'header'])
+    expect(marks()).toHaveLength(1)
+    expect(marks()[0].entityId).toBe(calls.checkpoints[0].id)
   })
 })
 

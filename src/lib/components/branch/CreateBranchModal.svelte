@@ -7,7 +7,7 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { GitBranch, Loader2, X } from '@lucide/svelte'
+  import { GitBranch, Loader2 } from '@lucide/svelte'
 
   let {
     open = $bindable(false),
@@ -82,23 +82,23 @@
       />
     </div>
     <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button variant="secondary" size="sm" onclick={cancel} disabled={saving} class="h-9 px-3">
-        <X class="mr-1.5 h-4 w-4" />
-        Cancel
-      </Button>
-      <Button
-        size="sm"
-        onclick={() => void create()}
-        disabled={!name.trim() || saving || !checkpoint}
-        class="h-9 bg-amber-500 px-3 text-white hover:bg-amber-600"
-      >
-        {#if saving}
-          <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-        {:else}
-          <GitBranch class="mr-1.5 h-4 w-4" />
-        {/if}
-        Create Branch
-      </Button>
+      <span class="flex w-full gap-2 sm:w-auto">
+        <Button variant="outline" class="flex-1 sm:flex-none" onclick={cancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button
+          onclick={() => void create()}
+          disabled={!name.trim() || saving || !checkpoint}
+          class="flex-1 bg-amber-500 text-white hover:bg-amber-600 sm:flex-none"
+        >
+          {#if saving}
+            <Loader2 class="h-4 w-4 animate-spin" />
+          {:else}
+            <GitBranch class="h-4 w-4" />
+          {/if}
+          Create Branch
+        </Button>
+      </span>
     </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

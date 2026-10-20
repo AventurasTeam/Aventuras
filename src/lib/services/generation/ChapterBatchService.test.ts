@@ -100,12 +100,7 @@ function baseCallbacks(overrides: Partial<ChapterBatchCallbacks> = {}): ChapterB
   return {
     isCancelled: () => false,
     onChapterProgress: vi.fn(),
-    loreCallbacks: {
-      onCreateEntry: vi.fn(async () => {}),
-      onUpdateEntry: vi.fn(async () => {}),
-      onDeleteEntry: vi.fn(async () => {}),
-      onMergeEntries: vi.fn(async () => {}),
-    },
+    loreCallbacks: { onSaveSession: vi.fn(async () => {}) },
     ...overrides,
   }
 }

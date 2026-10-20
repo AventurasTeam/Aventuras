@@ -13,6 +13,7 @@
   import LorebookVaultImportModal from './LorebookVaultImportModal.svelte'
   import { BookOpen, Plus, ArrowLeft, Loader2, Bot, AlertCircle, RotateCcw } from '@lucide/svelte'
   import { runManualLoreManagement } from '#lib/services/generation/index.ts'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
 
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Alert, AlertDescription, AlertTitle } from '#lib/components/ui/alert/index.ts'
@@ -24,6 +25,29 @@
 
   // Track if we're in "new entry" mode
   let creatingNew = $state(false)
+
+  /** A failed chapter session runs again for its chapter, so its changes stay the chapter's. */
+  function retryLoreManagement() {
+    const retry = ui.loreManagementRetry
+    if (!retry) {
+      void runManualLoreManagement()
+      return
+    }
+    const open =
+      story.currentStory?.id === retry.storyId &&
+      (story.currentStory.currentBranchId ?? null) === retry.branchId
+    const chapter = open ? story.chapters.find((ch) => ch.id === retry.chapterId) : undefined
+    if (!chapter) {
+      ui.showToast(
+        open
+          ? 'The chapter whose lore management failed no longer exists.'
+          : 'Open the branch of the chapter whose lore management failed to retry it.',
+        'warning',
+      )
+      return
+    }
+    void chapterCards.restartLore(chapter, { readAfterChapter: retry.readAfterChapter })
+  }
 
   // Vault import modal open state
   let vaultImportOpen = $state(false)
@@ -176,7 +200,7 @@
               variant="outline"
               size="sm"
               class="border-destructive/30 text-destructive hover:bg-destructive/10 h-8 text-xs"
-              onclick={() => void runManualLoreManagement()}
+              onclick={retryLoreManagement}
             >
               <RotateCcw class="mr-1.5 h-3.5 w-3.5" />
               Retry

@@ -8,7 +8,8 @@
 import { ChapterCards, type ChapterCard } from '#lib/services/chapterCreation/index.ts'
 import { ui } from '#lib/stores/ui.svelte.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
-import { isLoreManagementRunning } from '#lib/services/generation/index.ts'
+import type { Chapter } from '#lib/types/index.ts'
+import { isLoreManagementRunning, runManualLoreManagement } from '#lib/services/generation/index.ts'
 
 class ChapterCardsStore {
   /** Increments on every change. Read it to make a derivation reactive. */
@@ -43,6 +44,27 @@ class ChapterCardsStore {
       this.cards.remove(card.id)
       activity.discardRecord(card.recordKey)
     }
+  }
+
+  /**
+   * Runs a chapter's lore management again, recorded as the chapter's, and moves its card along.
+   * Resolves once the run ends.
+   */
+  async restartLore(chapter: Chapter, options: { readAfterChapter?: boolean } = {}): Promise<void> {
+    const card = this.cards.withChapter(chapter.id)[0]
+    if (card) this.cards.loreRestarted(card.id)
+    const recordId = card ? activity.reopenRecord(card.recordKey) : null
+    const result = await runManualLoreManagement(
+      chapter,
+      recordId && card
+        ? { activity, placement: { recordId }, label: `Lore management (run ${card.loreRuns})` }
+        : undefined,
+      options,
+    )
+    if (recordId) activity.endRecord(recordId)
+    if (!card) return
+    if (result?.completed) this.cards.loreFinished(card.id)
+    else this.cards.loreIncomplete(card.id, result?.error ?? 'Lore management did not complete')
   }
 
   /**

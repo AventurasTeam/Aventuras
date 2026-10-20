@@ -5,10 +5,11 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
-    onConfirm: (endEntryIndex: number) => void
+    onConfirm: (endEntryIndex: number, readAfter: boolean) => void
     onClose: () => void
   }
 
@@ -22,6 +23,9 @@
   })
 
   const entries = $derived(availableEntries())
+
+  // Off by default, so chaining chapters by hand does not read each tail twice.
+  let readAfter = $state(false)
 
   // Selected entry index (relative to available entries)
   let selectedIndex = $derived(Math.max(0, entries.length - 1))
@@ -37,7 +41,7 @@
     if (entries.length === 0) return
     // Convert to absolute index
     const absoluteIndex = story.lastChapterEndIndex + selectedIndex + 1
-    onConfirm(absoluteIndex)
+    onConfirm(absoluteIndex, readAfter)
   }
 </script>
 
@@ -88,6 +92,10 @@
         <div class="text-muted-foreground bg-muted/20 border-t px-4 py-2 text-xs">
           Chapter will include {selectedIndex + 1} of {entries.length} entries
         </div>
+        <label class="flex items-center gap-2 border-t px-4 py-3 text-sm">
+          <Switch bind:checked={readAfter} disabled={ui.memoryLoading} />
+          Lore management reads the story after this chapter
+        </label>
       {/if}
     </div>
 

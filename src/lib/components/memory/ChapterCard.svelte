@@ -17,7 +17,6 @@
     X,
     MilestoneIcon,
   } from '@lucide/svelte'
-  import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
@@ -97,17 +96,8 @@
 
   const isLast = $derived(story.isLastChapter(chapter.id))
 
-  async function handleDelete() {
-    const confirmed = await ask(
-      `Are you sure you want to delete Chapter ${chapter.number}${chapter.title ? `: ${chapter.title}` : ''}? The story entries will remain, but the summary will be lost.`,
-      {
-        title: 'Delete Chapter',
-        kind: 'warning',
-      },
-    )
-    if (confirmed) {
-      await story.deleteChapter(chapter.id)
-    }
+  function handleDelete() {
+    ui.requestChapterDelete(chapter.id)
   }
 </script>
 

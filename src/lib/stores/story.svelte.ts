@@ -23,6 +23,7 @@ import type {
   TrackedEntityType,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
+  WorldStateMark,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 import { database, type DbStatement } from '#lib/services/database.ts'
@@ -33,21 +34,27 @@ import {
   changedFields,
   classifierView,
   cloneState,
-  breakRecord,
   diffStates,
   headerRecord,
   isContinuous,
   lastCompletedEntry,
   KEEP_ALL,
+  KEEP_NONE,
   pastQuery,
   skippedSnapshots,
   lastHeaderOnLine,
+  recordsHolder,
+  chapterMark,
+  loreOwners,
+  planChapterLoreRevert,
   planReversal,
   refusalMessage,
   resolveOverride,
   resolveRun,
   rowsOf,
   type AnchorCandidate,
+  type ChapterLoreRefusal,
+  type ChapterLoreRevert,
   type GapOverride,
   type LoreChapter,
   type PastSources,
@@ -65,6 +72,7 @@ import {
   DELETE_ROW,
   MARK_ROW_DELETED,
   addRowStatement,
+  chapterLoreStatements,
   planRollback,
   rollbackService,
   type RollbackSummary,
@@ -131,6 +139,7 @@ import {
   buildLoreManagementCallbacks,
   buildLoreManagementUICallbacks,
   resolveCharacterPresence,
+  type LoreSessionWrites,
   type WorldState,
 } from '#lib/services/generation/index.ts'
 import { createLogger } from '#lib/log.ts'
@@ -226,6 +235,8 @@ export interface PastCheckpointPreview {
   unkeepable: WorldStateChangeRecord[]
   /** The chapters whose lore management the rebuild undoes. */
   lore: LoreChapter[]
+  /** Whether the rebuild undoes any of the classifier's changes. */
+  classifier: boolean
   /** Without a refusal, the full state the rebuild starts from. */
   source: AnchorLabel | null
   /**
@@ -243,9 +254,35 @@ export interface RevertPreview {
   unkeepable: WorldStateChangeRecord[]
   /** The chapters whose lore management the revert undoes. */
   lore: LoreChapter[]
+  /** Whether the revert undoes any of the classifier's changes. */
+  classifier: boolean
 }
 
-const NO_REVERT: RevertPreview = { manual: [], tidy: [], unkeepable: [], lore: [] }
+const NO_REVERT: RevertPreview = {
+  manual: [],
+  tidy: [],
+  unkeepable: [],
+  lore: [],
+  classifier: false,
+}
+
+/** What deleting a chapter would undo of its lore management. */
+export interface ChapterLorePreview {
+  /** Why the lore cannot be undone with the chapter; null when it can. */
+  refusal: ChapterLoreRefusal | null
+  /** The chapter's own lorebook changes. */
+  undone: WorldStateChangeRecord[]
+  /** The reader's later changes to those entries, undone with the chapter's. */
+  manual: WorldStateChangeRecord[]
+  /** Later changes from lore management the reader ran, likewise. */
+  tidy: WorldStateChangeRecord[]
+  /** Later changes from the lore management of chapters since deleted, likewise. */
+  deletedChapters: WorldStateChangeRecord[]
+  /** Later changes to those entries that cannot be applied again, their entry being gone. */
+  unkeepable: WorldStateChangeRecord[]
+  /** Entry numbers of the snapshots the undo deletes, since they hold what it reverts. */
+  snapshots: number[]
+}
 
 // Story Store using Svelte 5 runes
 class StoryStore {
@@ -1349,23 +1386,66 @@ class StoryStore {
       manual: plan.manual,
       tidy: plan.tidy,
       unkeepable: plan.unkeepable,
-      lore: this.loreChaptersFor(plan.chapterEntryIds),
+      lore: this.loreChaptersFor(plan.chapter, await this.lineMarks()),
+      classifier: plan.classifier,
     }
   }
 
-  /** The chapters ending at these entries, or the entry alone where its chapter was deleted. */
-  private loreChaptersFor(entryIds: string[]): LoreChapter[] {
+  /**
+   * The chapters removing the entries from `position` on deletes with them: each one starting or
+   * ending on a removed entry, as `deleteEntriesFromPosition` drops them.
+   */
+  chaptersRemovedFrom(position: number): LoreChapter[] {
+    const removed = new Set(this.entries.filter((e) => e.position >= position).map((e) => e.id))
     const numberOf = (id: string) => {
       const e = this.entries.find((x) => x.id === id)
       return e ? entryNumber(e) : null
     }
-    return entryIds.flatMap((id): LoreChapter[] => {
-      const chapter = this.chapters.find((ch) => ch.endEntryId === id)
-      const last = numberOf(id)
-      if (last === null) return []
-      if (!chapter) return [{ number: null, first: last, last }]
-      return [{ number: chapter.number, first: numberOf(chapter.startEntryId) ?? last, last }]
-    })
+    return this.chapters
+      .filter((ch) => removed.has(ch.startEntryId) || removed.has(ch.endEntryId))
+      .flatMap((ch): LoreChapter[] => {
+        const first = numberOf(ch.startEntryId)
+        const last = numberOf(ch.endEntryId)
+        return first !== null && last !== null ? [{ number: ch.number, first, last }] : []
+      })
+  }
+
+  /**
+   * Entry numbers of the branch's world-state snapshots that removing the entries from
+   * `position` on deletes with them (or the snapshots at `onlyEntryId`, deleting that alone).
+   */
+  async snapshotsRemovedFrom(position: number, onlyEntryId?: string): Promise<number[]> {
+    if (!this.currentStory) return []
+    const snapshots = await database.getWorldStateSnapshotTimes(
+      this.currentStory.id,
+      this.currentStory.currentBranchId ?? null,
+    )
+    return snapshots
+      .filter((s) => (onlyEntryId ? s.entryId === onlyEntryId : s.entryPosition >= position))
+      .flatMap((s) => {
+        const entry = this.entries.find((e) => e.id === s.entryId)
+        return entry ? [entryNumber(entry)] : []
+      })
+  }
+
+  /** The chapters whose lore these records are, or the entry alone where a deleted one's is. */
+  private loreChaptersFor(
+    records: WorldStateChangeRecord[],
+    marks: WorldStateMark[],
+  ): LoreChapter[] {
+    const numberOf = (id: string) => {
+      const e = this.entries.find((x) => x.id === id)
+      return e ? entryNumber(e) : null
+    }
+    return loreOwners(records, marks, this.chapters).flatMap(
+      ({ entryId, chapterId }): LoreChapter[] => {
+        const last = numberOf(entryId)
+        const chapter = this.chapters.find((ch) => ch.id === chapterId)
+        if (last === null) return []
+        if (!chapter) return [{ number: null, first: last, last }]
+        return [{ number: chapter.number, first: numberOf(chapter.startEntryId) ?? last, last }]
+      },
+    )
   }
 
   // Delete a story entry
@@ -1442,7 +1522,7 @@ class StoryStore {
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
-      records: await this.breakForUnrevertedDelete(existingEntry),
+      recordsTo: recordsHolder(this.entries, existingEntry)?.id,
     })
     this.announceDroppedAnchors(droppedAnchors)
     this.forgetAnchors([entryId])
@@ -1875,16 +1955,10 @@ class StoryStore {
   /** In-memory state after a reconciliation commits, shared by every path that plans one. */
   private publishReconciliation(plan: ReconciliationPlan): void {
     const times = new Map(plan.times.map((time) => [time.entryId, time]))
-    const deltas = new Map(plan.deltas.map((update) => [update.entryId, update.delta]))
     this.entries = this.entries.map((entry) => {
       const time = times.get(entry.id)
       if (!time) return entry
-      const delta = deltas.get(entry.id)
-      return {
-        ...entry,
-        metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
-        ...(delta ? { worldStateDelta: delta } : {}),
-      }
+      return { ...entry, metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end } }
     })
 
     const spans = new Map(plan.chapterSpans.map((span) => [span.chapterId, span]))
@@ -1912,9 +1986,9 @@ class StoryStore {
    * Write one entry's own beginning and ending.
    *
    * Planned as a one-entry reconciliation rather than a bare metadata write, so it carries the same
-   * guarantees: chapter spans covering it are recomputed, the clock inside its delta follows,
-   * the keyframe it invalidates is discarded, and the story clock moves only when the entry is
-   * the last one. All of it commits together.
+   * guarantees: chapter spans covering it are recomputed, the clocks of the checkpoints and
+   * snapshots taken at it follow, and the story clock moves only when the entry is the last one.
+   * All of it commits together.
    */
   async setEntryTimes(entryId: string, start: TimeTracker, end: TimeTracker): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
@@ -2205,6 +2279,12 @@ class StoryStore {
     return [null, ...(branchId ? this.buildBranchLineage(branchId).map((b) => b.id) : [])]
   }
 
+  /** Marks on the open branch's line. */
+  private async lineMarks(): Promise<WorldStateMark[]> {
+    if (!this.currentStory) return []
+    return database.getWorldStateMarks(this.currentStory.id, this.lineBranchIds())
+  }
+
   /** Records attached to entries visible on the open branch. */
   private async lineRecords(
     kinds?: WorldStateRecord['kind'][],
@@ -2227,24 +2307,6 @@ class StoryStore {
    */
   private startHeader(storyId: string, entryId: string): WorldStateHeaderRecord {
     return headerRecord({ storyId, branchId: null, entryId }, { continuous: true })
-  }
-
-  /**
-   * An entry's records go with it, so deleting one that has them without a rollback leaves its
-   * changes live with nothing to undo them. A break on the entry before it keeps a later revert
-   * or past checkpoint from treating that stretch as tracked.
-   */
-  private async breakForUnrevertedDelete(entry: StoryEntry): Promise<WorldStateRecord[]> {
-    if (!this.currentStory || !settings.experimentalFeatures.stateTracking) return []
-    const previous = [...this.entries].reverse().find((e) => e.position < entry.position)
-    if (!previous || !(await database.entryHasWorldStateRecords(entry.id))) return []
-    return [
-      breakRecord({
-        storyId: this.currentStory.id,
-        branchId: this.currentStory.currentBranchId ?? null,
-        entryId: previous.id,
-      }),
-    ]
   }
 
   /** The current name of a tracked row, for showing a change to the reader. */
@@ -3001,6 +3063,85 @@ class StoryStore {
     this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
     this.invalidateRetrievalCache()
     log('Lorebook entries deleted:', ids.length)
+  }
+
+  /**
+   * Writes an approved lore management session in one transaction with its records: creates,
+   * updates, merges (the survivor, then its sources) and deletes, each planned against the
+   * lorebook the ones before it leave. Nothing is written or shown unless all of it commits.
+   */
+  async saveLoreSession(writes: LoreSessionWrites, opts?: RecordOptions): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    const storyId = this.currentStory.id
+    const branchId = this.currentStory.currentBranchId
+    const ctx = this.recordContext(opts)
+    const statements: DbStatement[] = []
+    const records: (WorldStateRecord | null)[] = []
+    let rows = [...this.lorebookEntries]
+    // A write to an inherited row lands on its copy, and later writes to that row follow it.
+    const copies: Record<string, string> = {}
+    const find = (id: string) => rows.find((e) => e.id === (copies[id] ?? id))
+
+    const add = (data: Entry) => {
+      const now = Date.now()
+      const entry: Entry = withUniqueEntryTerms({
+        ...data,
+        storyId,
+        createdAt: now,
+        updatedAt: now,
+        branchId: data.branchId ?? branchId,
+      })
+      statements.push(database.addEntryStatement(entry))
+      records.push(this.record(ctx, 'lorebook_entry', entry.id, 'create', null, entry))
+      rows = [...rows, entry]
+    }
+    const remove = (id: string) => {
+      const existing = find(id)
+      if (!existing) return
+      const removal = this.deletePlan('lorebook_entry', existing, ctx)
+      statements.push(...removal.statements)
+      records.push(...removal.records)
+      rows = rows.filter((e) => e.id !== existing.id)
+    }
+
+    for (const entry of writes.creates) add(entry)
+    for (const entry of writes.updates) {
+      const existing = find(entry.id)
+      if (!existing) throw new Error(`Lorebook entry not found: ${entry.name}`)
+      const cow = this.cowPlan('lorebook_entry', existing, ctx)
+      const owned = cow.entity
+      if (cow.wasCowed) copies[existing.id] = owned.id
+      // Which row this is stays the row's own; the session hands over whole entries.
+      const {
+        id: _id,
+        storyId: _storyId,
+        branchId: _branchId,
+        overridesId: _overridesId,
+        createdAt: _createdAt,
+        deleted: _deleted,
+        ...fields
+      } = entry
+      const updates = { ...withUniqueEntryTerms(fields), updatedAt: Date.now() }
+      statements.push(...cow.statements, database.updateEntryStatement(owned.id, updates))
+      records.push(...cow.records, this.updateRecord(ctx, 'lorebook_entry', owned, fields))
+      rows = rows.map((e) => (e.id === existing.id ? { ...owned, ...updates } : e))
+    }
+    // The survivor first: a source deleted before it would be lost if the insert failed.
+    for (const { sourceIds, merged } of writes.merges) {
+      add(merged)
+      for (const id of sourceIds) remove(id)
+    }
+    for (const id of writes.deletes) remove(id)
+
+    await this.commit(statements, records)
+    this.lorebookEntries = rows
+    this.invalidateRetrievalCache()
+    log('Lore session saved:', {
+      created: writes.creates.length,
+      updated: writes.updates.length,
+      merged: writes.merges.length,
+      deleted: writes.deletes.length,
+    })
   }
 
   /**
@@ -3841,9 +3982,10 @@ class StoryStore {
   /**
    * Refuses, with a toast, any chapter but the open branch's last, and any while chapter work on
    * the branch runs: a chapter being cut starts where the last one ends, and would leave the
-   * deleted one's entries uncut.
+   * deleted one's entries uncut. With `undoLore`, the lore its sessions recorded is undone in the
+   * same transaction.
    */
-  async deleteChapter(chapterId: string): Promise<boolean> {
+  async deleteChapter(chapterId: string, opts: { undoLore?: boolean } = {}): Promise<boolean> {
     if (!this.currentStory) throw new Error('No story loaded')
     // The chapter's own branch too: a child branch shows a parent's chapter as its own.
     const owner = this.chapters.find((ch) => ch.id === chapterId)?.branchId ?? null
@@ -3864,7 +4006,25 @@ class StoryStore {
       return false
     }
 
-    await database.deleteChapter(chapterId)
+    const chapter = this.chapters.find((ch) => ch.id === chapterId)
+    if (opts.undoLore && chapter) {
+      // Nothing kept: a record is removed with the change it undid, so none may be applied again.
+      const revert = await this.chapterLoreRevert(chapter, KEEP_NONE)
+      if (!revert.ok) throw new Error("This chapter's lore can no longer be undone.")
+      await database.transaction([
+        ...database.deleteChapterStatements(chapterId),
+        ...chapterLoreStatements({
+          storyId: this.currentStory.id,
+          plan: revert.plan,
+          reverted: revert.reverted,
+          lineBranchIds: this.lineBranchIds(),
+        }),
+      ])
+      this.lorebookEntries = revert.plan.state.lorebookEntries
+      this.invalidateRetrievalCache()
+    } else {
+      await database.deleteChapter(chapterId)
+    }
     this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
 
     // Invalidate chapter cache
@@ -3873,6 +4033,56 @@ class StoryStore {
     log('Chapter deleted:', chapterId)
     chapterCards.chapterDeleted(chapterId)
     return true
+  }
+
+  private async chapterLoreRevert(
+    chapter: Chapter,
+    keep: RevertKeep = KEEP_ALL,
+  ): Promise<ChapterLoreRevert> {
+    const [records, marks] = await Promise.all([this.lineRecords(), this.lineMarks()])
+    return planChapterLoreRevert({
+      endEntryId: chapter.endEntryId,
+      chapterSeq: chapterMark(marks, chapter.id),
+      records,
+      entryPositions: new Map(this.entries.map((e) => [e.id, e.position])),
+      state: this.trackedState(),
+      tracking: {
+        on: settings.experimentalFeatures.stateTracking,
+        enabledSince: settings.experimentalFeatures.trackingEnabledSince,
+      },
+      keep,
+    })
+  }
+
+  async previewChapterLoreUndo(chapterId: string): Promise<ChapterLorePreview> {
+    const chapter = this.chapters.find((ch) => ch.id === chapterId)
+    const none = {
+      undone: [],
+      manual: [],
+      tidy: [],
+      deletedChapters: [],
+      unkeepable: [],
+      snapshots: [],
+    }
+    if (!chapter || !this.currentStory) return { refusal: 'nothing', ...none }
+    const revert = await this.chapterLoreRevert(chapter)
+    if (!revert.ok) return { refusal: revert.reason, ...none }
+    // As `chapterLoreStatements` selects them.
+    const since = Math.min(...revert.reverted.map((r) => r.seq))
+    const snapshots = (await this.lineMarks()).flatMap((m) => {
+      if (m.entityType !== 'snapshot' || m.seq <= since) return []
+      const entry = this.entries.find((e) => e.id === m.entryId)
+      return entry ? [entryNumber(entry)] : []
+    })
+    return {
+      refusal: null,
+      undone: revert.undone,
+      manual: revert.plan.manual,
+      tidy: revert.plan.tidy,
+      deletedChapters: revert.deletedChapters,
+      unkeepable: revert.plan.unkeepable,
+      snapshots,
+    }
   }
 
   // Update memory configuration (partial updates)
@@ -4295,7 +4505,7 @@ class StoryStore {
       createdAt: Date.now(),
     }
 
-    await database.createCheckpoint(record)
+    await database.createCheckpoint(record, { branchId: lastEntry.branchId ?? null })
 
     const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
     const checkpoint: Checkpoint = {
@@ -4357,8 +4567,9 @@ class StoryStore {
 
   private async pastSources(): Promise<PastSources> {
     if (!this.currentStory) throw new Error('No story loaded')
-    const [records, snapshots] = await Promise.all([
+    const [records, marks, snapshots] = await Promise.all([
       this.lineRecords(),
+      this.lineMarks(),
       database.getWorldStateSnapshotTimes(
         this.currentStory.id,
         this.currentStory.currentBranchId ?? null,
@@ -4367,6 +4578,7 @@ class StoryStore {
     return {
       entries: this.entries,
       records,
+      marks,
       snapshots: snapshots.map((s) => ({
         ...s,
         closing: s.id.startsWith(CLOSING_SNAPSHOT_PREFIX),
@@ -4460,6 +4672,7 @@ class StoryStore {
       tidy: [],
       unkeepable: [],
       lore: [],
+      classifier: false,
       source: null,
       skipped: [],
       overrides: null,
@@ -4482,7 +4695,8 @@ class StoryStore {
         manual: plan.manual,
         tidy: plan.tidy,
         unkeepable: plan.unkeepable,
-        lore: this.loreChaptersFor(plan.chapterEntryIds),
+        lore: this.loreChaptersFor(plan.chapter, src.marks),
+        classifier: plan.classifier,
         source: this.anchorLabel(run.anchor),
         skipped: skippedSnapshots(src, entry.position, run.anchor.position),
       }
@@ -4506,7 +4720,8 @@ class StoryStore {
       manual: undoPlan?.manual ?? [],
       tidy: undoPlan?.tidy ?? [],
       unkeepable: undoPlan?.unkeepable ?? [],
-      lore: undoPlan ? this.loreChaptersFor(undoPlan.chapterEntryIds) : [],
+      lore: undoPlan ? this.loreChaptersFor(undoPlan.chapter, src.marks) : [],
+      classifier: undoPlan?.classifier ?? false,
       skipped,
       overrides:
         next.ok || previous.ok
@@ -4530,7 +4745,7 @@ class StoryStore {
   async createCheckpointAt(
     entryId: string,
     name: string,
-    opts: { keepManual: boolean; keepTidy: boolean; override?: GapOverride },
+    opts: { override?: GapOverride } = {},
   ): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNotBusy('create a checkpoint')
@@ -4538,11 +4753,7 @@ class StoryStore {
       throw new Error('This entry already has a checkpoint')
     }
 
-    const { entry, plan } = await this.rebuildPastState(
-      entryId,
-      { manual: opts.keepManual, tidy: opts.keepTidy },
-      opts.override,
-    )
+    const { entry, plan } = await this.rebuildPastState(entryId, KEEP_NONE, opts.override)
     const entries = this.entries.filter((e) => e.position <= entry.position)
     const kept = new Set(entries.map((e) => e.id))
     const record: CheckpointRecord = {

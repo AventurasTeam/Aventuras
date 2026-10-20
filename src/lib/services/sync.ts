@@ -4,7 +4,7 @@ import type { AventuraExport } from './export'
 // The one piece of the `.avt` exporter sync shares. See the note on `exportStoryToJson` for what
 // is deliberately *not* shared.
 import { gatherPackBinding, NOT_VOUCHED, type ExportTracking } from './export'
-import { recordsForExport } from './stateTracking'
+import { marksForExport, recordsForExport } from './stateTracking'
 import { database } from './database'
 
 /**
@@ -115,6 +115,7 @@ class SyncService {
       packBinding,
       timeAnchors,
       storedRecords,
+      worldStateMarks,
     ] = await Promise.all([
       database.getStoryEntries(storyId),
       database.getCharacters(storyId),
@@ -129,9 +130,10 @@ class SyncService {
       gatherPackBinding(storyId),
       database.getTimeAnchors(storyId),
       database.getWorldStateRecordsForStory(storyId),
+      database.getWorldStateMarksForStory(storyId).then(marksForExport),
     ])
 
-    const worldStateRecords = recordsForExport(storedRecords, tracking, Date.now())
+    const worldStateRecords = recordsForExport(storedRecords, tracking, Date.now(), worldStateMarks)
     const exportData: AventuraExport = {
       // Left at 1.7.0 on purpose. The receiving importer is shape-driven — it reads whichever
       // sections are present and never compares this number — so `packBinding` below is honoured
@@ -154,6 +156,7 @@ class SyncService {
       // Omitted when empty, as `exportToAventura` does.
       ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
       ...(worldStateRecords.length > 0 ? { worldStateRecords } : {}),
+      ...(worldStateMarks.length > 0 ? { worldStateMarks } : {}),
       // Omitted rather than written as null, so a story with no pack keeps the shape that takes
       // the legacy import path — matching what `exportToAventura` produces.
       ...(packBinding ? { packBinding } : {}),

@@ -59,6 +59,33 @@ describe('store writes', () => {
   })
 })
 
+describe('a lore management session', () => {
+  const body = () => bodyOf('saveLoreSession')
+
+  it('records its writes', () => {
+    expect(body()).toContain('this.recordContext(opts)')
+  })
+
+  it('plans a merge after an update against the row the update left', () => {
+    // An update on a lightweight branch writes a copy; a later write to the row finds the copy.
+    expect(body()).toContain('copies[existing.id] = owned.id')
+    expect(body()).toMatch(
+      /const find = \(id: string\) => rows\.find\(\(e\) => e\.id === \(copies\[id\] \?\? id\)\)/,
+    )
+    expect(body().indexOf('for (const entry of writes.updates)')).toBeLessThan(
+      body().indexOf('for (const { sourceIds, merged } of writes.merges)'),
+    )
+  })
+
+  it('commits once, and shows nothing unless that commit lands', () => {
+    expect(body().match(/await this\.commit\(/g)).toHaveLength(1)
+    expect(body()).not.toMatch(/await database\./)
+    expect(body().indexOf('await this.commit(')).toBeLessThan(
+      body().indexOf('this.lorebookEntries = rows'),
+    )
+  })
+})
+
 describe('chapter lore', () => {
   it("lands on the chapter's last entry", () => {
     expect(bodyOf('latestChapterEndEntryId')).toContain('newest?.endEntryId')
@@ -135,11 +162,10 @@ describe('past checkpoints', () => {
 })
 
 describe('deleting one entry', () => {
-  it('breaks the run when the entry had records and no rollback is made', () => {
-    expect(bodyOf('deleteEntry')).toContain('records: await this.breakForUnrevertedDelete(')
-    const body = bodyOf('breakForUnrevertedDelete')
-    expect(body).toContain('database.entryHasWorldStateRecords(entry.id)')
-    expect(body).toContain('breakRecord(')
+  it('moves the records to a neighbouring entry when no rollback is made', () => {
+    expect(bodyOf('deleteEntry')).toContain(
+      'recordsTo: recordsHolder(this.entries, existingEntry)?.id',
+    )
   })
 })
 

@@ -30,11 +30,17 @@ const COMPLETION_LINGER_MS = 2000
 /** Why a session refused by the branch lock did not run. */
 export const LORE_SESSION_BUSY = 'Another lore management run was in progress'
 
+/** An approved session's writes, in the order they apply. */
+export interface LoreSessionWrites {
+  creates: Entry[]
+  updates: Entry[]
+  merges: { sourceIds: string[]; merged: Entry }[]
+  deletes: string[]
+}
+
 export interface LoreManagementCallbacks {
-  onCreateEntry: (entry: Entry) => Promise<void>
-  onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-  onDeleteEntry: (id: string) => Promise<void>
-  onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
+  /** Writes every change of an approved session, with its records, or none of them. */
+  onSaveSession: (writes: LoreSessionWrites) => Promise<void>
   /** `activityParentId`: the read's own step, when the run is recorded. */
   onQueryChapter?: (
     chapterNumber: number,
@@ -62,7 +68,8 @@ export interface LoreManagementUICallbacks {
    * `onComplete` two seconds later — and this is the only record of what a run did.
    */
   onSummary?: (summary: string, changeCount: number) => void
-  onError?: (error: string) => void
+  /** `chapter`: the chapter the failed session followed; absent for a Tidy or batch run. */
+  onError?: (error: string, chapter?: Chapter) => void
   onComplete: () => void
 }
 
@@ -220,21 +227,15 @@ export class LoreManagementCoordinator {
         input.recentEntries,
         input.chapters,
         {
-          onCreateEntry: async (entry) => {
-            await callbacks.onCreateEntry(entry)
-            uiCallbacks?.onProgress('Creating entries...', bumpChanges())
-          },
-          onUpdateEntry: async (id, updates) => {
-            await callbacks.onUpdateEntry(id, updates)
-            uiCallbacks?.onProgress('Updating entries...', bumpChanges())
-          },
-          onDeleteEntry: async (id) => {
-            await callbacks.onDeleteEntry(id)
-            uiCallbacks?.onProgress('Cleaning up entries...', bumpChanges())
-          },
-          onMergeEntries: async (entryIds, mergedEntry) => {
-            await callbacks.onMergeEntries(entryIds, mergedEntry)
-            uiCallbacks?.onProgress('Merging entries...', bumpChanges())
+          onSaveSession: async (writes) => {
+            uiCallbacks?.onProgress('Saving changes...', changeCount)
+            await callbacks.onSaveSession(writes)
+            const count =
+              writes.creates.length +
+              writes.updates.length +
+              writes.merges.length +
+              writes.deletes.length
+            uiCallbacks?.onProgress('Saved changes', bumpChanges(count))
           },
           onQueryChapter: callbacks.onQueryChapter,
           getKeptSeparate: callbacks.getKeptSeparate,
@@ -270,7 +271,7 @@ export class LoreManagementCoordinator {
     } catch (error) {
       log('Lore management failed', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      uiCallbacks?.onError?.(errorMessage)
+      uiCallbacks?.onError?.(errorMessage, input.newChapter?.chapter)
       if (reporting) failStep(reporting.activity, stepId, error)
 
       // Still clear the UI state: a failed run must not leave the lorebook read-only.

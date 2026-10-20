@@ -36,13 +36,16 @@ const log = createLogger('ManualLoreManagement')
  * agent in full; absent for the Tidy lorebook button, which has no new chapter.
  * @param reporting Where the run records itself. A recorded run is not refused up front by
  * another holding the branch: the coordinator refuses it, so the refusal is recorded too.
+ * @param options.readAfterChapter Off, a run after a chapter reads that chapter and none of the
+ * story after it.
  */
 export async function runManualLoreManagement(
   newChapter?: Chapter,
   reporting?: LoreSessionActivity,
+  options: { readAfterChapter?: boolean } = {},
 ): Promise<LoreSessionResult | null> {
   try {
-    return await startManualLoreManagement(newChapter, reporting)
+    return await startManualLoreManagement(newChapter, reporting, options.readAfterChapter ?? true)
   } catch (error) {
     log('Manual lore management failed', error)
     return null
@@ -50,8 +53,9 @@ export async function runManualLoreManagement(
 }
 
 async function startManualLoreManagement(
-  newChapter?: Chapter,
-  reporting?: LoreSessionActivity,
+  newChapter: Chapter | undefined,
+  reporting: LoreSessionActivity | undefined,
+  readAfterChapter: boolean,
 ): Promise<LoreSessionResult | null> {
   if (
     !story.currentStory ||
@@ -79,7 +83,7 @@ async function startManualLoreManagement(
       // Everything the chapters do not cover. On a story with no chapters this is the
       // whole story, and without it a manual run would be reasoning from the entry list
       // alone — see `LoreManagementContext.recentEntries`.
-      recentEntries: story.getUnchapterizedEntries(),
+      recentEntries: newChapter && !readAfterChapter ? [] : story.getUnchapterizedEntries(),
       mode: currentStory.mode ?? 'adventure',
       pov: story.pov,
       tense: story.tense,
@@ -95,7 +99,7 @@ async function startManualLoreManagement(
         ? { origin: 'chapter', entryId: newChapter.endEntryId }
         : { origin: 'tidy', entryId: story.lastCompletedEntryId ?? undefined },
     ),
-    buildLoreManagementUICallbacks(),
+    buildLoreManagementUICallbacks('panel', { readAfterChapter }),
     reporting,
   )
 }

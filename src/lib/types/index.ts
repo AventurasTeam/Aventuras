@@ -186,8 +186,6 @@ export interface StoryEntry {
   translatedContent?: string | null // Translated text for display
   translationLanguage?: string | null // Language code of translation
   originalInput?: string | null // Original user input before translation (for user_action type)
-  // Phase 1: World state delta tracking
-  worldStateDelta?: WorldStateDelta | null // World state changes caused by this entry's classification
   // Persisted action suggestions/choices for time-travel restore
   suggestedActions?: string | null // JSON blob: ActionChoice[] or Suggestion[] depending on story mode
 }
@@ -994,9 +992,8 @@ export interface StoryBeatBeforeState {
 }
 
 /**
- * Records the complete world state change caused by a single classification.
- * Stored as JSON on the story_entries.world_state_delta column.
- * Contains enough information to fully undo the classification's effects.
+ * The world state change one classification made, as story files written before change records
+ * carry it on each entry. Import turns it into records (`fromWorldStateDelta`).
  */
 export interface WorldStateDelta {
   /** The raw classification result that was applied (stored as-is for debugging/audit) */
@@ -1068,11 +1065,6 @@ export interface WorldStateChangeRecord extends WorldStateRecordBase {
 export interface WorldStateHeaderRecord extends WorldStateRecordBase {
   kind: 'header'
   continuous: boolean
-  /**
-   * Only on a header read from an old delta: the scene before it, which that format kept apart
-   * from the location rows. A stored header has none; the classifier records the flags it moves.
-   */
-  legacyLocationBefore?: string | null
   /** `classifier` marks history recorded before lorebook and manual changes were tracked. */
   coverage: 'full' | 'classifier'
 }
@@ -1083,6 +1075,25 @@ export interface WorldStateBreakRecord extends WorldStateRecordBase {
 
 export type WorldStateRecord =
   WorldStateChangeRecord | WorldStateHeaderRecord | WorldStateBreakRecord
+
+/**
+ * Where a snapshot, a checkpoint or a chapter was made in the write order, stored with the
+ * records as kind `mark`. A snapshot or checkpoint holds every record before its mark; a
+ * chapter's lore sessions are recorded after its own. Lives as long as what it marks.
+ */
+export interface WorldStateMark {
+  id: string
+  storyId: string
+  branchId: string | null
+  /** The snapshot's entry, the checkpoint's last entry, the chapter's end entry. */
+  entryId: string
+  seq: number
+  entityType: WorldStateMarkType
+  entityId: string
+  createdAt: number
+}
+
+export type WorldStateMarkType = 'snapshot' | 'checkpoint' | 'chapter'
 
 /**
  * A full world state saved at an entry: every few entries while State Tracking is on, and on

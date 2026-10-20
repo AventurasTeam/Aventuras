@@ -3,7 +3,7 @@
  * Coordinates with the main exportService to provide complete story data.
  */
 
-import { recordsForExport } from '#lib/services/stateTracking/index.ts'
+import { marksForExport, recordsForExport } from '#lib/services/stateTracking/index.ts'
 import { database } from '#lib/services/database.ts'
 import type {
   StoryEntry,
@@ -13,6 +13,7 @@ import type {
   StoryBeat,
   Chapter,
   TimeAnchor,
+  WorldStateMark,
   WorldStateRecord,
   Entry,
   CheckpointRecord,
@@ -37,6 +38,7 @@ export interface StoryExportData {
   chapters: Chapter[]
   timeAnchors: TimeAnchor[]
   worldStateRecords: WorldStateRecord[]
+  worldStateMarks: WorldStateMark[]
   /**
    * The story's prompt pack, as much of it as can safely travel. Null when the story has no pack
    * row to point at (a story predating the column, or one whose pack has since been deleted) —
@@ -133,6 +135,7 @@ export async function gatherStoryData(
     packBinding,
     timeAnchors,
     worldStateRecords,
+    worldStateMarks,
   ] = await Promise.all([
     database.getStoryEntries(storyId),
     database.getCharacters(storyId),
@@ -147,6 +150,7 @@ export async function gatherStoryData(
     gatherPackBinding(storyId),
     database.getTimeAnchors(storyId),
     database.getWorldStateRecordsForStory(storyId),
+    database.getWorldStateMarksForStory(storyId).then(marksForExport),
   ])
 
   return {
@@ -162,7 +166,8 @@ export async function gatherStoryData(
     chapters,
     packBinding,
     timeAnchors,
-    worldStateRecords: recordsForExport(worldStateRecords, tracking, Date.now()),
+    worldStateRecords: recordsForExport(worldStateRecords, tracking, Date.now(), worldStateMarks),
+    worldStateMarks,
   }
 }
 

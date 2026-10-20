@@ -16,14 +16,17 @@ import type {
   Entry,
   Branch,
   WorldStateDelta,
+  WorldStateMark,
+  WorldStateRecord,
 } from '#lib/types/index.ts'
-import type { AventuraExport, IdMaps, PackRuntimeVariableExport } from './types'
+import type { AventuraExport, ExportedStoryEntry, IdMaps, PackRuntimeVariableExport } from './types'
 import { remapRuntimeVars } from '#lib/services/packs/index.ts'
 import type { RuntimeVariable, RuntimeEntityType } from '#lib/services/packs/index.ts'
 import type { PackBindingResolution } from './packBinding'
 import { createMappers } from './idMaps'
-import { remapRecord } from './worldStateRecords'
+import { inWriteOrder, remapMark, remapRecord } from './worldStateRecords'
 import { normalizeTime } from '#lib/services/storyTime/index.ts'
+import { fromWorldStateDelta, markRecord } from '#lib/services/stateTracking/index.ts'
 
 /** The resolved binding, plus both sides' runtime variable definitions for the re-keying. */
 export interface StoryPackBinding extends PackBindingResolution {
@@ -152,15 +155,8 @@ export async function importStructure(
     }
   }
 
-  // A delta is a graph of entity ids, exactly like the checkpoint snapshots further down, and it
-  // needs the same treatment: every id in it was minted by the exporting install and matches
-  // nothing here. Carried over unmapped it does not merely fail to roll back — `previousState.
-  // currentLocationId` reaches `database.setCurrentLocation`, which clears `current` on every
-  // location of the story before failing to match the stale id, so a retry on an imported story
-  // would silently leave it with no current location at all.
-  //
-  // `classificationResult` is deliberately untouched: it is the raw model output, kept for
-  // debugging only, and nothing reads ids out of it.
+  // An older file's delta is a graph of entity ids minted by the exporting install, like the
+  // checkpoint snapshots further down, so it is remapped before it becomes change records.
   const remapWorldStateDelta = (
     delta: WorldStateDelta | null | undefined,
   ): WorldStateDelta | null => {
@@ -210,8 +206,19 @@ export async function importStructure(
     }
   }
 
+  const legacyRecords: WorldStateRecord[] = []
   for (const entry of data.entries) {
     const newEntryId = oldToNewId.get(entry.id) ?? crypto.randomUUID()
+    const delta = remapWorldStateDelta(entry.worldStateDelta)
+    if (delta) {
+      const scope = {
+        id: newEntryId,
+        storyId: newStoryId,
+        branchId: mapBranchId(entry.branchId ?? null),
+        createdAt: entry.createdAt,
+      } as StoryEntry
+      legacyRecords.push(...fromWorldStateDelta(scope, delta))
+    }
 
     await database.addStoryEntry({
       id: newEntryId,
@@ -229,7 +236,6 @@ export async function importStructure(
       // `addStoryEntry` turns the undefined into a NULL column either way.
       reasoning: entry.reasoning,
       suggestedActions: entry.suggestedActions ?? null,
-      worldStateDelta: remapWorldStateDelta(entry.worldStateDelta),
     })
   }
 
@@ -375,8 +381,9 @@ export async function importStructure(
     })
   }
 
-  // State Tracking records (added in v1.11.0), in their original order so `seq` keeps it.
-  const records = [...(data.worldStateRecords ?? [])]
+  // State Tracking records (added in v1.11.0), in their original order so `seq` keeps it. A file
+  // carries these or the older deltas, never both (`validateExport`).
+  const fileRecords = [...(data.worldStateRecords ?? [])]
     .sort((a, b) => a.seq - b.seq)
     .map((record) =>
       remapRecord(record, {
@@ -388,22 +395,79 @@ export async function importStructure(
       }),
     )
     .filter((record) => record !== null)
-  if (records.length > 0) {
-    await database.transaction(records.map((r) => database.worldStateRecordStatement(r)))
+  const importedEntries = new Map(data.entries.map((e) => [e.id, e]))
+  const fileMarks = (data.worldStateMarks ?? [])
+    .map((mark) =>
+      remapMark(mark, {
+        newStoryId,
+        mapEntryId: (id) => (importedEntries.has(id) ? oldToNewId.get(id) : undefined),
+        mapBranchId,
+        mapMarkedId: (type, id) =>
+          type === 'checkpoint'
+            ? checkpointIdMap.get(id)
+            : type === 'chapter'
+              ? oldToNewId.get(id)
+              : undefined,
+      }),
+    )
+    .filter((mark) => mark !== null)
+  // A file from before marks: each chapter and checkpoint is placed by when it was made.
+  const unmarked: WorldStateMark[] = []
+  if (!data.worldStateMarks) {
+    for (const cp of data.checkpoints ?? []) {
+      const entry = importedEntries.get(cp.lastEntryId)
+      const id = checkpointIdMap.get(cp.id)
+      if (!entry || !id) continue
+      const scope = {
+        storyId: newStoryId,
+        branchId: mapBranchId(entry.branchId ?? null),
+        entryId: oldToNewId.get(entry.id)!,
+      }
+      unmarked.push({ ...markRecord(scope, 'checkpoint', id), createdAt: cp.createdAt ?? 0 })
+    }
+    for (const chapter of data.chapters ?? []) {
+      const entry = importedEntries.get(chapter.endEntryId)
+      const id = oldToNewId.get(chapter.id)
+      if (!entry || !id) continue
+      const scope = {
+        storyId: newStoryId,
+        branchId: chapter.branchId ? (branchIdMap.get(chapter.branchId) ?? null) : null,
+        entryId: oldToNewId.get(entry.id)!,
+      }
+      unmarked.push({ ...markRecord(scope, 'chapter', id), createdAt: chapter.createdAt })
+    }
+  }
+  const positions = new Map(data.entries.map((e) => [oldToNewId.get(e.id), e.position]))
+  const written = inWriteOrder({
+    converted: legacyRecords,
+    records: fileRecords,
+    marks: fileMarks,
+    unmarked,
+    positionOf: (id) => positions.get(id),
+  })
+  if (written.length > 0) {
+    await database.transaction(
+      written.map((w) =>
+        'record' in w
+          ? database.worldStateRecordStatement(w.record)
+          : database.worldStateMarkStatement(w.mark),
+      ),
+    )
   }
 
   // Checkpoints (added in v1.6.0). Their snapshots are whole entity graphs, each needing the
   // same remapping as the live rows above.
   if (data.checkpoints) {
-    const remapStoryEntry = (entry: StoryEntry): StoryEntry => ({
+    // An older file's copies carry deltas; nothing reads them, so they are dropped.
+    const remapStoryEntry = ({
+      worldStateDelta: _delta,
+      ...entry
+    }: ExportedStoryEntry): StoryEntry => ({
       ...entry,
       id: remapEntityId(entry.id),
       storyId: newStoryId,
       parentId: entry.parentId ? (remapEntityId(entry.parentId) ?? entry.parentId) : null,
       branchId: mapBranchId(entry.branchId ?? null),
-      // The snapshot carries whole entry rows, deltas included: without this a checkpoint
-      // restore would put the stale-id deltas back that the live rows above just shed.
-      worldStateDelta: remapWorldStateDelta(entry.worldStateDelta),
     })
     const remapCharacter = (char: Character): Character => ({
       ...char,
@@ -498,24 +562,27 @@ export async function importStructure(
     // Pre-mapped, so this id matches the one checkpoint snapshots above already used.
     const newChapterId = oldToNewId.get(chapter.id) ?? crypto.randomUUID()
 
-    await database.addChapter({
-      id: newChapterId,
-      storyId: newStoryId,
-      number: chapter.number,
-      title: chapter.title,
-      startEntryId: oldToNewId.get(chapter.startEntryId) ?? chapter.startEntryId,
-      endEntryId: oldToNewId.get(chapter.endEntryId) ?? chapter.endEntryId,
-      entryCount: chapter.entryCount,
-      summary: chapter.summary,
-      startTime: chapter.startTime,
-      endTime: chapter.endTime,
-      keywords: chapter.keywords,
-      characters: chapter.characters,
-      locations: chapter.locations,
-      plotThreads: chapter.plotThreads,
-      emotionalTone: chapter.emotionalTone,
-      branchId: chapter.branchId ? (branchIdMap.get(chapter.branchId) ?? null) : null,
-      createdAt: chapter.createdAt,
-    })
+    await database.addChapter(
+      {
+        id: newChapterId,
+        storyId: newStoryId,
+        number: chapter.number,
+        title: chapter.title,
+        startEntryId: oldToNewId.get(chapter.startEntryId) ?? chapter.startEntryId,
+        endEntryId: oldToNewId.get(chapter.endEntryId) ?? chapter.endEntryId,
+        entryCount: chapter.entryCount,
+        summary: chapter.summary,
+        startTime: chapter.startTime,
+        endTime: chapter.endTime,
+        keywords: chapter.keywords,
+        characters: chapter.characters,
+        locations: chapter.locations,
+        plotThreads: chapter.plotThreads,
+        emotionalTone: chapter.emotionalTone,
+        branchId: chapter.branchId ? (branchIdMap.get(chapter.branchId) ?? null) : null,
+        createdAt: chapter.createdAt,
+      },
+      { mark: false },
+    )
   }
 }

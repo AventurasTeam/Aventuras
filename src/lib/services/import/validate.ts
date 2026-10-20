@@ -28,6 +28,11 @@ export function validateExport(data: AventuraExport): string | null {
   if (data.entries.length === 0) {
     return 'Invalid story file: The file contains no story entries.'
   }
+  // Older files carry deltas on their entries, newer ones change records. Only a development
+  // build in between wrote both, and its deltas would replay history the records already hold.
+  if (data.worldStateRecords?.length && data.entries.some((entry) => entry.worldStateDelta)) {
+    return 'This story file was written by a development build of Aventuras, and holds its world-state history in two forms. It cannot be imported.'
+  }
   return null
 }
 

@@ -105,12 +105,7 @@ function setup(over: Overrides = {}) {
       tense: 'present',
     },
     loreSession,
-    loreCallbacks: {
-      onCreateEntry: vi.fn(),
-      onUpdateEntry: vi.fn(),
-      onDeleteEntry: vi.fn(),
-      onMergeEntries: vi.fn(),
-    },
+    loreCallbacks: { onSaveSession: vi.fn() },
     activity: recorder,
     activityParentId: afterTurn,
     onTurnWorkEnded,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { WorldStateRecord } from '#lib/types/index.ts'
-import { RECORD_COLUMNS, recordToRow, rowToRecord } from '.'
+import type { WorldStateMark, WorldStateRecord } from '#lib/types/index.ts'
+import { RECORD_COLUMNS, markToRow, recordToRow, rowToMark, rowToRecord } from '.'
 
 const base = { storyId: 's', branchId: 'b', entryId: 'e', seq: 7, createdAt: 123 }
 
@@ -37,6 +37,29 @@ describe('record rows', () => {
     expect(roundTrip(record)).toEqual(record)
   })
 
+  it('round-trips a header converted from an old delta, marked by its origin', () => {
+    const record: WorldStateRecord = {
+      ...base,
+      id: 'e:header',
+      kind: 'header',
+      continuous: false,
+      coverage: 'classifier',
+    }
+    expect(recordToRow(record)[RECORD_COLUMNS.indexOf('origin')]).toBe('legacy')
+    expect(roundTrip(record)).toEqual(record)
+  })
+
+  it('leaves the origin of a full header empty', () => {
+    const values = recordToRow({
+      ...base,
+      id: 'h3',
+      kind: 'header',
+      continuous: true,
+      coverage: 'full',
+    })
+    expect(values[RECORD_COLUMNS.indexOf('origin')]).toBeNull()
+  })
+
   it('round-trips a break', () => {
     const record: WorldStateRecord = { ...base, id: 'b1', kind: 'break' }
     expect(roundTrip(record)).toEqual(record)
@@ -51,5 +74,15 @@ describe('record rows', () => {
       coverage: 'full',
     })
     expect(values[RECORD_COLUMNS.indexOf('continuous')]).toBe(0)
+  })
+})
+
+describe('mark rows', () => {
+  it('round-trips a mark, stored with the records as kind mark', () => {
+    const mark: WorldStateMark = { ...base, id: 'm1', entityType: 'chapter', entityId: 'ch1' }
+    const values = markToRow(mark)
+    const row = Object.fromEntries(RECORD_COLUMNS.map((c, i) => [c, values[i]]))
+    expect(row.kind).toBe('mark')
+    expect(rowToMark({ ...row, seq: mark.seq })).toEqual(mark)
   })
 })

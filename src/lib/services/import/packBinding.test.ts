@@ -29,6 +29,7 @@ const calls = {
   beats: [] as any[],
   checkpoints: [] as any[],
   deleted: [] as string[],
+  records: [] as any[],
 }
 
 vi.mock('#lib/services/database.ts', () => ({
@@ -50,6 +51,9 @@ vi.mock('#lib/services/database.ts', () => ({
     getAllPacks: vi.fn(async () => db.packs),
     getRuntimeVariables: vi.fn(async () => db.runtimeVars),
     getPackVariables: vi.fn(async () => db.packVariables),
+    worldStateRecordStatement: (record: any) => record,
+    worldStateMarkStatement: (mark: any) => mark,
+    transaction: vi.fn(async (statements: any[]) => void calls.records.push(...statements)),
   },
 }))
 
@@ -471,7 +475,7 @@ describe('runImport — re-keying entity values', () => {
     })
   })
 
-  it('re-keys rollback deltas and checkpoint snapshots as well as live rows', async () => {
+  it('re-keys converted delta records and checkpoint snapshots as well as live rows', async () => {
     db.packs.push(pack({ id: 'local-grimdark' }))
     const entityTypes = ['character', 'location', 'item', 'story_beat'] as const
     db.runtimeVars = entityTypes.map((entityType) => ({
@@ -533,13 +537,14 @@ describe('runImport — re-keying entity values', () => {
     ]
 
     expect((await runImport(data)).success).toBe(true)
-    const deltaEntities = calls.entries[0].worldStateDelta.previousState
+    const before = (entityType: string) =>
+      calls.records.find((r) => r.kind === 'change' && r.entityType === entityType).before
     const checkpoint = calls.checkpoints[0]
     const pairs = [
-      [deltaEntities.characters[0], checkpoint.charactersSnapshot[0], 'character'],
-      [deltaEntities.locations[0], checkpoint.locationsSnapshot[0], 'location'],
-      [deltaEntities.items[0], checkpoint.itemsSnapshot[0], 'item'],
-      [deltaEntities.storyBeats[0], checkpoint.storyBeatsSnapshot[0], 'story_beat'],
+      [before('character'), checkpoint.charactersSnapshot[0], 'character'],
+      [before('location'), checkpoint.locationsSnapshot[0], 'location'],
+      [before('item'), checkpoint.itemsSnapshot[0], 'item'],
+      [before('story_beat'), checkpoint.storyBeatsSnapshot[0], 'story_beat'],
     ] as const
     for (const [deltaEntity, snapshotEntity, entityType] of pairs) {
       expect(deltaEntity.metadata.runtimeVars[`local-${entityType}`]).toEqual({

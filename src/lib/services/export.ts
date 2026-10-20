@@ -24,6 +24,7 @@ import type {
   Branch,
   EmbeddedImageMeta,
   TimeAnchor,
+  WorldStateMark,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 
@@ -47,6 +48,7 @@ class ExportService {
     packBinding: PackBindingExport | null = null,
     timeAnchors: TimeAnchor[] = [],
     worldStateRecords: WorldStateRecord[] = [],
+    worldStateMarks: WorldStateMark[] = [],
   ): Promise<boolean> {
     // embeddedImages is metadata only (no base64). The native exporter fills in each image's
     // imageData from SQLite, so the heavy bytes never sit in the JS heap (their only home would
@@ -74,6 +76,7 @@ class ExportService {
       ...(packBinding ? { packBinding } : {}),
       ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
       ...(worldStateRecords.length > 0 ? { worldStateRecords } : {}),
+      ...(worldStateMarks.length > 0 ? { worldStateMarks } : {}),
     }
 
     const target = await resolveSaveTarget(`${this.sanitizeFilename(story.title)}.avt`, [

@@ -380,7 +380,7 @@ describe('planReversal', () => {
       entryPositions: positions,
       keep: { manual: false, tidy: false },
     })
-    expect(plan.chapterEntryIds).toEqual(['e2', 'e3'])
+    expect([...new Set(plan.chapter.map((r) => r.entryId))]).toEqual(['e2', 'e3'])
   })
 })
 

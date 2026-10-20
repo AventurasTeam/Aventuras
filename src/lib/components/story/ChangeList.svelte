@@ -16,7 +16,7 @@
     <li>
       {describeChange(change, (type, id) => story.trackedName(type, id))}
       {#if lost.has(change.id)}
-        <span class="text-amber-500">— cannot be kept: what it changed is gone</span>
+        <span class="text-amber-500">— will not be kept: what it changed will be gone</span>
       {/if}
     </li>
   {/each}

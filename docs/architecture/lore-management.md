@@ -95,7 +95,7 @@ one. Several things hold that down, and only the last is optional:
 - **Deletes and merges are applied.** They used to be approved by the tool, logged, and then
   dropped — the session's change loop handled `create` and `update` only — so every run
   re-proposed the same consolidation it had already "done". `merges` and `deletedEntries` now
-  come back with the result and reach the caller's existing `onMergeEntries` / `onDeleteEntry`.
+  come back with the result and reach the caller through `onSaveSession`.
 - **Changes land in the snapshot as they are made.** The array the tools read is the array the
   session mutates, so an entry created on step 2 is addressable on step 3, at the index its tool
   result reported. It is never spliced: the model holds indices from the prompt and from every
@@ -156,14 +156,20 @@ because a branch has its own resolved view of the entries. A session the lock re
 as skipped (`LORE_SESSION_BUSY`), not silently dropped. The same reasoning covers chapters:
 a turn's background tasks create one, so `ui.backgroundTasksActiveFor(storyId, branchId)`
 disables **Create Chapter Now** and `createManualChapter` refuses outright, or two chapters get
-built over overlapping ranges of the same entries. A turn starts no chapter check of its own while
+built over overlapping ranges of the same entries. The disabled button names what it waits for: a
+chapter being written, a lore session holding the branch, the turn's background tasks, or no new
+entries. The run set is a plain `Set`, so the header reads `ui.loreManagementActive` to re-derive
+when a session starts or ends. A turn starts no chapter check of its own while
 a chapter creation card on its branch is still working or any session holds the branch; see
 [Chapter creation cards](overview.md#chapter-creation-cards).
 
 **The agent writes nothing while it runs.** Each change it approves goes into
-`LoreSessionLedger`; `saveLoreSession` writes them in order once it has finished. An agent that
-fails leaves the lorebook untouched; a write that fails partway through saving leaves the ones
-before it.
+`LoreSessionLedger`; once it has finished, `saveLoreSession` hands the whole session to
+`onSaveSession`, and `story.saveLoreSession` writes it in one transaction with its records:
+creates, updates, merges (survivor first), deletes, each planned against the lorebook the ones
+before it leave, so a merge of an entry the same session updated on a lightweight branch takes the
+copy the update wrote. A session that fails at any point, its save included, leaves the lorebook
+and its records as they were, which is why an incomplete chapter's card has no lore to report.
 
 In the activity record a run is a list of model calls and tool calls side by side. A model call is
 named before it is made, by why the loop makes it (`loreModelCallReason` in `loreSteps.ts`): every
@@ -242,6 +248,19 @@ of shifting every line under it — and that order is also what makes the indice
 session. Blacklisted entries (`loreManagementBlacklisted`) are filtered out of the pool
 entirely; showing them was worse than useless, since the agent cannot act on one but can
 re-create it.
+
+**A chapter made by hand can skip the story after it.** The manual chapter dialog's "Lore
+management reads the story after this chapter" (off by default, not remembered) passes no tail to
+its lore session when off, so chaining chapters by hand does not read each tail once after its
+chapter and again as the next chapter. The chapter and its summary are the same either way.
+Automatic chapters and Tidy keep their reading.
+
+**A failed chapter session is retried as that chapter's.** The lorebook's failure banner keeps
+which chapter's session failed (`ui.loreManagementRetry`, from the coordinator's `onError`) and how
+it read the story; Retry runs it again for that chapter through `chapterCards.restartLore`, as the
+chapter card's restart does, so its changes are recorded as the chapter's and not as a Tidy run's.
+Only on the chapter's own branch: elsewhere Retry says to open it. A Tidy run or a batch pass is
+retried as Tidy.
 
 **An agent with no story text must not create.** Chapters are the usual material, but a manual run
 can happen before any chapter exists, so every caller passes `recentEntries` — the un-chapterized

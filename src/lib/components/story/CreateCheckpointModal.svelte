@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { StoryEntry } from '#lib/types/index.ts'
-  import { gapMessage, loreLine, type GapOverride } from '#lib/services/stateTracking/index.ts'
+  import { gapMessage, revertLines, type GapOverride } from '#lib/services/stateTracking/index.ts'
   import { story, type AnchorLabel, type PastCheckpointPreview } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
@@ -26,8 +26,6 @@
   let name = $state('')
   // For a past entry: whether it can be rebuilt, and the manual changes that would undo.
   let pastCheckpoint = $state<PastCheckpointPreview | null>(null)
-  let keepManual = $state(false)
-  let keepTidy = $state(false)
   let saving = $state(false)
   // A refused past checkpoint can still be built from a full state the reader picks.
   let advancedOpen = $state(false)
@@ -78,8 +76,6 @@
     entry = target
     name = ''
     pastCheckpoint = null
-    keepManual = false
-    keepTidy = false
     advancedOpen = false
     overruleGaps = false
     if (isLatestEntry) return
@@ -124,8 +120,6 @@
       if (isLatestEntry) await story.createCheckpoint(name.trim())
       else {
         await story.createCheckpointAt(entry.id, name.trim(), {
-          keepManual,
-          keepTidy,
           override: overriding ? gapOverride : undefined,
         })
       }
@@ -211,26 +205,29 @@
           />
           <div class="text-muted-foreground space-y-1 text-xs">
             <p>Checkpoints save the story state and allow branching.</p>
-            <button
-              type="button"
-              class="hover:text-foreground flex items-center gap-1 font-medium"
-              onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
-              aria-expanded={!ui.checkpointHelpFolded}
-              aria-controls="past-checkpoint-help"
-            >
-              {#if ui.checkpointHelpFolded}
-                <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-              {:else}
-                <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+            <!-- The latest entry is checkpointed from the current state; nothing is rebuilt. -->
+            {#if !isLatestEntry}
+              <button
+                type="button"
+                class="hover:text-foreground flex items-center gap-1 font-medium"
+                onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
+                aria-expanded={!ui.checkpointHelpFolded}
+                aria-controls="past-checkpoint-help"
+              >
+                {#if ui.checkpointHelpFolded}
+                  <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+                {:else}
+                  <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+                {/if}
+                How past checkpoints work
+              </button>
+              {#if !ui.checkpointHelpFolded}
+                <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
+                  Historical checkpoints rely on the state diffs that are recorded alongside the
+                  tracked entries, and calculate past state through the rollback from the nearest
+                  full-state landmark: an automated snapshot, another checkpoint, or current state.
+                </p>
               {/if}
-              How past checkpoints work
-            </button>
-            {#if !ui.checkpointHelpFolded}
-              <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
-                Historical checkpoints rely on the state diffs that are recorded alongside the
-                tracked entries, and calculate past state through the rollback from the nearest
-                full-state landmark: an automated snapshot, another checkpoint, or current state.
-              </p>
             {/if}
           </div>
 
@@ -355,55 +352,53 @@
             </div>
           {/if}
           {#if pastCheckpoint && showUndone}
-            {#if pastCheckpoint.manual.length > 0}
-              <p class="text-muted-foreground text-xs">
-                Some changes were made by a user after this entry:
-              </p>
-              <ChangeList changes={pastCheckpoint.manual} unkeepable={pastCheckpoint.unkeepable} />
-              <label class="flex items-center gap-2 text-xs">
-                <Checkbox bind:checked={keepManual} disabled={saving} />
-                Include them in the checkpoint
-              </label>
-            {/if}
-            {#if pastCheckpoint.tidy.length > 0}
-              <p class="text-muted-foreground text-xs">
-                Lore management you ran after this entry made these changes:
-              </p>
-              <ChangeList changes={pastCheckpoint.tidy} unkeepable={pastCheckpoint.unkeepable} />
-              <label class="flex items-center gap-2 text-xs">
-                <Checkbox bind:checked={keepTidy} disabled={saving} />
-                Include them in the checkpoint
-              </label>
+            {#if pastCheckpoint.manual.length + pastCheckpoint.tidy.length > 0}
+              <div class="space-y-1">
+                {#if pastCheckpoint.manual.length > 0}
+                  <p class="text-muted-foreground text-xs">
+                    Changes you made by hand after this entry will not be in the checkpoint:
+                  </p>
+                  <ChangeList changes={pastCheckpoint.manual} unkeepable={[]} />
+                {/if}
+                {#if pastCheckpoint.tidy.length > 0}
+                  <p class="text-muted-foreground text-xs">
+                    Changes from lore management you ran after this entry will not be in the
+                    checkpoint:
+                  </p>
+                  <ChangeList changes={pastCheckpoint.tidy} unkeepable={[]} />
+                {/if}
+              </div>
             {/if}
             {#if pastCheckpoint.source?.position !== entry.position}
-              {@const line = loreLine(
-                pastCheckpoint.lore,
-                pastCheckpoint.manual.length + pastCheckpoint.tidy.length > 0,
-              )}
-              {#if line}
+              {#each revertLines(pastCheckpoint.classifier, pastCheckpoint.lore) as line, i (i)}
                 <p class="text-muted-foreground text-xs">{line}</p>
-              {/if}
+              {/each}
             {/if}
           {/if}
         </div>
         <ResponsiveModal.Footer class="border-t px-6 py-4">
-          <Button variant="secondary" size="sm" onclick={cancel} disabled={saving} class="h-9 px-3">
-            <X class="mr-1.5 h-4 w-4" />
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onclick={create}
-            disabled={!name.trim() || blocked || saving}
-            class="h-9 bg-blue-500 px-3 text-white hover:bg-blue-600"
-          >
-            {#if saving}
-              <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-            {:else}
-              <Bookmark class="mr-1.5 h-4 w-4" />
-            {/if}
-            Create Checkpoint
-          </Button>
+          <span class="flex w-full gap-2 sm:w-auto">
+            <Button
+              variant="outline"
+              class="flex-1 sm:flex-none"
+              onclick={cancel}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onclick={create}
+              disabled={!name.trim() || blocked || saving}
+              class="flex-1 bg-blue-500 text-white hover:bg-blue-600 sm:flex-none"
+            >
+              {#if saving}
+                <Loader2 class="h-4 w-4 animate-spin" />
+              {:else}
+                <Bookmark class="h-4 w-4" />
+              {/if}
+              Create Checkpoint
+            </Button>
+          </span>
         </ResponsiveModal.Footer>
       </div>
     {/if}

@@ -105,6 +105,7 @@ export {
 } from './LoreManagementCoordinator'
 export type {
   LoreManagementCallbacks,
+  LoreSessionWrites,
   LoreSessionActivity,
   LoreManagementUICallbacks,
   LoreSessionInput,

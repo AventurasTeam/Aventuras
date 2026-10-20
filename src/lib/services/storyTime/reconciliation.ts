@@ -2,18 +2,11 @@
  * Turning a reconciliation into the writes that commit with it.
  *
  * Reconciling is not only entry times: chapter spans covering those entries are copies that go
- * stale, an old delta's recorded clock would otherwise be shown out of date, and a range
- * reaching the end of the branch moves the story clock. All of it lands together or
- * not at all.
+ * stale, and a range reaching the end of the branch moves the story clock. All of it lands
+ * together or not at all.
  */
 
-import type {
-  Chapter,
-  Checkpoint,
-  StoryEntry,
-  TimeTracker,
-  WorldStateDelta,
-} from '#lib/types/index.ts'
+import type { Chapter, Checkpoint, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import type { ReconciledTime } from './reconcile'
 import type { Boundary } from './boundaries'
 import { toMinutes } from './minutes'
@@ -24,20 +17,19 @@ export interface ChapterSpanUpdate {
   endTime: TimeTracker | null
 }
 
-export interface DeltaUpdate {
-  entryId: string
-  delta: WorldStateDelta
-}
-
 export interface CheckpointClockUpdate {
   checkpointId: string
+  timeTracker: TimeTracker
+}
+
+export interface SnapshotClockUpdate {
+  entryId: string
   timeTracker: TimeTracker
 }
 
 export interface ReconciliationPlan {
   times: ReconciledTime[]
   chapterSpans: ChapterSpanUpdate[]
-  deltas: DeltaUpdate[]
   /**
    * The story clock afterwards, or null to leave it alone.
    *
@@ -54,12 +46,10 @@ export interface ReconciliationPlan {
    */
   checkpointClocks: CheckpointClockUpdate[]
   /**
-   * Entries whose automatic world-state keyframes this reconciliation invalidates.
-   *
-   * A keyframe is a cache taken wherever the snapshot interval fell, so it can be neither
-   * pinned nor rewritten with confidence, and is discarded the way a rollback discards it.
+   * World-state snapshots taken at a rewritten entry, given that entry's new ending. They are
+   * kept: past states are rebuilt from them, and a closing one shows a run was tracked.
    */
-  keyframeEntryIds: string[]
+  snapshotClocks: SnapshotClockUpdate[]
 }
 
 export interface PlanReconciliationInput {
@@ -101,21 +91,6 @@ export function planReconciliation(input: PlanReconciliationInput): Reconciliati
     })
   }
 
-  // A delta records the clock as it stood before its entry was classified, which is that
-  // entry's beginning. Everything else in the delta is left exactly as it was.
-  const deltas: DeltaUpdate[] = []
-  for (const time of times) {
-    const entry = entries[indexById.get(time.entryId) ?? -1]
-    if (!entry?.worldStateDelta) continue
-    deltas.push({
-      entryId: entry.id,
-      delta: {
-        ...entry.worldStateDelta,
-        previousState: { ...entry.worldStateDelta.previousState, timeTracker: time.start },
-      },
-    })
-  }
-
   const reachesEnd = lastReconciled === entries.length - 1
   const clock = reachesEnd ? (times[times.length - 1]?.end ?? null) : null
 
@@ -131,10 +106,9 @@ export function planReconciliation(input: PlanReconciliationInput): Reconciliati
   return {
     times,
     chapterSpans,
-    deltas,
     clock,
     checkpointClocks,
-    keyframeEntryIds: times.map((time) => time.entryId),
+    snapshotClocks: times.map((time) => ({ entryId: time.entryId, timeTracker: time.end })),
   }
 }
 
@@ -204,13 +178,6 @@ export function reconciliationStatements(
     })
   }
 
-  for (const delta of plan.deltas) {
-    statements.push({
-      sql: 'UPDATE story_entries SET world_state_delta = ? WHERE id = ?',
-      params: [JSON.stringify(delta.delta), delta.entryId],
-    })
-  }
-
   for (const update of plan.checkpointClocks) {
     statements.push({
       sql: 'UPDATE checkpoints SET time_tracker_snapshot = ? WHERE id = ?',
@@ -218,12 +185,10 @@ export function reconciliationStatements(
     })
   }
 
-  // Chunked like the database service's deletes, to stay under SQLite's bound-parameter limit.
-  for (let i = 0; i < plan.keyframeEntryIds.length; i += 500) {
-    const slice = plan.keyframeEntryIds.slice(i, i + 500)
+  for (const update of plan.snapshotClocks) {
     statements.push({
-      sql: `DELETE FROM world_state_snapshots WHERE entry_id IN (${slice.map(() => '?').join(', ')})`,
-      params: slice,
+      sql: 'UPDATE world_state_snapshots SET time_tracker_snapshot = ? WHERE entry_id = ?',
+      params: [JSON.stringify(update.timeTracker), update.entryId],
     })
   }
 

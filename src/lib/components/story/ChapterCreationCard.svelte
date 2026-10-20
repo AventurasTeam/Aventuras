@@ -8,7 +8,6 @@
   import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
   import { formatDuration, turnDuration } from '#lib/services/activity/index.ts'
   import type { ChapterCard } from '#lib/services/chapterCreation/index.ts'
-  import { runManualLoreManagement } from '#lib/services/generation/index.ts'
   import { reportRenderError } from '#lib/utils/activityDisplay.ts'
   import ActivitySummary from './ActivitySummary.svelte'
   import ActivityTimeline from './ActivityTimeline.svelte'
@@ -68,24 +67,7 @@
     if (!chapter || busy) return
     busy = true
     try {
-      chapterCards.cards.loreRestarted(card.id)
-      const run = card.loreRuns + 1
-      const recordId = activity.reopenRecord(card.recordKey)
-      const result = await runManualLoreManagement(
-        chapter,
-        recordId
-          ? { activity, placement: { recordId }, label: `Lore management (run ${run})` }
-          : undefined,
-      )
-      if (recordId) activity.endRecord(recordId)
-      if (result?.completed) chapterCards.cards.loreFinished(card.id)
-      else {
-        chapterCards.cards.loreIncomplete(
-          card.id,
-          result?.error ?? 'Lore management did not complete',
-          result?.changeCount ?? 0,
-        )
-      }
+      await chapterCards.restartLore(chapter)
     } finally {
       busy = false
     }
@@ -93,13 +75,9 @@
 
   async function deleteChapter() {
     if (!card.chapterId || !isLast || busy) return
-    const changes = card.loreChangeCount
-    const kept =
-      changes === 0
-        ? 'The incomplete runs wrote no lore changes.'
-        : `The ${changes === 1 ? 'lore change' : `${changes} lore changes`} the incomplete runs wrote ${changes === 1 ? 'stays' : 'stay'} in the lorebook.`
+    // An incomplete session saved nothing, so there is no lore to undo with it.
     const confirmed = await ask(
-      `Delete ${label}${card.title ? `: ${card.title}` : ''}? Its entries remain, and a later turn can cut them into a chapter again. ${kept}`,
+      `Delete ${label}${card.title ? `: ${card.title}` : ''}? Its entries remain, and a later turn can cut them into a chapter again.`,
       { title: 'Delete incomplete chapter', kind: 'warning' },
     )
     if (!confirmed) return
