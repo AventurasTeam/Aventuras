@@ -184,6 +184,22 @@ describe('debug logging', () => {
     )
   })
 
+  it('redacts the Gemini key header', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))
+
+    await sdkFetch()(API_URL, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': 'AIzaSyD1234567890abcdefghij' },
+      body: '{}',
+    })
+
+    expect(debug.addDebugRequest).toHaveBeenCalledWith(
+      'google-image',
+      expect.objectContaining({ headers: { 'x-goog-api-key': 'AIza...ghij' } }),
+      undefined,
+    )
+  })
+
   it('does not describe the request when debug logging is off', async () => {
     debug.isActive = false
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))

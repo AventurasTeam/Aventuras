@@ -2,7 +2,7 @@
 
 import { debug } from '#lib/stores/debug.svelte.ts'
 
-const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key'])
+const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'])
 const BINARY_CONTENT_TYPE = /^(image|audio)\/|^application\/octet-stream/
 const SCRUB_MIN_LENGTH = 1024
 const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/
