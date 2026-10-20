@@ -689,7 +689,8 @@ describe('resolveCollision — merge', () => {
 })
 
 // A run reserving right after the build's gate check settles the writes dispatched so far: the
-// resolution must already be among them (generation-pipeline.md → Gate derivation as a selector).
+// resolution must already be among them (generation-pipeline.md → Action rejection — defense in
+// depth).
 describe('resolveCollision — dispatches in the tick of its gate check', () => {
   it.each([
     ['merge', MERGE_B_INTO_A],

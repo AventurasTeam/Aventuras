@@ -17,10 +17,14 @@ export function reserveRunAfterGateCheck(
   const real = generationStore.isUserEditBlocked
   let calls = 0
   let resolveSettled!: () => void
+  let timer: ReturnType<typeof setTimeout> | undefined
   const settled = new Promise<void>((resolve, reject) => {
     resolveSettled = resolve
-    setTimeout(() => reject(new Error(`gate check ${callNo} never passed (${calls} seen)`)), 1000)
-  })
+    timer = setTimeout(
+      () => reject(new Error(`gate check ${callNo} never passed (${calls} seen)`)),
+      1000,
+    )
+  }).finally(() => clearTimeout(timer))
   const spy = vi.spyOn(generationStore, 'isUserEditBlocked').mockImplementation(() => {
     calls += 1
     const blocked = real()
@@ -32,5 +36,12 @@ export function reserveRunAfterGateCheck(
     }
     return blocked
   })
-  return { settled, checks: () => calls, restore: () => spy.mockRestore() }
+  return {
+    settled,
+    checks: () => calls,
+    restore: () => {
+      clearTimeout(timer)
+      spy.mockRestore()
+    },
+  }
 }

@@ -190,8 +190,8 @@ describe('commitRowDelete — in-flight refusal writes nothing', () => {
 })
 
 // A run reserving right after the gate check settles the writes dispatched so far: the delete must
-// already be among them, so it commits before that run reads (generation-pipeline.md → Gate
-// derivation as a selector).
+// already be among them, so it commits before that run reads (generation-pipeline.md → Action
+// rejection — defense in depth).
 describe('commitRowDelete — dispatches in the tick of its gate check', () => {
   it.each([
     ['deleteRow', () => deleteRow('lore', 'b1', 'lore_1', ctx)],
