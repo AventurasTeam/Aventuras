@@ -6,6 +6,7 @@
  */
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import * as z from 'zod'
 import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
@@ -15,10 +16,20 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 // Spread into the request body, which this provider reads under its camelCase name.
 const PROVIDER_OPTIONS_KEY = 'openaiCompatible'
+
+const ModelEntry = z
+  .object({ id: z.string().catch(''), name: z.string().catch('') })
+  .refine(({ id, name }) => id || name)
+  .transform(({ id, name }): ImageModelInfo => ({
+    id: id || name,
+    name: name || id,
+    supportsImg2Img: true,
+  }))
 
 export function createOpenAICompatibleProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl?.trim().replace(/\/+$/, '')
@@ -61,18 +72,5 @@ async function fetchCustomModels(baseUrl: string, apiKey?: string): Promise<Imag
     apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
     { serviceId: 'openai-compatible-image-models' },
   )
-  const data = await response.json()
-  const entries: { id?: string; name?: string }[] = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.data)
-      ? data.data
-      : []
-
-  return entries
-    .filter((m) => m.id || m.name)
-    .map((m) => ({
-      id: m.id || m.name || '',
-      name: m.name || m.id || '',
-      supportsImg2Img: false,
-    }))
+  return parseModelList(await response.json(), ModelEntry)
 }

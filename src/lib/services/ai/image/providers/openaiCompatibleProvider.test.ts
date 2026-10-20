@@ -115,8 +115,8 @@ describe('OpenAI Compatible model listing', () => {
     }).listModels('k')
 
     expect(models).toEqual([
-      { id: 'flux-dev', name: 'flux-dev', supportsImg2Img: false },
-      { id: 'gpt-4o', name: 'GPT-4o', supportsImg2Img: false },
+      { id: 'flux-dev', name: 'flux-dev', supportsImg2Img: true },
+      { id: 'gpt-4o', name: 'GPT-4o', supportsImg2Img: true },
     ])
     expect(imageGetFetch).toHaveBeenCalledWith(
       `${BASE_URL}/models`,
@@ -133,6 +133,23 @@ describe('OpenAI Compatible model listing', () => {
     }).listModels('')
     expect(models.map((m) => m.id)).toEqual(['flux-dev'])
     expect(vi.mocked(imageGetFetch).mock.lastCall![1]).toBeUndefined()
+  })
+
+  it('skips entries that are not objects or carry no string id or name', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({
+        data: [null, 'flux', { id: 7 }, { name: 'only-name' }, { id: 'flux-dev', name: 3 }],
+      }),
+    )
+    const models = await createOpenAICompatibleProvider({
+      apiKey: '',
+      baseUrl: BASE_URL,
+    }).listModels('')
+
+    expect(models).toEqual([
+      { id: 'only-name', name: 'only-name', supportsImg2Img: true },
+      { id: 'flux-dev', name: 'flux-dev', supportsImg2Img: true },
+    ])
   })
 
   it('returns an empty list, and makes no request, without a base URL', async () => {

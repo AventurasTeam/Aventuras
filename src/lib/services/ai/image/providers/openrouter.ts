@@ -10,6 +10,7 @@
  * - Model discovery: GET /models, filter by output_modalities includes "image"
  */
 
+import * as z from 'zod'
 import {
   specToAspectRatio,
   base64ImageMime,
@@ -24,23 +25,30 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { parseModelList } from './parseModelList'
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 const MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models'
 
-interface OpenRouterModel {
-  id: string
-  name?: string
-  description?: string
-  architecture?: {
-    input_modalities?: string[]
-    output_modalities?: string[]
-  }
-  pricing?: {
-    prompt?: string
-    completion?: string
-    image?: string
-  }
+const optionalString = z.string().optional().catch(undefined)
+const modalities = z.array(z.string()).catch([])
+
+const OpenRouterModel = z.object({
+  id: z.string(),
+  name: optionalString,
+  description: optionalString,
+  architecture: z
+    .object({ input_modalities: modalities, output_modalities: modalities })
+    .catch({ input_modalities: [], output_modalities: [] }),
+  pricing: z
+    .object({ prompt: optionalString, completion: optionalString, image: optionalString })
+    .catch({}),
+})
+
+/** A price string as a number; zero, negative and unparseable prices read as unknown. */
+function positivePrice(value: string | undefined): number | undefined {
+  const parsed = parseFloat(value ?? '')
+  return parsed > 0 ? parsed : undefined
 }
 
 /** The aspect ratios OpenRouter documents. */
@@ -152,50 +160,21 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
       const response = await imageGetFetch(MODELS_ENDPOINT, headers, {
         serviceId: 'openrouter-image-models',
       })
-      const data = await response.json()
-      const models = data?.data || []
-
-      // Filter for models that have "image" in output_modalities
-      const imageModels = models.filter((m: OpenRouterModel) =>
-        m.architecture?.output_modalities?.includes('image'),
-      )
-
-      return imageModels.map((m: OpenRouterModel): ImageModelInfo => {
-        const inputMods = m.architecture?.input_modalities || []
-        const outputMods = m.architecture?.output_modalities || []
-        const supportsImg2Img = inputMods.includes('image') && outputMods.includes('image')
-
-        // Parse cost from pricing.image if available
-        let costPerImage: number | undefined
-        if (m.pricing?.image) {
-          const parsed = parseFloat(m.pricing.image)
-          if (!isNaN(parsed) && parsed > 0) costPerImage = parsed
-        }
-
-        let costPerTextToken: number | undefined
-        if (m.pricing?.prompt) {
-          const parsed = parseFloat(m.pricing.prompt)
-          if (!isNaN(parsed) && parsed > 0) costPerTextToken = parsed
-        }
-
-        let costPerImageToken: number | undefined
-        if (m.pricing?.completion) {
-          const parsed = parseFloat(m.pricing.completion)
-          if (!isNaN(parsed) && parsed > 0) costPerImageToken = parsed
-        }
-
-        return {
+      return parseModelList(await response.json(), OpenRouterModel)
+        .filter((m) => m.architecture.output_modalities.includes('image'))
+        .map((m): ImageModelInfo => ({
           id: m.id,
           name: m.name || m.id,
           description: m.description,
-          supportsImg2Img,
-          costPerImage,
-          costPerTextToken,
-          costPerImageToken,
-          inputModalities: inputMods,
-          outputModalities: outputMods,
-        }
-      })
+          supportsImg2Img:
+            m.architecture.input_modalities.includes('image') &&
+            m.architecture.output_modalities.includes('image'),
+          costPerImage: positivePrice(m.pricing.image),
+          costPerTextToken: positivePrice(m.pricing.prompt),
+          costPerImageToken: positivePrice(m.pricing.completion),
+          inputModalities: m.architecture.input_modalities,
+          outputModalities: m.architecture.output_modalities,
+        }))
     },
   }
 }

@@ -198,6 +198,14 @@ describe('OpenAI model listing', () => {
     ])
   })
 
+  it('skips entries without a string id', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({ data: [null, 'gpt-image-1', { id: 7 }, { id: 'gpt-image-1' }] }),
+    )
+    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    expect(models.map((m) => m.id)).toEqual(['gpt-image-1'])
+  })
+
   it('lists against a custom base URL the same way', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(
       modelsResponse({ data: [{ id: 'gpt-image-1' }, { id: 'flux-dev' }] }),
