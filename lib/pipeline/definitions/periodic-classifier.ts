@@ -80,6 +80,9 @@ const CALL_TIMEOUT_MS = 300_000
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
 
+// The status the run found, for onInterrupt to restore once the orchestrator's reversal commits.
+const PRE_RUN_STATUS = 'periodicClassifier.preRunStatus'
+
 async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   const [row] = await ctx.db
     .select({ classifierStatus: branches.classifierStatus })
@@ -150,6 +153,7 @@ export async function* periodicClassifierPhase(
     }
   const cfg = appSettingsStore.getAppSettings()
   const status = await readStatus(ctx)
+  ctx.intermediates[PRE_RUN_STATUS] = status
   const entries = await readWindowEntries(
     ctx,
     status.processedThrough,
@@ -212,11 +216,8 @@ export async function* periodicClassifierPhase(
   } finally {
     bounded.dispose()
   }
-  // An interrupt restores the pre-run status: it uses no retry and leaves the watermark.
-  if (result.status === 'aborted' && !bounded.expired()) {
-    await writeStatus(ctx, status)
-    return { status: 'aborted' }
-  }
+  // An interrupt uses no retry and leaves the watermark; onInterrupt restores the pre-run status.
+  if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
     // An expiry aborts the same way a cancel does, but it is a provider fault: through the abort
     // arm it would burn no retry, and every later turn would rediscover the same dead provider.
@@ -249,13 +250,6 @@ export async function* periodicClassifierPhase(
       ...newPlacesOf(extraction).map((p) => p.handle),
     ]),
   )
-
-  // A cancel restores the pre-run status, as the abort arm does; the orchestrator reverses any
-  // write this run already made.
-  const discard = async (): Promise<PhaseResult> => {
-    await writeStatus(ctx, status)
-    return { status: 'aborted' }
-  }
 
   const embedDescriptions = classifierEmbedder()
   const reconcile = async (
@@ -292,9 +286,9 @@ export async function* periodicClassifierPhase(
     return decided
   }
   const decisions = await reconcile('character')
-  if (decisions === null) return discard()
+  if (decisions === null) return { status: 'aborted' }
   const factionDecisions = await reconcile('faction', new Set(decisions.keys()))
-  if (factionDecisions === null) return discard()
+  if (factionDecisions === null) return { status: 'aborted' }
 
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
@@ -317,11 +311,11 @@ export async function* periodicClassifierPhase(
 
   // classifier.md → Pipeline framing: a pass cancelled during its writes reverses its own group.
   for (const write of plan.planned) {
-    if (ctx.abortSignal.aborted) return discard()
+    if (ctx.abortSignal.aborted) return { status: 'aborted' }
     yield { type: 'delta_emitted', action: write.action, entryId: write.entryId }
   }
-  // An interrupted pass never moves the watermark, even one cancelled after its last write.
-  if (ctx.abortSignal.aborted) return discard()
+  // The last point a cancel discards; past it the pass commits, watermark included.
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
   // One statement: a success recorded without its watermark would reset the retry count on a pass
@@ -362,6 +356,11 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
           })
           await recordFailure(ctx, detail)
         }
+      },
+      // Not in the phase: a reversal that can't commit leaves `running` for boot recovery.
+      onInterrupt: async (run, ctx) => {
+        const status = run.intermediates[PRE_RUN_STATUS] as ClassifierStatus | undefined
+        if (status) await writeStatus({ db: ctx.db, branchId: run.branchId }, status)
       },
       gateBehavior: 'hard-gate',
       interruptible: true,

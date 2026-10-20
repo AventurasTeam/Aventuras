@@ -86,6 +86,14 @@ async function* failsCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'phase-logic', detail: 'clean fail' } }
 }
 
+async function* writesThenCancels(): AsyncGenerator<
+  { type: 'delta_emitted'; action: PipelineAction },
+  PhaseResult
+> {
+  yield { type: 'delta_emitted', action: newEntry('entry_cancelled') }
+  return { status: 'aborted' }
+}
+
 // Only `cause.threw`, not the error-kind filter, keeps onPhaseException from firing here.
 async function* failsCleanlyWithHookEligibleKind(): AsyncGenerator<never, PhaseResult> {
   return { status: 'failed', error: { kind: 'orchestrator', detail: 'clean fail' } }
@@ -245,6 +253,60 @@ describe('orchestrator hardening', () => {
   // the user the entire turn: the run failed and the reversal sweep took the
   // committed prose with it. The 'noop' code exists to say "well-formed, changed
   // nothing"; before this it was written by handlers and read by nobody.
+  it('runs onInterrupt for a cancel, after its reversal but before the run is released', async () => {
+    const { db, ctx } = await makeHarness()
+    const seen: { entriesLeft: number; runStillRegistered: boolean }[] = []
+    definePipeline({
+      kind: 'interrupt-hook',
+      phases: [{ name: 'p', run: writesThenCancels }],
+      onInterrupt: async () => {
+        seen.push({
+          entriesLeft: (await db.select().from(storyEntries)).length,
+          runStillRegistered: generationStore.getTxState().runs.size > 0,
+        })
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('interrupt-hook', ctx))
+
+    expect(seen).toEqual([{ entriesLeft: 0, runStillRegistered: true }])
+    expect(result.outcome).toBe('aborted')
+  })
+
+  it('winds the run down even when onInterrupt throws', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'interrupt-hook-throws',
+      phases: [{ name: 'p', run: writesThenCancels }],
+      onInterrupt: async () => {
+        throw new Error('boom')
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('interrupt-hook-throws', ctx))
+
+    expect(result.outcome).toBe('aborted')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  it('does not run onInterrupt for a failure', async () => {
+    const { ctx } = await makeHarness()
+    let called = false
+    definePipeline({
+      kind: 'interrupt-hook-on-failure',
+      phases: [{ name: 'p', run: failsCleanly }],
+      onInterrupt: async () => {
+        called = true
+      },
+      ...base,
+    })
+
+    expect(expectRan(await runPipeline('interrupt-hook-on-failure', ctx)).outcome).toBe('failed')
+    expect(called).toBe(false)
+  })
+
   it('skips a noop-coded rejection instead of failing the run', async () => {
     const { db, ctx } = await makeHarness()
     await db.insert(entities).values({

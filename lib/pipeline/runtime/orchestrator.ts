@@ -381,6 +381,23 @@ async function runPhaseExceptionHook(
   }
 }
 
+async function runInterruptHook(run: RunState, ctx: RunCtx): Promise<void> {
+  const onInterrupt = getPipeline(run.kind).onInterrupt
+  if (!onInterrupt) return
+  try {
+    await onInterrupt(run, ctx)
+  } catch (hookError) {
+    logger.error(
+      'pipeline.interrupt_hook_failed',
+      {
+        runId: run.runId,
+        error: hookError instanceof Error ? hookError.message : String(hookError),
+      },
+      { actionId: run.actionId },
+    )
+  }
+}
+
 type AbortCause =
   | { reason: 'user-cancel' }
   | { reason: 'preflight-failure'; error: PipelineError }
@@ -417,6 +434,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   // Must precede generationStore.abortRun below — that release drops the gate serializing this.
   if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
     await runPhaseExceptionHook(run, ctx, cause.error)
+  if (cause.reason === 'user-cancel' && !reversalFailed) await runInterruptHook(run, ctx)
   const newlyDeferred = generationStore.abortRun(run.runId, outcome)
   // A straggler that wrote while the run was still registered (during the hook) may have taken a
   // fresh hold since the release above.

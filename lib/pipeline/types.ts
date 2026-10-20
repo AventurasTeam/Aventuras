@@ -143,6 +143,12 @@ export type PhaseExceptionHook = (
   error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
 ) => Promise<void>
 
+/**
+ * Runs after a user-cancel abort's reversal committed, while the run still holds the gate; skipped
+ * when the reversal can't commit, so recovery owns the writes left on disk.
+ */
+export type InterruptHook = (run: RunState, ctx: DbCtx) => Promise<void>
+
 export type Pipeline = {
   kind: string
   phases: readonly PhaseNode[]
@@ -155,6 +161,7 @@ export type Pipeline = {
   chainsTo?: (run: RunState, ctx: DbCtx) => string | null | Promise<string | null>
   onPreflightFailure?: PreflightFailureHook
   onPhaseException?: PhaseExceptionHook
+  onInterrupt?: InterruptHook
 }
 
 export type TxResult = {

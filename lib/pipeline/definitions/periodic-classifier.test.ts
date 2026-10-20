@@ -49,6 +49,7 @@ import {
   hydrateAppSettings,
   interruptMemoryRuns,
   resetAllStores,
+  type RunState,
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -62,7 +63,7 @@ import {
 import { __resetRegistry, getPipeline } from '../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../runtime/action-port'
 import { runPipeline, type RunCtx } from '../runtime/orchestrator'
-import type { PhaseContext, TxResult } from '../types'
+import type { PhaseContext, Pipeline, TxResult } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -233,6 +234,13 @@ async function drain(ctx: PhaseContext) {
     if (next.done) return { events, result: next.value }
     events.push(next.value)
   }
+}
+
+function interruptHook(): NonNullable<Pipeline['onInterrupt']> {
+  ensurePeriodicClassifierPipelineRegistered()
+  const { onInterrupt } = getPipeline(PERIODIC_CLASSIFIER_KIND)
+  if (!onInterrupt) throw new Error('the pass declares no onInterrupt')
+  return onInterrupt
 }
 
 const createdEntry = (events: unknown[]) =>
@@ -446,12 +454,39 @@ describe('periodicClassifierPhase', () => {
     expect(stateAtCallTime).toBe('running')
   })
 
-  it('restores the pre-run status on an early abort, so running is never stuck', async () => {
-    const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
+  // The phase can't know whether the orchestrator's reversal will commit, so the restore is the hook's.
+  it('leaves running on an abort, for its interrupt hook to restore the status it read', async () => {
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      seedStatus: { state: 'retrying', retryCount: 1, lastError: 'rate limited' },
+    })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
     const { result } = await drain(h.ctx)
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', retryCount: 1 })
+
+    await interruptHook()(
+      { branchId: 'b1', intermediates: h.ctx.intermediates } as unknown as RunState,
+      h.ctx,
+    )
+    expect(h.status()).toEqual({
+      state: 'retrying',
+      lastSuccessAt: null,
+      lastError: 'rate limited',
+      retryCount: 1,
+      processedThrough: 0,
+    })
+  })
+
+  it('restores nothing from its interrupt hook for a run that never read the status', async () => {
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      seedStatus: { state: 'running' },
+    })
+    await interruptHook()({ branchId: 'b1', intermediates: {} } as unknown as RunState, h.ctx)
+    expect(h.status()).toMatchObject({ state: 'running' })
   })
 
   it('advances processedThrough after the deltas, never before', async () => {
@@ -506,7 +541,7 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('returns aborted on a cancel between its writes, restoring the pre-run status', async () => {
+  it('returns aborted on a cancel between its writes, keeping its retry state', async () => {
     const h = await ctxWith({
       processedThrough: 0,
       headPosition: 2,
@@ -531,7 +566,7 @@ describe('periodicClassifierPhase', () => {
     expect(await gen.next()).toEqual({ done: true, value: { status: 'aborted' } })
     expect(h.watermarks).toEqual([])
     expect(h.status()).toEqual({
-      state: 'retrying',
+      state: 'running',
       lastSuccessAt: null,
       lastError: 'rate limited',
       retryCount: 1,
@@ -556,7 +591,7 @@ describe('periodicClassifierPhase', () => {
 
     expect(await gen.next()).toEqual({ done: true, value: { status: 'aborted' } })
     expect(h.watermarks).toEqual([])
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0, processedThrough: 0 })
   })
 
   it('returns aborted on a cancel after the model call, before its first write', async () => {
@@ -573,7 +608,7 @@ describe('periodicClassifierPhase', () => {
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0, processedThrough: 0 })
   })
 
   it('returns aborted with no deltas when the abort lands before parsing', async () => {
@@ -583,7 +618,7 @@ describe('periodicClassifierPhase', () => {
     expect(events).toEqual([])
     expect(result).toEqual({ status: 'aborted' })
     // An abort is not a failure: no retry state is burned.
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0, processedThrough: 0 })
   })
 
   it('returns aborted on a cancel during the character reconciliation, cutting it short', async () => {
@@ -619,7 +654,7 @@ describe('periodicClassifierPhase', () => {
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', processedThrough: 0 })
     expect(embedder).toHaveBeenCalledTimes(1)
   })
 
@@ -667,7 +702,7 @@ describe('periodicClassifierPhase', () => {
     const { result } = await pass
 
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0 })
   })
 
   // The timeout timer stayed armed after an outer abort, so a cancel landing near
@@ -696,7 +731,7 @@ describe('periodicClassifierPhase', () => {
       const { result } = await pass
 
       expect(result).toEqual({ status: 'aborted' })
-      expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0 })
+      expect(h.status()).toMatchObject({ state: 'running', retryCount: 0 })
     } finally {
       vi.useRealTimers()
     }
@@ -1856,6 +1891,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
       lastError: null,
     })
   })
+
   it('commits nothing and keeps its pre-run status when interrupted during the model call', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, RETRYING)
@@ -1911,6 +1947,57 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await db.select().from(deltas)).toEqual([])
     expect(await storedStatus(db)).toEqual(RETRYING)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  // generation-pipeline.md → Recovery-failure policy: the writes stay on disk, so the status must
+  // not reopen the cadence over them.
+  it('leaves running when interrupted mid-burst and its reversal cannot commit', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    await seedStatus(db, RETRYING)
+    const fixedActionId = 'act_classifier_poison'
+    await db.insert(deltas).values({
+      id: 'd_classifier_poison',
+      branchId: 'b1',
+      entryId: null,
+      actionId: fixedActionId,
+      logPosition: 900,
+      source: 'ai_classifier',
+      targetTable: 'not_a_registered_table',
+      targetId: 'x',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+    let interrupted = false
+    configurePort(async (args, applyCtx) => {
+      const result = await realApplyDeltaAction(args, applyCtx)
+      if (!interrupted && args.action.kind === 'createHappening') {
+        interrupted = true
+        for (const run of generationStore.getTxState().runs.values()) run.abortController.abort()
+      }
+      return result
+    })
+    registerWithReply({
+      happenings: [
+        { title: 'A', sourceTurn: 't1', involvements: [], awareness: [] },
+        { title: 'B', sourceTurn: 't1', involvements: [], awareness: [] },
+      ],
+    })
+
+    expect(
+      await runOutcome({
+        storyId: 's1',
+        branchId: 'b1',
+        db,
+        runInTransaction,
+        actionId: fixedActionId,
+      }),
+    ).toBe('failed')
+    expect(interrupted).toBe(true)
+    expect((await db.select().from(happenings)).map((h) => h.title)).toEqual(['A'])
+    expect(await storedStatus(db)).toEqual({ ...RETRYING, state: 'running' })
+    expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
   })
 })
 
