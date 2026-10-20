@@ -16,6 +16,7 @@ import {
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
+import { loadHeadTurn } from './head-turn'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
@@ -59,22 +60,43 @@ export async function updateStoryEntryContent(
   content: string,
   ctx: DbCtx,
 ): Promise<{ status: 'ok' } | StoryEntryRejection> {
-  if (generationStore.isUserEditBlocked()) return inFlightRejection()
-  // Ahead of the bracket, which cancels the in-flight classifier before its body runs:
-  // an unchanged save must not cost a pass. Safe outside the barrier because no other
-  // writer touches this column, unlike the tail read the scope needs.
+  const headAtStart = mayPassGate(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
+  if (contentEditBlocked(branchId, headAtStart)) return inFlightRejection()
+  // Ahead of the bracket, which interrupts a pass before its body runs: an unchanged save must
+  // not cost a pass. Safe outside the barrier because no other writer touches this column,
+  // unlike the tail read the scope needs.
   const [existing] = await ctx.db
     .select({ content: storyEntries.content })
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
   if (existing?.content === content) return { status: 'ok' }
-  // Re-checked past the read, so this gate and the bracket's flag set are one synchronous
+  // Re-checked past the reads, so this gate and the bracket's flag set are one synchronous
   // block: a second Save that read alongside the first is refused, not thrown as re-entry.
   // Not inside the bracket, where the flag itself reads as blocked.
-  if (generationStore.isUserEditBlocked()) return inFlightRejection()
+  const inHeadTurn = mayPassGate(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
+  if (contentEditBlocked(branchId, inHeadTurn)) return inFlightRejection()
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
+}
+
+/**
+ * True when only interruptible runs on the branch hold the gate, the one case an edit of the
+ * head turn may pass by interrupting them (principles.md → Edit restrictions during in-flight
+ * generation). Head membership is read only then, so the awaits stay off every other path.
+ */
+function mayPassGate(branchId: string): boolean {
+  return generationStore.isUserEditBlocked() && !generationStore.isHeadReversalBlocked(branchId)
+}
+
+function contentEditBlocked(branchId: string, inHeadTurn: boolean): boolean {
+  if (!generationStore.isUserEditBlocked()) return false
+  return !inHeadTurn || generationStore.isHeadReversalBlocked(branchId)
+}
+
+async function isHeadTurnEntry(branchId: string, id: string, ctx: DbCtx): Promise<boolean> {
+  const head = await loadHeadTurn(branchId, ctx)
+  return head != null && (head.tail.id === id || head.origin?.id === id)
 }
 
 function inFlightRejection(): StoryEntryRejection {

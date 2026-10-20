@@ -185,8 +185,9 @@ describe('bracketProseReversal — the interrupt', () => {
     await landed
     expect(await db.select().from(happenings)).toHaveLength(1)
 
+    const [run] = [...generationStore.getTxState().runs.values()]
     const seen: unknown[] = []
-    await bracketProseReversal('b1', async () => {
+    const bracket = bracketProseReversal('b1', async () => {
       const txState = generationStore.getTxState()
       seen.push({
         runs: txState.runs.size,
@@ -194,6 +195,9 @@ describe('bracketProseReversal — the interrupt', () => {
         facts: (await db.select().from(happenings)).length,
       })
     })
+    // The order is flag, interrupt, settle: the abort is out before the bracket's first await.
+    expect(run.abortController.signal.aborted).toBe(true)
+    await bracket
     off()
 
     // The flag is up before the interrupt, so no pass can start between it and the sweep.

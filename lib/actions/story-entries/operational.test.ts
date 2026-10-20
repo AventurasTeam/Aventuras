@@ -1495,3 +1495,91 @@ describe('sameRollbackCounts', () => {
     },
   )
 })
+
+// The head turn is e2 (user_action) over e3 (ai_reply); e1 sits below it.
+describe('head-turn edits during a pass', () => {
+  async function seedHeadTurnWithPass() {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurn(db)
+    const pass = registerStandInPass({ anchorEntryId: 'e1' })
+    const deferrals = recordDeferrals()
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+    return { db, ctx, start, held, deferrals }
+  }
+
+  async function happeningIds(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+    return (await db.select().from(happenings)).map((h) => h.id).sort()
+  }
+
+  it('an edit of the head reply interrupts the pass, deferring it, and commits', async () => {
+    const { db, ctx, start, held, deferrals } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e3', 'rewritten reply', ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    // hap_3 goes with the edit; the pass's own happening, anchored to e1, only through the abort.
+    expect(await happeningIds(db)).toEqual(['hap_1', 'hap_2'])
+    expect(entriesStore.getById('e3')?.content).toBe('rewritten reply')
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(deferrals).toHaveLength(1)
+  })
+
+  it("an edit of the head turn's user action interrupts the pass too", async () => {
+    const { db, ctx, start } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e2', 'rewritten action', ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+    expect(await happeningIds(db)).toEqual(['hap_1'])
+    expect(entriesStore.getById('e2')?.content).toBe('rewritten action')
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  it('refuses an edit off the head turn, leaving the pass running', async () => {
+    const { db, ctx, start, held } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e1', 'reworded', ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'in-flight-gated',
+    })
+
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(row.content).toBe('a')
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('returns an unchanged save of the head reply without costing the pass', async () => {
+    const { ctx, start, held } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e3', 'reply', ctx)).toEqual({ status: 'ok' })
+
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('refuses a head-turn edit while a suggestion refresh runs beside the pass', async () => {
+    const { ctx, start, held } = await seedHeadTurnWithPass()
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    expect(await updateStoryEntryContent('b1', 'e3', 'rewritten reply', ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'in-flight-gated',
+    })
+
+    expect(entriesStore.getById('e3')?.content).toBe('reply')
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+})

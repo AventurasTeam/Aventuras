@@ -353,7 +353,7 @@ describe('AC6 — undo floor in a wizard-created story', () => {
   })
 })
 
-describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
+describe('AC4 — CTRL-Z of the turn with a classifier run mid-flight', () => {
   it('interrupts the run and holds the sweep until its terminal resolves', async () => {
     const { db, ctx } = await seedBranch([
       entry('e_opening', 1, 'opening'),
@@ -368,15 +368,14 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
       resolveTerminal = r
     })
     const abortController = new AbortController()
-    let aborted = false
-    abortController.signal.addEventListener('abort', () => {
-      aborted = true
+    const aborted = new Promise<void>((resolve) => {
+      abortController.signal.addEventListener('abort', () => resolve(), { once: true })
     })
-    // No-gate so undo's own gate check passes; the bracket must still interrupt the run.
+    // A pass holds the gate; CTRL-Z of the turn passes it by interrupting it.
     generationStore.startRun({
       runId: 'run_c',
       kind: 'periodic-classifier',
-      gateBehavior: 'no-gate',
+      gateBehavior: 'hard-gate',
       interruptible: true,
       beforeTurn: false,
       actionId: 'act_c',
@@ -390,15 +389,15 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
     })
 
     const done = undoLastAction('b1', ctx)
-    // Synchronous with the bracket's entry: the interrupt precedes the settle (prose reversals).
-    expect(aborted).toBe(true)
-    // The sweep waits for the terminal, not merely a macrotask: an unbracketed sweep would have
-    // finished within this flush (in-memory SQLite, no real I/O).
+    // The undo reads its target before the gate decides; then the bracket aborts the run…
+    await aborted
+    // …and the sweep waits for the terminal, not merely a microtask turn: an
+    // unbracketed sweep would have finished within this flush (in-memory SQLite,
+    // no real I/O), so the entry still standing is the barrier's own evidence.
     await new Promise((r) => setTimeout(r, 0))
-    expect(aborted).toBe(true)
     expect(entriesStore.getById('e_t1')).toBeDefined()
 
-    // As the orchestrator does: the run leaves txState, then its terminal resolves.
+    // What the orchestrator does at the end of an abort: deregister, then resolve the terminal.
     generationStore.abortRun('run_c')
     resolveTerminal()
     expect((await done).status).toBe('ok')
