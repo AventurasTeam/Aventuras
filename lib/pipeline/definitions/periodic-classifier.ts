@@ -360,7 +360,18 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       // Not in the phase: a reversal that can't commit leaves `running` for boot recovery.
       onInterrupt: async (run, ctx) => {
         const status = run.intermediates[PRE_RUN_STATUS] as ClassifierStatus | undefined
-        if (status) await writeStatus({ db: ctx.db, branchId: run.branchId }, status)
+        if (!status) return
+        const target = { db: ctx.db, branchId: run.branchId }
+        try {
+          await writeStatus(target, status)
+        } catch (e) {
+          // Left running, the cadence stays suspended until the next boot.
+          logger.warn('classifier.interrupt_restore_retried', {
+            branchId: run.branchId,
+            error: e instanceof Error ? e.message : String(e),
+          })
+          await writeStatus(target, status)
+        }
       },
       gateBehavior: 'hard-gate',
       interruptible: true,

@@ -1677,6 +1677,29 @@ describe('periodicClassifierPhase via runPipeline', () => {
     await db.update(branches).set({ classifierStatus: status }).where(eq(branches.id, 'b1'))
   }
 
+  type Chunk = { value?: unknown; queryChunks?: Chunk[] } | null
+  const sqlText = (query: Chunk): string =>
+    (query?.queryChunks ?? [])
+      .map((chunk) => (Array.isArray(chunk?.value) ? chunk.value.join('') : sqlText(chunk)))
+      .join('')
+
+  // Resolves once the model call is in flight; the call itself ends only on an abort.
+  function holdModelCall(): Promise<void> {
+    let calling!: () => void
+    const inCall = new Promise<void>((resolve) => {
+      calling = resolve
+    })
+    vi.mocked(generateStructured).mockImplementation(
+      (...args: unknown[]) =>
+        new Promise((resolve) => {
+          const signal = args[4] as AbortSignal
+          signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
+          calling()
+        }) as never,
+    )
+    return inCall
+  }
+
   it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
 
@@ -1733,11 +1756,6 @@ describe('periodicClassifierPhase via runPipeline', () => {
       })} WHERE id = 'b1'`,
     )
     let failWatermark = true
-    type Chunk = { value?: unknown; queryChunks?: Chunk[] } | null
-    const sqlText = (query: Chunk): string =>
-      (query?.queryChunks ?? [])
-        .map((chunk) => (Array.isArray(chunk?.value) ? chunk.value.join('') : sqlText(chunk)))
-        .join('')
     const flaky = new Proxy(db, {
       get(target, prop) {
         if (prop === 'run')
@@ -1896,18 +1914,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, RETRYING)
     ensurePeriodicClassifierPipelineRegistered()
-    let calling!: () => void
-    const inCall = new Promise<void>((resolve) => {
-      calling = resolve
-    })
-    vi.mocked(generateStructured).mockImplementation(
-      (...args: unknown[]) =>
-        new Promise((resolve) => {
-          const signal = args[4] as AbortSignal
-          signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
-          calling()
-        }) as never,
-    )
+    const inCall = holdModelCall()
 
     const pass = runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })
     await inCall
@@ -1917,6 +1924,38 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await db.select().from(deltas)).toEqual([])
     expect(await storedStatus(db)).toEqual(RETRYING)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  // Left `running`, the cadence would stay suspended for the rest of the session.
+  it('retries a status restore that fails once after an interrupt', async () => {
+    const { db, runInTransaction } = await seedApplyTimeHarness()
+    await seedStatus(db, RETRYING)
+    ensurePeriodicClassifierPipelineRegistered()
+    const inCall = holdModelCall()
+    let failRestore = false
+    const flaky = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'run')
+          return (...args: Parameters<typeof db.run>) => {
+            if (failRestore && sqlText(args[0] as Chunk).includes("'$.state'")) {
+              failRestore = false
+              throw new Error('SQLITE_BUSY')
+            }
+            return target.run(...args)
+          }
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+
+    const pass = runOutcome({ storyId: 's1', branchId: 'b1', db: flaky, runInTransaction })
+    await inCall
+    failRestore = true
+    await interruptMemoryRuns('b1')
+
+    expect(await pass).toBe('aborted')
+    expect(failRestore).toBe(false)
+    expect(await storedStatus(db)).toEqual(RETRYING)
   })
 
   it('reverses what it wrote when interrupted mid-burst, keeping its status, watermark and retry count', async () => {

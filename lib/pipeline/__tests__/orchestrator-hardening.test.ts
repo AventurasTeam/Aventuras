@@ -249,10 +249,6 @@ describe('orchestrator hardening', () => {
     expect(result.outcome).toBe('failed')
   })
 
-  // A model restating current state is ordinary, and an unmarked rejection cost
-  // the user the entire turn: the run failed and the reversal sweep took the
-  // committed prose with it. The 'noop' code exists to say "well-formed, changed
-  // nothing"; before this it was written by handlers and read by nobody.
   it('runs onInterrupt for a cancel, after its reversal but before the run is released', async () => {
     const { db, ctx } = await makeHarness()
     const seen: { entriesLeft: number; runStillRegistered: boolean }[] = []
@@ -289,6 +285,9 @@ describe('orchestrator hardening', () => {
 
     expect(result.outcome).toBe('aborted')
     expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(
+      getDiagnosticsSnapshot().logEntries.some((e) => e.kind === 'pipeline.interrupt_hook_failed'),
+    ).toBe(true)
   })
 
   it('does not run onInterrupt for a failure', async () => {
@@ -307,6 +306,10 @@ describe('orchestrator hardening', () => {
     expect(called).toBe(false)
   })
 
+  // A model restating current state is ordinary, and an unmarked rejection cost
+  // the user the entire turn: the run failed and the reversal sweep took the
+  // committed prose with it. The 'noop' code exists to say "well-formed, changed
+  // nothing"; before this it was written by handlers and read by nobody.
   it('skips a noop-coded rejection instead of failing the run', async () => {
     const { db, ctx } = await makeHarness()
     await db.insert(entities).values({
