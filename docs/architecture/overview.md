@@ -615,7 +615,7 @@ user-configured, so CORS, Android's cleartext block and iOS ATS (above) would ea
 them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
 any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
 AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google and OpenAI use it), `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64`
+debug logging; Google, OpenAI and OpenAI Compatible use it), `imageFetch` / `imageGetFetch` / `fetchPublicImageBase64`
 for the hand-written image adapters and for model discovery, `corsFetch` for discovery.
 
 What the plugin changes for the server on the other end:
