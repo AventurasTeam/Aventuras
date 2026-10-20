@@ -6,6 +6,7 @@
  */
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import type { JSONValue } from '@ai-sdk/provider'
 import * as z from 'zod'
 import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
@@ -31,6 +32,38 @@ const ModelEntry = z
     supportsImg2Img: true,
   }))
 
+/** Shared with Pollinations, whose reply format and endpoints match; `extraFields` join the request body. */
+export async function generateOpenAICompatibleImage(options: {
+  baseUrl: string
+  apiKey?: string
+  serviceId: string
+  model: string
+  prompt: string
+  spec: ImageGenerateOptions['spec']
+  referenceImages?: string[]
+  extraFields?: Record<string, JSONValue>
+  signal?: AbortSignal
+}): Promise<ImageGenerateResult> {
+  const { baseUrl, apiKey, serviceId, model, prompt, spec, referenceImages, extraFields, signal } =
+    options
+
+  const provider = createOpenAICompatible({
+    name: PROVIDER_OPTIONS_KEY,
+    baseURL: baseUrl,
+    apiKey: apiKey || undefined,
+    fetch: createImageSdkFetch(serviceId),
+  })
+
+  return generateSdkImage({
+    model: provider.imageModel(model),
+    prompt,
+    referenceImages,
+    size: formatImageSize(specToPixels(spec)),
+    providerOptions: { [PROVIDER_OPTIONS_KEY]: { response_format: 'b64_json', ...extraFields } },
+    signal,
+  })
+}
+
 export function createOpenAICompatibleProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl?.trim().replace(/\/+$/, '')
 
@@ -42,19 +75,14 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
       const { model, prompt, spec, referenceImages, signal } = options
       if (!baseUrl) throw new Error('OpenAI-compatible provider requires a custom base URL')
 
-      const provider = createOpenAICompatible({
-        name: PROVIDER_OPTIONS_KEY,
-        baseURL: baseUrl,
-        apiKey: config.apiKey || undefined,
-        fetch: createImageSdkFetch('openai-compatible-image'),
-      })
-
-      return generateSdkImage({
-        model: provider.imageModel(model),
+      return generateOpenAICompatibleImage({
+        baseUrl,
+        apiKey: config.apiKey,
+        serviceId: 'openai-compatible-image',
+        model,
         prompt,
+        spec,
         referenceImages,
-        size: formatImageSize(specToPixels(spec)),
-        providerOptions: { [PROVIDER_OPTIONS_KEY]: { response_format: 'b64_json' } },
         signal,
       })
     },

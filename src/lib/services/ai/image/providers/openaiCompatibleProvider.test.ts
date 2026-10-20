@@ -1,30 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('#lib/stores/settings.svelte.ts', () => ({
-  settings: { apiSettings: { llmTimeoutMs: 60_000 } },
+const sdk = vi.hoisted(() => ({
+  config: [] as Record<string, unknown>[],
 }))
 
-const sent = vi.hoisted(() => ({
-  calls: [] as { url: string; init: RequestInit }[],
-  serviceIds: [] as string[],
+vi.mock('@ai-sdk/openai-compatible', () => ({
+  createOpenAICompatible: vi.fn((config: Record<string, unknown>) => {
+    sdk.config.push(config)
+    return { imageModel: (id: string) => ({ id }) }
+  }),
 }))
-
-// The recording fetch stands in for the Tauri transport; everything above it is the real SDK.
-vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
-  createSdkFetch: (options: { serviceId: string }) => {
-    sent.serviceIds.push(options.serviceId)
-    return async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      sent.calls.push({ url: input.toString(), init })
-      return new Response(JSON.stringify({ data: [{ b64_json: 'AAA' }] }), {
-        headers: { 'content-type': 'application/json' },
-      })
-    }
-  },
+vi.mock('./sdkImage', () => ({
+  createImageSdkFetch: vi.fn((serviceId: string) => `fetch:${serviceId}`),
+  generateSdkImage: vi.fn(async () => ({ base64: 'AAA' })),
 }))
 vi.mock('./fetchAdapter', () => ({ imageGetFetch: vi.fn() }))
 
 import { imageGetFetch } from './fetchAdapter'
-import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
+import {
+  createOpenAICompatibleProvider,
+  generateOpenAICompatibleImage,
+} from './openaiCompatibleProvider'
 import type { ImageGenerateOptions } from './types'
 
 const BASE_URL = 'https://proxy.test/v1'
@@ -37,67 +34,99 @@ const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions
   ...over,
 })
 
-const lastCall = () => sent.calls.at(-1)!
+const lastGenerate = () => vi.mocked(generateSdkImage).mock.lastCall![0]
 
 beforeEach(() => {
-  sent.calls.length = 0
-  sent.serviceIds.length = 0
+  sdk.config.length = 0
   vi.clearAllMocks()
 })
 
-describe('OpenAI Compatible image generation', () => {
-  it('posts a JSON generation that asks for b64_json', async () => {
-    const result = await createOpenAICompatibleProvider({
-      apiKey: 'k',
+describe('generateOpenAICompatibleImage', () => {
+  const generate = (over: Partial<Parameters<typeof generateOpenAICompatibleImage>[0]> = {}) =>
+    generateOpenAICompatibleImage({
       baseUrl: BASE_URL,
-    }).generate(options())
-
-    expect(result).toEqual({ base64: 'AAA' })
-    expect(lastCall().url).toBe(`${BASE_URL}/images/generations`)
-    expect(new Headers(lastCall().init.headers).get('authorization')).toBe('Bearer k')
-    expect(JSON.parse(lastCall().init.body as string)).toEqual({
+      apiKey: 'k',
+      serviceId: 'svc-image',
       model: 'flux-dev',
       prompt: 'a castle',
-      n: 1,
+      spec: { orientation: 'square', size: 'medium' },
+      ...over,
+    })
+
+  it('builds the SDK provider from the base URL, key and a fetch for the service id', async () => {
+    await generate()
+    expect(sdk.config).toEqual([
+      { name: 'openaiCompatible', baseURL: BASE_URL, apiKey: 'k', fetch: 'fetch:svc-image' },
+    ])
+    expect(createImageSdkFetch).toHaveBeenCalledWith('svc-image')
+  })
+
+  it('passes no key when it is blank', async () => {
+    await generate({ apiKey: '' })
+    expect(sdk.config[0].apiKey).toBeUndefined()
+  })
+
+  it('hands the model, prompt, size and signal to the SDK and returns its result', async () => {
+    const signal = new AbortController().signal
+    const result = await generate({ signal })
+
+    expect(result).toEqual({ base64: 'AAA' })
+    expect(lastGenerate()).toMatchObject({
+      model: { id: 'flux-dev' },
+      prompt: 'a castle',
       size: '1536x1536',
-      response_format: 'b64_json',
+      signal,
     })
   })
 
-  it('posts references as an edit that asks for b64_json', async () => {
-    await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).generate(
-      options({ referenceImages: [PNG] }),
-    )
-
-    expect(lastCall().url).toBe(`${BASE_URL}/images/edits`)
-    const form = lastCall().init.body as FormData
-    expect(form).toBeInstanceOf(FormData)
-    expect(form.get('response_format')).toBe('b64_json')
-    expect((form.getAll('image') as Blob[]).map((part) => part.type)).toEqual(['image/png'])
+  it('forwards the reference images', async () => {
+    await generate({ referenceImages: [PNG] })
+    expect(lastGenerate().referenceImages).toEqual([PNG])
   })
 
-  it('sends no Authorization header without a key', async () => {
-    await createOpenAICompatibleProvider({ apiKey: '', baseUrl: BASE_URL }).generate(options())
-    expect(new Headers(lastCall().init.headers).has('authorization')).toBe(false)
+  it('asks for b64_json and merges the extra fields', async () => {
+    await generate()
+    expect(lastGenerate().providerOptions).toEqual({
+      openaiCompatible: { response_format: 'b64_json' },
+    })
+
+    await generate({ extraFields: { safe: false } })
+    expect(lastGenerate().providerOptions).toEqual({
+      openaiCompatible: { response_format: 'b64_json', safe: false },
+    })
+  })
+})
+
+describe('OpenAI Compatible image generation', () => {
+  it('generates against the base URL under the openai-compatible-image debug id', async () => {
+    const result = await createOpenAICompatibleProvider({
+      apiKey: 'k',
+      baseUrl: BASE_URL,
+    }).generate(options({ referenceImages: [PNG] }))
+
+    expect(result).toEqual({ base64: 'AAA' })
+    expect(sdk.config[0]).toMatchObject({ baseURL: BASE_URL, apiKey: 'k' })
+    expect(createImageSdkFetch).toHaveBeenCalledWith('openai-compatible-image')
+    expect(lastGenerate()).toMatchObject({
+      model: { id: 'flux-dev' },
+      prompt: 'a castle',
+      referenceImages: [PNG],
+    })
   })
 
   it('tolerates a trailing slash on the base URL', async () => {
     await createOpenAICompatibleProvider({ apiKey: '', baseUrl: `${BASE_URL}/` }).generate(
       options(),
     )
-    expect(lastCall().url).toBe(`${BASE_URL}/images/generations`)
-  })
-
-  it('sends its requests under the openai-compatible-image debug id', async () => {
-    await createOpenAICompatibleProvider({ apiKey: '', baseUrl: BASE_URL }).generate(options())
-    expect(sent.serviceIds).toEqual(['openai-compatible-image'])
+    expect(sdk.config[0].baseURL).toBe(BASE_URL)
   })
 
   it.each([undefined, '', '   '])('throws without a base URL (%j)', async (baseUrl) => {
     await expect(
       createOpenAICompatibleProvider({ apiKey: 'k', baseUrl }).generate(options()),
     ).rejects.toThrow('requires a custom base URL')
-    expect(sent.calls).toHaveLength(0)
+    expect(generateSdkImage).not.toHaveBeenCalled()
+    expect(sdk.config).toHaveLength(0)
   })
 })
 
