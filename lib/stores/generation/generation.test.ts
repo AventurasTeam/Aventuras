@@ -102,6 +102,13 @@ describe('isHeadReversalBlocked', () => {
     expect(isHeadReversalBlocked(tx([pass('run_pass')], { reversalInProgress: true }), 'b1')).toBe(
       true,
     )
+    // A turn pending on another branch blocks too: the gate it is about to raise is app-wide.
+    expect(
+      isHeadReversalBlocked(
+        tx([pass('run_pass')], { pendingTurns: new Set([{ branchId: 'b2' }]) }),
+        'b1',
+      ),
+    ).toBe(true)
   })
 
   it('blocks when the interruptible run is on another branch', () => {
@@ -128,6 +135,7 @@ describe('isStoryBusy', () => {
     expect(isStoryBusy(tx([]), 's1', 'b1')).toBe(false)
     expect(isStoryBusy(tx([run('run_turn', 'per-turn')]), 's1', 'b1')).toBe(true)
     expect(isStoryBusy(tx([{ ...run('run_other'), storyId: 's2' }]), 's1', 'b1')).toBe(false)
+    expect(isStoryBusy(tx([{ ...run('run_b2'), branchId: 'b2' }]), 's1', 'b1')).toBe(true)
     expect(isStoryBusy(tx([], { pendingTurns: new Set([{ branchId: 'b1' }]) }), 's1', 'b1')).toBe(
       true,
     )
@@ -321,8 +329,9 @@ describe('pending turns', () => {
     const unsubscribe = generationStore.subscribe(() => calls++)
     turn.endEarly()
     expect(calls).toBe(1)
+    // The body leaving wakes a cancelStoryRuns waiting on it; the late mark end adds nothing.
     await turn.settle()
-    expect(calls).toBe(1)
+    expect(calls).toBe(2)
     unsubscribe()
   })
 
@@ -609,6 +618,71 @@ describe('cancelStoryRuns', () => {
     generationStore.setReversalInProgress(false)
     await cancelled
     expect(done).toBe(true)
+  })
+
+  // A failed regenerate's follow-up sweep raises the flag after its run left the store and its
+  // mark ended; only the turn body still spans the gap.
+  it('waits for the whole turn body, past a sweep raised after its run ended', async () => {
+    const order: string[] = []
+    const turnRun = liveRun({ runId: 'run_turn', kind: 'per-turn' })
+    const turn = generationStore.bracketPendingTurn('b1', async (endMark) => {
+      generationStore.startRun(turnRun)
+      endMark()
+      await turnRun.terminal
+      for (let hop = 0; hop < 5; hop++) await Promise.resolve()
+      generationStore.setReversalInProgress(true)
+      order.push('sweep start')
+      await flush()
+      generationStore.setReversalInProgress(false)
+      order.push('sweep end')
+    })
+
+    await cancelStoryRuns('s1', 'b1')
+    order.push('cancel resolved')
+    expect(order).toEqual(['sweep start', 'sweep end', 'cancel resolved'])
+    await turn
+  })
+
+  it('is not held by a turn body on another branch', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const elsewhere = generationStore.bracketPendingTurn('b2', async (endMark) => {
+      endMark()
+      await held
+    })
+
+    let done = false
+    void cancelStoryRuns('s1', 'b1').then(() => {
+      done = true
+    })
+    await flush()
+    expect(done).toBe(true)
+
+    release()
+    await elsewhere
+  })
+
+  // The terminal is a thenable that removes the run itself after a few reads, so a regression
+  // (a microtask spin that starves timers) fails the count instead of hanging the worker.
+  it('waits for a store change when an aborted run is still registered', async () => {
+    let reads = 0
+    const stuck = liveRun(
+      { runId: 'run_stuck', kind: 'per-turn' },
+      (r) => void setTimeout(() => generationStore.abortRun(r.runId), 0),
+    )
+    stuck.terminal = {
+      then: (resolve: () => void) => {
+        if (++reads > 50) generationStore.abortRun(stuck.runId)
+        resolve()
+      },
+    } as unknown as Promise<void>
+    generationStore.startRun(stuck)
+
+    await cancelStoryRuns('s1', 'b1')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(reads).toBeLessThanOrEqual(2)
   })
 
   it('resolves at once when nothing on the story is busy', async () => {

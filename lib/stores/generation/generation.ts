@@ -9,7 +9,10 @@ export type RunState = {
   gateBehavior: 'hard-gate' | 'no-gate'
   /** Copied from the pipeline at reserve: a head reversal or Cancel ends this run and defers it. */
   interruptible: boolean
-  /** Started by Send to run deferred work before the turn (generation-pipeline.md → chainsTo on predecessor). */
+  /**
+   * Started by Send to run deferred work before the turn
+   * (generation-pipeline.md → chainsTo on predecessor).
+   */
   beforeTurn: boolean
   actionId: string
   storyId: string | null
@@ -77,7 +80,6 @@ export function deferredWorkKindOf(kind: string): DeferredWorkKind | null {
   return DEFERRED_WORK_KIND.get(kind) ?? null
 }
 
-// Only an interruptible pass or close touches the record; any other run leaves it alone.
 function deferralKeyOf(run: RunState | undefined): DeferredWorkKind | null {
   return run?.interruptible ? deferredWorkKindOf(run.kind) : null
 }
@@ -103,6 +105,9 @@ function withDeferral(
 
 type GenerationState = {
   txState: TxState
+  // Turns from admission until their body settles, past the pending mark (which ends at
+  // reservation): a regenerate's follow-up sweep runs in this tail with no run and no mark.
+  turnBodies: ReadonlySet<PendingTurn>
   // Monotonic; bumps when a run leaves txState (finish, successor swap, abort)
   // or a reversal settles — the points where a run's writes are final.
   settleCount: number
@@ -139,6 +144,7 @@ const emptyTxState = (): TxState => ({
 
 const store = createStore<GenerationState>()((set) => ({
   txState: emptyTxState(),
+  turnBodies: new Set(),
   settleCount: 0,
   startRun: (run) =>
     set((s) => {
@@ -196,6 +202,7 @@ const store = createStore<GenerationState>()((set) => ({
     const turn: PendingTurn = { branchId }
     set((s) => ({
       txState: { ...s.txState, pendingTurns: new Set([...s.txState.pendingTurns, turn]) },
+      turnBodies: new Set([...s.turnBodies, turn]),
     }))
     // Idempotent; a no-op once __reset dropped the token, so a late end can't free another's.
     const end = () =>
@@ -208,14 +215,27 @@ const store = createStore<GenerationState>()((set) => ({
     try {
       return await body(end)
     } finally {
-      end()
+      set((s) => {
+        if (!s.turnBodies.has(turn)) return s
+        const turnBodies = new Set(s.turnBodies)
+        turnBodies.delete(turn)
+        if (!s.txState.pendingTurns.has(turn)) return { turnBodies }
+        const pendingTurns = new Set(s.txState.pendingTurns)
+        pendingTurns.delete(turn)
+        return { txState: { ...s.txState, pendingTurns }, turnBodies }
+      })
     }
   },
-  __reset: () => set({ txState: emptyTxState(), settleCount: 0 }),
+  __reset: () => set({ txState: emptyTxState(), turnBodies: new Set(), settleCount: 0 }),
 }))
 
 function getTxState(): TxState {
   return store.getState().txState
+}
+
+function turnBodyActive(branchId: string): boolean {
+  for (const turn of store.getState().turnBodies) if (turn.branchId === branchId) return true
+  return false
 }
 
 function getSettleCount(): number {
@@ -315,13 +335,14 @@ function nextStoreChange(): Promise<void> {
 }
 
 /**
- * Aborts every run on the story until `isStoryBusy` is false: a turn ending during the wait can
- * chain a pass, and a pending turn or a reversal registers its run later. Records nothing.
+ * Aborts every run on the story until `isStoryBusy` is false and no turn body is active on the
+ * branch: a turn ending during the wait can chain a pass, a pending turn or a reversal registers
+ * its run later, and a regenerate's follow-up sweep starts after its run ended. Records nothing.
  */
 export async function cancelStoryRuns(storyId: string, branchId: string): Promise<void> {
   for (;;) {
     const txState = getTxState()
-    if (!isStoryBusy(txState, storyId, branchId)) return
+    if (!isStoryBusy(txState, storyId, branchId) && !turnBodyActive(branchId)) return
     const runs = [...txState.runs.values()].filter((r) => r.storyId === storyId)
     if (runs.length === 0) {
       await nextStoreChange()
@@ -329,5 +350,7 @@ export async function cancelStoryRuns(storyId: string, branchId: string): Promis
     }
     for (const r of runs) r.abortController.abort()
     await Promise.all(runs.map((r) => r.terminal))
+    // A terminal can resolve before its run leaves txState; re-aborting would spin on it.
+    if (runs.some((r) => getTxState().runs.has(r.runId))) await nextStoreChange()
   }
 }
