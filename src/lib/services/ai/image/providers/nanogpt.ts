@@ -8,10 +8,19 @@ import type {
 import { imageGetFetch } from './fetchAdapter'
 import { createNanoGPTImage } from './nanogptImage'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '#lib/utils/image.ts'
+import {
+  specToPixels,
+  formatImageSize,
+  specFromPixels,
+  specToAspectRatio,
+  type ImageSpec,
+} from '#lib/utils/image.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
+
+// Keeps `w:h` ratios; the catalogue also lists values like `auto` and `match_input_image`.
+const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 
 // Known img2img capable models/tags
 const IMG2IMG_TAGS = new Set(['image-to-image', 'image-edit'])
@@ -32,10 +41,15 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, modelInfo, referenceImages, signal } = options
 
+      const ratios = modelInfo?.supportedAspectRatios
+
       return generateSdkImage({
         model: nanogpt.imageModel(model),
         prompt,
         referenceImages,
+        aspectRatio: ratios?.length
+          ? (specToAspectRatio(spec, ratios) as `${number}:${number}`)
+          : undefined,
         providerOptions: {
           nanogpt: { resolution: resolveSize(spec, modelInfo?.supportedResolutions) },
         },
@@ -53,6 +67,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
         description?: string
         cost?: Record<string, number>
         resolutions?: Array<{ value: string; comment?: string }>
+        additionalParams?: { aspect_ratio?: { options?: Array<{ value?: string }> } }
         tags?: string[]
         supportsMultipleImg2Img?: boolean
       }>
@@ -68,6 +83,10 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
         }
 
         const resolutions = m.resolutions?.map((r) => r.value).filter(Boolean) ?? []
+        const aspectRatios =
+          m.additionalParams?.aspect_ratio?.options
+            ?.map((o) => o.value)
+            .filter((v): v is string => !!v && ASPECT_RATIO.test(v)) ?? []
 
         return {
           id: m.model || m.name || '',
@@ -77,6 +96,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
           maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
           costPerImage,
           supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
+          supportedAspectRatios: aspectRatios.length > 0 ? aspectRatios : undefined,
         }
       })
     },

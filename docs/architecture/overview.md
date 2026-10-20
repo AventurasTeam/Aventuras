@@ -581,7 +581,8 @@ with the nearest thing it does, which is not the same picture.
 NanoGPT calls its unified `POST /images` through a small custom `ImageModelV4`
 (`nanogptImage.ts`): one JSON request for text-to-image and edits, references as `input_references`
 data URLs, and the model's resolution tier (`1k`, `1344*576`) in `providerOptions.nanogpt` because the
-SDK's `size` takes only `WxH`. Chutes, Zhipu and A1111 still keep hand-written requests. OpenAI
+SDK's `size` takes only `WxH`. Models that list aspect ratios also get one, so orientation survives
+a tier-only resolution. Chutes, Zhipu and A1111 still keep hand-written requests. OpenAI
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
 key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, NanoGPT and Google call
 the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations reuses the OpenAI Compatible helper

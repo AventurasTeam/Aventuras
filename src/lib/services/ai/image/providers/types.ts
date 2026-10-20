@@ -62,6 +62,8 @@ export interface ImageModelInfo {
    * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
    */
   supportedResolutions?: string[]
+  /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
+  supportedAspectRatios?: string[]
   costPerImage?: number
   costPerTextToken?: number
   costPerImageToken?: number
