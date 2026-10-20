@@ -143,7 +143,7 @@
             {preview.refusal === 'interrupted' || preview.refusal === 'untracked'
               ? "The chapter's lore will stay in the lorebook: changes made since it may not have been recorded."
               : preview.refusal === 'inherited'
-                ? "The chapter's lore will stay in the lorebook: the chapter was cut on another branch, and only that branch can undo it."
+                ? 'This chapter was cut on another branch, and can only be deleted there.'
                 : 'No lore management changes were recorded for this chapter.'}
           </p>
         {/if}
@@ -155,7 +155,7 @@
         onCancel={cancel}
         onConfirm={confirm}
         busy={deleting}
-        disabled={preview === null}
+        disabled={preview === null || preview.refusal === 'inherited'}
       />
     </div>
   </ResponsiveModal.Content>

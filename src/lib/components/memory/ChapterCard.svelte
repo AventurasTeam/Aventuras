@@ -95,6 +95,7 @@
   }
 
   const isLast = $derived(story.isLastChapter(chapter.id))
+  const owned = $derived(story.ownsChapter(chapter.id))
 
   function handleDelete() {
     ui.requestChapterDelete(chapter.id)
@@ -149,8 +150,12 @@
           size="icon"
           class="text-muted-foreground h-7 w-7 hover:text-red-500"
           onclick={handleDelete}
-          disabled={!isLast}
-          title={isLast ? 'Delete chapter' : 'Only the last chapter can be deleted'}
+          disabled={!isLast || !owned}
+          title={!owned
+            ? 'Cut on another branch; it can be deleted there'
+            : isLast
+              ? 'Delete chapter'
+              : 'Only the last chapter can be deleted'}
         >
           <Trash2 class="h-3.5 w-3.5" />
         </Button>

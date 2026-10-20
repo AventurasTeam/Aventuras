@@ -3975,6 +3975,12 @@ class StoryStore {
    * Whether this is the open branch's last chapter, the only one that can be deleted: the next
    * chapter starts where the last one ends, so deleting an earlier one leaves its entries uncut.
    */
+  /** Whether the open branch cut this chapter itself, rather than inheriting it. */
+  ownsChapter(chapterId: string): boolean {
+    const chapter = this.chapters.find((ch) => ch.id === chapterId)
+    return !!chapter && (chapter.branchId ?? null) === (this.currentStory?.currentBranchId ?? null)
+  }
+
   isLastChapter(chapterId: string): boolean {
     const chapters = this.currentBranchChapters
     const last = chapters.reduce<Chapter | null>(
@@ -4008,6 +4014,12 @@ class StoryStore {
     if (!this.isLastChapter(chapterId)) {
       log('Refusing to delete a chapter that is not the last:', chapterId)
       ui.showToast('Only the last chapter can be deleted.', 'warning')
+      return false
+    }
+    // The row is the parent's: deleting it here would take it from the parent and every branch.
+    if (!this.ownsChapter(chapterId)) {
+      log('Refusing to delete a chapter inherited from another branch:', chapterId)
+      ui.showToast('This chapter was cut on another branch. Delete it there.', 'warning')
       return false
     }
 
@@ -4053,7 +4065,7 @@ class StoryStore {
     checkpoints: WorldStateMark[]
   }> {
     const none = { snapshots: [], checkpoints: [] }
-    if ((chapter.branchId ?? null) !== (this.currentStory?.currentBranchId ?? null)) {
+    if (!this.ownsChapter(chapter.id)) {
       return { revert: { ok: false, reason: 'inherited' }, ...none }
     }
     const [records, marks] = await Promise.all([this.lineRecords(), this.lineMarks()])

@@ -150,9 +150,9 @@ delete never lists the undone records again, and a past state is rebuilt from a 
 the live one at worst. A past checkpoint only reads records, and invalidates nothing. The undo is
 refused unless everything since was recorded (tracking on since before the chapter's records, and
 no break or non-continuous header after them), since an unrecorded edit would be overwritten; that
-also means no closing snapshot lies in the span it deletes. It is refused, too, for a chapter the
-open branch inherits: the records reached through the line belong to the branch it was cut on, whose
-lorebook they would revert instead of this one's.
+also means no closing snapshot lies in the span it deletes. A chapter the open branch inherits
+cannot be deleted from it at all (`ownsChapter`): its row is the branch it was cut on, and the
+records reached through the line would revert that branch's lorebook instead of this one's.
 
 ## Tracked runs
 
