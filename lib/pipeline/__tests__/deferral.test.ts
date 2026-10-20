@@ -122,6 +122,48 @@ describe('deferred work', () => {
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
 
+  // The interrupt lands as the predecessor's commit swaps the pass in, before the pass starts.
+  it('defers a pass interrupted at the swap from its predecessor, once', async () => {
+    const { db, ctx } = await makeHarness()
+    defineStandIn(PERIODIC_CLASSIFIER_KIND)
+    definePipeline({
+      kind: 'origin-turn',
+      phases: [
+        {
+          name: 'turn',
+          run: async function* (): AsyncGenerator<never, PhaseResult> {
+            return { status: 'completed' }
+          },
+        },
+      ],
+      affordance: 'pill-only',
+      gateBehavior: 'hard-gate',
+      concurrencyPolicy: {},
+      chainsTo: () => PERIODIC_CLASSIFIER_KIND,
+    })
+    const seen = recordTerminalEvents()
+    let interrupted: Promise<void> | undefined
+    const off = generationStore.subscribe(() => {
+      const runs = [...generationStore.getTxState().runs.values()]
+      if (!interrupted && runs.some((r) => r.kind === PERIODIC_CLASSIFIER_KIND))
+        interrupted = interruptMemoryRuns('b1')
+    })
+    try {
+      const start = startPipeline('origin-turn', ctx)
+      expect(expectRan(await start.origin).outcome).toBe('completed')
+      await start.chain
+      await interrupted
+    } finally {
+      off()
+    }
+
+    expect(interrupted).toBeDefined()
+    expect(deferredOnB1()).toEqual({ pass: true })
+    expect(seen.filter((e) => e.type === 'run_deferred')).toHaveLength(1)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
+  })
+
   it('emits nothing new when work already deferred is aborted again', async () => {
     const { ctx } = await makeHarness()
     defineStandIn(PERIODIC_CLASSIFIER_KIND)
