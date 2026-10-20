@@ -8,9 +8,6 @@ vi.mock('./fetchAdapter', () => ({
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { apiSettings: { llmTimeoutMs: 60_000 } },
 }))
-vi.mock('./openaiCompatibleProvider', () => ({
-  generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
-}))
 
 const sdkFetch = vi.hoisted(() => vi.fn())
 vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
@@ -19,9 +16,7 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 
 import { imageGetFetch } from './fetchAdapter'
 import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
-import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
 import { createNanoGPTProvider } from './nanogpt'
-import { createPollinationsProvider } from './pollinations'
 import type { ImageGenerateOptions, ImageModelInfo } from './types'
 
 const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
@@ -78,14 +73,13 @@ describe('NanoGPT adapter', () => {
     )
   })
 
-  it.each([
-    'https://nano-gpt.com/api/v1',
-    'https://nano-gpt.com/api/v1/',
-    'https://proxy.test/v1',
-  ])('keeps the configured base URL %s', async (baseUrl) => {
-    await createNanoGPTProvider({ apiKey: 'k', baseUrl }).generate(options())
-    expect(sentRequest().url).toBe(`${baseUrl.replace(/\/+$/, '')}/images`)
-  })
+  it.each(['https://nano-gpt.com/api/v1', 'https://nano-gpt.com/api/v1/', 'https://proxy.test/v1'])(
+    'keeps the configured base URL %s',
+    async (baseUrl) => {
+      await createNanoGPTProvider({ apiKey: 'k', baseUrl }).generate(options())
+      expect(sentRequest().url).toBe(`${baseUrl.replace(/\/+$/, '')}/images`)
+    },
+  )
 
   it("picks the resolution from the model's supported resolutions", async () => {
     await createNanoGPTProvider({ apiKey: 'k' }).generate(
@@ -122,32 +116,6 @@ describe('NanoGPT adapter', () => {
   it('sends references as data URLs', async () => {
     await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
     expect(sentRequest().body.input_references).toEqual(['data:image/png;base64,iVBORw0KGgo='])
-  })
-})
-
-describe('Pollinations adapter', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  const lastImageCall = () => vi.mocked(generateOpenAICompatibleImage).mock.lastCall![0]
-
-  it('generates against /v1 with the content filter off', async () => {
-    await createPollinationsProvider({ apiKey: 'k' }).generate(options())
-    expect(lastImageCall()).toMatchObject({
-      baseUrl: 'https://gen.pollinations.ai/v1',
-      apiKey: 'k',
-      serviceId: 'pollinations-image',
-      model: 'm1',
-      prompt: 'a castle',
-      referenceImages: ['iVBORw0KGgo='],
-      extraFields: { safe: false },
-    })
-  })
-
-  it('requires an API key', async () => {
-    await expect(createPollinationsProvider({ apiKey: '' }).generate(options())).rejects.toThrow(
-      'API key',
-    )
-    expect(generateOpenAICompatibleImage).not.toHaveBeenCalled()
   })
 })
 
