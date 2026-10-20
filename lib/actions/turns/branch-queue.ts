@@ -40,7 +40,8 @@ type StartTurn = (
 ) => Promise<TxResult | RejectedStart>
 
 /**
- * Marks a turn pending until its run is in txState (generation-pipeline.md → No-gate write phase).
+ * Marks a turn pending until its run is in txState (generation-pipeline.md → Gate derivation as a
+ * selector).
  * Every `per-turn` start runs in it, within the branch queue, through `startTurn`.
  */
 export function withPendingTurn<T>(

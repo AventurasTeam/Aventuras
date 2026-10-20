@@ -273,8 +273,8 @@ export async function getRollbackCounts(
 ): Promise<RollbackCounts | StoryEntryRejection> {
   // The closed set, not the window: a fact on a surviving turn naming a row the sweep
   // removes goes too (rollback-confirm.md → Counts).
-  // Held shared: a no-gate run's abort reversal or a prose reversal landing between the
-  // closure's reads refuses it.
+  // Held shared, so neither a prose reversal nor an interruptible run's abort reversal lands
+  // between the closure's reads and refuses it.
   const swept = await withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, () =>
     resolveSweep(branchId, targetId, ctx),
   )

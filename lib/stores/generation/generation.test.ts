@@ -64,8 +64,8 @@ describe('isUserEditBlocked', () => {
     expect(isUserEditBlocked(tx([], { reversalInProgress: true }))).toBe(true)
   })
 
-  // generation-pipeline.md → No-gate write phase: a reversal opened between a Send and its run's
-  // registration would have the turn's queued user_action refused.
+  // generation-pipeline.md → Gate derivation as a selector: a reversal opened between a Send and
+  // its run's registration would have the turn's queued user_action refused.
   it('blocks while a turn is pending, on any branch', () => {
     const blocked = (pendingTurns: TxState['pendingTurns']) =>
       isUserEditBlocked(tx([], { pendingTurns }))

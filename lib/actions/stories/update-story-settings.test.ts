@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   buildStorySettings,
@@ -97,7 +98,7 @@ function startRun(kind: string, gateBehavior: RunState['gateBehavior']): void {
 }
 
 describe('updateStorySettings', () => {
-  it.each([PER_TURN_KIND, 'chapter-close', SUGGESTION_REFRESH_KIND])(
+  it.each([PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', SUGGESTION_REFRESH_KIND])(
     'rejects settings writes while %s owns the hard gate',
     async (kind) => {
       const { db, runInTransaction } = await seed()
@@ -116,20 +117,6 @@ describe('updateStorySettings', () => {
       expect(row.updatedAt).toBe(1)
     },
   )
-
-  it('allows settings writes while only a no-gate run is active', async () => {
-    const { db, runInTransaction } = await seed()
-    startRun('periodic-classifier', 'no-gate')
-
-    const result = await updateStorySettings(
-      'story_1',
-      { suggestionCount: 2 },
-      { db, runInTransaction },
-      99,
-    )
-
-    expect(result).toMatchObject({ status: 'ok', settings: { suggestionCount: 2 } })
-  })
 
   it('merges the patch without clobbering sibling fields', async () => {
     const { db, runInTransaction, settings } = await seed()

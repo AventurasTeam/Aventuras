@@ -247,8 +247,8 @@ describe('seeded rollback', () => {
     }
   })
 
-  // A pass's writes land as one burst under the branch write lock (generation-pipeline.md →
-  // No-gate write phase), so nothing else commits between them.
+  // A pass holds the user-edit gate, so nothing else commits between its writes
+  // (generation-pipeline.md → Gate derivation as a selector).
   it('logs the hero happening fire as one contiguous action', () => {
     const fire = (rowsOf('deltas') as { branchId: string; actionId: string; logPosition: number }[])
       .filter((r) => r.branchId === 'br_hero_main' && r.actionId === 'act_class_1')

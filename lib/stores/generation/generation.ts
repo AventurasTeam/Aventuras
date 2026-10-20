@@ -36,9 +36,10 @@ export type PendingTurn = { readonly branchId: string }
 export type DeferredWork = { readonly pass?: true; readonly close?: true }
 export type DeferredWorkKind = keyof DeferredWork
 
-// reversalInProgress brackets a prose-reversal's wait->sweep window, blocking REVERSAL_BLOCKED
-// scheduling (concurrency.ts) and user dispatch. pendingTurns: generation-pipeline.md → No-gate
-// write phase. ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
+// reversalInProgress brackets a prose reversal's interrupt->sweep window, blocking interruptible
+// starts (concurrency.ts) and user dispatch. pendingTurns: generation-pipeline.md → Gate
+// derivation as a selector. ReadonlyMap keeps consumers off the mutators; intermediates stays
+// mutable.
 export type TxState = {
   runs: ReadonlyMap<string, RunState>
   reversalInProgress: boolean
@@ -300,9 +301,7 @@ export function backgroundClassifierRunning(txState: TxState, branchId: string):
 // orchestrator.
 //
 // branchId is required, not optional: matching on kind alone would let a
-// reversal on one branch abort another branch's run and then sweep while that
-// run is still writing. Only one story is open at a time today, but the
-// classifier scheduler already keys its state per branch, so the two must agree.
+// caller on one branch abort another branch's run.
 export function awaitRunTerminal(
   kind: string,
   branchId: string,

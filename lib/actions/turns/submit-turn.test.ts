@@ -440,7 +440,7 @@ describe('submitTurn', () => {
     expectRan(await first)
   })
 
-  // generation-pipeline.md → No-gate write phase: no window where a periodic pass misses the turn.
+  // generation-pipeline.md → Gate derivation as a selector: no gap for a reversal to refuse it.
   describe('pending turn mark', () => {
     it('marks the turn from before its user_action write until its run registers', async () => {
       const { ctx, release, first } = await holdAdmissionOnB1()
