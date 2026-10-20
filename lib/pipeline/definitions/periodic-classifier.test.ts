@@ -1,7 +1,11 @@
 import { eq, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { PipelineAction } from '@/lib/actions'
+import {
+  bracketProseReversal,
+  classifierWatermarkClampOps,
+  type PipelineAction,
+} from '@/lib/actions'
 import {
   applyDeltaAction as realApplyDeltaAction,
   settleUserWrites,
@@ -1956,6 +1960,35 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await pass).toBe('aborted')
     expect(failRestore).toBe(false)
     expect(await storedStatus(db)).toEqual(RETRYING)
+  })
+
+  // generation-pipeline.md → Prose reversals and the interrupt: the restore lands before the sweep.
+  it('restores its status when a prose reversal interrupts it, under the clamp the sweep lands', async () => {
+    const { db, runInTransaction } = await seedStory()
+    for (const position of [1, 2, 3, 4])
+      await db.insert(storyEntries).values({
+        id: `e${position}`,
+        branchId: 'b1',
+        position,
+        kind: 'ai_reply',
+        content: `turn ${position}`,
+        chapterId: null,
+        metadata: {},
+        createdAt: 1,
+      } as never)
+    const preRun: ClassifierStatus = { ...RETRYING, processedThrough: 3 }
+    await seedStatus(db, preRun)
+    ensurePeriodicClassifierPipelineRegistered()
+    const inCall = holdModelCall()
+
+    const pass = runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })
+    await inCall
+    await bracketProseReversal('b1', () => runInTransaction(classifierWatermarkClampOps('b1', 3)))
+
+    expect(await pass).toBe('aborted')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(await storedStatus(db)).toEqual({ ...preRun, processedThrough: 2 })
   })
 
   it('reverses what it wrote when interrupted mid-burst, keeping its status, watermark and retry count', async () => {
