@@ -8,9 +8,7 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { entities } from '@/lib/db'
 import {
   definePipeline,
-  ensurePerTurnPipelineRegistered,
   ensurePeriodicClassifierPipelineRegistered,
-  PER_TURN_KIND,
   runPipeline,
   type PhaseContext,
   type PhaseResult,
@@ -20,7 +18,11 @@ import { awaitRunTerminal, generationStore, type RunState } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
-const base = { affordance: 'invisible', gateBehavior: 'no-gate' } as const
+const base = { affordance: 'invisible', gateBehavior: 'hard-gate' } as const
+
+async function* noop(): AsyncGenerator<never, PhaseResult> {
+  return { status: 'completed' }
+}
 
 describe('runPipeline concurrency entry + coordination', () => {
   beforeEach(() => resetSingletons())
@@ -85,24 +87,47 @@ describe('runPipeline concurrency entry + coordination', () => {
     expect(seen).toBe('from the user')
   })
 
-  it('lets a per-turn run start while the classifier is in flight, and blocks a second classifier', () => {
-    // Asserted against the policies the two definitions actually register, not
-    // hand-written stand-ins: per-turn's blockedBy lacks periodic-classifier,
-    // and the classifier self-blocks.
-    ensurePerTurnPipelineRegistered()
+  // Against the policy the classifier actually registers, not a stand-in. per-turn's own
+  // blockedBy is pinned by per-turn.test.ts.
+  it('blocks a second classifier, and a classifier during a close', () => {
     ensurePeriodicClassifierPipelineRegistered()
     const inflight = (kind: string): Map<string, RunState> =>
       new Map([[`r_${kind}`, { runId: `r_${kind}`, kind } as RunState]])
 
-    expect(
-      checkConcurrencyContract(PER_TURN_KIND, inflight(PERIODIC_CLASSIFIER_KIND), false),
-    ).toMatchObject({ kind: 'start' })
     expect(
       checkConcurrencyContract(PERIODIC_CLASSIFIER_KIND, inflight(PERIODIC_CLASSIFIER_KIND), false),
     ).toMatchObject({ kind: 'blocked' })
     expect(
       checkConcurrencyContract(PERIODIC_CLASSIFIER_KIND, inflight('chapter-close'), false),
     ).toMatchObject({ kind: 'blocked' })
+  })
+
+  it('refuses an interruptible start inside a prose reversal, and only that start', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'memory-run',
+      phases: [{ name: 'p', run: noop }],
+      ...base,
+      interruptible: true,
+      concurrencyPolicy: {},
+    })
+    definePipeline({
+      kind: 'plain',
+      phases: [{ name: 'p', run: noop }],
+      ...base,
+      concurrencyPolicy: {},
+    })
+
+    generationStore.setReversalInProgress(true)
+    expect(await runPipeline('memory-run', ctx)).toEqual({
+      outcome: 'rejected',
+      blockedBy: 'reversal',
+    })
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(expectRan(await runPipeline('plain', ctx)).outcome).toBe('completed')
+
+    generationStore.setReversalInProgress(false)
+    expect(expectRan(await runPipeline('memory-run', ctx)).outcome).toBe('completed')
   })
 
   it('rejects a start blocked by an in-flight run of a blocking kind', async () => {
