@@ -25,33 +25,31 @@ bulkier than the entries. The scene sections are the baseline, so they are frame
 Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.
 Take the changes from the turn below; nothing above it happened this turn.
 
-{% comment %}The second half of the condition de-dupes the row named as both in-scene and the
-location; it is nil-safe, since a null structuralLocation makes it "e.id != nil". An item a
-holder's Holds line names is not listed again (piggyback.md → What the writer sees).{% endcomment -%}
-{%- assign heldIds = '' | split: ',' -%}
-{%- for h in heldItems -%}{%- assign ids = h.items | map: 'id' -%}{%- assign heldIds = heldIds | concat: ids -%}{%- endfor -%}
-{%- assign hasScene = false -%}
+{% comment -%}
+The scene sections mirror the narrator's (per-turn.ts), ids always: the roster is the ids'
+source, and a section that shows state without one leaves the model matching by name.
+{%- endcomment -%}
+{%- assign inScene = '' | split: ',' -%}
 {%- for e in referenceable -%}
-{%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}{%- assign hasScene = true -%}{%- endif -%}
-{%- endfor -%}
-{% if hasScene -%}
-# In scene
-{% for e in referenceable -%}
 {%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}
-{%- unless heldIds contains e.id %}
-## {{ e.name }}{% if e.description != blank %}
-{{ e.description }}{% endif %}{% for h in heldItems %}{% if h.holderId == e.id %}
-Holds: {% for i in h.items %}[{{ i.id }}] {{ i.name }}{% if i.equipped %} (equipped){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}{% endfor %}
-{% endunless -%}
+{%- assign listedElsewhere = false -%}
+{%- if e.state.holder and e.state.holder.status == 'active' and sceneEntities contains e.state.holder.id -%}{%- assign listedElsewhere = true -%}{%- endif -%}
+{%- if e.kind == 'item' and e.state.location and e.state.location.id == structuralLocation.id -%}{%- assign listedElsewhere = true -%}{%- endif -%}
+{%- unless listedElsewhere -%}{%- assign inScene = inScene | push: e -%}{%- endunless -%}
 {%- endif -%}
-{%- endfor %}
-
+{%- endfor -%}
+{% if inScene.size > 0 -%}
+# In scene
+{% for e in inScene %}
+## {{ e.name }} [{{ e.id }}]{% if e.description != blank %}
+{{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: true, ids: true %}
+{% endfor %}
 {% endif -%}
 {% if structuralLocation -%}
 # Current location
 
-{{ structuralLocation.name }}{% if currentLocationChain.size > 0 %} — in {{ currentLocationChain | join: ' › ' }}{% endif %}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}{% if looseItems.size > 0 %}
-Here: {% for i in looseItems %}[{{ i.id }}] {{ i.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}
+[{{ structuralLocation.id }}] {{ structuralLocation.name }}{% if currentLocationChain.size > 0 %} — in {{ currentLocationChain | join: ' › ' }}{% endif %}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}{% include 'macro_entity_state', e: structuralLocation, here: true, ids: true %}{% if looseItems.size > 0 %}
+Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: true %}{% endfor %}{% endif %}
 
 {% endif -%}
 {% if locationMap.size > 0 -%}
@@ -59,7 +57,17 @@ Here: {% for i in looseItems %}[{{ i.id }}] {{ i.name }}{% unless forloop.last %
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
 {% endfor %}
 {% endif -%}
-{% include 'macro_memory_blocks' -%}
+{% include 'macro_memory_blocks', ids: true -%}
+{%- comment -%}
+piggyback.md → Fallback classifier context: a character the turn names whom nothing above
+shows with state is still a roster id a write can name, so it shows the values a write replaces.
+{%- endcomment -%}
+{% if namedCharacters.size > 0 -%}
+# Named in this turn — not necessarily present
+{% for e in namedCharacters %}
+[{{ e.id }}] {{ e.name }}{% if e.description != blank %}: {{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: false, ids: true %}
+{% endfor %}
+{% endif -%}
 {%- comment -%}
 lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs). Clamped because a
 negative offset slices from the END in Liquid — coinciding with the intended rows, not meaning them.

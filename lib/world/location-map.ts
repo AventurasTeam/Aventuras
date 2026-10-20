@@ -1,8 +1,7 @@
 import type { Entity } from '@/lib/db'
 import { blankToNull } from '@/lib/text'
 
-import { stateOf } from './entity-draft'
-import { byName, itemsAt, locationAncestors } from './overview'
+import { byName, locationAncestors } from './overview'
 import { parentChainIds, parentIdOf, parentOfLocations } from './parent-chain'
 import { placeModes } from './place-modes'
 
@@ -10,8 +9,6 @@ import { placeModes } from './place-modes'
 export type LocationMapRow =
   | { retired: false; id: string; name: string; depth: number; retiredReason: null }
   | { retired: true; id: null; name: string; depth: number; retiredReason: string | null }
-export type HeldItemLine = { id: string; name: string; equipped: boolean }
-export type LooseItemLine = { id: string; name: string }
 
 export type PlaceTreeRow = { entity: Entity; depth: number }
 
@@ -161,33 +158,4 @@ export function listedAncestorNames(locationId: string, entities: readonly Entit
   return locationAncestors(locationId, entities)
     .filter((e) => !modes.isDisabled(e.id))
     .map((e) => e.name)
-}
-
-/** `Holds:`: inventory, then equipped items. An id in both arrays shows once, as equipped. */
-export function heldItemLines(character: Entity, entities: readonly Entity[]): HeldItemLine[] {
-  const state = stateOf(character, 'character')
-  const inventory = state.inventory ?? []
-  const equippedItems = state.equipped_items ?? []
-  const equipped = new Set(equippedItems)
-  const items = new Map(
-    entities.filter((e) => e.kind === 'item' && e.status !== 'retired').map((e) => [e.id, e]),
-  )
-  const shown = new Set<string>()
-  const lines: HeldItemLine[] = []
-  const add = (id: string, isEquipped: boolean): void => {
-    const row = items.get(id)
-    if (row === undefined || shown.has(id)) return
-    shown.add(id)
-    lines.push({ id, name: row.name, equipped: isEquipped })
-  }
-  for (const id of inventory) if (!equipped.has(id)) add(id, false)
-  for (const id of equippedItems) add(id, true)
-  return lines
-}
-
-/** `Here:`: the unretired items lying at the location, by name. */
-export function looseItemLines(locationId: string, entities: readonly Entity[]): LooseItemLine[] {
-  return itemsAt(locationId, entities)
-    .filter((e) => e.status !== 'retired')
-    .map((e) => ({ id: e.id, name: e.name }))
 }

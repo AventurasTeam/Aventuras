@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { buildEntityViews } from '@/lib/world'
+
 import { renderTemplate, TEMPLATE_IDS } from '../index'
 
 type Definition = { setting: string; genre: string; tone: string }
@@ -95,5 +99,94 @@ describe('bundled suggestion-refresh template — system and user halves', () =>
     ]) {
       expect(user).not.toContain(definitionText)
     }
+  })
+})
+
+// architecture.md → Entity state on the template surface: the narrator's in-scene list, no ids.
+describe('bundled suggestion-refresh template — in scene', () => {
+  const sceneOf = (rows: Entity[], sceneEntities: string[]) => {
+    const views = buildEntityViews(rows, { sceneEntities, currentLocationId: null })
+    return renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
+      definition: {
+        mode: 'adventure',
+        setting: '',
+        genre: { promptBody: '' },
+        tone: { promptBody: '' },
+      },
+      entities: rows.map((e) => ({ ...e, state: views.byId.get(e.id) })),
+      sceneEntities,
+      entries: [{ content: 'The gate groaned open.' }],
+      suggestionCount: 2,
+      suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'A decisive move.' }],
+      refreshGuidance: '',
+    }).user
+  }
+  const aria = makeEntity({
+    id: 'char_1',
+    kind: 'character',
+    name: 'Aria',
+    description: 'A wary scout.',
+    state: {
+      inventory: ['item_k'],
+      equipped_items: [],
+      voice: 'low',
+      stackables: { gold: 3 },
+    } as never,
+  })
+  const key = makeEntity({
+    id: 'item_k',
+    kind: 'item',
+    name: 'Silver Key',
+    description: 'Cold to the touch.',
+    state: { at_location_id: null },
+  })
+
+  it('renders each in-scene entity with its state lines and held items, without ids', () => {
+    const user = sceneOf([aria, key], ['char_1', 'item_k'])
+    expect(user).toContain(
+      '# In scene\n\n## Aria\nA wary scout.\nVoice: low\nHolds:\n- Silver Key: Cold to the touch.\nStackables: gold 3\n\n# Story so far',
+    )
+    expect(user).not.toContain('[')
+    // Held, so listed under its holder alone.
+    expect(user).not.toContain('## Silver Key')
+  })
+
+  // In scene, an item is where the scene is, whoever off-scene holds it.
+  it('renders an in-scene item held off-scene with no Location or Held by line', () => {
+    const rows = [
+      makeEntity({ ...aria, state: null }),
+      makeEntity({
+        id: 'char_2',
+        kind: 'character',
+        name: 'Bex',
+        state: { inventory: ['item_l'], equipped_items: [] } as never,
+      }),
+      makeEntity({
+        id: 'item_l',
+        kind: 'item',
+        name: 'Lantern',
+        description: 'Still lit.',
+        state: { at_location_id: 'loc_2' },
+      }),
+      makeEntity({ id: 'loc_2', kind: 'location', name: 'The Mill' }),
+    ]
+    const views = buildEntityViews(rows, {
+      sceneEntities: ['char_1', 'item_l'],
+      currentLocationId: null,
+    })
+    expect(views.byId.get('item_l')).toMatchObject({
+      holder: { name: 'Bex' },
+      location: { name: 'The Mill' },
+    })
+
+    const user = sceneOf(rows, ['char_1', 'item_l'])
+    expect(user).toContain('## Lantern\nStill lit.\n\n# Story so far')
+    expect(user).not.toContain('Held by:')
+    expect(user).not.toContain('Location:')
+  })
+
+  it('prints no empty line under an entity with no description', () => {
+    const user = sceneOf([makeEntity({ ...aria, description: null, state: null })], ['char_1'])
+    expect(user).toContain('# In scene\n\n## Aria\n\n# Story so far')
   })
 })

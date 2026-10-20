@@ -51,6 +51,47 @@ describe('engine', () => {
   })
 })
 
+// The bundled templates include a macro once per row, so an uncached engine re-parses it per row.
+describe('parse cache', () => {
+  const looped = (macroSource: string): Pack => ({
+    templates: {
+      t: {
+        group: 'generationContext',
+        system: '',
+        user: "{% for r in rows %}{% include 'm', r: r %}{% endfor %}",
+      },
+    },
+    macros: { m: { group: 'staticContent', source: macroSource } },
+  })
+
+  it('parses an included macro once across rows and renders', () => {
+    const engine = createEngine(looped('{% probe %}{{ r }}'))
+    let parses = 0
+    engine.registerTag('probe', {
+      parse() {
+        parses += 1
+      },
+      render() {
+        return ''
+      },
+    })
+
+    expect(renderWith(engine, 't', { rows: ['a', 'b', 'c'] }).user).toBe('abc')
+    expect(renderWith(engine, 't', { rows: ['a', 'b', 'c'] }).user).toBe('abc')
+    expect(renderWith(engine, 't', { rows: ['d'] }).user).toBe('d')
+    expect(parses).toBe(1)
+  })
+
+  it("keeps each engine's cache to its own pack", () => {
+    const first = createEngine(looped('<{{ r }}>'))
+    const second = createEngine(looped('[{{ r }}]'))
+
+    expect(renderWith(first, 't', { rows: ['a'] }).user).toBe('<a>')
+    expect(renderWith(second, 't', { rows: ['a'] }).user).toBe('[a]')
+    expect(renderWith(first, 't', { rows: ['b'] }).user).toBe('<b>')
+  })
+})
+
 // architecture.md → System and user halves.
 describe('template halves', () => {
   const halves: Pack = {
@@ -142,6 +183,30 @@ describe('templateGlobals', () => {
       inner: { group: 'generationContext', source: '{{ sceneMetadata.summary }}' },
     })
     expect(globals).toContain('sceneMetadata')
+  })
+
+  // A macro taking arguments (the bundled entity-state macro): its hash keys are the macro's own
+  // names, and only the value expressions are reads of the caller's context.
+  it("takes an include's arguments as the macro's own names, their values as reads", () => {
+    const macros = {
+      m: {
+        group: 'generationContext' as const,
+        source: '{% if here %}{{ e.name }}{% endif %}{% if ids %}x{% endif %}',
+      },
+    }
+    expect(
+      globalsFor(
+        "{% for e in rows %}{% include 'm', e: e, here: true, ids: flag %}{% endfor %}",
+        macros,
+      ).toSorted(),
+    ).toEqual(['flag', 'rows'])
+    // The hazard the bundled templates guard against: a site that leaves an argument out reads it.
+    expect(
+      globalsFor(
+        "{% for e in rows %}{% include 'm', e: e, here: true %}{% endfor %}",
+        macros,
+      ).toSorted(),
+    ).toEqual(['ids', 'rows'])
   })
 
   it('excludes a name the template assigns itself', () => {

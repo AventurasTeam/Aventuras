@@ -13,52 +13,21 @@ for the placement rule.
 
 ## Data-model
 
-- **Implement entity state in prompts.** Every entity a generation
-  prompt shows carries a `state` view, rendered by
-  `macro_entity_state` in the narrator, the fallback classifier and
-  suggestion refresh
-  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface));
-  the floor seats in-scene characters' factions and their held and
-  loose items
-  ([`retrieval.md → Structural floor`](./memory/retrieval.md#structural-floor--always-inject));
-  a ranked row is measured by a code mirror of the bundled row
-  ([`retrieval.md → Token estimation`](./memory/retrieval.md#token-estimation));
-  and the writer restates visuals and moves stackables against what it
-  sees
-  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)).
-  Designed 2026-10-19
-  ([exploration record](./explorations/2026-10-19-entity-state-in-prompts.md)).
-  The plan must check:
-  - the test pinning each memory-blocks row to its mirror, beside the
-    existing overhead re-derivation, and that a ranked row carries the
-    view it was measured with;
-  - that retrieval reads whole rows, since its `EntityRow`
-    (`lib/retrieval/pools.ts`) carries no `state`;
-  - the registry and both parity tests for the new fields and
-    `structuralSceneFactions` (`lib/prompts/templateContextMap.ts`);
-  - the bundled-pack invariant test extended to a disabled held item in
-    the scene, which renders, and a disabled faction, which no member
-    shows;
-  - that the fallback's schema descriptions say what the emission
-    prompt says;
-  - that the Memory probe's floor accounting
-    ([`memory/probe.md`](./memory/probe.md)) counts the new seats;
-  - that the rewritten in-scene blocks close the prompt content pass's
-    two nits on them, the In-scene loop's two blank lines and suggestion
-    refresh's empty line under an entity with no description, whose
-    sub-bullets go when they do;
-  - the code comments stating the old surface, which go with it
-    (`lib/retrieval/rendered-text.ts`,
-    `lib/prompts/bundled/memory-blocks.ts`,
-    `lib/pipeline/definitions/generation-context.ts`,
-    `lib/world/location-map.ts`);
-  - the E2E decision ([`testing.md`](./testing.md)).
-
-  Once it runs, a play check of the three assumptions the design rides
-  on: the writer restates a visual category rather than appending to
-  it, keeps to the word bound, and isn't pulled into bringing on stage
-  the characters whose full rows sit elsewhere. The visual-cut and
-  shortfall warnings measure the first two; only play shows the third.
+- **Play-check entity state in prompts.** Entity state reaches every
+  generation prompt
+  ([`architecture.md → Entity state on the template surface`](./architecture.md#entity-state-on-the-template-surface)),
+  and nobody has played it. Four assumptions ride on the model: the
+  writer restates a visual category rather than appending to it, keeps
+  to the word bound
+  ([`piggyback.md → Trailing block format`](./memory/piggyback.md#trailing-block-format)),
+  isn't pulled into bringing on stage the characters whose full rows
+  sit elsewhere, and, in the fallback, doesn't read a character the turn
+  names as present
+  ([`piggyback.md → Fallback classifier context`](./memory/piggyback.md#fallback-classifier-context)).
+  The visual-cut warning measures the first two; only play shows the
+  last two. The shortfall warning measures one more: that the writer
+  moves no more of a stackable than its payer holds. Raised 2026-10-19
+  by the entity-state implementation.
 
 - **Retrieval budget defaults.** The per-type budgets
   (`stories.settings.retrievalBudgets`, entities 1200) are
@@ -109,10 +78,6 @@ for the placement rule.
   The pass also takes the whitespace and wording nits the halves PR's
   reviews found in the bundled prompts, all older than the split
   (routed from triage 2026-10-11):
-  - the In-scene loop leaves two blank lines before the next heading in
-    the narrative (`per-turn.ts`), the fallback classifier
-    (`piggyback-fallback-classifier.ts`) and the suggestion refresh
-    (`suggestion-refresh.ts`);
   - a Setting, Genre or Tone the user starts with a newline renders a
     blank line under its heading;
   - the Gregorian calendar line reads "time in seconds (1 seconds per
@@ -125,8 +90,6 @@ for the placement rule.
     2026-10-18 by the classifier factions slice review);
   - the fallback classifier's roster leaves a blank line between its
     active and staged entries;
-  - the suggestion refresh's In scene list prints an empty line under
-    an entity with no description;
   - a place name with a newline breaks the location map's tree: the
     rest of the name lands at column 0, where it reads as a top-level
     place (`lib/world/location-map.ts`). A retired reason is already

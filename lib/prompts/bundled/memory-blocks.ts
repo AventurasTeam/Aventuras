@@ -1,19 +1,18 @@
 export const MEMORY_BLOCKS = `{%- comment -%}
-Two row families, never one loop: ranked rows carry the exact renderedText the
-ranker measured the type budget against; structural-floor rows are raw column
-projections that bypass the ranker entirely. Wrapping a ranked row costs
-RANKER_DEFAULTS.typeOverhead once per ROW, which is why the <scene_entities>
-and <current_location> instructions live in the including template instead.
-Only the entity block brackets an id: <state> references entities and nothing
-else, so an id anywhere below invites a reference no parser resolves.
+Every entity row has one shape, pinned, a scene's faction or ranked: [id] on \`ids\`, the head
+with its framing, then macro_entity_state's lines. A ranked row renders from the data the ranker
+measured, and lib/retrieval/rendered-text.ts builds the measured string as a mirror of this row.
+Wrapping a ranked row costs RANKER_DEFAULTS.typeOverhead once per ROW, which is why the
+<scene_entities> and <current_location> instructions live in the including template instead.
+Only an entity row brackets an id: <state> references entities and nothing else, so an id
+anywhere else below invites a reference no parser resolves. Assigned first: LiquidJS drops a
+filter on a for tag's collection.
 {%- endcomment -%}
-{% if structuralPinnedEntities.size > 0 or retrievedEntities.size > 0 -%}
+{%- assign mb_entities = structuralPinnedEntities | concat: structuralSceneFactions | concat: retrievedEntities -%}
+{% if mb_entities.size > 0 -%}
 # Elsewhere in the world
-{% for e in structuralPinnedEntities %}
-{% if piggybackFires %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.status == 'active' %} (currently elsewhere){% elsif e.status == 'staged' %} (available to introduce){% endif %}{% if e.description != blank %}: {{ e.description }}{% endif %}
-{% endfor %}
-{%- for e in retrievedEntities %}
-{% if piggybackFires %}[{{ e.id }}] {% endif %}{{ e.renderedText }}
+{% for e in mb_entities %}
+{% if ids %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.status == 'staged' %} (available to introduce){% elsif e.status == 'active' and e.kind != 'faction' %} (not in the scene){% endif %}{% if e.description != blank %}: {{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: false, ids: ids %}
 {% endfor %}
 {% endif -%}
 {% if structuralPinnedLore.size > 0 or retrievedLore.size > 0 -%}

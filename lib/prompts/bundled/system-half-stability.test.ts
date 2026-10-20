@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { emptyEntityView } from '@/lib/world'
+
 import { templateGlobals, type TemplateHalf } from '../engine'
 import { bundledPack, loadPack, renderTemplate, TEMPLATE_IDS, type TemplateId } from '../index'
 
@@ -46,6 +48,15 @@ const ranked = (id: string, displayName: string, renderedText: string) => ({
   displayName,
   renderedText,
 })
+// A ranked entity carries the data the ranker measured; the template renders from it.
+const rankedEntity = (id: string, name: string, description: string) => ({
+  ...ranked(id, name, 'never rendered'),
+  kind: 'character',
+  name,
+  description,
+  status: 'active',
+  state: { ...emptyEntityView('character'), voice: 'hoarse' },
+})
 
 // Two turns of one story: every per-call variable the story templates read takes a different
 // value in each, so a per-call block in a system half changes it between them.
@@ -69,7 +80,15 @@ const TURN_A: Record<string, unknown> = {
   ],
   currentLocationChain: ['The Marsh'],
   heldItems: [{ holderId: 'c1', items: [{ id: 'i1', name: 'Courier’s seal', equipped: false }] }],
-  looseItems: [{ id: 'i2', name: 'a rusted lantern' }],
+  looseItems: [
+    {
+      ...entity('i2', 'item', 'a rusted lantern', 'Green with age.'),
+      state: {
+        ...emptyEntityView('item'),
+        location: { id: 'l1', name: 'The Drowned Keep', status: 'active' },
+      },
+    },
+  ],
   entries: [
     { position: 1, content: 'The marsh road ended at a wall of black water.' },
     { position: 2, content: 'Kael went first, testing the stones.' },
@@ -84,11 +103,15 @@ const TURN_A: Record<string, unknown> = {
   structuralPinnedEntities: [
     { id: 'c3', kind: 'character', status: 'staged', name: 'Ilse', description: 'A ferrywoman.' },
   ],
+  structuralSceneFactions: [
+    { id: 'f1', kind: 'faction', status: 'active', name: 'The Tidewardens', description: null },
+  ],
+  namedCharacters: [entity('c5', 'character', 'Orrin', 'A lock-keeper.')],
   structuralPinnedLore: [{ id: 'lo1', title: 'House Eldrin', body: 'An exiled line.' }],
   structuralPinnedThreads: [
     { id: 't2', status: 'pending', title: 'The debt', description: 'Owed to the guild.' },
   ],
-  retrievedEntities: [ranked('c2', 'Mora', 'Mora (currently elsewhere): last seen at the ford.')],
+  retrievedEntities: [rankedEntity('c2', 'Mora', 'last seen at the ford.')],
   retrievedLore: [ranked('lo2', 'Veilstone', 'Veilstone\nA shard of the old moon.')],
   retrievedHappenings: [ranked('h1', 'The siege', 'The siege broke on the third night.')],
   retrievedThreads: [ranked('t3', 'The lost map', 'The lost map (resolved): torn in two.')],
@@ -133,6 +156,8 @@ const TURN_B: Record<string, unknown> = {
   ],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
+  structuralSceneFactions: [],
+  namedCharacters: [],
   structuralPinnedLore: [],
   structuralPinnedThreads: [],
   retrievedEntities: [],

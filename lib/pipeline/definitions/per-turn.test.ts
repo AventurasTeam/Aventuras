@@ -23,6 +23,7 @@ import type { RenderedPrompt, TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
+import { emptyEntityView } from '@/lib/world'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -750,8 +751,8 @@ describe('per-turn pipeline declaration', () => {
     )
   })
 
-  it('clamps negative worldTimeDelta to 0 and logs classifier.delta_clamped warning', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn')
+  it("clamps negative worldTimeDelta to 0 and logs classifier.delta_clamped on the run's logger", async () => {
+    const log: Logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
 
     currentStoryStore.set({
       storyId: 's1',
@@ -808,7 +809,7 @@ describe('per-turn pipeline declaration', () => {
       actionId: 'act_1',
       abortSignal: new AbortController().signal,
       intermediates,
-      log: makeLogger('act_1'),
+      log,
       runInTransaction: async () => undefined,
       db: phaseDb.db,
       storyId: 's1',
@@ -820,7 +821,7 @@ describe('per-turn pipeline declaration', () => {
       next = await gen.next()
     }
 
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(log.warn).toHaveBeenCalledWith(
       'classifier.delta_clamped',
       expect.objectContaining({
         originalDelta: -30,
@@ -1107,6 +1108,13 @@ function entityCandidate(id: string, displayName: string, renderedText: string):
     pinSignal: 0,
     keywordHits: [],
     embeddingStale: false,
+    entity: {
+      kind: 'character',
+      name: displayName,
+      description: null,
+      status: 'active',
+      state: emptyEntityView('character'),
+    },
   }
 }
 
@@ -1127,7 +1135,7 @@ function retrievalIntermediate(
     },
     selected: {
       entities: over.entities ?? [
-        entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (currently elsewhere): a smuggler.'),
+        entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (not in the scene): a smuggler.'),
       ],
     },
     selectedLocationIds: over.selectedLocationIds,
@@ -1288,7 +1296,7 @@ describe('narrative fold — retrieval handoff', () => {
             entityCandidate(
               RETRIEVED_LOCATION_ID,
               'The Market',
-              'The Market (currently elsewhere): stalls under sailcloth.',
+              'The Market (not in the scene): stalls under sailcloth.',
             ),
           ],
           selectedLocationIds: [RETRIEVED_LOCATION_ID],

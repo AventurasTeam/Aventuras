@@ -156,6 +156,9 @@ override it — that violates the north star. Two categories:
 - `truncate_tokens: n` — truncate to N tokens, smart at sentence
   boundaries
 - `prose_join` — `["A","B","C"]` → `"A, B, and C"`
+- `one_line` — a string with every whitespace run, line breaks
+  included, as one space, for a value that must keep to its line: a
+  labelled state line or a one-line list item
 - `json` — stringify for cases where the prompt embeds JSON literally
 - `has_keyword: source_text` — truthy when any of the filter's
   keywords appear in source_text
@@ -191,6 +194,8 @@ Example built-in macros:
 - `macro_entity_state` (`generationContext`) — an entity's state
   lines, shared by every block that shows an entity
   ([Entity state on the template surface](#entity-state-on-the-template-surface))
+- `macro_item_line` (`generationContext`) — one held or loose item's
+  line, shared by `Holds:` and `Here:`
 - `macro_happening_for_memory` (`generationContext`) — a happening
   formatted as it would appear in a POV character's memory, including
   the source descriptor
@@ -260,13 +265,13 @@ Wider caching is
 
 The bundled pack splits its templates this way:
 
-| Template                      | System half                                                                     | User half                                                                                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Per-turn narrative            | Setting, Genre, Tone, Calendar, the output-format line                          | In scene, Current location, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission             |
-| Piggyback fallback classifier | Calendar                                                                        | Everything else in its order: the ID roster, the scene, the location map and held items, the memory blocks, the turns and the report directives that follow them |
-| Periodic classifier           | The role line and the rules                                                     | The Known lists and the turns                                                                                                                                    |
-| Suggestion refresh            | Setting, Genre, Tone                                                            | In scene, Story so far, the next-turn options and the reader's draft                                                                                             |
-| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one | Everything                                                                                                                                                       |
+| Template                      | System half                                                                     | User half                                                                                                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-turn narrative            | Setting, Genre, Tone, Calendar, the output-format line                          | In scene, Current location, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission                                            |
+| Piggyback fallback classifier | Calendar                                                                        | Everything else in its order: the ID roster, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
+| Periodic classifier           | The role line and the rules                                                     | The Known lists and the turns                                                                                                                                                                   |
+| Suggestion refresh            | Setting, Genre, Tone                                                            | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                            |
+| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one | Everything                                                                                                                                                                                      |
 
 ### Structured output — the JSON contract is not pack content
 
@@ -452,7 +457,8 @@ registry may be.
 Every entity a `generationContext` template sees carries `state`: a
 view of its stored state built per kind, never the column itself. It's
 on `entities`, `structuralLocation`, `structuralPinnedEntities`,
-`structuralSceneFactions`, `retrievedEntities` and `looseItems`, and a
+`structuralSceneFactions`, `retrievedEntities`, `looseItems` and
+`namedCharacters`, and a
 ranked row also carries `kind`, `name`, `description` and `status`, so
 a template renders it from data rather than from its measured string.
 `structuralSceneFactions` is the factions the floor seats for the
@@ -461,12 +467,12 @@ in-scene characters
 The column isn't a surface: it holds `lastSeenAt.entryId`, a raw entry
 id ID substitution doesn't cover, bare id arrays and caches.
 
-| Kind      | `state`                                                                                                                                                                                                                                                                                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (in scene the current place, out of it the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
-| location  | `condition`, `parent`                                                                                                                                                                                                                                                                                                                      |
-| item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                            |
-| faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                     |
+| Kind      | `state`                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| character | `visual` (`physique`, `face`, `hair`, `eyes`, `attire`, `distinguishing`), `traits`, `drives`, `voice`, `faction`, `location` (the current place for an active character in the scene, else the last-seen one), `holdings` (`{ id, name, status, description, condition, equipped }` per item, inventory then equipped), `stackables` (`{ key, amount }` per key) |
+| location  | `condition`, `parent`                                                                                                                                                                                                                                                                                                                                             |
+| item      | `condition`, `location`, `holder` (a reference with `equipped`)                                                                                                                                                                                                                                                                                                   |
+| faction   | `standing`, `agenda`, `members` (a list of references)                                                                                                                                                                                                                                                                                                            |
 
 A reference is `{ id, name, status }`, one shape everywhere. A template
 wanting the whole referenced entity finds it in `entities`
@@ -499,17 +505,19 @@ state lines from its view, and each caller keeps its own head line:
 `## name` and the description in scene, the chain for the current
 location, `name (framing): description` in the memory blocks. The
 narrator's in-scene and current-location blocks, the memory blocks, the
-fallback classifier's scene sections and suggestion refresh's in-scene
-block all include it. A field with nothing in it prints nothing, label
-included.
+fallback classifier's scene sections and the characters it shows as
+named this turn, and suggestion refresh's in-scene block all include
+it. A field with nothing in it prints nothing, label included, and a
+value with line breaks in it keeps to its one line (`one_line`).
 
-- **Character.** One line per visual category, labelled with its
-  emission name (`Physique:` through `Distinguishing:`), so the writer
-  maps a line to the `type` a change restates; `Voice:`; `Traits:` and
-  `Drives:`, joined with `; ` since an entry can hold a comma;
-  `Faction:`; `Location:`, out of scene only; `Holds:`, one item per
-  line with its id, name, `(equipped)`, description and condition;
-  `Stackables:` as `gold 30, arrows 12`.
+- **Character.** `Location:`, out of scene only; one line per visual
+  category, labelled with its emission name (`Physique:` through
+  `Distinguishing:`), so the writer maps a line to the `type` a change
+  restates; `Voice:`; `Traits:` and `Drives:`, joined with `; ` since an
+  entry can hold a comma; `Faction:`; `Holds:`, one item per line with
+  its id, name, `(equipped)`, description and condition, folded onto the
+  line (`macro_item_line`, as `Here:` prints a loose item); `Stackables:`
+  as `gold 30, arrows 12`, largest first.
 - **Location.** `Condition:`, and `Part of:` with the parent's name,
   except the current location, which keeps its chain.
 - **Item.** `Condition:`, and out of scene `Location:` and `Held by:`.
@@ -519,10 +527,12 @@ included.
 Ids are bracketed only where a write uses them, on held and loose
 items, which a transfer moves, under the same condition as the rest of
 the block's ids. A faction, a location, a holder and members print a
-name. A ranked character, with piggyback firing:
+name, and a retired faction, place or holder is marked `(retired)`: the
+reference is still true, a disbanded faction or the place last seen,
+but mustn't read as current. A ranked character, with piggyback firing:
 
 ```
-[c3] Kael (currently elsewhere): A scarred ex-soldier turned smuggler.
+[c3] Kael (not in the scene): A scarred ex-soldier turned smuggler.
 Location: The Docks
 Physique: tall, broad-shouldered, a soldier's posture gone slack
 Hair: close-cropped, grey at the temples

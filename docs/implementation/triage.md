@@ -527,3 +527,68 @@ slice-planning gate forces its resolution before that slice is planned.
   delta code shouldn't take. Raised 2026-10-18 by the classifier
   factions slice review's simplifier pass, which skipped it as outside
   the slice.
+
+- **An ancestor of the current location is framed "not in the scene".**
+  The floor seats the current location alone. Its ancestors appear only
+  by name in its head ("The Drowned Market — in Veil's Hollow", from
+  `currentLocationChain`), and `filterEntityPool` keeps them in the
+  ranked pool (`lib/retrieval/pools.ts`). A ranked or `always` ancestor
+  then renders in the memory blocks as "Veil's Hollow (not in the
+  scene): …" while the scene stands inside it. In the dev seed, a scene
+  at the Drowned Market would show it: Veil's Hollow is `always`. The
+  words are
+  [`retrieval.md → Three-sub-pool entity model`](../memory/retrieval.md#three-sub-pool-entity-model)'s,
+  and the old "currently elsewhere" was as wrong. Both obvious fixes
+  reach the ranker's mirror, which must keep rendering exactly what it
+  measures: seat the chain on the
+  [structural floor](../memory/retrieval.md#structural-floor--always-inject)
+  and render it outside the memory blocks, since a seated row still
+  takes the memory blocks' framing (Veil's Hollow, `always`, is seated
+  already), or give an ancestor its own framing, which makes
+  `entityFraming` read the scene. Raised 2026-10-19 by the entity-state
+  smoke check.
+
+- **A transfer's holder is never kind-checked.** Canon has the fallback
+  drop a transfer whose item or holder is of the wrong kind, item and
+  stackable transfers alike, logging `classifier.transfer_dropped`, and
+  the tagged block fail the field
+  ([`piggyback.md → Parse strategy and failure recovery`](../memory/piggyback.md#parse-strategy-and-failure-recovery)).
+  `lib/piggyback/substitute.ts` checks only an item transfer's item:
+  `resolveItemTransfer` never checks `to` or `from`, and
+  `resolveStackable` checks nothing. A probe through
+  `buildPiggybackActions` moved 30 gold from an item to a character, and
+  4 gold from a character to an item, which credited no one, with
+  nothing logged. Older than entity state, which now brackets the ids
+  of held and loose items in every generation prompt, so a container
+  item named as a payer is likelier. Raised 2026-10-19 by the
+  entity-state slice review.
+
+- **Retrieval takes its disabled places beside the scene they derive
+  from.** `per-turn-retrieval.ts` computes `disabledPlaceIds` with
+  `placeModes` around the scene's location and passes it to
+  `runRetrieval` beside `sceneEntityIds` and `currentLocationId`, and
+  only the caller keeps the two in step. The pass now takes the store's
+  entities and builds its views over its own scene, so it could derive
+  the set itself and drop the parameter
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
+  an invariant kept by convention). Older than entity state, so its
+  slice review filed it rather than tightening it. Raised 2026-10-20 by
+  the entity-state slice review.
+
+- **Five copies of whitespace collapsing.** `lib/text/one-line.ts`
+  exports `oneLine`, which the `one_line` filter and the entity-state
+  mirror share. `classifier-context.ts` keeps its own `flat`,
+  `lib/history/field-labels.ts` its `collapseSpaces`, and
+  `location-map.ts` (a retired reason), `lib/text/excerpt.ts` and
+  `lib/entry-refs/read.ts` inline the same `replace(/\s+/g, ' ')`. Each
+  could call `oneLine`; all sit outside the entity-state slice. Raised
+  2026-10-20 by its slice review's simplifier pass, which skipped it as
+  outside the slice.
+
+- **Test helpers the slices keep re-rolling.** A logger stand-in
+  (`{ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }`) is written out
+  in `lib/piggyback/apply.test.ts`, `world-time.test.ts` and about six
+  pipeline tests, and suites wrap `makeEntity` in per-file `character`,
+  `item` and `faction` builders. Both want a shared test-helper home no
+  module boundary objects to. Raised 2026-10-20 by the entity-state
+  slice review's simplifier pass, which skipped them for want of one.

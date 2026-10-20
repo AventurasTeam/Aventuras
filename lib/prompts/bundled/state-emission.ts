@@ -6,12 +6,12 @@ export const STATE_EMISSION = `After your narrative prose, append exactly one <s
   <current_location>{% if locationMap.size > 0 %}the ID from Places, or {% endif %}the handle of a new_location above</current_location>
   <world_time_delta>{% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative)</world_time_delta>
   <visual_changes>
-    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the FULL new value for that category — this replaces whatever was there before, not a partial edit</entity>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
   </visual_changes>
   <new_item handle="new:a-short-label" name="the item's name">a short description of the item</new_item>
   <transfers>
     <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
-    <stackable key="lowercase name, e.g. gold" amount="quantity moved" to="ID" from="ID" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
   </transfers>
   <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
   <retrieval_queries>

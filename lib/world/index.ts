@@ -69,6 +69,7 @@ export { leadLabelFor, resolveLead } from './lead'
 export type { LeadLabel } from './lead'
 export {
   branchWorldTime,
+  byName,
   carryingSummary,
   charactersAt,
   chipPreview,
@@ -82,22 +83,33 @@ export {
 export type { CarryingSummary, ChipPreview } from './overview'
 export {
   buildLocationMap,
-  heldItemLines,
   listedAncestorNames,
   locationMapView,
-  looseItemLines,
   placeTree,
   unhiddenLocationView,
 } from './location-map'
 export type {
-  HeldItemLine,
   LocationMapRow,
   LocationMapView,
   LocationMatchView,
-  LooseItemLine,
   MapAnchor,
   PlaceTreeRow,
 } from './location-map'
+export { buildEntityViews, emptyEntityView } from './entity-views'
+export type {
+  CharacterStateView,
+  EntityRef,
+  EntityStateView,
+  EntityStateViewByKind,
+  EntityViews,
+  FactionStateView,
+  HoldingView,
+  ItemStateView,
+  KindedView,
+  LocationStateView,
+  StackableView,
+  ViewScene,
+} from './entity-views'
 export { placeModes } from './place-modes'
 export type { PlaceModes } from './place-modes'
 export {

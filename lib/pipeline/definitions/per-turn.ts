@@ -256,6 +256,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         },
         branchId,
         source: 'piggyback_tagged_block',
+        log: ctx.log,
       }),
     }
   }

@@ -1,4 +1,5 @@
-import type { DropReason, VecTargetKind } from '@/lib/db'
+import type { DropReason, Entity, VecTargetKind } from '@/lib/db'
+import type { KindedView } from '@/lib/world'
 
 /** Row kind. Singular, matching VecTargetKind and the probe's target_kind. */
 export type CandidateKind = VecTargetKind
@@ -65,22 +66,39 @@ export type HappeningCandidate = CandidateBase & {
   awarenessIds: readonly string[]
 }
 
-export type SimpleCandidate = CandidateBase & { kind: Exclude<CandidateKind, 'happening'> }
+/**
+ * An entity as the ranker measured it (architecture.md → Entity state on the template surface):
+ * the seated row carries this to the template, so what renders is what was measured.
+ */
+export type MeasuredEntity = KindedView & {
+  name: string
+  description: string | null
+  status: Entity['status']
+}
+
+export type EntityCandidate = CandidateBase & { kind: 'entity'; entity: MeasuredEntity }
+
+export type SimpleCandidate = CandidateBase & {
+  kind: Exclude<CandidateKind, 'happening' | 'entity'>
+}
 
 /** One row that reached a type's ranker pool. */
-export type Candidate = HappeningCandidate | SimpleCandidate
+export type Candidate = HappeningCandidate | EntityCandidate | SimpleCandidate
 
 /**
  * A row a keyword hit seated directly (retrieval.md → Keyword injection). No vector,
  * sims or score — a peer of Candidate in `selected`, not a Candidate with holes.
  * `kind` excludes the boost-only types, keeping a `kind === 'happening'` narrow provable.
  */
-export type InjectedRow = {
-  kind: 'entity' | 'lore'
-  id: string
-  displayName: string
-  renderedText: string
-}
+export type InjectedRow =
+  | {
+      kind: 'entity'
+      id: string
+      displayName: string
+      renderedText: string
+      entity: MeasuredEntity
+    }
+  | { kind: 'lore'; id: string; displayName: string; renderedText: string }
 
 /** Anything a type's budget paid for this turn, however it earned the seat. */
 export type SeatedRow = Candidate | InjectedRow

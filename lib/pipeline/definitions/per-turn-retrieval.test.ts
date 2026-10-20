@@ -21,9 +21,12 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
 import { __resetCaptureMode, armDeepCapture, decompressPayload } from '@/lib/probe'
 import {
+  buildStructuralFloor,
+  countTokens,
   RANKER_DEFAULTS,
   type CandidateTrace,
   type InjectedAwareness,
+  type KeywordInjection,
   type QueryStack,
   type RankedType,
   type RetrievalParams,
@@ -40,6 +43,7 @@ import {
   resetAllStores,
   storiesStore,
 } from '@/lib/stores'
+import { emptyEntityView } from '@/lib/world'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
@@ -89,6 +93,7 @@ function okOutcome({
   injectedAwareness?: InjectedAwareness[]
   timings?: RetrievalTimings
   bundleOverrides?: Partial<Record<RetrievalType, RankedType>>
+  keywordInjections?: KeywordInjection[]
 } = {}): RetrievalSuccess {
   return retrievalSuccess({ ...over, injectedAwareness, timings, bundles: bundleOverrides })
 }
@@ -869,6 +874,124 @@ describe('retrieval phase — diagnostics', () => {
     expect(result).toEqual({ status: 'completed' })
   })
 
+  // retrieval.md → Budget-fill termination: such a row is skipped permanently, and an entity's
+  // state makes the most fully described one the likeliest; the log is all that says so.
+  it('warns once per row larger than its whole type budget, ranked or keyword-seated', async () => {
+    seedOpenStory({
+      settings: {
+        retrievalBudgets: {
+          entities: 100,
+          lore: 50,
+          happenings: 1500,
+          threads: 400,
+          chapters: 600,
+        },
+      },
+    })
+    const cut = (id: string, tokens: number, seated = false): KeywordInjection => ({
+      row: {
+        kind: 'entity',
+        id,
+        displayName: 'Kael',
+        renderedText: 'Kael',
+        entity: {
+          kind: 'character',
+          name: 'Kael',
+          description: null,
+          status: 'active',
+          state: emptyEntityView('character'),
+        },
+      },
+      terms: ['kael'],
+      priority: 0,
+      tokensEstimated: tokens,
+      seated,
+    })
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({
+        bundleOverrides: {
+          lore: {
+            ...scoredBundle(),
+            traces: [
+              {
+                ...trace('lo_big', 0.5, 0),
+                dropReason: 'candidate_too_large',
+                tokensEstimated: 80,
+              },
+              { ...trace('lo_ok', 0.4, 1), dropReason: 'over_budget', tokensEstimated: 30 },
+            ],
+          },
+        },
+        keywordInjections: [
+          cut('char_big', 140),
+          cut('char_ok', 60, true),
+          // The same oversized lore row, matched by keyword too: one warning, not two.
+          {
+            row: {
+              kind: 'lore',
+              id: 'lo_big',
+              displayName: 'The drowned archive',
+              renderedText: '',
+            },
+            terms: ['archive'],
+            priority: 0,
+            tokensEstimated: 80,
+            seated: false,
+          },
+        ],
+      }),
+    )
+
+    const { log } = await runRetrievalPhase()
+
+    const warned = vi
+      .mocked(log.warn)
+      .mock.calls.filter(([event]) => event === 'retrieval.candidate_too_large')
+      .map(([, detail]) => detail)
+    expect(warned).toEqual([
+      { type: 'lore', id: 'lo_big', name: 'The drowned archive', tokens: 80, typeBudget: 50 },
+      { type: 'entities', id: 'char_big', name: 'Kael', tokens: 140, typeBudget: 100 },
+    ])
+  })
+
+  // Only keyword injection seats this row, so its type comes off the row alone.
+  it('warns of a keyword-seated lore row larger than the lore budget', async () => {
+    seedOpenStory({
+      settings: {
+        retrievalBudgets: {
+          entities: 100,
+          lore: 50,
+          happenings: 1500,
+          threads: 400,
+          chapters: 600,
+        },
+      },
+    })
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({
+        keywordInjections: [
+          {
+            row: { kind: 'lore', id: 'lo_kw', displayName: 'The Flood Accord', renderedText: '' },
+            terms: ['accord'],
+            priority: 0,
+            tokensEstimated: 80,
+            seated: false,
+          },
+        ],
+      }),
+    )
+
+    const { log } = await runRetrievalPhase()
+
+    const warned = vi
+      .mocked(log.warn)
+      .mock.calls.filter(([event]) => event === 'retrieval.candidate_too_large')
+      .map(([, detail]) => detail)
+    expect(warned).toEqual([
+      { type: 'lore', id: 'lo_kw', name: 'The Flood Accord', tokens: 80, typeBudget: 50 },
+    ])
+  })
+
   // The empty-pool case is a cold start, not a misconfiguration.
   it('stays quiet when a type had no candidates to seat', async () => {
     seedOpenStory()
@@ -989,6 +1112,20 @@ describe('retrieval phase — RetrievalParams assembly', () => {
       'loc_thorn',
       'loc_vellis',
     ])
+  })
+
+  // The pass builds its views from these: source rows carry no state.
+  it("passes the branch's store entities to the pass", async () => {
+    seedOpenStory({
+      entities: [
+        entity('char_hero', 'character', 'Kael'),
+        entity('loc_keep', 'location', 'The Keep'),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().storeEntities.map((e) => e.id)).toEqual(['char_hero', 'loc_keep'])
   })
 
   // The sync scope is no longer passed alongside the branch — runRetrieval
@@ -1416,6 +1553,53 @@ describe('retrieval phase — probe capture', () => {
     // probe.md → Failed captures: the reached query text is the evidence a
     // failed capture exists to carry.
     expect(payloadOf(rows[0]).queries.map((q) => q.text)).toEqual([...QUERY_TEXTS])
+  })
+
+  // The chain printed beside `# Current location` comes from the same store rows as the views.
+  it("prices the current location's chain off the branch's store entities", async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    const place = (id: string, name: string, parent: string | null): Entity => ({
+      ...entity(id, 'location', name),
+      state: { parent_location_id: parent },
+    })
+    seedOpenStory({
+      settings: { probe_mode_active: true },
+      entries: [
+        entry(1, 'opening', 'The tavern roars.', meta({ currentLocationId: 'loc_anchor' })),
+        entry(2, 'user_action', 'I draw the blade.', meta()),
+      ],
+      entities: [
+        place('loc_eldra', 'Eldra', null),
+        place('loc_vellis', 'Port Vellis', 'loc_eldra'),
+        place('loc_anchor', 'The Rusty Anchor', 'loc_vellis'),
+      ],
+    })
+    // The pass's own floor, over the rows and scene the phase hands it.
+    runRetrievalMock.mockImplementation(async (_deps, params) =>
+      retrievalSuccess({
+        queries: queryStack(),
+        floor: buildStructuralFloor({
+          entities: params.storeEntities,
+          storeEntities: params.storeEntities,
+          lore: [],
+          threads: [],
+          sceneEntityIds: params.sceneEntityIds,
+          currentLocationId: params.currentLocationId,
+          disabledPlaceIds: params.disabledPlaceIds,
+        }),
+      }),
+    )
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(payloadOf(captureRows(sqlite)[0]).structural_floor).toEqual([
+      {
+        target_kind: 'entity',
+        target_id: 'loc_anchor',
+        tokens: countTokens('The Rusty Anchor — in Port Vellis › Eldra'),
+      },
+    ])
   })
 
   it('writes nothing when the story gate is off', async () => {

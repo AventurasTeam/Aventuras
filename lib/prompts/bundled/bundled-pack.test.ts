@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { templateGlobals } from '../engine'
-import { bundledPack, renderTemplate, TEMPLATE_IDS, templateReads } from '../index'
+import {
+  bundledPack,
+  renderTemplate,
+  TEMPLATE_GROUPS,
+  TEMPLATE_IDS,
+  templateReads,
+  VARIABLES,
+} from '../index'
 import { loadPack } from '../load-pack'
 import { validatePackIncludes } from '../validate-includes'
 
@@ -9,6 +16,16 @@ describe('bundled pack', () => {
   it('passes include-compatibility validation', () => {
     expect(validatePackIncludes(bundledPack)).toEqual([])
   })
+
+  // A read the registry doesn't define is a variable no builder emits: an include site that leaves
+  // out one of a macro's arguments reads it as one (macro_entity_state's ids, here).
+  it.each(Object.values(TEMPLATE_IDS).filter((id) => TEMPLATE_GROUPS[id] === 'generationContext'))(
+    '%s reads only variables the registry defines',
+    (templateId) => {
+      const defined = new Set(VARIABLES.generationContext.map((v) => v.name))
+      expect([...templateReads(templateId)].filter((name) => !defined.has(name))).toEqual([])
+    },
+  )
 
   it('loads without throwing (engine builds)', () => {
     expect(() => loadPack(bundledPack)).not.toThrow()

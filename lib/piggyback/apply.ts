@@ -1,7 +1,7 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity, EntryMetadata, ItemState } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import type { Logger } from '@/lib/diagnostics'
+import { foldStackables } from '@/lib/keyword-terms'
 
 import { dedupeSceneEntities, scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 import { MAX_RETRIEVAL_QUERIES, VISUAL_TEXT_MAX, type PlannedTurn } from './types'
@@ -15,14 +15,36 @@ function normalizeRetrievalQueries(queries: readonly string[]): string[] {
   return [...distinct].slice(0, MAX_RETRIEVAL_QUERIES)
 }
 
+const CJK_CLAUSE_MARKS = '。、，；！？'
+const SENTENCE_ENDS = '.。！？'
+
 // Both producers arrive here uncapped. An over-long note fails the whole-state re-validation of
-// every later updateEntity carrying `state`, a delete's ref clear among them. Cut by UTF-16 unit
-// (Zod's `.length`), never mid-surrogate.
+// every later updateEntity carrying `state`, a delete's ref clear among them. piggyback.md →
+// Trailing block format: cut back to the last sentence or clause boundary in the bound's second
+// half, else the last whitespace there, else mid-word. By UTF-16 unit (Zod's `.length`), never
+// mid-surrogate.
 function truncateVisualText(text: string): string {
   if (text.length <= VISUAL_TEXT_MAX) return text
-  const cut = text.slice(0, VISUAL_TEXT_MAX)
-  const lastUnit = cut.charCodeAt(cut.length - 1)
-  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? cut.slice(0, -1) : cut
+  const head = text.slice(0, VISUAL_TEXT_MAX)
+  // Below the midpoint a cut drops half the bound or more, too much to pay for a cleaner one.
+  const floor = VISUAL_TEXT_MAX / 2
+  // An ASCII mark ends a clause only where whitespace follows it ("1.8 m" has none); CJK text
+  // puts no whitespace after its marks.
+  let clause = -1
+  for (let i = head.length - 1; i >= floor && clause < 0; i--) {
+    const mark = head[i]!
+    if (CJK_CLAUSE_MARKS.includes(mark) || ('.;,'.includes(mark) && /\s/.test(text[i + 1]!)))
+      clause = i
+  }
+  const atClause =
+    clause < 0 ? '' : head.slice(0, SENTENCE_ENDS.includes(head[clause]!) ? clause + 1 : clause)
+  if (atClause.trim() !== '') return atClause.trimEnd()
+  // Whitespace just past the bound still ends the head's last word.
+  const space = text.slice(0, VISUAL_TEXT_MAX + 1).search(/\s\S*$/)
+  const atSpace = space < floor ? '' : head.slice(0, space).trimEnd()
+  if (atSpace !== '') return atSpace
+  const lastUnit = head.charCodeAt(head.length - 1)
+  return lastUnit >= 0xd800 && lastUnit <= 0xdbff ? head.slice(0, -1) : head
 }
 
 type PreviousMetadata = {
@@ -43,6 +65,8 @@ type BuildArgs = {
   // Caller-supplied, not hardcoded: the two producers are distinct agents whose deltas'
   // provenance must say so (docs/memory/piggyback.md).
   source: DeltaSource
+  /** The phase's logger, so a warning carries the run's actionId. */
+  log: Logger
 }
 
 type BuildResult = {
@@ -57,13 +81,18 @@ type BuildResult = {
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
-  const { entryId, previousMetadata, branchId, source } = args
+  const { entryId, previousMetadata, branchId, source, log } = args
   const { block, createdRows, reusedIds } = args.turn
   const entities = [...args.entities, ...createdRows]
 
   const sceneEntities = dedupeSceneEntities(block.sceneEntities ?? previousMetadata.sceneEntities)
   const rawDelta = block.worldTimeDelta ?? 0
-  const appliedDelta = resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
+  const appliedDelta = resolvePiggybackWorldTimeDelta(
+    rawDelta,
+    entryId,
+    previousMetadata.worldTime,
+    log,
+  )
   const worldTime = previousMetadata.worldTime + appliedDelta
 
   const actions: PipelineAction[] = []
@@ -86,7 +115,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     named !== undefined && namedRow?.kind === 'location' && namedRow.status !== 'retired'
   const currentLocationRejected = named !== undefined && !namedIsLocation
   if (currentLocationRejected) {
-    logger.warn('classifier.current_location_rejected', {
+    log.warn('classifier.current_location_rejected', {
       entryId,
       currentLocation: named,
       kind: namedRow?.kind ?? null,
@@ -137,6 +166,16 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   for (const note of block.visualChanges ?? []) {
     if (isCharacter(note.id)) {
       const text = truncateVisualText(note.text)
+      // The writer is asked for about 60 words; a cut says it overran the 500-character bound.
+      if (text !== note.text)
+        log.warn('classifier.visual_truncated', {
+          entryId,
+          source,
+          entityId: note.id,
+          type: note.type,
+          length: note.text.length,
+          keptLength: text.length,
+        })
       actions.push({
         kind: 'updateEntityVisualState',
         source,
@@ -214,21 +253,27 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const currentStackables = (id: string): Map<string, number> => {
     const patched = stackablePatches.get(id)
     if (patched) return new Map(patched)
-    // A row written before keys were normalized can hold "Gold" beside "gold"; fold
-    // them here so the first transfer to touch the holder heals it.
+    // The patch carries the folded keys, so the first transfer to touch a holder heals its row.
     const state = byId.get(id)?.state as CharacterState | undefined
-    const folded = new Map<string, number>()
-    for (const [raw, count] of Object.entries(state?.stackables ?? {})) {
-      const key = normalizeTerm(raw)
-      if (key !== '' && count > 0) folded.set(key, (folded.get(key) ?? 0) + count)
-    }
-    return folded
+    return foldStackables(state?.stackables)
   }
 
   for (const transfer of block.transfers?.stackables ?? []) {
     if (transfer.from !== undefined && isCharacter(transfer.from)) {
       const next = currentStackables(transfer.from)
-      const remaining = Math.max(0, (next.get(transfer.key) ?? 0) - transfer.amount)
+      const balance = next.get(transfer.key) ?? 0
+      // data-model.md → Stackable items: the payer clamps at zero while the payee still gains
+      // the full amount, so the prose stays true for whoever received it.
+      if (balance < transfer.amount)
+        log.warn('classifier.stackable_shortfall', {
+          entryId,
+          source,
+          entityId: transfer.from,
+          key: transfer.key,
+          amount: transfer.amount,
+          balance,
+        })
+      const remaining = Math.max(0, balance - transfer.amount)
       if (remaining === 0) next.delete(transfer.key)
       else next.set(transfer.key, remaining)
       stackablePatches.set(transfer.from, next)

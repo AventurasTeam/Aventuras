@@ -4,20 +4,24 @@ import { IdBiMap, substituteIds } from '@/lib/ids'
 import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
+  matchTerms,
+  normalizeTerm,
   readPromptBuffer,
   type EntityRow,
   type LoreRow,
+  type MeasuredEntity,
   type RetrievalSuccess,
   type SeatedRow,
   type ThreadRow,
 } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
 import {
+  buildEntityViews,
   buildLocationMap,
-  heldItemLines,
+  byName,
   listedAncestorNames,
-  looseItemLines,
-  type HeldItemLine,
+  type EntityViews,
+  type KindedView,
 } from '@/lib/world'
 
 import { readLastTurns, readSceneSource } from './entry-reads'
@@ -54,8 +58,11 @@ type GuardFailure = { ok: false; result: PhaseFailure }
 /** A ranked bundle row as a template sees it. */
 export type RetrievedRow = { id: string; displayName: string; renderedText: string }
 
+/** A ranked entity row: the data the ranker measured, so a template renders it, not the string. */
+export type RetrievedEntityRow = RetrievedRow & MeasuredEntity
+
 /** A structural-floor row as a template sees it, per source type. */
-export type FloorEntity = Pick<EntityRow, 'id' | 'kind' | 'status' | 'name' | 'description'>
+export type FloorEntity = Pick<EntityRow, 'id' | 'status' | 'name' | 'description'> & KindedView
 export type FloorLore = Pick<LoreRow, 'id' | 'title' | 'body'>
 export type FloorThread = Pick<ThreadRow, 'id' | 'status' | 'title' | 'description'>
 
@@ -70,9 +77,10 @@ function blankIfWhitespace(value: string): string {
 /**
  * The exact fields templateContextMap documents for `generationContext.entities`.
  * Projected rather than passed whole: packs are user-authored, so an un-projected
- * drizzle row silently makes every future column (`state`, `tags`,
- * `embeddingStale`, timestamps) part of the template surface — reachable by a
- * custom template and impossible to drop later without breaking it.
+ * drizzle row silently makes every future column (`tags`, `embeddingStale`,
+ * timestamps) part of the template surface — reachable by a custom template and
+ * impossible to drop later without breaking it. `state` is the per-kind view, never
+ * the column (architecture.md → Entity state on the template surface).
  */
 export const PROMPT_ENTITY_FIELDS = [
   'id',
@@ -81,22 +89,25 @@ export const PROMPT_ENTITY_FIELDS = [
   'description',
   'status',
   'injectionMode',
+  'state',
 ] as const
 
-function promptEntity(entity: Entity): Pick<Entity, (typeof PROMPT_ENTITY_FIELDS)[number]> {
+type PromptEntity = Pick<Entity, 'id' | 'name' | 'description' | 'status' | 'injectionMode'> &
+  KindedView
+
+function promptEntity(entity: Entity, views: EntityViews): PromptEntity {
   return {
     id: entity.id,
-    kind: entity.kind,
+    ...views.kinded(entity.id, entity.kind),
     name: entity.name,
     description: entity.description,
     status: entity.status,
     injectionMode: entity.injectionMode,
-  }
+  } satisfies Record<(typeof PROMPT_ENTITY_FIELDS)[number], unknown>
 }
 
-// Only the fields a prompt renders: `renderedText` is the exact string the
-// ranker measured the type budget against, and the Float32Array vector beside
-// it would be walked into a numeric-keyed object by substituteIds.
+// Only the fields a prompt renders: the Float32Array vector beside them would be
+// walked into a numeric-keyed object by substituteIds.
 function promptRows(selected: readonly SeatedRow[] | undefined): RetrievedRow[] {
   return (selected ?? []).map((c) => ({
     id: c.id,
@@ -105,19 +116,53 @@ function promptRows(selected: readonly SeatedRow[] | undefined): RetrievedRow[] 
   }))
 }
 
+// The pair alone, so a measured entity is projected rather than spread.
+function kindedOf(entity: MeasuredEntity): KindedView {
+  switch (entity.kind) {
+    case 'character':
+      return { kind: entity.kind, state: entity.state }
+    case 'location':
+      return { kind: entity.kind, state: entity.state }
+    case 'item':
+      return { kind: entity.kind, state: entity.state }
+    case 'faction':
+      return { kind: entity.kind, state: entity.state }
+  }
+}
+
+// The view the ranker measured the row with, never one rebuilt here: a fallback recovering a
+// failed fold renders after that fold's writes, and the budget was spent on the measured row.
+function promptEntityRows(selected: readonly SeatedRow[] | undefined): RetrievedEntityRow[] {
+  return (selected ?? []).flatMap((c): RetrievedEntityRow[] =>
+    c.kind === 'entity'
+      ? [
+          {
+            id: c.id,
+            displayName: c.displayName,
+            renderedText: c.renderedText,
+            ...kindedOf(c.entity),
+            name: c.entity.name,
+            description: c.entity.description,
+            status: c.entity.status,
+          },
+        ]
+      : [],
+  )
+}
+
 // Projected to exactly the fields a template renders — the floor's own rows are
 // already narrowed, but a prompt surface is a user-authored contract and pins
 // its own field set.
-const floorEntity = (e: EntityRow): FloorEntity => ({
+const floorEntity = (e: EntityRow, views: EntityViews): FloorEntity => ({
   id: e.id,
-  kind: e.kind,
+  ...views.kinded(e.id, e.kind),
   status: e.status,
   name: e.name,
   description: e.description,
 })
 
-const floorEntities = (rows: readonly EntityRow[] | undefined): FloorEntity[] =>
-  (rows ?? []).map(floorEntity)
+const floorEntities = (rows: readonly EntityRow[] | undefined, views: EntityViews): FloorEntity[] =>
+  (rows ?? []).map((e) => floorEntity(e, views))
 
 const floorLore = (rows: readonly LoreRow[] | undefined): FloorLore[] =>
   (rows ?? []).map((l) => ({ id: l.id, title: l.title, body: l.body }))
@@ -130,27 +175,68 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
     description: t.description,
   }))
 
-// One read serves every variable built from the scene, so any of them keeps it.
+// One read serves every variable built from the scene, so any of them keeps it — each state-view
+// carrier built here too, as views depend on the scene (in-scene location, the invariant's seat).
 const SCENE_VARIABLES = [
   'sceneMetadata',
   'sceneEntities',
   'currentLocationId',
   'locationMap',
   'heldItems',
+  'entities',
+  'structuralLocation',
+  'structuralPinnedEntities',
+  'structuralSceneFactions',
+  'looseItems',
+  'namedCharacters',
 ]
+
+/** One of a holder's items in `heldItems`, from the holder's state view. */
+type HeldItemLine = { id: string; name: string; equipped: boolean }
 
 /** One entry per active in-scene character that holds anything, in scene order. */
 function heldItemsInScene(
   sceneEntities: readonly string[],
   entities: readonly Entity[],
+  views: EntityViews,
 ): { holderId: string; items: HeldItemLine[] }[] {
   const byId = new Map(entities.map((e) => [e.id, e]))
   return [...new Set(sceneEntities)].flatMap((id) => {
     const holder = byId.get(id)
     if (holder?.kind !== 'character' || holder.status !== 'active') return []
-    const items = heldItemLines(holder, entities)
+    const items = views
+      .of(holder.id, 'character')
+      .holdings.map((h) => ({ id: h.id, name: h.name, equipped: h.equipped }))
     return items.length > 0 ? [{ holderId: holder.id, items }] : []
   })
+}
+
+/** readLastTurns' minimum, the action-plus-reply pair a per-turn write extracts from. */
+const NAMED_THIS_TURN = 2
+
+/**
+ * piggyback.md → Fallback classifier context: a character this turn names but no other section
+ * shows with state would be a bare id. Disabled ones stay out (data-model.md → Injection modes).
+ */
+function charactersNamed(
+  turns: readonly StoryEntry[],
+  entities: readonly Entity[],
+  shownIds: ReadonlySet<string>,
+): Entity[] {
+  const text = turns
+    .slice(-NAMED_THIS_TURN)
+    .map((t) => promptProse(t))
+    .join('\n')
+  return entities
+    .filter(
+      (e) =>
+        e.kind === 'character' &&
+        (e.status === 'active' || e.status === 'staged') &&
+        e.injectionMode !== 'disabled' &&
+        !shownIds.has(e.id) &&
+        matchTerms(text, [e.name, ...e.keywords].map(normalizeTerm)).length > 0,
+    )
+    .sort(byName)
 }
 
 /**
@@ -263,7 +349,7 @@ export async function buildGenerationContext(
   const readsScene = SCENE_VARIABLES.some((name) => reads.has(name))
   const [buffer, lastTurns, sceneSource] = await Promise.all([
     reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
-    reads.has('lastTurns') || reads.has('worldTimeDeltaBasis')
+    reads.has('lastTurns') || reads.has('worldTimeDeltaBasis') || reads.has('namedCharacters')
       ? readLastTurns(
           ctx.db,
           branchId,
@@ -303,8 +389,7 @@ export async function buildGenerationContext(
     summary: sceneSource?.metadata?.summary ?? '',
   }
 
-  // The places retrieval puts in the prompt, in render order. Ranked rows reach a template as
-  // RetrievedRow, which carries no EntityKind, so their kinds come off the retrieval outcome.
+  // The places retrieval puts in the prompt, in render order.
   const locationIds = [
     ...(floor?.sceneEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
     ...(floor?.currentLocation?.kind === 'location' ? [floor.currentLocation.id] : []),
@@ -313,6 +398,14 @@ export async function buildGenerationContext(
   ]
   const structuralLocationId = floor?.currentLocation?.id ?? null
   const mapCurrentLocationId = structuralLocationId ?? scene.currentLocationId
+  // Built here for every row but the ranked ones, which carry the view they were measured with.
+  const views = buildEntityViews(branchEntities, {
+    sceneEntities: scene.sceneEntities,
+    currentLocationId: mapCurrentLocationId,
+  })
+  const branchById = new Map(branchEntities.map((e) => [e.id, e]))
+  const retrievedEntities = promptEntityRows(retrieval?.bundles.entities.selected)
+  const inSceneIds = new Set(scene.sceneEntities)
 
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
@@ -322,7 +415,7 @@ export async function buildGenerationContext(
     // template names it: the read is a means to the basis, not an entitlement to
     // the rows.
     lastTurns: reads.has('lastTurns') ? lastTurns.map(promptEntry) : [],
-    entities: branchEntities.map(promptEntity),
+    entities: branchEntities.map((e) => promptEntity(e, views)),
     sceneEntities: scene.sceneEntities,
     currentLocationId: scene.currentLocationId,
     sceneMetadata: scene,
@@ -334,17 +427,19 @@ export async function buildGenerationContext(
       partialChapterBuffer: settings.partialChapterBuffer,
       protectedBuffer: settings.protectedBuffer,
     },
-    retrievedEntities: promptRows(retrieval?.bundles.entities.selected),
+    retrievedEntities,
     retrievedLore: promptRows(retrieval?.bundles.lore.selected),
     retrievedHappenings: promptRows(retrieval?.bundles.happenings.selected),
     retrievedThreads: promptRows(retrieval?.bundles.threads.selected),
     retrievedChapters: promptRows(retrieval?.bundles.chapters.selected),
-    structuralLocation: floor?.currentLocation ? floorEntity(floor.currentLocation) : null,
+    structuralLocation: floor?.currentLocation ? floorEntity(floor.currentLocation, views) : null,
     structuralActiveThreads: floorThreads(floor?.activeThreads),
     // Kept per type rather than concatenated: no field tags a row with its own
     // type, and an entity's `name` against lore's and threads' `title` leaves
     // one loop nothing uniform to render.
-    structuralPinnedEntities: floorEntities(floor?.alwaysEntities),
+    structuralPinnedEntities: floorEntities(floor?.alwaysEntities, views),
+    // memory/retrieval.md → Structural floor: rendered with the pinned rows.
+    structuralSceneFactions: floorEntities(floor?.sceneFactions, views),
     structuralPinnedLore: floorLore(floor?.alwaysLore),
     structuralPinnedThreads: floorThreads(floor?.alwaysThreads),
     locationIds: [...new Set(locationIds)],
@@ -355,9 +450,27 @@ export async function buildGenerationContext(
       structuralLocationId === null
         ? []
         : listedAncestorNames(structuralLocationId, branchEntities),
-    heldItems: heldItemsInScene(scene.sceneEntities, branchEntities),
+    heldItems: heldItemsInScene(scene.sceneEntities, branchEntities, views),
     looseItems:
-      structuralLocationId === null ? [] : looseItemLines(structuralLocationId, branchEntities),
+      structuralLocationId === null
+        ? []
+        : views.looseAt(structuralLocationId).flatMap((id) => {
+            const row = branchById.get(id)
+            return row === undefined ? [] : [promptEntity(row, views)]
+          }),
+    namedCharacters: reads.has('namedCharacters')
+      ? charactersNamed(
+          lastTurns,
+          branchEntities,
+          new Set([
+            ...branchEntities
+              .filter((e) => e.status === 'active' && inSceneIds.has(e.id))
+              .map((e) => e.id),
+            ...(floor?.alwaysEntities ?? []).map((e) => e.id),
+            ...retrievedEntities.map((e) => e.id),
+          ]),
+        ).map((e) => promptEntity(e, views))
+      : [],
     intermediates: {},
     piggybackFires,
     // Re-gated on the derived slots, not just the caller's flag: a caller

@@ -4,6 +4,7 @@ import {
   unpackFloat32,
   vecTableName,
   vectorsByIdQuery,
+  type Entity,
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -30,7 +31,7 @@ import {
   type QueryStackInput,
 } from './queries'
 import { rankAll, rankPerType } from './ranker'
-import { entityRenderedText, lines, loreRenderedText } from './rendered-text'
+import { entityRenderedText, lines, loreRenderedText, measuredEntity } from './rendered-text'
 import {
   countStaleHappenings,
   loadChapterRanges,
@@ -83,6 +84,11 @@ export type RetrievalParams = {
    * seat and every pool. The caller computes it: source rows carry no parent to walk.
    */
   disabledPlaceIds: ReadonlySet<string>
+  /**
+   * The branch's store entities: source rows carry no state, so the floor builds this pass's scene
+   * views from these, reading factions and items; entity rows are measured and rendered by them.
+   */
+  storeEntities: readonly Entity[]
   /** Un-classified buffer prose, for Layer-A suppression. */
   recentProse: string
   /**
@@ -192,12 +198,8 @@ export type RetrievalOutcome =
        */
       injectedAwareness: InjectedAwareness[]
       /**
-       * Which of `bundles.entities.selected` are places. A Candidate's `kind` is
-       * the VecTargetKind ('entity'), not the EntityKind, and this pass is the
-       * last place that still holds the source row — without this a prompt
-       * cannot tell a retrieved location from a retrieved character, and an
-       * instruction naming "the IDs above" would point at a set that can be all
-       * characters.
+       * Which of `bundles.entities.selected` are places, in selection order; the
+       * generation context lists them in `locationIds`.
        */
       selectedLocationIds: string[]
       timings: RetrievalTimings
@@ -312,6 +314,7 @@ async function runRetrievalPass(
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,
+    storeEntities: params.storeEntities,
     lore: sourceRows.lore,
     threads: sourceRows.threads,
     sceneEntityIds: params.sceneEntityIds,
@@ -415,6 +418,7 @@ async function runRetrievalPass(
     floorIds: floor.seatedIds,
     recentProse: params.recentProse,
     disabledPlaceIds: params.disabledPlaceIds,
+    entityViews: floor.views,
     scanText: params.scanText,
     budgets: params.budgets,
     params: RANKER_DEFAULTS,
@@ -766,12 +770,14 @@ function assembleCandidates(
       })
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
+        const entity = measuredEntity(r, floor.views)
         return {
           ...shared(),
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
-          renderedText: entityRenderedText(r),
+          renderedText: entityRenderedText(entity),
+          entity,
           sims: simsFor(vector),
           vector,
           pinSignal: 0,

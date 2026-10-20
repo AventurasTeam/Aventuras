@@ -1181,7 +1181,7 @@ The retrieval pool per type after the structural floor is satisfied.
 
 Seating follows rendering: an entity the prompt shows in full in its
 structural sections is seated, so the ranker never offers it a second
-time as "currently elsewhere". Beside the floor, the per-turn prompt
+time as "not in the scene". Beside the floor, the per-turn prompt
 carries the location map, every listed location's name as a tree with
 the id of each one not retired
 ([`piggyback.md → What the writer sees`](./piggyback.md#what-the-writer-sees)).
@@ -1221,12 +1221,18 @@ The retrieval pool for entities splits by status:
 
 | Sub-pool             | Framing in prompt                                                        |
 | -------------------- | ------------------------------------------------------------------------ |
-| **Active off-scene** | "Currently elsewhere; available for retrieval reference"                 |
+| **Active off-scene** | "Not in the scene; available for retrieval reference"                    |
 | **Staged**           | "Available to introduce when narratively appropriate"                    |
 | **Retired**          | Default-excluded; opt-in via `injection_mode='always'` for ghosts/echoes |
 
+The active framing places a row against the scene, not the world: a
+character who steps out of the scene can still stand at the current
+location, and the row's `Location:` line says so
+([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
+which "currently elsewhere" would contradict.
+
 An active faction carries no framing: it is never in a scene, so
-"currently elsewhere" says nothing about it. A staged one keeps
+"not in the scene" says nothing about it. A staged one keeps
 "available to introduce".
 
 Active off-scene and staged compete for the entity-type token budget.
@@ -1428,9 +1434,13 @@ enters MMR's selected set.
 
 **Cascade** is off by default. Enabled, an injected row's own text is
 rescanned for further hits to `keywordRetrieval.cascadeMaxDepth`
-(default 2). Cascaded rows draw on the same keyword allowance, and
-depth-1 rows seat before depth-2 rows so a dense keyword graph cannot
-spend the whole allowance on second-order matches.
+(default 2). An entity row's own text is its name and description, not
+its framing or its state lines: those name every entity the row relates
+to (its faction, members, places, holder and held items), and
+rescanning them would spend the allowance on whatever the row's state
+names rather than on what the prose raised. Cascaded rows draw on the same keyword
+allowance, and depth-1 rows seat before depth-2 rows so a dense keyword
+graph cannot spend the whole allowance on second-order matches.
 
 ---
 
@@ -2075,10 +2085,12 @@ Three rules hold those numbers in place:
   ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
   and its `rendered_field_text` is built in code to mirror that row:
   the head, then the state lines, with the ids of held items measured
-  as though piggyback fires, through a stand-in placeholder of
-  realistic width. `lib/prompts/bundled/memory-blocks.test.ts` renders
-  the macro over views of every kind and fails unless each row equals
-  its mirror exactly. A custom pack that formats an entity differently
+  as though the block brackets ids, as it does whenever piggyback fires
+  and always in the fallback, through a stand-in placeholder of
+  realistic width that no placeholder map allocates.
+  `lib/prompts/bundled/memory-blocks.test.ts` renders the macro over
+  views of every kind and fails unless each row, its held items' ids
+  read as the stand-in, equals its mirror exactly. A custom pack that formats an entity differently
   is measured as the bundled row, and the difference is the pack's.
 - **Only the entity block brackets an id.** The `<state>` block
   references entities and nothing else, so an id on lore / happenings

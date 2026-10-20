@@ -713,9 +713,9 @@ code before it moved; resolve with the slice it names.
   `<scene_entities>` among them. Reasoned, not probed: the same read
   renders the fallback prompt's `Holds:` and `Here:` lines with the
   fold's transfers already applied, under the template's "the world as
-  it stands going into that turn"; once entity state reaches prompts,
-  the same read renders each holder's `Stackables:` balances too, and
-  the fallback is told not to move more than a payer holds
+  it stands going into that turn"; the same read renders each holder's
+  `Stackables:` balances too, and the fallback is told not to move more
+  than a payer holds
   ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)).
   Unreachable until this slice:
   `piggybackMode` defaults to `'off'` and only the dev seed turns it
@@ -1132,21 +1132,6 @@ code before it moved; resolve with the slice it names.
   only `swap-paused` and `memory-incomplete`. Reachable on any build
   whose provider or apply step fails repeatedly. The developer chose
   not to pull an interim pill forward. Routed from triage 2026-09-27.
-- **M7.2 — Every pack must rebuild the held-item id set in Liquid.** The
-  narrative (`lib/prompts/bundled/per-turn.ts`) and the fallback
-  classifier (`piggyback-fallback-classifier.ts`) each assign `heldIds`
-  from `heldItems` in the same loop to keep a held item out of the scene
-  list, because the context builder exposes no held-id set; a custom
-  pack (edited in this slice's pack tab) has to repeat that loop or list
-  held items twice. Candidate fix: a `heldItemIds` variable in the
-  generation context, read by both templates. Carried from the retired
-  "Implement system and user prompt halves" followup, which named the
-  split as the moment to share it; the split didn't. Raised 2026-10-11
-  by that PR's final review; routed from triage 2026-10-11. Entity state
-  gives each item's view a `holder`
-  ([`architecture.md → Entity state on the template surface`](../architecture.md#entity-state-on-the-template-surface)),
-  which a scene loop can test in place of the id set; the
-  implementation decides whether that retires this entry.
 - **M7.3 — Reader jump-to-entry from a delta row.** The reader route
   takes only `branchId` and `ReaderSurfaceHandle` exposes
   `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log
@@ -1165,6 +1150,19 @@ code before it moved; resolve with the slice it names.
   built-in Gregorian calendar (`earth-gregorian`,
   [`calendar-systems/spec.md`](../calendar-systems/spec.md)). Developer
   decision on the 4.2b stack review (2026-09-30).
+- **M7.5 — A probe capture's floor rows can't be grouped by source.**
+  Each `structural_floor` row is `{ target_kind, target_id, tokens }`,
+  and the seats entity state added (the in-scene characters' factions,
+  their held items, the items lying at the location) all carry the
+  `entity` target kind (`lib/probe/payload.ts`). The Selected tab's
+  wireframe groups "Their factions" and "Held and loose items" apart
+  from the in-scene entities
+  ([`memory-probe.md → Selected tab`](../ui/screens/memory-probe/memory-probe.md#selected-tab)),
+  and a capture written today can't be split later: the row carries no
+  source, and the entity it names may have changed since. A `source`
+  field means a `CAPTURE_VERSION` bump, which belongs with the
+  Selected-tab UI. Raised 2026-10-19 by the entity-state implementation;
+  routed by its slice review.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

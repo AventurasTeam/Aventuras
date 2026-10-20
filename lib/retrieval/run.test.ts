@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { EmbeddedFieldRow } from '@/lib/db'
 import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '@/lib/embedder'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
 import { KNN_K, RANKER_DEFAULTS } from './constants'
 import {
@@ -213,6 +214,7 @@ const BASE: RetrievalParams = {
   sceneEntityIds: ['char_a'],
   currentLocationId: null,
   disabledPlaceIds: new Set(),
+  storeEntities: [],
   recentProse: '',
   scanText: 'I ask about the amulet.\nKara Vex drew the blade.',
   keywordRetrieval: { mode: 'boost', budgetShare: 0.5, cascade: false, cascadeMaxDepth: 2 },
@@ -1294,8 +1296,77 @@ describe('runRetrieval — pools', () => {
     const ok = expectOk(out)
     expect(ok.bundles.entities.selected.map((c) => c.renderedText).sort()).toEqual([
       'Dalen (available to introduce): A smith.',
-      'Mira (currently elsewhere): A ranger.',
+      'Mira (not in the scene): A ranger.',
     ])
+  })
+
+  // retrieval.md → Token estimation: the row is measured from its view, and carries that view
+  // on to the template, so what renders is what was measured.
+  it('measures an entity from its view and carries the very view it measured', async () => {
+    const kael = 'char_00000000-0000-4000-8000-0000000000c1'
+    const sword = 'item_00000000-0000-4000-8000-0000000000d1'
+    const storeEntities = [
+      makeEntity({
+        id: kael,
+        kind: 'character',
+        name: 'Kael',
+        state: {
+          visual: { attire: 'a greatcoat' },
+          equipped_items: [sword],
+          inventory: [],
+        } as never,
+      }),
+      makeEntity({ id: sword, kind: 'item', name: 'Sword', state: { at_location_id: null } }),
+    ]
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow(kael, 'Kael', { description: 'A smuggler.' })],
+          knn: [hit(kael)],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [], storeEntities }),
+    )
+
+    const ok = expectOk(out)
+    const [row] = ok.bundles.entities.selected
+    expect(row?.renderedText).toBe(
+      'Kael (not in the scene): A smuggler.\nAttire: a greatcoat\nHolds:\n- [i00] Sword (equipped)',
+    )
+    expect(row?.kind === 'entity' && row.entity.state).toBe(ok.floor.views.byId.get(kael))
+  })
+
+  // Built over another scene, the views would place her where she was last seen.
+  it("builds the floor's views over the pass's scene, so an in-scene character stands here", async () => {
+    const storeEntities = [
+      makeEntity({
+        id: 'char_a',
+        kind: 'character',
+        name: 'Kara Vex',
+        state: { current_location_id: 'loc_old' } as never,
+      }),
+      makeEntity({ id: 'loc_1', kind: 'location', name: 'The Hollow' }),
+      makeEntity({ id: 'loc_old', kind: 'location', name: 'The Mill' }),
+    ]
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('char_a', 'Kara Vex'),
+            entityRow('loc_1', 'The Hollow', { kind: 'location' }),
+          ],
+        }),
+      }),
+      params({ currentLocationId: 'loc_1', storeEntities }),
+    )
+
+    const { floor } = expectOk(out)
+    expect(floor.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
+    expect(floor.views.of('char_a', 'character').location).toEqual({
+      id: 'loc_1',
+      name: 'The Hollow',
+      status: 'active',
+    })
   })
 
   // renderedText is the only string the ranker measures, so anything a block
@@ -1358,7 +1429,7 @@ describe('runRetrieval — pools', () => {
 
     const ok = expectOk(out)
     expect(ok.bundles.entities.selected.map((c) => c.renderedText)).toEqual([
-      'Mira (currently elsewhere)',
+      'Mira (not in the scene)',
     ])
     expect(ok.bundles.lore.selected.map((c) => c.renderedText)).toEqual(['The Concord'])
     expect(ok.bundles.threads.selected.map((c) => c.renderedText)).toEqual(['The debt (pending)'])
