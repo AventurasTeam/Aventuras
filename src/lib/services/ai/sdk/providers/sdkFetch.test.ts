@@ -41,7 +41,7 @@ describe('request bodies', () => {
     mockFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
   })
 
-  it('sends a FormData as bytes with its multipart boundary', async () => {
+  it('hands a FormData to the plugin whole, for it to encode', async () => {
     const form = new FormData()
     form.append('prompt', 'a castle')
 
@@ -53,17 +53,13 @@ describe('request bodies', () => {
 
     const init = mockFetch.mock.calls[0][1]!
     const headers = new Headers(init.headers)
-    const boundary = /^multipart\/form-data; boundary=(.+)$/.exec(headers.get('content-type')!)?.[1]
-    expect(boundary).toBeTruthy()
-    expect(init.body).toBeInstanceOf(ArrayBuffer)
-    const text = new TextDecoder().decode(init.body as ArrayBuffer)
-    expect(text).toContain(`--${boundary}`)
-    expect(text).toContain('a castle')
+    expect(init.body).toBe(form)
+    expect(headers.has('content-type')).toBe(false)
     expect(headers.get('authorization')).toBe('Bearer key')
     expect(headers.get('origin')).toBe('')
   })
 
-  it('replaces a content-type the caller set on a FormData request', async () => {
+  it('drops a content-type the caller set on a FormData request', async () => {
     await sdkFetch()(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -71,7 +67,18 @@ describe('request bodies', () => {
     })
 
     const headers = new Headers(mockFetch.mock.calls[0][1]!.headers)
-    expect(headers.get('content-type')).toMatch(/^multipart\/form-data; boundary=/)
+    expect(headers.has('content-type')).toBe(false)
+  })
+
+  it('keeps the content-type of a string body', async () => {
+    await sdkFetch()(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+
+    const headers = new Headers(mockFetch.mock.calls[0][1]!.headers)
+    expect(headers.get('content-type')).toBe('application/json')
   })
 
   it('sends a string body byte for byte, JSON or not', async () => {

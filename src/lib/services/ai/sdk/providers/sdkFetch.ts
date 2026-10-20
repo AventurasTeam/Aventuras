@@ -1,5 +1,5 @@
-// Transport for SDK providers: Tauri HTTP, a request guard, and debug logging. Responses come back
-// unthrown so the SDK builds its own errors; `createTimeoutFetch` adds the text-only layers on top.
+// Transport for SDK image providers: Tauri HTTP, a request guard, and debug logging. Responses come
+// back unthrown so the SDK builds its own errors. `createTimeoutFetch` is the text-model transport.
 
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
@@ -22,18 +22,13 @@ interface SdkFetchOptions {
   debugId?: string
 }
 
-/** The plugin takes bytes, not a `FormData`; the `Request` supplies the multipart boundary. */
-async function encodeFormData(
-  url: string,
-  method: string,
-  headers: RequestInit['headers'],
-  form: FormData,
-): Promise<{ body: ArrayBuffer; headers: Headers }> {
-  const request = new Request(url, { method, body: form })
-  const body = await request.arrayBuffer()
-  const encoded = new Headers(headers)
-  encoded.set('content-type', request.headers.get('content-type') ?? '')
-  return { body, headers: encoded }
+// The plugin encodes a `FormData` itself and fills in the multipart boundary, but only when the
+// caller has set no `content-type`.
+function headersFor(init: RequestInit | undefined): RequestInit['headers'] {
+  if (!(init?.body instanceof FormData)) return init?.headers
+  const headers = new Headers(init.headers)
+  headers.delete('content-type')
+  return headers
 }
 
 function logResponse(response: Response, debugId: string, serviceId: string, startTime: number) {
@@ -71,16 +66,11 @@ export function createSdkFetch(options: SdkFetchOptions) {
     const guard = createRequestGuard({ timeoutMs, what, callerSignal: init?.signal })
 
     try {
-      const request =
-        init?.body instanceof FormData
-          ? await encodeFormData(url, method, init.headers, init.body)
-          : { body: init?.body ?? undefined, headers: init?.headers }
-
       const response = guard.wrapBody(
         await httpFetch(url, {
           method,
-          headers: request.headers,
-          body: request.body,
+          headers: headersFor(init),
+          body: init?.body,
           signal: guard.signal,
         }),
       )
