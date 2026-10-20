@@ -483,6 +483,19 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
+  it('never reverts a concurrent watermark clamp from its interrupt hook', async () => {
+    const h = await ctxWith({ processedThrough: 3, headPosition: 4 })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
+    await drain(h.ctx)
+    // A whole-blob restore would serialize the stashed 3 over the clamp's 1.
+    h.clamp(1)
+    await interruptHook()(
+      { branchId: 'b1', intermediates: h.ctx.intermediates } as unknown as RunState,
+      h.ctx,
+    )
+    expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 1 })
+  })
+
   it('restores nothing from its interrupt hook for a run that never read the status', async () => {
     const h = await ctxWith({
       processedThrough: 0,
