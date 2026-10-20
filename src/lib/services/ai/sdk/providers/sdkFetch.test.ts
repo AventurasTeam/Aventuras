@@ -184,6 +184,15 @@ describe('debug logging', () => {
     )
   })
 
+  it('does not describe the request when debug logging is off', async () => {
+    debug.isActive = false
+    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))
+
+    await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
+
+    expect(debug.addDebugRequest).not.toHaveBeenCalled()
+  })
+
   it('scrubs inline image data from a JSON response and keeps the rest', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify(geminiImage), {

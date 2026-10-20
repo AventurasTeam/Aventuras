@@ -52,16 +52,18 @@ export function createSdkFetch(options: SdkFetchOptions) {
     const url = input instanceof Request ? input.url : input.toString()
     const method = init?.method ?? 'GET'
 
-    const debugId = debug.addDebugRequest(
-      serviceId,
-      {
-        url,
-        method,
-        headers: redactHeaders(init?.headers),
-        body: describeRequestBody(init?.body),
-      },
-      debugIdExternal,
-    )
+    const debugId = debug.isActive
+      ? debug.addDebugRequest(
+          serviceId,
+          {
+            url,
+            method,
+            headers: redactHeaders(init?.headers),
+            body: describeRequestBody(init?.body),
+          },
+          debugIdExternal,
+        )
+      : ''
 
     const guard = createRequestGuard({ timeoutMs, what, callerSignal: init?.signal })
 
