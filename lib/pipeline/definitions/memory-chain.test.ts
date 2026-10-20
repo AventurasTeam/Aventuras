@@ -118,11 +118,11 @@ function entry(kind: 'user_action' | 'ai_reply'): PhaseEmittedEvent {
 }
 
 // Stands in for the turn: it writes a user_action and a reply, and chains as per-turn does.
-function defineTurn(): void {
+function defineTurn(end: PhaseResult = { status: 'completed' }): void {
   async function* writeTurn(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
     yield entry('user_action')
     yield entry('ai_reply')
-    return { status: 'completed' }
+    return end
   }
   definePipeline({
     kind: PER_TURN_KIND,
@@ -327,6 +327,30 @@ describe('per-turn chains the pass through the orchestrator', () => {
       ]),
     )
   })
+
+  // Only commitRun evaluates chainsTo; the entries seeded before the turn survive its reversal.
+  it.each([
+    ['failed', { status: 'failed', error: { kind: 'phase-logic', detail: 'boom' } }],
+    ['aborted', { status: 'aborted' }],
+  ] as const)(
+    'chains nothing when the turn %s, though the cadence is due',
+    async (outcome, end) => {
+      const { db, ctx } = await makeHarness()
+      await seedEntries(db, 2)
+      nextPosition = 3
+      openStory(2)
+      defineTurn(end)
+      const passActionIds = defineRecordingPass()
+
+      expect(expectRan(await runPipeline(PER_TURN_KIND, ctx)).outcome).toBe(outcome)
+
+      expect(passActionIds).toEqual([])
+      expect(
+        await db.select().from(pipelineRuns).where(eq(pipelineRuns.kind, PERIODIC_CLASSIFIER_KIND)),
+      ).toEqual([])
+      expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+    },
+  )
 
   it('chains nothing when the turn leaves the count below the cadence', async () => {
     const { db, ctx } = await makeHarness()
