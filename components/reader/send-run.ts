@@ -1,3 +1,4 @@
+import type { SubmitTurnResult } from '@/lib/actions'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
@@ -45,4 +46,12 @@ export function cancelPillRun(branchId: string): Promise<void> {
   return run != null
     ? cancelSendRun(run)
     : awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+}
+
+/**
+ * A Send cancelled during its deferred pass wrote nothing, so a failure entry cleared before it
+ * can go back where it was (reader-composer.md → Custody of the turn's text).
+ */
+export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
+  return result.outcome === 'aborted' && 'beforeTurn' in result
 }

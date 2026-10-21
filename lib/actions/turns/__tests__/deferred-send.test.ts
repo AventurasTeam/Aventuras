@@ -93,6 +93,18 @@ async function deferAPass(ctx: RunCtx, pass: StandInPass, via: 'regenerate' | 'c
   return held
 }
 
+// Aborts the turn as it registers, after its user action was written.
+function cancelTheTurnOnStart(branchId: string): void {
+  const off = generationStore.subscribe(() => {
+    const turn = [...generationStore.getTxState().runs.values()].find(
+      (r) => r.branchId === branchId && r.kind === PER_TURN_KIND,
+    )
+    if (turn == null) return
+    off()
+    turn.abortController.abort()
+  })
+}
+
 async function userActionsReading(db: Db, content: string) {
   return db
     .select()
@@ -215,7 +227,12 @@ describe('Send with deferred work', () => {
     await interruptMemoryRuns('b1')
     const result = await within(turn, 'the cancelled Send')
 
-    expect(result).toMatchObject({ outcome: 'aborted', actionId: deferred.actionId })
+    // Before the turn's first write, so the host knows nothing it cleared beforehand moved.
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: deferred.actionId,
+      beforeTurn: true,
+    })
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(branchEntries('b1').some((e) => e.content === 'I wait.')).toBe(false)
     expect(
@@ -237,10 +254,25 @@ describe('Send with deferred work', () => {
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     const result = await within(turn, 'the cancelled Send')
 
-    expect(result).toMatchObject({ outcome: 'aborted', actionId: deferred.actionId })
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: deferred.actionId,
+      beforeTurn: true,
+    })
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  it('marks no cancel of the turn itself as before the turn', async () => {
+    const { ctx, db } = await setUp(50)
+    cancelTheTurnOnStart('b1')
+
+    const result = await within(send(ctx, 'I wait.'), 'the cancelled turn')
+
+    expect(result.outcome).toBe('aborted')
+    expect(result).not.toHaveProperty('beforeTurn')
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
   })
 
   it("lets the turn run when its deferred pass fails, and the turn's commit chains the retry", async () => {

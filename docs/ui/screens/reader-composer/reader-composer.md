@@ -551,7 +551,9 @@ entry re-appends at the branch tail, so on a path where a partial
 sweep already moved the tail it would park a stale notice over a
 branch it no longer describes — which is why the regenerate rejection
 arm may put the entry back and the throw arm may not. A draft has no
-position, so it is safe on both.
+position, so it is safe on both. A Send cancelled during its deferred
+work has written nothing either, so it puts the entry back too, and
+hands its own text to the draft.
 
 This leaves a failed turn's text under the same custody as any unsent
 draft, including the same limit: composer input is pre-submit state

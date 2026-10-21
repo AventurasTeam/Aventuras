@@ -11,6 +11,7 @@ import {
 } from '@/lib/stores'
 
 import {
+  abortedBeforeTurn,
   cancelComposerRun,
   cancelPillRun,
   cancelSendRun,
@@ -229,5 +230,26 @@ describe('cancelComposerRun', () => {
     await cancelComposerRun('br_1')
 
     expect(pass.abortController.signal.aborted).toBe(false)
+  })
+})
+
+describe('abortedBeforeTurn', () => {
+  const ran = { runId: 'run_1', actionId: 'act_1' }
+
+  it('holds for a Send cancelled during its deferred pass, which wrote nothing', () => {
+    expect(abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: true })).toBe(true)
+  })
+
+  // The turn wrote its user action before the cancel reversed it.
+  it('holds for no cancel of the turn itself', () => {
+    expect(abortedBeforeTurn({ ...ran, outcome: 'aborted' })).toBe(false)
+  })
+
+  it('holds for no Send that ran or was refused', () => {
+    expect(abortedBeforeTurn({ ...ran, outcome: 'completed' })).toBe(false)
+    expect(abortedBeforeTurn({ ...ran, outcome: 'failed' })).toBe(false)
+    expect(abortedBeforeTurn({ outcome: 'rejected', blockedBy: 'turn', converged: true })).toBe(
+      false,
+    )
   })
 })

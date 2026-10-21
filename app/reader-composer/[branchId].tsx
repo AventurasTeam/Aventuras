@@ -40,6 +40,7 @@ import { editGateOf } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
 import {
+  abortedBeforeTurn,
   cancelComposerRun,
   cancelPillRun,
   findSendRun,
@@ -645,7 +646,7 @@ export default function ReaderComposerRoute() {
       }
       const submission = { content, composerMode }
       try {
-        await dropSystemTail()
+        const dropped = await dropSystemTail()
         setLastSubmission(submission)
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
@@ -672,16 +673,23 @@ export default function ReaderComposerRoute() {
             },
             submission,
           )
-        else if (result.outcome === 'aborted' && branchUnchanged(branchId)) {
-          // Cancel reverses the whole turn (user_action included, C6) — hand
-          // the text back for edit/re-send. A retry has no raw pre-wrap text,
-          // so the wrapped content returns under 'free' (no re-wrap on send).
-          // Only into an empty composer: the composer clears itself on send, but
-          // Retry re-enters here without clearing, so text typed while the turn
-          // ran would otherwise be overwritten by the cancelled action.
-          if (isDraftEmpty(composerRef.current?.getDraft()))
-            composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
-          else toast.info(t('reader:turnCancelledDraftKept'))
+        else if (result.outcome === 'aborted') {
+          // Cancelled during its deferred pass, the Send wrote nothing, so the entry it cleared
+          // goes back, and that entry's Retry resends its own text rather than this Send's.
+          const putBack = abortedBeforeTurn(result) ? dropped : null
+          await restoreSystemTail(putBack)
+          if (branchUnchanged(branchId)) {
+            if (putBack != null) setLastSubmission(putBack.failure?.submission ?? null)
+            // Cancel reverses the whole turn (user_action included, C6) — hand
+            // the text back for edit/re-send. A retry has no raw pre-wrap text,
+            // so the wrapped content returns under 'free' (no re-wrap on send).
+            // Only into an empty composer: the composer clears itself on send, but
+            // Retry re-enters here without clearing, so text typed while the turn
+            // ran would otherwise be overwritten by the cancelled action.
+            if (isDraftEmpty(composerRef.current?.getDraft()))
+              composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
+            else toast.info(t('reader:turnCancelledDraftKept'))
+          }
         }
       } catch (err) {
         // submitTurn throws on a rejected user_action write — treat a thrown
@@ -703,6 +711,7 @@ export default function ReaderComposerRoute() {
       branchId,
       hydrationSucceeded,
       dropSystemTail,
+      restoreSystemTail,
       showTurnFailure,
       beginDispatch,
       endDispatch,
