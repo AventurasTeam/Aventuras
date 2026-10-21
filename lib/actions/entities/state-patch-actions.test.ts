@@ -518,7 +518,7 @@ describe('promoteStagedEntity', () => {
     expect(entitiesStore.getById('char_1')?.status).toBe('active')
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(
       await applyDeltaAction(
@@ -608,7 +608,7 @@ describe('appendEntityKeywords', () => {
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, append(['the wanderer']), 'act_k')).toEqual({
       status: 'rejected',
@@ -708,7 +708,7 @@ describe('retireEntity', () => {
     expect(row.retiredReason).toBeNull()
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, retire('fell at the ford'), 'act_r')).toEqual({
       status: 'rejected',
