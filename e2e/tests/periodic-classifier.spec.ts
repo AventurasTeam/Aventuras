@@ -19,7 +19,7 @@ import {
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { memoryBanner } from '../locators/memory-banner'
-import { reader } from '../locators/reader'
+import { reader, worldStateCountOf } from '../locators/reader'
 import { storyLeave } from '../locators/story-leave'
 import { toast } from '../locators/toast'
 
@@ -742,12 +742,10 @@ test.describe('periodic classifier — the gated pass', () => {
     return rows[0][0] as string
   }
 
-  // The count on the open rollback confirm's world-state line (probed up to 50), else null.
+  // The count on the open rollback confirm's world-state line, else null.
   async function shownWorldStateCount(): Promise<number | null> {
-    for (let count = 0; count <= 50; count++) {
-      if ((await reader.rollbackWorldStateLine(app.window, count).count()) > 0) return count
-    }
-    return null
+    const [line] = await reader.rollbackWorldStateLine(app.window).allTextContents()
+    return line == null ? null : worldStateCountOf(line)
   }
 
   // pipeline_runs has no branch column; only this story's passes run in this app.
@@ -911,7 +909,7 @@ test.describe('periodic classifier — the gated pass', () => {
     await reader.deleteEntry(page, userEntry).click()
     await expect(reader.rollbackConfirm(page)).toBeVisible()
     const before = await shownWorldStateCount()
-    if (before === null) throw new Error('the rollback confirm shows no world-state count ≤ 50')
+    if (before === null) throw new Error('the rollback confirm shows no world-state count')
 
     mock.releaseStructured()
     await expect.poll(() => runOutcome(pass), { timeout: 20_000 }).toBe('completed')

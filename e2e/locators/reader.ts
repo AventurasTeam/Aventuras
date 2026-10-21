@@ -10,26 +10,44 @@ import { t } from '../harness/i18n'
 // sentinel rather than at the punctuation around it, so the key's shape is free
 // to change.
 const BREAK_SENTINEL = '@@'
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const WORLD_TIME_BREAK_LABEL = new RegExp(
-  t('reader:worldTimeEdit.monotonicityBreak', { previousLabel: BREAK_SENTINEL })
-    .split(BREAK_SENTINEL)[0]
-    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  escapeRegExp(
+    t('reader:worldTimeEdit.monotonicityBreak', { previousLabel: BREAK_SENTINEL }).split(
+      BREAK_SENTINEL,
+    )[0],
+  ),
 )
+
+// The confirm's world-state line at any count. A count no story reaches resolves the `other`
+// plural, whose head and tail stay put around the number; `one` reads 1 alone, so it matches
+// literally. A non-numeric sentinel would resolve the bare key, the `one` copy.
+const COUNT_SENTINEL = 987_654_321
+const [WORLD_STATE_HEAD, WORLD_STATE_TAIL = ''] = t('reader:rollbackConfirm.worldState', {
+  count: COUNT_SENTINEL,
+}).split(String(COUNT_SENTINEL))
+const WORLD_STATE_OTHER = `•\\s*${escapeRegExp(WORLD_STATE_HEAD)}(\\d+)${escapeRegExp(WORLD_STATE_TAIL)}`
+const WORLD_STATE_ONE = `• ${t('reader:rollbackConfirm.worldState', { count: 1 })}`
+
+function rollbackDialog(page: Page): Locator {
+  return page.getByRole('alertdialog').filter({ has: reader.rollbackConfirm(page) })
+}
+
+/** The count a world-state line's text reads (`reader.rollbackWorldStateLine`), else null. */
+export function worldStateCountOf(text: string): number | null {
+  const line = text.replace(/\s+/g, ' ').trim()
+  if (line === WORLD_STATE_ONE) return 1
+  const match = new RegExp(`^${WORLD_STATE_OTHER}$`).exec(line)
+  return match == null ? null : Number(match[1])
+}
 
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
   send: (page: Page): Locator => page.getByRole('button', { name: t('reader:send') }),
-  // Send swaps to Cancel mid-run, and the memory banner's Cancel shares the name. The composer has
-  // no role or testID: its box is the deepest ancestor of the textarea holding Send-or-Cancel.
-  cancel: (page: Page): Locator => {
-    const cancel = page.getByRole('button', { name: t('cancel'), exact: true })
-    return page
-      .locator('*')
-      .filter({ has: reader.composer(page) })
-      .filter({ has: reader.send(page).or(cancel) })
-      .last()
-      .getByRole('button', { name: t('cancel'), exact: true })
-  },
+  // Send swaps to Cancel mid-run, and the memory banner's Cancel shares the name, so the
+  // composer's box scopes it (docs/testing.md → Tier 3).
+  cancel: (page: Page): Locator =>
+    page.getByTestId('composer').getByRole('button', { name: t('cancel'), exact: true }),
 
   // Composer mode dropdown (web: Radix Select). The trigger carries the "Mode"
   // label; each option renders the mode label + its hint.
@@ -113,16 +131,13 @@ export const reader = {
     page.getByRole('button', { name: t('reader:rollbackConfirm.confirm') }),
   // Its Cancel shares `common:cancel` with the composer's and the memory banner's.
   rollbackCancel: (page: Page): Locator =>
-    page
-      .getByRole('alertdialog')
-      .filter({ has: reader.rollbackConfirm(page) })
-      .getByRole('button', { name: t('cancel'), exact: true }),
-  // The confirm's world-state line when it reads `count` (rollback-confirm.tsx).
-  rollbackWorldStateLine: (page: Page, count: number): Locator =>
-    page
-      .getByRole('alertdialog')
-      .filter({ has: reader.rollbackConfirm(page) })
-      .getByText(`• ${t('reader:rollbackConfirm.worldState', { count })}`, { exact: true }),
+    rollbackDialog(page).getByRole('button', { name: t('cancel'), exact: true }),
+  // The confirm's world-state line at whatever count it reads (rollback-confirm.tsx); a regex
+  // is tested against raw text, which carries the line's leading newline.
+  rollbackWorldStateLine: (page: Page): Locator =>
+    rollbackDialog(page)
+      .getByText(new RegExp(`${WORLD_STATE_OTHER}\\s*$`))
+      .or(rollbackDialog(page).getByText(WORLD_STATE_ONE, { exact: true })),
 
   // Regenerate cascade confirm modal (RollbackConfirmModal variant="regenerate").
   // exact:true — see regenEntry's comment; the copy contains "regenerate" too.
