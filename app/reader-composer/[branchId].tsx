@@ -242,8 +242,8 @@ export default function ReaderComposerRoute() {
     isHeadReversalBlocked(s.txState, branchId),
   )
   // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn
-  // leaves Send in place and refused, so the composer stays live. Primitives, not the run: a
-  // fresh object per read would re-render the reader on every unrelated store write.
+  // leaves Send in place and refused, so the composer stays live. Primitives, so the pass's
+  // phase ticks don't re-render the reader.
   const sendRunKind = generationStore.useGeneration(
     (s) => findSendRun(s.txState, branchId)?.kind ?? null,
   )
@@ -1016,8 +1016,8 @@ export default function ReaderComposerRoute() {
   }, [terminalEntry?.id])
 
   const handleRefreshSuggestions = useCallback(() => {
-    // The strip re-renders disabled a frame after a reversal raises its flag or a Send marks
-    // its dispatch, and with REVERSAL_BLOCKED gone nothing downstream refuses a refresh then.
+    // The strip re-renders disabled a frame late, and the orchestrator admits a refresh during
+    // a reversal or a pending Send.
     if (dispatchInFlightRef.current || generationStore.isHeadReversalBlocked(branchId)) return
     const anchor = terminalEntry
     const story = openForBranch
