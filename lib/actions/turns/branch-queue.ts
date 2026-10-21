@@ -1,6 +1,6 @@
 import {
   PER_TURN_KIND,
-  runPipeline,
+  startPipeline,
   type RejectedStart,
   type RunCtxFor,
   type TxResult,
@@ -34,7 +34,10 @@ export function withBranchQueue<T>(branchId: string, fn: () => Promise<T>): Prom
   return result
 }
 
-/** Starts the `per-turn` run on the marked branch; the mark ends once the run is in txState. */
+/**
+ * Starts the `per-turn` run on the marked branch; the mark ends once the run is in txState. Settles
+ * at the turn's commit or abort, so the branch queue frees while a pass the turn chained runs on.
+ */
 type StartTurn = (
   ctx: Omit<RunCtxFor<typeof PER_TURN_KIND>, 'branchId' | 'onReserved'>,
 ) => Promise<TxResult | RejectedStart>
@@ -49,6 +52,6 @@ export function withPendingTurn<T>(
   fn: (startTurn: StartTurn) => Promise<T>,
 ): Promise<T> {
   return generationStore.bracketPendingTurn(branchId, (endMark) =>
-    fn((ctx) => runPipeline(PER_TURN_KIND, { ...ctx, branchId, onReserved: endMark })),
+    fn((ctx) => startPipeline(PER_TURN_KIND, { ...ctx, branchId, onReserved: endMark }).origin),
   )
 }
