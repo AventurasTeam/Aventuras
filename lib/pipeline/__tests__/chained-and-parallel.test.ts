@@ -295,6 +295,34 @@ describe('chained transition', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
 
+  it('does not evaluate chainsTo for a run cancelled in its last phase', async () => {
+    const { ctx } = await makeHarness()
+    let chainReads = 0
+    async function* cancelledLate({ actionId }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+      const own = [...generationStore.getTxState().runs.values()].find(
+        (r) => r.actionId === actionId,
+      )
+      own?.abortController.abort()
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: cancelledLate }],
+      chainsTo: () => {
+        chainReads++
+        return 'succ'
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('pred', ctx))
+
+    expect(result.outcome).toBe('completed')
+    expect(chainReads).toBe(0)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
   const failingChains: [string, NonNullable<Pipeline['chainsTo']>][] = [
     [
       'throws',

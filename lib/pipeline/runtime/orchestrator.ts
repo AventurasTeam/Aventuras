@@ -286,9 +286,10 @@ async function commitRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
-  const chained = await nextKindOf(run, ctx)
-  // An abort during the awaited read still commits the turn but chains no pass.
-  const nextKind = run.abortController.signal.aborted ? null : chained
+  const aborted = () => run.abortController.signal.aborted
+  // An abort before or during the awaited read still commits the turn but chains no pass.
+  const chained = aborted() ? null : await nextKindOf(run, ctx)
+  const nextKind = aborted() ? null : chained
   // chainsTo may name an unregistered kind (authoring bug); resolve it without
   // throwing so a bad chain can't strand the just-committed run in txState.runs.
   const nextPipeline = nextKind ? getPipelineSafe(nextKind) : undefined
