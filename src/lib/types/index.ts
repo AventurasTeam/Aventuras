@@ -1049,7 +1049,8 @@ interface WorldStateRecordBase {
  * - update: `before`/`after` hold only the changed fields.
  * `after` is absent on the classifier's records: they are written with the snapshot that follows
  * them, so none is ever applied late.
- * - delete / softDelete: `before` is the full row.
+ * - delete / softDelete: `before` is the full row; `after` is `{ mergedInto }` when a lore
+ *   session merged the row into the entry it names, and null otherwise.
  */
 export interface WorldStateChangeRecord extends WorldStateRecordBase {
   kind: 'change'

@@ -442,11 +442,14 @@ describe('undoing a chapter lore', () => {
     expect(revert.ok && revert.undone.map((r) => r.id)).toEqual([anew.id])
   })
 
-  it('is refused when a later save merged an entry the chapter wrote', () => {
+  it('undoes a later merge of an entry the chapter wrote, survivor and sources alike', () => {
     const made = change('chapter', 'e5', 'made', 'create', null, lore('made'))
-    // One Tidy save: the survivor under a new id, then its sources removed.
-    const merged = change('tidy', 'e8', 'survivor', 'create', null, lore('survivor'))
-    const source = change('tidy', 'e8', 'made', 'delete', lore('made'), null)
+    // One Tidy save: the survivor under a new id, then its sources removed, linked to it.
+    const survivor = change('tidy', 'e8', 'survivor', 'create', null, lore('survivor'))
+    const source = (id: string) => ({
+      ...change('tidy', 'e8', id, 'delete', lore(id), null),
+      after: { mergedInto: 'survivor' },
+    })
     const query = (records: WorldStateRecord[]) =>
       planChapterLoreRevert({
         endEntryId: 'e5',
@@ -456,10 +459,22 @@ describe('undoing a chapter lore', () => {
         state: loreState(lore('survivor')),
         tracking,
       })
-    expect(query([made, merged, source])).toEqual({ ok: false, reason: 'merged' })
-    // A plain later delete is undone with the rest.
-    const deleted = change('manual', 'e8', 'made', 'delete', lore('made'), null)
-    expect(query([made, deleted]).ok).toBe(true)
+    const revert = query([made, survivor, source('made'), source('other')])
+    if (!revert.ok) throw new Error(revert.reason)
+    expect(revert.reverted.map((r) => r.entityId).sort()).toEqual([
+      'made',
+      'made',
+      'other',
+      'survivor',
+    ])
+    // The chapter's entry stays gone, the merge's other source comes back, the survivor goes.
+    expect(revert.plan.state.lorebookEntries.map((e) => e.id)).toEqual(['other'])
+
+    // A create in the same save as a plain delete is not a merge.
+    const unrelated = change('tidy', 'e8', 'fresh', 'create', null, lore('fresh'))
+    const deleted = change('tidy', 'e8', 'made', 'delete', lore('made'), null)
+    const plain = query([made, unrelated, deleted])
+    expect(plain.ok && plain.reverted.map((r) => r.entityId)).toEqual(['made', 'made'])
   })
 
   it('is refused when nothing was recorded, or recording broke since the chapter', () => {

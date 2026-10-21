@@ -153,10 +153,11 @@ delete never lists the undone records again, and a past state is rebuilt from a 
 the live one at worst. A past checkpoint only reads records, and invalidates nothing. The undo is
 refused unless everything since was recorded (tracking on since before the chapter's records, and
 no break or non-continuous header after them), since an unrecorded edit would be overwritten; that
-also means no closing snapshot lies in the span it deletes. It is refused when a later save merged an
-entry the chapter wrote, since the survivor carries a new id no record ties to its sources and
-undoing the source's removal would split the merge, and when a branch forks at or after the
-chapter's end, since that branch inherits the lore and the history that records it. A chapter the
+also means no closing snapshot lies in the span it deletes. A later merge is followed whole: a
+lore session records each source's delete with `{ mergedInto }`, the survivor's id, so the undo
+reverts the survivor and every source of the merge with the chapter's lore. It is refused when a
+branch forks at or after the chapter's end, since that branch inherits the lore and the history
+that records it. A chapter the
 open branch inherits
 cannot be deleted from it at all (`ownsChapter`): its row belongs to the branch it was cut on, and the
 records reached through the line would revert that branch's lorebook instead of this one's.

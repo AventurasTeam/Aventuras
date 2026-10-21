@@ -135,9 +135,11 @@ SET seq = ordered.rn
 FROM ordered
 WHERE ordered.id = world_state_changes.id AND world_state_changes.seq IS NOT ordered.rn;
 
--- A mark's id is 'mark:<entity_type>:<entity_id>', so it goes with what it marks by key.
+-- For reading a branch line's marks.
 CREATE INDEX IF NOT EXISTS idx_wsc_marks ON world_state_changes(story_id, branch_id, seq)
     WHERE kind = 'mark';
+
+-- A mark's id is 'mark:<entity_type>:<entity_id>', so it goes with what it marks by key.
 
 CREATE TRIGGER IF NOT EXISTS wsc_mark_snapshot_gone AFTER DELETE ON world_state_snapshots
 BEGIN

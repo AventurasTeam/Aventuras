@@ -128,13 +128,11 @@
           <p class="text-muted-foreground text-sm">
             {preview.refusal === 'interrupted' || preview.refusal === 'untracked'
               ? "The chapter's lore will stay in the lorebook: changes made since it may not have been recorded."
-              : preview.refusal === 'merged'
-                ? "The chapter's lore will stay in the lorebook: an entry it wrote was merged into another since, which undoing would split."
-                : preview.refusal === 'forked'
-                  ? "The chapter's lore will stay in the lorebook: a branch forked after it inherits that lore."
-                  : preview.refusal === 'inherited'
-                    ? 'This chapter was cut on another branch, and can only be deleted there.'
-                    : 'No lore management changes were recorded for this chapter.'}
+              : preview.refusal === 'forked'
+                ? "The chapter's lore will stay in the lorebook: a branch forked after it inherits that lore."
+                : preview.refusal === 'inherited'
+                  ? 'This chapter was cut on another branch, and can only be deleted there.'
+                  : 'No lore management changes were recorded for this chapter.'}
           </p>
         {/if}
       </div>

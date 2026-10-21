@@ -13,6 +13,7 @@ export function recordEntityIds(record: WorldStateRecord): string[] {
   for (const row of [record.before, record.after]) {
     if (typeof row?.id === 'string') ids.push(row.id)
     if (typeof row?.overridesId === 'string') ids.push(row.overridesId)
+    if (typeof row?.mergedInto === 'string') ids.push(row.mergedInto)
   }
   return ids
 }
@@ -37,6 +38,7 @@ function remapRow(
   if ('storyId' in out) out.storyId = m.newStoryId
   if ('branchId' in out) out.branchId = m.mapBranchId((out.branchId as string | null) ?? null)
   if (typeof out.overridesId === 'string') out.overridesId = m.mapEntityId(out.overridesId)
+  if (typeof out.mergedInto === 'string') out.mergedInto = m.mapEntityId(out.mergedInto)
   if ('metadata' in out && out.metadata) out.metadata = m.remapMetadata(out.metadata, type)
   // An item's location is a location id, or the 'inventory' sentinel.
   if (type === 'item' && typeof out.location === 'string' && out.location !== 'inventory') {

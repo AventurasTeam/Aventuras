@@ -69,8 +69,7 @@ export function marksHolding(
  * Why a chapter's lore cannot be undone: none was recorded, what came after may not be, or the
  * chapter belongs to the branch it was cut on, whose records the open branch only inherits.
  */
-export type ChapterLoreRefusal =
-  'nothing' | 'untracked' | 'interrupted' | 'inherited' | 'merged' | 'forked'
+export type ChapterLoreRefusal = 'nothing' | 'untracked' | 'interrupted' | 'inherited' | 'forked'
 
 export type ChapterLoreRevert =
   | { ok: false; reason: ChapterLoreRefusal }
@@ -111,21 +110,32 @@ export function planChapterLoreRevert(query: ChapterLoreQuery): ChapterLoreRever
     return { ok: false, reason: 'interrupted' }
   }
 
-  // An override written later on a lightweight branch carries on the row it shadows.
+  // The later changes to the same lorebook entries. An override written later on a lightweight
+  // branch carries on the row it shadows, and a merge carries a source on in its survivor, with
+  // the merge's other sources, so the whole merge is undone with it.
   const ids = new Set(undone.map((r) => r.entityId))
   const own = new Set(undone.map((r) => r.id))
-  const later: WorldStateChangeRecord[] = []
-  for (const r of since) {
-    if (r.kind !== 'change' || r.entityType !== 'lorebook_entry' || own.has(r.id)) continue
-    const shadows = r.op === 'create' && ids.has((r.before as { id?: string } | null)?.id ?? '')
-    if (shadows) ids.add(r.entityId)
-    if (ids.has(r.entityId)) later.push(r)
+  const candidates = since.filter(
+    (r): r is WorldStateChangeRecord =>
+      r.kind === 'change' && r.entityType === 'lorebook_entry' && !own.has(r.id),
+  )
+  for (let grew = true; grew;) {
+    grew = false
+    const follow = (id: string) => {
+      if (!ids.has(id)) {
+        ids.add(id)
+        grew = true
+      }
+    }
+    for (const r of candidates) {
+      const shadowed = r.op === 'create' ? (r.before as { id?: string } | null)?.id : undefined
+      if (shadowed && ids.has(shadowed)) follow(r.entityId)
+      const into = mergedInto(r)
+      if (into && ids.has(r.entityId)) follow(into)
+      if (into && ids.has(into)) follow(r.entityId)
+    }
   }
-  // A merge writes its survivor under a new id, which no record ties to its sources: undoing a
-  // source's removal would leave the survivor holding the chapter's text.
-  if (later.some((r) => r.op === 'delete' && savedWithCreate(r, since))) {
-    return { ok: false, reason: 'merged' }
-  }
+  const later = candidates.filter((r) => ids.has(r.entityId))
 
   const plan = planReversal({
     state: query.state,
@@ -142,17 +152,9 @@ export function planChapterLoreRevert(query: ChapterLoreQuery): ChapterLoreRever
   }
 }
 
-/**
- * Whether a lorebook entry was created in the save that wrote `record`. A save is one
- * transaction, so its records run in unbroken `seq` order with the same origin and entry.
- */
-function savedWithCreate(record: WorldStateChangeRecord, records: WorldStateRecord[]): boolean {
-  const bySeq = new Map(records.map((r) => [r.seq, r]))
-  const sameSave = (r: WorldStateRecord | undefined): r is WorldStateChangeRecord =>
-    r?.kind === 'change' && r.origin === record.origin && r.entryId === record.entryId
-  for (let seq = record.seq - 1; ; seq--) {
-    const r = bySeq.get(seq)
-    if (!sameSave(r)) return false
-    if (r.entityType === 'lorebook_entry' && r.op === 'create' && r.before === null) return true
-  }
+/** The survivor a lore session merged this delete's entry into, if it did. */
+function mergedInto(record: WorldStateChangeRecord): string | undefined {
+  if (record.op !== 'delete' && record.op !== 'softDelete') return undefined
+  const into = (record.after as { mergedInto?: unknown } | null)?.mergedInto
+  return typeof into === 'string' ? into : undefined
 }

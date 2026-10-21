@@ -1222,15 +1222,15 @@ class StoryStore {
     return false
   }
 
+  private forksAtOrAfter(branch: Branch, position: number): boolean {
+    return this.entries.some((e) => e.id === branch.forkEntryId && e.position >= position)
+  }
+
   /**
    * Every destructive operation that removes entries from a position onward runs this first,
    * before any rollback: a branch forked at or after that position would survive with a fork
    * point that no longer exists, and a rollback already applied cannot be taken back.
    */
-  private forksAtOrAfter(branch: Branch, position: number): boolean {
-    return this.entries.some((e) => e.id === branch.forkEntryId && e.position >= position)
-  }
-
   private assertNoBranchForkAtOrAfter(position: number): void {
     const forked = this.branches.find((b) => this.forksAtOrAfter(b, position))
     if (forked) {
@@ -3111,12 +3111,20 @@ class StoryStore {
       records.push(this.record(ctx, 'lorebook_entry', entry.id, 'create', null, entry))
       rows = [...rows, entry]
     }
-    const remove = (id: string) => {
+    // `into`: the survivor a merge folds this entry into, kept on its delete record so an undo
+    // can follow the merge to the entry that holds its text.
+    const remove = (id: string, into?: string) => {
       const existing = find(id)
       if (!existing) return
       const removal = this.deletePlan('lorebook_entry', existing, ctx)
       statements.push(...removal.statements)
-      records.push(...removal.records)
+      records.push(
+        ...removal.records.map((r) =>
+          r?.kind === 'change' && into && (r.op === 'delete' || r.op === 'softDelete')
+            ? { ...r, after: { mergedInto: into } }
+            : r,
+        ),
+      )
       rows = rows.filter((e) => e.id !== existing.id)
     }
 
@@ -3144,7 +3152,7 @@ class StoryStore {
     // The survivor first: a source deleted before it would be lost if the insert failed.
     for (const { sourceIds, merged } of writes.merges) {
       add(merged)
-      for (const id of sourceIds) remove(id)
+      for (const id of sourceIds) remove(id, merged.id)
     }
     for (const id of writes.deletes) remove(id)
 
