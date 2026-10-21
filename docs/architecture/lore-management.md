@@ -167,8 +167,8 @@ a chapter creation card on its branch is still working or any session holds the 
 `LoreSessionLedger`; once it has finished, `saveLoreSession` hands the whole session to
 `onSaveSession`, and `story.saveLoreSession` writes it in one transaction with its records:
 creates, updates, merges (survivor first), deletes, each planned against the lorebook the ones
-before it leave, so a merge of an entry the same session updated on a lightweight branch takes the
-copy the update wrote. A session that fails at any point, its save included, leaves the lorebook
+before it leave. An entry the session updated is never also merged or deleted by it: the ledger
+folds that into the merge or the delete. A session that fails at any point, its save included, leaves the lorebook
 and its records as they were, which is why an incomplete chapter's card has no lore to report.
 
 In the activity record a run is a list of model calls and tool calls side by side. A model call is

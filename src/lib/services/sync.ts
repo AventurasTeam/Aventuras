@@ -156,7 +156,8 @@ class SyncService {
       // Omitted when empty, as `exportToAventura` does.
       ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
       ...(worldStateRecords.length > 0 ? { worldStateRecords } : {}),
-      ...(worldStateMarks.length > 0 ? { worldStateMarks } : {}),
+      // Always written, empty included: import reads an absent field as a file from before marks.
+      worldStateMarks,
       // Omitted rather than written as null, so a story with no pack keeps the shape that takes
       // the legacy import path — matching what `exportToAventura` produces.
       ...(packBinding ? { packBinding } : {}),

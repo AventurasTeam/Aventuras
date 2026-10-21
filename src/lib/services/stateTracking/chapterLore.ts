@@ -44,17 +44,23 @@ export function loreOwners(
 
 /**
  * The snapshots or checkpoints whose saved state holds what a chapter-lore undo reverts: those
- * marked after the first record it reverts, on entries of the open line. An ancestor branch's mark
- * past the fork sits on an entry the line does not have, and is left alone.
+ * marked on the chapter's own branch, at an entry of its line, after the first record it reverts.
+ * An ancestor's mark never holds the lore, even at a shared entry taken after it.
  */
 export function marksHolding(
   marks: WorldStateMark[],
   reverted: WorldStateRecord[],
-  lineEntryIds: ReadonlySet<string>,
+  scope: { branchId: string | null; lineEntryIds: ReadonlySet<string> },
   type: 'snapshot' | 'checkpoint',
 ): WorldStateMark[] {
   const since = Math.min(...reverted.map((r) => r.seq))
-  return marks.filter((m) => m.entityType === type && m.seq > since && lineEntryIds.has(m.entryId))
+  return marks.filter(
+    (m) =>
+      m.entityType === type &&
+      m.seq > since &&
+      m.branchId === scope.branchId &&
+      scope.lineEntryIds.has(m.entryId),
+  )
 }
 
 /**

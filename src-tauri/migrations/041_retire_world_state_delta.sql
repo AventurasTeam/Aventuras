@@ -1,10 +1,5 @@
--- Moves every old per-entry world_state_delta into world_state_changes, strips the copies kept in
--- checkpoints, drops the column, and gives every snapshot, checkpoint and chapter its mark. The
--- conversion produces exactly what fromWorldStateDelta builds (services/stateTracking/legacy.ts);
--- the fixture next to it is asserted against both.
---
--- A converted header is marked by origin 'legacy': it recorded the classifier only. Its rows sort
--- below every existing seq, and an entry that already has a header of its own is skipped.
+-- Converts world_state_delta into records and drops it, then marks snapshots, checkpoints and
+-- chapters; see docs/architecture/state-tracking.md. Matches fromWorldStateDelta (legacy.ts).
 
 INSERT INTO world_state_changes
     (id, story_id, branch_id, entry_id, seq, kind, origin, entity_type, entity_id, op,
@@ -110,17 +105,7 @@ WHERE json_valid(entries_snapshot) AND entries_snapshot LIKE '%"worldStateDelta"
 
 ALTER TABLE story_entries DROP COLUMN world_state_delta;
 
--- kind 'mark': where a snapshot, a checkpoint or a chapter was made in the write order.
--- `entity_type` names which and `entity_id` its row; the entry is the snapshot's, the
--- checkpoint's last or the chapter's end. A snapshot or checkpoint holds every record before its
--- mark, and a chapter's lore is recorded after its own, so reading the order compares `seq`
--- rather than creation times.
---
--- Existing ones are placed, then every row of a story is renumbered from 1 in that order. Among
--- the rows converted above (seq <= 0) a mark goes after those of entries up to its own: an old
--- snapshot or checkpoint was taken with its entry the latest classified, and a converted row's
--- time is its entry's, which a sync or import resets. Among rows written since (seq > 0) it goes
--- after the last one written by the time it was made.
+-- Marks: placed by entry among converted rows (seq <= 0), by time among later ones.
 
 INSERT INTO world_state_changes
     (id, story_id, branch_id, entry_id, seq, kind, origin, entity_type, entity_id, op,
@@ -141,8 +126,7 @@ SELECT 'mark:chapter:' || ch.id, ch.story_id, ch.branch_id, ch.end_entry_id, 0, 
 FROM chapters ch
 WHERE EXISTS (SELECT 1 FROM story_entries e WHERE e.id = ch.end_entry_id);
 
--- Each mark's key is a running maximum over the story's rows: among rows written since, in time
--- order; among converted rows, in entry order. One pass each, not a lookup per mark.
+-- A mark's key is a running maximum of seq, in time order and in entry order.
 WITH placed AS (
     SELECT w.id, w.story_id, w.seq, w.created_at, e.position,
            CASE WHEN w.kind = 'mark' THEN 1 ELSE 0 END AS m

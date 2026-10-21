@@ -103,7 +103,7 @@ export type RunGap =
   | { cause: 'header'; entryId: string; sinceEntryId: string | null }
   /**
    * Records may be missing after it: an export could not vouch for tracking since the branch's
-   * last record, or an entry with records was deleted without a rollback.
+   * last record.
    */
   | { cause: 'break'; entryId: string }
   | { cause: 'trackingOff' }

@@ -66,12 +66,7 @@ describe('a lore management session', () => {
     expect(body()).toContain('this.recordContext(opts)')
   })
 
-  it('plans a merge after an update against the row the update left', () => {
-    // An update on a lightweight branch writes a copy; a later write to the row finds the copy.
-    expect(body()).toContain('copies[existing.id] = owned.id')
-    expect(body()).toMatch(
-      /const find = \(id: string\) => rows\.find\(\(e\) => e\.id === \(copies\[id\] \?\? id\)\)/,
-    )
+  it('plans the merges and deletes after the updates', () => {
     expect(body().indexOf('for (const entry of writes.updates)')).toBeLessThan(
       body().indexOf('for (const { sourceIds, merged } of writes.merges)'),
     )
@@ -80,9 +75,9 @@ describe('a lore management session', () => {
   it('commits once, and shows nothing unless that commit lands', () => {
     expect(body().match(/await this\.commit\(/g)).toHaveLength(1)
     expect(body()).not.toMatch(/await database\./)
-    expect(body().indexOf('await this.commit(')).toBeLessThan(
-      body().indexOf('this.lorebookEntries = rows'),
-    )
+    // And only on the lorebook still open, not the copy taken before the await.
+    expect(body().indexOf('await this.commit(')).toBeLessThan(body().indexOf('this.isOpen('))
+    expect(body().indexOf('this.isOpen(')).toBeLessThan(body().indexOf('this.lorebookEntries = ['))
   })
 })
 

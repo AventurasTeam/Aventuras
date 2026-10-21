@@ -121,7 +121,8 @@ past-checkpoint form shows the revert lines.
 
 Deleting an entry without a rollback (the switch, Revert on Delete off, an error entry dismissed)
 leaves its changes live, so its changes and breaks move to a neighbouring entry in the same
-transaction (`recordsHolder`), and its header goes with it. A narration's move to the entry after
+transaction (`recordsHolder`). Its header goes with it unless it marks a gap (not continuous): that
+is the only record of the gap, and moves too. A narration's move to the entry after
 it: they were made after the entry before, whose state still leaves them out, and a revert from the
 entry after lists and undoes them. A user action's move to the entry before it: they were made
 before the narration answering it, so regenerating that narration must keep them. Either takes the

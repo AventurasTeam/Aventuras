@@ -1730,11 +1730,7 @@ class DatabaseService {
   /** These snapshots, with their marks. */
   deleteWorldStateSnapshotsStatements(ids: string[]): DbStatement[] {
     return chunkedStatements(ids, (slice, list) => [
-      statement(
-        `DELETE FROM world_state_changes
-         WHERE kind = 'mark' AND entity_type = 'snapshot' AND entity_id IN (${list})`,
-        slice,
-      ),
+      snapshotMarksStatement(`id IN (${list})`, slice),
       statement(`DELETE FROM world_state_snapshots WHERE id IN (${list})`, slice),
     ])
   }
@@ -2865,8 +2861,9 @@ class DatabaseService {
     chapterIds?: string[]
     checkpointIds?: string[]
     /**
-     * The entry the deleted entries' changes and breaks move to, their effects staying live;
-     * their headers go with them. Without it, every record goes.
+     * The entry the deleted entries' changes and breaks move to, their effects staying live, with
+     * a header that marks a gap: it is the only record of one. Other headers go with their entry.
+     * Without it, every record goes.
      */
     recordsTo?: string
   }): Promise<void> {
@@ -2874,7 +2871,9 @@ class DatabaseService {
       ? chunkedStatements(entryIds, (slice, list) => [
           statement(
             `UPDATE world_state_changes SET entry_id = ?
-             WHERE kind IN ('change', 'break') AND entry_id IN (${list})`,
+             WHERE (kind IN ('change', 'break')
+                    OR (kind = 'header' AND continuous = 0 AND origin IS NULL))
+               AND entry_id IN (${list})`,
             [recordsTo, ...slice],
           ),
         ])
@@ -3104,7 +3103,6 @@ class DatabaseService {
       translatedContent: row.translated_content || null,
       translationLanguage: row.translation_language || null,
       originalInput: row.original_input || null,
-      // Phase 1: World state delta
       // Persisted action suggestions for time-travel
       suggestedActions: row.suggested_actions || null,
     }

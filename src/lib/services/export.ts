@@ -76,7 +76,8 @@ class ExportService {
       ...(packBinding ? { packBinding } : {}),
       ...(timeAnchors.length > 0 ? { timeAnchors } : {}),
       ...(worldStateRecords.length > 0 ? { worldStateRecords } : {}),
-      ...(worldStateMarks.length > 0 ? { worldStateMarks } : {}),
+      // Always written, empty included: import reads an absent field as a file from before marks.
+      worldStateMarks,
     }
 
     const target = await resolveSaveTarget(`${this.sanitizeFilename(story.title)}.avt`, [

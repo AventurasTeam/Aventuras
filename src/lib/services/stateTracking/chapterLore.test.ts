@@ -40,7 +40,7 @@ describe('loreOwners', () => {
 
 describe('marksHolding', () => {
   const snap = (entityId: string, seq: number, entryId: string) =>
-    ({ entityType: 'snapshot', entityId, seq, entryId }) as WorldStateMark
+    ({ entityType: 'snapshot', entityId, seq, entryId, branchId: null }) as WorldStateMark
 
   it('takes the snapshots on the line marked after the first reverted record', () => {
     const marks = [
@@ -50,12 +50,17 @@ describe('marksHolding', () => {
       snap('parent', 6, 'p9'),
       { ...snap('chapter', 7, 'e4'), entityType: 'chapter' } as WorldStateMark,
     ]
-    const line = new Set(['e1', 'e3', 'e4'])
+    const line = { branchId: null, lineEntryIds: new Set(['e1', 'e3', 'e4']) }
     const held = marksHolding(marks, [lore('e3', 3), lore('e3', 4)], line, 'snapshot')
     expect(held.map((m) => m.entityId)).toEqual(['after'])
     const checkpoint = { ...snap('cp', 8, 'e4'), entityType: 'checkpoint' } as WorldStateMark
     expect(marksHolding([...marks, checkpoint], [lore('e3', 3)], line, 'checkpoint')).toEqual([
       checkpoint,
     ])
+    // An ancestor's checkpoint at a shared entry, taken after the lore, never held it.
+    const ancestors = { ...checkpoint, branchId: 'main' } as WorldStateMark
+    expect(
+      marksHolding([ancestors], [lore('e3', 3)], { ...line, branchId: 'b' }, 'checkpoint'),
+    ).toEqual([])
   })
 })

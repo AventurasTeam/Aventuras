@@ -3082,10 +3082,9 @@ class StoryStore {
     const ctx = this.recordContext(opts)
     const statements: DbStatement[] = []
     const records: (WorldStateRecord | null)[] = []
-    let rows = [...this.lorebookEntries]
-    // A write to an inherited row lands on its copy, and later writes to that row follow it.
-    const copies: Record<string, string> = {}
-    const find = (id: string) => rows.find((e) => e.id === (copies[id] ?? id))
+    const before = this.lorebookEntries
+    let rows = [...before]
+    const find = (id: string) => rows.find((e) => e.id === id)
 
     const add = (data: Entry) => {
       const now = Date.now()
@@ -3115,7 +3114,6 @@ class StoryStore {
       if (!existing) throw new Error(`Lorebook entry not found: ${entry.name}`)
       const cow = this.cowPlan('lorebook_entry', existing, ctx)
       const owned = cow.entity
-      if (cow.wasCowed) copies[existing.id] = owned.id
       // Which row this is stays the row's own; the session hands over whole entries.
       const {
         id: _id,
@@ -3139,7 +3137,20 @@ class StoryStore {
     for (const id of writes.deletes) remove(id)
 
     await this.commit(statements, records)
-    this.lorebookEntries = rows
+    // Another story or branch opened meanwhile loads its own lorebook, this save included.
+    if (!this.isOpen({ storyId, branchId: branchId ?? null })) return
+    // Applied to the lorebook as it is now, not the copy taken before the await.
+    const unchanged = new Set(before)
+    const changed = rows.filter((e) => !unchanged.has(e))
+    const kept = new Set(rows.map((e) => e.id))
+    const removed = new Set(before.filter((e) => !kept.has(e.id)).map((e) => e.id))
+    const current = new Set(this.lorebookEntries.map((e) => e.id))
+    this.lorebookEntries = [
+      ...this.lorebookEntries
+        .filter((e) => !removed.has(e.id))
+        .map((e) => changed.find((c) => c.id === e.id) ?? e),
+      ...changed.filter((c) => !current.has(c.id)),
+    ]
     this.invalidateRetrievalCache()
     log('Lore session saved:', {
       created: writes.creates.length,
@@ -3971,16 +3982,16 @@ class StoryStore {
   }
 
   // Delete a chapter
-  /**
-   * Whether this is the open branch's last chapter, the only one that can be deleted: the next
-   * chapter starts where the last one ends, so deleting an earlier one leaves its entries uncut.
-   */
   /** Whether the open branch cut this chapter itself, rather than inheriting it. */
   ownsChapter(chapterId: string): boolean {
     const chapter = this.chapters.find((ch) => ch.id === chapterId)
     return !!chapter && (chapter.branchId ?? null) === (this.currentStory?.currentBranchId ?? null)
   }
 
+  /**
+   * Whether this is the open branch's last chapter, the only one that can be deleted: the next
+   * chapter starts where the last one ends, so deleting an earlier one leaves its entries uncut.
+   */
   isLastChapter(chapterId: string): boolean {
     const chapters = this.currentBranchChapters
     const last = chapters.reduce<Chapter | null>(
@@ -4081,11 +4092,14 @@ class StoryStore {
       },
     })
     if (!revert.ok) return { revert, ...none }
-    const line = new Set(this.entries.map((e) => e.id))
+    const scope = {
+      branchId: this.currentStory?.currentBranchId ?? null,
+      lineEntryIds: new Set(this.entries.map((e) => e.id)),
+    }
     return {
       revert,
-      snapshots: marksHolding(marks, revert.reverted, line, 'snapshot'),
-      checkpoints: marksHolding(marks, revert.reverted, line, 'checkpoint'),
+      snapshots: marksHolding(marks, revert.reverted, scope, 'snapshot'),
+      checkpoints: marksHolding(marks, revert.reverted, scope, 'checkpoint'),
     }
   }
 
