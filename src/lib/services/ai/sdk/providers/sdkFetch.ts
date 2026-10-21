@@ -74,6 +74,8 @@ export function createSdkFetch(options: SdkFetchOptions) {
           headers: headersFor(init),
           body: init?.body,
           signal: guard.signal,
+          // The SDK follows redirects itself, to validate each hop.
+          ...(init?.redirect === 'manual' && { maxRedirections: 0 }),
         }),
       )
       if (debug.isActive) logResponse(response, debugId, serviceId, startTime)

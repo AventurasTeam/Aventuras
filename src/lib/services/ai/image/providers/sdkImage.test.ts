@@ -187,4 +187,35 @@ describe('a url-only OpenAI-compatible reply', () => {
     const same = await run('https://api.test/files/a.png')
     expect(authorization(same.fetchMock.mock.calls[1])).toBe('Bearer secret')
   })
+
+  it('follows a redirect hop by hop and drops the key once it leaves the API origin', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/images/generations')) {
+        return Response.json({ data: [{ url: 'https://api.test/files/a.png' }] })
+      }
+      if (url === 'https://api.test/files/a.png') {
+        return new Response(null, { status: 302, headers: { location: 'https://cdn.test/a.png' } })
+      }
+      return new Response(PNG_BYTES, { headers: { 'content-type': 'image/png' } })
+    })
+    const provider = createOpenAICompatible({
+      name: 'openaiCompatible',
+      baseURL: 'https://api.test/v1',
+      apiKey: 'secret',
+      fetch: fetchMock,
+    })
+
+    const result = await generateSdkImage({ model: provider.imageModel('m'), prompt: 'x' })
+
+    expect(result).toEqual({ base64: 'iVBORw==' })
+    const downloads = fetchMock.mock.calls.slice(1)
+    expect(downloads.map(([url]) => String(url))).toEqual([
+      'https://api.test/files/a.png',
+      'https://cdn.test/a.png',
+    ])
+    expect(downloads.map((call) => call[1]?.redirect)).toEqual(['manual', 'manual'])
+    expect(authorization(downloads[0])).toBe('Bearer secret')
+    expect(authorization(downloads[1])).toBeNull()
+  })
 })

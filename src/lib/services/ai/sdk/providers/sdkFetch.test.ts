@@ -88,6 +88,24 @@ describe('request bodies', () => {
   })
 })
 
+describe('redirects', () => {
+  beforeEach(() => {
+    mockFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
+  })
+
+  it('has the plugin return a 3xx instead of following it when the caller asks for manual', async () => {
+    await sdkFetch()(API_URL, { redirect: 'manual' })
+
+    expect(mockFetch.mock.calls[0][1]).toMatchObject({ maxRedirections: 0 })
+  })
+
+  it('leaves the plugin to follow redirects otherwise', async () => {
+    await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
+
+    expect(mockFetch.mock.calls[0][1]).not.toHaveProperty('maxRedirections')
+  })
+})
+
 describe('responses', () => {
   it('returns an error status instead of throwing, body intact', async () => {
     mockFetch.mockResolvedValueOnce(new Response('{"error":"slow down"}', { status: 429 }))
