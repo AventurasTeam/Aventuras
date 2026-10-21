@@ -34,7 +34,7 @@
     "@ai-sdk/groq": "^4.0.59",
     "@ai-sdk/mistral": "^4.0.62",
     "@ai-sdk/openai": "^4.0.91",
-    "@ai-sdk/openai-compatible": "^3.0.67",
+    "@ai-sdk/openai-compatible": "^3.0.70",
     "@ai-sdk/xai": "^5.0.20",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-liquid": "^6.3.3",
