@@ -152,6 +152,7 @@ describe('Send with deferred work', () => {
         runId: expect.any(String),
         kind: PERIODIC_CLASSIFIER_KIND,
         branchId: 'b1',
+        work: 'pass',
       },
     ])
     // The regenerated turn chains nothing while the work stays deferred.

@@ -149,6 +149,7 @@ describe('deferred work', () => {
       runId: held.runId,
       kind: PERIODIC_CLASSIFIER_KIND,
       branchId: 'b1',
+      work: 'pass',
     })
     const tx = expectRan(await start.origin)
     expect(tx.outcome).toBe('aborted')
@@ -332,6 +333,21 @@ describe('deferred work', () => {
     expect(tx.error?.detail).toMatch(/^reverse-replay failed/)
     expect(generationStore.getTxState().deferred.size).toBe(0)
     expect(seen.map((e) => e.type)).toEqual(['run_complete'])
+  })
+
+  it('records an interrupted close in its own slot and names it on run_deferred', async () => {
+    const { ctx } = await makeHarness()
+    defineStandIn('chapter-close')
+    const seen = recordTerminalEvents()
+
+    const { start } = await startHeld('chapter-close', ctx)
+    await interruptMemoryRuns('b1')
+
+    expect(expectRan(await start.origin).outcome).toBe('aborted')
+    expect(deferredOnB1()).toEqual({ close: true })
+    expect(seen.filter((e) => e.type === 'run_deferred')).toEqual([
+      expect.objectContaining({ kind: 'chapter-close', work: 'close' }),
+    ])
   })
 
   it('records nothing for an interruptible run of a kind that maps to no deferred work', async () => {

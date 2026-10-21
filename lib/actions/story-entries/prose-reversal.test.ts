@@ -210,6 +210,7 @@ describe('bracketProseReversal — the interrupt', () => {
         type: 'run_deferred',
         kind: PERIODIC_CLASSIFIER_KIND,
         branchId: 'b1',
+        work: 'pass',
       }),
     ])
   })

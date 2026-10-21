@@ -3,7 +3,7 @@ import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
-import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
+import type { AppSettingsSnapshot, DeferredWorkKind, RunState } from '@/lib/stores'
 
 export type PipelineError =
   | { kind: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
@@ -61,7 +61,8 @@ export type PipelineEvent =
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
-  | { type: 'run_deferred'; runId: string; kind: string; branchId: string }
+  // `work` is the slot newly recorded; `kind` is the run's, for diagnostics.
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string; work: DeferredWorkKind }
   | PhaseEmittedEvent
 
 // Caller-supplied run parameters, keyed by kind. Only kinds that REQUIRE inputs

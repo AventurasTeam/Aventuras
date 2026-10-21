@@ -229,19 +229,22 @@ describe('nextMemoryRun', () => {
   })
 
   it.each([
-    [PERIODIC_CLASSIFIER_KIND, { pass: true }],
-    ['chapter-close', { close: true }],
-  ] as const)('names nothing while the branch holds deferred work (%s)', async (kind, recorded) => {
-    const { db, ctx } = await makeHarness()
-    await seedEntries(db, 2)
-    openStory(2)
-    const interrupted = turnRun({ runId: `run_${kind}`, kind, interruptible: true })
-    generationStore.startRun(interrupted)
-    expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe(true)
-    expect(generationStore.getTxState().deferred.get('b1')).toEqual(recorded)
+    [PERIODIC_CLASSIFIER_KIND, 'pass', { pass: true }],
+    ['chapter-close', 'close', { close: true }],
+  ] as const)(
+    'names nothing while the branch holds deferred work (%s)',
+    async (kind, slot, recorded) => {
+      const { db, ctx } = await makeHarness()
+      await seedEntries(db, 2)
+      openStory(2)
+      const interrupted = turnRun({ runId: `run_${kind}`, kind, interruptible: true })
+      generationStore.startRun(interrupted)
+      expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe(slot)
+      expect(generationStore.getTxState().deferred.get('b1')).toEqual(recorded)
 
-    expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
-  })
+      expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
+    },
+  )
 
   it('ignores work deferred on another branch', async () => {
     const { db, ctx } = await makeHarness()
@@ -254,7 +257,7 @@ describe('nextMemoryRun', () => {
       branchId: 'b2',
     })
     generationStore.startRun(elsewhere)
-    expect(generationStore.abortRun(elsewhere.runId, 'aborted')).toBe(true)
+    expect(generationStore.abortRun(elsewhere.runId, 'aborted')).toBe('pass')
 
     expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
   })

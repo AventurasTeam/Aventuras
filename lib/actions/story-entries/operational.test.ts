@@ -1373,6 +1373,7 @@ describe('rollback during a pass', () => {
         runId: expect.any(String),
         kind: PERIODIC_CLASSIFIER_KIND,
         branchId: 'b1',
+        work: 'pass',
       },
     ])
   })

@@ -453,6 +453,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
       runId: run.runId,
       kind: run.kind,
       branchId: run.branchId,
+      work: newlyDeferred,
     })
   run.resolveTerminal()
   return { runId: run.runId, actionId: run.actionId, outcome, ...(error ? { error } : {}) }

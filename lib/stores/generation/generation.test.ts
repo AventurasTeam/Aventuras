@@ -12,6 +12,7 @@ import {
   isStoryBusy,
   isUserEditBlocked,
   selectMemoryRun,
+  type DeferredWorkKind,
   type RunState,
   type TxState,
 } from './generation'
@@ -167,21 +168,21 @@ describe('deferred work', () => {
       const state = generationStore.getTxState()
       seen.push({ registered: state.runs.has('run_pass'), deferred: state.deferred.get('b1') })
     })
-    let recorded: boolean
+    let recorded: DeferredWorkKind | null
     try {
       recorded = generationStore.abortRun('run_pass', 'aborted')
     } finally {
       off()
     }
-    expect(recorded).toBe(true)
+    expect(recorded).toBe('pass')
     expect(seen).toEqual([{ registered: false, deferred: { pass: true } }])
   })
 
-  it('returns false when the work was already deferred, and keeps the record', () => {
+  it('returns null when the work was already deferred, and keeps the record', () => {
     generationStore.startRun(pass('run_first'))
     generationStore.abortRun('run_first', 'aborted')
     generationStore.startRun(pass('run_send', { beforeTurn: true }))
-    expect(generationStore.abortRun('run_send', 'aborted')).toBe(false)
+    expect(generationStore.abortRun('run_send', 'aborted')).toBeNull()
     expect(deferredOn('b1')).toEqual({ pass: true })
   })
 
@@ -203,11 +204,11 @@ describe('deferred work', () => {
     generationStore.startRun(pass('run_first'))
     generationStore.abortRun('run_first', 'aborted')
     generationStore.startRun(pass('run_send'))
-    expect(generationStore.abortRun('run_send', 'failed')).toBe(false)
+    expect(generationStore.abortRun('run_send', 'failed')).toBeNull()
     expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
 
     generationStore.startRun(pass('run_fresh'))
-    expect(generationStore.abortRun('run_fresh', 'failed')).toBe(false)
+    expect(generationStore.abortRun('run_fresh', 'failed')).toBeNull()
     expect(generationStore.getTxState().deferred.size).toBe(0)
   })
 
@@ -215,7 +216,7 @@ describe('deferred work', () => {
     generationStore.startRun(pass('run_first'))
     generationStore.abortRun('run_first', 'aborted')
     generationStore.startRun(pass('run_unwound'))
-    expect(generationStore.abortRun('run_unwound')).toBe(false)
+    expect(generationStore.abortRun('run_unwound')).toBeNull()
     expect(generationStore.getTxState().runs.has('run_unwound')).toBe(false)
     expect(deferredOn('b1')).toEqual({ pass: true })
 
@@ -228,7 +229,7 @@ describe('deferred work', () => {
     generationStore.startRun(pass('run_pass'))
     generationStore.abortRun('run_pass', 'aborted')
     generationStore.startRun(pass('run_close', { kind: 'chapter-close' }))
-    expect(generationStore.abortRun('run_close', 'aborted')).toBe(true)
+    expect(generationStore.abortRun('run_close', 'aborted')).toBe('close')
     expect(deferredOn('b1')).toEqual({ pass: true, close: true })
 
     generationStore.startRun(pass('run_send'))
@@ -249,18 +250,18 @@ describe('deferred work', () => {
 
   it('records nothing for an interruptible run of an unmapped kind', () => {
     generationStore.startRun(pass('run_other', { kind: 'some-interruptible' }))
-    expect(generationStore.abortRun('run_other', 'aborted')).toBe(false)
+    expect(generationStore.abortRun('run_other', 'aborted')).toBeNull()
     expect(generationStore.getTxState().deferred.size).toBe(0)
   })
 
   it('records nothing for a pass-kind run that is not interruptible', () => {
     generationStore.startRun(pass('run_plain', { interruptible: false }))
-    expect(generationStore.abortRun('run_plain', 'aborted')).toBe(false)
+    expect(generationStore.abortRun('run_plain', 'aborted')).toBeNull()
     expect(generationStore.getTxState().deferred.size).toBe(0)
   })
 
   it('records nothing for an unknown run id', () => {
-    expect(generationStore.abortRun('run_missing', 'aborted')).toBe(false)
+    expect(generationStore.abortRun('run_missing', 'aborted')).toBeNull()
     expect(generationStore.getTxState().deferred.size).toBe(0)
   })
 

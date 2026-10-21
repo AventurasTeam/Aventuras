@@ -127,7 +127,8 @@ type PipelineEvent =
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
-  | { type: 'run_deferred'; runId: string; kind: string; branchId: string }
+  // work: the slot newly recorded in txState.deferred; kind: the run's, for diagnostics
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string; work: 'pass' | 'close' }
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction }
@@ -545,7 +546,8 @@ that ends `aborted` records its kind for its branch (a pass as
 it. So every way a pass or a close is cancelled — the interrupt, the
 pill's or the banner's Cancel, Cancel & leave — defers it, and a
 failed one is left to the next commit's retry. A newly recorded
-deferral emits `run_deferred` on the bus, which raises the toast.
+deferral emits `run_deferred` on the bus naming the slot it recorded,
+which raises that slot's toast.
 
 ### Gate derivation as a selector
 
@@ -1021,7 +1023,8 @@ in-progress (currentPhase iterates)
                                                       │    or close records ('aborted') or clears
                                                       │    ('failed') its deferral in the same update
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
-                                                      │  emit run_deferred if the deferral is newly recorded
+                                                      │  emit run_deferred (work: the slot) if the
+                                                      │    deferral is newly recorded
 ```
 
 ### Crash recovery via `pipeline_runs` marker table

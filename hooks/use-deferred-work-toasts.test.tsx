@@ -3,7 +3,8 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { __resetBus, PER_TURN_KIND, pipelineEventBus } from '@/lib/pipeline'
+import { __resetBus, pipelineEventBus } from '@/lib/pipeline'
+import { type DeferredWorkKind } from '@/lib/stores'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { useDeferredWorkToasts } from './use-deferred-work-toasts'
@@ -13,8 +14,14 @@ function Probe() {
   return null
 }
 
-function deferred(kind: string): void {
-  pipelineEventBus.emit({ type: 'run_deferred', runId: `run-${kind}`, kind, branchId: 'branch-1' })
+function deferred(work: DeferredWorkKind, kind: string): void {
+  pipelineEventBus.emit({
+    type: 'run_deferred',
+    runId: `run-${kind}`,
+    kind,
+    branchId: 'branch-1',
+    work,
+  })
 }
 
 describe('useDeferredWorkToasts', () => {
@@ -34,7 +41,7 @@ describe('useDeferredWorkToasts', () => {
 
   it('toasts a deferred pass once, as info with no action', () => {
     render(<Probe />)
-    deferred(PERIODIC_CLASSIFIER_KIND)
+    deferred('pass', PERIODIC_CLASSIFIER_KIND)
     expect(shown).toEqual([
       expect.objectContaining({
         severity: 'info',
@@ -46,7 +53,7 @@ describe('useDeferredWorkToasts', () => {
 
   it('toasts a deferred chapter close with its own copy', () => {
     render(<Probe />)
-    deferred('chapter-close')
+    deferred('close', 'chapter-close')
     expect(shown).toEqual([
       expect.objectContaining({
         severity: 'info',
@@ -55,16 +62,18 @@ describe('useDeferredWorkToasts', () => {
     ])
   })
 
-  it('stays quiet for a kind that defers nothing', () => {
+  it('picks the copy from the deferred slot, not the run kind', () => {
     render(<Probe />)
-    deferred(PER_TURN_KIND)
-    expect(shown).toEqual([])
+    deferred('close', PERIODIC_CLASSIFIER_KIND)
+    expect(shown).toEqual([
+      expect.objectContaining({ message: 'Chapter close moved to your next turn.' }),
+    ])
   })
 
   it('stops toasting once unmounted', () => {
     const { unmount } = render(<Probe />)
     unmount()
-    deferred(PERIODIC_CLASSIFIER_KIND)
+    deferred('pass', PERIODIC_CLASSIFIER_KIND)
     expect(shown).toEqual([])
   })
 })

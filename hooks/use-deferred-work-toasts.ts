@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 
 import { t } from '@/lib/i18n'
 import { pipelineEventBus } from '@/lib/pipeline'
-import { deferredWorkKindOf, type DeferredWorkKind } from '@/lib/stores'
+import { type DeferredWorkKind } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const DEFERRED_WORK_COPY = {
@@ -18,8 +18,7 @@ export function useDeferredWorkToasts(): void {
   useEffect(
     () =>
       pipelineEventBus.subscribe('run_deferred', (event) => {
-        const kind = deferredWorkKindOf(event.kind)
-        if (kind != null) toast.info(t(DEFERRED_WORK_COPY[kind]))
+        toast.info(t(DEFERRED_WORK_COPY[event.work]))
       }),
     [],
   )
