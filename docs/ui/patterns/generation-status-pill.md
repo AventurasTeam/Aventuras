@@ -67,8 +67,8 @@ type GenerationStatusPillProps = {
   // ignored for every other phase.
   beforeTurn?: boolean
   error?: ErrorState
-  // Optional: ignored while the phase is uncancellable for its own reasons
-  // (a committing transaction, say), so a caller may pass it unconditionally.
+  // Absent, the tag renders bare with no popover: the caller omits it
+  // while its run can't be cancelled.
   onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }

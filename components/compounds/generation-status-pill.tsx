@@ -51,10 +51,10 @@ type ErrorState =
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
-  /** `updating-memory` running before the user's turn (Send's deferred work); ignored for other phases. */
+  /** `updating-memory` running before the user's turn (Send's deferred work); else ignored. */
   beforeTurn?: boolean
   error?: ErrorState
-  // Absent, the tag renders bare with no popover: a caller omits it while its run can't be cancelled.
+  // Absent, the tag renders bare with no popover: omit it while the run can't be cancelled.
   onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }
