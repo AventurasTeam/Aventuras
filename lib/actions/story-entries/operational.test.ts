@@ -1568,6 +1568,26 @@ describe('head-turn edits during a pass', () => {
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
+  // Both Saves read membership before either enters the bracket; the second check refuses the second.
+  it('refuses the second of two head-reply saves that race through the pass', async () => {
+    const { ctx, start } = await seedHeadTurnWithPass()
+
+    const results = await Promise.allSettled([
+      updateStoryEntryContent('b1', 'e3', 'first rewrite', ctx),
+      updateStoryEntryContent('b1', 'e3', 'second rewrite', ctx),
+    ])
+
+    expect(results).toEqual([
+      { status: 'fulfilled', value: { status: 'ok' } },
+      {
+        status: 'fulfilled',
+        value: expect.objectContaining({ status: 'rejected', code: 'in-flight-gated' }),
+      },
+    ])
+    expect(entriesStore.getById('e3')?.content).toBe('first rewrite')
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
   it('refuses a head-turn edit while a suggestion refresh runs beside the pass', async () => {
     const { ctx, start, held } = await seedHeadTurnWithPass()
     registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')

@@ -1145,6 +1145,49 @@ describe('undo and redo during a pass', () => {
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
+  // Both calls read their target before either enters the bracket; the re-check refuses the second.
+  it('refuses the second of two CTRL-Z presses that race through the pass', async () => {
+    const { ctx, pass } = await seedWithPass()
+    const start = startPass(ctx)
+    await pass.nextHeld()
+
+    const results = await Promise.allSettled([undoLastAction('b1', ctx), undoLastAction('b1', ctx)])
+
+    expect(results).toEqual([
+      { status: 'fulfilled', value: { status: 'ok' } },
+      { status: 'fulfilled', value: GATED },
+    ])
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
+  it('proceeds normally when the pass ends while the target is read', async () => {
+    const { ctx } = await seedWithPass()
+    expect(await updateStoryEntryContent('b1', 'e_turn', 'edited', ctx)).toEqual({ status: 'ok' })
+    generationStore.startRun({
+      runId: 'run_ending',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      gateBehavior: 'hard-gate',
+      interruptible: true,
+      beforeTurn: false,
+      actionId: 'act_ending',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: '',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+
+    // The edit group is not the turn, so only a gate that dropped during the read admits it.
+    const done = undoLastAction('b1', ctx)
+    generationStore.abortRun('run_ending')
+
+    expect(await done).toEqual({ status: 'ok' })
+    expect(entriesStore.getById('e_turn')?.content).toBe('a reply')
+  })
+
   // The target is chosen before the bracket; a write landing during the interrupt can move it.
   it('refuses inside the bracket when the target stopped being the turn during the interrupt', async () => {
     const { db, ctx, pass } = await seedWithPass({

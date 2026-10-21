@@ -58,7 +58,7 @@ async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
 }
 
 export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
-  // Only CTRL-Z of the turn passes a pass or a close, by interrupting it, so the target is read
+  // Only CTRL-Z of the turn passes a pass, by interrupting it, so the target is read
   // before the gate decides (principles.md → Edit restrictions during in-flight generation).
   let throughInterrupt = false
   if (generationStore.isUserEditBlocked()) {
@@ -142,11 +142,10 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       reason: 'redo stack does not belong to this branch',
     }
 
-  // A redo restores prose and reverses classifier output, so it interrupts any pass or close
-  // on the branch the way every other reversal does.
+  // Bracketed like every reversal, so no pass starts mid-sweep.
   return bracketProseReversal(branchId, () =>
     refusingIntegrity(branchId, async () => {
-      // A write committing during the interrupt clears the stack; its snapshot would restore over it.
+      // A write committing during the settle clears the stack; its snapshot would restore over it.
       if (undoRedoStore.peekRedoGroup() !== group)
         return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
       const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)

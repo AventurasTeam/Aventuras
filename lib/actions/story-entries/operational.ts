@@ -60,7 +60,8 @@ export async function updateStoryEntryContent(
   content: string,
   ctx: DbCtx,
 ): Promise<{ status: 'ok' } | StoryEntryRejection> {
-  const headAtStart = mayPassGate(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
+  const headAtStart =
+    onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
   if (contentEditBlocked(branchId, headAtStart)) return inFlightRejection()
   // Ahead of the bracket, which interrupts a pass before its body runs: an unchanged save must
   // not cost a pass. Safe outside the barrier because no other writer touches this column,
@@ -73,7 +74,8 @@ export async function updateStoryEntryContent(
   // Re-checked past the reads, so this gate and the bracket's flag set are one synchronous
   // block: a second Save that read alongside the first is refused, not thrown as re-entry.
   // Not inside the bracket, where the flag itself reads as blocked.
-  const inHeadTurn = mayPassGate(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
+  const inHeadTurn =
+    onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
   if (contentEditBlocked(branchId, inHeadTurn)) return inFlightRejection()
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
@@ -85,7 +87,7 @@ export async function updateStoryEntryContent(
  * head turn may pass by interrupting them (principles.md → Edit restrictions during in-flight
  * generation). Head membership is read only then, so the awaits stay off every other path.
  */
-function mayPassGate(branchId: string): boolean {
+function onlyInterruptibleRunsHold(branchId: string): boolean {
   return generationStore.isUserEditBlocked() && !generationStore.isHeadReversalBlocked(branchId)
 }
 
