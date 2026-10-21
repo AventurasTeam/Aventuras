@@ -989,7 +989,10 @@ it there if the banner lands while it still runs; past the settle,
 without the re-pin, the reply's last lines would stay hidden for the
 whole pass. A draft that grows the composer is another trigger.
 Further from the bottom the user keeps their position, and a
-viewport that grows needs nothing.
+viewport that grows needs nothing. An entry's inline editor that has
+focus holds the position too: on Android the keyboard opening under
+it shrinks the viewport, and pinning the bottom then would push the
+editor up under the top bar.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The

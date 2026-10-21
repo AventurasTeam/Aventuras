@@ -634,25 +634,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [lessons-learned](lessons-learned/README.md)). Raised 2026-10-21 by
   the gated classifier slice's task reviews.
 
-- **The reader's viewport-shrink re-pin may pull a focused in-row
-  editor out of view on Android.** The re-pin (the `ResizeObserver`
-  effect in `components/reader/reader-surface.tsx`) scrolls to the
-  bottom whenever the scroller shrinks while the reader is within 20 px
-  of it (`NEAR_BOTTOM_THRESHOLD_PX`) and no finger is down; it doesn't
-  check for a focused editable. On Android the in-row editor
-  autofocuses (the `Textarea`'s `autoFocus` in
-  `components/compounds/entry-card.tsx`), so the keyboard's shrink
-  re-pins. A short row's editor grows the row (its button row), moving
-  the reader off the bottom first, so nothing happens. But editing a
-  long entry above the last row, one over the `Textarea`'s 10 rows, so
-  the row shrinks and the reader stays at the bottom, could push its
-  editor up under the top of the viewport. Whether Android's WebView
-  then scrolls the focused field back into view, before or after the
-  observer runs, decides it. Read, not probed on a device: the check is
-  an emulator with `hw.keyboard=no`, the reader at the bottom, editing a
-  long entry above the last one. Raised 2026-10-21 by the gated
-  classifier slice review.
-
 - **`classifier.failure_record_retried` carries no `actionId`.** The
   periodic classifier's `onPhaseException`
   (`lib/pipeline/definitions/periodic-classifier.ts`) logs it when its
