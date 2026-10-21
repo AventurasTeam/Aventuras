@@ -40,6 +40,10 @@ import {
   useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
+import {
+  countsAfterRefusal,
+  useLiveRollbackCounts,
+} from '@/components/reader/use-live-rollback-counts'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -64,7 +68,9 @@ import {
   redoLastAction,
   refreshSuggestions,
   regenerateTurn,
+  STORY_ENTRY_REJECTION,
   rollbackToEntry,
+  sameRollbackCounts,
   submitTurn,
   undoLastAction,
   type UndoRejectionCode,
@@ -122,6 +128,9 @@ import { runAction } from '@/lib/utils'
 import { resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
+
+const loadRollbackCounts = (branchId: string, targetId: string) =>
+  getRollbackCounts(branchId, targetId, ctx)
 
 // Copy follows the user's remedy (wait, resume the swap, recheck counts); invariant violations get
 // no retry invitation: a retry cannot succeed and would loop.
@@ -722,13 +731,15 @@ export default function ReaderComposerRoute() {
   )
 
   // Guarded here rather than at the callers because both the immediate tap and
-  // the modal's confirm funnel through this one dispatch.
+  // the modal's confirm funnel through this one dispatch. When the action refuses a
+  // confirmed regenerate (one passed `expectedCounts`), resolves to the counts the
+  // confirm re-opens on; null on every other path.
   const runRegenerate = useCallback(
-    async (targetId: string) => {
-      if (!storyId || !hydrationSucceeded) return
+    async (targetId: string, expectedCounts?: RollbackCounts): Promise<RollbackCounts | null> => {
+      if (!storyId || !hydrationSucceeded) return null
       if (!beginDispatch()) {
         logger.warn('pipeline.regenerate_dispatch_suppressed', { branchId, entryId: targetId })
-        return
+        return null
       }
       try {
         let regen: RegenerateTurnResult
@@ -738,7 +749,7 @@ export default function ReaderComposerRoute() {
         // inherit the "no submission to hand back" premise the catch encodes.
         try {
           dropped = await dropSystemTail()
-          regen = await regenerateTurn({ storyId, branchId }, targetId, ctx)
+          regen = await regenerateTurn({ storyId, branchId }, targetId, ctx, { expectedCounts })
         } catch (err) {
           // A toast, not a failure entry: the throw carries no userActionContent,
           // and a system entry's Retry renders unconditionally — it would offer a
@@ -756,7 +767,7 @@ export default function ReaderComposerRoute() {
           // The drop above destroyed an earlier failure's only copy of its text.
           // restoreSystemTail is unsafe here (tail may have moved); the draft isn't.
           if (branchUnchanged(branchId)) handBackSubmission(dropped?.failure?.submission)
-          return
+          return null
         }
         if (regen.status === 'rejected') {
           logger.warn('pipeline.regenerate_rejected', {
@@ -768,7 +779,7 @@ export default function ReaderComposerRoute() {
           // and putting the failure entry back is an exact undo of the drop.
           await restoreSystemTail(dropped)
           toast.error(t(REGENERATE_REJECTION_COPY[regen.code]))
-          return
+          return expectedCounts == null ? null : countsAfterRefusal(expectedCounts, regen)
         }
         const { result } = regen
         // A branch switch under the dispatch makes the composer's draft another
@@ -836,6 +847,7 @@ export default function ReaderComposerRoute() {
             composerRef.current?.restoreDraft(regen.userActionContent, 'free')
           await reload()
         }
+        return null
       } finally {
         endDispatch()
       }
@@ -909,23 +921,52 @@ export default function ReaderComposerRoute() {
     [branchId],
   )
 
+  const showLiveCounts = useCallback(
+    (counts: RollbackCounts) =>
+      setRollback((prev) =>
+        prev == null || sameRollbackCounts(prev.counts, counts) ? prev : { ...prev, counts },
+      ),
+    [],
+  )
+  useLiveRollbackCounts({
+    branchId,
+    target: rollback,
+    load: loadRollbackCounts,
+    onCounts: showLiveCounts,
+  })
+
+  // The confirm's AlertDialogAction closed the modal on press, so a refusal re-opens it,
+  // unless the user left the branch or opened another confirm since.
+  const reopenConfirm = useCallback(
+    (confirmed: RollbackState, counts: RollbackCounts) => {
+      if (!branchUnchanged(branchId)) return
+      setRollback((current) => current ?? { ...confirmed, counts })
+    },
+    [branchId, branchUnchanged],
+  )
+
   const confirmRollback = useCallback(async () => {
     if (!rollback) return
-    if (rollback.mode === 'regenerate') {
-      const targetId = rollback.targetId
+    const confirmed = rollback
+    if (confirmed.mode === 'regenerate') {
       // Close before the stream starts; the streaming card takes over the surface.
       setRollback(null)
-      await runRegenerate(targetId)
+      const reopenOn = await runRegenerate(confirmed.targetId, confirmed.counts)
+      if (reopenOn != null) reopenConfirm(confirmed, reopenOn)
       return
     }
-    const result = await rollbackToEntry(branchId, rollback.targetId, ctx)
+    const result = await rollbackToEntry(branchId, confirmed.targetId, ctx, {
+      expectedCounts: confirmed.counts,
+    })
     if (result.status === 'rejected') {
-      // Keep the modal open so the user doesn't assume the delete happened.
-      toast.error(t('reader:rollbackFailed'))
+      // A refused commit keeps the modal up, so the user doesn't assume the delete happened.
+      const changed = result.code === STORY_ENTRY_REJECTION.countsChanged
+      toast.error(t(changed ? 'reader:rollbackCountsChanged' : 'reader:rollbackFailed'))
+      reopenConfirm(confirmed, countsAfterRefusal(confirmed.counts, result))
       return
     }
     setRollback(null)
-  }, [branchId, rollback, runRegenerate])
+  }, [branchId, rollback, runRegenerate, reopenConfirm])
 
   const handleCommitEdit = useContentEditing(branchId, ctx, reload)
 
