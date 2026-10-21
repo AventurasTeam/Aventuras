@@ -154,7 +154,7 @@ Serializable props in (native → document):
   window). Drives the boundary skeleton and gates `onNearTop`.
 - `branchKey` — branch identity. A change resets in-document edit
   state and re-lands the scroll at the bottom.
-- `editBlocked`, `headReversalBlocked`, `jumpButtonEnabled`,
+- `editGate`, `jumpButtonEnabled`,
   `systemFixLabel` (present only when the system entry has a
   kind-specific fix route), theme id + token values, and other
   settings-derived flags.

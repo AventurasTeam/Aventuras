@@ -125,7 +125,6 @@ const PASS_IN_FLIGHT_ARGS = {
   tailEntryId: 'p5',
   worldTimeDecorations: { p5: { label: 'Day 12 · 14:33', raw: 90 } },
   worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: WORLD_TIME_ORIGIN },
-  editBlocked: true,
 }
 
 function rowButton(id: string, name: string): HTMLElement {
@@ -169,7 +168,7 @@ const meta = {
     streaming: null,
     branchKey: 'branch_story',
     hasOlder: false,
-    editBlocked: false,
+    editGate: 'open',
     jumpButtonEnabled: true,
     ...noopHandlers,
     ...sceneWiring,
@@ -342,7 +341,7 @@ export const SaveAndRegenerateAbsentOffHead: Story = {
  * the rest keeps the gate (principles.md → Edit restrictions during in-flight generation).
  */
 export const PassInFlightHeadTurnLive: Story = {
-  args: { ...PASS_IN_FLIGHT_ARGS, headReversalBlocked: false },
+  args: { ...PASS_IN_FLIGHT_ARGS, editGate: 'interruptible' },
   play: async () => {
     const edit = t('reader:entryCard.editEntry')
     await waitFor(() => expect(rowButton('p5', edit)).not.toBeDisabled())
@@ -363,9 +362,9 @@ export const PassInFlightHeadTurnLive: Story = {
   },
 }
 
-/** A host that passes no `headReversalBlocked` keeps one gate for every row control. */
-export const GateHeldWithoutHeadReversalSplit: Story = {
-  args: PASS_IN_FLIGHT_ARGS,
+/** A closed gate holds every row control, the head turn's included. */
+export const ClosedGateHoldsEveryRow: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, editGate: 'closed' },
   play: async () => {
     await waitFor(() => expect(rowButton('p5', t('reader:entryCard.editEntry'))).toBeDisabled())
     expect(rowButton('p5', t('reader:entryCard.regenerate'))).toBeDisabled()

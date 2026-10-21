@@ -193,8 +193,7 @@ export function ReaderSurface({
   streaming,
   branchKey,
   hasOlder,
-  editBlocked,
-  headReversalBlocked = editBlocked,
+  editGate,
   jumpButtonEnabled,
   systemFixLabel,
   entityNames,
@@ -549,12 +548,7 @@ export function ReaderSurface({
         ) : null}
         {rows.map((row) => {
           const decoration = worldTimeDecorations[row.id]
-          const flags = rowReversalFlags({
-            rowId: row.id,
-            headTurnIds,
-            editBlocked,
-            headReversalBlocked,
-          })
+          const flags = rowReversalFlags({ rowId: row.id, headTurnIds, editGate })
           return (
             <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
               <ReaderRow
@@ -562,7 +556,7 @@ export function ReaderSurface({
                 tier={tier}
                 editing={editingId === row.id}
                 editContent={editingId === row.id ? editDraft : null}
-                editBlocked={editBlocked}
+                editBlocked={editGate !== 'open'}
                 editDisabled={flags.editDisabled}
                 reversalDisabled={flags.reversalDisabled}
                 systemFixLabel={systemFixLabel}

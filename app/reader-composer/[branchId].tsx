@@ -36,6 +36,7 @@ import {
   shouldRestoreUserActionAfterHandlingFailure,
 } from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
+import { editGateOf } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
 import {
@@ -629,6 +630,7 @@ export default function ReaderComposerRoute() {
   const actionsBlocked = editBlocked || dispatchInFlight
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
   const headReversalBlocked = headReversalGateHeld || dispatchInFlight
+  const editGate = editGateOf({ editBlocked: actionsBlocked, headReversalBlocked })
   const gateRunKind = generationStore.useGeneration((s) =>
     selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
   )
@@ -1252,8 +1254,7 @@ export default function ReaderComposerRoute() {
     streaming: streamingPayload,
     branchKey: branchId,
     hasOlder,
-    editBlocked: actionsBlocked,
-    headReversalBlocked,
+    editGate,
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     onNearTop: loadOlderEntries,
