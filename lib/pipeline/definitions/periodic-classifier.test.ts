@@ -479,7 +479,7 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('never reverts a concurrent watermark clamp from its interrupt hook', async () => {
+  it('restores only the lifecycle keys from its interrupt hook, never the watermark', async () => {
     const h = await ctxWith({ processedThrough: 3, headPosition: 4 })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
     await drain(h.ctx)
@@ -791,7 +791,7 @@ describe('periodicClassifierPhase', () => {
     expect(generateStructured).not.toHaveBeenCalled()
   })
 
-  // The entity stores are global: prompting against another branch's roster would plan wrong rows.
+  // The entity stores hold one branch: for another they leave an empty roster to plan against.
   it('fails when the entity stores hold another branch, before any LLM call', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     entitiesStore.hydrate('b2', [])
@@ -1320,11 +1320,11 @@ describe('periodicClassifierPhase', () => {
     expect(texts[0]).toBe(texts[1])
   })
 
-  it('never reverts a concurrent watermark clamp: status keys are written key-scoped', async () => {
+  it('writes its status key-scoped and its watermark MAX-guarded', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     vi.mocked(generateStructured).mockImplementation(async () => {
-      // The reversal clamp is the other writer on this column and can land
-      // between this run's status read and its status write.
+      // Stands in for the column's other writer, the reversal clamp, which the gate keeps out of a
+      // running pass: this pins only how the pass writes the column.
       h.clamp(7)
       return {
         status: 'ok',

@@ -290,7 +290,10 @@ export function awaitRunTerminal(
   return run.terminal
 }
 
-/** Aborts every interruptible run on the branch; resolves once each has ended. Records nothing. */
+/**
+ * Aborts every interruptible run on the branch; resolves once each has ended. Records nothing
+ * itself; each aborted pass or close records its own deferral.
+ */
 export async function interruptMemoryRuns(branchId: string): Promise<void> {
   const runs = [...getTxState().runs.values()].filter(
     (r) => r.interruptible && r.branchId === branchId,
@@ -310,7 +313,8 @@ function nextStoreChange(): Promise<void> {
 
 /**
  * Aborts every run on the story until `isStoryBusy` is false and no turn body runs on the branch:
- * a chained pass, pending turn, reversal or regenerate sweep registers late. Records nothing.
+ * a chained pass, pending turn, reversal or regenerate sweep registers late. Records nothing
+ * itself; each aborted pass or close records its own deferral.
  */
 export async function cancelStoryRuns(storyId: string, branchId: string): Promise<void> {
   for (;;) {

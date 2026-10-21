@@ -87,7 +87,8 @@ function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
 }
 
 // Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped
-// json_set: the reversal clamp owns $.processedThrough and can commit between read and write.
+// json_set (cadence.md -> Concurrency): no row lock covers the column, which the reversal clamp
+// also writes, so a write never rewrites keys it doesn't own.
 async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
@@ -115,8 +116,8 @@ function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> 
   return patchStatus(ctx, watermarkKey(coversThrough))
 }
 
-// The entity stores are global, hydrated for one branch: a pass whose branch they don't hold would
-// prompt, reconcile and plan against another branch's roster.
+// The entity stores hold one branch: filtered for a branch they don't hold, they leave an empty
+// roster to prompt, reconcile and plan against.
 function storesHoldBranch(
   open: OpenStory | null,
   ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,

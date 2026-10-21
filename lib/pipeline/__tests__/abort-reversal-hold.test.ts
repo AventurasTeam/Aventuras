@@ -221,8 +221,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     await landed
 
     abortRuns()
-    // Today's rethrow leaves the run registered (parked.md → An abort waits on its phases, except a
-    // thrown parallel branch).
+    // The rethrow leaves the run registered; the hold is released all the same.
     await expect(within(run.origin, 'abort')).rejects.toThrow('not a replay error')
     expect(await grantedWithin('a write after the thrown reversal')).toBe('granted')
   })

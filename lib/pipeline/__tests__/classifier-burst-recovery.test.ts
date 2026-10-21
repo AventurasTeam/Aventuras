@@ -155,8 +155,9 @@ describe('a crashed classifier burst', () => {
     expect(branch.classifierStatus).toEqual(running)
   })
 
-  // An abort whose reversal failed ends the pass's hold (generation-pipeline.md → No-gate write
-  // phase), so the user can delete a character the pass created while the tail scene names it.
+  // The orchestrator lifts the gate even when an abort's reversal failed (generation-pipeline.md →
+  // Recovery-failure policy), so the user can delete a character the pass created while the tail
+  // scene names it.
   it('reports an integrity refusal by kind, and every boot meets it again', async () => {
     const { db, ctx } = await makeHarness()
     registerAllDomains()

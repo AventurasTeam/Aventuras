@@ -5,7 +5,7 @@ import { branches, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib
 import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 
 /**
- * Classifiable turns past the watermark — the cadence's input. Counts rows, not position deltas:
+ * Classifiable entries past the watermark — the cadence's input. Counts rows, not position deltas:
  * `system` entries occupy positions but are filtered from the window, so a delta fires it early.
  */
 export async function unprocessedEntryCount(

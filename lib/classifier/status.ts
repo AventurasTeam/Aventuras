@@ -64,7 +64,9 @@ export function worstCaseCadenceEntries(cadence: number): number {
 /**
  * Entry-counted cadence (canon ships no token trigger in v1). Suspended in failed-persistent so a
  * broken provider is not called on every turn: Run now is the only way out. A `running` status
- * seen at a turn's commit is a pass a crash left behind, which boot quarantines.
+ * seen at a turn's commit is a pass left unfinished: by a crash, or in session by an interrupt
+ * whose reversal couldn't commit or a status write that failed its retry. It holds the cadence
+ * until boot resets it, which boot skips while the branch still holds unreversed orphans.
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus

@@ -1258,7 +1258,7 @@ async function nextMemoryRun(
   if (!story) return null
   const status = await readClassifierStatus(run.branchId, ctx)
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
-  // failed-persistent waits for the user; a persisted 'running' is a boot quarantine
+  // failed-persistent waits for the user; a persisted 'running' (a pass left unfinished) waits for boot
   const held = status.state === 'failed-persistent' || status.state === 'running'
   const passable = unprocessed > 0 && !held
   if (await closeOwed(run.branchId, story, ctx))
