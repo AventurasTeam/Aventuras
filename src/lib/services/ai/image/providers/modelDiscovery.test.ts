@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./fetchAdapter', () => ({
-  imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
 }))
 vi.mock('./sdkImage', () => ({ createImageSdkFetch: vi.fn(), generateSdkImage: vi.fn() }))

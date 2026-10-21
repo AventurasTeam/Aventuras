@@ -17,7 +17,6 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
 }))
 
 vi.mock('./fetchAdapter', () => ({
-  imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
   fetchPublicImageBase64: vi.fn(),
 }))

@@ -14,7 +14,6 @@ vi.mock('@saintno/comfyui-sdk', () => ({
   CallWrapper: class {},
 }))
 vi.mock('./fetchAdapter', () => ({
-  imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
 }))
 vi.mock('#lib/utils/http.ts', () => ({ httpFetch: vi.fn() }))
