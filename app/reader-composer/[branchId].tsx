@@ -1427,7 +1427,8 @@ export default function ReaderComposerRoute() {
           </>
         ) : null}
       </View>
-      {rollback ? (
+      {/* Focus-gated: a refusal can re-open it after the user moved to another in-story screen. */}
+      {rollback && isFocused ? (
         <RollbackConfirmModal
           open
           onOpenChange={(open) => {

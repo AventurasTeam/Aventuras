@@ -193,8 +193,8 @@ test.describe('periodic classifier — real provider smoke', () => {
       const target = (await replies()) + 1
       while ((await replies()) < target) {
         expect(attempts, 'every prompt spent without a reply landing').toBeLessThan(PROMPTS.length)
-        // A failed turn leaves the reversal sweep holding the edit barrier; start
-        // each attempt from a quiescent composer rather than racing it.
+        // The textarea is editable once hydrated; the Send click below waits for an enabled
+        // Send, which is what outlasts a failed turn's reversal sweep.
         await expect(reader.composer(app.window)).toBeEditable({ timeout: EDITABLE_WAIT_MS })
         const settled = await settledTurns()
         await reader.composer(app.window).fill(PROMPTS[attempts]!)

@@ -248,6 +248,11 @@ companions.
   each route's unsaved guard calls
   `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
   through `useRowSessionGuard`).
+  Slice-authoring note: the memory banner labels only the pass
+  (`use-memory-run-banner.ts`, and its test pins that a close shows
+  nothing); canon shows it for a pass or a chapter-close transaction
+  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci)),
+  so this slice adds the close's label and flips that test.
 - M5.3 — Chapter timeline screen per
   [`docs/ui/screens/chapter-timeline/chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md);
   chapter delete routes through the deep-rollback surface (M5.5).
