@@ -1232,18 +1232,24 @@ already-shipped calendar editor.
   kind with `hard-gate` concurrency per
   [`generation-pipeline.md → V1 declarations`](../generation-pipeline.md#v1-declarations))
   lands alongside.
-  Slice-authoring note: the reader picks its pill run in `pillRunOf`
-  (`app/reader-composer/[branchId].tsx`) from `findSendRun`, an
-  allowlist of per-turn and Send's deferred pass
-  (`components/reader/send-run.ts`), then the branch's pass or close.
-  World and Plot pick theirs by interruptibility and gate in `pillRun`
-  (`components/story-settings/generation-run.ts`, private to that file;
-  they reach it through `cancelStoryPillRun` and
-  `selectStorySettingsGenerationRunKind`). The two agree for today's
-  kinds, but `translation-retry` is hard-gate, non-interruptible and not
-  a turn, so it would get a Cancel on World and Plot and none in the
-  reader. This slice must export the branch-scoped `pillRun` and have
-  the reader use it.
+  Slice-authoring note: two policies pick the run the pill names. The
+  reader's pill and its Cancel (`cancelPillRun`) use `pillRunOf` in
+  `components/reader/send-run.ts`: `findSendRun`, an allowlist of
+  per-turn and Send's deferred pass, then the branch's pass or close
+  (`selectMemoryRun`). World, Plot and Story Settings pick theirs by
+  interruptibility and gate in `pillRun`
+  (`components/story-settings/generation-run.ts`, private to that
+  file), through `useStoryGenerationGate`, which returns the pill's run
+  kind and a bound `cancelPillRun`. The reader uses `pillRun` too, for
+  its gate tooltip: `selectStorySettingsGenerationRunKind` reads it
+  across the story, not the branch, and feeds `generationGateReason`.
+  The two agree for today's kinds, but `translation-retry` is
+  hard-gate, non-interruptible and not a turn, so it would get a Cancel
+  on World and Plot and none in the reader, while the reader's tooltip,
+  through `pillRun`, still says to cancel it. This slice must export a
+  branch-scoped `pillRun` and have the reader's pill, its Cancel and
+  its gate tooltip all use it; `findSendRun` stays for the composer's
+  Send and Cancel.
 - M8.2 — Translation UI: the reactive `useTranslation`
   subscription over the M1.5 store (render reactivity was scoped
   out of the content slice to land with this display-translation
