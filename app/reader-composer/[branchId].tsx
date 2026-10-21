@@ -30,6 +30,7 @@ import {
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
+import { cancelSendRun, findSendRun } from '@/components/reader/send-run'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
@@ -105,9 +106,11 @@ import {
   entitiesStore,
   entriesStore,
   generationStore,
+  isHeadReversalBlocked,
   isUserEditBlocked,
   readerRailStore,
   rehydrateStories,
+  type RunState,
   selectMemoryRun,
   storiesStore,
   type TxState,
@@ -159,6 +162,11 @@ function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
 
 function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
   return ev.key === 'End' && !blockingOverlaysStore.isBlocked()
+}
+
+// Send's run first, then the branch's pass or close, which owns the pill over a refresh.
+function pillRunOf(txState: TxState, branchId: string): RunState | undefined {
+  return findSendRun(txState, branchId) ?? selectMemoryRun(txState, { branchId })
 }
 
 type ReaderGateState = {
@@ -228,36 +236,34 @@ export default function ReaderComposerRoute() {
   )
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  // The phase, not a boolean: one source for whether a turn runs and what it
-  // does. Neither a refresh nor a pass is a turn — either counted here would swap
-  // Send for Cancel and raise the streaming placeholder over a branch that isn't
-  // streaming. Both are hard-gate, so `editBlocked` above still covers undo/redo
-  // during them.
-  // Two selectors over one predicate rather than one returning a pair: a fresh
-  // object per read would re-render the reader on every unrelated store write.
-  const findTurnRun = useCallback(
-    (s: { txState: TxState }) =>
-      [...s.txState.runs.values()].find(
-        (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND && !r.interruptible,
-      ),
-    [branchId],
+  // Narrower than editBlocked: a pass or a close alone lets the head reversals through, each
+  // interrupting it (principles.md → Edit restrictions during in-flight generation).
+  const headReversalGateHeld = generationStore.useGeneration((s) =>
+    isHeadReversalBlocked(s.txState, branchId),
   )
-  const turnPhase = generationStore.useGeneration((s) => findTurnRun(s)?.currentPhase ?? null)
-  const turnKind = generationStore.useGeneration((s) => findTurnRun(s)?.kind ?? null)
-  const isGenerating = turnPhase !== null
+  // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn
+  // leaves Send in place and refused, so the composer stays live. Primitives, not the run: a
+  // fresh object per read would re-render the reader on every unrelated store write.
+  const sendRunKind = generationStore.useGeneration(
+    (s) => findSendRun(s.txState, branchId)?.kind ?? null,
+  )
+  const isGenerating = sendRunKind !== null
+  // Only a turn streams a card; Send's deferred pass is a structured call.
+  const turnStreaming = sendRunKind === PER_TURN_KIND
   const refreshingSuggestions = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
     ),
   )
-  // The pill's run: the turn, else the branch's pass, which owns the pill over a refresh
-  // beside it (generation-pipeline.md → Pill currentPhase — foreground-first).
-  const findPillRun = useCallback(
-    (s: { txState: TxState }) => findTurnRun(s) ?? selectMemoryRun(s.txState, { branchId }),
-    [findTurnRun, branchId],
+  const pillRunKind = generationStore.useGeneration(
+    (s) => pillRunOf(s.txState, branchId)?.kind ?? null,
   )
-  const pillRunPhase = generationStore.useGeneration((s) => findPillRun(s)?.currentPhase ?? null)
-  const pillRunKind = generationStore.useGeneration((s) => findPillRun(s)?.kind ?? null)
+  const pillRunPhase = generationStore.useGeneration(
+    (s) => pillRunOf(s.txState, branchId)?.currentPhase ?? null,
+  )
+  const pillBeforeTurn = generationStore.useGeneration(
+    (s) => pillRunOf(s.txState, branchId)?.beforeTurn === true,
+  )
 
   const open = currentStoryStore.useCurrentStory((s) => s)
   const [hydration, setHydration] = useState<BranchHydrationState>({
@@ -454,11 +460,11 @@ export default function ReaderComposerRoute() {
   // Covers the abort/failure paths where no committed row ever lands to
   // trigger the entries.some(...) hide check below.
   useEffect(() => {
-    if (!isGenerating) {
+    if (!turnStreaming) {
       streamBufferRef.current = null
       setStreaming(null)
     }
-  }, [isGenerating])
+  }, [turnStreaming])
 
   // Visible from the moment the run starts (pre-first-chunk placeholder), and
   // hidden the frame the committed row lands: the real commit hits entriesStore
@@ -466,7 +472,7 @@ export default function ReaderComposerRoute() {
   // just isGenerating) prevents a frame where both the synthetic and the real
   // committed card are visible.
   const streamingVisible =
-    isGenerating && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
+    turnStreaming && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
 
   const reload = useCallback(async () => {
     const recent = await readRecentEntries(branchId, db)
@@ -633,6 +639,8 @@ export default function ReaderComposerRoute() {
   // What every user-edit affordance gates on: the generation gate alone leaves
   // the pre-registration window open.
   const actionsBlocked = editBlocked || dispatchInFlight
+  // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
+  const headReversalBlocked = headReversalGateHeld || dispatchInFlight
   const gateRunKind = generationStore.useGeneration((s) =>
     selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
   )
@@ -936,7 +944,7 @@ export default function ReaderComposerRoute() {
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
             dispatchInFlight: dispatchInFlightRef.current,
-            userEditBlocked: generationStore.isUserEditBlocked(),
+            headReversalBlocked: generationStore.isHeadReversalBlocked(startedBranchId),
           }),
         )
       } catch (err) {
@@ -984,6 +992,17 @@ export default function ReaderComposerRoute() {
     void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
   }, [branchId])
 
+  // Read at click time, not from render: a turn's commit can chain a pass in between.
+  const cancelComposerRun = useCallback(() => {
+    const run = findSendRun(generationStore.getTxState(), branchId)
+    if (run != null) void cancelSendRun(run)
+  }, [branchId])
+  const cancelPillRun = useCallback(() => {
+    const run = pillRunOf(generationStore.getTxState(), branchId)
+    if (run != null) void cancelSendRun(run)
+    else void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+  }, [branchId])
+
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
   // error belongs to the strip that fired it. The entry ref alone would cover
@@ -997,6 +1016,9 @@ export default function ReaderComposerRoute() {
   }, [terminalEntry?.id])
 
   const handleRefreshSuggestions = useCallback(() => {
+    // The strip re-renders disabled a frame after a reversal raises its flag or a Send marks
+    // its dispatch, and with REVERSAL_BLOCKED gone nothing downstream refuses a refresh then.
+    if (dispatchInFlightRef.current || generationStore.isHeadReversalBlocked(branchId)) return
     const anchor = terminalEntry
     const story = openForBranch
     // The phase resolves its own anchor; this only proves there is one to
@@ -1137,11 +1159,8 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
-    // editBlocked, not isGenerating: undo/redo reject on the gate, which a
-    // suggestion refresh now holds too. Keyed off the turn alone, the item
-    // would stay enabled and its rejection would toast "nothing to undo" over
-    // an intact history.
-    const blocked = { disabled: actionsBlocked, disabledReason: gateReason }
+    // Undo of the turn is a head reversal, live through a pass; the action refuses any other
+    // target with `gated`. Redo never is one, so it keeps the whole gate.
     return {
       id: 'reader',
       header: t('chrome.onThisScreen'),
@@ -1149,7 +1168,8 @@ export default function ReaderComposerRoute() {
         {
           id: 'undo',
           label: t('reader:actions.undo'),
-          ...blocked,
+          disabled: headReversalBlocked,
+          disabledReason: gateReason,
           onActivate: () => runUndoRedo('undo'),
         },
         // Absent, not disabled, when the stack is empty — the menu doesn't
@@ -1160,7 +1180,8 @@ export default function ReaderComposerRoute() {
               {
                 id: 'redo',
                 label: t('reader:actions.redo'),
-                ...blocked,
+                disabled: actionsBlocked,
+                disabledReason: gateReason,
                 onActivate: () => runUndoRedo('redo'),
               },
             ]
@@ -1170,7 +1191,15 @@ export default function ReaderComposerRoute() {
           : []),
       ],
     }
-  }, [hasRedo, actionsBlocked, gateReason, runUndoRedo, entries.length, jumpToBottom])
+  }, [
+    hasRedo,
+    actionsBlocked,
+    headReversalBlocked,
+    gateReason,
+    runUndoRedo,
+    entries.length,
+    jumpToBottom,
+  ])
 
   const streamingPayload = useMemo(
     () =>
@@ -1204,6 +1233,7 @@ export default function ReaderComposerRoute() {
     branchKey: branchId,
     hasOlder,
     editBlocked: actionsBlocked,
+    headReversalBlocked,
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     onNearTop: loadOlderEntries,
@@ -1258,17 +1288,9 @@ export default function ReaderComposerRoute() {
           storyId={storyId}
           swapTarget={swapTarget}
           activePhase={activePhase}
-          // Only a turn or a refresh is cancelled from here; otherwise the prop is
-          // absent rather than a no-op handler that would still open the popover.
-          {...(isGenerating || refreshingSuggestions
-            ? {
-                // The run's own kind, not PER_TURN_KIND: findTurnRun matches on a
-                // denylist, so any foreground pipeline added later raises this
-                // Cancel and a hardcoded kind would abort a run that isn't there.
-                onCancel: () =>
-                  void awaitRunTerminal(turnKind ?? SUGGESTION_REFRESH_KIND, branchId, 'cancel'),
-              }
-            : {})}
+          beforeTurn={pillBeforeTurn}
+          // Absent while nothing runs on the branch: a no-op handler would still open the popover.
+          {...(pillRunKind != null || refreshingSuggestions ? { onCancel: cancelPillRun } : {})}
           onOpenMemory={() => {
             if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
           }}
@@ -1322,7 +1344,7 @@ export default function ReaderComposerRoute() {
               onRefresh={handleRefreshSuggestions}
               onCancel={handleCancelSuggestions}
               onToggleCollapsed={handleToggleStripCollapsed}
-              disabled={actionsBlocked}
+              disabled={headReversalBlocked}
             />
           ) : null}
           <View className="border-t border-border px-6 pb-3.5 pt-3">
@@ -1343,9 +1365,7 @@ export default function ReaderComposerRoute() {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={() =>
-                  void awaitRunTerminal(turnKind ?? PER_TURN_KIND, branchId, 'cancel')
-                }
+                onCancel={cancelComposerRun}
               />
             </View>
           </View>
