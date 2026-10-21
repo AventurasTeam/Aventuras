@@ -9,7 +9,6 @@ import { openEmbedderSwapDialog } from '@/lib/stores'
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
 
 type LeaveStory = (proceed: () => void) => void
-const leaveAtOnce: LeaveStory = (proceed) => proceed()
 
 /**
  * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
@@ -86,8 +85,8 @@ export function toSystemFailureMeta(
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
   storyId: string | null,
-  /** App Settings is outside the story: an in-story host passes its story-leave guard. */
-  leaveStory: LeaveStory = leaveAtOnce,
+  /** App Settings is outside the story, so the push waits on the host's story-leave guard. */
+  leaveStory: LeaveStory,
 ): SystemEntryFixAction {
   const router = useRouter()
   if (failure === undefined) return undefined
@@ -131,7 +130,7 @@ export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
   storyId: string | null,
-  leaveStory: LeaveStory = leaveAtOnce,
+  leaveStory: LeaveStory,
 ): { onRetry: () => void; fixAction: SystemEntryFixAction } {
   const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,

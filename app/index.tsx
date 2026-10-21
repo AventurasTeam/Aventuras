@@ -217,6 +217,7 @@ export default function Index() {
       onOpenAppSettings={() => router.push('/settings')}
       actions={
         <AppActionsMenu
+          beforeLeaveStory={null}
           blocked={prompt != null || storyRecovery != null || pendingDelete != null}
         />
       }

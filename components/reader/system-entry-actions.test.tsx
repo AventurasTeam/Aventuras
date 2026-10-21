@@ -32,6 +32,8 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
+const leaveAtOnce = (proceed: () => void) => proceed()
+
 const EMBEDDER_INIT: PipelineError = {
   kind: 'embedder',
   reason: 'init',
@@ -221,7 +223,9 @@ describe('useEmbedderFixAction', () => {
 
 describe('useConfigFixAction', () => {
   it("sends a broken override to that story's Models tab, where the row can be cleared", () => {
-    const { result } = renderHook(() => useConfigFixAction('override-provider-missing', 'story_1'))
+    const { result } = renderHook(() =>
+      useConfigFixAction('override-provider-missing', 'story_1', leaveAtOnce),
+    )
     expect(result.current?.label).toBe(t('reader:systemEntry.fixOverride'))
 
     act(() => result.current?.onPress())
@@ -231,7 +235,9 @@ describe('useConfigFixAction', () => {
   })
 
   it('still sends an app-chain provider failure to App Settings', () => {
-    const { result } = renderHook(() => useConfigFixAction('provider-missing', 'story_1'))
+    const { result } = renderHook(() =>
+      useConfigFixAction('provider-missing', 'story_1', leaveAtOnce),
+    )
     expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
 
     act(() => result.current?.onPress())
@@ -241,14 +247,18 @@ describe('useConfigFixAction', () => {
   })
 
   it('drops the override action when no story is resolved', () => {
-    const { result } = renderHook(() => useConfigFixAction('override-provider-missing', null))
+    const { result } = renderHook(() =>
+      useConfigFixAction('override-provider-missing', null, leaveAtOnce),
+    )
     expect(result.current).toBeUndefined()
   })
 
   // The bubble reads a persisted open string, so a kind written by a newer build
   // must keep an affordance rather than lose one.
   it('lands an unrecognised persisted failure on the generic default fix', () => {
-    const { result } = renderHook(() => useConfigFixAction('from-a-newer-build', 'story_1'))
+    const { result } = renderHook(() =>
+      useConfigFixAction('from-a-newer-build', 'story_1', leaveAtOnce),
+    )
     expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
   })
 
@@ -285,7 +295,8 @@ describe('useSystemEntryActions', () => {
   const onRetry = () => {}
 
   function actionsFor(failure: SystemFailureMeta | undefined, storyId: string | null = 'story_1') {
-    return renderHook(() => useSystemEntryActions(failure, onRetry, storyId)).result.current
+    return renderHook(() => useSystemEntryActions(failure, onRetry, storyId, leaveAtOnce)).result
+      .current
   }
 
   it('offers Switch embedder for an embedder failure', () => {
