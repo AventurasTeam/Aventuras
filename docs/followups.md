@@ -44,38 +44,6 @@ for the placement rule.
   error reaches the user is unverified. Raised 2026-10-19 by the
   entity-state design.
 
-- **Implement the gated periodic classifier.** A pass holds the gate,
-  chained after the turn that brings it due, and a head reversal or
-  Cancel interrupts it and defers it to the next Send, with a toast
-  ([`classifier.md → Pipeline framing`](./memory/classifier.md#pipeline-framing),
-  [`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)).
-  Designed 2026-10-20
-  ([exploration record](./explorations/2026-10-20-ai-writers.md)).
-  The plan must check:
-  - the chained successor inheriting its predecessor's `actionId`
-    (`newRunState` in `lib/pipeline/runtime/orchestrator.ts` takes it
-    from the context, which `submit-turn.ts` sets), with a chain test
-    that passes one;
-  - the in-memory cadence and open-region mirrors `chainsTo` reads,
-    kept in step with every entry write, reversal and watermark move;
-  - the `deferred` and `pendingClose` records, the interrupt's gate
-    exception for an `interruptible` run, and the toasts;
-  - retries moved from backoff timers to the next turn's commit;
-  - each mechanism canon no longer describes, removed or kept for a
-    stated reason: the no-gate write phase and its wait for turns,
-    `applyDeltaActionGroupBuilt`, the abort-free burst, the post-call
-    re-read, reconciliation outside the lock, `tickDeferred`, the
-    non-blocking `updating-memory` phase and their comments
-    (`register-awareness.ts` still describes a pass reversing mid-turn);
-  - whether a World pane can stay dirty across a pass, which decides
-    whether its three-way merges stay;
-  - a rollback or regenerate confirm opened while a pass or a close
-    runs, whose counts go stale if it commits before the user confirms;
-  - the triage items the gate closes, and the real-provider smoke,
-    which waits on the backoff's retry;
-  - a pass's duration on the dev models, now the user's wait;
-  - the E2E decision ([`testing.md`](./testing.md)).
-
 - **Implement the AI writer map.** The per-turn writer and the
   periodic classifier gain the writes the authorship contract gives
   them
@@ -89,8 +57,9 @@ for the placement rule.
   ([`classifier.md → What the classifier writes`](./memory/classifier.md#what-the-classifier-writes));
   and unplaced places with their matching
   ([`data-model.md → LocationState shape`](./data-model.md#locationstate-shape)).
-  Follows the gated classifier, without which a pass and a turn can't
-  share a field. The plan must check:
+  It builds on the gated classifier: a pass holds the gate and runs
+  between turns, so a pass and a turn can share a field. The plan must
+  check:
   - that each new update's current value reaches its writer's prompt
     first: standing, threads and happening ids in a pass's lists;
   - a pass's parse-failure rate under the larger schema, splitting the

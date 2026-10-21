@@ -583,7 +583,7 @@ remain unprocessed, then the close
 `[Run classifier now]` starts one directly.
 
 **Interrupted, then deferred.** A head reversal — regenerate, swipe, an
-edit of the head reply, CTRL-Z of the turn, rollback — and the pill's
+edit of the head turn, CTRL-Z of the turn, rollback — and the pill's
 Cancel interrupt a pass: it is cancelled and waited out, and the
 reversal goes ahead
 ([`generation-pipeline.md → Prose reversals and the interrupt`](../generation-pipeline.md#prose-reversals-and-the-interrupt)).
@@ -597,6 +597,11 @@ whole Send and keeps the user's text in the composer. The mark lives
 in memory: after a restart, the next turn's commit finds the pass due
 anyway. A pass cancelled before its writes commits nothing; one
 cancelled during them reverses its own group, as any aborted run does.
+An interrupted pass uses no retry and leaves the watermark; it restores
+its pre-run status through the pipeline's `onInterrupt` hook, which runs
+after that reversal has committed. A reversal that cannot commit skips
+the hook and leaves the branch `running` for boot recovery
+([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy)).
 
 **Undo.** A pass holds its own `actionId`, stamped
 `source = periodic_classifier` (distinct from per-turn piggyback's

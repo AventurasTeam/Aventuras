@@ -113,9 +113,6 @@
   .gen-status.visible { display: flex; }
   .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
   .gen-status.error { border-color: #b45309; background: #b45309; color: #fff; }
-  /* Background phase: no accent fill, muted dot — nothing is being waited on. */
-  .gen-status.background { color: var(--ink-muted); }
-  .gen-status.background .dot { background: var(--ink-muted); }
   .gen-status.error .dot { background: var(--warn); animation: none; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
 
@@ -1608,6 +1605,7 @@
   const cancelPopover = document.getElementById('gen-cancel-popover');
   const cancelAction = document.getElementById('gen-cancel-action');
   const bannerCancel = document.getElementById('gen-banner-cancel');
+  const bannerLabel = document.getElementById('gen-banner-label');
 
   const genPhaseLabels = {
     idle: null,
@@ -1624,10 +1622,9 @@
 
   const errorStates = new Set(['error-swap-paused', 'error-stale', 'error-classifier']);
 
-  // The one non-blocking phase: it drops the accent fill and YIELDS the slot to
-  // any error, which is why gen-state and error-state are not mutually exclusive
-  // here (patterns/generation-status-pill.md -> Priority resolution).
-  const backgroundPhases = new Set(['updating-memory']);
+  // No v1 phase is non-blocking: updating-memory holds the gate like the rest, keeps
+  // the accent fill and the slot, and owns the cancel; the banner shows beside it
+  // (patterns/generation-status-pill.md -> Memory phases).
 
   const streamingBrain = document.getElementById('streaming-brain');
   const streamingToks = document.getElementById('streaming-toks');
@@ -1640,7 +1637,6 @@
     if (label) {
       genStatus.classList.add('visible');
       genStatus.classList.toggle('error', isError);
-      genStatus.classList.toggle('background', backgroundPhases.has(state));
       genLabel.textContent = label;
 
       if (isError) {
@@ -1652,14 +1648,16 @@
         cancelBtn.classList.add('hidden');
         banner.classList.remove('visible');
         cancelAction.textContent = state === 'error-classifier' ? 'Open Memory settings' : 'Open Memory settings';
-      } else if (backgroundPhases.has(state)) {
-        // Background phase: muted pill, no streaming surface, composer stays
-        // usable — nothing is being waited on and there is nothing to cancel.
+      } else if (state === 'updating-memory') {
+        // A pass: blocking, accent pill, no streaming surface. The composer stays live
+        // (Send waits for the gate); the banner and the pill popover own the cancel.
         streamingEntry.classList.remove('visible');
         composer.classList.remove('generating');
         sendBtn.classList.remove('hidden');
         cancelBtn.classList.add('hidden');
-        banner.classList.remove('visible');
+        bannerLabel.textContent = 'Updating memory\u2026';
+        banner.classList.add('visible');
+        cancelAction.textContent = 'Cancel memory update';
       } else {
         // Active generation phase — streaming surface + composer-cancel mode.
         streamingEntry.classList.add('visible');
@@ -1684,6 +1682,7 @@
         }
 
         // Banner shows only during chapter-close
+        if (state === 'chapter-close') bannerLabel.textContent = 'Closing chapter: 2 of 4 \u2014 generating chapter metadata\u2026';
         banner.classList.toggle('visible', state === 'chapter-close');
         cancelAction.textContent = state === 'chapter-close' ? 'Cancel chapter close' : 'Cancel generation';
       }

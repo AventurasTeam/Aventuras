@@ -269,36 +269,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the second touches older mock declarations. Raised 2026-10-11 by the
   system and user halves PR's slice review (simplifier pass).
 
-- **The real-provider smoke gives up on the watermark when one
-  classifier call times out.** `e2e/tests/classifier-real-provider.smoke.spec.ts`
-  polls for the periodic classifier's watermark to move for at most
-  300 s (`expect.poll`, `timeout: 300_000`). The classifier's model call
-  is allowed the same 300 s (`CALL_TIMEOUT_MS` in
-  `lib/pipeline/definitions/periodic-classifier.ts`), and its first retry
-  waits a further 30 s (`BACKOFF_MS` in `lib/classifier/status.ts`). So
-  one slow call fails the smoke where the app would recover: the timeout
-  leaves the classifier `retrying`, not `failed-persistent`, and the
-  scheduler runs the pass again after the backoff. Seen by the developer
-  at `9a490a48` with Gemma4-26B-A4B on a local OpenAI-compatible server:
-  three runs gave 1 pass, 1 fail and 1 flaky, and every failed attempt
-  stopped with the watermark at its parked value. The failed run's database shows
-  the classifier call timing out (`lastError` "timeout after
-  300000ms"); the passing retry's classifier call took 255 s. The same
-  smoke passed 3 of 3 at the system and user halves PR's head. Fix,
-  decided by the developer: increase the smoke's timeouts. The
-  watermark poll's `timeout: 300_000` must outlast one call timeout, the
-  backoff and a second call, and the test's `test.setTimeout(600_000)`
-  must still leave room for that after the turn loop, whose own waits
-  (`toBeEditable` up to 120 s and the run-settle poll up to 240 s, per
-  attempt) draw on the same budget. The numbers aren't chosen. This is
-  the only `*.smoke.spec.ts` under `e2e/tests/` today. Raised
-  2026-10-11 by the developer's smoke runs for that PR, recorded in its
-  description under "Developer checks before merge". The gated
-  classifier (`followups.md`) changes the premise: a timed-out pass
-  retries at the next turn's commit, not after a backoff, so once it
-  lands the smoke must take another turn to see the retry, whatever
-  its timeouts.
-
 - **The `anthropic` provider can't reach Anthropic from the desktop
   app.** The renderer calls `api.anthropic.com` directly, and
   Anthropic's CORS preflight refuses the call: `@ai-sdk/anthropic`
@@ -423,49 +393,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
   2026-10-15 by the retired and disabled places slice review's
   simplifier pass.
-
-- **A pass keeps a failed turn's user_action in its window.** A
-  periodic pass reads its window when it starts. If a turn is streaming
-  then, the window holds that turn's user_action. The pass waits the
-  turn out, then plans and writes against that window. If the turn
-  fails or is cancelled, it reverses its own user_action. A fact the pass
-  anchored on that entry then names a deleted row, and `processedThrough`
-  stays past positions the next Send reuses, so that prose is never
-  classified (`lib/pipeline/definitions/periodic-classifier.ts`, the
-  window read and the watermark write). The prose-reversal barrier
-  doesn't cover a failed turn's own reversal
-  ([`generation-pipeline.md → Prose reversals and the interrupt`](../generation-pipeline.md#prose-reversals-and-the-interrupt)).
-  Trigger: the scheduler's retry timer, or the gap in `noteTurnCommitted`,
-  starts a pass while a turn streams, and the turn then fails or the
-  user presses Cancel. Probed with a scratch test: the end state is the
-  same on `main`, so this predates the mentioned-places write-phase
-  wait. Raised 2026-10-16 by the mentioned places slice review.
-
-- **Regenerate checks the edit gate, then awaits before raising it.**
-  `regenerateTurn` (`lib/actions/turns/regenerate-turn.ts`) checks
-  `isUserEditBlocked`, runs two awaited selects, then raises its
-  pending-turn mark and opens its prose-reversal bracket. The CTRL-Z
-  hotkey (`runUndoRedo` in `app/reader-composer/[branchId].tsx`) isn't
-  held back by the reader's dispatch ref, so an undo can open its
-  bracket in that gap. Regenerate then throws "bracketProseReversal is
-  not re-entrant", and the reader toasts the regenerate failure and
-  reloads. The window is milliseconds, and the check, reads, bracket
-  order is unchanged from `main`. `updateStoryEntryContent`
-  (`lib/actions/story-entries/operational.ts`) already re-checks the
-  gate after its read, which would close it here too. Read, not probed.
-  Raised 2026-10-16 by the mentioned places slice review.
-
-- **A pass whose story closed holds the classifier slot until it
-  ends.** The mentioned-places branch check discards a pass once the
-  entity stores leave its branch, but only when the pass wakes: nothing
-  cancels it on a story or branch switch. Until its model call returns
-  or times out (up to 300 s), it holds the only periodic-classifier
-  slot, since `blockedBy` covers every branch
-  (`lib/pipeline/runtime/concurrency.ts`). Meanwhile the newly opened
-  story's cadence passes are rejected as busy and wait for the next
-  tick. Read, not probed. Residual of the removed item "A periodic
-  pass isn't cancelled when its story closes". Raised 2026-10-16 by the
-  mentioned places slice review.
 
 - **The generation store's run mutators are public.**
   `generationStore.startRun`, `finishRun`, `abortRun` and
@@ -606,3 +533,129 @@ slice-planning gate forces its resolution before that slice is planned.
   (`wizard.md`) omit the flip its era picker promises. Found 2026-10-20
   by the AI writers design's inventory; not reproduced in the running
   app.
+
+- **An abort whose reversal throws something unrecognised leaves the
+  run registered.** `abortRun` in `lib/pipeline/runtime/orchestrator.ts`
+  rethrows any reversal error `describeReplayError` doesn't recognise,
+  before `generationStore.abortRun` and `resolveTerminal` run. The run
+  stays in `txState` with the gate up and an unsettled terminal, so
+  `interruptMemoryRuns`, `cancelStoryRuns` and the gate itself hang
+  until a restart. A chained successor inherits it: the
+  `pipeline.chain_run_failed` catch in `driveSuccessors` only logs.
+  Needs a reversal to throw a non-`DeltaReplayError`, which nothing
+  does today. Related to
+  [`parked.md → An abort waits on its phases, except a thrown parallel branch`](../parked.md#an-abort-waits-on-its-phases-except-a-thrown-parallel-branch).
+  Raised 2026-10-21 by the gated classifier slice's task reviews.
+
+- **A user Cancel whose abort reversal fails lets the Send proceed.**
+  `abortRun` turns a cancelled run whose reversal failed into
+  `failed`, and a `failed` outcome clears the run's deferral.
+  `submitTurn` treats a `failed` deferred pass as "go ahead", so the
+  turn then runs over the unreversed orphans that boot recovery will
+  see. Rare: the reversal's SQLite transaction has to fail. The fix
+  belongs in the orchestrator: a user-cancel whose reversal fails ends
+  `aborted` with an error, so the deferral stays and the Send is
+  cancelled. Raised 2026-10-21 by the gated classifier slice's task
+  reviews.
+
+- **M5.2: `interruptMemoryRuns` takes one snapshot.** It aborts the
+  interruptible runs on the branch as they stand and awaits those
+  terminals. A pass committing during the interrupt could chain a
+  close, which canon's pass-to-close chain allows, that the snapshot
+  misses and that then runs beside the reversal's sweep.
+  `cancelStoryRuns` already loops until the story is idle. Fix: loop
+  the same way, or have `commitRun` refuse an interruptible successor
+  while `reversalInProgress`. Owner: M5.2, the first close that can
+  chain. Raised 2026-10-21 by the gated classifier slice's task
+  reviews.
+
+- **M5.2: Send must also run a deferred close.** `submitTurn` runs
+  only `deferred.pass`, and `nextMemoryRun` returns null while the
+  branch holds a `close` record, so a `{ close: true }` record would
+  stop all memory work on that branch until a restart. Owner: M5.2,
+  which adds the close pipeline. Raised 2026-10-21 by the gated
+  classifier slice's task reviews.
+
+- **M5.2: CTRL-Z of the turn during a close.** `undoLastAction` reads
+  its target before the gate decision. `selectUndoTarget` skips
+  `periodic_classifier` deltas, but a close logs its own under the
+  `chapter_close` source, so the target it finds is the close's group
+  and CTRL-Z of the turn is refused for as long as the close runs.
+  Owner: M5.2. Raised 2026-10-21 by the gated classifier slice's task
+  reviews.
+
+- **The head turn's membership test is written out four times.**
+  `resolveHeadTurn` in `lib/head-turn` is the one definition of the
+  head turn, but the "is this entry its tail or origin" test on top of
+  it is restated in `isHeadTurnEntry`
+  (`lib/actions/story-entries/operational.ts`), `resolveInvalidationScope`
+  (`lib/actions/story-entries/classifier-facts.ts`), `headTurnIdsOf`
+  (`components/reader/row-reversal-flags.ts`) and
+  `resolveSaveAndRegenTurn` (`components/reader/save-and-regen.ts`).
+  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
+  asks for one rule. If they drift, an edit could interrupt a pass and
+  then do a bare write, or the reader could offer an edit the action
+  layer refuses. Raised 2026-10-21 by the gated classifier slice's
+  task reviews.
+
+- **The reader's pill run is a second definition.** `pillRunOf` in
+  `app/reader-composer/[branchId].tsx` picks Send's run with
+  `findSendRun` (`components/reader/send-run.ts`, an allowlist of
+  per-turn and Send's deferred pass), then the branch's pass or close.
+  World and Plot use `pillRun` and `cancelStoryPillRun`
+  (`components/story-settings/generation-run.ts`, tested), which pick
+  by interruptibility and gate. The two agree for today's kinds. A
+  hard-gate, non-interruptible, non-turn kind, such as canon's
+  `translation-retry`, would get a Cancel on World and Plot but none
+  in the reader. Trigger: M8.1. Fix: have the reader reuse the
+  branch-scoped `pillRun`. Raised 2026-10-21 by the gated classifier
+  slice's task reviews.
+
+- **Undo's tooltip names the pass when a refresh blocks it.** With a
+  suggestion refresh running beside a pass, `gateReason` follows the
+  pill to the pass (`Updating memory. Cancel to edit.`), but the
+  refresh is what blocks a head reversal, so Undo's tooltip names the
+  wrong run and the Cancel it points to doesn't enable Undo. Read, not
+  probed. Raised 2026-10-21 by the gated classifier slice's task
+  reviews.
+
+- **Reader rows show no disabled reason.** `ReaderRow` in
+  `components/reader/reader-surface.tsx` passes no `disabledReason` to
+  `EntryCard`, so during a pass a disabled off-head pencil sits beside
+  a live regenerate and delete with no tooltip
+  ([`principles.md → Affordance loci`](../ui/principles.md#affordance-loci),
+  its disabled-controls rule).
+  Raised 2026-10-21 by the gated classifier slice's task reviews.
+
+- **The Toaster's layering contradicts `toast.md → Z-index`.** The
+  `Toaster` in `components/ui/toast.tsx` sets `z-[100]`, which
+  [`toast.md → Z-index`](../ui/patterns/toast.md#z-index) says is
+  above Sheet and AlertDialog. On web RN-Web's `z-index: 0` stacking
+  contexts trap it and Radix dialogs portal to the body, so a toast
+  fired under a dialog sits beneath the scrim. The accessibility half
+  is the M9.5 entry on toasts under a modal Sheet in
+  [`roadmap.md`](./roadmap.md). Raised 2026-10-21 by the gated
+  classifier slice's task reviews.
+
+- **The `sseFetch` fixture answers non-streaming calls with SSE.**
+  `lib/actions/turns/__tests__/fixtures.ts` stubs every request with an
+  event stream. The piggyback fallback's non-streaming call gets that
+  body, fails as a retryable JSON error, and costs each per-turn test
+  a 500 ms backoff (`BACKOFF_BASE_MS` in
+  `lib/ai/transport/call-with-retry.ts`), plus a
+  `classifier.piggyback_fallback_failed` warning in the logs. Raised
+  2026-10-21 by the gated classifier slice's task reviews.
+
+- **`recentDeltaRows` reads the whole delta log.**
+  `lib/actions/story-entries/undo.ts` selects every delta on the
+  branch with no limit, and `undoLastAction` now reads it twice while a
+  pass runs, once before the gate decision and once in the bracket.
+  Raised 2026-10-21 by the gated classifier slice's task reviews.
+
+- **Android: keyboard input pops the reader.** On the emulator,
+  `adb input text` leaves touch mode, and with focus on the top bar's
+  back arrow a space presses it, so `router.back()` pops the reader
+  and logs two "GO_BACK was not handled" warnings. Seen before and
+  after the gated classifier's changes, so it is not theirs; real
+  hardware keyboards may meet it too. Raised 2026-10-21 by the gated
+  classifier slice's task reviews.

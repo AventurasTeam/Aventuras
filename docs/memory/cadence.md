@@ -170,7 +170,7 @@ chains from the pass, or from the turn when no pass is due, and phase
 0 chains passes ahead of it until the classifier is caught up
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 All of them hold the user-edit gate, so World edits and Send wait for
-them. A head reversal (regenerate, swipe, an edit of the head reply,
+them. A head reversal (regenerate, swipe, an edit of the head turn,
 CTRL-Z of the turn, rollback) and Cancel interrupt a pass or a close,
 which then runs before the next turn instead
 ([`generation-pipeline.md → Prose reversals and the interrupt`](../generation-pipeline.md#prose-reversals-and-the-interrupt)).

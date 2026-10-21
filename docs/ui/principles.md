@@ -303,7 +303,7 @@ Implementation contract is in
   [`memory/chapter-close.md`](../memory/chapter-close.md).
 
 **Head reversals pass through a pass or a close.** While either holds
-the gate, regenerate, swipe, an edit of the head reply, CTRL-Z of the
+the gate, regenerate, swipe, an edit of the head turn, CTRL-Z of the
 turn and rollback stay enabled: each interrupts it, and the pass or
 close runs before the next turn instead, with a toast saying so. The
 user never waits minutes to redo the reply they just read.
@@ -400,7 +400,9 @@ they can't submit). Hover/focus reveals a uniform tooltip:
 
 Suggestion refresh is a hard-gate run too, and may run beside a pass
 or a close. It leaves Send in place rather than swapping it for Cancel,
-so its cancel is the status pill's.
+so its cancel is the status pill's when it runs alone. Beside a pass or
+a close the pill names and cancels that run, and the refresh's cancel
+is the suggestion strip's ✕.
 
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.
@@ -419,12 +421,18 @@ changes.
                               [Stay]    [Cancel & leave]
 ```
 
+In flight covers more than a registered run: a Send admitted in its
+branch queue whose run hasn't registered yet, and a reversal's sweep
+(a regenerate's among them), prompt the same way.
+
 `Stay` dismisses the modal; user remains, transaction continues.
-`Cancel & leave` triggers abort + revert, then proceeds with
-navigation. A pass or a close cancelled this way runs before the
-story's next turn instead. Pack edits (vault is out-of-story) and global-settings
-access naturally route through this modal — no per-feature gate
-needed.
+`Cancel & leave` triggers abort + revert, waits for a pending Send or
+a sweep to end, then proceeds with navigation. A regenerate that
+failed or was aborted still has its follow-up sweep to run, so the
+wait covers a turn's whole body, not only its run. A pass or a close
+cancelled this way runs before the story's next turn instead. Pack
+edits (vault is out-of-story) and global-settings access naturally
+route through this modal — no per-feature gate needed.
 
 ### Background pipelines
 

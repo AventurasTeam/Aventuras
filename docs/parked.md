@@ -936,9 +936,8 @@ fixed:
   which boot meets only for a pass's or a close's orphan, whose branch
   it holds back. Either way the branch is reconciled or already held back.
 - **In-session it needs a later successful turn.** The cadence is
-  checked only at a completed turn (today's scheduler ticks only on
-  `kind === PER_TURN_KIND && outcome === 'completed'`), so the failed
-  run does not start a pass.
+  checked only at a completed turn (per-turn's `chainsTo` runs at its
+  commit), so the failed run does not start a pass.
 - **What is stranded is not duplicate material.** A failed reversal
   leaves the aborted run's own entry and its piggyback facts on disk
   _and_ on screen — the patchers never ran either, so the store keeps
@@ -1013,21 +1012,14 @@ prune. And phases also write directly through `ctx.db` (classifier
 status, for one), which dropping events does not stop, so each phase's
 direct writes need auditing first.
 
-Seen again 2026-10-05 in the reversal-integrity PR's review, with part
-of that fix in place: `handleEvent` (`lib/pipeline/runtime/orchestrator.ts`)
-drops a `no-gate` run's write once the run has left txState, keyed on
-its removal rather than its abort. Two windows stay open. A straggler
-that first emits before the run leaves txState, during the reversal or
-the exception hook, passes that check and commits under the run's
-`actionId` unreversed, and boot recovery never reverses it, since the
-run's marker settled with the reversal. And if the reversal throws
-something other than a `DeltaReplayError`, `abortRun` rethrows before
-`generationStore.abortRun`, so the run stays registered and a later
-straggler passes the check and takes a write-phase hold nobody
-releases; that needs both latent conditions at once. Dropping from the
-abort on, as above, covers both. Waiting for every sibling to settle
-before the run aborts would close them too, but contradicts the abort's
-"no drain" step in
+Seen again 2026-10-05 in the reversal-integrity PR's review, which
+found part of that fix in place: `handleEvent` dropped a `no-gate`
+run's write once the run had left txState. That drop went with the
+no-gate write phase when the periodic classifier became gated, so the
+straggler above is unguarded again. Dropping from the abort on, as
+above, is the fix. Waiting for every sibling to settle before the run
+aborts would also close it, but contradicts the abort's "no drain"
+step in
 [Run state transitions](./generation-pipeline.md#run-state-transitions),
 so it needs a canon edit first.
 
@@ -2894,7 +2886,11 @@ button while the dialog was open — confirmed by an actual run
 through the dialog, but the root cause (portal nesting?) was never
 investigated, and any future locator or a11y assumption about
 background-hiding on this stack is unsafe. Surfaced by M3.7b
-implementation (2026-07-31).
+implementation (2026-07-31). A browser probe on 2026-10-21 found that
+Radix's `hideOthers` does mark the app root `aria-hidden` while a
+dialog is open, sparing an `aria-live` node that existed before it
+opened, so the claim doesn't hold for the dialogs probed; why this
+locator matched both stays uninvestigated.
 
 #### BC-style origin era rendering
 
@@ -3008,21 +3004,24 @@ reads that stale array as the truth and deletes or reverts the rows a
 concurrent write added. It also re-creates a row a concurrent write
 deleted, since a draft row whose id left the baseline reads as new.
 
-Unreachable today. Every writer that can link an existing happening is
-`hard-gate`, which blocks the Plot pane while it runs: the periodic
+Unreachable. Every writer that can link an existing happening holds
+the gate, which blocks the Plot pane while it runs — the periodic
 classifier, which links a character's awareness to a happening it
-lists, and chapter-close, which rewrites links on existing
-happenings
+lists, and chapter-close, which rewrites links on existing happenings
 ([awareness pin tuning](./memory/chapter-close.md#3d--awareness-pin-tuning),
-[happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation)),
-but under the same gate. The fix is a three-way merge: record each
-links field's baseline when it goes dirty, then apply the user's diff
-onto the latest rows — about 60–100 lines across the hook and the
-draft builder.
+[happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation))
+— and none starts from Plot or World, while leaving a dirty pane asks
+first. The fix is a three-way merge: record each links field's
+baseline when it goes dirty, then apply the user's diff onto the
+latest rows — about 60–100 lines across the hook and the draft
+builder. World's pane Save carried such a merge for keywords and
+relationships until the gated classifier removed it on the same
+reasoning, so a change to either premise needs both.
 
 Parked 2026-09-23. Revisit when a `no-gate` writer links an existing
-happening, or when a gated run becomes startable while a Plot session
-is dirty. Raised 2026-09-22 by Slice 4.3.
+happening, or when a gated run becomes startable while a Plot or World
+pane is dirty. M5.2's chapter close and M7.2's `[Run classifier now]`
+are the first candidates. Raised 2026-09-22 by Slice 4.3.
 
 #### Select's dropdown popover is pinned to its trigger's width
 

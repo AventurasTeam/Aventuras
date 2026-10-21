@@ -16,7 +16,7 @@ in that batch — the passes it chains hold their own `action_id`s with
 
 An auto close chains after the turn that crosses the threshold, behind
 that turn's pass when one is due, and holds the user-edit gate. A head
-reversal (regenerate, swipe, an edit of the head reply, CTRL-Z of the
+reversal (regenerate, swipe, an edit of the head turn, CTRL-Z of the
 turn, rollback) and Cancel interrupt it, as they interrupt a pass: the
 close is cancelled, its writes reversed, and it runs before the next
 turn instead, with a toast saying so
