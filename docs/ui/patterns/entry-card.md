@@ -82,7 +82,7 @@ type EntryCardProps = {
   disabled?: boolean
   disabledReason?: string
   editDisabled?: boolean // pencil and every edit-mode control; falls back to disabled
-  reversalDisabled?: boolean // regen and delete; falls back to disabled
+  reversalDisabled?: boolean // regen and delete; Save & regenerate needs both flags; falls back to disabled
 
   // Edit mode (host-controlled):
   editing?: boolean
@@ -731,8 +731,9 @@ density-aware sizing inherit from icon-actions.
 so the gate splits in three. `reversalDisabled` gates regen and
 delete, `editDisabled` gates the pencil and every edit-mode control,
 and `disabled` gates the rest: branch, flip era, the world-time
-footer, the scene editor and the system-entry buttons. Each split prop
-falls back to `disabled` when absent. The reader leaves regen and
+footer, the scene editor and the system-entry buttons. Save &
+regenerate saves, then regenerates, so it needs both flags clear. Each
+split prop falls back to `disabled` when absent. The reader leaves regen and
 delete live while only a pass or a close holds the gate, and the
 pencil live on the head turn's entries alone: the tail and, when the
 tail answers one, its `user_action`. An edit off the head turn

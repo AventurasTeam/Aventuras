@@ -492,7 +492,7 @@ export function ReaderSurface({
     setEditDraft('')
   }, [])
   const headTurn = useMemo(() => resolveSaveAndRegenTurn(rows, tailEntryId), [rows, tailEntryId])
-  const headTurnIds = useMemo(() => headTurnIdsOf(rows), [rows])
+  const headTurnIds = useMemo(() => headTurnIdsOf(rows, tailEntryId), [rows, tailEntryId])
 
   return (
     <div className="relative h-full">

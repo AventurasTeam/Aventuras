@@ -3,10 +3,15 @@ import { resolveHeadTurn, type TurnEntry } from '@/lib/head-turn'
 /**
  * The head turn's entries: the narrative tail and, when the tail answers one, its
  * `user_action`. The same membership `updateStoryEntryContent` lets through a pass.
+ * Empty unless the window's last turn is the tail the host named, as for
+ * `resolveSaveAndRegenTurn`: a window short of the live edge describes another turn.
  */
-export function headTurnIdsOf(rows: readonly TurnEntry[]): ReadonlySet<string> {
+export function headTurnIdsOf(
+  rows: readonly TurnEntry[],
+  tailEntryId: string | null,
+): ReadonlySet<string> {
   const head = resolveHeadTurn(rows)
-  if (head == null) return new Set()
+  if (head == null || head.tail.id !== tailEntryId) return new Set()
   return new Set(head.origin == null ? [head.tail.id] : [head.tail.id, head.origin.id])
 }
 

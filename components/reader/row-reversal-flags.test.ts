@@ -9,24 +9,38 @@ function entry(id: string, kind: string) {
 describe('headTurnIdsOf', () => {
   it('holds the tail reply and the user action it answers', () => {
     const rows = [entry('e1', 'opening'), entry('e2', 'user_action'), entry('e3', 'ai_reply')]
-    expect([...headTurnIdsOf(rows)].sort()).toEqual(['e2', 'e3'])
+    expect([...headTurnIdsOf(rows, 'e3')].sort()).toEqual(['e2', 'e3'])
   })
 
   // The failure banner sits at MAX(position) + 1 and is no turn of its own.
   it('reads past a trailing system entry to the turn beneath it', () => {
     const rows = [entry('e1', 'user_action'), entry('e2', 'ai_reply'), entry('e3', 'system')]
-    expect([...headTurnIdsOf(rows)].sort()).toEqual(['e1', 'e2'])
+    expect([...headTurnIdsOf(rows, 'e2')].sort()).toEqual(['e1', 'e2'])
   })
 
   it('holds only the tail when the tail answers no user action', () => {
-    expect([...headTurnIdsOf([entry('e1', 'ai_reply'), entry('e2', 'user_action')])]).toEqual([
+    expect([...headTurnIdsOf([entry('e1', 'ai_reply'), entry('e2', 'user_action')], 'e2')]).toEqual(
+      ['e2'],
+    )
+    expect([...headTurnIdsOf([entry('e1', 'opening'), entry('e2', 'ai_reply')], 'e2')]).toEqual([
       'e2',
     ])
-    expect([...headTurnIdsOf([entry('e1', 'opening'), entry('e2', 'ai_reply')])]).toEqual(['e2'])
   })
 
   it('is empty on an empty branch', () => {
-    expect(headTurnIdsOf([]).size).toBe(0)
+    expect(headTurnIdsOf([], 'e1').size).toBe(0)
+  })
+
+  // A window that stops short of the branch's live edge describes a different turn, which the
+  // action layer would refuse (the same check resolveSaveAndRegenTurn makes).
+  it('is empty when the window ends on a turn the host did not name as the tail', () => {
+    const rows = [entry('e1', 'user_action'), entry('e2', 'ai_reply')]
+    expect(headTurnIdsOf(rows, 'e9').size).toBe(0)
+  })
+
+  it('is empty when the host names no tail', () => {
+    const rows = [entry('e1', 'user_action'), entry('e2', 'ai_reply')]
+    expect(headTurnIdsOf(rows, null).size).toBe(0)
   })
 })
 

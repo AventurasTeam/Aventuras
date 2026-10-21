@@ -155,9 +155,9 @@ type EntryCardProps = {
   // edit-restrictions (uniform):
   disabled?: boolean
   disabledReason?: string
-  /** Pencil and edit mode; falls back to `disabled`. Head-turn rows stay live during a pass. */
+  /** Gates the pencil and every edit-mode control; falls back to `disabled`. */
   editDisabled?: boolean
-  /** ↻ and ×; falls back to `disabled`. Live while only a pass or a close holds the gate. */
+  /** Gates ↻, × and Save & regenerate (with `editDisabled`); falls back to `disabled`. */
   reversalDisabled?: boolean
 
   // edit mode (host-controlled):
@@ -1045,7 +1045,7 @@ export function EntryCard({
                 variant="secondary"
                 size="sm"
                 onPress={onCommitEditAndRegen}
-                disabled={editOff || !editDirty}
+                disabled={editOff || reversalOff || !editDirty}
               >
                 <Icon as={RefreshCw} size="sm" />
                 <Text>{t('reader:entryCard.saveAndRegenerate')}</Text>

@@ -389,6 +389,7 @@ export const HeadTurnEditDuringPass: StoryT = {
     editing: true,
     disabled: true,
     editDisabled: false,
+    reversalDisabled: false,
     onContentChange: fn(),
     onCommitEdit: fn(),
     onCommitEditAndRegen: fn(),
@@ -408,6 +409,33 @@ export const HeadTurnEditDuringPass: StoryT = {
 
     await userEvent.click(save)
     await waitFor(() => expect(args.onCommitEdit).toHaveBeenCalledTimes(1))
+  },
+}
+
+/**
+ * Save & regenerate is a save then a regenerate: with the reversal gate held it stays off,
+ * so a saved edit is never followed by a refused regenerate. Plain Save follows `editDisabled`.
+ */
+export const SaveAndRegenerateWaitsOnReversalGate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    editDisabled: false,
+    reversalDisabled: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    expect(
+      await screen.findByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: t('save') })).not.toBeDisabled()
   },
 }
 
