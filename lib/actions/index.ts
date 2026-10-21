@@ -106,7 +106,6 @@ export {
 export { storyHasTurns } from './story-entries/has-turns'
 export {
   getRollbackCounts,
-  rollbackCountsOf,
   rollbackToEntry,
   sameRollbackCounts,
   updateStoryEntryContent,

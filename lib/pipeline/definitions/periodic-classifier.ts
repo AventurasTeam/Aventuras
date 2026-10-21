@@ -8,7 +8,6 @@ import {
   classifierReplySchema,
   clampEmbeddedCharacter,
   IDLE_STATUS_JSON,
-  idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
@@ -41,6 +40,7 @@ import {
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
+import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
@@ -82,12 +82,8 @@ type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
 // The status the run found, for onInterrupt to restore once the orchestrator's reversal commits.
 const PRE_RUN_STATUS = 'periodicClassifier.preRunStatus'
 
-async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
-  const [row] = await ctx.db
-    .select({ classifierStatus: branches.classifierStatus })
-    .from(branches)
-    .where(eq(branches.id, ctx.branchId))
-  return row?.classifierStatus ?? idleStatus()
+function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
+  return readClassifierStatus(ctx.branchId, ctx)
 }
 
 // Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped

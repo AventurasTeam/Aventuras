@@ -28,7 +28,7 @@ export async function unprocessedEntryCount(
 
 export async function readClassifierStatus(
   branchId: string,
-  ctx: DbCtx,
+  ctx: Pick<DbCtx, 'db'>,
 ): Promise<ClassifierStatus> {
   const [row] = await ctx.db
     .select({ classifierStatus: branches.classifierStatus })
