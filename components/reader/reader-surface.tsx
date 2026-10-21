@@ -243,9 +243,9 @@ export function ReaderSurface({
     setEditingId(null)
     setEditDraft('')
   }, [branchKey])
-  // Bottom pin: late layout (font swaps, image decode, a committed reply's
-  // footer) can still grow content after a scrollTop write, so re-assert per
-  // frame until the scroll height settles. The user's first gesture breaks it.
+  // Bottom pin: late layout (font swaps, image decode) can still grow content
+  // after a scrollTop write, so re-assert per frame until the scroll height
+  // settles. The user's first gesture breaks it.
   const pinRafRef = useRef(0)
   const stopBottomPin = useCallback(() => {
     pinActiveRef.current = false
@@ -432,8 +432,8 @@ export function ReaderSurface({
     if (streaming == null) {
       if (streamActiveRef.current) {
         streamActiveRef.current = false
-        // The committed row replacing the streaming card is taller (its footer)
-        // and can land frames later; an engaged reader stays at the bottom.
+        // The committed row that replaces the streaming card is taller (its
+        // footer); hold an engaged reader at the bottom through the swap.
         const engaged = machine.state === 'engaged'
         machine.streamEnded()
         if (engaged) startBottomPin()
@@ -454,8 +454,7 @@ export function ReaderSurface({
     }
   }, [streaming, startBottomPin])
 
-  // A viewport shrinking under a reader at the bottom (the memory banner mounting as a pass
-  // starts) would otherwise hide the newest lines.
+  // A viewport shrinking under a reader at the bottom would otherwise hide the newest lines.
   useEffect(() => {
     const el = scrollRef.current
     if (el == null) return
@@ -463,7 +462,7 @@ export function ReaderSurface({
     const observer = new ResizeObserver(() => {
       const previousClientHeight = lastClientHeight
       lastClientHeight = el.clientHeight
-      if (el.clientHeight >= previousClientHeight) return
+      if (el.clientHeight >= previousClientHeight || gestureActiveRef.current) return
       // Read from geometry, not lastDistanceRef: content can grow below without a scroll
       // event, and a shrink never clamps scrollTop.
       const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight

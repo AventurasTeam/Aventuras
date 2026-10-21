@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 
 import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
@@ -616,6 +616,26 @@ test.describe('periodic classifier — unassigned agent', () => {
   })
 })
 
+// The reader's distance from the bottom once its geometry has held for 10 frames: an end
+// state, not the first sample that happens to pass.
+function settledDistanceFromBottom(scroller: Locator): Promise<number> {
+  return scroller.evaluate(
+    (el) =>
+      new Promise<number>((resolve) => {
+        let stableFrames = 0
+        let last = ''
+        const tick = () => {
+          const key = `${el.scrollHeight}|${el.clientHeight}|${el.scrollTop}`
+          stableFrames = key === last ? stableFrames + 1 : 0
+          last = key
+          if (stableFrames >= 10) resolve(el.scrollHeight - el.scrollTop - el.clientHeight)
+          else requestAnimationFrame(tick)
+        }
+        tick()
+      }),
+  )
+}
+
 // A pass that writes one happening, so its run leaves deltas to find by action_id.
 function gatedPassReply(title: string) {
   return {
@@ -801,13 +821,19 @@ test.describe('periodic classifier — the gated pass', () => {
     expect(pass).not.toBe(userAction.actionId)
 
     await expect(memoryBanner.updating(page)).toBeVisible()
-    // The reply settles at the bottom and the banner then takes height from the reader; its
-    // last lines stay in view through both (reader-composer.md → Autoscroll).
+    // Geometry, not the DB: the reader's viewport shrinks under the shell's banner and the
+    // composer, a route seam no story reaches. The reply's stream-end settle leaves the reader
+    // at the bottom under the banner (reader-composer.md → Autoscroll).
     const scroller = reader.scroller(page)
     expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0)
-    await expect
-      .poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
-      .toBeLessThanOrEqual(1)
+    expect(await settledDistanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+    // A draft that grows the composer shrinks the reader again, long after the settle; the
+    // viewport-shrink re-pin keeps it at the bottom.
+    const readerHeight = await scroller.evaluate((el) => el.clientHeight)
+    await reader.composer(page).fill('E2E-GATE-LINES\ntwo\nthree\nfour\nfive\nsix')
+    await expect.poll(() => scroller.evaluate((el) => el.clientHeight)).toBeLessThan(readerHeight)
+    expect(await settledDistanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+    await reader.composer(page).fill('')
     // The head reversals interrupt a pass, so they stay live; the rest keeps the whole gate.
     const offHead = await replyBefore(branch, userEntry)
     await expect(reader.regenEntry(page, reply)).toBeEnabled()

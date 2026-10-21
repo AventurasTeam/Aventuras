@@ -481,13 +481,44 @@ export const GrowNearBottomHolds: Story = {
   },
 }
 
+/** No programmatic write lands under a finger: a shrink while a touch is down holds. */
+export const ShrinkDuringTouchHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeCloseTo(BANNER_HEIGHT_PX, 0)
+  },
+}
+
+/**
+ * Content that grew below the viewport fires no scroll event, so only the geometry at the
+ * shrink knows the reader had already left the bottom.
+ */
+export const ShrinkAfterSilentGrowthHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    entryRow('o14').style.paddingBottom = '80px'
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeGreaterThan(60))
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
 const REPLY_TEXT = 'The corridor folds shut behind you.'
-// Frames between the commit and the reply's late growth: inside the settle window, as the real
-// route's footer layout lands a couple of frames after the stream card goes.
+// Frames between the commit and the reply's late growth, inside the settle window: the per-frame
+// loop is what absorbs layout that lands after the pin's first write.
 const LATE_GROWTH_FRAMES = 5
 
 // The surface across a stream's end: the streaming card gives way to its committed row, which
-// grows a few frames later the way the real reply's footer lays out late.
+// then grows a few frames later.
 function StreamEndHarness(props: ComponentProps<typeof ReaderSurface>) {
   const [phase, setPhase] = useState<'streaming' | 'committed' | 'grown'>('streaming')
   useEffect(() => {
@@ -575,6 +606,24 @@ export const StreamEndSettleBrokenByWheel: Story = {
     expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
     expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
     scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }))
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A touch drag during the settle hands the position back to the user. */
+export const StreamEndSettleBrokenByTouch: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
+    expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    scroller.dispatchEvent(new Event('touchmove', { bubbles: true }))
     scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
     const scrollTop = scroller.scrollTop
     await replyGrown()
