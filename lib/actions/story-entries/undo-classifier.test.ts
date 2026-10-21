@@ -398,7 +398,7 @@ describe('AC4 — CTRL-Z of the turn with a classifier run mid-flight', () => {
     expect(entriesStore.getById('e_t1')).toBeDefined()
 
     // What the orchestrator does at the end of an abort: deregister, then resolve the terminal.
-    generationStore.abortRun('run_c')
+    generationStore.abortRun('run_c', 'aborted')
     resolveTerminal()
     expect((await done).status).toBe('ok')
     expect(entriesStore.getById('e_t1')).toBeUndefined()

@@ -122,7 +122,7 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
     // Marker insert failed; unwind the synchronous reservation so a half-registered
     // run can't gate edits or hold the branch against a retry. Resolve terminal so a
     // waiter that grabbed it between reserve and failure isn't left hanging.
-    generationStore.abortRun(run.runId)
+    generationStore.abortRun(run.runId, 'unwound')
     run.resolveTerminal()
     throw e
   }
@@ -593,7 +593,7 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
       await startChainedSuccessor(current, ctx)
     } catch (e) {
       // As beginRun's unwind: a half-registered successor must not keep the gate up.
-      generationStore.abortRun(current.runId)
+      generationStore.abortRun(current.runId, 'unwound')
       current.resolveTerminal()
       logger.error(
         'pipeline.chain_start_failed',

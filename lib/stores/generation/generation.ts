@@ -107,10 +107,11 @@ type GenerationState = {
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch and `'failed'` clears that record; no outcome leaves the record alone. Returns the
-   * slot this call newly recorded, or null.
+   * branch and `'failed'` clears that record; `'unwound'` (a reservation whose marker insert
+   * failed, so the run never started) leaves the record alone. Returns the slot this call newly
+   * recorded, or null.
    */
-  abortRun: (runId: string, outcome?: 'aborted' | 'failed') => DeferredWorkKind | null
+  abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   setReversalInProgress: (value: boolean) => void
   /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
   bracketPendingTurn: <T>(
@@ -170,7 +171,7 @@ const store = createStore<GenerationState>()((set) => ({
       runs.delete(runId)
       const key = run?.interruptible
       let deferred = s.txState.deferred
-      if (run && key && outcome) {
+      if (run && key && outcome !== 'unwound') {
         if (outcome === 'aborted' && deferred.get(run.branchId)?.[key] !== true) recorded = key
         deferred = withDeferral(deferred, run.branchId, key, outcome === 'aborted')
       }

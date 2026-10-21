@@ -201,16 +201,16 @@ describe('deferred work', () => {
     expect(generationStore.getTxState().deferred.size).toBe(0)
   })
 
-  it('leaves the record alone when the abort names no outcome (a marker-insert unwind)', () => {
+  it('leaves the record alone for an unwound reservation (a marker-insert failure)', () => {
     generationStore.startRun(pass('run_first'))
     generationStore.abortRun('run_first', 'aborted')
     generationStore.startRun(pass('run_unwound'))
-    expect(generationStore.abortRun('run_unwound')).toBeNull()
+    expect(generationStore.abortRun('run_unwound', 'unwound')).toBeNull()
     expect(generationStore.getTxState().runs.has('run_unwound')).toBe(false)
     expect(deferredOn('b1')).toEqual({ pass: true })
 
     generationStore.startRun(pass('run_clean', { branchId: 'b2' }))
-    generationStore.abortRun('run_clean')
+    generationStore.abortRun('run_clean', 'unwound')
     expect(generationStore.getTxState().deferred.has('b2')).toBe(false)
   })
 
@@ -355,7 +355,7 @@ describe('generation store', () => {
   it('startRun adds, abortRun removes', () => {
     generationStore.startRun(run('run_1'))
     expect(generationStore.getTxState().runs.has('run_1')).toBe(true)
-    generationStore.abortRun('run_1')
+    generationStore.abortRun('run_1', 'aborted')
     expect(generationStore.getTxState().runs.has('run_1')).toBe(false)
   })
 
@@ -391,9 +391,9 @@ describe('settleCount', () => {
     expect(generationStore.getSettleCount()).toBe(1)
   })
 
-  it('bumps by one on abortRun, with or without an outcome', () => {
+  it('bumps by one on abortRun, whatever the outcome', () => {
     generationStore.startRun(run('run_1'))
-    generationStore.abortRun('run_1')
+    generationStore.abortRun('run_1', 'unwound')
     expect(generationStore.getSettleCount()).toBe(1)
     generationStore.startRun(pass('run_2'))
     generationStore.abortRun('run_2', 'aborted')
@@ -424,6 +424,7 @@ describe('settleCount', () => {
 })
 
 // Default abort ends the run as the orchestrator does: leaves txState, then resolves its terminal.
+// It ends 'failed', which records no deferral, so only a helper's own record would show.
 function liveRun(over: Partial<RunState> & { runId: string }, onAbort?: (r: RunState) => void) {
   let resolveTerminal!: () => void
   const terminal = new Promise<void>((resolve) => {
@@ -432,7 +433,7 @@ function liveRun(over: Partial<RunState> & { runId: string }, onAbort?: (r: RunS
   const r: RunState = { ...run(over.runId), ...over, terminal, resolveTerminal }
   r.abortController.signal.addEventListener('abort', () => {
     if (onAbort) return onAbort(r)
-    generationStore.abortRun(r.runId)
+    generationStore.abortRun(r.runId, 'failed')
     r.resolveTerminal()
   })
   return r
@@ -631,11 +632,11 @@ describe('cancelStoryRuns', () => {
     let reads = 0
     const stuck = liveRun(
       { runId: 'run_stuck', kind: 'per-turn' },
-      (r) => void setTimeout(() => generationStore.abortRun(r.runId), 0),
+      (r) => void setTimeout(() => generationStore.abortRun(r.runId, 'aborted'), 0),
     )
     stuck.terminal = {
       then: (resolve: () => void) => {
-        if (++reads > 50) generationStore.abortRun(stuck.runId)
+        if (++reads > 50) generationStore.abortRun(stuck.runId, 'aborted')
         resolve()
       },
     } as unknown as Promise<void>

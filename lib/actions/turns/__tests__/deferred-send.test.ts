@@ -292,7 +292,7 @@ describe('Send with deferred work', () => {
     expect(result.outcome).toBe('completed')
     expect(pass.runs).toHaveLength(1)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
-    generationStore.abortRun(blocker.runId)
+    generationStore.abortRun(blocker.runId, 'aborted')
   })
 
   it('runs no pass before a turn when nothing is deferred', async () => {
