@@ -382,9 +382,9 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
   },
 
   zhipu: {
-    name: 'Zhipu AI',
-    description: 'GLM models (Chinese AI provider)',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    name: 'Z.AI',
+    description: 'GLM models',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
     requiresApiKey: true,
     capabilities: {
       textGeneration: true,
