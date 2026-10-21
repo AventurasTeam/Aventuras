@@ -46,6 +46,7 @@ import {
   sendRunStreams,
 } from '@/components/reader/send-run'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
+import { suggestionRefreshBlocked } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
   describeTurnFailure,
@@ -1025,9 +1026,10 @@ export default function ReaderComposerRoute() {
   }, [terminalEntry?.id])
 
   const handleRefreshSuggestions = useCallback(() => {
-    // The strip re-renders disabled a frame late, and the orchestrator admits a refresh during
-    // a reversal or a pending Send.
-    if (dispatchInFlightRef.current || generationStore.isHeadReversalBlocked(branchId)) return
+    if (
+      suggestionRefreshBlocked(generationStore.getTxState(), branchId, dispatchInFlightRef.current)
+    )
+      return
     const anchor = terminalEntry
     const story = openForBranch
     // The phase resolves its own anchor; this only proves there is one to
