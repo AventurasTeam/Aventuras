@@ -1770,7 +1770,9 @@ own.
   selected: every CTRL-Z, redo, prose edit, rollback and its preview,
   abort and boot recovery. CTRL-Z also loads the branch's whole log,
   payloads included, to pick its target (`recentDeltaRows` in
-  `lib/actions/story-entries/undo.ts`), and `reverseReplayDeltas`'s
+  `lib/actions/story-entries/undo.ts`), and while a pass runs
+  `undoLastAction` reads it twice: once before the gate decides, once
+  in the reversal bracket. `reverseReplayDeltas`'s
   `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
   matches no index, so abort and boot recovery scan `deltas` across
   every story. The only `deltas` indexes are `(branch_id, log_position)`
@@ -1783,7 +1785,8 @@ own.
   read for CTRL-Z's target, measured on a bench beside
   `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
   review (2026-10-05); the two wider scans were found when it was
-  routed.
+  routed, and the double read during a pass by the gated classifier
+  slice's task reviews (2026-10-21).
 - **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
   `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
   indexes without statistics. Measured while planning 4.2c's History

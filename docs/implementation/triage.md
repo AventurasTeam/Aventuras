@@ -600,12 +600,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `classifier.piggyback_fallback_failed` warning in the logs. Raised
   2026-10-21 by the gated classifier slice's task reviews.
 
-- **`recentDeltaRows` reads the whole delta log.**
-  `lib/actions/story-entries/undo.ts` selects every delta on the
-  branch with no limit, and `undoLastAction` reads it twice while a
-  pass runs, once before the gate decision and once in the bracket.
-  Raised 2026-10-21 by the gated classifier slice's task reviews.
-
 - **Android: keyboard input pops the reader.** On the emulator,
   `adb input text` leaves touch mode, and with focus on the top bar's
   back arrow a space presses it, so `router.back()` pops the reader
