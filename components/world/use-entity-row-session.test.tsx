@@ -200,8 +200,7 @@ describe('useEntityRowSession', () => {
     expect(onRejected).not.toHaveBeenCalled()
   })
 
-  // A classifier alias landing while keywords are dirty must not become the Save's base.
-  it('saves against the keywords the draft was based on, not the list stored since', async () => {
+  it('hands onSave the draft alone, the dirty field as the user left it', async () => {
     const onSave = vi.fn(async () => ({ status: 'ok', id: 'loc_shop' }) as EntitySaveResult)
     const based = { ...VALUES, keywords: ['the shop'] }
     const hook = renderHook(
@@ -228,9 +227,9 @@ describe('useEntityRowSession', () => {
     await act(async () => {
       await hook.result.current.save()
     })
+    // The whole argument list: a base passed beside the draft fails this.
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ keywords: ['the shop', 'the store'] }),
-      ['the shop'],
     )
   })
 

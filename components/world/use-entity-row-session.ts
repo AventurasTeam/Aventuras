@@ -13,7 +13,6 @@ import type { EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { EntityBaseDraft } from '@/lib/world'
 
-import { useDraftBase, type DraftBase } from './use-draft-base'
 import {
   placeRefusalNotice,
   placeRefusalText,
@@ -38,8 +37,7 @@ type EntityRowSessionOptions<Draft extends EntityDraft> = {
   resolver: Resolver<Draft>
   fieldLabel: (field: string) => string
   issueText: (message: string) => string
-  /** `keywordsBase`: the stored keywords the draft's list was based on (Save's three-way diff). */
-  onSave: (draft: Draft, keywordsBase: readonly string[]) => Promise<EntitySaveResult>
+  onSave: (draft: Draft) => Promise<EntitySaveResult>
   /** After a successful save; the route selects the row (a create's new id). */
   onSaved: (id: string) => void
   onRejected?: (reason: string) => void
@@ -70,7 +68,6 @@ export function useEntityRowSession<Draft extends EntityDraft>({
   const rowKey = rowId ?? `create:${kind}:${createSeq}`
   const formRef = useRef<UseFormReturn<Draft> | null>(null)
   const rowKeyRef = useRef(rowKey)
-  const keywordsRef = useRef<DraftBase<readonly string[]> | null>(null)
   // The refused field shows the rule's text; the bar's notice adds the tab the field is on.
   const [placeNotice, setPlaceNotice] = useState<{ message: string; notice: string } | null>(null)
   const sessionIssueText = useCallback(
@@ -81,8 +78,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
   const commit = useCallback(
     async (draft: Draft): Promise<RowCommitResult> => {
       const startKey = rowKeyRef.current
-      const keywords = keywordsRef.current
-      const result = await onSave(draft, keywords?.base ?? values.keywords)
+      const result = await onSave(draft)
       if (result.status === 'rejected') {
         // A place rule names its own field and places (world.md → Settings).
         const { refusal } = result
@@ -102,7 +98,6 @@ export function useEntityRowSession<Draft extends EntityDraft>({
         }
         return { status: 'rejected', reason: place?.notice ?? saveRejectionText(result.code) }
       }
-      if (rowKeyRef.current === startKey) keywords?.markSaved(draft.keywords)
       // The write landed: a throwing onSaved must not read as failed, or a retry creates it twice.
       try {
         onSaved(result.id)
@@ -115,7 +110,7 @@ export function useEntityRowSession<Draft extends EntityDraft>({
       }
       return { status: 'ok' }
     },
-    [kind, values.keywords, onSave, onSaved, fieldErrors],
+    [kind, onSave, onSaved, fieldErrors],
   )
   const session = useRowSaveSession<Draft>({
     rowKey,
@@ -129,14 +124,9 @@ export function useEntityRowSession<Draft extends EntityDraft>({
     onRejected,
   })
   const { form, dirty, requestLeave } = session
-  const keywordsBase = useDraftBase<readonly string[]>(
-    session.dirtyFields.includes(fieldLabel('keywords')),
-    values.keywords,
-  )
   useLayoutEffect(() => {
     formRef.current = form
     rowKeyRef.current = rowKey
-    keywordsRef.current = keywordsBase
   })
   useEffect(() => {
     onSession({ dirty, requestLeave })

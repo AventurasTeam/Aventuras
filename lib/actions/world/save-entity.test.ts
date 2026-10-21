@@ -126,10 +126,8 @@ describe('saveEntity', () => {
           kind: 'character',
           branchId: 'br_1',
           row,
-          keywordsBase: row.keywords,
           draft: characterDraftFrom(null, []),
           relationships: [],
-          relationshipsBase: [],
         },
         ctx,
       ),
@@ -159,10 +157,8 @@ describe('saveEntity', () => {
           kind: 'character',
           branchId: 'br_1',
           row,
-          keywordsBase: row.keywords,
           draft,
           relationships: [],
-          relationshipsBase: [],
         },
         ctx,
       ),
@@ -196,7 +192,6 @@ describe('saveEntity', () => {
         kind: 'location',
         branchId: 'br_1',
         row: null,
-        keywordsBase: [],
         draft: { ...locationDraftFrom(null), name: 'The Salt Wells' },
       },
       ctx,
@@ -217,7 +212,6 @@ describe('saveEntity', () => {
         kind: 'location',
         branchId: 'br_1',
         row,
-        keywordsBase: row.keywords,
         draft: { ...locationDraftFrom(row), parentLocationId: 'loc_b' },
       },
       ctx,
@@ -252,10 +246,8 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row,
-        keywordsBase: row.keywords,
         draft,
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )
@@ -288,10 +280,8 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row,
-        keywordsBase: row.keywords,
         draft,
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )
@@ -310,7 +300,6 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row: null,
-        keywordsBase: [],
         draft: {
           ...characterDraftFrom(null, []),
           name: 'Sable',
@@ -319,7 +308,6 @@ describe('saveEntity', () => {
           ],
         },
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )
@@ -348,7 +336,7 @@ describe('saveEntity', () => {
     expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
   })
 
-  it('keeps a pair added after the draft baseline while it writes the edited one', async () => {
+  it('deletes a stored pair the draft lacks while it writes the edited one, as one action', async () => {
     const { db, ctx } = await setup()
     await db
       .insert(entities)
@@ -378,13 +366,11 @@ describe('saveEntity', () => {
     ])
     characterRelationshipsStore.hydrate('br_1', await db.select().from(characterRelationships))
     const current = characterRelationshipsStore.getRelationships('char_kael', 'br_1')
-    const base = current.filter((r) => r.otherId === 'char_aria')
-    expect(base).toHaveLength(1)
     expect(current).toHaveLength(2)
 
     const row = await rowOf(db, 'char_kael')
     const draft = {
-      ...characterDraftFrom(row, base),
+      ...characterDraftFrom(row, current),
       relationships: [
         {
           cardKey: 'card_aria',
@@ -396,32 +382,21 @@ describe('saveEntity', () => {
     }
     expect(
       await saveEntity(
-        {
-          kind: 'character',
-          branchId: 'br_1',
-          row,
-          keywordsBase: row.keywords,
-          draft,
-          relationships: current,
-          relationshipsBase: base,
-        },
+        { kind: 'character', branchId: 'br_1', row, draft, relationships: current },
         ctx,
       ),
     ).toEqual({ status: 'ok', id: 'char_kael' })
 
     const rels = await db.select().from(characterRelationships)
-    expect(rels.find((r) => r.id === 'rel_vorne')).toMatchObject({
-      kind: 'rival',
-      inverseKind: null,
-    })
+    expect(rels.map((r) => r.id)).toEqual(['rel_aria'])
     // Kael is b of Kael↔Aria, so Kael's view of Aria is inverse_kind.
-    expect(rels.find((r) => r.id === 'rel_aria')).toMatchObject({
-      kind: 'brother',
-      inverseKind: 'estranged sister',
-    })
-    const rows = await deltaRows(db)
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ op: 'update', targetId: 'rel_aria' })
+    expect(rels[0]).toMatchObject({ kind: 'brother', inverseKind: 'estranged sister' })
+    const rows = (await deltaRows(db)).sort((a, b) => a.logPosition - b.logPosition)
+    expect(rows.map((r) => [r.op, r.targetId])).toEqual([
+      ['update', 'rel_aria'],
+      ['delete', 'rel_vorne'],
+    ])
+    expect(new Set(rows.map((r) => r.actionId)).size).toBe(1)
   })
 
   it('collapses keyword case variants on commit', async () => {
@@ -433,10 +408,8 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row,
-        keywordsBase: row.keywords,
         draft: { ...characterDraftFrom(row, []), keywords: ['Grey Wolf', 'grey wolf'] },
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )
@@ -454,10 +427,8 @@ describe('saveEntity', () => {
         kind: 'character',
         branchId: 'br_1',
         row,
-        keywordsBase: row.keywords,
         draft: { ...characterDraftFrom(row, []), description: 'x' },
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )
@@ -513,7 +484,6 @@ describe('saveEntity — places', () => {
       kind: 'location' as const,
       branchId: 'br_1',
       row,
-      keywordsBase: row.keywords,
       draft: { ...locationDraftFrom(row), ...changes },
     }
   }
@@ -691,7 +661,6 @@ describe('saveEntity — places', () => {
           kind: 'location',
           branchId: 'br_1',
           row,
-          keywordsBase: [],
           draft: locationDraftFrom(null),
         },
         ctx,
@@ -742,10 +711,8 @@ describe('saveEntity — places', () => {
         kind: 'character',
         branchId: 'br_1',
         row: kael,
-        keywordsBase: [],
         draft: { ...characterDraftFrom(kael, []), currentLocationId: 'loc_vellis' },
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )
@@ -760,10 +727,8 @@ describe('saveEntity — places', () => {
         kind: 'character',
         branchId: 'br_1',
         row: mira,
-        keywordsBase: [],
         draft: { ...characterDraftFrom(mira, []), description: 'waits' },
         relationships: [],
-        relationshipsBase: [],
       },
       ctx,
     )

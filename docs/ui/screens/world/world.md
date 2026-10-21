@@ -363,10 +363,10 @@ are referenced.
   the editor, not on the row.
 - **Save** — relationship edits join the pane's save session: one Save
   commits them with the rest of the pane under one `action_id`, each
-  pair as a single write carrying both perspectives. Only the user's
-  own changes relative to what the pane showed are written; a pair or
-  view the classifier changed meanwhile, and the user left alone,
-  keeps its stored value.
+  pair as a single write carrying both perspectives. The draft is
+  diffed against the links stored at Save: an edited view is written,
+  an untouched one keeps its stored text, and a pair the user deleted
+  is removed.
 
 **Edits and memory updates.** A memory update never overwrites a field
 the user saved after the prose it processes (a status, a removed
@@ -378,12 +378,9 @@ authoring contract below. A pass holds the gate, so World's Saves wait
 while it runs, and the generation status pill and banner read
 `updating memory…`
 ([`generation-status-pill.md → Memory phases`](../../patterns/generation-status-pill.md#memory-phases)).
-A pane left dirty across a pass leaves the pass's writes alone the same
-way: keywords, like relationships, merge three-way, so the Save applies
-only the terms the user added or removed to the stored list, and an
-alias a pass appended stays. A faction a pass set stays unless the user
-changed the faction: the pane refreshes every field the user hasn't
-touched.
+A pane is never dirty across a pass: none starts from World, and
+leaving a dirty pane asks first, so a Save writes the draft as the user
+left it.
 
 **Empty state.** When the character has no recorded relationships,
 render the Relationships sub-section heading + an empty-state hint
@@ -1103,8 +1100,7 @@ Field-level rules:
   and for keywords, keeps the canonical's entries in their order,
   with the other row's additions after them, the order the chips
   show. The merge builds it from the rows as they are when it
-  writes, less the terms the user dropped, so a keyword the
-  classifier adds while the merge waits is kept.
+  writes, less the terms the user dropped.
 - **`state` JSON** — taken whole-side from canonical. Per-field
   diff inside `state` is out of scope for v1: schema shape
   varies per kind (character / location / item / faction),

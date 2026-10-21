@@ -471,8 +471,6 @@ describe('flag clears through the entity arm', () => {
       kind: 'character',
       draft: { ...characterDraftFrom(row, []), name },
       relationships: [],
-      relationshipsBase: [],
-      keywordsBase: row.keywords,
       branchId: 'b1',
       row,
       branchEntities,
@@ -591,7 +589,6 @@ describe('flag clears through the entity arm', () => {
     const actions = entityActions({
       kind: 'location',
       draft: { ...locationDraftFrom(market), parentLocationId: 'loc_q' },
-      keywordsBase: market.keywords,
       branchId: 'b1',
       row: market,
       branchEntities: rows,

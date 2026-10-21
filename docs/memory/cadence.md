@@ -314,10 +314,3 @@ What stays open:
   happening on abort or recovery or a happening on a prose edit,
   deletes the user's edits to it too, and prunes their deltas with it
   ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
-- A World pane left dirty across a pass Saves against the row as it
-  rendered it. Keywords and relationships merge three-way, so a pass's
-  write survives unless the user changed the same term or view;
-  `entities.state` is rebuilt with only the fields the user changed,
-  and the pane refreshes a field the user hasn't touched when a pass
-  writes it. A pass holds the gate, so none of its writes lands between
-  a Save's render and its commit.
