@@ -41,6 +41,8 @@ export const reader = {
   // Each entry renders in a `data-entry-row` div (components/reader/reader-surface.tsx),
   // a stable DOM scope anchor — no component change needed.
   row: (page: Page, entryId: string): Locator => page.locator(`[data-entry-row="${entryId}"]`),
+  // The rows' scroll container, the parent every `data-entry-row` shares.
+  scroller: (page: Page): Locator => page.locator('[data-entry-row]').first().locator('..'),
   editEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.editEntry') }),
   deleteEntry: (page: Page, entryId: string): Locator =>

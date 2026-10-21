@@ -801,6 +801,13 @@ test.describe('periodic classifier — the gated pass', () => {
     expect(pass).not.toBe(userAction.actionId)
 
     await expect(memoryBanner.updating(page)).toBeVisible()
+    // The reply settles at the bottom and the banner then takes height from the reader; its
+    // last lines stay in view through both (reader-composer.md → Autoscroll).
+    const scroller = reader.scroller(page)
+    expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0)
+    await expect
+      .poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+      .toBeLessThanOrEqual(1)
     // The head reversals interrupt a pass, so they stay live; the rest keeps the whole gate.
     const offHead = await replyBefore(branch, userEntry)
     await expect(reader.regenEntry(page, reply)).toBeEnabled()

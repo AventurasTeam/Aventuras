@@ -948,7 +948,12 @@ while still in the same stream → autoscroll re-engages. Viewport
 pins back to streaming entry's bottom.
 
 **Stream end.** Engaged / disengaged state resets. Next stream
-re-evaluates the engage condition fresh.
+re-evaluates the engage condition fresh. An engaged end holds the
+bottom while the reply settles: the committed row replaces the
+streaming card and lays out taller (its footer arrives with it), so
+the viewport re-asserts the bottom each frame until the content
+height holds, and a wheel or touch gesture hands control back. A
+disengaged end moves nothing.
 
 **Layout shifts during a stream.**
 
@@ -966,10 +971,12 @@ height while the user sits within ~20px of the bottom (the
 [jump button's](#jump-buttons) near-bottom tolerance), the viewport
 re-pins to the bottom, with or without a stream. The trigger is the
 [memory banner](../../principles.md#affordance-loci) mounting below
-the top bar as a pass starts, right after a reply commits: without
-the re-pin, the reply's last lines would stay hidden for the whole
-pass. Further from the bottom the user keeps their position, and a
-viewport that grows needs nothing.
+the top bar as a pass starts, right after a reply commits. The
+stream-end settle above leaves the reader at the bottom, and holds
+it there if the banner lands while it still runs; past the settle,
+without the re-pin, the reply's last lines would stay hidden for the
+whole pass. Further from the bottom the user keeps their position,
+and a viewport that grows needs nothing.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The

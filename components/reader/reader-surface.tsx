@@ -243,21 +243,21 @@ export function ReaderSurface({
     setEditingId(null)
     setEditDraft('')
   }, [branchKey])
-  // Open-at-bottom is a pin, not a one-shot: late layout (font swaps, image
-  // decode) can still grow content after the first scrollTop write. Re-assert
-  // per frame until the scroll height settles; the user's first gesture
-  // breaks the pin. Keyed on hasRows (not rows) so prepends don't cancel a
-  // running pin.
-  const hasRows = rows.length > 0
-  useLayoutEffect(() => {
-    if (!hasRows || landedBranchRef.current === branchKey) return
-    landedBranchRef.current = branchKey
+  // Bottom pin: late layout (font swaps, image decode, a committed reply's
+  // footer) can still grow content after a scrollTop write, so re-assert per
+  // frame until the scroll height settles. The user's first gesture breaks it.
+  const pinRafRef = useRef(0)
+  const stopBottomPin = useCallback(() => {
+    pinActiveRef.current = false
+    cancelAnimationFrame(pinRafRef.current)
+  }, [])
+  const startBottomPin = useCallback(() => {
     const el = scrollRef.current
     if (el == null) return
+    cancelAnimationFrame(pinRafRef.current)
     pinActiveRef.current = true
     let stableFrames = 0
     let lastHeight = -1
-    let raf = 0
     const assertBottom = () => {
       if (!pinActiveRef.current) return
       el.scrollTop = el.scrollHeight
@@ -267,14 +267,20 @@ export function ReaderSurface({
         pinActiveRef.current = false
         return
       }
-      raf = requestAnimationFrame(assertBottom)
+      pinRafRef.current = requestAnimationFrame(assertBottom)
     }
     assertBottom()
-    return () => {
-      pinActiveRef.current = false
-      cancelAnimationFrame(raf)
-    }
-  }, [branchKey, hasRows])
+  }, [])
+  useEffect(() => stopBottomPin, [stopBottomPin])
+  // Open-at-bottom. Keyed on hasRows (not rows) so prepends don't cancel a
+  // running pin.
+  const hasRows = rows.length > 0
+  useLayoutEffect(() => {
+    if (!hasRows || landedBranchRef.current === branchKey) return
+    landedBranchRef.current = branchKey
+    startBottomPin()
+    return stopBottomPin
+  }, [branchKey, hasRows, startBottomPin, stopBottomPin])
 
   // Everything that changes height above the reading position — a prepended
   // block, the boundary shimmer mounting or unmounting, or both in one
@@ -389,12 +395,15 @@ export function ReaderSurface({
 
   // Upward only: wheel-down toward the live edge should let the positional
   // rule re-engage autoscroll, not interrupt it. Any wheel breaks the
-  // open-at-bottom pin — the user has taken over.
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    pinActiveRef.current = false
-    anchorHoldActiveRef.current = false
-    if (event.deltaY < 0) autoscrollRef.current.userInterrupted()
-  }, [])
+  // bottom pin — the user has taken over.
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      stopBottomPin()
+      anchorHoldActiveRef.current = false
+      if (event.deltaY < 0) autoscrollRef.current.userInterrupted()
+    },
+    [stopBottomPin],
+  )
 
   // Touch drags interrupt like native drag-begin did — keyed off the first
   // touchmove, not touchstart, so plain taps can't disengage a pinned stream.
@@ -402,12 +411,12 @@ export function ReaderSurface({
     gestureActiveRef.current = true
   }, [])
   const handleTouchMove = useCallback(() => {
-    pinActiveRef.current = false
+    stopBottomPin()
     anchorHoldActiveRef.current = false
     if (touchInterruptedRef.current) return
     touchInterruptedRef.current = true
     autoscrollRef.current.userInterrupted()
-  }, [])
+  }, [stopBottomPin])
   const handleTouchEnd = useCallback(() => {
     touchInterruptedRef.current = false
     gestureActiveRef.current = false
@@ -423,7 +432,11 @@ export function ReaderSurface({
     if (streaming == null) {
       if (streamActiveRef.current) {
         streamActiveRef.current = false
+        // The committed row replacing the streaming card is taller (its footer)
+        // and can land frames later; an engaged reader stays at the bottom.
+        const engaged = machine.state === 'engaged'
         machine.streamEnded()
+        if (engaged) startBottomPin()
       }
       return
     }
@@ -439,7 +452,7 @@ export function ReaderSurface({
       if (el != null) el.scrollTop = el.scrollHeight
       machine.autoscrollApplied({ distanceFromBottomPx: 0 })
     }
-  }, [streaming])
+  }, [streaming, startBottomPin])
 
   // A viewport shrinking under a reader at the bottom (the memory banner mounting as a pass
   // starts) would otherwise hide the newest lines.
@@ -462,10 +475,10 @@ export function ReaderSurface({
   }, [])
 
   const jumpToBottom = useCallback(() => {
-    // Cancel any active landing pin / anchor-hold loop first: otherwise a hold
+    // Cancel any active bottom pin / anchor-hold loop first: otherwise a hold
     // spawned by a just-fired boundary prepend keeps yanking scrollTop toward
     // the top anchor while this animates to the bottom, and they fight.
-    pinActiveRef.current = false
+    stopBottomPin()
     anchorHoldActiveRef.current = false
     const el = scrollRef.current
     if (el != null) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
@@ -476,7 +489,7 @@ export function ReaderSurface({
       autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
       pendingJumpAtRef.current = Date.now()
     }
-  }, [])
+  }, [stopBottomPin])
   useImperativeHandle(ref, () => ({ jumpToBottom }), [jumpToBottom])
 
   const startEdit = useCallback((row: StoryEntry) => {

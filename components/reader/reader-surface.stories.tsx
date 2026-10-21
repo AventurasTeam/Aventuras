@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useEffect, useState, type ComponentProps } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
@@ -477,6 +478,107 @@ export const GrowNearBottomHolds: Story = {
     await resizeViewport(scroller, 5)
     expect(scroller.scrollTop).toBe(scrollTop)
     expect(distanceFromBottom(scroller)).toBeCloseTo(10, 0)
+  },
+}
+
+const REPLY_TEXT = 'The corridor folds shut behind you.'
+// Frames between the commit and the reply's late growth: inside the settle window, as the real
+// route's footer layout lands a couple of frames after the stream card goes.
+const LATE_GROWTH_FRAMES = 5
+
+// The surface across a stream's end: the streaming card gives way to its committed row, which
+// grows a few frames later the way the real reply's footer lays out late.
+function StreamEndHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const [phase, setPhase] = useState<'streaming' | 'committed' | 'grown'>('streaming')
+  useEffect(() => {
+    if (phase !== 'committed') return
+    let frames = 0
+    let raf = 0
+    const tick = () => {
+      frames += 1
+      if (frames >= LATE_GROWTH_FRAMES) setPhase('grown')
+      else raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [phase])
+  const reply = entry({
+    id: 'reply',
+    kind: 'ai_reply',
+    content: phase === 'grown' ? `${REPLY_TEXT}\n\n${REPLY_TEXT}\n\n${REPLY_TEXT}` : REPLY_TEXT,
+    position: OVERFLOW_ROWS.length + 1,
+  })
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button type="button" onClick={() => setPhase('committed')}>
+        End stream
+      </button>
+      <div data-grown={phase === 'grown'} style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface
+          {...props}
+          rows={phase === 'streaming' ? OVERFLOW_ROWS : [...OVERFLOW_ROWS, reply]}
+          streaming={phase === 'streaming' ? { content: REPLY_TEXT, reasoning: '' } : null}
+        />
+      </div>
+    </div>
+  )
+}
+
+// A plain click, so the play keeps its place inside the settle window; React commits the
+// stream's end on the next microtask, before the frame waited for here.
+async function endStream() {
+  screen.getByRole('button', { name: 'End stream' }).click()
+  await nextFrame()
+}
+
+async function replyGrown() {
+  await waitFor(() =>
+    expect(document.querySelector('[data-grown="true"]')).toBeInstanceOf(HTMLElement),
+  )
+  for (let i = 0; i < 3; i++) await nextFrame()
+}
+
+/** An engaged stream's end holds the bottom while the committed reply settles. */
+export const StreamEndSettlesAtBottom: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    await replyGrown()
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+
+/** A disengaged reader keeps its position through the stream's end. */
+export const StreamEndDisengagedHolds: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 200)
+    const scrollTop = scroller.scrollTop
+    await endStream()
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A wheel during the settle hands the position back to the user. */
+export const StreamEndSettleBrokenByWheel: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    // Inside the settle: the reply has committed and not yet grown.
+    expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
+    expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }))
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
   },
 }
 
