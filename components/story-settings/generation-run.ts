@@ -46,9 +46,9 @@ export function selectStorySettingsGenerationRunKind(
 }
 
 /**
- * Cancels the pill's run on the branch it runs on: a pass or a close through the interrupt,
- * which defers it to the next Send, anything else through its terminal. Pass the `branchId`
- * the screen gave `useStoryGenerationGate`, so Cancel ends the run that pill names.
+ * Cancels the pill's run on the branch it runs on; a pass or a close, being interruptible, is
+ * deferred to the next Send. Pass the `branchId` the screen gave `useStoryGenerationGate`, so
+ * Cancel ends the run that pill names.
  */
 export function cancelStoryPillRun(storyId: string | undefined, branchId?: string): void {
   const run = pillRun(generationStore.getTxState(), { storyId, branchId })

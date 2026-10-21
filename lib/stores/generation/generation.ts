@@ -275,11 +275,11 @@ export const generationStore = {
  */
 export function selectMemoryRun(
   txState: TxState,
-  scope: { branchId: string } | { storyId: string },
+  scope: { branchId: string; storyId?: never } | { storyId: string; branchId?: never },
 ): RunState | undefined {
   for (const run of txState.runs.values()) {
     if (!run.interruptible) continue
-    if ('branchId' in scope ? run.branchId === scope.branchId : run.storyId === scope.storyId)
+    if (scope.branchId != null ? run.branchId === scope.branchId : run.storyId === scope.storyId)
       return run
   }
   return undefined

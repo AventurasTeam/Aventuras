@@ -184,15 +184,17 @@ describe('useStoryGenerationGate', () => {
   })
 
   it("picks among the branch's runs when given a branch, among the story's when not", () => {
-    generationStore.startRun(pass({ branchId: 'branch-2' }))
+    generationStore.startRun(pass({ branchId: 'branch-2', beforeTurn: true }))
 
     let byBranch: Gate | undefined
     render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(g) => (byBranch = g)} />)
     expect(byBranch?.activeRunKind).toBeNull()
+    expect(byBranch?.beforeTurn).toBe(false)
 
     let byStory: Gate | undefined
     render(<GateProbe storyId="story-1" onResult={(g) => (byStory = g)} />)
     expect(byStory?.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
+    expect(byStory?.beforeTurn).toBe(true)
   })
 })
 
