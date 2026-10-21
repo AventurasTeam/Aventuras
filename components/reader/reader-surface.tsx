@@ -27,6 +27,7 @@ import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
+import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
 import type { ResolvedEntity } from './scene-editing'
 
@@ -48,6 +49,9 @@ type ReaderRowProps = {
   editing: boolean
   editContent: string | null
   editBlocked: boolean
+  // Split from editBlocked by rowReversalFlags, so the head reversals stay live during a pass.
+  editDisabled: boolean
+  reversalDisabled: boolean
   systemFixLabel?: string
   // Flat primitives rather than the decoration object: a fresh `{…}` per walk
   // would defeat the shallow memo compare the same way a merged row would.
@@ -88,6 +92,8 @@ const ReaderRow = memo(function ReaderRow({
   editing,
   editContent,
   editBlocked,
+  editDisabled,
+  reversalDisabled,
   systemFixLabel,
   worldTimeLabel,
   worldTimeRaw,
@@ -135,6 +141,8 @@ const ReaderRow = memo(function ReaderRow({
       meta={row.metadata ?? undefined}
       reasoning={row.metadata?.reasoning}
       disabled={editBlocked}
+      editDisabled={editDisabled}
+      reversalDisabled={reversalDisabled}
       editing={editing}
       contentEditNotice={contentEditNotice ?? undefined}
       editDirty={editing && editContent !== row.content}
@@ -186,6 +194,7 @@ export function ReaderSurface({
   branchKey,
   hasOlder,
   editBlocked,
+  headReversalBlocked = editBlocked,
   jumpButtonEnabled,
   systemFixLabel,
   entityNames,
@@ -483,6 +492,7 @@ export function ReaderSurface({
     setEditDraft('')
   }, [])
   const headTurn = useMemo(() => resolveSaveAndRegenTurn(rows, tailEntryId), [rows, tailEntryId])
+  const headTurnIds = useMemo(() => headTurnIdsOf(rows), [rows])
 
   return (
     <div className="relative h-full">
@@ -507,6 +517,12 @@ export function ReaderSurface({
         ) : null}
         {rows.map((row) => {
           const decoration = worldTimeDecorations[row.id]
+          const flags = rowReversalFlags({
+            rowId: row.id,
+            headTurnIds,
+            editBlocked,
+            headReversalBlocked,
+          })
           return (
             <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
               <ReaderRow
@@ -515,6 +531,8 @@ export function ReaderSurface({
                 editing={editingId === row.id}
                 editContent={editingId === row.id ? editDraft : null}
                 editBlocked={editBlocked}
+                editDisabled={flags.editDisabled}
+                reversalDisabled={flags.reversalDisabled}
                 systemFixLabel={systemFixLabel}
                 worldTimeLabel={decoration?.label}
                 worldTimeRaw={decoration?.raw}

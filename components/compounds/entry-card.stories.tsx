@@ -5,6 +5,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
@@ -297,6 +298,116 @@ export const Disabled: StoryT = {
     meta: aiMeta,
     disabled: true,
     disabledReason: 'Generation is in flight. Cancel to edit.',
+  },
+  play: async () => {
+    // A gated IconAction is named by its reason. With neither split prop set, `disabled`
+    // gates all five: pencil, regenerate, branch, flip era, delete.
+    const gated = await screen.findAllByRole('button', {
+      name: 'Generation is in flight. Cancel to edit.',
+    })
+    expect(gated).toHaveLength(5)
+    for (const button of gated) expect(button).toBeDisabled()
+  },
+}
+
+const PASS_REASON = 'Updating memory. Cancel to edit.'
+
+/**
+ * A pass holds the gate on an older reply: ↻ and × interrupt it, so they stay live, while
+ * the pencil, branch, flip era and the world-time footer keep the whole gate.
+ */
+export const OlderEntryDuringPass: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: true,
+    reversalDisabled: false,
+  },
+  play: async ({ args }) => {
+    const regenerate = await screen.findByRole('button', {
+      name: t('reader:entryCard.regenerate'),
+    })
+    expect(regenerate).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+    ).not.toBeDisabled()
+    // Pencil, branch and flip era, each renamed by the reason while gated.
+    const gated = screen.getAllByRole('button', { name: PASS_REASON })
+    expect(gated).toHaveLength(3)
+    for (const button of gated) expect(button).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: t('reader:worldTimeEdit.title') }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(regenerate)
+    await waitFor(() => expect(args.onRegen).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** The head turn's reply during a pass: its pencil joins ↻ and × as a live head reversal. */
+export const HeadTurnDuringPass: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: false,
+    reversalDisabled: false,
+  },
+  play: async ({ args }) => {
+    const pencil = await screen.findByRole('button', { name: t('reader:entryCard.editEntry') })
+    expect(pencil).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.regenerate') }),
+    ).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+    ).not.toBeDisabled()
+    // Branch and flip era are no head reversal.
+    const gated = screen.getAllByRole('button', { name: PASS_REASON })
+    expect(gated).toHaveLength(2)
+    for (const button of gated) expect(button).toBeDisabled()
+
+    await userEvent.click(pencil)
+    await waitFor(() => expect(args.onEdit).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** Editing the head turn's action during a pass: every edit-mode control follows `editDisabled`. */
+export const HeadTurnEditDuringPass: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    editDisabled: false,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async ({ args }) => {
+    const textarea = await screen.findByRole('textbox', {
+      name: t('reader:entryCard.editContent'),
+    })
+    expect(textarea).not.toHaveAttribute('readonly')
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
+    ).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: t('cancel') })).not.toBeDisabled()
+    const save = screen.getByRole('button', { name: t('save') })
+    expect(save).not.toBeDisabled()
+
+    await userEvent.click(save)
+    await waitFor(() => expect(args.onCommitEdit).toHaveBeenCalledTimes(1))
   },
 }
 

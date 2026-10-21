@@ -89,6 +89,49 @@ const noopHandlers = {
 const HEAD_TURN_ROWS = ROWS.slice(0, 3)
 const EDITED_ACTION = 'I step through the frame of the second painting.'
 
+const PASS_ROWS: StoryEntry[] = [
+  entry({
+    id: 'p1',
+    kind: 'opening',
+    content: 'The gallery had no doors, and yet every visitor arrived.',
+    position: 1,
+  }),
+  entry({
+    id: 'p2',
+    kind: 'user_action',
+    content: 'I step through the frame of the first painting.',
+    position: 2,
+  }),
+  entry({ id: 'p3', kind: 'ai_reply', content: 'Paint parts around you like water.', position: 3 }),
+  entry({
+    id: 'p4',
+    kind: 'user_action',
+    content: 'I map the two wings against each other.',
+    position: 4,
+  }),
+  entry({
+    id: 'p5',
+    kind: 'ai_reply',
+    content: 'The wings refuse to line up.',
+    position: 5,
+    metadata: BASE_META,
+  }),
+]
+
+// The tail carries a time footer and scene metadata, so both editors would be live
+// without the gate: their absence below is the gate's doing.
+const PASS_IN_FLIGHT_ARGS = {
+  rows: PASS_ROWS,
+  tailEntryId: 'p5',
+  worldTimeDecorations: { p5: { label: 'Day 12 · 14:33', raw: 90 } },
+  worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: WORLD_TIME_ORIGIN },
+  editBlocked: true,
+}
+
+function rowButton(id: string, name: string): HTMLElement {
+  return within(entryRow(id)).getByRole('button', { name })
+}
+
 function entryRow(id: string): HTMLElement {
   const row = document.querySelector(`[data-entry-row="${id}"]`)
   if (!(row instanceof HTMLElement)) throw new Error(`no row for ${id}`)
@@ -291,6 +334,44 @@ export const SaveAndRegenerateAbsentOffHead: Story = {
     expect(
       screen.queryByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
     ).not.toBeInTheDocument()
+  },
+}
+
+/**
+ * A pass holds the gate. The head reversals interrupt it, so every ↻ and ×, and the head
+ * turn's two pencils, stay live. An older entry's pencil and the tail's time and scene
+ * editors keep the whole gate (principles.md → Edit restrictions during in-flight generation).
+ */
+export const PassInFlightHeadTurnLive: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, headReversalBlocked: false },
+  play: async () => {
+    const edit = t('reader:entryCard.editEntry')
+    await waitFor(() => expect(rowButton('p5', edit)).not.toBeDisabled())
+    expect(rowButton('p4', edit)).not.toBeDisabled()
+    for (const id of ['p1', 'p2', 'p3']) expect(rowButton(id, edit)).toBeDisabled()
+    for (const id of ['p3', 'p5'])
+      expect(rowButton(id, t('reader:entryCard.regenerate'))).not.toBeDisabled()
+    for (const id of ['p2', 'p3', 'p4', 'p5'])
+      expect(rowButton(id, t('reader:entryCard.deleteEntry'))).not.toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: t('reader:worldTimeEdit.title') }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(rowButton('p5', t('reader:entryCard.showState')))
+    expect(
+      within(entryRow('p5')).queryByRole('button', { name: t('reader:entryCard.stateEditScene') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+/** A host that passes no `headReversalBlocked` keeps one gate for every row control. */
+export const GateHeldWithoutHeadReversalSplit: Story = {
+  args: PASS_IN_FLIGHT_ARGS,
+  play: async () => {
+    await waitFor(() => expect(rowButton('p5', t('reader:entryCard.editEntry'))).toBeDisabled())
+    expect(rowButton('p5', t('reader:entryCard.regenerate'))).toBeDisabled()
+    expect(rowButton('p5', t('reader:entryCard.deleteEntry'))).toBeDisabled()
+    expect(rowButton('p4', t('reader:entryCard.editEntry'))).toBeDisabled()
   },
 }
 
