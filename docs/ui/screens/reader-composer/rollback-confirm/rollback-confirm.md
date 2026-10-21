@@ -96,6 +96,24 @@ holds the full per-table record for anyone digging deeper; the
 [Diagnostics Hub · Delta log tab](../../diagnostics/diagnostics.md#tab-5--delta-log)
 exposes the global view (gated by the diagnostics master toggle).
 
+**The counts stay true while the modal is open.** A memory pass or a
+chapter close can run under the open modal (see
+[Edge cases](#edge-cases)), so the set can move after the counts were
+read: a pass commits facts, or the modal opened partway through a
+pass's writes. Whenever a run settles while the modal is open, it
+recounts and shows the fresh counts; a recount that fails or is
+refused keeps the counts on screen. The commit checks again:
+`rollbackToEntry` resolves the set it is about to reverse, after any
+interrupt, and refuses with `counts-changed`, carrying the fresh
+counts, when they differ from the counts the user saw. The reader then
+shows an error [toast](../../../patterns/toast.md),
+`The counts changed while this was open. Check them before confirming.`,
+and re-opens the modal on the fresh counts, so a second confirm
+consents to exactly what goes
+([`generation-pipeline.md → Branch write lock`](../../../../generation-pipeline.md#branch-write-lock)).
+A regenerate confirm does the same through `regenerateTurn`
+([`reader-composer.md → Regenerate confirmation`](../reader-composer.md#regenerate-confirmation)).
+
 ## Cross-chapter case
 
 When the rollback range crosses one or more chapter boundaries —
@@ -168,13 +186,19 @@ mechanism rather than the hover-preview.
   reverses, so a set the log cannot close
   ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay))
   opens no modal and shows the rollback-failed toast instead. A refusal
-  only the commit raises shows the same toast with the modal still open.
+  only the commit raises shows the same toast with the modal still open,
+  except `counts-changed`, which has its own toast ([Counts](#counts)).
 - **During generation** — per
   [branch-navigator → during generation](../branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked),
-  the per-entry `×` is disabled while any pipeline phase is active,
-  except a memory pass or a chapter close, which a confirmed rollback
-  interrupts and moves to the next turn. No modal opens because the
-  trigger is unavailable.
+  the per-entry `×` is disabled while any pipeline phase is active, so
+  no modal opens. A memory pass or a chapter close is the exception:
+  the `×` stays enabled and the modal opens as usual. While it is open
+  it recounts each time a run settles under it, per [Counts](#counts).
+  Confirming interrupts the pass or close and moves it to the next
+  turn, with its deferral toast. If the set the commit then resolves
+  differs from the counts on screen, the commit refuses
+  `counts-changed`: the counts-changed toast shows and the modal
+  re-opens on the fresh counts.
 
 ## Screen-specific open questions
 

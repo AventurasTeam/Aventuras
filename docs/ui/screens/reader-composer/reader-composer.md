@@ -272,6 +272,15 @@ rare enough that the confirm never turns routine. It reuses the
 cross-chapter copy, reframed as re-run rather than re-open: the
 chapter returns to in-progress and regenerates.
 
+**Its counts stay true while it is open**, as the rollback modal's do
+([`rollback-confirm.md → Counts`](./rollback-confirm/rollback-confirm.md#counts)):
+it recounts each time a run settles under it, and `regenerateTurn`
+refuses `counts-changed`, with the fresh counts, when the set it
+resolves at confirm differs from the counts the user saw. The reader
+then shows the toast
+`The counts changed while this was open. Check them before confirming.`
+and re-opens the confirm on the fresh counts.
+
 ### During a memory update
 
 Every few turns a pass chains after the turn, and a chapter close
