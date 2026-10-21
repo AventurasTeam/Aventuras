@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
+import { editGateOf, headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 
 function entry(id: string, kind: string) {
   return { id, kind, position: 0 }
@@ -43,35 +43,57 @@ describe('headTurnIdsOf', () => {
   })
 })
 
+describe('editGateOf', () => {
+  it('is open while nothing blocks', () => {
+    expect(editGateOf({ editBlocked: false, headReversalBlocked: false })).toBe('open')
+  })
+
+  it('is interruptible while only a pass or a close holds the gate', () => {
+    expect(editGateOf({ editBlocked: true, headReversalBlocked: false })).toBe('interruptible')
+  })
+
+  it('is closed while the head reversals are blocked too', () => {
+    expect(editGateOf({ editBlocked: true, headReversalBlocked: true })).toBe('closed')
+  })
+
+  // The store's gates never disagree this way; the stricter one wins if they do.
+  it('is closed when only the head reversals are blocked', () => {
+    expect(editGateOf({ editBlocked: false, headReversalBlocked: true })).toBe('closed')
+  })
+})
+
 describe('rowReversalFlags', () => {
   const headTurnIds = new Set(['e4', 'e5'])
 
-  it('keeps the head turn editable and its reversals live while only a pass holds the gate', () => {
+  it('keeps the head turn editable and its reversals live through an interruptible gate', () => {
     for (const rowId of ['e4', 'e5'])
-      expect(
-        rowReversalFlags({ rowId, headTurnIds, editBlocked: true, headReversalBlocked: false }),
-      ).toEqual({ editDisabled: false, reversalDisabled: false })
+      expect(rowReversalFlags({ rowId, headTurnIds, editGate: 'interruptible' })).toEqual({
+        editDisabled: false,
+        reversalDisabled: false,
+      })
   })
 
-  // An edit off the head turn can't interrupt a pass (Decision "Which reader controls
-  // interrupt a pass"), but its row's ↻ and × can.
+  // principles.md → Edit restrictions during in-flight generation.
   it("keeps an older entry's edit on the whole gate while its reversals stay live", () => {
-    expect(
-      rowReversalFlags({ rowId: 'e2', headTurnIds, editBlocked: true, headReversalBlocked: false }),
-    ).toEqual({ editDisabled: true, reversalDisabled: false })
+    expect(rowReversalFlags({ rowId: 'e2', headTurnIds, editGate: 'interruptible' })).toEqual({
+      editDisabled: true,
+      reversalDisabled: false,
+    })
   })
 
-  it('gates every row when the head reversals are blocked too', () => {
+  it('gates every row while the gate is closed', () => {
     for (const rowId of ['e2', 'e5'])
-      expect(
-        rowReversalFlags({ rowId, headTurnIds, editBlocked: true, headReversalBlocked: true }),
-      ).toEqual({ editDisabled: true, reversalDisabled: true })
+      expect(rowReversalFlags({ rowId, headTurnIds, editGate: 'closed' })).toEqual({
+        editDisabled: true,
+        reversalDisabled: true,
+      })
   })
 
-  it('gates nothing while neither gate is held', () => {
+  it('gates nothing while the gate is open', () => {
     for (const rowId of ['e2', 'e5'])
-      expect(
-        rowReversalFlags({ rowId, headTurnIds, editBlocked: false, headReversalBlocked: false }),
-      ).toEqual({ editDisabled: false, reversalDisabled: false })
+      expect(rowReversalFlags({ rowId, headTurnIds, editGate: 'open' })).toEqual({
+        editDisabled: false,
+        reversalDisabled: false,
+      })
   })
 })

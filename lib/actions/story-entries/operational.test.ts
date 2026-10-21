@@ -38,6 +38,7 @@ import {
   undoRedoStore,
 } from '@/lib/stores'
 
+import { shownCounts } from './__tests__/shown-counts'
 import { isContentEditDelta } from './classifier-facts'
 import {
   getRollbackCounts,
@@ -228,7 +229,7 @@ describe('updateStoryEntryContent', () => {
       runId: 'r1',
       kind: 'per-turn',
       gateBehavior: 'hard-gate',
-      interruptible: false,
+      interruptible: null,
       beforeTurn: false,
       actionId: 'a',
       storyId: 's1',
@@ -338,6 +339,9 @@ async function seedBranchWithTurns(db: Awaited<ReturnType<typeof createTestDb>>[
   )
 }
 
+// Where the preview refuses too, no confirm opens; the refusal lands before the counts compare.
+const NEVER_SHOWN: RollbackCounts = { entries: 0, chapters: 0, worldStateChanges: 0 }
+
 describe('rollbackToEntry', () => {
   it('counts and removes the clicked entry plus everything after it', async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -346,10 +350,10 @@ describe('rollbackToEntry', () => {
     entriesStore.hydrate('b1', [])
 
     // delete t2 removes t2 + t3 (2 entry-creates); world-state = ent_a create + ent_a update = 2.
-    const counts = await getRollbackCounts('b1', 't2', ctx)
+    const counts = await shownCounts('b1', 't2', ctx)
     expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: counts })
     expect(result.status).toBe('ok')
 
     const remaining = (await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1')))
@@ -366,7 +370,7 @@ describe('rollbackToEntry', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
-    const result = await rollbackToEntry('b1', 'op', ctx)
+    const result = await rollbackToEntry('b1', 'op', ctx, { expectedCounts: NEVER_SHOWN })
     expect(result.status).toBe('rejected')
     if (result.status === 'rejected') expect(result.code).toBe('rollback-floor')
   })
@@ -375,7 +379,8 @@ describe('rollbackToEntry', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
-    await rollbackToEntry('b1', 't1', ctx)
+    const shown = await shownCounts('b1', 't1', ctx)
+    await rollbackToEntry('b1', 't1', ctx, { expectedCounts: shown })
     const remaining = (
       await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))
     ).map((r) => r.id)
@@ -401,7 +406,8 @@ describe('rollbackToEntry', () => {
     // with a null anchor, so they are never in the invalidation set.
     expect(deltaCountAfter).toBe(deltaCountBefore + 1)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const shown = await shownCounts('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
     expect(result.status).toBe('ok')
     const remaining = (await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1')))
       .map((r) => r.id)
@@ -418,7 +424,8 @@ describe('rollbackToEntry', () => {
     // t1 survives a rollback to t3, so its edit must survive with it — the delta sits
     // at the log head, so only its entry_id anchor keeps the sweep off it.
     await updateStoryEntryContent('b1', 't1', 'kept edit', ctx)
-    expect((await rollbackToEntry('b1', 't3', ctx)).status).toBe('ok')
+    const shown = await shownCounts('b1', 't3', ctx)
+    expect((await rollbackToEntry('b1', 't3', ctx, { expectedCounts: shown })).status).toBe('ok')
 
     const [row] = await db
       .select()
@@ -446,8 +453,9 @@ describe('rollbackToEntry', () => {
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
+    const shown = await shownCounts('b1', 't2', ctx)
     const spy = vi.spyOn(generationStore, 'setReversalInProgress')
-    await rollbackToEntry('b1', 't2', ctx)
+    await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
     expect(spy.mock.calls.map((c) => c[0])).toEqual([true, false])
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
     spy.mockRestore()
@@ -457,7 +465,7 @@ describe('rollbackToEntry', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
-    const result = await rollbackToEntry('b1', 'op', ctx)
+    const result = await rollbackToEntry('b1', 'op', ctx, { expectedCounts: NEVER_SHOWN })
     expect(result.status).toBe('rejected')
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
   })
@@ -481,7 +489,8 @@ describe('rollbackToEntry', () => {
       .where(eq(branches.id, 'b1'))
 
     // t2 is position 3 and is itself the first removed entry.
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const shown = await shownCounts('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
     expect(result.status).toBe('ok')
     const [row] = await db.select().from(branches).where(eq(branches.id, 'b1'))
     expect(row.classifierStatus?.processedThrough).toBe(2)
@@ -507,7 +516,8 @@ describe('rollbackToEntry', () => {
 
     // Asserted first: a rejected rollback runs no clamp, so the watermark would
     // read 1 for the wrong reason and the test would prove nothing.
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const shown = await shownCounts('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
     expect(result.status).toBe('ok')
     const [row] = await db.select().from(branches).where(eq(branches.id, 'b1'))
     expect(row.classifierStatus?.processedThrough).toBe(1)
@@ -521,7 +531,8 @@ describe('rollbackToEntry', () => {
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const shown = await shownCounts('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
     expect(result.status).toBe('ok')
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
@@ -532,11 +543,14 @@ describe('rollbackToEntry', () => {
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    const shown = await shownCounts('b1', 't2', ctx)
     const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
 
-    const error: unknown = await rollbackToEntry('b1', 't2', ctx).catch((e: unknown) => e)
+    const error: unknown = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown }).catch(
+      (e: unknown) => e,
+    )
     patch.mockRestore()
 
     expect(error).toBeInstanceOf(DeltaReplayError)
@@ -1141,13 +1155,10 @@ describe('rollback over the closed set', () => {
     entriesStore.hydrate('b1', [])
 
     // The window alone holds ent_a's create and update and hap_t3's create; the link is a fourth.
-    expect(await getRollbackCounts('b1', 't2', ctx)).toEqual({
-      entries: 2,
-      chapters: 0,
-      worldStateChanges: 4,
-    })
+    const shown = await shownCounts('b1', 't2', ctx)
+    expect(shown).toEqual({ entries: 2, chapters: 0, worldStateChanges: 4 })
 
-    expect((await rollbackToEntry('b1', 't2', ctx)).status).toBe('ok')
+    expect((await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })).status).toBe('ok')
     expect(await db.select().from(happeningInvolvements)).toEqual([])
     expect(await db.select().from(happenings)).toEqual([])
     const lps = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).map(
@@ -1207,7 +1218,7 @@ describe('rollback over the closed set', () => {
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await db.select().from(deltas)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: NEVER_SHOWN })
 
     expect(result).toEqual({
       status: 'rejected',
@@ -1253,8 +1264,9 @@ describe('rollback over the closed set', () => {
     ])
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await db.select().from(deltas)
+    const shown = await shownCounts('b1', 't2', ctx)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
     expect(result).toEqual({
       status: 'rejected',
@@ -1354,8 +1366,9 @@ describe('rollback during a pass', () => {
     const deferrals = recordDeferrals()
     const start = startStandInPass(ctx)
     const held = await pass.nextHeld()
+    const shown = await shownCounts('b1', 't2', ctx)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
     expect(result).toEqual({
       status: 'ok',
@@ -1373,6 +1386,7 @@ describe('rollback during a pass', () => {
         runId: expect.any(String),
         kind: PERIODIC_CLASSIFIER_KIND,
         branchId: 'b1',
+        work: 'pass',
       },
     ])
   })
@@ -1386,8 +1400,9 @@ describe('rollback during a pass', () => {
     const start = startStandInPass(ctx)
     const held = await pass.nextHeld()
     registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+    const shown = await shownCounts('b1', 't2', ctx)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
     expect(result).toMatchObject({ status: 'rejected', code: 'in-flight-gated' })
     expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
@@ -1398,19 +1413,13 @@ describe('rollback during a pass', () => {
   })
 })
 
-async function shownCounts(ctx: DbCtx, targetId: string): Promise<RollbackCounts> {
-  const counts = await getRollbackCounts('b1', targetId, ctx)
-  if ('status' in counts) throw new Error(`preview refused: ${counts.reason}`)
-  return counts
-}
-
 describe('rollback confirm counts', () => {
   it('refuses with the fresh counts when a pass committed since the confirm opened, writing nothing', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    const shown = await shownCounts(ctx, 't2')
+    const shown = await shownCounts('b1', 't2', ctx)
     expect(shown).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
     // A pass's fact about a turn the rollback removes, committed while the modal is open.
     await applyDeltaAction(
@@ -1453,7 +1462,7 @@ describe('rollback confirm counts', () => {
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    const shown = await shownCounts(ctx, 't2')
+    const shown = await shownCounts('b1', 't2', ctx)
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
@@ -1467,11 +1476,11 @@ describe('rollback confirm counts', () => {
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    const shown = await shownCounts(ctx, 't2')
+    const shown = await shownCounts('b1', 't2', ctx)
     const pass = registerStandInPass({ anchorEntryId: 't3' })
     const start = startStandInPass(ctx)
     await pass.nextHeld()
-    expect(await shownCounts(ctx, 't2')).toEqual({ ...shown, worldStateChanges: 3 })
+    expect(await shownCounts('b1', 't2', ctx)).toEqual({ ...shown, worldStateChanges: 3 })
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 

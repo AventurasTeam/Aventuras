@@ -69,7 +69,7 @@ function inFlightRun(storyId: string, branchId = 'br_1'): RunState {
     intermediates: {},
     terminal: new Promise<void>(() => {}),
     resolveTerminal: () => {},
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
   }
 }
@@ -263,6 +263,24 @@ describe('useStoryLeaveGuard', () => {
 
     expect(cancelStoryRuns).toHaveBeenCalledWith('story_1', 'br_1')
     expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a second Cancel & leave while the first is still cancelling', async () => {
+    generationStore.startRun(inFlightRun('story_1'))
+    const cancel = deferred()
+    cancelStoryRuns.mockReturnValue(cancel.promise)
+    const { result } = renderHook(() => useStoryLeaveGuard('story_1', 'br_1'))
+    const proceed = vi.fn()
+    act(() => result.current.guardLeave(proceed))
+
+    act(() => result.current.dialog?.props.onConfirmLeave())
+    act(() => result.current.dialog?.props.onConfirmLeave())
+    await act(async () => {
+      cancel.resolve()
+    })
+
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(cancelStoryRuns).toHaveBeenCalledTimes(1)
   })
 
   // A guard captured at render must decide on the store as it is when pressed.

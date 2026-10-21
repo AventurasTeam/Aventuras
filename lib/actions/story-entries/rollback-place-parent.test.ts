@@ -22,6 +22,7 @@ import {
 } from '@/lib/stores'
 import { parentIdOf } from '@/lib/world'
 
+import { shownCounts } from './__tests__/shown-counts'
 import { rollbackToEntry } from './operational'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
@@ -182,8 +183,9 @@ describe('rolling back past a place parent anchored on a later turn than its chi
     )
     await passCreatesDocks()
     await hydrateStores()
+    const shown = await shownCounts('b1', 't2', ctx)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
     // The parent's create and the child's cleared parent: the preview counts the move too.
     expect(result).toEqual({
@@ -201,8 +203,9 @@ describe('rolling back past a place parent anchored on a later turn than its chi
     )
     await passCreatesDocks()
     await hydrateStores()
+    const shown = await shownCounts('b1', 't2', ctx)
 
-    const result = await rollbackToEntry('b1', 't2', ctx)
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
     expect(result.status).toBe('ok')
     await expectDocksAtTheRoot()

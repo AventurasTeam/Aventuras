@@ -29,7 +29,7 @@ import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { deleteEntityRow } from './delete-entity'
 import { ROW_DELETE_REJECTION } from './delete-row'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, settleUserWrites } from '../delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
@@ -181,6 +181,24 @@ beforeEach(async () => {
   entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
 })
 
+function startHardGateRun(runId: string): void {
+  generationStore.startRun({
+    runId,
+    kind: 'turn',
+    gateBehavior: 'hard-gate',
+    interruptible: null,
+    beforeTurn: false,
+    actionId: `act_${runId}`,
+    storyId: 's1',
+    branchId: 'b1',
+    abortController: new AbortController(),
+    currentPhase: 'commit',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+}
+
 async function otherState(): Promise<CharacterState> {
   const [row] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_o'))
   return row.state as CharacterState
@@ -305,21 +323,7 @@ describe('deleteEntityRow — C3 acceptance', () => {
 
 describe('deleteEntityRow — races closed by the in-lock re-read', () => {
   it('a hard-gate run finishing during the in-lock head read keeps its state write', async () => {
-    generationStore.startRun({
-      runId: 'r1',
-      kind: 'turn',
-      gateBehavior: 'hard-gate',
-      interruptible: false,
-      beforeTurn: false,
-      actionId: 'act_r1',
-      storyId: 's1',
-      branchId: 'b1',
-      abortController: new AbortController(),
-      currentPhase: 'commit',
-      intermediates: {},
-      terminal: Promise.resolve(),
-      resolveTerminal: () => {},
-    })
+    startHardGateRun('r1')
     headTurnHook.onSecond = async () => {
       const written = await applyDeltaAction(
         {
@@ -465,5 +469,57 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
     expect(await sceneEdit).toEqual({ status: 'ok' })
     expect(await deletion).toEqual({ status: 'ok' })
     expect([...(await tailScene())].sort()).toEqual(['char_lead', 'char_o'])
+  })
+})
+
+// Runs `then` in a microtask queued by the delete's store read, so it lands before the gate check
+// only if something awaits between the two.
+function afterStoreRead(then: () => void): { restore: () => void } {
+  const real = entitiesStore.getEntities
+  let reads = 0
+  const spy = vi.spyOn(entitiesStore, 'getEntities').mockImplementation(() => {
+    reads += 1
+    if (reads === 1) queueMicrotask(then)
+    return real()
+  })
+  return { restore: () => spy.mockRestore() }
+}
+
+// generation-pipeline.md → Action rejection — defense in depth.
+describe('deleteEntityRow — reads the stores in the tick of its gate check', () => {
+  it('a run reserving right after the read waits for the write', async () => {
+    let settle = () => {}
+    const settled = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    const read = afterStoreRead(() => {
+      startHardGateRun('r1')
+      void settleUserWrites().then(settle)
+    })
+    try {
+      const deleting = deleteEntityRow('b1', 'char_x', ctx)
+      await settled
+      // Read as the run's wait ends: a write dispatched after that has no deltas yet.
+      expect((await ctx.db.select().from(deltas)).length).toBeGreaterThan(0)
+      expect(await deleting).toEqual({ status: 'ok' })
+    } finally {
+      read.restore()
+    }
+  })
+
+  it('a run ending right after the read still refuses the delete it read under', async () => {
+    startHardGateRun('r1')
+    const read = afterStoreRead(() => generationStore.finishRun('r1'))
+    try {
+      expect(await deleteEntityRow('b1', 'char_x', ctx)).toMatchObject({
+        status: 'rejected',
+        code: ROW_DELETE_REJECTION.inFlight,
+      })
+      // The run ends only from the read's microtask, so the hook fired.
+      expect(generationStore.isUserEditBlocked()).toBe(false)
+      expect(await ctx.db.select().from(deltas)).toEqual([])
+    } finally {
+      read.restore()
+    }
   })
 })

@@ -182,7 +182,7 @@ export default function SettingsRoute() {
       variant="app"
       title={<Text className="font-semibold">{t('settings:title')}</Text>}
       onBack={onBack}
-      actions={<AppActionsMenu />}
+      actions={<AppActionsMenu beforeLeaveStory={null} />}
     >
       <MasterDetailLayout
         isRowSelected={selectedTab != null}

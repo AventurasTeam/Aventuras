@@ -421,13 +421,8 @@ describe('bumpAwarenessRetrieval', () => {
     expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(5)
   })
 
-  // The periodic classifier and a turn do not block each other, so a classifier
-  // run that aborts after retrieval snapshotted its awareness rows reverse-
-  // replays them away mid-turn. The handler no longer reads the row, so it can
-  // no longer see this and reject as 'noop': it logs a delta whose UPDATE
-  // matches nothing. What still has to hold is that the turn survives and the
-  // table is untouched — failing here would reverse the user's whole turn over
-  // a counter.
+  // Under the turn's gate the target can't vanish; if it did, the row-blind handler
+  // logs a no-op UPDATE — failing would reverse the user's whole turn over a counter.
   it('survives a vanished bump target without touching the table', async () => {
     const { ctx } = await setup([awarenessRow('haw_1', 4)])
 

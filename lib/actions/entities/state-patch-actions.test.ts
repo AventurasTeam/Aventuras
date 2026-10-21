@@ -518,7 +518,7 @@ describe('promoteStagedEntity', () => {
     expect(entitiesStore.getById('char_1')?.status).toBe('active')
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(
       await applyDeltaAction(
@@ -562,7 +562,7 @@ describe('appendEntityKeywords', () => {
     payload: { branchId: 'br_1', id: 'char_1', keywords, proseEntryId: null },
   })
 
-  it('appends only what the live row lacks, keeping an alias the user added mid-pass', async () => {
+  it('appends only what the live row lacks, keeping an alias the user added before the pass', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight'] })
     expect(
@@ -582,7 +582,7 @@ describe('appendEntityKeywords', () => {
     ])
   })
 
-  it('extends the live list, so an alias removed mid-pass stays out when the payload omits it', async () => {
+  it('extends the live list, so an alias removed before the pass stays out when the payload omits it', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
     expect((await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')).status).toBe('ok')
@@ -608,7 +608,7 @@ describe('appendEntityKeywords', () => {
     expect((await rowFor(db, 'char_1')).keywords).toEqual(['the knight'])
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, append(['the wanderer']), 'act_k')).toEqual({
       status: 'rejected',
@@ -656,7 +656,7 @@ describe('retireEntity', () => {
     expect((await rowFor(db, 'char_1')).retiredReason).toBeNull()
   })
 
-  it("no-ops on a row the user retired mid-pass, keeping the user's reason", async () => {
+  it("no-ops on a row the user retired before the pass, keeping the user's reason", async () => {
     const { db, ctx } = await setup()
     await create(ctx, ACTIVE)
     expect(
@@ -708,7 +708,7 @@ describe('retireEntity', () => {
     expect(row.retiredReason).toBeNull()
   })
 
-  it('no-ops when the target row is gone, same as any other row the pass read stale', async () => {
+  it('no-ops when the target row is gone', async () => {
     const { ctx } = await setup()
     expect(await apply(ctx, retire('fell at the ford'), 'act_r')).toEqual({
       status: 'rejected',

@@ -14,7 +14,7 @@ import { expectRan, makeHarness, resetSingletons } from './harness'
 const base = {
   affordance: 'pill-and-banner',
   gateBehavior: 'hard-gate',
-  interruptible: true,
+  interruptible: 'pass',
   concurrencyPolicy: {},
 } as const
 

@@ -552,14 +552,16 @@ slice-planning gate forces its resolution before that slice is planned.
   `failed`, and a `failed` outcome clears the run's deferral.
   `submitTurn` treats a `failed` deferred pass as "go ahead", so the
   turn then runs over the unreversed orphans that boot recovery will
-  see. Rare: the reversal's SQLite transaction has to fail. A reversal
-  that commits but whose store sync then fails settles `failed` too,
-  so that Cancel also lets the turn run (over no orphans, but against
-  the user's Cancel). The fix belongs in the orchestrator: a
-  user-cancel whose reversal or its store sync fails ends `aborted`
-  with an error, so the deferral stays and the Send is cancelled.
-  Raised 2026-10-21 by the gated classifier slice's task and branch
-  reviews.
+  see. Rare: the reversal's SQLite transaction has to fail. The fix
+  belongs in the orchestrator: a user-cancel whose reversal fails ends
+  `aborted` with an error, so the deferral stays and the Send is
+  cancelled. A reversal that commits but whose store sync then fails
+  settles `failed` too, so that Cancel also lets the turn run (over no
+  orphans, but against the user's Cancel). That case is unreachable
+  today and is
+  [`parked.md → A store sync that fails after a committed reversal leaves stores stale`](../parked.md#a-store-sync-that-fails-after-a-committed-reversal-leaves-stores-stale),
+  whose fix lets the Cancel keep its `aborted` outcome. Raised
+  2026-10-21 by the gated classifier slice's task and branch reviews.
 
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
@@ -600,12 +602,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `classifier.piggyback_fallback_failed` warning in the logs. Raised
   2026-10-21 by the gated classifier slice's task reviews.
 
-- **`recentDeltaRows` reads the whole delta log.**
-  `lib/actions/story-entries/undo.ts` selects every delta on the
-  branch with no limit, and `undoLastAction` reads it twice while a
-  pass runs, once before the gate decision and once in the bracket.
-  Raised 2026-10-21 by the gated classifier slice's task reviews.
-
 - **Android: keyboard input pops the reader.** On the emulator,
   `adb input text` leaves touch mode, and with focus on the top bar's
   back arrow a space presses it, so `router.back()` pops the reader
@@ -637,3 +633,49 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`dev-environment.md`](../dev-environment.md) or
   [lessons-learned](lessons-learned/README.md)). Raised 2026-10-21 by
   the gated classifier slice's task reviews.
+
+- **On an Android phone the keyboard hides the reader's inline editor.**
+  Pre-existing: main behaves the same. On an emulator (411×914 dp, the
+  suggestion strip open), Edit on an entry near the bottom autofocuses
+  its `Textarea` (`components/compounds/entry-card.tsx`), and the
+  keyboard leaves the reader 180 CSS px above the suggestion strip and
+  composer. The editor grows the row, so the reader has already left the
+  bottom and the viewport-shrink re-pin doesn't fire. The textarea
+  then sits at 162–386 px, only its top 18 px above the strip. For
+  a long last row it sits at 211–435 px, fully hidden. Nothing scrolls
+  it into view: Android's WebView never scrolled a focused field into
+  view in any run, and the reader has no code that does. A fix that
+  keeps a focused inline editor in view when the reader shrinks would
+  also cover two cases where the re-pin had helped. The re-pin now
+  holds for a focused editor
+  ([`reader-composer.md → Autoscroll`](../ui/screens/reader-composer/reader-composer.md#autoscroll)),
+  so they behave as on main again. On the stock phone, a long last
+  row's editor kept its lower half and Save in view (79 px of the
+  textarea, against 13 px without the re-pin). On a very tall reader
+  (density 300), the whole textarea stayed in view, against 149 of
+  its 224 px. Raised 2026-10-21 by the gated classifier slice review's
+  R1 probe.
+
+- **`classifier.failure_record_retried` carries no `actionId`.** The
+  periodic classifier's `onPhaseException`
+  (`lib/pipeline/definitions/periodic-classifier.ts`) logs it when its
+  first failure-record write throws, without the run's `actionId`, so
+  the Logs tab can't tie it to its pass
+  ([`observability.md → Record shape`](../observability.md#record-shape):
+  a run-scoped emission carries the run's `actionId`). The hook's
+  context type (`PhaseExceptionHook` in `lib/pipeline/types.ts`) has no
+  `actionId` to pass; the fix widens it, as the slice review did for
+  `onInterrupt`, whose `InterruptHook` context now carries one.
+  Predates the gated classifier slice. Raised 2026-10-21 by the gated
+  classifier slice review.
+
+- **The reader's status pill blanks between Send's deferred pass and
+  its turn.** After the deferred pass commits, `submitTurn`
+  (`lib/actions/turns/submit-turn.ts`) runs two reads and the
+  user_action transaction before the turn registers, holding only the
+  pending mark. The pill picks its run from the registered runs
+  (`pillRunOf` in `components/reader/send-run.ts`), so for that gap it
+  shows nothing, then the turn's phase. The composer's Cancel holds
+  through the gap (`composerShowsCancel`, same file); the pill doesn't.
+  A frame or two on desktop. Read, not probed. Raised 2026-10-21 by the
+  gated classifier slice review.

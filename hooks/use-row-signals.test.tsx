@@ -142,7 +142,7 @@ function run(id: string): RunState {
     runId: id,
     kind: 'per-turn',
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: `act_${id}`,
     storyId: 's1',

@@ -14,6 +14,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { entriesStore, generationStore, happeningsStore, undoRedoStore } from '@/lib/stores'
 
+import { shownCounts } from './__tests__/shown-counts'
 import { isContentEditDelta } from './classifier-facts'
 import { rollbackToEntry, updateStoryEntryContent } from './operational'
 import { writeSystemEntry } from './system-entry'
@@ -360,7 +361,10 @@ describe('undo of a content edit', () => {
     // The rollback prunes the turn's delta but the survival anchor spares this edit, so
     // it is left at the log head on what is now the tail — the edit's position says
     // "head turn" even though it was made below one.
-    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+    const shown = await shownCounts('b1', 'e_reply', ctx)
+    expect((await rollbackToEntry('b1', 'e_reply', ctx, { expectedCounts: shown })).status).toBe(
+      'ok',
+    )
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
@@ -562,7 +566,10 @@ describe('a content edit round trip', () => {
     await updateStoryEntryContent('b1', 'e_act', 'i turn back', ctx)
     // The scope named e_act and e_reply; rolling back to the reply deletes it while the
     // survival anchor spares the edit sitting on e_act.
-    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+    const shown = await shownCounts('b1', 'e_reply', ctx)
+    expect((await rollbackToEntry('b1', 'e_reply', ctx, { expectedCounts: shown })).status).toBe(
+      'ok',
+    )
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 

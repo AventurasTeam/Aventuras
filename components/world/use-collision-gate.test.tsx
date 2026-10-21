@@ -10,7 +10,7 @@ import { useCollisionGate } from './use-collision-gate'
 const STORY = 'story-1'
 const BRANCH = 'branch-1'
 
-function run(kind: string, interruptible = false): RunState {
+function run(kind: string, interruptible: RunState['interruptible'] = null): RunState {
   return {
     runId: `run-${kind}`,
     kind,
@@ -58,7 +58,7 @@ describe('useCollisionGate', () => {
   // A pass holds the gate (memory/classifier.md → Pipeline framing), so Resolve waits on it.
   it('blocks Resolve during a pass with the memory reason', () => {
     const { result } = renderHook(() => useCollisionGate(STORY, BRANCH))
-    act(() => generationStore.startRun(run(PERIODIC_CLASSIFIER_KIND, true)))
+    act(() => generationStore.startRun(run(PERIODIC_CLASSIFIER_KIND, 'pass')))
     expect(result.current).toBe('Updating memory. Cancel to edit.')
   })
 })

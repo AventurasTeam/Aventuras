@@ -6,7 +6,6 @@ import { BUNDLED_PACK_ID } from '@/lib/prompts'
 import {
   appSettingsStore,
   cancelStoryRuns,
-  deferredWorkKindOf,
   entitiesStore,
   generationStore,
   interruptMemoryRuns,
@@ -38,7 +37,6 @@ describe('lib/stores public surface', () => {
 
   it('exposes the deferral and interrupt helpers', () => {
     expect(typeof cancelStoryRuns).toBe('function')
-    expect(typeof deferredWorkKindOf).toBe('function')
     expect(typeof interruptMemoryRuns).toBe('function')
     expect(typeof isHeadReversalBlocked).toBe('function')
     expect(typeof isStoryBusy).toBe('function')
@@ -80,7 +78,7 @@ describe('lib/stores public surface', () => {
       runId: 'r1',
       kind: 'synthetic',
       gateBehavior: 'no-gate',
-      interruptible: false,
+      interruptible: null,
       beforeTurn: false,
       actionId: 'a1',
       storyId: null,
@@ -117,7 +115,7 @@ describe('lib/stores public surface', () => {
       runId: 'r_pass',
       kind: PERIODIC_CLASSIFIER_KIND,
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
     })
     generationStore.abortRun('r_pass', 'aborted')
     expect(generationStore.getTxState().deferred.size).toBe(1)

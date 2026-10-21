@@ -30,7 +30,7 @@ function runState(kind: string): RunState {
     runId: `r_${kind}`,
     kind,
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: 'a',
     storyId: null,
@@ -83,7 +83,7 @@ describe('checkConcurrencyContract', () => {
   // generation-pipeline.md → runPipeline entry algorithm: no pass or close may start between a
   // reversal's interrupt and its sweep.
   it('blocks an interruptible start while a reversal is in progress, and starts it after', () => {
-    define('memory-run', { blockedBy: ['memory-run'] }, { interruptible: true })
+    define('memory-run', { blockedBy: ['memory-run'] }, { interruptible: 'pass' })
     expect(checkConcurrencyContract('memory-run', runs(), true)).toEqual({
       kind: 'blocked',
       by: 'reversal',
@@ -92,7 +92,7 @@ describe('checkConcurrencyContract', () => {
   })
 
   it('checks the reversal before blockedBy', () => {
-    define('memory-run', { blockedBy: ['per-turn'] }, { interruptible: true })
+    define('memory-run', { blockedBy: ['per-turn'] }, { interruptible: 'pass' })
     define('per-turn', {})
     expect(checkConcurrencyContract('memory-run', runs('per-turn'), true)).toEqual({
       kind: 'blocked',

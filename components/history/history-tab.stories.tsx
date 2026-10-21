@@ -259,7 +259,7 @@ export const ReloadsOnRowPatchAndRunSettle: Story = {
       runId,
       kind: 'test_run',
       gateBehavior: 'hard-gate',
-      interruptible: false,
+      interruptible: null,
       beforeTurn: false,
       actionId: 'act_settle',
       storyId: null,

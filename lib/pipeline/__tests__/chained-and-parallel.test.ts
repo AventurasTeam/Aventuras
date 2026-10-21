@@ -65,6 +65,29 @@ function failingMarkerInsert(db: RunCtx['db'], kind: string): RunCtx['db'] {
   })
 }
 
+type Complete = { kind: string; outcome: string; idle: boolean; error?: unknown }
+
+// `idle` is what the drain worker reads at each run_complete.
+function recordCompletes(): Complete[] {
+  const seen: Complete[] = []
+  pipelineEventBus.subscribe('run_complete', (e) => {
+    seen.push({
+      kind: e.kind,
+      outcome: e.outcome,
+      idle: !generationStore.hasActiveRun(),
+      ...(e.error ? { error: e.error } : {}),
+    })
+  })
+  return seen
+}
+
+const markerUnwound = (kind: string): Complete => ({
+  kind,
+  outcome: 'failed',
+  idle: true,
+  error: { kind: 'orchestrator', detail: expect.stringMatching(/^marker insert failed: /) },
+})
+
 function heldPhase(): { run: () => AsyncGenerator<never, PhaseResult>; release: () => void } {
   let release!: () => void
   const gate = new Promise<void>((resolve) => {
@@ -295,6 +318,34 @@ describe('chained transition', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
 
+  it('does not evaluate chainsTo for a run cancelled in its last phase', async () => {
+    const { ctx } = await makeHarness()
+    let chainReads = 0
+    async function* cancelledLate({ actionId }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+      const own = [...generationStore.getTxState().runs.values()].find(
+        (r) => r.actionId === actionId,
+      )
+      own?.abortController.abort()
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: cancelledLate }],
+      chainsTo: () => {
+        chainReads++
+        return 'succ'
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('pred', ctx))
+
+    expect(result.outcome).toBe('completed')
+    expect(chainReads).toBe(0)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
   const failingChains: [string, NonNullable<Pipeline['chainsTo']>][] = [
     [
       'throws',
@@ -421,11 +472,14 @@ describe('split start', () => {
     definePipeline({ kind: 'pred', phases: [{ name: 'p', run: noop }], ...base })
     const db = failingMarkerInsert(ctx.db, 'pred')
 
+    const completes = recordCompletes()
+
     const { origin, chain } = startPipeline('pred', { ...ctx, db })
 
     await expect(origin).rejects.toThrow('marker insert failed')
     await expect(chain).resolves.toBeUndefined()
     expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(completes).toEqual([markerUnwound('pred')])
     await expect(runPipeline('pred', { ...ctx, db })).rejects.toThrow('marker insert failed')
   })
 
@@ -443,12 +497,18 @@ describe('split start', () => {
     pipelineEventBus.subscribe('run_complete', (e) => {
       if (e.kind === 'pred') successor = [...generationStore.getTxState().runs.values()][0]
     })
+    const completes = recordCompletes()
 
     const { origin, chain } = startPipeline('pred', { ...ctx, db })
 
     expect(expectRan(await origin).outcome).toBe('completed')
     await expect(chain).resolves.toBeUndefined()
     expect(successor?.kind).toBe('succ')
+    // Pred's run_complete fires with succ still registered, so only succ's reports idle.
+    expect(completes).toEqual([
+      { kind: 'pred', outcome: 'completed', idle: false },
+      markerUnwound('succ'),
+    ])
     const ended = await Promise.race([
       successor!.terminal.then(() => 'ended'),
       flush().then(() => 'pending'),

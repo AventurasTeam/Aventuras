@@ -14,7 +14,12 @@ import {
   type PipelineStart,
   type RunCtx,
 } from '@/lib/pipeline'
-import { awaitRunTerminal, generationStore, interruptMemoryRuns } from '@/lib/stores'
+import {
+  awaitRunTerminal,
+  generationStore,
+  interruptMemoryRuns,
+  type DeferredWorkKind,
+} from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -46,13 +51,13 @@ async function* writesThenHolds({
   return result
 }
 
-function defineStandIn(kind: string, interruptible = true): void {
+function defineStandIn(kind: string, interruptible: DeferredWorkKind | null = 'pass'): void {
   definePipeline({
     kind,
     phases: [{ name: 'pass', run: writesThenHolds }],
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
-    interruptible,
+    interruptible: interruptible ?? undefined,
     concurrencyPolicy: { blockedBy: [kind] },
   })
 }
@@ -85,6 +90,43 @@ function recordTerminalEvents(): Seen[] {
 
 const deferredOnB1 = () => generationStore.getTxState().deferred.get('b1')
 
+function defineChainingTurn(): void {
+  definePipeline({
+    kind: 'origin-turn',
+    phases: [
+      {
+        name: 'turn',
+        run: async function* (): AsyncGenerator<never, PhaseResult> {
+          return { status: 'completed' }
+        },
+      },
+    ],
+    affordance: 'pill-only',
+    gateBehavior: 'hard-gate',
+    concurrencyPolicy: {},
+    chainsTo: () => PERIODIC_CLASSIFIER_KIND,
+  })
+}
+
+// Interrupts the pass in the store update that swaps it in at the turn's commit, before it starts.
+async function runInterruptedAtSwap(ctx: RunCtx): Promise<boolean> {
+  let interrupted: Promise<void> | undefined
+  const off = generationStore.subscribe(() => {
+    const runs = [...generationStore.getTxState().runs.values()]
+    if (!interrupted && runs.some((r) => r.kind === PERIODIC_CLASSIFIER_KIND))
+      interrupted = interruptMemoryRuns('b1')
+  })
+  try {
+    const start = startPipeline('origin-turn', ctx)
+    expect(expectRan(await start.origin).outcome).toBe('completed')
+    await start.chain
+    await interrupted
+  } finally {
+    off()
+  }
+  return interrupted !== undefined
+}
+
 describe('deferred work', () => {
   beforeEach(() => {
     resetSingletons()
@@ -99,7 +141,7 @@ describe('deferred work', () => {
 
     const { start } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
     const [held] = generationStore.getTxState().runs.values()
-    expect(held.interruptible).toBe(true)
+    expect(held.interruptible).toBe('pass')
     expect(await db.select().from(storyEntries)).toHaveLength(1)
 
     await interruptMemoryRuns('b1')
@@ -112,6 +154,7 @@ describe('deferred work', () => {
       runId: held.runId,
       kind: PERIODIC_CLASSIFIER_KIND,
       branchId: 'b1',
+      work: 'pass',
     })
     const tx = expectRan(await start.origin)
     expect(tx.outcome).toBe('aborted')
@@ -120,46 +163,83 @@ describe('deferred work', () => {
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
 
-  // The interrupt lands as the predecessor's commit swaps the pass in, before the pass starts.
   it('defers a pass interrupted at the swap from its predecessor, once', async () => {
     const { db, ctx } = await makeHarness()
     defineStandIn(PERIODIC_CLASSIFIER_KIND)
-    definePipeline({
-      kind: 'origin-turn',
-      phases: [
-        {
-          name: 'turn',
-          run: async function* (): AsyncGenerator<never, PhaseResult> {
-            return { status: 'completed' }
-          },
-        },
-      ],
-      affordance: 'pill-only',
-      gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
-      chainsTo: () => PERIODIC_CLASSIFIER_KIND,
-    })
+    defineChainingTurn()
     const seen = recordTerminalEvents()
-    let interrupted: Promise<void> | undefined
-    const off = generationStore.subscribe(() => {
-      const runs = [...generationStore.getTxState().runs.values()]
-      if (!interrupted && runs.some((r) => r.kind === PERIODIC_CLASSIFIER_KIND))
-        interrupted = interruptMemoryRuns('b1')
-    })
-    try {
-      const start = startPipeline('origin-turn', ctx)
-      expect(expectRan(await start.origin).outcome).toBe('completed')
-      await start.chain
-      await interrupted
-    } finally {
-      off()
-    }
 
-    expect(interrupted).toBeDefined()
+    expect(await runInterruptedAtSwap(ctx)).toBe(true)
+
     expect(deferredOnB1()).toEqual({ pass: true })
     expect(seen.filter((e) => e.type === 'run_deferred')).toHaveLength(1)
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(await db.select().from(storyEntries)).toHaveLength(0)
+  })
+
+  // No classifier profile is set, so this pass's pre-flight would fail and its hook burn a retry.
+  describe('a pass cancelled before its pre-flight', () => {
+    let preflightHookCalls = 0
+    let phaseEntered = false
+
+    beforeEach(() => {
+      preflightHookCalls = 0
+      phaseEntered = false
+      definePipeline({
+        kind: PERIODIC_CLASSIFIER_KIND,
+        phases: [
+          {
+            name: 'pass',
+            run: async function* (): AsyncGenerator<never, PhaseResult> {
+              phaseEntered = true
+              return { status: 'completed' }
+            },
+            resolves: [{ target: 'classifier' }],
+          },
+        ],
+        affordance: 'pill-and-banner',
+        gateBehavior: 'hard-gate',
+        interruptible: 'pass',
+        concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND] },
+        onPreflightFailure: async () => {
+          preflightHookCalls++
+        },
+      })
+    })
+
+    const passComplete = (seen: Seen[]) =>
+      seen.find((e) => e.type === 'run_complete' && e.kind === PERIODIC_CLASSIFIER_KIND)
+
+    it('is interrupted, not failed, when cancelled at the swap from its predecessor', async () => {
+      const { ctx } = await makeHarness()
+      defineChainingTurn()
+      const seen = recordTerminalEvents()
+
+      expect(await runInterruptedAtSwap(ctx)).toBe(true)
+
+      expect(passComplete(seen)).toMatchObject({ outcome: 'aborted' })
+      expect(preflightHookCalls).toBe(0)
+      expect(phaseEntered).toBe(false)
+      expect(deferredOnB1()).toEqual({ pass: true })
+      expect(seen.filter((e) => e.type === 'run_deferred')).toHaveLength(1)
+    })
+
+    it("keeps a Send's deferred pass deferred when cancelled as it reserves", async () => {
+      const { ctx } = await makeHarness()
+      const seen = recordTerminalEvents()
+
+      const start = startPipeline(PERIODIC_CLASSIFIER_KIND, {
+        ...ctx,
+        beforeTurn: true,
+        onReserved: () => void interruptMemoryRuns('b1'),
+      })
+
+      expect(expectRan(await start.origin).outcome).toBe('aborted')
+      expect(preflightHookCalls).toBe(0)
+      expect(phaseEntered).toBe(false)
+      expect(deferredOnB1()).toEqual({ pass: true })
+      expect(passComplete(seen)).toMatchObject({ outcome: 'aborted' })
+    })
   })
 
   it('emits nothing new when work already deferred is aborted again', async () => {
@@ -245,7 +325,7 @@ describe('deferred work', () => {
       ],
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND] },
     })
     const seen = recordTerminalEvents()
@@ -260,26 +340,28 @@ describe('deferred work', () => {
     expect(seen.map((e) => e.type)).toEqual(['run_complete'])
   })
 
-  it('records nothing for an interruptible run of a kind that maps to no deferred work', async () => {
+  it('records an interrupted run in the slot its declaration names, whatever its kind', async () => {
     const { ctx } = await makeHarness()
-    defineStandIn('other-interruptible')
+    defineStandIn('other-interruptible', 'close')
     const seen = recordTerminalEvents()
 
     const { start } = await startHeld('other-interruptible', ctx)
     await interruptMemoryRuns('b1')
 
     expect(expectRan(await start.origin).outcome).toBe('aborted')
-    expect(generationStore.getTxState().deferred.size).toBe(0)
-    expect(seen.map((e) => e.type)).toEqual(['run_complete'])
+    expect(deferredOnB1()).toEqual({ close: true })
+    expect(seen.filter((e) => e.type === 'run_deferred')).toEqual([
+      expect.objectContaining({ kind: 'other-interruptible', work: 'close' }),
+    ])
   })
 
   it('records nothing for a pass-kind run that is not interruptible', async () => {
     const { ctx } = await makeHarness()
-    defineStandIn(PERIODIC_CLASSIFIER_KIND, false)
+    defineStandIn(PERIODIC_CLASSIFIER_KIND, null)
     const seen = recordTerminalEvents()
 
     const { start } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
-    expect([...generationStore.getTxState().runs.values()][0].interruptible).toBe(false)
+    expect([...generationStore.getTxState().runs.values()][0].interruptible).toBeNull()
     await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, 'b1', 'cancel')
 
     expect(expectRan(await start.origin).outcome).toBe('aborted')

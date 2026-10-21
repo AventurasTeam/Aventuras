@@ -1167,7 +1167,7 @@ describe('undo and redo during a pass', () => {
       runId: 'run_ending',
       kind: PERIODIC_CLASSIFIER_KIND,
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       beforeTurn: false,
       actionId: 'act_ending',
       storyId: 's1',
@@ -1181,7 +1181,7 @@ describe('undo and redo during a pass', () => {
 
     // The edit group is not the turn, so only a gate that dropped during the read admits it.
     const done = undoLastAction('b1', ctx)
-    generationStore.abortRun('run_ending')
+    generationStore.abortRun('run_ending', 'failed')
 
     expect(await done).toEqual({ status: 'ok' })
     expect(entriesStore.getById('e_turn')?.content).toBe('a reply')

@@ -247,7 +247,19 @@ companions.
   while dirty and exposes a removal-aware `guardRemoval(proceed)`, and
   each route's unsaved guard calls
   `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
-  through `useRowSessionGuard`).
+  through `useRowSessionGuard`). The two dialogs are the lesser cost.
+  World's Save no longer merges concurrent writes into a dirty pane's
+  keywords and relationships, since a pane is never dirty across a pass
+  ([`world.md → Relationships — character-to-character`](../ui/screens/world/world.md#relationships--character-to-character)),
+  and Plot's Save keeps a dirty links array whole. A close started from
+  the Actions menu over a dirty World or Plot pane would run under the
+  draft, and the pane's later Save would write its dirty fields, whole
+  arrays included, over the close's writes to them. That is the
+  revisit signal of
+  [`parked.md → A dirty links array on Save overwrites concurrent link writes`](../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes),
+  whose first candidate is this close: this slice must keep a close
+  from starting over a dirty pane, or bring back the three-way merge
+  that entry describes, for both surfaces.
   Slice-authoring note: the memory banner labels only the pass
   (`use-memory-run-banner.ts`, and its test pins that a close shows
   nothing); canon shows it for a pass or a chapter-close transaction
@@ -1232,18 +1244,24 @@ already-shipped calendar editor.
   kind with `hard-gate` concurrency per
   [`generation-pipeline.md → V1 declarations`](../generation-pipeline.md#v1-declarations))
   lands alongside.
-  Slice-authoring note: the reader picks its pill run in `pillRunOf`
-  (`app/reader-composer/[branchId].tsx`) from `findSendRun`, an
-  allowlist of per-turn and Send's deferred pass
-  (`components/reader/send-run.ts`), then the branch's pass or close.
-  World and Plot pick theirs by interruptibility and gate in `pillRun`
-  (`components/story-settings/generation-run.ts`, private to that file;
-  they reach it through `cancelStoryPillRun` and
-  `selectStorySettingsGenerationRunKind`). The two agree for today's
-  kinds, but `translation-retry` is hard-gate, non-interruptible and not
-  a turn, so it would get a Cancel on World and Plot and none in the
-  reader. This slice must export the branch-scoped `pillRun` and have
-  the reader use it.
+  Slice-authoring note: two policies pick the run the pill names. The
+  reader's pill and its Cancel (`cancelPillRun`) use `pillRunOf` in
+  `components/reader/send-run.ts`: `findSendRun`, an allowlist of
+  per-turn and Send's deferred pass, then the branch's pass or close
+  (`selectMemoryRun`). World, Plot and Story Settings pick theirs by
+  interruptibility and gate in `pillRun`
+  (`components/story-settings/generation-run.ts`, private to that
+  file), through `useStoryGenerationGate`, which returns the pill's run
+  kind and a bound `cancelPillRun`. The reader uses `pillRun` too, for
+  its gate tooltip: `selectStorySettingsGenerationRunKind` reads it
+  across the story, not the branch, and feeds `generationGateReason`.
+  The two agree for today's kinds, but `translation-retry` is
+  hard-gate, non-interruptible and not a turn, so it would get a Cancel
+  on World and Plot and none in the reader, while the reader's tooltip,
+  through `pillRun`, still says to cancel it. This slice must export a
+  branch-scoped `pillRun` and have the reader's pill, its Cancel and
+  its gate tooltip all use it; `findSendRun` stays for the composer's
+  Send and Cancel.
 - M8.2 — Translation UI: the reactive `useTranslation`
   subscription over the M1.5 store (render reactivity was scoped
   out of the content slice to land with this display-translation
@@ -1770,7 +1788,9 @@ own.
   selected: every CTRL-Z, redo, prose edit, rollback and its preview,
   abort and boot recovery. CTRL-Z also loads the branch's whole log,
   payloads included, to pick its target (`recentDeltaRows` in
-  `lib/actions/story-entries/undo.ts`), and `reverseReplayDeltas`'s
+  `lib/actions/story-entries/undo.ts`), and while a pass runs
+  `undoLastAction` reads it twice: once before the gate decides, once
+  in the reversal bracket. `reverseReplayDeltas`'s
   `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
   matches no index, so abort and boot recovery scan `deltas` across
   every story. The only `deltas` indexes are `(branch_id, log_position)`
@@ -1783,7 +1803,8 @@ own.
   read for CTRL-Z's target, measured on a bench beside
   `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
   review (2026-10-05); the two wider scans were found when it was
-  routed.
+  routed, and the double read during a pass by the gated classifier
+  slice's task reviews (2026-10-21).
 - **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
   `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
   indexes without statistics. Measured while planning 4.2c's History
@@ -1845,7 +1866,7 @@ own.
   AlertDialog or right Sheet) that opens with no toast showing hides the
   app root, and a toast mounted after inherits it. An always-rendered,
   empty live region would be spared by `hideOthers`. The observation in
-  [`parked.md → Background content behind AlertDialog is not aria-hidden`](../parked.md#background-content-behind-alertdialog-is-not-aria-hidden)
+  [`parked.md → Why one role locator matched both Discard buttons behind an AlertDialog`](../parked.md#why-one-role-locator-matched-both-discard-buttons-behind-an-alertdialog)
   contradicts this; a browser probe (2026-10-21) sided with
   `hideOthers`: it marks the app root `aria-hidden` while a Radix
   dialog is open, a toast that exists before it runs stays announced,

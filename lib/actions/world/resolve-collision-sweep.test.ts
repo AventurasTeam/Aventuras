@@ -28,6 +28,7 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
+import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -216,7 +217,10 @@ describe('resolveCollision — merge link copies across a prose-edit sweep', () 
   it('rolls the merge back with the pass, restoring the loser as it stood before both', async () => {
     await passThenMerge(false)
 
-    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+    const shown = await shownCounts('b1', 'e_reply', ctx)
+    expect((await rollbackToEntry('b1', 'e_reply', ctx, { expectedCounts: shown })).status).toBe(
+      'ok',
+    )
 
     expect(await entityIds()).toEqual(['char_a', 'char_b'])
     expect(await linksOn('char_a')).toEqual({ awareness: [], involvements: [] })

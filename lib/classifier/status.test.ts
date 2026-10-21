@@ -115,7 +115,7 @@ describe('shouldCadenceFire', () => {
     expect(shouldCadenceFire({ status, unprocessedEntries: 99, cadence: 1 })).toBe(false)
   })
 
-  it('does not fire for a running status, which a crash left for boot to quarantine', () => {
+  it('does not fire for a running status, a pass left unfinished until boot resets it', () => {
     const status = { ...idleStatus(), state: 'running' as const }
     expect(shouldCadenceFire({ status, unprocessedEntries: 99, cadence: 1 })).toBe(false)
   })

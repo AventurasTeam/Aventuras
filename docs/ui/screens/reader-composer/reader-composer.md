@@ -272,6 +272,15 @@ rare enough that the confirm never turns routine. It reuses the
 cross-chapter copy, reframed as re-run rather than re-open: the
 chapter returns to in-progress and regenerates.
 
+**Its counts stay true while it is open**, as the rollback modal's do
+([`rollback-confirm.md → Counts`](./rollback-confirm/rollback-confirm.md#counts)):
+it recounts each time a run settles under it, and `regenerateTurn`
+refuses `counts-changed`, with the fresh counts, when the set it
+resolves at confirm differs from the counts the user saw. The reader
+then shows the toast
+`The counts changed while this was open. Check them before confirming.`
+and re-opens the confirm on the fresh counts.
+
 ### During a memory update
 
 Every few turns a pass chains after the turn, and a chapter close
@@ -551,7 +560,9 @@ entry re-appends at the branch tail, so on a path where a partial
 sweep already moved the tail it would park a stale notice over a
 branch it no longer describes — which is why the regenerate rejection
 arm may put the entry back and the throw arm may not. A draft has no
-position, so it is safe on both.
+position, so it is safe on both. A Send cancelled during its deferred
+work has written nothing either, so it puts the entry back too, and
+hands its own text to the draft.
 
 This leaves a failed turn's text under the same custody as any unsent
 draft, including the same limit: composer input is pre-submit state
@@ -978,7 +989,10 @@ it there if the banner lands while it still runs; past the settle,
 without the re-pin, the reply's last lines would stay hidden for the
 whole pass. A draft that grows the composer is another trigger.
 Further from the bottom the user keeps their position, and a
-viewport that grows needs nothing.
+viewport that grows needs nothing. An entry's inline editor that has
+focus holds the position too: on Android the keyboard opening under
+it shrinks the viewport, and pinning the bottom then would push the
+editor up under the top bar.
 
 **Streaming while in a non-recent window.** Pipeline writes happen
 in the data layer regardless of which window is rendered. The

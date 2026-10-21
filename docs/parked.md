@@ -2875,7 +2875,7 @@ so a twin unmounting no longer detaches the survivor's callbacks, and
 for same-tab siblings. Surfaced by M3.11 Task 4 review (2026-07-22),
 narrowed 2026-07-22 and 2026-08-18.
 
-#### Background content behind AlertDialog is not aria-hidden
+#### Why one role locator matched both Discard buttons behind an AlertDialog
 
 **Open question: why did a role locator match both Discard buttons
 behind an open `AlertDialog`?** It read as the background not being

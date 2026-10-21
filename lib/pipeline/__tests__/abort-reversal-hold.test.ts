@@ -19,7 +19,7 @@ import {
   type PhaseEmittedEvent,
   type PhaseResult,
 } from '@/lib/pipeline'
-import { generationStore } from '@/lib/stores'
+import { generationStore, type DeferredWorkKind } from '@/lib/stores'
 
 import { makeHarness, resetSingletons } from './harness'
 
@@ -56,7 +56,7 @@ const grantedWithin = (what: string) =>
     what,
   )
 
-function defineRun(kind: string, interruptible: boolean): { landed: Promise<void> } {
+function defineRun(kind: string, interruptible?: DeferredWorkKind): { landed: Promise<void> } {
   let land!: () => void
   const landed = new Promise<void>((resolve) => {
     land = resolve
@@ -124,7 +124,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
 
   it('waits for a preview in progress before it reverses', async () => {
     const { db, ctx } = await makeHarness()
-    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
+    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, 'pass')
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
     const preview = openPreview()
@@ -155,7 +155,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
       return reverseReplayDeltas(...args)
     }
     configurePort({ reverseReplayDeltas: slowReverse })
-    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
+    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, 'pass')
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
 
@@ -176,7 +176,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
 
   it('takes no hold for a run that is not interruptible', async () => {
     const { db, ctx } = await makeHarness()
-    const { landed } = defineRun('turn-stand-in', false)
+    const { landed } = defineRun('turn-stand-in')
     const run = startPipeline('turn-stand-in', ctx)
     await landed
     const preview = openPreview()
@@ -204,7 +204,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
           }),
         ),
     })
-    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
+    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, 'pass')
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
 
@@ -216,13 +216,12 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
   it('releases the hold when the reversal throws something the orchestrator does not recognise', async () => {
     const { ctx } = await makeHarness()
     configurePort({ reverseReplayDeltas: () => Promise.reject(new Error('not a replay error')) })
-    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, true)
+    const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, 'pass')
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
 
     abortRuns()
-    // Today's rethrow leaves the run registered (parked.md → An abort waits on its phases, except a
-    // thrown parallel branch).
+    // The rethrow leaves the run registered; the hold is released all the same.
     await expect(within(run.origin, 'abort')).rejects.toThrow('not a replay error')
     expect(await grantedWithin('a write after the thrown reversal')).toBe('granted')
   })

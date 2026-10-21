@@ -108,7 +108,7 @@ describe('runPipeline concurrency entry + coordination', () => {
       kind: 'memory-run',
       phases: [{ name: 'p', run: noop }],
       ...base,
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: {},
     })
     definePipeline({
@@ -251,6 +251,10 @@ describe('runPipeline concurrency entry + coordination', () => {
       releaseBlocker = r
     })
     let blockerInflight: Promise<unknown> | undefined
+    let entered!: () => void
+    const bgInPhase = new Promise<void>((r) => {
+      entered = r
+    })
 
     async function* blockerPhase(): AsyncGenerator<never, PhaseResult> {
       await blockerGate
@@ -260,6 +264,7 @@ describe('runPipeline concurrency entry + coordination', () => {
     // txState — a kind fg.blockedBy lists. A stale entry path reserves fg anyway;
     // a correct one re-checks after the wait and rejects it.
     async function* bgPhase({ abortSignal }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+      entered()
       await new Promise<void>((resolve) => {
         if (abortSignal.aborted) resolve()
         else abortSignal.addEventListener('abort', () => resolve(), { once: true })
@@ -290,6 +295,8 @@ describe('runPipeline concurrency entry + coordination', () => {
     })
 
     const bg = runPipeline('bg', ctx)
+    // A run cancelled before its phases never enters them, and only bg's phase starts the blocker.
+    await bgInPhase
     const fg = await runPipeline('fg', ctx)
     expect(fg).toEqual({ outcome: 'rejected', blockedBy: 'blocker' })
     expect((await bg).outcome).toBe('aborted')

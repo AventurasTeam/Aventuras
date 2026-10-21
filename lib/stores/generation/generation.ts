@@ -1,14 +1,18 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+export type DeferredWork = { readonly pass?: true; readonly close?: true }
+export type DeferredWorkKind = keyof DeferredWork
 
 export type RunState = {
   runId: string
   kind: string
   gateBehavior: 'hard-gate' | 'no-gate'
-  /** Copied from the pipeline at reserve: a head reversal or Cancel ends this run and defers it. */
-  interruptible: boolean
+  /**
+   * Copied from the pipeline at reserve: the slot a head reversal or Cancel ends and defers this
+   * run in; null for a run never deferred.
+   */
+  interruptible: DeferredWorkKind | null
   /** Send's deferred work, before the turn (generation-pipeline.md → chainsTo on predecessor). */
   beforeTurn: boolean
   actionId: string
@@ -29,9 +33,6 @@ export type RunState = {
 
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
-
-export type DeferredWork = { readonly pass?: true; readonly close?: true }
-export type DeferredWorkKind = keyof DeferredWork
 
 // reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
 // user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
@@ -66,19 +67,6 @@ export function isStoryBusy(txState: TxState, storyId: string, branchId: string)
   if (txState.reversalInProgress) return true
   for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
-}
-
-const DEFERRED_WORK_KIND: ReadonlyMap<string, DeferredWorkKind> = new Map([
-  [PERIODIC_CLASSIFIER_KIND, 'pass'],
-  ['chapter-close', 'close'],
-])
-
-export function deferredWorkKindOf(kind: string): DeferredWorkKind | null {
-  return DEFERRED_WORK_KIND.get(kind) ?? null
-}
-
-function deferralKeyOf(run: RunState | undefined): DeferredWorkKind | null {
-  return run?.interruptible ? deferredWorkKindOf(run.kind) : null
 }
 
 // An emptied record is deleted, not left as {}: readers test `deferred.has(branchId)`.
@@ -119,10 +107,10 @@ type GenerationState = {
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch and `'failed'` clears that record; no outcome leaves the record alone. Returns true
-   * only when this call newly recorded the deferral.
+   * branch, `'failed'` clears that record, `'unwound'` (marker insert failed; never started)
+   * leaves it. Returns the slot this call newly recorded, or null.
    */
-  abortRun: (runId: string, outcome?: 'aborted' | 'failed') => boolean
+  abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   setReversalInProgress: (value: boolean) => void
   /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
   bracketPendingTurn: <T>(
@@ -169,21 +157,21 @@ const store = createStore<GenerationState>()((set) => ({
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
       if (successor) runs.set(successor.runId, successor)
-      const key = deferralKeyOf(run)
-      const deferred =
-        run && key ? withDeferral(s.txState.deferred, run.branchId, key, false) : s.txState.deferred
+      const deferred = run?.interruptible
+        ? withDeferral(s.txState.deferred, run.branchId, run.interruptible, false)
+        : s.txState.deferred
       return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
     }),
   abortRun: (runId, outcome) => {
-    let recorded = false
+    let recorded: DeferredWorkKind | null = null
     set((s) => {
       const run = s.txState.runs.get(runId)
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
-      const key = deferralKeyOf(run)
+      const key = run?.interruptible
       let deferred = s.txState.deferred
-      if (run && key && outcome) {
-        recorded = outcome === 'aborted' && deferred.get(run.branchId)?.[key] !== true
+      if (run && key && outcome !== 'unwound') {
+        if (outcome === 'aborted' && deferred.get(run.branchId)?.[key] !== true) recorded = key
         deferred = withDeferral(deferred, run.branchId, key, outcome === 'aborted')
       }
       return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
@@ -301,7 +289,7 @@ export function awaitRunTerminal(
   return run.terminal
 }
 
-/** Aborts every interruptible run on the branch; resolves once each has ended. Records nothing. */
+/** Aborts the branch's interruptible runs and awaits their end; each records its own deferral. */
 export async function interruptMemoryRuns(branchId: string): Promise<void> {
   const runs = [...getTxState().runs.values()].filter(
     (r) => r.interruptible && r.branchId === branchId,
@@ -321,7 +309,8 @@ function nextStoreChange(): Promise<void> {
 
 /**
  * Aborts every run on the story until `isStoryBusy` is false and no turn body runs on the branch:
- * a chained pass, pending turn, reversal or regenerate sweep registers late. Records nothing.
+ * a chained pass, pending turn, reversal or regenerate sweep registers late. Records nothing
+ * itself; each aborted pass or close records its own deferral.
  */
 export async function cancelStoryRuns(storyId: string, branchId: string): Promise<void> {
   for (;;) {

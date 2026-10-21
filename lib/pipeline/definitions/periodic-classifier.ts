@@ -87,7 +87,7 @@ function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
 }
 
 // Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped
-// json_set: the reversal clamp owns $.processedThrough and can commit between read and write.
+// json_set (cadence.md -> Concurrency): the reversal clamp writes the column too, under no lock.
 async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
@@ -115,8 +115,8 @@ function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> 
   return patchStatus(ctx, watermarkKey(coversThrough))
 }
 
-// The entity stores are global, hydrated for one branch: a pass whose branch they don't hold would
-// prompt, reconcile and plan against another branch's roster.
+// The entity stores hold one branch: filtered for a branch they don't hold, they leave an empty
+// roster to prompt, reconcile and plan against.
 function storesHoldBranch(
   open: OpenStory | null,
   ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,
@@ -353,23 +353,23 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         }
       },
       // Not in the phase: a reversal that can't commit leaves `running` for boot recovery.
-      onInterrupt: async (run, ctx) => {
-        const status = run.intermediates[PRE_RUN_STATUS] as ClassifierStatus | undefined
+      onInterrupt: async (ctx) => {
+        const status = ctx.intermediates[PRE_RUN_STATUS] as ClassifierStatus | undefined
         if (!status) return
-        const target = { db: ctx.db, branchId: run.branchId }
         try {
-          await writeStatus(target, status)
+          await writeStatus(ctx, status)
         } catch (e) {
           // Left running, the cadence stays suspended until the next boot.
-          logger.warn('classifier.interrupt_restore_retried', {
-            branchId: run.branchId,
-            error: e instanceof Error ? e.message : String(e),
-          })
-          await writeStatus(target, status)
+          logger.warn(
+            'classifier.interrupt_restore_retried',
+            { branchId: ctx.branchId, error: e instanceof Error ? e.message : String(e) },
+            { actionId: ctx.actionId },
+          )
+          await writeStatus(ctx, status)
         }
       },
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
       },

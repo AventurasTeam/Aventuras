@@ -193,8 +193,7 @@ export function ReaderSurface({
   streaming,
   branchKey,
   hasOlder,
-  editBlocked,
-  headReversalBlocked = editBlocked,
+  editGate,
   jumpButtonEnabled,
   systemFixLabel,
   entityNames,
@@ -463,6 +462,11 @@ export function ReaderSurface({
       const previousClientHeight = lastClientHeight
       lastClientHeight = el.clientHeight
       if (el.clientHeight >= previousClientHeight || gestureActiveRef.current) return
+      // The Android keyboard opening under an in-row editor would push the editor up under
+      // the top. hasFocus: a tap on the native composer leaves activeElement on an open editor.
+      const doc = el.ownerDocument
+      const active = doc.activeElement
+      if (active instanceof HTMLTextAreaElement && el.contains(active) && doc.hasFocus()) return
       // Read from geometry, not lastDistanceRef: content can grow below without a scroll
       // event, and a shrink never clamps scrollTop.
       const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight
@@ -549,12 +553,7 @@ export function ReaderSurface({
         ) : null}
         {rows.map((row) => {
           const decoration = worldTimeDecorations[row.id]
-          const flags = rowReversalFlags({
-            rowId: row.id,
-            headTurnIds,
-            editBlocked,
-            headReversalBlocked,
-          })
+          const flags = rowReversalFlags({ rowId: row.id, headTurnIds, editGate })
           return (
             <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
               <ReaderRow
@@ -562,7 +561,7 @@ export function ReaderSurface({
                 tier={tier}
                 editing={editingId === row.id}
                 editContent={editingId === row.id ? editDraft : null}
-                editBlocked={editBlocked}
+                editBlocked={editGate !== 'open'}
                 editDisabled={flags.editDisabled}
                 reversalDisabled={flags.reversalDisabled}
                 systemFixLabel={systemFixLabel}

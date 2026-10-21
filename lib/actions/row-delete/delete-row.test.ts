@@ -34,7 +34,7 @@ function blockGeneration(): void {
     runId: 'r_block',
     kind: 'turn',
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: 'act_block',
     storyId: 's1',

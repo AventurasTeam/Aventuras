@@ -125,7 +125,6 @@ const PASS_IN_FLIGHT_ARGS = {
   tailEntryId: 'p5',
   worldTimeDecorations: { p5: { label: 'Day 12 · 14:33', raw: 90 } },
   worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: WORLD_TIME_ORIGIN },
-  editBlocked: true,
 }
 
 function rowButton(id: string, name: string): HTMLElement {
@@ -169,7 +168,7 @@ const meta = {
     streaming: null,
     branchKey: 'branch_story',
     hasOlder: false,
-    editBlocked: false,
+    editGate: 'open',
     jumpButtonEnabled: true,
     ...noopHandlers,
     ...sceneWiring,
@@ -342,7 +341,7 @@ export const SaveAndRegenerateAbsentOffHead: Story = {
  * the rest keeps the gate (principles.md → Edit restrictions during in-flight generation).
  */
 export const PassInFlightHeadTurnLive: Story = {
-  args: { ...PASS_IN_FLIGHT_ARGS, headReversalBlocked: false },
+  args: { ...PASS_IN_FLIGHT_ARGS, editGate: 'interruptible' },
   play: async () => {
     const edit = t('reader:entryCard.editEntry')
     await waitFor(() => expect(rowButton('p5', edit)).not.toBeDisabled())
@@ -363,9 +362,9 @@ export const PassInFlightHeadTurnLive: Story = {
   },
 }
 
-/** A host that passes no `headReversalBlocked` keeps one gate for every row control. */
-export const GateHeldWithoutHeadReversalSplit: Story = {
-  args: PASS_IN_FLIGHT_ARGS,
+/** A closed gate holds every row control, the head turn's included. */
+export const ClosedGateHoldsEveryRow: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, editGate: 'closed' },
   play: async () => {
     await waitFor(() => expect(rowButton('p5', t('reader:entryCard.editEntry'))).toBeDisabled())
     expect(rowButton('p5', t('reader:entryCard.regenerate'))).toBeDisabled()
@@ -527,6 +526,87 @@ export const ShrinkAfterSilentGrowthHolds: Story = {
     const scrollTop = scroller.scrollTop
     await shrinkViewport(scroller)
     expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/**
+ * The Android keyboard opening under an in-row editor shrinks the reader; pinning the bottom
+ * then would push the editor up under the top.
+ */
+export const ShrinkWhileEditingHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await userEvent.click(rowButton('o13', t('reader:entryCard.editEntry')))
+    const textarea = await waitFor(() =>
+      screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+    )
+    await waitFor(() => expect(textarea).toHaveFocus())
+    await scrollToDistance(scroller, 0)
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(textarea).toHaveFocus()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/**
+ * On native the composer is a native view: tapping it leaves the reader document's activeElement
+ * on an open editor but takes the document's focus, so the re-pin applies again.
+ */
+export const ShrinkWhileEditorLostFocusRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await userEvent.click(rowButton('o13', t('reader:entryCard.editEntry')))
+    const textarea = await waitFor(() =>
+      screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+    )
+    await waitFor(() => expect(textarea).toHaveFocus())
+    await scrollToDistance(scroller, 0)
+    const hasFocus = Document.prototype.hasFocus
+    Document.prototype.hasFocus = () => false
+    try {
+      await shrinkViewport(scroller)
+      await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+    } finally {
+      Document.prototype.hasFocus = hasFocus
+    }
+  },
+}
+
+/** Focus in an editable outside the reader (the web composer shares its document) keeps the re-pin. */
+export const ShrinkWhileOutsideEditableFocusedRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    const composer = document.createElement('textarea')
+    document.body.append(composer)
+    try {
+      composer.focus()
+      await shrinkViewport(scroller)
+      expect(composer).toHaveFocus()
+      await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+    } finally {
+      composer.remove()
+    }
+  },
+}
+
+/** Only an editor holds the reader: a focused row button (a just-pressed Regenerate) keeps the re-pin. */
+export const ShrinkWhileRowButtonFocusedRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    const button = rowButton('o14', t('reader:entryCard.regenerate'))
+    button.focus()
+    await shrinkViewport(scroller)
+    expect(button).toHaveFocus()
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
   },
 }
 

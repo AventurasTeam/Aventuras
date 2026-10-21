@@ -14,7 +14,7 @@ function run(kind: string, over: Partial<RunState> = {}): RunState {
     runId: `run-${kind}`,
     kind,
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: `action-${kind}`,
     storyId: 'story-1',
@@ -29,7 +29,7 @@ function run(kind: string, over: Partial<RunState> = {}): RunState {
 }
 
 function pass(over: Partial<RunState> = {}): RunState {
-  return run(PERIODIC_CLASSIFIER_KIND, { interruptible: true, ...over })
+  return run(PERIODIC_CLASSIFIER_KIND, { interruptible: 'pass', ...over })
 }
 
 function openStory(branchId = 'branch-1'): void {
@@ -95,7 +95,7 @@ describe('useMemoryRunBanner', () => {
   // interruptible run of another kind never borrows the pass's label.
   it('shows nothing for an interruptible run of another kind', () => {
     openStory()
-    generationStore.startRun(run('chapter-close', { interruptible: true }))
+    generationStore.startRun(run('chapter-close', { interruptible: 'close' }))
     const { result } = renderHook(() => useMemoryRunBanner())
     expect(result.current).toBeNull()
   })

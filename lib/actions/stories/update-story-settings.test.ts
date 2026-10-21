@@ -84,7 +84,7 @@ function startRun(kind: string, gateBehavior: RunState['gateBehavior']): void {
     runId: `run-${kind}`,
     kind,
     gateBehavior,
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: `action-${kind}`,
     storyId: 'story_1',

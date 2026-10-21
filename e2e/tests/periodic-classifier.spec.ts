@@ -19,12 +19,12 @@ import {
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { memoryBanner } from '../locators/memory-banner'
-import { reader } from '../locators/reader'
+import { reader, worldStateCountOf } from '../locators/reader'
 import { storyLeave } from '../locators/story-leave'
 import { toast } from '../locators/toast'
 
-// A turn's commit chaining its pass only happens in a running app; assert the graph through the
-// DB bridge (docs/testing.md -> Selector strategy, tier 1).
+// Unit tests drive a turn's commit chaining its pass; only a running app runs the real pass, so
+// read its writes back through the DB bridge (docs/testing.md -> Selector strategy, tier 1).
 test.describe('periodic classifier — graph population', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -742,12 +742,9 @@ test.describe('periodic classifier — the gated pass', () => {
     return rows[0][0] as string
   }
 
-  // The count on the open rollback confirm's world-state line (probed up to 50), else null.
   async function shownWorldStateCount(): Promise<number | null> {
-    for (let count = 0; count <= 50; count++) {
-      if ((await reader.rollbackWorldStateLine(app.window, count).count()) > 0) return count
-    }
-    return null
+    const [line] = await reader.rollbackWorldStateLine(app.window).allTextContents()
+    return line == null ? null : worldStateCountOf(line)
   }
 
   // pipeline_runs has no branch column; only this story's passes run in this app.
@@ -911,7 +908,7 @@ test.describe('periodic classifier — the gated pass', () => {
     await reader.deleteEntry(page, userEntry).click()
     await expect(reader.rollbackConfirm(page)).toBeVisible()
     const before = await shownWorldStateCount()
-    if (before === null) throw new Error('the rollback confirm shows no world-state count ≤ 50')
+    if (before === null) throw new Error('the rollback confirm shows no world-state count')
 
     mock.releaseStructured()
     await expect.poll(() => runOutcome(pass), { timeout: 20_000 }).toBe('completed')

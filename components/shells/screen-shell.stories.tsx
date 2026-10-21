@@ -51,7 +51,7 @@ function openStoryWithPass(): void {
     runId: 'run-pass',
     kind: PERIODIC_CLASSIFIER_KIND,
     gateBehavior: 'hard-gate',
-    interruptible: true,
+    interruptible: 'pass',
     beforeTurn: false,
     actionId: 'action-pass',
     storyId: 'story-1',

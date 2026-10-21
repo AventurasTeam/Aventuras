@@ -58,7 +58,7 @@ interface Pipeline {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
-  interruptible?: boolean // a head reversal or Cancel ends me and defers me to the next turn; see Prose reversals and the interrupt
+  interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; see Prose reversals and the interrupt
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState, ctx) => string | null | Promise<string | null> // awaited at commit while the run holds the gate; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
@@ -68,7 +68,12 @@ interface Pipeline {
     error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
   ) => Promise<void>
   // a user Cancel or a head reversal ended me; runs once the abort's reversal has committed, before the run releases
-  onInterrupt?: (run: RunState, ctx) => Promise<void>
+  onInterrupt?: (ctx: {
+    db: DbCtx['db']
+    branchId: string
+    actionId: string
+    intermediates: Readonly<Record<string, unknown>>
+  }) => Promise<void>
 }
 
 export const pipelines: ReadonlyMap<string, Pipeline>
@@ -127,7 +132,8 @@ type PipelineEvent =
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
-  | { type: 'run_deferred'; runId: string; kind: string; branchId: string }
+  // work: the slot newly recorded in txState.deferred; kind: the run's, for diagnostics
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string; work: 'pass' | 'close' }
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction }
@@ -527,7 +533,7 @@ type RunState = {
   actionId: string // globally unique; never reused
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
-  interruptible: boolean // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it
+  interruptible: 'pass' | 'close' | null // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it in this slot
   beforeTurn: boolean // started by Send to run deferred work before the turn
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
@@ -540,12 +546,13 @@ type RunState = {
 
 Only the orchestrator writes `deferred`, through the generation store
 and in the same update that removes the run: an `interruptible` run
-that ends `aborted` records its kind for its branch (a pass as
-`pass`, a close as `close`), and that kind's commit or failure clears
-it. So every way a pass or a close is cancelled — the interrupt, the
+that ends `aborted` records, for its branch, the slot its declaration
+names (the pass declares `pass`, the close `close`), and a commit or
+failure of a run declaring that slot clears it. So every way a pass or a close is cancelled — the interrupt, the
 pill's or the banner's Cancel, Cancel & leave — defers it, and a
 failed one is left to the next commit's retry. A newly recorded
-deferral emits `run_deferred` on the bus, which raises the toast.
+deferral emits `run_deferred` on the bus naming the slot it recorded,
+which raises that slot's toast.
 
 ### Gate derivation as a selector
 
@@ -620,6 +627,12 @@ validates classifier's config at the start of each pass. The memory
 probe is not a pipeline — it captures as a side-effect of the
 per-turn pipeline's retrieval phase, covered by that pipeline's
 pre-flight.
+
+A run cancelled before its pre-flight skips it and takes the
+user-cancel abort: a pass the interrupt reached as its predecessor's
+commit swapped it in, or Send's deferred pass cancelled as it
+reserved, is interrupted, not failed, so it uses no retry and stays
+deferred.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
@@ -981,6 +994,8 @@ because the gate stays up across the handoff.
 ```
 beginRun(kind)
    │  INSERT pipeline_runs row (finished_at NULL)
+   │    └── insert fails ─► remove run from txState, its deferral untouched;
+   │                        emit run_complete (outcome: 'failed'); resolve terminal
    │  emit run_start
    ▼
 in-progress (currentPhase iterates)
@@ -1009,13 +1024,14 @@ in-progress (currentPhase iterates)
                                                       │    pipeline.onPhaseException(ctx, error) —
                                                       │    skipped when the rollback itself could not commit
                                                       │  if user-cancel && rollback committed:
-                                                      │    pipeline.onInterrupt(run, ctx) — a pass
+                                                      │    pipeline.onInterrupt(ctx) — a pass
                                                       │    restores its pre-run status here
                                                       │  remove run from txState; an interruptible pass
                                                       │    or close records ('aborted') or clears
                                                       │    ('failed') its deferral in the same update
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
-                                                      │  emit run_deferred if the deferral is newly recorded
+                                                      │  emit run_deferred (work: the slot) if the
+                                                      │    deferral is newly recorded
 ```
 
 ### Crash recovery via `pipeline_runs` marker table
@@ -1242,7 +1258,7 @@ async function nextMemoryRun(
   if (!story) return null
   const status = await readClassifierStatus(run.branchId, ctx)
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
-  // failed-persistent waits for the user; a persisted 'running' is a boot quarantine
+  // failed-persistent waits for the user; a persisted 'running' (a pass left unfinished) waits for boot
   const held = status.state === 'failed-persistent' || status.state === 'running'
   const passable = unprocessed > 0 && !held
   if (await closeOwed(run.branchId, story, ctx))
@@ -1881,7 +1897,8 @@ to `detail` alone otherwise.
 head turn, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
 before the branch's next turn instead
 ([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
-The periodic classifier and chapter-close declare it.
+Its value names the `txState.deferred` slot that records me: the
+periodic classifier declares `'pass'`, chapter-close `'close'`.
 
 `concurrencyPolicy`:
 
@@ -1912,7 +1929,7 @@ const perTurnPipeline: Pipeline = {
 const periodicClassifierPipeline: Pipeline = {
   kind: 'periodic-classifier',
   gateBehavior: 'hard-gate',
-  interruptible: true,
+  interruptible: 'pass',
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
@@ -1922,7 +1939,7 @@ const periodicClassifierPipeline: Pipeline = {
 const chapterClosePipeline: Pipeline = {
   kind: 'chapter-close',
   gateBehavior: 'hard-gate',
-  interruptible: true,
+  interruptible: 'close',
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },

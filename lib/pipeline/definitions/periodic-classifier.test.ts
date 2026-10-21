@@ -53,7 +53,6 @@ import {
   hydrateAppSettings,
   interruptMemoryRuns,
   resetAllStores,
-  type RunState,
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -470,10 +469,7 @@ describe('periodicClassifierPhase', () => {
     expect(result).toEqual({ status: 'aborted' })
     expect(h.status()).toMatchObject({ state: 'running', retryCount: 1 })
 
-    await interruptHook()(
-      { branchId: 'b1', intermediates: h.ctx.intermediates } as unknown as RunState,
-      h.ctx,
-    )
+    await interruptHook()(h.ctx)
     expect(h.status()).toEqual({
       state: 'retrying',
       lastSuccessAt: null,
@@ -483,16 +479,13 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('never reverts a concurrent watermark clamp from its interrupt hook', async () => {
+  it('restores only the lifecycle keys from its interrupt hook, never the watermark', async () => {
     const h = await ctxWith({ processedThrough: 3, headPosition: 4 })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
     await drain(h.ctx)
     // A whole-blob restore would serialize the stashed 3 over the clamp's 1.
     h.clamp(1)
-    await interruptHook()(
-      { branchId: 'b1', intermediates: h.ctx.intermediates } as unknown as RunState,
-      h.ctx,
-    )
+    await interruptHook()(h.ctx)
     expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 1 })
   })
 
@@ -502,7 +495,7 @@ describe('periodicClassifierPhase', () => {
       headPosition: 1,
       seedStatus: { state: 'running' },
     })
-    await interruptHook()({ branchId: 'b1', intermediates: {} } as unknown as RunState, h.ctx)
+    await interruptHook()({ ...h.ctx, intermediates: {} })
     expect(h.status()).toMatchObject({ state: 'running' })
   })
 
@@ -798,7 +791,7 @@ describe('periodicClassifierPhase', () => {
     expect(generateStructured).not.toHaveBeenCalled()
   })
 
-  // The entity stores are global: prompting against another branch's roster would plan wrong rows.
+  // The entity stores hold one branch: for another they leave an empty roster to plan against.
   it('fails when the entity stores hold another branch, before any LLM call', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     entitiesStore.hydrate('b2', [])
@@ -1327,11 +1320,11 @@ describe('periodicClassifierPhase', () => {
     expect(texts[0]).toBe(texts[1])
   })
 
-  it('never reverts a concurrent watermark clamp: status keys are written key-scoped', async () => {
+  it('writes its status key-scoped and its watermark MAX-guarded', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     vi.mocked(generateStructured).mockImplementation(async () => {
-      // The reversal clamp is the other writer on this column and can land
-      // between this run's status read and its status write.
+      // Stands in for the column's other writer, the reversal clamp, which the gate keeps out of a
+      // running pass: this pins only how the pass writes the column.
       h.clamp(7)
       return {
         status: 'ok',
@@ -1355,7 +1348,7 @@ describe('periodicClassifierPhase', () => {
     const pipeline = getPipeline(PERIODIC_CLASSIFIER_KIND)
     expect(pipeline).toMatchObject({
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       affordance: 'pill-and-banner',
       concurrencyPolicy: {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
@@ -1943,7 +1936,9 @@ describe('periodicClassifierPhase via runPipeline', () => {
   })
 
   // Left `running`, the cadence would stay suspended for the rest of the session.
-  it('retries a status restore that fails once after an interrupt', async () => {
+  it('retries a status restore that fails once after an interrupt, logging it as the run', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, RETRYING)
     ensurePeriodicClassifierPipelineRegistered()
@@ -1966,12 +1961,17 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     const pass = runOutcome({ storyId: 's1', branchId: 'b1', db: flaky, runInTransaction })
     await inCall
+    const [held] = generationStore.getTxState().runs.values()
     failRestore = true
     await interruptMemoryRuns('b1')
 
     expect(await pass).toBe('aborted')
     expect(failRestore).toBe(false)
     expect(await storedStatus(db)).toEqual(RETRYING)
+    const retried = getDiagnosticsSnapshot().logEntries.filter(
+      (e) => e.kind === 'classifier.interrupt_restore_retried',
+    )
+    expect(retried.map((e) => e.actionId)).toEqual([held.actionId])
   })
 
   // generation-pipeline.md → Prose reversals and the interrupt: the restore lands before the sweep.

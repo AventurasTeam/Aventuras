@@ -21,12 +21,14 @@ import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
-/**
- * `converged: false` means the refused turn's user_action is still in the branch, so nothing may
- * offer its text for resubmission. An `aborted` result can be Send's deferred pass, cancelled
- * before the user_action was written.
- */
-export type SubmitTurnResult = TxResult | (RejectedStart & { converged: boolean })
+/** Send's deferred pass was cancelled, so the whole Send was, before it wrote anything. */
+export type DeferredPassAborted = TxResult & { outcome: 'aborted'; beforeTurn: true }
+
+/** `converged: false`: the refused user_action is still in the branch; never re-offer its text. */
+export type SubmitTurnResult =
+  | TxResult
+  | DeferredPassAborted
+  | (RejectedStart & { converged: boolean })
 
 const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
 
@@ -61,13 +63,14 @@ export async function submitTurn(
       // this process; the marker still covers a swap recovered from an earlier one.
       if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
-      return withPendingTurn(ids.branchId, async (startTurn) => {
+      return withPendingTurn(ids.branchId, async (startTurn): Promise<SubmitTurnResult> => {
         // Under the turn's mark, so no reversal interrupts Send's own deferred work.
         if (generationStore.getTxState().deferred.get(ids.branchId)?.pass) {
           const deferred = await runDeferredPass(ids, ctx)
           // A cancel cancels the whole Send and the work stays deferred; a pass that failed or
           // could not start lets the turn go ahead.
-          if (deferred.outcome === 'aborted') return deferred
+          if (deferred.outcome === 'aborted')
+            return { ...deferred, outcome: 'aborted', beforeTurn: true }
         }
 
         // Shared across the user_action's delta and the pipeline run it kicks off,

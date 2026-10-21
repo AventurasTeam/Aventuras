@@ -7,7 +7,6 @@ import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
-  cancelStoryPillRun,
   generationGateReason,
   selectStorySettingsGenerationRunKind,
   storyPillPhase,
@@ -19,7 +18,7 @@ type RunOptions = {
   storyId?: string
   branchId?: string
   gateBehavior?: RunState['gateBehavior']
-  interruptible?: boolean
+  interruptible?: RunState['interruptible']
   beforeTurn?: boolean
 }
 
@@ -30,7 +29,7 @@ function run(kind: string, options: RunOptions = {}): RunState {
     runId: `run-${kind}-${storyId}-${branchId}`,
     kind,
     gateBehavior: options.gateBehavior ?? 'hard-gate',
-    interruptible: options.interruptible ?? false,
+    interruptible: options.interruptible ?? null,
     beforeTurn: options.beforeTurn ?? false,
     actionId: `action-${kind}`,
     storyId,
@@ -45,7 +44,7 @@ function run(kind: string, options: RunOptions = {}): RunState {
 
 // The periodic classifier as it declares itself: hard-gate and interruptible.
 function pass(options: Pick<RunOptions, 'storyId' | 'branchId' | 'beforeTurn'> = {}): RunState {
-  return run(PERIODIC_CLASSIFIER_KIND, { ...options, interruptible: true })
+  return run(PERIODIC_CLASSIFIER_KIND, { ...options, interruptible: 'pass' })
 }
 
 function tx(...runs: RunState[]): TxState {
@@ -161,6 +160,7 @@ describe('useStoryGenerationGate', () => {
       editBlocked: true,
       gateReason: 'Updating memory. Cancel to edit.',
       beforeTurn: true,
+      cancelPillRun: expect.any(Function),
     })
 
     act(() => {
@@ -171,6 +171,7 @@ describe('useStoryGenerationGate', () => {
       editBlocked: false,
       gateReason: undefined,
       beforeTurn: false,
+      cancelPillRun: expect.any(Function),
     })
   })
 
@@ -219,14 +220,23 @@ describe('generationGateReason', () => {
   })
 })
 
-describe('cancelStoryPillRun', () => {
+describe("useStoryGenerationGate's cancelPillRun", () => {
+  function gateFor(storyId: string, branchId?: string): Gate {
+    let gate: Gate | undefined
+    render(<GateProbe storyId={storyId} branchId={branchId} onResult={(g) => (gate = g)} />)
+    if (gate == null) throw new Error('gate not rendered')
+    return gate
+  }
+
   it("aborts the pill's run on its own branch, not a sibling's run of another kind", () => {
     const refresh = run(SUGGESTION_REFRESH_KIND, { branchId: 'branch-1' })
     const turn = run(PER_TURN_KIND, { branchId: 'branch-2' })
     generationStore.startRun(refresh)
     generationStore.startRun(turn)
+    const gate = gateFor('story-1')
+    expect(gate.activeRunKind).toBe(PER_TURN_KIND)
 
-    cancelStoryPillRun('story-1')
+    gate.cancelPillRun()
 
     expect(turn.abortController.signal.aborted).toBe(true)
     expect(refresh.abortController.signal.aborted).toBe(false)
@@ -237,8 +247,10 @@ describe('cancelStoryPillRun', () => {
     const other = run(PER_TURN_KIND, { storyId: 'story-2', branchId: 'branch-9' })
     generationStore.startRun(other)
     generationStore.startRun(mine)
+    const gate = gateFor('story-1')
+    expect(gate.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
 
-    cancelStoryPillRun('story-1')
+    gate.cancelPillRun()
 
     await vi.waitFor(() => expect(mine.abortController.signal.aborted).toBe(true))
     expect(other.abortController.signal.aborted).toBe(false)
@@ -251,10 +263,30 @@ describe('cancelStoryPillRun', () => {
     const sibling = run(PER_TURN_KIND, { branchId: 'branch-2' })
     generationStore.startRun(sibling)
     generationStore.startRun(mine)
+    const gate = gateFor('story-1', 'branch-1')
+    expect(gate.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
 
-    cancelStoryPillRun('story-1', 'branch-1')
+    gate.cancelPillRun()
 
     await vi.waitFor(() => expect(mine.abortController.signal.aborted).toBe(true))
     expect(sibling.abortController.signal.aborted).toBe(false)
+  })
+
+  it('follows the scope to a new branch, not the one it first rendered with', async () => {
+    const left = run(PER_TURN_KIND, { branchId: 'branch-1' })
+    const opened = pass({ branchId: 'branch-2' })
+    generationStore.startRun(left)
+    generationStore.startRun(opened)
+    let gate: Gate | undefined
+    const { rerender } = render(
+      <GateProbe storyId="story-1" branchId="branch-1" onResult={(g) => (gate = g)} />,
+    )
+    rerender(<GateProbe storyId="story-1" branchId="branch-2" onResult={(g) => (gate = g)} />)
+    expect(gate?.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
+
+    gate?.cancelPillRun()
+
+    await vi.waitFor(() => expect(opened.abortController.signal.aborted).toBe(true))
+    expect(left.abortController.signal.aborted).toBe(false)
   })
 })

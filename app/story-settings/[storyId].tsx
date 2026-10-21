@@ -14,11 +14,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AboutPanel } from '@/components/story-settings/about-panel'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
-import {
-  cancelStoryPillRun,
-  storyPillPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { MemoryKnobsPanel } from '@/components/story-settings/memory-knobs-panel'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { ModelsPanel } from '@/components/story-settings/models-panel'
@@ -208,6 +204,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     editBlocked,
     gateReason: disabledReason,
     beforeTurn,
+    cancelPillRun,
   } = useStoryGenerationGate(storyId)
 
   // Scoped to THIS route's story: the open story survives navigation, so an
@@ -368,7 +365,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
           swapTarget={settings?.embedding_swap_target}
           activePhase={storyPillPhase(activeRunKind)}
           beforeTurn={beforeTurn}
-          onCancel={() => cancelStoryPillRun(storyId)}
+          onCancel={cancelPillRun}
           onOpenMemory={() => selectTab('memory')}
         />
       }

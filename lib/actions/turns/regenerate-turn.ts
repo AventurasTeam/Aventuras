@@ -38,16 +38,16 @@ export type RegenerateRejectionCode =
   | 'not-an-ai-reply'
   | 'no-origin'
   | 'sweep-refused'
-  | 'counts-changed'
+  | typeof STORY_ENTRY_REJECTION.countsChanged
 
 export type RegenerateTurnResult =
   | {
       status: 'rejected'
-      code: RegenerateRejectionCode
+      // Only `CountsChangedRejection` carries this code, so it alone narrows to the fresh counts.
+      code: Exclude<RegenerateRejectionCode, typeof STORY_ENTRY_REJECTION.countsChanged>
       reason: string
-      /** With `counts-changed`: the set as it stands now, for the confirm to show. */
-      counts?: RollbackCounts
     }
+  | CountsChangedRejection
   | {
       status: 'ran'
       result: TxResult | RejectedStart
@@ -164,12 +164,7 @@ export async function regenerateTurn(
           }
           if (swept.status === 'rejected')
             return swept.code === STORY_ENTRY_REJECTION.countsChanged
-              ? {
-                  status: 'rejected',
-                  code: 'counts-changed',
-                  reason: swept.reason,
-                  counts: swept.counts,
-                }
+              ? swept
               : { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
           // A regenerate is a new unrelated action (data-model.md); the discarded
           // take is not redo-restorable.
