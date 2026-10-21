@@ -5,6 +5,7 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { deltas, happenings, pipelineRuns, storyEntries, type StoryEntry } from '@/lib/db'
 import { PER_TURN_KIND, registerPipeline, type PhaseResult, type RunCtx } from '@/lib/pipeline'
 import {
+  cancelStoryRuns,
   currentStoryStore,
   entriesStore,
   generationStore,
@@ -159,6 +160,19 @@ describe('Send with deferred work', () => {
     expect(pass.runs).toHaveLength(1)
   })
 
+  it('lets Cancel & leave abort the pass a turn chained after the turn returned, deferring it', async () => {
+    const { ctx, db, pass, deferrals } = await setUp(3)
+    const { held } = await chainAPass(ctx, pass)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+
+    await within(cancelStoryRuns('s1', 'b1'), 'Cancel & leave')
+
+    expect((await markerOf(db, held.actionId))?.outcome).toBe('aborted')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(deferrals).toHaveLength(1)
+  })
+
   it('runs the deferred pass first at the next Send, under its mark and before its user action', async () => {
     const { ctx, db, pass } = await setUp(3)
     const interrupted = await deferAPass(ctx, pass, 'regenerate')
@@ -210,6 +224,23 @@ describe('Send with deferred work', () => {
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
     // Cancelling work that was already deferred moves nothing new to the next turn.
     expect(deferrals).toHaveLength(1)
+  })
+
+  it('cancels the whole Send when Cancel & leave lands during its deferred pass', async () => {
+    const { ctx, db, pass } = await setUp(3)
+    await deferAPass(ctx, pass, 'cancel')
+
+    const turn = send(ctx, 'I wait.')
+    const deferred = await within(pass.nextHeld(), 'the deferred pass')
+    await within(cancelStoryRuns('s1', 'b1'), 'Cancel & leave')
+    // Leaving waits out the Send's whole body, not just the pass it was running.
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    const result = await within(turn, 'the cancelled Send')
+
+    expect(result).toMatchObject({ outcome: 'aborted', actionId: deferred.actionId })
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
   it("lets the turn run when its deferred pass fails, and the turn's commit chains the retry", async () => {
