@@ -147,19 +147,10 @@ export async function imageFetch(options: {
   }
 }
 
-/** Downloads an image from a third-party host as raw base64. Never sends an API key. */
-export async function fetchImageBase64(
-  url: string,
-  options?: { signal?: AbortSignal; serviceId?: string },
-): Promise<string> {
-  const response = await imageGetFetch(url, undefined, options)
-  return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
-}
-
 /** Redirects followed before giving up; each hop is checked against `isPublicHttpUrl`. */
 const MAX_REDIRECTS = 3
 
-/** Like `fetchImageBase64`, for a URL that came from outside: the URL and every redirect must be public. */
+/** Downloads an image as raw base64. The URL came from outside, so it and every redirect must be public. */
 export async function fetchPublicImageBase64(
   url: string,
   options?: { signal?: AbortSignal; serviceId?: string; timeoutMs?: number },

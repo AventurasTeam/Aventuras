@@ -5,7 +5,6 @@ import * as z from 'zod'
 import { APICallError, InvalidResponseDataError } from 'ai'
 import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
 import { bytesToBase64 } from '#lib/utils/image.ts'
-import { fetchImageBase64 } from './fetchAdapter'
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -49,6 +48,14 @@ function parseJson(text: string): unknown {
   } catch {
     return undefined
   }
+}
+
+// A plain Error, not an APICallError: a 429 from the host would otherwise make the 429 middleware
+// re-run, and re-bill, the generation.
+async function downloadBase64(fetch: Fetch, url: string, signal?: AbortSignal): Promise<string> {
+  const response = await fetch(url, { signal })
+  if (!response.ok) throw new Error(`Image download failed: HTTP ${response.status}`)
+  return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
 }
 
 export function createNanoGPTImage(settings: NanoGPTImageSettings) {
@@ -142,12 +149,7 @@ export function createNanoGPTImage(settings: NanoGPTImageSettings) {
             if (item.b64_json) {
               images.push(item.b64_json)
             } else if (item.url) {
-              images.push(
-                await fetchImageBase64(item.url, {
-                  signal: abortSignal,
-                  serviceId: 'nanogpt-image-download',
-                }),
-              )
+              images.push(await downloadBase64(settings.fetch, item.url, abortSignal))
             }
           }
 

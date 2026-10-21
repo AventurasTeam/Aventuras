@@ -8,15 +8,15 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(),
 }))
-vi.mock('./fetchAdapter', () => ({ fetchImageBase64: vi.fn() }))
 
-import { fetchImageBase64 } from './fetchAdapter'
 import { generateSdkImage } from './sdkImage'
 import { createNanoGPTImage } from './nanogptImage'
 
 const BASE_URL = 'https://api.nano-gpt.com/api/v1'
 const PNG = 'iVBORw0KGgo='
 const JPEG = '/9j/4AAQSkZJRg=='
+const PNG_BYTES = Uint8Array.from([137, 80, 78, 71])
+const PNG_BYTES_BASE64 = 'iVBORw=='
 
 // Requests and replies as captured from the live API.
 const PROMPT = 'A small red fox sitting in a snowy pine forest at dusk, soft watercolor style'
@@ -183,31 +183,51 @@ describe('response', () => {
     expect(result.response.modelId).toBe('minimax-image-01')
   })
 
-  it('downloads a url item without sending the key', async () => {
-    fetchMock.mockImplementation(async () => json({ data: [{ url: 'https://cdn.test/a.png' }] }))
-    vi.mocked(fetchImageBase64).mockResolvedValue('DOWNLOADED')
+  it('downloads a url item through the injected fetch without sending the key', async () => {
+    fetchMock.mockImplementation(async (input) =>
+      String(input).endsWith('/images')
+        ? json({ data: [{ url: 'https://cdn.test/a.png' }] })
+        : new Response(PNG_BYTES, { headers: { 'content-type': 'image/png' } }),
+    )
 
     const signal = new AbortController().signal
     const result = await model().doGenerate(callOptions({ abortSignal: signal }))
 
-    expect(result.images).toEqual(['DOWNLOADED'])
-    expect(fetchImageBase64).toHaveBeenCalledWith('https://cdn.test/a.png', {
-      signal,
-      serviceId: 'nanogpt-image-download',
-    })
+    expect(result.images).toEqual([PNG_BYTES_BASE64])
+    const [url, init] = fetchMock.mock.calls[1]
+    expect(url).toBe('https://cdn.test/a.png')
+    expect(init?.signal).toBe(signal)
+    expect(new Headers(init?.headers).has('authorization')).toBe(false)
   })
 
   it('prefers b64_json when an item has both, and handles a mix', async () => {
-    fetchMock.mockImplementation(async () =>
-      json({
-        data: [{ b64_json: 'A', url: 'https://cdn.test/a.png' }, { url: 'https://cdn.test/b.png' }],
-      }),
+    fetchMock.mockImplementation(async (input) =>
+      String(input).endsWith('/images')
+        ? json({
+            data: [
+              { b64_json: 'A', url: 'https://cdn.test/a.png' },
+              { url: 'https://cdn.test/b.png' },
+            ],
+          })
+        : new Response(PNG_BYTES),
     )
-    vi.mocked(fetchImageBase64).mockResolvedValue('B')
 
     const result = await model().doGenerate(callOptions({ n: 2 }))
-    expect(result.images).toEqual(['A', 'B'])
-    expect(fetchImageBase64).toHaveBeenCalledTimes(1)
+    expect(result.images).toEqual(['A', PNG_BYTES_BASE64])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('fails on a download that is not 2xx, without an APICallError the 429 retry would act on', async () => {
+    fetchMock.mockImplementation(async (input) =>
+      String(input).endsWith('/images')
+        ? json({ data: [{ url: 'https://cdn.test/a.png' }] })
+        : new Response('slow down', { status: 429 }),
+    )
+
+    const error = await rejection(model().doGenerate(callOptions()))
+    expect(error).toBeInstanceOf(Error)
+    expect(APICallError.isInstance(error)).toBe(false)
+    expect((error as Error).message).toContain('429')
   })
 
   it.each([

@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./fetchAdapter', () => ({
   imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
-  fetchImageBase64: vi.fn(),
 }))
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { apiSettings: { llmTimeoutMs: 60_000 } },
