@@ -989,6 +989,8 @@ because the gate stays up across the handoff.
 ```
 beginRun(kind)
    │  INSERT pipeline_runs row (finished_at NULL)
+   │    └── insert fails ─► remove run from txState, its deferral untouched;
+   │                        emit run_complete (outcome: 'failed'); resolve terminal
    │  emit run_start
    ▼
 in-progress (currentPhase iterates)

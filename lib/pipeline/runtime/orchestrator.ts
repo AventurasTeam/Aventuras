@@ -109,23 +109,17 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
   return run
 }
 
-async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
-  try {
-    await ctx.db.insert(pipelineRuns).values({
-      runId: run.runId,
-      kind: run.kind,
-      actionId: run.actionId,
-      storyId: ctx.storyId,
-      startedAt: Date.now(),
-    })
-  } catch (e) {
-    // Marker insert failed; unwind the synchronous reservation so a half-registered
-    // run can't gate edits or hold the branch against a retry. Resolve terminal so a
-    // waiter that grabbed it between reserve and failure isn't left hanging.
-    generationStore.abortRun(run.runId, 'unwound')
-    run.resolveTerminal()
-    throw e
-  }
+async function insertMarker(run: RunState, ctx: RunCtx): Promise<void> {
+  await ctx.db.insert(pipelineRuns).values({
+    runId: run.runId,
+    kind: run.kind,
+    actionId: run.actionId,
+    storyId: ctx.storyId,
+    startedAt: Date.now(),
+  })
+}
+
+function announceStart(run: RunState): void {
   turnCaptureSink.beginTurn({ actionId: run.actionId, kind: run.kind, branchId: run.branchId })
   pipelineEventBus.emit({
     type: 'run_start',
@@ -133,6 +127,35 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
     kind: run.kind,
     actionId: run.actionId,
   })
+}
+
+// A failed marker insert unwinds the reservation so a half-registered run can't gate edits or hold
+// the branch against a retry. run_complete reports the idle: a chained successor's predecessor
+// emitted its own while this run was still registered. The terminal frees a waiter that grabbed it.
+function unwindReservation(run: RunState, e: unknown): void {
+  generationStore.abortRun(run.runId, 'unwound')
+  pipelineEventBus.emit({
+    type: 'run_complete',
+    runId: run.runId,
+    kind: run.kind,
+    actionId: run.actionId,
+    outcome: 'failed',
+    error: {
+      kind: 'orchestrator',
+      detail: `marker insert failed: ${e instanceof Error ? e.message : String(e)}`,
+    },
+  })
+  run.resolveTerminal()
+}
+
+async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
+  try {
+    await insertMarker(run, ctx)
+  } catch (e) {
+    unwindReservation(run, e)
+    throw e
+  }
+  announceStart(run)
 }
 
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
@@ -246,23 +269,6 @@ async function runNode(node: PhaseNode, run: RunState, ctx: RunCtx): Promise<Pha
   generationStore.recordPhaseResult(run.runId, node.name, result)
   pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: node.name, result })
   return result
-}
-
-async function startChainedSuccessor(run: RunState, ctx: RunCtx): Promise<void> {
-  await ctx.db.insert(pipelineRuns).values({
-    runId: run.runId,
-    kind: run.kind,
-    actionId: run.actionId,
-    storyId: ctx.storyId,
-    startedAt: Date.now(),
-  })
-  turnCaptureSink.beginTurn({ actionId: run.actionId, kind: run.kind, branchId: run.branchId })
-  pipelineEventBus.emit({
-    type: 'run_start',
-    runId: run.runId,
-    kind: run.kind,
-    actionId: run.actionId,
-  })
 }
 
 // Awaited while the run is still in txState, so the gate stays up across the read. A throw
@@ -590,11 +596,9 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
   while (run) {
     const current = run
     try {
-      await startChainedSuccessor(current, ctx)
+      await insertMarker(current, ctx)
     } catch (e) {
-      // As beginRun's unwind: a half-registered successor must not keep the gate up.
-      generationStore.abortRun(current.runId, 'unwound')
-      current.resolveTerminal()
+      unwindReservation(current, e)
       logger.error(
         'pipeline.chain_start_failed',
         {
@@ -606,6 +610,7 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
       )
       return
     }
+    announceStart(current)
     try {
       run = (await driveRun(current, ctx)).successor
     } catch (e) {

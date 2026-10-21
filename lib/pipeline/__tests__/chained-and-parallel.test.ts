@@ -65,6 +65,29 @@ function failingMarkerInsert(db: RunCtx['db'], kind: string): RunCtx['db'] {
   })
 }
 
+type Complete = { kind: string; outcome: string; idle: boolean; error?: unknown }
+
+// `idle` is what the drain worker reads at each run_complete.
+function recordCompletes(): Complete[] {
+  const seen: Complete[] = []
+  pipelineEventBus.subscribe('run_complete', (e) => {
+    seen.push({
+      kind: e.kind,
+      outcome: e.outcome,
+      idle: !generationStore.hasActiveRun(),
+      ...(e.error ? { error: e.error } : {}),
+    })
+  })
+  return seen
+}
+
+const markerUnwound = (kind: string): Complete => ({
+  kind,
+  outcome: 'failed',
+  idle: true,
+  error: { kind: 'orchestrator', detail: expect.stringMatching(/^marker insert failed: /) },
+})
+
 function heldPhase(): { run: () => AsyncGenerator<never, PhaseResult>; release: () => void } {
   let release!: () => void
   const gate = new Promise<void>((resolve) => {
@@ -449,11 +472,14 @@ describe('split start', () => {
     definePipeline({ kind: 'pred', phases: [{ name: 'p', run: noop }], ...base })
     const db = failingMarkerInsert(ctx.db, 'pred')
 
+    const completes = recordCompletes()
+
     const { origin, chain } = startPipeline('pred', { ...ctx, db })
 
     await expect(origin).rejects.toThrow('marker insert failed')
     await expect(chain).resolves.toBeUndefined()
     expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(completes).toEqual([markerUnwound('pred')])
     await expect(runPipeline('pred', { ...ctx, db })).rejects.toThrow('marker insert failed')
   })
 
@@ -471,12 +497,19 @@ describe('split start', () => {
     pipelineEventBus.subscribe('run_complete', (e) => {
       if (e.kind === 'pred') successor = [...generationStore.getTxState().runs.values()][0]
     })
+    const completes = recordCompletes()
 
     const { origin, chain } = startPipeline('pred', { ...ctx, db })
 
     expect(expectRan(await origin).outcome).toBe('completed')
     await expect(chain).resolves.toBeUndefined()
     expect(successor?.kind).toBe('succ')
+    // The predecessor's run_complete fired with the successor still registered; only the
+    // successor's own reports the idle the drain worker waits for.
+    expect(completes).toEqual([
+      { kind: 'pred', outcome: 'completed', idle: false },
+      markerUnwound('succ'),
+    ])
     const ended = await Promise.race([
       successor!.terminal.then(() => 'ended'),
       flush().then(() => 'pending'),
