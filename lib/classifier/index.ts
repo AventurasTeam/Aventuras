@@ -34,7 +34,6 @@ export type {
 export { buildClassifierActions, clampEmbeddedCharacter, RECONCILED_KINDS } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
 export {
-  CLASSIFIER_MAX_RETRIES,
   IDLE_STATUS_JSON,
   idleStatus,
   nextStatusOnFailure,
