@@ -1866,7 +1866,7 @@ own.
   AlertDialog or right Sheet) that opens with no toast showing hides the
   app root, and a toast mounted after inherits it. An always-rendered,
   empty live region would be spared by `hideOthers`. The observation in
-  [`parked.md → Background content behind AlertDialog is not aria-hidden`](../parked.md#background-content-behind-alertdialog-is-not-aria-hidden)
+  [`parked.md → Why one role locator matched both Discard buttons behind an AlertDialog`](../parked.md#why-one-role-locator-matched-both-discard-buttons-behind-an-alertdialog)
   contradicts this; a browser probe (2026-10-21) sided with
   `hideOthers`: it marks the app root `aria-hidden` while a Radix
   dialog is open, a toast that exists before it runs stays announced,
