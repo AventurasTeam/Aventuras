@@ -53,7 +53,6 @@ import {
   hydrateAppSettings,
   interruptMemoryRuns,
   resetAllStores,
-  type RunState,
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
@@ -470,10 +469,7 @@ describe('periodicClassifierPhase', () => {
     expect(result).toEqual({ status: 'aborted' })
     expect(h.status()).toMatchObject({ state: 'running', retryCount: 1 })
 
-    await interruptHook()(
-      { branchId: 'b1', intermediates: h.ctx.intermediates } as unknown as RunState,
-      h.ctx,
-    )
+    await interruptHook()(h.ctx)
     expect(h.status()).toEqual({
       state: 'retrying',
       lastSuccessAt: null,
@@ -489,10 +485,7 @@ describe('periodicClassifierPhase', () => {
     await drain(h.ctx)
     // A whole-blob restore would serialize the stashed 3 over the clamp's 1.
     h.clamp(1)
-    await interruptHook()(
-      { branchId: 'b1', intermediates: h.ctx.intermediates } as unknown as RunState,
-      h.ctx,
-    )
+    await interruptHook()(h.ctx)
     expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 1 })
   })
 
@@ -502,7 +495,7 @@ describe('periodicClassifierPhase', () => {
       headPosition: 1,
       seedStatus: { state: 'running' },
     })
-    await interruptHook()({ branchId: 'b1', intermediates: {} } as unknown as RunState, h.ctx)
+    await interruptHook()({ ...h.ctx, intermediates: {} })
     expect(h.status()).toMatchObject({ state: 'running' })
   })
 

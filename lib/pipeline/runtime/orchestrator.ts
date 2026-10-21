@@ -373,7 +373,12 @@ async function runInterruptHook(run: RunState, ctx: RunCtx): Promise<void> {
   const onInterrupt = getPipeline(run.kind).onInterrupt
   if (!onInterrupt) return
   try {
-    await onInterrupt(run, ctx)
+    await onInterrupt({
+      db: ctx.db,
+      branchId: run.branchId,
+      actionId: run.actionId,
+      intermediates: run.intermediates,
+    })
   } catch (hookError) {
     logger.error(
       'pipeline.interrupt_hook_failed',

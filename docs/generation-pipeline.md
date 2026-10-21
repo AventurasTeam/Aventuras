@@ -68,7 +68,12 @@ interface Pipeline {
     error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
   ) => Promise<void>
   // a user Cancel or a head reversal ended me; runs once the abort's reversal has committed, before the run releases
-  onInterrupt?: (run: RunState, ctx) => Promise<void>
+  onInterrupt?: (ctx: {
+    db: DbCtx['db']
+    branchId: string
+    actionId: string
+    intermediates: Readonly<Record<string, unknown>>
+  }) => Promise<void>
 }
 
 export const pipelines: ReadonlyMap<string, Pipeline>
@@ -1019,7 +1024,7 @@ in-progress (currentPhase iterates)
                                                       │    pipeline.onPhaseException(ctx, error) —
                                                       │    skipped when the rollback itself could not commit
                                                       │  if user-cancel && rollback committed:
-                                                      │    pipeline.onInterrupt(run, ctx) — a pass
+                                                      │    pipeline.onInterrupt(ctx) — a pass
                                                       │    restores its pre-run status here
                                                       │  remove run from txState; an interruptible pass
                                                       │    or close records ('aborted') or clears

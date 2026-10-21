@@ -148,7 +148,11 @@ export type PhaseExceptionHook = (
  * Runs after a user-cancel abort's reversal committed, while the run still holds the gate; skipped
  * when the reversal can't commit, so recovery owns the writes left on disk.
  */
-export type InterruptHook = (run: RunState, ctx: DbCtx) => Promise<void>
+export type InterruptHook = (
+  ctx: Pick<PhaseContext, 'db' | 'branchId' | 'actionId'> & {
+    intermediates: Readonly<Record<string, unknown>>
+  },
+) => Promise<void>
 
 export type Pipeline = {
   kind: string
