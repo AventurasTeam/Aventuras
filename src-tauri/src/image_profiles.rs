@@ -1,4 +1,5 @@
-//! Migration 042 rewrites the `image_profiles` and `system_services_settings` blobs in place.
+//! Migration 042 rewrites the `api_profiles`, `image_profiles` and `system_services_settings` blobs
+//! in place.
 //! The application reads them through the SQL plugin, so the rules are checked here.
 
 #[cfg(test)]
@@ -272,6 +273,146 @@ mod tests {
         let profiles = setting(&pool, "image_profiles").await.unwrap();
         assert_eq!(profiles[0]["providerType"], "chutes");
         assert_eq!(profiles[0]["model"], "");
+    }
+
+    const BIGMODEL: &str = "https://open.bigmodel.cn/api/paas/v4";
+
+    #[tokio::test]
+    async fn an_unset_zhipu_base_url_is_pinned_on_api_and_image_profiles() {
+        let pool = migrate(&[
+            (
+                "api_profiles",
+                json!([
+                    api_profile("missing", "zhipu", None),
+                    api_profile("empty", "zhipu", Some("")),
+                    api_profile("blank", "zhipu", Some("  ")),
+                ]),
+            ),
+            (
+                "image_profiles",
+                json!([
+                    image_profile("zhipu", None, "cogview-4-250304"),
+                    image_profile("zhipu", Some(""), "cogview-4-250304"),
+                    image_profile("zhipu", Some("  "), "cogview-4-250304"),
+                ]),
+            ),
+        ])
+        .await;
+
+        for key in ["api_profiles", "image_profiles"] {
+            let profiles = setting(&pool, key).await.unwrap();
+            let urls: Vec<_> = profiles
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["baseUrl"].as_str().unwrap())
+                .collect();
+            assert_eq!(urls, [BIGMODEL; 3], "{key}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_zhipu_base_url_that_is_set_is_left_alone() {
+        let pool = migrate(&[
+            (
+                "api_profiles",
+                json!([api_profile(
+                    "a1",
+                    "zhipu",
+                    Some("https://api.z.ai/api/paas/v4")
+                )]),
+            ),
+            (
+                "image_profiles",
+                json!([image_profile(
+                    "zhipu",
+                    Some("https://proxy.local/v4"),
+                    "glm-image"
+                )]),
+            ),
+        ])
+        .await;
+
+        let api = setting(&pool, "api_profiles").await.unwrap();
+        assert_eq!(api[0]["baseUrl"], "https://api.z.ai/api/paas/v4");
+        let images = setting(&pool, "image_profiles").await.unwrap();
+        assert_eq!(images[0]["baseUrl"], "https://proxy.local/v4");
+        assert_eq!(images[0]["model"], "glm-image");
+    }
+
+    #[tokio::test]
+    async fn a_legacy_zhipu_slot_inherits_the_pinned_base_url() {
+        let pool = migrate(&[
+            ("api_profiles", json!([api_profile("z1", "zhipu", None)])),
+            (
+                "system_services_settings",
+                services(json!({ "profileId": "z1", "model": "cogview-3-flash" })),
+            ),
+        ])
+        .await;
+
+        let profiles = setting(&pool, "image_profiles").await.unwrap();
+        assert_eq!(profiles[0]["providerType"], "zhipu");
+        assert_eq!(profiles[0]["baseUrl"], BIGMODEL);
+        assert_eq!(profiles[0]["model"], "cogview-3-flash");
+    }
+
+    #[tokio::test]
+    async fn an_empty_zhipu_model_becomes_cogview_and_other_providers_flux() {
+        let pool = migrate(&[(
+            "image_profiles",
+            json!([
+                image_profile("zhipu", Some("https://api.z.ai/api/paas/v4"), ""),
+                image_profile("nanogpt", None, ""),
+                image_profile("pollinations", None, ""),
+            ]),
+        )])
+        .await;
+
+        let profiles = setting(&pool, "image_profiles").await.unwrap();
+        let models: Vec<_> = profiles
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["model"].as_str().unwrap())
+            .collect();
+        assert_eq!(models, ["cogview-4-250304", "flux", "flux"]);
+    }
+
+    #[tokio::test]
+    async fn other_providers_keep_their_empty_base_url() {
+        let pool = migrate(&[
+            (
+                "api_profiles",
+                json!([
+                    api_profile("n1", "nanogpt", None),
+                    api_profile("o1", "openrouter", Some("")),
+                ]),
+            ),
+            (
+                "image_profiles",
+                json!([image_profile("nanogpt", None, "flux")]),
+            ),
+        ])
+        .await;
+
+        let api = setting(&pool, "api_profiles").await.unwrap();
+        assert!(api[0].get("baseUrl").is_none());
+        assert_eq!(api[1]["baseUrl"], "");
+        let images = setting(&pool, "image_profiles").await.unwrap();
+        assert!(images[0].get("baseUrl").is_none());
+    }
+
+    #[tokio::test]
+    async fn an_api_profile_array_holding_a_non_object_is_left_alone() {
+        let pool = migrate(&[(
+            "api_profiles",
+            json!([api_profile("z1", "zhipu", None), "stray"]),
+        )])
+        .await;
+
+        let api = setting(&pool, "api_profiles").await.unwrap();
+        assert!(api[0].get("baseUrl").is_none());
     }
 
     #[tokio::test]

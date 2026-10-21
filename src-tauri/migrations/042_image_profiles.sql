@@ -1,6 +1,29 @@
 -- Image profiles: settings written before image profiles existed become image profiles, then every
 -- image profile is moved onto the providers that exist now.
 
+-- Z.AI's default host is now api.z.ai. A zhipu profile with no base URL was talking to BigModel, so
+-- it keeps that host. This runs first so the image profiles built from API profiles inherit it. An
+-- array holding anything but objects is left alone.
+UPDATE settings
+SET value = (
+  SELECT json_group_array(
+    json(
+      CASE
+        WHEN p.value ->> '$.providerType' = 'zhipu'
+          AND trim(coalesce(p.value ->> '$.baseUrl', '')) = ''
+        THEN json_set(p.value, '$.baseUrl', 'https://open.bigmodel.cn/api/paas/v4')
+        ELSE p.value
+      END
+    )
+    ORDER BY p.key
+  )
+  FROM json_each(settings.value) AS p
+)
+WHERE key = 'api_profiles'
+  AND json_valid(value)
+  AND json_type(value) = 'array'
+  AND NOT EXISTS (SELECT 1 FROM json_each(settings.value) WHERE type <> 'object');
+
 -- A legacy slot is an image setting that names an API profile and a model. They count only while
 -- no image profile has been saved.
 CREATE TEMP TABLE legacy_image_slot AS
@@ -111,8 +134,9 @@ DROP TABLE legacy_image_profile;
 -- Profiles of provider "openai" that point at a proxy move to "openai-compatible": the OpenAI
 -- provider lists only gpt-image models and reads b64_json replies. A profile with no base URL, or
 -- one at api.openai.com, stays on "openai". "chutes" has no image provider and moves there too; an
--- empty base URL becomes https://api.chutes.ai/v1. An array holding anything but objects is left
--- alone.
+-- empty base URL becomes https://api.chutes.ai/v1. A "zhipu" profile with an empty base URL is
+-- pinned to https://open.bigmodel.cn/api/paas/v4, as its API profile is. An array holding anything
+-- but objects is left alone.
 UPDATE settings
 SET value = (
   SELECT json_group_array(
@@ -131,6 +155,9 @@ SET value = (
           '$.providerType', 'openai-compatible',
           '$.baseUrl', coalesce(nullif(trim(p.value ->> '$.baseUrl'), ''), 'https://api.chutes.ai/v1')
         )
+        WHEN p.value ->> '$.providerType' = 'zhipu'
+          AND trim(coalesce(p.value ->> '$.baseUrl', '')) = ''
+        THEN json_set(p.value, '$.baseUrl', 'https://open.bigmodel.cn/api/paas/v4')
         ELSE p.value
       END
     )
@@ -143,13 +170,19 @@ WHERE key = 'image_profiles'
   AND json_type(value) = 'array'
   AND NOT EXISTS (SELECT 1 FROM json_each(settings.value) WHERE type <> 'object');
 
--- A profile without a model gets "flux".
+-- A profile without a model gets "flux", or "cogview-4-250304" for zhipu, which is what it was
+-- running.
 UPDATE settings
 SET value = (
   SELECT json_group_array(
     json(
       CASE
-        WHEN coalesce(p.value ->> '$.model', '') = '' THEN json_set(p.value, '$.model', 'flux')
+        WHEN coalesce(p.value ->> '$.model', '') = ''
+        THEN json_set(
+          p.value,
+          '$.model',
+          CASE WHEN p.value ->> '$.providerType' = 'zhipu' THEN 'cogview-4-250304' ELSE 'flux' END
+        )
         ELSE p.value
       END
     )
