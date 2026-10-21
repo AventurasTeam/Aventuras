@@ -49,7 +49,7 @@ describe('generateOpenAICompatibleImage', () => {
       serviceId: 'svc-image',
       model: 'flux-dev',
       prompt: 'a castle',
-      spec: { orientation: 'square', size: 'medium' },
+      size: '1536x1536',
       ...over,
     })
 
@@ -110,6 +110,7 @@ describe('OpenAI Compatible image generation', () => {
     expect(lastGenerate()).toMatchObject({
       model: { id: 'flux-dev' },
       prompt: 'a castle',
+      size: '1536x1536',
       referenceImages: [PNG],
     })
   })

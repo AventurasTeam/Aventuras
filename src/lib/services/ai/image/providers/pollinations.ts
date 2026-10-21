@@ -5,6 +5,7 @@
  * uses Pollinations' own catalogue.
  */
 
+import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -54,7 +55,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         serviceId: 'pollinations-image',
         model,
         prompt,
-        spec,
+        size: formatImageSize(specToPixels(spec)),
         referenceImages,
         extraFields: { safe: false },
         signal,

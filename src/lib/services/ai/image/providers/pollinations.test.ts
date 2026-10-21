@@ -31,6 +31,7 @@ describe('Pollinations adapter', () => {
       serviceId: 'pollinations-image',
       model: 'm1',
       prompt: 'a castle',
+      size: '1536x1536',
       referenceImages: ['iVBORw0KGgo='],
       extraFields: { safe: false },
     })

@@ -32,19 +32,19 @@ const ModelEntry = z
     supportsImg2Img: true,
   }))
 
-/** Shared with Pollinations, whose reply format and endpoints match; `extraFields` join the request body. */
+/** Shared with Pollinations and Z.AI, whose reply format and endpoints match; `extraFields` join the request body. */
 export async function generateOpenAICompatibleImage(options: {
   baseUrl: string
   apiKey?: string
   serviceId: string
   model: string
   prompt: string
-  spec: ImageGenerateOptions['spec']
+  size: `${number}x${number}`
   referenceImages?: string[]
   extraFields?: Record<string, JSONValue>
   signal?: AbortSignal
 }): Promise<ImageGenerateResult> {
-  const { baseUrl, apiKey, serviceId, model, prompt, spec, referenceImages, extraFields, signal } =
+  const { baseUrl, apiKey, serviceId, model, prompt, size, referenceImages, extraFields, signal } =
     options
 
   const provider = createOpenAICompatible({
@@ -58,7 +58,7 @@ export async function generateOpenAICompatibleImage(options: {
     model: provider.imageModel(model),
     prompt,
     referenceImages,
-    size: formatImageSize(specToPixels(spec)),
+    size,
     providerOptions: { [PROVIDER_OPTIONS_KEY]: { response_format: 'b64_json', ...extraFields } },
     signal,
   })
@@ -81,7 +81,7 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
         serviceId: 'openai-compatible-image',
         model,
         prompt,
-        spec,
+        size: formatImageSize(specToPixels(spec)),
         referenceImages,
         signal,
       })
