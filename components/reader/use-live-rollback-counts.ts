@@ -1,28 +1,8 @@
 import { useEffect, useRef } from 'react'
 
-import {
-  STORY_ENTRY_REJECTION,
-  type CountsChangedRejection,
-  type RegenerateTurnResult,
-  type RollbackCounts,
-  type StoryEntryRejection,
-} from '@/lib/actions'
+import type { RollbackCounts, StoryEntryRejection } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { generationStore } from '@/lib/stores'
-
-/**
- * The counts a refused confirm re-opens on (rollback-confirm.md → Edge cases): the action's
- * fresh ones on `counts-changed`, else the ones the user confirmed.
- */
-export function countsAfterRefusal(
-  confirmed: RollbackCounts,
-  refusal:
-    | StoryEntryRejection
-    | CountsChangedRejection
-    | Extract<RegenerateTurnResult, { status: 'rejected' }>,
-): RollbackCounts {
-  return refusal.code === STORY_ENTRY_REJECTION.countsChanged ? refusal.counts : confirmed
-}
 
 /**
  * Keeps an open rollback or regenerate confirm's counts true while a run settles under it,

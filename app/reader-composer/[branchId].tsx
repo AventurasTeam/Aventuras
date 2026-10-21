@@ -10,6 +10,14 @@ import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
+import {
+  regenerateRefusalCopy,
+  reopenAfterRefusal,
+  rollbackRefusalCopy,
+  type ConfirmState,
+  type RegenerateRefusal,
+  type RollbackRefusal,
+} from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
@@ -46,10 +54,7 @@ import {
   useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
-import {
-  countsAfterRefusal,
-  useLiveRollbackCounts,
-} from '@/components/reader/use-live-rollback-counts'
+import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -75,7 +80,6 @@ import {
   redoLastAction,
   refreshSuggestions,
   regenerateTurn,
-  STORY_ENTRY_REJECTION,
   rollbackToEntry,
   sameRollbackCounts,
   submitTurn,
@@ -83,7 +87,6 @@ import {
   type UndoRejectionCode,
   writeSystemEntry,
   type LoadOpenStoryResult,
-  type RegenerateRejectionCode,
   type RegenerateTurnResult,
   type RollbackCounts,
   type StoryEntryRejection,
@@ -131,24 +134,6 @@ const ctx = { db, runInTransaction }
 const loadRollbackCounts = (branchId: string, targetId: string) =>
   getRollbackCounts(branchId, targetId, ctx)
 
-// Copy follows the user's remedy (wait, resume the swap, recheck counts); invariant violations get
-// no retry invitation: a retry cannot succeed and would loop.
-const REGENERATE_REJECTION_COPY = {
-  'embedder-swap': 'reader:actions.blockedWhileSwapping',
-  'generation-in-flight': 'reader:actions.blockedWhileGenerating',
-  [STORY_ENTRY_REJECTION.countsChanged]: 'reader:rollbackCountsChanged',
-  'branch-not-loaded': 'reader:regenerateUnavailable',
-  'not-an-ai-reply': 'reader:regenerateUnavailable',
-  'no-origin': 'reader:regenerateUnavailable',
-  'sweep-refused': 'reader:regenerateUnavailable',
-} as const satisfies Record<RegenerateRejectionCode, string>
-
-type RollbackState = {
-  mode: 'rollback' | 'regenerate'
-  targetId: string
-  targetNumber: number
-  counts: RollbackCounts
-}
 type BranchHydrationState =
   | { branchId: string; status: 'loading' }
   | {
@@ -220,7 +205,7 @@ export default function ReaderComposerRoute() {
   // and stays unconditional.
   const branchUnchanged = useCallback((started: string) => branchIdRef.current === started, [])
 
-  const [rollback, setRollback] = useState<RollbackState | null>(null)
+  const [rollback, setRollback] = useState<ConfirmState | null>(null)
   const [lastSubmission, setLastSubmission] = useState<{
     content: string
     composerMode: string
@@ -724,9 +709,12 @@ export default function ReaderComposerRoute() {
   )
 
   // Guarded here, not at the callers: the immediate tap and the confirm both funnel through it.
-  // Resolves to the counts a refused confirmed regenerate re-opens the confirm on; null otherwise.
+  // Resolves to the action's refusal, which a confirmed regenerate re-opens its confirm on.
   const runRegenerate = useCallback(
-    async (targetId: string, expectedCounts?: RollbackCounts): Promise<RollbackCounts | null> => {
+    async (
+      targetId: string,
+      expectedCounts?: RollbackCounts,
+    ): Promise<RegenerateRefusal | null> => {
       if (!storyId || !hydrationSucceeded) return null
       if (!beginDispatch()) {
         logger.warn('pipeline.regenerate_dispatch_suppressed', { branchId, entryId: targetId })
@@ -769,8 +757,8 @@ export default function ReaderComposerRoute() {
           // Every rejection fires before the first sweep, so nothing else moved
           // and putting the failure entry back is an exact undo of the drop.
           await restoreSystemTail(dropped)
-          toast.error(t(REGENERATE_REJECTION_COPY[regen.code]))
-          return expectedCounts == null ? null : countsAfterRefusal(expectedCounts, regen)
+          toast.error(t(regenerateRefusalCopy(regen)))
+          return regen
         }
         const { result } = regen
         // A branch switch under the dispatch makes the composer's draft another
@@ -927,12 +915,10 @@ export default function ReaderComposerRoute() {
     onCounts: showLiveCounts,
   })
 
-  // The confirm's AlertDialogAction closed the modal on press, so a refusal re-opens it,
-  // unless the user left the branch or opened another confirm since.
   const reopenConfirm = useCallback(
-    (confirmed: RollbackState, counts: RollbackCounts) => {
-      if (!branchUnchanged(branchId)) return
-      setRollback((current) => current ?? { ...confirmed, counts })
+    (confirmed: ConfirmState, refusal: RollbackRefusal | RegenerateRefusal) => {
+      const stillOnBranch = branchUnchanged(branchId)
+      setRollback((current) => reopenAfterRefusal({ current, confirmed, refusal, stillOnBranch }))
     },
     [branchId, branchUnchanged],
   )
@@ -943,18 +929,16 @@ export default function ReaderComposerRoute() {
     if (confirmed.mode === 'regenerate') {
       // Close before the stream starts; the streaming card takes over the surface.
       setRollback(null)
-      const reopenOn = await runRegenerate(confirmed.targetId, confirmed.counts)
-      if (reopenOn != null) reopenConfirm(confirmed, reopenOn)
+      const refusal = await runRegenerate(confirmed.targetId, confirmed.counts)
+      if (refusal != null) reopenConfirm(confirmed, refusal)
       return
     }
     const result = await rollbackToEntry(branchId, confirmed.targetId, ctx, {
       expectedCounts: confirmed.counts,
     })
     if (result.status === 'rejected') {
-      // A refused commit keeps the modal up, so the user doesn't assume the delete happened.
-      const changed = result.code === STORY_ENTRY_REJECTION.countsChanged
-      toast.error(t(changed ? 'reader:rollbackCountsChanged' : 'reader:rollbackFailed'))
-      reopenConfirm(confirmed, countsAfterRefusal(confirmed.counts, result))
+      toast.error(t(rollbackRefusalCopy(result)))
+      reopenConfirm(confirmed, result)
       return
     }
     setRollback(null)

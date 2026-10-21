@@ -3,11 +3,12 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { STORY_ENTRY_REJECTION, type RollbackCounts, type StoryEntryRejection } from '@/lib/actions'
+import type { RollbackCounts, StoryEntryRejection } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { generationStore } from '@/lib/stores'
 
-import { countsAfterRefusal, useLiveRollbackCounts } from './use-live-rollback-counts'
+import { countsAfterRefusal } from './confirm-refusal'
+import { useLiveRollbackCounts } from './use-live-rollback-counts'
 
 type Target = { targetId: string; counts: RollbackCounts }
 type Load = (branchId: string, targetId: string) => Promise<RollbackCounts | StoryEntryRejection>
@@ -219,29 +220,5 @@ describe('useLiveRollbackCounts', () => {
     settleARun()
 
     await waitFor(() => expect(result.current.target?.counts).toEqual(AFTER_PASS))
-  })
-})
-
-describe('countsAfterRefusal', () => {
-  it('re-opens a counts-changed refusal on the counts the action returned', () => {
-    expect(
-      countsAfterRefusal(OPENED, {
-        status: 'rejected',
-        code: STORY_ENTRY_REJECTION.countsChanged,
-        reason: 'counts changed',
-        counts: REFUSED_FRESH,
-      }),
-    ).toEqual(REFUSED_FRESH)
-  })
-
-  it('re-opens any other refusal on the counts the user confirmed', () => {
-    expect(countsAfterRefusal(OPENED, refused('in-flight-gated'))).toBe(OPENED)
-    expect(countsAfterRefusal(OPENED, refused('generation-in-flight'))).toBe(OPENED)
-    expect(countsAfterRefusal(OPENED, refused('sweep-refused'))).toBe(OPENED)
-  })
-
-  it('takes no counts-changed refusal without its counts', () => {
-    // @ts-expect-error a counts-changed refusal always carries the counts it found
-    countsAfterRefusal(OPENED, refused(STORY_ENTRY_REJECTION.countsChanged))
   })
 })
