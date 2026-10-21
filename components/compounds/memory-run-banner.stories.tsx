@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { t } from '@/lib/i18n'
 
@@ -45,5 +45,18 @@ export const PhoneUpdatingBeforeTurn: Story = {
     expect(screen.getByText(t('chrome.memoryBanner.updatingBeforeTurn'))).toBeVisible()
     await userEvent.click(cancel)
     await waitFor(() => expect(args.onCancel).toHaveBeenCalledTimes(1))
+  },
+}
+
+export const LiveRegionCoversOnlyTheLabel: Story = {
+  args: { label: t('chrome.memoryBanner.updating'), onCancel: fn() },
+  play: async () => {
+    const region = await screen.findByRole('status')
+    // role="status" implies aria-atomic, so a region spanning the bar would re-announce Cancel too.
+    expect(region).toHaveTextContent(t('chrome.memoryBanner.updating'))
+    expect(within(region).queryAllByRole('button')).toEqual([])
+    const banner = screen.getByTestId('memory-run-banner')
+    expect(region).not.toBe(banner)
+    expect(region.contains(within(banner).getByRole('button', { name: t('cancel') }))).toBe(false)
   },
 }

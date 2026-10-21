@@ -20,7 +20,6 @@ export function MemoryRunBannerView({ label, onCancel }: MemoryRunBannerViewProp
     <View
       // E2E scope anchor: the banner's Cancel shares its role and name with the composer's.
       testID="memory-run-banner"
-      role="status"
       className="relative w-full flex-row items-center gap-2 border-b border-info px-4 py-1.5"
     >
       <View
@@ -29,9 +28,13 @@ export function MemoryRunBannerView({ label, onCancel }: MemoryRunBannerViewProp
         className="absolute inset-0 bg-info opacity-[.12]"
       />
       <Icon as={Info} size="sm" className="text-info" />
-      <Text size="sm" className="flex-1 text-fg-primary">
-        {label}
-      </Text>
+      {/* Scoped to the label: role="status" implies aria-atomic, so a region spanning the bar
+          would re-announce Cancel too. aria-live is what maps to Android's live region. */}
+      <View role="status" aria-live="polite" className="min-w-0 flex-1">
+        <Text size="sm" className="text-fg-primary">
+          {label}
+        </Text>
+      </View>
       <Button variant="ghost" size="sm" onPress={onCancel}>
         <Text>{t('cancel')}</Text>
       </Button>
@@ -39,7 +42,7 @@ export function MemoryRunBannerView({ label, onCancel }: MemoryRunBannerViewProp
   )
 }
 
-/** The open branch's pass, as a banner; nothing while none runs. `ScreenShell` mounts it on `in-story`. */
+/** The open branch's pass, as a banner; nothing while none runs. */
 export function MemoryRunBanner() {
   const banner = useMemoryRunBanner()
   if (banner == null) return null

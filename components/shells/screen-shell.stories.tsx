@@ -369,6 +369,9 @@ export const ActionsSlot: Story = {
   },
 }
 
+const IN_STORY_MEMORY_RUN_BODY =
+  'in-story variant — a pass in flight shows the memory-run banner below the chrome'
+
 export const InStoryMemoryRun: Story = {
   beforeEach: () => {
     openStoryWithPass()
@@ -383,7 +386,7 @@ export const InStoryMemoryRun: Story = {
       onOpenStorySettings={noop}
       onOpenActions={noop}
     >
-      <BodyPlaceholder label="in-story variant — a pass in flight shows the memory-run banner below the chrome" />
+      <BodyPlaceholder label={IN_STORY_MEMORY_RUN_BODY} />
     </ScreenShell>
   ),
   play: async () => {
@@ -391,8 +394,40 @@ export const InStoryMemoryRun: Story = {
     expect(within(banner).getByText(t('chrome.memoryBanner.updating'))).toBeInTheDocument()
     const progress = screen.getByRole('progressbar', { name: t('chrome.chapterProgress') })
     expect(progress.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const body = screen.getByText(IN_STORY_MEMORY_RUN_BODY)
+    expect(banner.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.click(within(banner).getByRole('button', { name: t('cancel') }))
     await waitFor(() => expect(memoryRun?.abortController.signal.aborted).toBe(true))
+  },
+}
+
+// The banner sits below the phone chip strip too, not between the progress strip and it.
+export const InStoryMemoryRunPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  beforeEach: () => {
+    openStoryWithPass()
+    return clearPass
+  },
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={35}
+      centerExtras={<Tag tone="soft">Chap 3</Tag>}
+      mobileChipAction={<Tag tone="default">Browse</Tag>}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story phone — the banner sits below the chip strip" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const banner = await screen.findByTestId('memory-run-banner')
+    await waitFor(() => {
+      const chip = screen.getByText('Browse')
+      expect(chip.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
   },
 }
 
