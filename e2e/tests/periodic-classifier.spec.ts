@@ -721,7 +721,7 @@ test.describe('periodic classifier — the gated pass', () => {
     return rows[0][0] as string
   }
 
-  // The count on the open rollback confirm's world-state line, or null with none shown.
+  // The count on the open rollback confirm's world-state line (probed up to 50), else null.
   async function shownWorldStateCount(): Promise<number | null> {
     for (let count = 0; count <= 50; count++) {
       if ((await reader.rollbackWorldStateLine(app.window, count).count()) > 0) return count
@@ -877,7 +877,7 @@ test.describe('periodic classifier — the gated pass', () => {
     await reader.deleteEntry(page, userEntry).click()
     await expect(reader.rollbackConfirm(page)).toBeVisible()
     const before = await shownWorldStateCount()
-    if (before === null) throw new Error('the rollback confirm shows no world-state count')
+    if (before === null) throw new Error('the rollback confirm shows no world-state count ≤ 50')
 
     mock.releaseStructured()
     await expect.poll(() => runOutcome(pass), { timeout: 20_000 }).toBe('completed')
@@ -945,7 +945,7 @@ test.describe('periodic classifier — the gated pass', () => {
     expect(written.count).toBeGreaterThan(0)
     expect(written.last).not.toBeNull()
     expect(written.last!).toBeLessThan(userAction.logPosition)
-    // Nothing chained at the regenerate's commit: the interrupted pass waited for this Send.
+    // The interrupted pass, then its deferred run at this Send, then the pass this turn chains.
     await expect
       .poll(async () => (await passOutcomes()).slice(outcomesBefore), { timeout: 20_000 })
       .toEqual(['aborted', 'completed', 'completed'])

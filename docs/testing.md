@@ -374,8 +374,8 @@ window the cancel spec cancels into, with no sleep-based wait.
 `holdNextStructured(name)` does the same for the next structured call
 whose prompt matches that shape: the call is recorded in `requests`,
 then answered only at `releaseStructured()`, with the reply set by
-then, or dropped when the client aborts — the in-flight window the
-gated pass's interrupt and Cancel specs act in.
+then — the in-flight window the gated pass's interrupt and Cancel
+specs act in.
 
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the
