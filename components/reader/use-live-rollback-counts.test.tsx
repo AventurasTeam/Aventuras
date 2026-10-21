@@ -3,7 +3,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { RollbackCounts, StoryEntryRejection } from '@/lib/actions'
+import { STORY_ENTRY_REJECTION, type RollbackCounts, type StoryEntryRejection } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { generationStore } from '@/lib/stores'
 
@@ -16,6 +16,10 @@ const OPENED: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 2 }
 const REFUSED_FRESH: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 5 }
 const AFTER_PASS: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 7 }
 const LATER: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 9 }
+
+function refused<C extends string>(code: C) {
+  return { status: 'rejected', code, reason: `refused: ${code}` } as const
+}
 
 // A falling reversal flag is one of the points settleCount bumps at; it needs no run fixture.
 function settleARun() {
@@ -207,7 +211,7 @@ describe('useLiveRollbackCounts', () => {
     act(() =>
       result.current.setTarget({
         targetId: 'e3',
-        counts: countsAfterRefusal(OPENED, { code: 'in-flight-gated' }),
+        counts: countsAfterRefusal(OPENED, refused('in-flight-gated')),
       }),
     )
     expect(result.current.target?.counts).toEqual(OPENED)
@@ -220,18 +224,24 @@ describe('useLiveRollbackCounts', () => {
 
 describe('countsAfterRefusal', () => {
   it('re-opens a counts-changed refusal on the counts the action returned', () => {
-    expect(countsAfterRefusal(OPENED, { code: 'counts-changed', counts: REFUSED_FRESH })).toEqual(
-      REFUSED_FRESH,
-    )
+    expect(
+      countsAfterRefusal(OPENED, {
+        status: 'rejected',
+        code: STORY_ENTRY_REJECTION.countsChanged,
+        reason: 'counts changed',
+        counts: REFUSED_FRESH,
+      }),
+    ).toEqual(REFUSED_FRESH)
   })
 
   it('re-opens any other refusal on the counts the user confirmed', () => {
-    expect(countsAfterRefusal(OPENED, { code: 'in-flight-gated' })).toBe(OPENED)
-    expect(countsAfterRefusal(OPENED, { code: 'generation-in-flight' })).toBe(OPENED)
-    expect(countsAfterRefusal(OPENED, { code: 'sweep-refused' })).toBe(OPENED)
+    expect(countsAfterRefusal(OPENED, refused('in-flight-gated'))).toBe(OPENED)
+    expect(countsAfterRefusal(OPENED, refused('generation-in-flight'))).toBe(OPENED)
+    expect(countsAfterRefusal(OPENED, refused('sweep-refused'))).toBe(OPENED)
   })
 
-  it('keeps the confirmed counts when a counts-changed refusal carries none', () => {
-    expect(countsAfterRefusal(OPENED, { code: 'counts-changed' })).toBe(OPENED)
+  it('takes no counts-changed refusal without its counts', () => {
+    // @ts-expect-error a counts-changed refusal always carries the counts it found
+    countsAfterRefusal(OPENED, refused(STORY_ENTRY_REJECTION.countsChanged))
   })
 })

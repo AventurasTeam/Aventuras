@@ -138,7 +138,7 @@ const loadRollbackCounts = (branchId: string, targetId: string) =>
 const REGENERATE_REJECTION_COPY = {
   'embedder-swap': 'reader:actions.blockedWhileSwapping',
   'generation-in-flight': 'reader:actions.blockedWhileGenerating',
-  'counts-changed': 'reader:rollbackCountsChanged',
+  [STORY_ENTRY_REJECTION.countsChanged]: 'reader:rollbackCountsChanged',
   'branch-not-loaded': 'reader:regenerateUnavailable',
   'not-an-ai-reply': 'reader:regenerateUnavailable',
   'no-origin': 'reader:regenerateUnavailable',

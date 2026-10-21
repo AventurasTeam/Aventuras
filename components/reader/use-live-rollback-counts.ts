@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 
-import { STORY_ENTRY_REJECTION, type RollbackCounts, type StoryEntryRejection } from '@/lib/actions'
+import {
+  STORY_ENTRY_REJECTION,
+  type CountsChangedRejection,
+  type RegenerateTurnResult,
+  type RollbackCounts,
+  type StoryEntryRejection,
+} from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { generationStore } from '@/lib/stores'
 
@@ -10,11 +16,12 @@ import { generationStore } from '@/lib/stores'
  */
 export function countsAfterRefusal(
   confirmed: RollbackCounts,
-  refusal: { code: string; counts?: RollbackCounts },
+  refusal:
+    | StoryEntryRejection
+    | CountsChangedRejection
+    | Extract<RegenerateTurnResult, { status: 'rejected' }>,
 ): RollbackCounts {
-  return refusal.code === STORY_ENTRY_REJECTION.countsChanged && refusal.counts != null
-    ? refusal.counts
-    : confirmed
+  return refusal.code === STORY_ENTRY_REJECTION.countsChanged ? refusal.counts : confirmed
 }
 
 /**
