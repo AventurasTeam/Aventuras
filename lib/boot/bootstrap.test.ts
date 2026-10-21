@@ -6,22 +6,30 @@ import {
   __resetBranchWriteLocks,
   withBranchWriteShared,
 } from '@/lib/actions/delta/branch-write-lock'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   branches,
   deltas,
+  happenings,
   pipelineRuns,
   stories,
   storyEntries,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
+import { embedClassifierDescriptions } from '@/lib/embedder-swap'
+import { __resetRegistry as __resetPipelineRegistry, getPipeline } from '@/lib/pipeline'
+import {
+  __resetClassifierEmbedder,
+  classifierEmbedder,
+} from '@/lib/pipeline/definitions/description-embedder'
 import {
   __resetDeltaActionPort,
-  holdWritePhase,
-  releaseWritePhase,
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
 } from '@/lib/pipeline/runtime/action-port'
 import { appSettingsStore, recoveryReportStore, resetAllStores } from '@/lib/stores'
 
@@ -191,9 +199,83 @@ describe('runBootstrap', () => {
       { runId: 'r1', storyId: 's1', deltas: 1 },
     ])
   })
+
+  it('wires the classifier embedder and registers the pass, which per-turn chains to', async () => {
+    __resetClassifierEmbedder()
+    __resetPipelineRegistry()
+    await seedRow()
+
+    await runBootstrap(ctx)
+
+    expect(classifierEmbedder()).toBe(embedClassifierDescriptions)
+    expect(getPipeline(PERIODIC_CLASSIFIER_KIND).kind).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('reverses an orphaned pass at boot and hands its branch back to the cadence', async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({
+      id: 'b1',
+      storyId: 's1',
+      name: 'm',
+      createdAt: 1,
+      classifierStatus: {
+        state: 'running',
+        lastSuccessAt: null,
+        lastError: null,
+        retryCount: 0,
+        processedThrough: 2,
+      },
+    })
+    await ctx.db.insert(happenings).values({
+      id: 'hap_orphan',
+      branchId: 'b1',
+      title: 'landed before the crash',
+      commonKnowledge: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert(pipelineRuns).values({
+      runId: 'r_pass',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      actionId: 'act_pass',
+      storyId: 's1',
+      startedAt: 1,
+      finishedAt: null,
+      outcome: null,
+    })
+    await ctx.db.insert(deltas).values({
+      id: 'd_pass',
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'act_pass',
+      logPosition: 1,
+      source: 'periodic_classifier',
+      targetTable: 'happenings',
+      targetId: 'hap_orphan',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    expect(await runBootstrap(ctx)).toEqual({ status: 'ok' })
+
+    expect(await ctx.db.select().from(happenings)).toEqual([])
+    const [marker] = await ctx.db
+      .select()
+      .from(pipelineRuns)
+      .where(eq(pipelineRuns.runId, 'r_pass'))
+    expect(marker.outcome).toBe('recovered')
+    const [branch] = await ctx.db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(branch.status).toMatchObject({ state: 'idle', processedThrough: 2 })
+  })
 })
 
-// Every pipeline test configures its own port, so only this pins the production write phase.
+// Every pipeline test configures its own port, so only this pins the production wiring.
 describe('ensureDeltaActionPort', () => {
   // The lock advances over microtasks; a macrotask hop runs every queued continuation.
   const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -207,15 +289,15 @@ describe('ensureDeltaActionPort', () => {
     __resetBranchWriteLocks()
   })
 
-  it("holds the branch's writes from the run's write phase until it is released", async () => {
+  it("wires the lock's exclusive hold: a shared write waits until it is released", async () => {
     ensureDeltaActionPort()
-    await holdWritePhase('b1', 'act_run')
+    await holdBranchWriteExclusive('b1', 'act_run')
     const run = vi.fn(async () => {})
     const write = withBranchWriteShared('b1', 'act_user', run)
     await flush()
     expect(run).not.toHaveBeenCalled()
 
-    releaseWritePhase('b1', 'act_run')
+    releaseBranchWriteExclusive('b1', 'act_run')
     await flush()
     // Checked before awaiting, so a release that frees nothing fails here, not by timeout.
     expect(run).toHaveBeenCalledOnce()

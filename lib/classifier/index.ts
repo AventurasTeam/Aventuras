@@ -33,16 +33,13 @@ export type {
 } from './reconcile'
 export { buildClassifierActions, clampEmbeddedCharacter, RECONCILED_KINDS } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
-export { createClassifierScheduler } from './scheduler'
-export type { ClassifierSchedulerDeps, RunNowOutcome, StartRunOutcome } from './scheduler'
 export {
-  BACKOFF_MS,
+  CLASSIFIER_MAX_RETRIES,
   IDLE_STATUS_JSON,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
-  retryDelayForStatus,
   shouldCadenceFire,
   worstCaseCadenceEntries,
 } from './status'

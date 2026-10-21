@@ -14,6 +14,8 @@ function run(kind: string, gateBehavior: RunState['gateBehavior']): RunState {
     runId: `run-${kind}`,
     kind,
     gateBehavior,
+    interruptible: false,
+    beforeTurn: false,
     actionId: `action-${kind}`,
     storyId: STORY,
     branchId: BRANCH,

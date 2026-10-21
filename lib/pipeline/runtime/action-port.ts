@@ -18,10 +18,10 @@ export type DeltaActionPort = {
   ) => { detail: string; committed: boolean; refusal: IntegrityRefusal | null } | undefined
   /** Resolves once every user write dispatched so far has committed or been refused. */
   settleUserWrites: () => Promise<void>
-  /** Takes the branch write lock exclusive for the run; idempotent per actionId, never rejects. */
-  holdWritePhase: (branchId: string, actionId: string) => Promise<void>
-  /** Ends the run's hold (or queued request); does nothing when it has none. */
-  releaseWritePhase: (branchId: string, actionId: string) => void
+  /** Takes the branch write lock exclusive for `actionId`; idempotent per actionId, never rejects. */
+  holdBranchWriteExclusive: (branchId: string, actionId: string) => Promise<void>
+  /** Ends `actionId`'s exclusive hold, or drops its queued request; else a no-op. */
+  releaseBranchWriteExclusive: (branchId: string, actionId: string) => void
 }
 
 let port: DeltaActionPort | undefined
@@ -65,14 +65,14 @@ export function describeReplayError(
   return requirePort().describeReplayError(e)
 }
 
-export function holdWritePhase(
-  ...args: Parameters<DeltaActionPort['holdWritePhase']>
-): ReturnType<DeltaActionPort['holdWritePhase']> {
-  return requirePort().holdWritePhase(...args)
+export function holdBranchWriteExclusive(
+  ...args: Parameters<DeltaActionPort['holdBranchWriteExclusive']>
+): ReturnType<DeltaActionPort['holdBranchWriteExclusive']> {
+  return requirePort().holdBranchWriteExclusive(...args)
 }
 
-export function releaseWritePhase(
-  ...args: Parameters<DeltaActionPort['releaseWritePhase']>
-): ReturnType<DeltaActionPort['releaseWritePhase']> {
-  return requirePort().releaseWritePhase(...args)
+export function releaseBranchWriteExclusive(
+  ...args: Parameters<DeltaActionPort['releaseBranchWriteExclusive']>
+): ReturnType<DeltaActionPort['releaseBranchWriteExclusive']> {
+  return requirePort().releaseBranchWriteExclusive(...args)
 }

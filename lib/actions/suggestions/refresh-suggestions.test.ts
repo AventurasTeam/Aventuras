@@ -292,10 +292,16 @@ describe('refreshSuggestions', () => {
     expect(generateStructuredMock).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects a re-roll started inside a prose reversal', async () => {
+  // generation-pipeline.md → runPipeline entry algorithm: the flag refuses only an interruptible
+  // start. The strip's ⟳ is disabled for the reversal's span instead.
+  it('is not refused by a prose reversal, which holds back only a pass or a close', async () => {
     const { db, ctx } = await makeHarness()
     await seed(db)
     wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      status: 'ok',
+      value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] },
+    })
     generationStore.setReversalInProgress(true)
 
     const result = await refreshSuggestions(
@@ -304,9 +310,8 @@ describe('refreshSuggestions', () => {
       ctx,
     )
 
-    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'reversal' })
-    // Guard's point: no ai_classifier delta lands inside the reversal's DB-await window.
-    expect(generateStructuredMock).not.toHaveBeenCalled()
+    expect(result.outcome).toBe('completed')
+    expect(generateStructuredMock).toHaveBeenCalledTimes(1)
   })
 
   it('halts before phase 0 with a config-resolver failure when the suggestion agent is unassigned', async () => {

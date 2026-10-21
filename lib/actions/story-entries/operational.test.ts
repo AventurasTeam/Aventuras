@@ -1,7 +1,14 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { applyDeltaAction, DeltaReplayError, reverseReplayDeltas, type DbCtx } from '@/lib/actions'
+import {
+  applyDeltaAction,
+  DeltaReplayError,
+  reverseReplayDeltas,
+  STORY_ENTRY_REJECTION,
+  type DbCtx,
+} from '@/lib/actions'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   deltas,
@@ -17,6 +24,12 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import {
+  __resetBus,
+  __resetRegistry as resetPipelineRegistry,
+  startPipeline,
+  SUGGESTION_REFRESH_KIND,
+} from '@/lib/pipeline'
+import {
   entriesStore,
   generationStore,
   happeningAwarenessStore,
@@ -26,16 +39,30 @@ import {
 } from '@/lib/stores'
 
 import { isContentEditDelta } from './classifier-facts'
-import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
+import {
+  getRollbackCounts,
+  rollbackToEntry,
+  sameRollbackCounts,
+  updateStoryEntryContent,
+  type RollbackCounts,
+} from './operational'
 import {
   __resetBranchWriteLocks,
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
+import {
+  recordDeferrals,
+  registerStandInPass,
+  registerStoreOnlyRun,
+  runningPass,
+} from '../turns/__tests__/stand-in-pass'
 
 afterEach(() => {
   __resetBranchWriteLocks()
+  __resetBus()
+  resetPipelineRegistry()
   entriesStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -201,6 +228,8 @@ describe('updateStoryEntryContent', () => {
       runId: 'r1',
       kind: 'per-turn',
       gateBehavior: 'hard-gate',
+      interruptible: false,
+      beforeTurn: false,
       actionId: 'a',
       storyId: 's1',
       branchId: 'b1',
@@ -1147,7 +1176,7 @@ describe('rollback over the closed set', () => {
     error.mockRestore()
   })
 
-  it("selects the preview's set only once a no-gate run's abort reversal has committed", async () => {
+  it("selects the preview's set only once an interruptible run's abort reversal has committed", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedLateLink(db, ctx, true)
@@ -1308,5 +1337,269 @@ describe('content edit refusals', () => {
     expect(row.content).toBe('old')
     expect(await db.select().from(deltas)).toEqual(before)
     expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+})
+
+function startStandInPass(ctx: DbCtx) {
+  return startPipeline(PERIODIC_CLASSIFIER_KIND, { storyId: 's1', branchId: 'b1', ...ctx })
+}
+
+describe('rollback during a pass', () => {
+  it('interrupts the pass, reversing its write and deferring it, then rolls back', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const pass = registerStandInPass({ anchorEntryId: 't1' })
+    const deferrals = recordDeferrals()
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+
+    expect(result).toEqual({
+      status: 'ok',
+      counts: { entries: 2, chapters: 0, worldStateChanges: 2 },
+    })
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    // The pass's happening anchors to the surviving t1, so only the abort can have removed it.
+    expect(await db.select().from(happenings)).toEqual([])
+    expect((await db.select().from(deltas)).map((d) => d.actionId)).toEqual(['turn1'])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(deferrals).toEqual([
+      {
+        type: 'run_deferred',
+        runId: expect.any(String),
+        kind: PERIODIC_CLASSIFIER_KIND,
+        branchId: 'b1',
+      },
+    ])
+  })
+
+  it('refuses while a suggestion refresh runs beside the pass, interrupting nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const pass = registerStandInPass({ anchorEntryId: 't1' })
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'in-flight-gated' })
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+})
+
+async function shownCounts(ctx: DbCtx, targetId: string): Promise<RollbackCounts> {
+  const counts = await getRollbackCounts('b1', targetId, ctx)
+  if ('status' in counts) throw new Error(`preview refused: ${counts.reason}`)
+  return counts
+}
+
+describe('rollback confirm counts', () => {
+  it('refuses with the fresh counts when a pass committed since the confirm opened, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts(ctx, 't2')
+    expect(shown).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
+    // A pass's fact about a turn the rollback removes, committed while the modal is open.
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappening',
+          source: 'periodic_classifier',
+          payload: {
+            entry: { id: 'hap_late', branchId: 'b1', title: 'Late', createdAt: 1, updatedAt: 1 },
+          },
+        },
+        actionId: 'act_late',
+        branchId: 'b1',
+        entryId: 't3',
+      },
+      ctx,
+    )
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    const before = await db.select().from(deltas)
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      counts: { entries: 2, chapters: 0, worldStateChanges: 3 },
+    })
+    // Compile-time: the code alone narrows to the rejection that carries the fresh counts.
+    if (result.status === 'rejected' && result.code === STORY_ENTRY_REJECTION.countsChanged)
+      expect(result.counts.worldStateChanges).toBe(3)
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(generationStore.getTxState().reversalInProgress).toBe(false)
+  })
+
+  it('rolls back when the confirmed counts still hold', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts(ctx, 't2')
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({ status: 'ok', counts: shown })
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+  })
+
+  // The interrupt reverses the pass's write, so the set the commit reverses is the one confirmed.
+  it('rolls back when the interrupt reverses the only change since the confirm', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts(ctx, 't2')
+    const pass = registerStandInPass({ anchorEntryId: 't3' })
+    const start = startStandInPass(ctx)
+    await pass.nextHeld()
+    expect(await shownCounts(ctx, 't2')).toEqual({ ...shown, worldStateChanges: 3 })
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({ status: 'ok', counts: shown })
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+})
+
+describe('sameRollbackCounts', () => {
+  const counts: RollbackCounts = { entries: 2, chapters: 1, worldStateChanges: 3 }
+
+  it('matches equal counts', () => {
+    expect(sameRollbackCounts(counts, { ...counts })).toBe(true)
+  })
+
+  it.each(['entries', 'chapters', 'worldStateChanges'] as const)(
+    'tells counts apart by %s',
+    (field) => {
+      expect(sameRollbackCounts(counts, { ...counts, [field]: counts[field] + 1 })).toBe(false)
+    },
+  )
+})
+
+// The head turn is e2 (user_action) over e3 (ai_reply); e1 sits below it.
+describe('head-turn edits during a pass', () => {
+  async function seedHeadTurnWithPass() {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedHeadTurn(db)
+    const pass = registerStandInPass({ anchorEntryId: 'e1' })
+    const deferrals = recordDeferrals()
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+    return { db, ctx, start, held, deferrals }
+  }
+
+  async function happeningIds(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+    return (await db.select().from(happenings)).map((h) => h.id).sort()
+  }
+
+  it('an edit of the head reply interrupts the pass, deferring it, and commits', async () => {
+    const { db, ctx, start, held, deferrals } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e3', 'rewritten reply', ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    // hap_3 goes with the edit; the pass's own happening, anchored to e1, only through the abort.
+    expect(await happeningIds(db)).toEqual(['hap_1', 'hap_2'])
+    expect(entriesStore.getById('e3')?.content).toBe('rewritten reply')
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(deferrals).toHaveLength(1)
+  })
+
+  it("an edit of the head turn's user action interrupts the pass too", async () => {
+    const { db, ctx, start } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e2', 'rewritten action', ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+    expect(await happeningIds(db)).toEqual(['hap_1'])
+    expect(entriesStore.getById('e2')?.content).toBe('rewritten action')
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  it('refuses an edit off the head turn, leaving the pass running', async () => {
+    const { db, ctx, start, held } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e1', 'reworded', ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'in-flight-gated',
+    })
+
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
+    expect(row.content).toBe('a')
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('returns an unchanged save of the head reply without costing the pass', async () => {
+    const { ctx, start, held } = await seedHeadTurnWithPass()
+
+    expect(await updateStoryEntryContent('b1', 'e3', 'reply', ctx)).toEqual({ status: 'ok' })
+
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  // Both Saves read membership before either enters the bracket; the re-check refuses the second.
+  it('refuses the second of two head-reply saves that race through the pass', async () => {
+    const { ctx, start } = await seedHeadTurnWithPass()
+
+    const results = await Promise.allSettled([
+      updateStoryEntryContent('b1', 'e3', 'first rewrite', ctx),
+      updateStoryEntryContent('b1', 'e3', 'second rewrite', ctx),
+    ])
+
+    expect(results).toEqual([
+      { status: 'fulfilled', value: { status: 'ok' } },
+      {
+        status: 'fulfilled',
+        value: expect.objectContaining({ status: 'rejected', code: 'in-flight-gated' }),
+      },
+    ])
+    expect(entriesStore.getById('e3')?.content).toBe('first rewrite')
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
+  it('refuses a head-turn edit while a suggestion refresh runs beside the pass', async () => {
+    const { ctx, start, held } = await seedHeadTurnWithPass()
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    expect(await updateStoryEntryContent('b1', 'e3', 'rewritten reply', ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'in-flight-gated',
+    })
+
+    expect(entriesStore.getById('e3')?.content).toBe('reply')
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 })

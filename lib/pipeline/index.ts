@@ -31,9 +31,15 @@ export {
   configureDeltaActionPort,
   type DeltaActionPort,
 } from './runtime/action-port'
-// awaitRunTerminal is deliberately absent: it moved to lib/stores/generation so
-// lib/actions can await a terminal without importing the orchestrator.
-export { runPipeline, type RunCtx, type RunCtxFor } from './runtime/orchestrator'
+// awaitRunTerminal is deliberately absent: it lives in lib/stores/generation, beside
+// interruptMemoryRuns, so callers can await a terminal without importing the orchestrator.
+export {
+  runPipeline,
+  startPipeline,
+  type PipelineStart,
+  type RunCtx,
+  type RunCtxFor,
+} from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
 export type { RecoveredRun, RecoveryFailure, RecoveryReport } from './runtime/recovery'
 export type {

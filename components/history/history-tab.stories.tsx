@@ -259,6 +259,8 @@ export const ReloadsOnRowPatchAndRunSettle: Story = {
       runId,
       kind: 'test_run',
       gateBehavior: 'no-gate',
+      interruptible: false,
+      beforeTurn: false,
       actionId: 'act_settle',
       storyId: null,
       branchId: 'br_1',

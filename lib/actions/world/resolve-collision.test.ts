@@ -42,12 +42,8 @@ import {
 import { entityLinkRows } from '@/lib/world'
 
 import { resolveCollision, type CollisionResolution } from './resolve-collision'
-import { applyDeltaAction } from '../delta/apply-delta-action'
-import {
-  __resetBranchWriteLocks,
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '../delta/branch-write-lock'
+import { reserveRunAfterGateCheck } from '../delta/__tests__/gate-race'
+import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { withKeyLock } from '../delta/key-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
@@ -218,12 +214,7 @@ async function deltaRows(): Promise<Delta[]> {
 }
 
 async function undoAll() {
-  return undoAllBut(null)
-}
-
-async function undoAllBut(keptActionId: string | null) {
-  const target = (await deltaRows()).filter((r) => r.actionId !== keptActionId)
-  const set = await selectReversalSet(ctx, { branchId: 'b1', target })
+  const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltaRows() })
   const { group, reverse } = await prepareUndo(set, ctx)
   await reverse()
   return group
@@ -232,22 +223,6 @@ async function undoAllBut(keptActionId: string | null) {
 async function setTerms(id: string, terms: Partial<Pick<Entity, 'tags' | 'keywords'>>) {
   await ctx.db.update(entities).set(terms).where(eq(entities.id, id))
   await hydrateStores()
-}
-
-async function passAppendsKeyword(id: string, keyword: string) {
-  const written = await applyDeltaAction(
-    {
-      action: {
-        kind: 'appendEntityKeywords',
-        source: 'periodic_classifier',
-        payload: { branchId: 'b1', id, keywords: [keyword], proseEntryId: null },
-      },
-      actionId: 'act_pass',
-      branchId: 'b1',
-    },
-    ctx,
-  )
-  return written.status
 }
 
 async function awarenessIds(): Promise<string[]> {
@@ -292,6 +267,8 @@ function startHardGateRun(): void {
     runId: 'r1',
     kind: 'turn',
     gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: 'act_r1',
     storyId: 's1',
     branchId: 'b1',
@@ -709,73 +686,28 @@ describe('resolveCollision — merge', () => {
     })
     expect(await deltaRows()).toEqual([])
   })
+})
 
-  it('plans from the stores only after a no-gate pass holding the branch lock has written', async () => {
-    await holdBranchWriteExclusive('b1', 'act_pass')
-    let settled = false
-    const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx).finally(() => {
-      settled = true
-    })
-    await flush()
-    await flush()
-    expect(settled).toBe(false)
-
-    const written = await applyDeltaAction(
-      {
-        action: {
-          kind: 'upsertHappeningAwareness',
-          source: 'periodic_classifier',
-          payload: { branchId: 'b1', characterId: 'char_b', happeningId: 'hap_3' },
-        },
-        actionId: 'act_pass',
-        branchId: 'b1',
-      },
-      ctx,
-    )
-    expect(written.status).toBe('ok')
-    releaseBranchWriteExclusive('b1', 'act_pass')
-
-    expect(await merging).toEqual({ status: 'ok' })
-    // A plan built before the hold released would miss this row, and B's delete would cascade it.
-    const onA = await ctx.db
-      .select()
-      .from(happeningAwareness)
-      .where(eq(happeningAwareness.characterId, 'char_a'))
-    expect(onA.map((r) => r.happeningId).sort()).toEqual(['hap_1', 'hap_2', 'hap_3'])
-  })
-
+// A run reserving right after the build's gate check settles the writes dispatched so far, so the
+// resolution must be among them (generation-pipeline.md → Action rejection — defense in depth).
+describe('resolveCollision — dispatches in the tick of its gate check', () => {
   it.each([
-    ['the canonical', 'char_a'],
-    ['the loser', 'char_b'],
-  ])(
-    'keeps a keyword a pass appends to %s while the merge waits; CTRL-Z and redo are exact',
-    async (_, appendedTo) => {
-      await setTerms('char_a', { keywords: ['the guard'] })
-      await setTerms('char_b', { keywords: ['Captain Brannoc'] })
-      await holdBranchWriteExclusive('b1', 'act_pass')
-      const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx)
-      await flush()
-      await flush()
-
-      expect(await passAppendsKeyword(appendedTo, 'the smith')).toBe('ok')
-      const before = await worldSnapshot()
-      releaseBranchWriteExclusive('b1', 'act_pass')
-
-      expect(await merging).toEqual({ status: 'ok' })
-      expect((await entityRow('char_a'))?.keywords).toEqual(
-        appendedTo === 'char_a'
-          ? ['the guard', 'the smith', 'Captain Brannoc']
-          : ['the guard', 'Captain Brannoc', 'the smith'],
-      )
-      const merged = await worldSnapshot()
-
-      const group = await undoAllBut('act_pass')
-      expect(await worldSnapshot()).toEqual(before)
-
-      await applyRedo(group, ctx)
-      expect(await worldSnapshot()).toEqual(merged)
-    },
-  )
+    ['merge', MERGE_B_INTO_A],
+    ['keep', KEEP_A_B],
+  ])('%s: a run reserving right after the check waits for the write', async (_, resolution) => {
+    // Check 1 is resolveCollision's own; check 2 is the build's, right before the dispatch.
+    const race = reserveRunAfterGateCheck(2, startHardGateRun)
+    try {
+      const resolving = resolveCollision('b1', resolution, ctx)
+      await race.settled
+      // Read as the run's wait ends: a write dispatched after that has no deltas yet.
+      expect((await deltaRows()).length).toBeGreaterThan(0)
+      expect(race.checks()).toBe(2)
+      expect(await resolving).toEqual({ status: 'ok' })
+    } finally {
+      race.restore()
+    }
+  })
 })
 
 describe('resolveCollision — merge re-points and clears flags', () => {

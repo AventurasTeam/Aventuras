@@ -16,13 +16,15 @@ import {
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
+import { loadHeadTurn } from './head-turn'
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
 export type StoryEntryRejection = {
   status: 'rejected'
   reason: string
-  code: StoryEntryRejectionCode
+  // Only `CountsChangedRejection` carries this code, so it alone narrows to the fresh counts.
+  code: Exclude<StoryEntryRejectionCode, typeof STORY_ENTRY_REJECTION.countsChanged>
 }
 
 export function logReversalRefused(branchId: string, e: ReversalIntegrityError): void {
@@ -58,22 +60,40 @@ export async function updateStoryEntryContent(
   content: string,
   ctx: DbCtx,
 ): Promise<{ status: 'ok' } | StoryEntryRejection> {
-  if (generationStore.isUserEditBlocked()) return inFlightRejection()
-  // Ahead of the bracket, which cancels the in-flight classifier before its body runs:
-  // an unchanged save must not cost a pass. Safe outside the barrier because no other
-  // writer touches this column, unlike the tail read the scope needs.
+  const headAtStart =
+    onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
+  if (contentEditBlocked(branchId, headAtStart)) return inFlightRejection()
+  // Ahead of the bracket, which interrupts a pass: an unchanged save must not cost one. Safe
+  // outside the barrier because no other writer touches this column, unlike the scope's tail read.
   const [existing] = await ctx.db
     .select({ content: storyEntries.content })
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
   if (existing?.content === content) return { status: 'ok' }
-  // Re-checked past the read, so this gate and the bracket's flag set are one synchronous
-  // block: a second Save that read alongside the first is refused, not thrown as re-entry.
-  // Not inside the bracket, where the flag itself reads as blocked.
-  if (generationStore.isUserEditBlocked()) return inFlightRejection()
+  // Re-checked past the reads: gate and the bracket's flag set stay one synchronous block, so a
+  // second Save is refused, not thrown as re-entry. Not inside the bracket (flag reads blocked).
+  const inHeadTurn =
+    onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
+  if (contentEditBlocked(branchId, inHeadTurn)) return inFlightRejection()
   return bracketProseReversal(branchId, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
+}
+
+// Only interruptible runs hold the gate: the one case a head-turn edit may pass, by interrupting
+// them (principles.md → Edit restrictions during in-flight generation). Gates the head-turn read.
+function onlyInterruptibleRunsHold(branchId: string): boolean {
+  return generationStore.isUserEditBlocked() && !generationStore.isHeadReversalBlocked(branchId)
+}
+
+function contentEditBlocked(branchId: string, inHeadTurn: boolean): boolean {
+  if (!generationStore.isUserEditBlocked()) return false
+  return !inHeadTurn || generationStore.isHeadReversalBlocked(branchId)
+}
+
+async function isHeadTurnEntry(branchId: string, id: string, ctx: DbCtx): Promise<boolean> {
+  const head = await loadHeadTurn(branchId, ctx)
+  return head != null && (head.tail.id === id || head.origin?.id === id)
 }
 
 function inFlightRejection(): StoryEntryRejection {
@@ -160,6 +180,14 @@ async function updateStoryEntryContentBracketed(
 }
 
 export type RollbackCounts = { entries: number; chapters: number; worldStateChanges: number }
+
+/** The set moved since the confirm showed its counts; `counts` is the set as it stands now. */
+export type CountsChangedRejection = {
+  status: 'rejected'
+  code: typeof STORY_ENTRY_REJECTION.countsChanged
+  reason: string
+  counts: RollbackCounts
+}
 
 async function resolveRollbackWindow(
   branchId: string,
@@ -251,7 +279,7 @@ export async function resolveSweep(
 // entry is being deleted, so counting one here would charge the user twice for a loss
 // the entries line already reports.
 // A cleared parent logs no delta but still moves a place, so it counts as a change.
-function countBuckets({ rows, refClears }: ReversalSet): RollbackCounts {
+export function rollbackCountsOf({ rows, refClears }: ReversalSet): RollbackCounts {
   let entries = 0
   let chapters = 0
   let worldStateChanges = refClears.length
@@ -264,6 +292,14 @@ function countBuckets({ rows, refClears }: ReversalSet): RollbackCounts {
   return { entries, chapters, worldStateChanges }
 }
 
+export function sameRollbackCounts(a: RollbackCounts, b: RollbackCounts): boolean {
+  return (
+    a.entries === b.entries &&
+    a.chapters === b.chapters &&
+    a.worldStateChanges === b.worldStateChanges
+  )
+}
+
 const ROLLBACK_PREVIEW_LOCK_ID = 'rollback-preview'
 
 export async function getRollbackCounts(
@@ -273,31 +309,37 @@ export async function getRollbackCounts(
 ): Promise<RollbackCounts | StoryEntryRejection> {
   // The closed set, not the window: a fact on a surviving turn naming a row the sweep
   // removes goes too (rollback-confirm.md → Counts).
-  // Held shared: a no-gate run's abort reversal or a prose reversal landing between the
-  // closure's reads refuses it.
+  // Held shared: a prose reversal or interruptible-run abort reversal landing mid-read refuses it.
   const swept = await withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, () =>
     resolveSweep(branchId, targetId, ctx),
   )
   if ('status' in swept) return swept
-  return countBuckets(swept.set)
+  return rollbackCountsOf(swept.set)
 }
 
 export async function rollbackToEntry(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ status: 'ok'; counts: RollbackCounts } | StoryEntryRejection> {
-  if (generationStore.isUserEditBlocked())
-    return {
-      status: 'rejected',
-      reason: 'generation in flight',
-      code: STORY_ENTRY_REJECTION.inFlight,
-    }
+  opts?: { expectedCounts?: RollbackCounts },
+): Promise<
+  { status: 'ok'; counts: RollbackCounts } | StoryEntryRejection | CountsChangedRejection
+> {
+  // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
+  if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
 
   return bracketProseReversal(branchId, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
-    const counts = countBuckets(swept.set)
+    const counts = rollbackCountsOf(swept.set)
+    // Compared with the set the commit reverses, so the consent covers exactly what goes.
+    if (opts?.expectedCounts && !sameRollbackCounts(counts, opts.expectedCounts))
+      return {
+        status: 'rejected',
+        code: STORY_ENTRY_REJECTION.countsChanged,
+        reason: 'rollback counts changed since the confirm opened',
+        counts,
+      }
     try {
       await commitNewAction(swept.set, ctx, swept.clampOps)
     } catch (e) {

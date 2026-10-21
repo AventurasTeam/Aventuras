@@ -98,11 +98,22 @@ export type { WorkingSetStore } from './factory/working-set-store'
 export {
   awaitRunTerminal,
   backgroundClassifierRunning,
+  cancelStoryRuns,
+  deferredWorkKindOf,
+  interruptMemoryRuns,
   isBackgroundKind,
   isForegroundGenerating,
+  isHeadReversalBlocked,
+  isStoryBusy,
   isUserEditBlocked,
 } from './generation/generation'
-export type { PendingTurn, RunState, TxState } from './generation/generation'
+export type {
+  DeferredWork,
+  DeferredWorkKind,
+  PendingTurn,
+  RunState,
+  TxState,
+} from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'

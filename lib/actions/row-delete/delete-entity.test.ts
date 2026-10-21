@@ -30,11 +30,7 @@ import { entitiesStore, generationStore } from '@/lib/stores'
 import { deleteEntityRow } from './delete-entity'
 import { ROW_DELETE_REJECTION } from './delete-row'
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import {
-  __resetBranchWriteLocks,
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '../delta/branch-write-lock'
+import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
@@ -313,6 +309,8 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
       runId: 'r1',
       kind: 'turn',
       gateBehavior: 'hard-gate',
+      interruptible: false,
+      beforeTurn: false,
       actionId: 'act_r1',
       storyId: 's1',
       branchId: 'b1',
@@ -467,99 +465,5 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
     expect(await sceneEdit).toEqual({ status: 'ok' })
     expect(await deletion).toEqual({ status: 'ok' })
     expect([...(await tailScene())].sort()).toEqual(['char_lead', 'char_o'])
-  })
-})
-
-describe('deleteEntityRow — a pass writing while the delete waits on the branch lock', () => {
-  const faction = (id: string): NewEntity => ({
-    id,
-    branchId: 'b1',
-    kind: 'faction',
-    name: id,
-    status: 'active',
-    injectionMode: 'auto',
-    createdAt: 1,
-    updatedAt: 1,
-  })
-  const join = (id: string, factionId: string | null) =>
-    applyDeltaAction(
-      {
-        action: {
-          kind: 'setCharacterFaction',
-          source: 'periodic_classifier',
-          payload: { branchId: 'b1', id, factionId, proseEntryId: null },
-        },
-        actionId: 'act_pass',
-        branchId: 'b1',
-      },
-      ctx,
-    )
-  const factionOf = async (id: string) => {
-    const [row] = await ctx.db.select().from(entities).where(eq(entities.id, id))
-    return (row.state as CharacterState).faction_id
-  }
-  const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
-
-  it('plans from the rows the pass leaves, so its memberships are neither overwritten nor left naming the faction', async () => {
-    __resetBranchWriteLocks()
-    await ctx.db
-      .insert(entities)
-      .values([
-        faction('fact_x'),
-        faction('fact_y'),
-        character('char_a', 'Ana', { faction_id: 'fact_x' }),
-        character('char_b', 'Bram'),
-      ])
-    entitiesStore.hydrate('b1', (await ctx.db.select().from(entities)) as never)
-
-    await holdBranchWriteExclusive('b1', 'act_pass')
-    let settled = false
-    const deletion = deleteEntityRow('b1', 'fact_x', ctx).finally(() => {
-      settled = true
-    })
-    try {
-      await flush()
-      await flush()
-      expect(settled).toBe(false)
-      expect((await join('char_a', 'fact_y')).status).toBe('ok')
-      expect((await join('char_b', 'fact_x')).status).toBe('ok')
-    } finally {
-      releaseBranchWriteExclusive('b1', 'act_pass')
-    }
-
-    expect(await deletion).toEqual({ status: 'ok' })
-    expect(await factionOf('char_a')).toBe('fact_y')
-    expect(await factionOf('char_b')).toBeNull()
-  })
-
-  it('refuses in-flight when a hard-gate run starts while it waits', async () => {
-    __resetBranchWriteLocks()
-    await holdBranchWriteExclusive('b1', 'act_pass')
-    const deletion = deleteEntityRow('b1', 'char_x', ctx)
-    try {
-      await flush()
-      await flush()
-      generationStore.startRun({
-        runId: 'r1',
-        kind: 'turn',
-        gateBehavior: 'hard-gate',
-        actionId: 'act_r1',
-        storyId: 's1',
-        branchId: 'b1',
-        abortController: new AbortController(),
-        currentPhase: 'commit',
-        intermediates: {},
-        terminal: Promise.resolve(),
-        resolveTerminal: () => {},
-      })
-    } finally {
-      releaseBranchWriteExclusive('b1', 'act_pass')
-    }
-
-    expect(await deletion).toMatchObject({
-      status: 'rejected',
-      code: ROW_DELETE_REJECTION.inFlight,
-    })
-    expect(await ctx.db.select().from(deltas)).toEqual([])
   })
 })

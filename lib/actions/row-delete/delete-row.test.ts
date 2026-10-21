@@ -20,6 +20,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
+import { reserveRunAfterGateCheck } from '../delta/__tests__/gate-race'
 import { withKeyLock } from '../delta/key-lock'
 import { rowLock } from '../delta/row-locks'
 import type { DbCtx } from '../types'
@@ -33,6 +34,8 @@ function blockGeneration(): void {
     runId: 'r_block',
     kind: 'turn',
     gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: 'act_block',
     storyId: 's1',
     branchId: 'b1',
@@ -183,6 +186,27 @@ describe('commitRowDelete — in-flight refusal writes nothing', () => {
     })
     expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_1'))).toHaveLength(1)
     expect(await ctx.db.select().from(deltas)).toEqual([])
+  })
+})
+
+// A run reserving right after the gate check settles the writes dispatched so far, so the delete
+// must be among them (generation-pipeline.md → Action rejection — defense in depth).
+describe('commitRowDelete — dispatches in the tick of its gate check', () => {
+  it.each([
+    ['deleteRow', () => deleteRow('lore', 'b1', 'lore_1', ctx)],
+    ['deleteEntityRow', () => deleteEntityRow('b1', 'char_1', ctx)],
+  ])('%s: a run reserving right after the check waits for the write', async (_, remove) => {
+    const race = reserveRunAfterGateCheck(1, blockGeneration)
+    try {
+      const deleting = remove()
+      await race.settled
+      // Read as the run's wait ends: a write dispatched after that has no deltas yet.
+      expect((await ctx.db.select().from(deltas)).length).toBeGreaterThan(0)
+      expect(race.checks()).toBe(1)
+      expect(await deleting).toEqual({ status: 'ok' })
+    } finally {
+      race.restore()
+    }
   })
 })
 

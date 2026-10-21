@@ -24,6 +24,8 @@ export type UndoResult =
   | { status: 'ok' }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
 
+const GATED: UndoResult = { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+
 function unreadableScopeRejection(deltaId: string): UndoResult {
   return {
     status: 'rejected',
@@ -56,8 +58,17 @@ async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
 }
 
 export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
-  if (generationStore.isUserEditBlocked())
-    return { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+  // Only CTRL-Z of the turn passes a pass, by interrupting it, so the target is read
+  // before the gate decides (principles.md → Edit restrictions during in-flight generation).
+  let throughInterrupt = false
+  if (generationStore.isUserEditBlocked()) {
+    if (generationStore.isHeadReversalBlocked(branchId)) return GATED
+    const target = selectUndoTarget(await recentDeltaRows(branchId, ctx))
+    if (generationStore.isUserEditBlocked()) {
+      if (target?.kind !== 'turn' || generationStore.isHeadReversalBlocked(branchId)) return GATED
+      throughInterrupt = true
+    }
+  }
   // The reader screen only ever calls this for the branch it has loaded; a
   // stale branchId (e.g. mid branch-switch) would otherwise let the reversal
   // race the in-flight reload that's about to hydrate the same branch.
@@ -68,14 +79,20 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
   return bracketProseReversal(branchId, () =>
-    refusingIntegrity(branchId, () => undoBracketed(branchId, ctx)),
+    refusingIntegrity(branchId, () => undoBracketed(branchId, ctx, throughInterrupt)),
   )
 }
 
-async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> {
+async function undoBracketed(
+  branchId: string,
+  ctx: DbCtx,
+  throughInterrupt: boolean,
+): Promise<UndoResult> {
   const recent = await recentDeltaRows(branchId, ctx)
   const target = selectUndoTarget(recent)
   if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
+  // Admitted past the gate to undo the turn; a target that moved during the interrupt is gated.
+  if (throughInterrupt && target.kind !== 'turn') return GATED
 
   let set: ReversalSet
   let clampOps: SqlOp[]
@@ -110,8 +127,7 @@ async function undoBracketed(branchId: string, ctx: DbCtx): Promise<UndoResult> 
 }
 
 export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
-  if (generationStore.isUserEditBlocked())
-    return { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+  if (generationStore.isUserEditBlocked()) return GATED
   if (entriesStore.getLoadedBranch() !== branchId)
     return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
 
@@ -126,11 +142,10 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
       reason: 'redo stack does not belong to this branch',
     }
 
-  // A redo restores prose and reverses classifier output, so it drains an in-flight
-  // pass the way every other reversal does.
+  // Bracketed like every reversal, so no pass starts mid-sweep.
   return bracketProseReversal(branchId, () =>
     refusingIntegrity(branchId, async () => {
-      // A write committing during the drain clears the stack; its snapshot would restore over it.
+      // A write committing during the settle clears the stack; its snapshot would restore over it.
       if (undoRedoStore.peekRedoGroup() !== group)
         return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
       const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)

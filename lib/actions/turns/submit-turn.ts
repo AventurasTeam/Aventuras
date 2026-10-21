@@ -1,10 +1,18 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
-import { ensurePerTurnPipelineRegistered, type RejectedStart, type TxResult } from '@/lib/pipeline'
+import {
+  ensurePerTurnPipelineRegistered,
+  ensurePeriodicClassifierPipelineRegistered,
+  runPipeline,
+  type RejectedStart,
+  type TxResult,
+} from '@/lib/pipeline'
+import { generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
@@ -15,11 +23,30 @@ export type SubmitTurnMeta = { content: string; composerMode: string }
 
 /**
  * `converged: false` means the refused turn's user_action is still in the branch, so nothing may
- * offer its text for resubmission.
+ * offer its text for resubmission. An `aborted` result can be Send's deferred pass, cancelled
+ * before the user_action was written.
  */
 export type SubmitTurnResult = TxResult | (RejectedStart & { converged: boolean })
 
 const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
+
+/**
+ * Send's deferred work (generation-pipeline.md → chainsTo on predecessor): its own run with its
+ * own actionId, awaited to its end so it commits before the turn's first write.
+ */
+function runDeferredPass(
+  ids: { storyId: string; branchId: string },
+  ctx: DbCtx,
+): Promise<TxResult | RejectedStart> {
+  ensurePeriodicClassifierPipelineRegistered()
+  return runPipeline(PERIODIC_CLASSIFIER_KIND, {
+    storyId: ids.storyId,
+    branchId: ids.branchId,
+    beforeTurn: true,
+    db: ctx.db,
+    runInTransaction: ctx.runInTransaction,
+  })
+}
 
 export async function submitTurn(
   ids: { storyId: string; branchId: string },
@@ -35,6 +62,14 @@ export async function submitTurn(
       if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
       return withPendingTurn(ids.branchId, async (startTurn) => {
+        // Under the turn's mark, so no reversal interrupts Send's own deferred work.
+        if (generationStore.getTxState().deferred.get(ids.branchId)?.pass) {
+          const deferred = await runDeferredPass(ids, ctx)
+          // A cancel cancels the whole Send and the work stays deferred; a pass that failed or
+          // could not start lets the turn go ahead.
+          if (deferred.outcome === 'aborted') return deferred
+        }
+
         // Shared across the user_action's delta and the pipeline run it kicks off,
         // so CTRL-Z reverses the whole turn as one group (milestone.md C6).
         const turnActionId = generateId('act')

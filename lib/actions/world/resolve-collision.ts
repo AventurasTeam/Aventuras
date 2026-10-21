@@ -30,16 +30,15 @@ import {
 } from '@/lib/world'
 
 import {
-  applyDeltaActionGroupBuilt,
+  applyDeltaActionGroup,
   DELTA_REJECTION,
-  type BuiltGroup,
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
-import type { DbCtx } from '../types'
+import type { DbCtx, PipelineAction } from '../types'
 
 export const COLLISION_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
@@ -64,7 +63,7 @@ export type CollisionResolution =
       fromLoser: readonly MergeScalar[]
       /**
        * Terms the user dropped (tags trimmed, keywords by `normalizeTerm`), never final lists: the
-       * build unions rows read under the branch lock, so a no-gate pass's interim terms survive.
+       * build unions the rows as they stand when it commits.
        */
       deselectedTags: readonly string[]
       deselectedKeywords: readonly string[]
@@ -81,7 +80,9 @@ export type CollisionResolveResult =
   | { status: 'rejected'; reason: string; code: CollisionRejectionCode }
 
 type MergeResolution = Extract<CollisionResolution, { mode: 'merge' }>
-type Built = BuiltGroup<CollisionRejectionCode>
+type Built =
+  | { status: 'ok'; actions: readonly PipelineAction[] }
+  | { status: 'rejected'; reason: string; code: CollisionRejectionCode }
 type Refusal = Extract<Built, { status: 'rejected' }>
 
 function refusal(code: CollisionRejectionCode, reason: string): Refusal {
@@ -195,14 +196,15 @@ function buildResolution(
   }
 }
 
-function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<DeltaGroupResult> {
-  return applyDeltaActionGroupBuilt(build, { actionId: generateId('act'), branchId }, ctx)
+// Built and dispatched in one tick: a run that starts after the build's gate check settles this
+// write before it reads.
+async function commit(branchId: string, build: () => Built, ctx: DbCtx): Promise<DeltaGroupResult> {
+  const built = build()
+  if (built.status === 'rejected') return built
+  return applyDeltaActionGroup(built.actions, { actionId: generateId('act'), branchId }, ctx)
 }
 
-/**
- * generation-pipeline.md → No-gate write phase: the merge rewrites the tail scene, so it holds the
- * tail's metadata lock around the branch lock.
- */
+/** The merge rewrites the tail scene, so it holds the tail's metadata lock around its write. */
 async function commitMerge(
   branchId: string,
   resolution: MergeResolution,
@@ -239,10 +241,7 @@ function rejected(
   return { status: 'rejected', reason, code }
 }
 
-/**
- * world.md → Collision review and entity merge: one resolution = one `action_id`, built under the
- * branch lock.
- */
+/** world.md → Collision review and entity merge: one resolution = one `action_id`. */
 export async function resolveCollision(
   branchId: string,
   resolution: CollisionResolution,

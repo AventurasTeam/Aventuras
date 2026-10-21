@@ -141,7 +141,9 @@ function run(id: string): RunState {
   return {
     runId: id,
     kind: 'per-turn',
-    gateBehavior: 'no-gate',
+    gateBehavior: 'hard-gate',
+    interruptible: false,
+    beforeTurn: false,
     actionId: `act_${id}`,
     storyId: 's1',
     branchId: 'br_1',

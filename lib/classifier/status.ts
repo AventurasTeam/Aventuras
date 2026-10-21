@@ -1,8 +1,7 @@
 import type { ClassifierStatus } from '@/lib/db'
 
-// classifier.md -> Auto-retry policy. One attempt plus three backed-off retries,
-// then failed-persistent.
-export const BACKOFF_MS = [30_000, 120_000, 300_000] as const
+// classifier.md -> Auto-retry policy: one attempt, three retries, each at a later turn's commit.
+export const CLASSIFIER_MAX_RETRIES = 3
 
 export function idleStatus(): ClassifierStatus {
   return {
@@ -41,29 +40,16 @@ export function nextStatusOnSuccess(
   }
 }
 
-/**
- * The wait before the next attempt, or null when the backoff is exhausted.
- * `retryCount` counts failures so far, so attempt N waits `BACKOFF_MS[N - 1]`.
- * Sole owner of that mapping — the scheduler re-derives the delay from here.
- */
-export function retryDelayForStatus(status: ClassifierStatus): number | null {
-  if (status.state !== 'retrying') return null
-  return BACKOFF_MS[status.retryCount - 1] ?? null
-}
-
 export function nextStatusOnFailure(
   status: ClassifierStatus,
   failure: { error: string; at: number },
-): { status: ClassifierStatus; retryDelayMs: number | null } {
-  const attempt = status.retryCount
-  const exhausted = attempt >= BACKOFF_MS.length
-  const next: ClassifierStatus = {
+): ClassifierStatus {
+  return {
     ...status,
-    state: exhausted ? 'failed-persistent' : 'retrying',
+    state: status.retryCount >= CLASSIFIER_MAX_RETRIES ? 'failed-persistent' : 'retrying',
     lastError: failure.error,
-    retryCount: Math.min(attempt + 1, BACKOFF_MS.length),
+    retryCount: Math.min(status.retryCount + 1, CLASSIFIER_MAX_RETRIES),
   }
-  return { status: next, retryDelayMs: retryDelayForStatus(next) }
 }
 
 /**
@@ -76,9 +62,9 @@ export function worstCaseCadenceEntries(cadence: number): number {
 }
 
 /**
- * Entry-counted cadence (canon ships no token trigger in v1). Suspended in
- * failed-persistent so a broken provider is not spammed on every tick — the
- * manual run is the only way out.
+ * Entry-counted cadence (canon ships no token trigger in v1). Suspended in failed-persistent so a
+ * broken provider is not called on every turn: Run now is the only way out. A `running` status
+ * seen at a turn's commit is a pass a crash left behind, which boot quarantines.
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus

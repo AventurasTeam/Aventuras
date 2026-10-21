@@ -194,13 +194,8 @@ const bumpRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   // and a read each would double the round trips on the device least able to
   // absorb them.
   //
-  // The cost is that a row deleted between the pass and this apply is no longer
-  // detectable here — the periodic classifier can reverse-replay its awareness
-  // rows away mid-turn, since it and a turn do not block each other. That now
-  // writes a delta whose UPDATE matches nothing and whose undo no-ops, rather
-  // than the 'noop' rejection this returned while it still read the row. The
-  // turn must survive it either way: failing would reverse the user's whole
-  // turn over a counter that feeds chapter-close ranking.
+  // Other writers wait on the turn's gate, so these rows can't vanish before apply; if one did, the
+  // UPDATE and its undo no-op — failing would reverse the whole turn over a chapter-close counter.
   const next = priorCount + 1
   return {
     status: 'ok',

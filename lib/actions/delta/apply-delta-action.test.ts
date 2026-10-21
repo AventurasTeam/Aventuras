@@ -387,7 +387,7 @@ describe('applyDeltaActionGroup', () => {
   })
 })
 
-describe('the branch write lock (generation-pipeline.md → No-gate write phase)', () => {
+describe('the branch write lock (generation-pipeline.md → Branch write lock)', () => {
   let ctx: DbCtx
 
   beforeEach(async () => {

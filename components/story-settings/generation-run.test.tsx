@@ -24,6 +24,8 @@ function run(
     runId: `run-${kind}`,
     kind,
     gateBehavior,
+    interruptible: false,
+    beforeTurn: false,
     actionId: `action-${kind}`,
     storyId,
     branchId,
@@ -40,6 +42,7 @@ function tx(...runs: RunState[]): TxState {
     runs: new Map(runs.map((item) => [item.runId, item])),
     reversalInProgress: false,
     pendingTurns: new Set(),
+    deferred: new Map(),
   }
 }
 

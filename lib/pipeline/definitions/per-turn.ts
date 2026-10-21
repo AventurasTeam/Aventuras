@@ -2,6 +2,7 @@ import { APICallError } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 
 import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { redactUrl } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
@@ -21,6 +22,7 @@ import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { classifierEmbedder } from './description-embedder'
 import { buildGenerationContext } from './generation-context'
+import { nextMemoryRun } from './memory-chain'
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 import {
   PIGGYBACK_FALLBACK_PHASE_NAME,
@@ -401,7 +403,8 @@ export function ensurePerTurnPipelineRegistered(): void {
       phases,
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      concurrencyPolicy: { blockedBy: ['per-turn', 'chapter-close'] },
+      concurrencyPolicy: { blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
+      chainsTo: nextMemoryRun,
     })
   }
 }

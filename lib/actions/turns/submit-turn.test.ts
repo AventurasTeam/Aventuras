@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, storyEntries, type StoryEntry } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { startStorySwap } from '@/lib/embedder-swap'
@@ -64,7 +65,11 @@ describe('submitTurn', () => {
     expect(pipeline.phases).toHaveLength(4)
     expect(pipeline.affordance).toBe('pill-and-banner')
     expect(pipeline.gateBehavior).toBe('hard-gate')
-    expect(pipeline.concurrencyPolicy.blockedBy).toEqual([PER_TURN_KIND, 'chapter-close'])
+    expect(pipeline.concurrencyPolicy.blockedBy).toEqual([
+      PER_TURN_KIND,
+      PERIODIC_CLASSIFIER_KIND,
+      'chapter-close',
+    ])
   })
 
   // A swap owns the vec tables: the turn's sync stage would embed under the
@@ -435,7 +440,7 @@ describe('submitTurn', () => {
     expectRan(await first)
   })
 
-  // generation-pipeline.md → No-gate write phase: no window where a periodic pass misses the turn.
+  // generation-pipeline.md → Gate derivation as a selector: no gap for a reversal to refuse it.
   describe('pending turn mark', () => {
     it('marks the turn from before its user_action write until its run registers', async () => {
       const { ctx, release, first } = await holdAdmissionOnB1()

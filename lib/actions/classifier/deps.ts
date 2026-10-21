@@ -1,42 +1,6 @@
-import { and, eq, gt, ne, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 
-import { idleStatus } from '@/lib/classifier'
-import { branches, deltas, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
-
-/**
- * Classifiable turns past the watermark — the cadence's input. Counts rows rather
- * than differencing positions: `system` entries occupy positions but are filtered
- * out of the window, so a position delta fires the cadence early on a branch that
- * carries technical rows.
- */
-export async function unprocessedEntryCount(
-  branchId: string,
-  processedThrough: number | null,
-  ctx: DbCtx,
-): Promise<number> {
-  const [row] = await ctx.db
-    .select({ n: sql<number>`COUNT(*)` })
-    .from(storyEntries)
-    .where(
-      and(
-        eq(storyEntries.branchId, branchId),
-        gt(storyEntries.position, processedThrough ?? 0),
-        ne(storyEntries.kind, 'system'),
-      ),
-    )
-  return row?.n ?? 0
-}
-
-export async function readClassifierStatus(
-  branchId: string,
-  ctx: DbCtx,
-): Promise<ClassifierStatus> {
-  const [row] = await ctx.db
-    .select({ classifierStatus: branches.classifierStatus })
-    .from(branches)
-    .where(eq(branches.id, branchId))
-  return row?.classifierStatus ?? idleStatus()
-}
+import { branches, deltas, type DbCtx } from '@/lib/db'
 
 /**
  * Boot-time orphan reconciliation: a branch left `state: 'running'` was owned by a

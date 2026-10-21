@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   characterRelationships,
@@ -16,6 +17,13 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
+import {
+  __resetBus,
+  __resetRegistry as resetPipelineRegistry,
+  startPipeline,
+  SUGGESTION_REFRESH_KIND,
+  type PhaseContext,
+} from '@/lib/pipeline'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { isContentEditDelta } from './classifier-facts'
@@ -28,10 +36,18 @@ import {
   reverseReplayDeltas,
 } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
-import type { PipelineAction } from '../types'
+import {
+  recordDeferrals,
+  registerStandInPass,
+  registerStoreOnlyRun,
+  runningPass,
+} from '../turns/__tests__/stand-in-pass'
+import type { DbCtx, PipelineAction } from '../types'
 
 afterEach(() => {
   vi.restoreAllMocks()
+  __resetBus()
+  resetPipelineRegistry()
   entriesStore.__reset()
   generationStore.__reset()
   undoRedoStore.clear()
@@ -1048,5 +1064,171 @@ describe('redo restores the order the writes first logged in', () => {
       expect.objectContaining({ id: 'rel_1', kind: null, inverseKind: 'mentor' }),
     ])
     expect(await db.select().from(deltas).where(eq(deltas.id, 'd_view'))).toHaveLength(1)
+  })
+})
+
+// principles.md → Edit restrictions during in-flight generation: only CTRL-Z of the turn passes.
+describe('undo and redo during a pass', () => {
+  async function seedWithPass(options: { onAbort?: (phase: PhaseContext) => Promise<void> } = {}) {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    const pass = registerStandInPass({ anchorEntryId: 'e_opening', onAbort: options.onAbort })
+    return { db, ctx, pass, deferrals: recordDeferrals() }
+  }
+
+  const startPass = (ctx: DbCtx) =>
+    startPipeline(PERIODIC_CLASSIFIER_KIND, { storyId: 's1', branchId: 'b1', ...ctx })
+
+  const GATED = { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+
+  it('undoes the turn through a pass, interrupting and deferring it', async () => {
+    const { db, ctx, pass, deferrals } = await seedWithPass()
+    const start = startPass(ctx)
+    const held = await pass.nextHeld()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    // The pass's happening anchors to the opening, which the undo keeps: the abort reversed it.
+    expect(await db.select().from(happenings)).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(deferrals).toHaveLength(1)
+    expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+
+  it('refuses a CTRL-Z whose target is not the turn, leaving the pass running', async () => {
+    const { ctx, pass } = await seedWithPass()
+    expect(await updateStoryEntryContent('b1', 'e_turn', 'edited', ctx)).toEqual({ status: 'ok' })
+    const start = startPass(ctx)
+    const held = await pass.nextHeld()
+
+    expect(await undoLastAction('b1', ctx)).toEqual(GATED)
+
+    expect(entriesStore.getById('e_turn')?.content).toBe('edited')
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('refuses redo while a pass runs, leaving the pass running', async () => {
+    const { ctx, pass } = await seedWithPass()
+    const start = startPass(ctx)
+    const held = await pass.nextHeld()
+
+    // `gated`, not `nothing-to-apply`: the gate answers before the empty stack would.
+    expect(await redoLastAction('b1', ctx)).toEqual(GATED)
+
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  it('refuses CTRL-Z of the turn while a suggestion refresh runs beside the pass', async () => {
+    const { ctx, pass } = await seedWithPass()
+    const start = startPass(ctx)
+    const held = await pass.nextHeld()
+    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+
+    expect(await undoLastAction('b1', ctx)).toEqual(GATED)
+
+    expect(entriesStore.getById('e_turn')).toBeDefined()
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
+  // Both calls read their target before either enters the bracket; the re-check refuses the second.
+  it('refuses the second of two CTRL-Z presses that race through the pass', async () => {
+    const { ctx, pass } = await seedWithPass()
+    const start = startPass(ctx)
+    await pass.nextHeld()
+
+    const results = await Promise.allSettled([undoLastAction('b1', ctx), undoLastAction('b1', ctx)])
+
+    expect(results).toEqual([
+      { status: 'fulfilled', value: { status: 'ok' } },
+      { status: 'fulfilled', value: GATED },
+    ])
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+  })
+
+  it('proceeds normally when the pass ends while the target is read', async () => {
+    const { ctx } = await seedWithPass()
+    expect(await updateStoryEntryContent('b1', 'e_turn', 'edited', ctx)).toEqual({ status: 'ok' })
+    generationStore.startRun({
+      runId: 'run_ending',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      gateBehavior: 'hard-gate',
+      interruptible: true,
+      beforeTurn: false,
+      actionId: 'act_ending',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: '',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+
+    // The edit group is not the turn, so only a gate that dropped during the read admits it.
+    const done = undoLastAction('b1', ctx)
+    generationStore.abortRun('run_ending')
+
+    expect(await done).toEqual({ status: 'ok' })
+    expect(entriesStore.getById('e_turn')?.content).toBe('a reply')
+  })
+
+  // The target is chosen before the bracket; a write landing during the interrupt can move it.
+  it('refuses inside the bracket when the target stopped being the turn during the interrupt', async () => {
+    const { db, ctx, pass } = await seedWithPass({
+      onAbort: async (phase) => {
+        const [head] = await phase.db
+          .select({ lp: deltas.logPosition })
+          .from(deltas)
+          .where(eq(deltas.branchId, 'b1'))
+          .orderBy(desc(deltas.logPosition))
+          .limit(1)
+        await phase.db.insert(happenings).values({
+          id: 'hap_user',
+          branchId: 'b1',
+          title: 'Named by hand',
+          createdAt: 3,
+          updatedAt: 3,
+        })
+        await phase.db.insert(deltas).values({
+          id: 'd_user',
+          branchId: 'b1',
+          actionId: 'act_user',
+          op: 'create',
+          targetTable: 'happenings',
+          targetId: 'hap_user',
+          entryId: null,
+          source: 'user_edit',
+          undoPayload: null,
+          logPosition: (head?.lp ?? 0) + 1,
+          encodingVersion: 1,
+          createdAt: 3,
+        })
+      },
+    })
+    const start = startPass(ctx)
+    await pass.nextHeld()
+
+    expect(await undoLastAction('b1', ctx)).toEqual(GATED)
+
+    expect(entriesStore.getById('e_turn')).toBeDefined()
+    expect((await db.select().from(deltas)).map((d) => d.id).sort()).toEqual(['d_turn', 'd_user'])
+    // The interrupt itself went ahead before the re-selection refused.
+    expect(await start.origin).toMatchObject({ outcome: 'aborted' })
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 })

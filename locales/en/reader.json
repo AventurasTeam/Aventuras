@@ -44,6 +44,7 @@
   },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
+  "rollbackCountsChanged": "The counts changed while this was open. Check them before confirming.",
   "regenerateFailed": "Couldn't regenerate the reply. Please try again.",
   "regenerateUnavailable": "This reply can't be regenerated.",
   "regenerateCancelledDraftKept": "Regeneration cancelled. Your draft was kept, so the discarded action wasn't restored.",

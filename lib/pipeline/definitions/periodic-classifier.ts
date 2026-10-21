@@ -8,7 +8,6 @@ import {
   classifierReplySchema,
   clampEmbeddedCharacter,
   IDLE_STATUS_JSON,
-  idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
@@ -36,13 +35,15 @@ import {
   currentStoryStore,
   entitiesStore,
   happeningsStore,
+  type OpenStory,
 } from '@/lib/stores'
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
+import { readClassifierStatus } from './memory-chain'
+import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import { enterWritePhase } from '../runtime/write-phase'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from '../types'
 
 export { PERIODIC_CLASSIFIER_KIND }
@@ -71,23 +72,18 @@ async function readWindowEntries(
     .limit(maxEntries + 1)) as StoryEntry[]
 }
 
-// The classifier is the one agent a user cannot cancel — the pill has no
-// affordance for a background pass — and it persists `state: 'running'`, which
-// gates both its own cadence and `runNow`. A provider that accepts the request
-// and never answers therefore wedges it until the next boot. This bounds the
-// whole structured call (retries included) so the expiry becomes an ordinary
-// failure the existing backoff can act on. A profile `timeout` shorter than
-// this still wins — the SDK aborts first; a longer one is deliberately capped.
+// Bounds the structured call (retries included): a hung provider would hold the pass's user-edit
+// gate until the user cancels. Expiry is an ordinary failure the next turn retries; a shorter
+// profile `timeout` still wins (the SDK aborts first), a longer one is capped.
 const CALL_TIMEOUT_MS = 300_000
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
 
-async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
-  const [row] = await ctx.db
-    .select({ classifierStatus: branches.classifierStatus })
-    .from(branches)
-    .where(eq(branches.id, ctx.branchId))
-  return row?.classifierStatus ?? idleStatus()
+// The status the run found, for onInterrupt to restore once the orchestrator's reversal commits.
+const PRE_RUN_STATUS = 'periodicClassifier.preRunStatus'
+
+function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
+  return readClassifierStatus(ctx.branchId, ctx)
 }
 
 // Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped
@@ -119,10 +115,12 @@ function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> 
   return patchStatus(ctx, watermarkKey(coversThrough))
 }
 
-// The entity stores are global, hydrated for one branch: a switch away mid-pass leaves them on
-// another, and filtering them by ours would reconcile and plan against an empty roster.
-function storesHoldBranch(ctx: Pick<PhaseContext, 'storyId' | 'branchId'>): boolean {
-  const open = currentStoryStore.getCurrentStory()
+// The entity stores are global, hydrated for one branch: a pass whose branch they don't hold would
+// prompt, reconcile and plan against another branch's roster.
+function storesHoldBranch(
+  open: OpenStory | null,
+  ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,
+): open is OpenStory {
   return (
     open?.branchId === ctx.branchId &&
     open.storyId === ctx.storyId &&
@@ -135,7 +133,7 @@ function branchEntities(branchId: string): Entity[] {
 }
 
 async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
-  const { status } = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
+  const status = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
   await writeStatus(ctx, status)
 }
 
@@ -143,13 +141,14 @@ export async function* periodicClassifierPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const open = currentStoryStore.getCurrentStory()
-  if (!open || open.branchId !== ctx.branchId || open.storyId !== ctx.storyId)
+  if (!storesHoldBranch(open, ctx))
     return {
       status: 'failed',
-      error: { kind: 'orchestrator', detail: 'periodic-classifier: no open story for branch' },
+      error: { kind: 'orchestrator', detail: 'periodic-classifier: branch not loaded' },
     }
   const cfg = appSettingsStore.getAppSettings()
   const status = await readStatus(ctx)
+  ctx.intermediates[PRE_RUN_STATUS] = status
   const entries = await readWindowEntries(
     ctx,
     status.processedThrough,
@@ -169,6 +168,7 @@ export async function* periodicClassifierPhase(
     return { status: 'completed' }
   }
 
+  // Prompt, reconcile and plan share this roster: under the gate nothing changes it mid-call.
   const entities = branchEntities(ctx.branchId)
   const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
     (r) => r.branchId === ctx.branchId,
@@ -190,7 +190,7 @@ export async function* periodicClassifierPhase(
     }),
   )
 
-  // Makes shouldCadenceFire's running guard live for the duration of the call.
+  // Read by the status block; left behind by a crash, it holds the cadence until boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
 
   const bounded = boundedSignal(ctx.abortSignal, CALL_TIMEOUT_MS)
@@ -211,16 +211,11 @@ export async function* periodicClassifierPhase(
   } finally {
     bounded.dispose()
   }
-  // Restore the pre-run status: an abort burns no retry state, and leaving
-  // 'running' behind would permanently block shouldCadenceFire's guard.
-  if (result.status === 'aborted' && !bounded.expired()) {
-    await writeStatus(ctx, status)
-    return { status: 'aborted' }
-  }
+  // An interrupt uses no retry and leaves the watermark; onInterrupt restores the pre-run status.
+  if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
-    // A expiry aborts the same way a cancel does, but it is a provider fault:
-    // routing it through the abort arm would burn no retry and leave the pass
-    // to rediscover the same dead provider on the next tick, forever.
+    // An expiry aborts the same way a cancel does, but it is a provider fault: through the abort
+    // arm it would burn no retry, and every later turn would rediscover the same dead provider.
     const detail =
       result.status === 'aborted'
         ? `timeout after ${CALL_TIMEOUT_MS}ms`
@@ -228,7 +223,7 @@ export async function* periodicClassifierPhase(
           ? result.kind
           : result.detail
     const timedOut = result.status === 'aborted'
-    const { status: next } = nextStatusOnFailure(status, { error: detail, at: Date.now() })
+    const next = nextStatusOnFailure(status, { error: detail, at: Date.now() })
     await writeStatus(ctx, next)
     return {
       status: 'failed',
@@ -251,18 +246,6 @@ export async function* periodicClassifierPhase(
     ]),
   )
 
-  // Nothing is committed before the hold, so a discard only restores the pre-run status, as
-  // the abort arm above does: no retry is burned and the watermark stays.
-  const discard = async (reason: string | null): Promise<PhaseResult> => {
-    if (reason !== null) ctx.log.warn('classifier.pass_discarded', { reason })
-    await writeStatus(ctx, status)
-    return { status: 'aborted' }
-  }
-
-  if (!storesHoldBranch(ctx)) return discard('branch-unloaded')
-  // Re-read after the model call: World edits run under a no-gate pass, so the prompt's
-  // snapshot misses a character the user created mid-call and still holds one deleted.
-  const current = branchEntities(ctx.branchId)
   const embedDescriptions = classifierEmbedder()
   const reconcile = async (
     kind: ReconciledKind,
@@ -287,33 +270,25 @@ export async function* periodicClassifierPhase(
           kind === 'character'
             ? {
                 kind,
-                entities: current,
+                entities,
                 embedDescriptions,
                 scene: window.sceneOf(candidate.sourceTurn),
               }
-            : { kind, entities: current, embedDescriptions },
+            : { kind, entities, embedDescriptions },
         ),
       )
     }
     return decided
   }
   const decisions = await reconcile('character')
-  if (decisions === null) return discard(null)
+  if (decisions === null) return { status: 'aborted' }
   const factionDecisions = await reconcile('faction', new Set(decisions.keys()))
-  if (factionDecisions === null) return discard(null)
+  if (factionDecisions === null) return { status: 'aborted' }
 
-  // generation-pipeline.md → No-gate write phase.
-  if (!(await enterWritePhase(ctx))) return discard(null)
-
-  // Abort-free under the write lock: a reversal's cancel lets this burst land for the positional
-  // sweep to reverse. Never return aborted holding deltas; the discards below hold none.
-  if (!storesHoldBranch(ctx)) return discard('branch-unloaded')
-  // classifier.md → Mentioned places: planned inside the hold, against the rows as they stand,
-  // so a place a turn created during the model call is reused rather than made again.
   const plan = buildClassifierActions(substituted, {
     branchId: ctx.branchId,
     window,
-    entities: branchEntities(ctx.branchId),
+    entities,
     decisions,
     factionDecisions,
     now: () => Date.now(),
@@ -329,13 +304,17 @@ export async function* periodicClassifierPhase(
     ctx.log.warn('classifier.create_dropped', { kind: 'location', ...drop })
   for (const drop of plan.parentDrops) ctx.log.warn('classifier.create_parent_dropped', drop)
 
+  // classifier.md → Pipeline framing: a pass cancelled during its writes reverses its own group.
   for (const write of plan.planned) {
+    if (ctx.abortSignal.aborted) return { status: 'aborted' }
     yield { type: 'delta_emitted', action: write.action, entryId: write.entryId }
   }
+  // The last point a cancel discards; past it the pass commits, watermark included.
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
-  // One statement: a success recorded without its watermark would reset the retry count on a
-  // pass that then fails and reverses, and retry it at the first backoff forever.
+  // One statement: a success recorded without its watermark would reset the retry count on a pass
+  // that then fails and reverses, and retry it from its first attempt forever.
   await patchStatus(ctx, sql`${lifecycleKeys(next)}, ${watermarkKey(window.coversThrough)}`)
   return { status: 'completed' }
 }
@@ -353,7 +332,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
           resolves: PERIODIC_CLASSIFIER_RESOLVES,
         },
       ],
-      affordance: 'pill-only',
+      affordance: 'pill-and-banner',
       onPreflightFailure: async (ctx, error) => {
         const detail = error.kind === 'config-resolver' ? error.failure : error.detail
         await recordFailure(ctx, `classifier: ${detail}`)
@@ -373,8 +352,27 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
           await recordFailure(ctx, detail)
         }
       },
-      gateBehavior: 'no-gate',
-      concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
+      // Not in the phase: a reversal that can't commit leaves `running` for boot recovery.
+      onInterrupt: async (run, ctx) => {
+        const status = run.intermediates[PRE_RUN_STATUS] as ClassifierStatus | undefined
+        if (!status) return
+        const target = { db: ctx.db, branchId: run.branchId }
+        try {
+          await writeStatus(target, status)
+        } catch (e) {
+          // Left running, the cadence stays suspended until the next boot.
+          logger.warn('classifier.interrupt_restore_retried', {
+            branchId: run.branchId,
+            error: e instanceof Error ? e.message : String(e),
+          })
+          await writeStatus(target, status)
+        }
+      },
+      gateBehavior: 'hard-gate',
+      interruptible: true,
+      concurrencyPolicy: {
+        blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
+      },
     })
   }
 }
