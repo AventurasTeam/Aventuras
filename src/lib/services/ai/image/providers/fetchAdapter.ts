@@ -1,9 +1,9 @@
 /**
  * Image Fetch Adapter
  *
- * Shared fetch wrapper for image providers using Tauri's HTTP plugin.
- * Handles timeout, debug logging, and both JSON and FormData bodies.
- * Longer default timeout (5 min) since image generation is slow.
+ * GET helpers for image providers using Tauri's HTTP plugin: model discovery and reference
+ * downloads. Generation POSTs go through `createSdkFetch`.
+ * Longer default timeout (5 min) since image fetches can be slow.
  */
 
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
@@ -12,140 +12,6 @@ import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
 import { httpFetch } from '#lib/utils/http.ts'
-
-async function logImageResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): Promise<void> {
-  try {
-    const text = await response.text()
-    let responsePayload: unknown
-    try {
-      responsePayload = JSON.parse(text)
-    } catch {
-      responsePayload = { size: text.length }
-    }
-    debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
-  } catch {
-    // Debug logging is best-effort.
-  }
-}
-
-/**
- * POST-based image fetch (JSON or FormData body).
- */
-export async function imageFetch(options: {
-  url: string
-  method?: string
-  headers?: Record<string, string>
-  body?: string | FormData
-  signal?: AbortSignal
-  timeoutMs?: number
-  serviceId?: string
-}): Promise<Response> {
-  const {
-    url,
-    method = 'POST',
-    headers = {},
-    body,
-    signal,
-    timeoutMs = IMAGE_TIMEOUT_DEFAULT,
-    serviceId = 'image-gen',
-  } = options
-
-  const guard = createRequestGuard({
-    timeoutMs,
-    what: 'Image generation',
-    callerSignal: signal,
-  })
-  const startTime = Date.now()
-
-  // Safe debug logging - don't parse FormData as JSON
-  let debugBody: unknown = {}
-  if (typeof body === 'string') {
-    try {
-      debugBody = JSON.parse(body)
-    } catch {
-      debugBody = { raw: body.slice(0, 200) }
-    }
-  } else if (body instanceof FormData) {
-    debugBody = { formData: [...body.keys()] }
-  }
-
-  const debugId = debug.addDebugRequest(serviceId, { url, method, body: debugBody })
-
-  try {
-    let response: Response
-
-    if (body instanceof FormData) {
-      // For FormData, use Request object so Tauri handles multipart encoding
-      const request = new Request(url, {
-        method,
-        headers,
-        body,
-        signal: guard.signal,
-      })
-      // Convert to arrayBuffer for Tauri compatibility
-      const arrayBuf = await request.arrayBuffer()
-      const contentType = request.headers.get('content-type') ?? ''
-      response = await httpFetch(url, {
-        method,
-        headers: { ...headers, 'content-type': contentType },
-        body: arrayBuf,
-        signal: guard.signal,
-      })
-    } else {
-      response = await httpFetch(url, {
-        method,
-        headers,
-        body: body as string | undefined,
-        signal: guard.signal,
-      })
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      let errorPayload: unknown
-      try {
-        errorPayload = JSON.parse(errorText)
-      } catch {
-        errorPayload = errorText
-      }
-      debug.addDebugResponse(
-        debugId,
-        serviceId,
-        { status: response.status, error: errorPayload, statusText: response.statusText },
-        startTime,
-        errorText,
-      )
-      const err = errorPayload as any
-      const humanMessage =
-        typeof errorPayload === 'string'
-          ? errorPayload
-          : (err?.error?.message ?? err?.message ?? err?.error)
-      throw new Error(
-        `Image API error ${response.status}: ${humanMessage ?? JSON.stringify(errorPayload)}`,
-      )
-    }
-
-    response = guard.wrapBody(response)
-    // Only buffer the body for the debug panel when debug is active. Otherwise hand the
-    // response straight to the caller (which chooses .json()/.blob()): this avoids forcing
-    // text() on every response — which would also corrupt binary image bodies — and skips a
-    // redundant full-body copy + double parse.
-    if (debug.isActive) {
-      void logImageResponse(response.clone(), debugId, serviceId, startTime)
-    }
-
-    return response
-  } catch (error) {
-    throw guard.mapError(error)
-  } finally {
-    guard.dispose()
-  }
-}
 
 /** Redirects followed before giving up; each hop is checked against `isPublicHttpUrl`. */
 const MAX_REDIRECTS = 3

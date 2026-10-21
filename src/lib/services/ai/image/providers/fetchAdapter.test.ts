@@ -10,7 +10,7 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { fetchPublicImageBase64, imageFetch, imageGetFetch } from './fetchAdapter'
+import { fetchPublicImageBase64, imageGetFetch } from './fetchAdapter'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 
@@ -115,20 +115,11 @@ function pendingUntilAborted(_url: unknown, init?: { signal?: AbortSignal | null
   })
 }
 
-describe.each([
-  [
-    'imageFetch',
-    'Image generation',
-    (signal: AbortSignal | undefined, timeoutMs: number) =>
-      imageFetch({ url: 'https://img.test/gen', body: '{}', signal, timeoutMs }),
-  ],
-  [
-    'imageGetFetch',
-    'Image fetch',
-    (signal: AbortSignal | undefined, timeoutMs: number) =>
-      imageGetFetch('https://img.test/a.png', undefined, { signal, timeoutMs }),
-  ],
-])('%s abort handling', (_name, what, run) => {
+describe('imageGetFetch abort handling', () => {
+  const what = 'Image fetch'
+  const run = (signal: AbortSignal | undefined, timeoutMs: number) =>
+    imageGetFetch('https://img.test/a.png', undefined, { signal, timeoutMs })
+
   beforeEach(() => {
     mockFetch.mockReset()
     mockFetch.mockImplementation(pendingUntilAborted)
@@ -162,18 +153,11 @@ describe.each([
   })
 })
 
-describe.each([
-  [
-    'imageFetch',
-    'Image generation',
-    (timeoutMs: number) => imageFetch({ url: 'https://img.test/gen', body: '{}', timeoutMs }),
-  ],
-  [
-    'imageGetFetch',
-    'Image fetch',
-    (timeoutMs: number) => imageGetFetch('https://img.test/a.png', undefined, { timeoutMs }),
-  ],
-])('%s body timeout', (_name, what, run) => {
+describe('imageGetFetch body timeout', () => {
+  const what = 'Image fetch'
+  const run = (timeoutMs: number) =>
+    imageGetFetch('https://img.test/a.png', undefined, { timeoutMs })
+
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -199,43 +183,16 @@ describe.each([
 })
 
 describe('request headers', () => {
-  const expectNoOriginWithAuth = () => {
-    const headers = new Headers(mockFetch.mock.calls[0][1]?.headers)
-    expect(headers.get('origin')).toBe('')
-    expect(headers.get('authorization')).toBe('Bearer key')
-  }
-
   beforeEach(() => {
     mockFetch.mockReset()
     mockFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
   })
 
-  it('imageFetch sends an empty Origin with a JSON body', async () => {
-    await imageFetch({
-      url: 'https://img.test/gen',
-      body: '{}',
-      headers: { Authorization: 'Bearer key' },
-    })
-
-    expectNoOriginWithAuth()
-  })
-
-  it('imageFetch sends an empty Origin with a FormData body', async () => {
-    const form = new FormData()
-    form.append('prompt', 'a cat')
-
-    await imageFetch({
-      url: 'https://img.test/gen',
-      body: form,
-      headers: { Authorization: 'Bearer key' },
-    })
-
-    expectNoOriginWithAuth()
-  })
-
   it('imageGetFetch sends an empty Origin', async () => {
     await imageGetFetch('https://img.test/a.png', { Authorization: 'Bearer key' })
 
-    expectNoOriginWithAuth()
+    const headers = new Headers(mockFetch.mock.calls[0][1]?.headers)
+    expect(headers.get('origin')).toBe('')
+    expect(headers.get('authorization')).toBe('Bearer key')
   })
 })
