@@ -247,7 +247,19 @@ companions.
   while dirty and exposes a removal-aware `guardRemoval(proceed)`, and
   each route's unsaved guard calls
   `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
-  through `useRowSessionGuard`).
+  through `useRowSessionGuard`). The two dialogs are the lesser cost.
+  World's Save no longer merges concurrent writes into a dirty pane's
+  keywords and relationships, since a pane is never dirty across a pass
+  ([`world.md → Relationships — character-to-character`](../ui/screens/world/world.md#relationships--character-to-character)),
+  and Plot's Save keeps a dirty links array whole. A close started from
+  the Actions menu over a dirty World or Plot pane would run under the
+  draft, and the pane's later Save would write its dirty fields, whole
+  arrays included, over the close's writes to them. That is the
+  revisit signal of
+  [`parked.md → A dirty links array on Save overwrites concurrent link writes`](../parked.md#a-dirty-links-array-on-save-overwrites-concurrent-link-writes),
+  whose first candidate is this close: this slice must keep a close
+  from starting over a dirty pane, or bring back the three-way merge
+  that entry describes, for both surfaces.
   Slice-authoring note: the memory banner labels only the pass
   (`use-memory-run-banner.ts`, and its test pins that a close shows
   nothing); canon shows it for a pass or a chapter-close transaction
