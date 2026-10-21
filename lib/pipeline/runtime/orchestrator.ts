@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 
 import type { MutationResult } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
-import { logger, makeLogger, turnCaptureSink } from '@/lib/diagnostics'
+import { logger, makeLogger, turnCaptureSink, type LogKind } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 
@@ -109,17 +109,34 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
   return run
 }
 
-async function insertMarker(run: RunState, ctx: RunCtx): Promise<void> {
-  await ctx.db.insert(pipelineRuns).values({
-    runId: run.runId,
-    kind: run.kind,
-    actionId: run.actionId,
-    storyId: ctx.storyId,
-    startedAt: Date.now(),
-  })
-}
-
-function announceStart(run: RunState): void {
+// A failed marker insert unwinds the reservation so a half-registered run can't gate edits or hold
+// the branch against a retry. run_complete reports the idle: a chained successor's predecessor
+// emitted its own while this run was still registered. The terminal frees a waiter that grabbed it.
+async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
+  try {
+    await ctx.db.insert(pipelineRuns).values({
+      runId: run.runId,
+      kind: run.kind,
+      actionId: run.actionId,
+      storyId: ctx.storyId,
+      startedAt: Date.now(),
+    })
+  } catch (e) {
+    generationStore.abortRun(run.runId, 'unwound')
+    pipelineEventBus.emit({
+      type: 'run_complete',
+      runId: run.runId,
+      kind: run.kind,
+      actionId: run.actionId,
+      outcome: 'failed',
+      error: {
+        kind: 'orchestrator',
+        detail: `marker insert failed: ${e instanceof Error ? e.message : String(e)}`,
+      },
+    })
+    run.resolveTerminal()
+    throw e
+  }
   turnCaptureSink.beginTurn({ actionId: run.actionId, kind: run.kind, branchId: run.branchId })
   pipelineEventBus.emit({
     type: 'run_start',
@@ -127,35 +144,6 @@ function announceStart(run: RunState): void {
     kind: run.kind,
     actionId: run.actionId,
   })
-}
-
-// A failed marker insert unwinds the reservation so a half-registered run can't gate edits or hold
-// the branch against a retry. run_complete reports the idle: a chained successor's predecessor
-// emitted its own while this run was still registered. The terminal frees a waiter that grabbed it.
-function unwindReservation(run: RunState, e: unknown): void {
-  generationStore.abortRun(run.runId, 'unwound')
-  pipelineEventBus.emit({
-    type: 'run_complete',
-    runId: run.runId,
-    kind: run.kind,
-    actionId: run.actionId,
-    outcome: 'failed',
-    error: {
-      kind: 'orchestrator',
-      detail: `marker insert failed: ${e instanceof Error ? e.message : String(e)}`,
-    },
-  })
-  run.resolveTerminal()
-}
-
-async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
-  try {
-    await insertMarker(run, ctx)
-  } catch (e) {
-    unwindReservation(run, e)
-    throw e
-  }
-  announceStart(run)
 }
 
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
@@ -347,19 +335,16 @@ async function commitRun(
   return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
 }
 
-async function runPhaseExceptionHook(
+async function runHook(
   run: RunState,
-  ctx: RunCtx,
-  error: PipelineError,
+  failureKind: LogKind,
+  hook: () => Promise<void>,
 ): Promise<void> {
-  if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
-  const onPhaseException = getPipeline(run.kind).onPhaseException
-  if (!onPhaseException) return
   try {
-    await onPhaseException(ctx, error)
+    await hook()
   } catch (hookError) {
     logger.error(
-      'pipeline.phase_exception_hook_failed',
+      failureKind,
       {
         runId: run.runId,
         error: hookError instanceof Error ? hookError.message : String(hookError),
@@ -369,26 +354,28 @@ async function runPhaseExceptionHook(
   }
 }
 
+async function runPhaseExceptionHook(
+  run: RunState,
+  ctx: RunCtx,
+  error: PipelineError,
+): Promise<void> {
+  if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
+  const onPhaseException = getPipeline(run.kind).onPhaseException
+  if (!onPhaseException) return
+  await runHook(run, 'pipeline.phase_exception_hook_failed', () => onPhaseException(ctx, error))
+}
+
 async function runInterruptHook(run: RunState, ctx: RunCtx): Promise<void> {
   const onInterrupt = getPipeline(run.kind).onInterrupt
   if (!onInterrupt) return
-  try {
-    await onInterrupt({
+  await runHook(run, 'pipeline.interrupt_hook_failed', () =>
+    onInterrupt({
       db: ctx.db,
       branchId: run.branchId,
       actionId: run.actionId,
       intermediates: run.intermediates,
-    })
-  } catch (hookError) {
-    logger.error(
-      'pipeline.interrupt_hook_failed',
-      {
-        runId: run.runId,
-        error: hookError instanceof Error ? hookError.message : String(hookError),
-      },
-      { actionId: run.actionId },
-    )
-  }
+    }),
+  )
 }
 
 type AbortCause =
@@ -542,17 +529,10 @@ async function driveRun(
     // Before abortRun: that releases the run, and releasing it drops the gate
     // that serializes this write against the phases' own status writes.
     const onPreflightFailure = getPipeline(run.kind).onPreflightFailure
-    if (onPreflightFailure) {
-      try {
-        await onPreflightFailure(ctx, preflightError)
-      } catch (e) {
-        logger.error(
-          'pipeline.preflight_hook_failed',
-          { runId: run.runId, error: e instanceof Error ? e.message : String(e) },
-          { actionId: run.actionId },
-        )
-      }
-    }
+    if (onPreflightFailure)
+      await runHook(run, 'pipeline.preflight_hook_failed', () =>
+        onPreflightFailure(ctx, preflightError),
+      )
     return { tx: await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError }) }
   }
   const outcome = await runPhases(run, ctx)
@@ -601,9 +581,8 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
   while (run) {
     const current = run
     try {
-      await insertMarker(current, ctx)
+      await beginRun(current, ctx)
     } catch (e) {
-      unwindReservation(current, e)
       logger.error(
         'pipeline.chain_start_failed',
         {
@@ -615,7 +594,6 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
       )
       return
     }
-    announceStart(current)
     try {
       run = (await driveRun(current, ctx)).successor
     } catch (e) {
