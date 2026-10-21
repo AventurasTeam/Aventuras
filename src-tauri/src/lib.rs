@@ -5,6 +5,7 @@ mod avt_import;
 mod backup;
 mod db;
 mod db_tx;
+mod image_profiles;
 mod migration_patch;
 mod sync;
 mod time_anchors;
@@ -265,6 +266,12 @@ pub fn run() {
             version: 40,
             description: "world_state_changes",
             sql: include_str!("../migrations/040_world_state_changes.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 41,
+            description: "image_profiles",
+            sql: include_str!("../migrations/041_image_profiles.sql"),
             kind: MigrationKind::Up,
         },
     ];
