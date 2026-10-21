@@ -1,5 +1,5 @@
-// NanoGPT's unified image API (POST {base}/images) as an AI SDK image model. NanoGPT answers
-// `data[].b64_json`, which @ai-sdk/openai-compatible would accept, but a `url`-only item it would reject.
+// NanoGPT's unified image API (POST {base}/images) as an AI SDK image model. It is a custom model
+// because the unified `/images` endpoint and its `input_references` are not the OpenAI image shape.
 
 import * as z from 'zod'
 import { APICallError, InvalidResponseDataError } from 'ai'
