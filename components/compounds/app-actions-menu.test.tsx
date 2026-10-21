@@ -61,6 +61,36 @@ describe('AppActionsMenu navigation', () => {
     expect(router.push).toHaveBeenCalledWith('/diagnostics')
   })
 
+  it('wraps only the jump that leaves the story in beforeLeaveStory, inside beforeNavigate', () => {
+    const order: string[] = []
+    const beforeNavigate = vi.fn((proceed: () => void) => {
+      order.push('dirty-guard')
+      proceed()
+    })
+    const held: (() => void)[] = []
+    const beforeLeaveStory = vi.fn((proceed: () => void) => {
+      order.push('story-leave')
+      held.push(proceed)
+    })
+    render(
+      <AppActionsMenu
+        story={STORY}
+        beforeNavigate={beforeNavigate}
+        beforeLeaveStory={beforeLeaveStory}
+      />,
+    )
+
+    entry('open-reader')?.onActivate()
+    expect(surfaceNavigate).toHaveBeenCalledWith('/reader-composer/br_1')
+    expect(beforeLeaveStory).not.toHaveBeenCalled()
+
+    captured.props?.onOpenDiagnosticsHub()
+    expect(order).toEqual(['dirty-guard', 'dirty-guard', 'story-leave'])
+    expect(router.push).not.toHaveBeenCalled()
+    held.forEach((proceed) => proceed())
+    expect(router.push).toHaveBeenCalledWith('/diagnostics')
+  })
+
   it('omits GO TO off-story', () => {
     render(<AppActionsMenu />)
     expect(captured.props).not.toBeNull()

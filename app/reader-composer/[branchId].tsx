@@ -55,8 +55,10 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
+import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useSwapState } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
+import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
 import {
@@ -287,6 +289,7 @@ export default function ReaderComposerRoute() {
   const hydrationSucceeded = hydrated != null
   // From the hydration rather than a read of its own, which could fail and leave Send inert.
   const storyId = hydrated?.storyId ?? null
+  const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
   const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities(
@@ -361,6 +364,7 @@ export default function ReaderComposerRoute() {
   const stripErrorFix = useConfigFixAction(
     stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
     storyId,
+    guardLeave,
   )
 
   // The failure belongs to the entry it was fired on; a turn, a rollback or a
@@ -881,6 +885,7 @@ export default function ReaderComposerRoute() {
       if (submission) void runSubmit(submission.content, submission.composerMode)
     },
     storyId,
+    guardLeave,
   )
 
   const handleDismissSystemEntry = useCallback(
@@ -1199,6 +1204,10 @@ export default function ReaderComposerRoute() {
     ignoreEditableTargets: true,
     enabled: isFocused,
   })
+  const leaveReader = useCallback(() => router.back(), [router])
+  // Android back goes through router.back(), so the story-leave guard sees it, as the other
+  // in-story routes do.
+  useMasterDetailBack(true, leaveReader)
   const contextualActions: ActionGroup = useMemo(() => {
     // Undo of the turn is a head reversal, live through a pass; the action refuses any other
     // target with `gated`. Redo never is one, so it keeps the whole gate.
@@ -1313,7 +1322,7 @@ export default function ReaderComposerRoute() {
           />
         ) : undefined
       }
-      onBack={() => router.back()}
+      onBack={leaveReader}
       onOpenStorySettings={() => {
         if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
       }}
@@ -1321,6 +1330,7 @@ export default function ReaderComposerRoute() {
         <AppActionsMenu
           contextual={contextualActions}
           story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
+          beforeLeaveStory={guardLeave}
           blocked={rollback != null || timeEdit != null}
         />
       }
@@ -1473,6 +1483,7 @@ export default function ReaderComposerRoute() {
           onClose={closeSceneEdit}
         />
       ) : null}
+      {storyLeaveDialog}
     </ScreenShell>
   )
 }

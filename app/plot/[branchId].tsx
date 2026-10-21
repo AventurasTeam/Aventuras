@@ -46,6 +46,7 @@ import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
+import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
 import {
   importHappening,
@@ -102,6 +103,7 @@ export default function PlotRoute() {
 
   const open = useColdOpenStory(branchId, 'plot')
   const storyId = open?.storyId ?? null
+  const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 
   // Raw maps from the selectors (stable between patches); arrays via useMemo.
@@ -447,6 +449,7 @@ export default function PlotRoute() {
           contextual={panesReady ? contextual : undefined}
           story={storyId != null ? { storyId, branchId, surface: 'plot' } : undefined}
           beforeNavigate={guard}
+          beforeLeaveStory={guardLeave}
         />
       }
       statusSlot={
@@ -540,6 +543,7 @@ export default function PlotRoute() {
           onValidated={happeningImport.onValidated}
         />
       )}
+      {storyLeaveDialog}
     </ScreenShell>
   )
 }
