@@ -87,8 +87,7 @@ function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
 }
 
 // Direct row writes: branches isn't delta-logged (classifier.md -> Persistence). Key-scoped
-// json_set (cadence.md -> Concurrency): no row lock covers the column, which the reversal clamp
-// also writes, so a write never rewrites keys it doesn't own.
+// json_set (cadence.md -> Concurrency): the reversal clamp writes the column too, under no lock.
 async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(

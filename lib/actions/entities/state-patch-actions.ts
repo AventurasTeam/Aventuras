@@ -343,10 +343,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   }
 }
 
-/**
- * active → retired only, checked on the row as the write lands, so a row the user moved off active
- * keeps its status.
- */
+/** active → retired only, checked as the write lands, so a user-moved row keeps its status. */
 export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'retireEntity')
     throw new Error(`handler/kind mismatch: expected 'retireEntity', got '${action.kind}'`)

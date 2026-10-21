@@ -421,10 +421,8 @@ describe('bumpAwarenessRetrieval', () => {
     expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(5)
   })
 
-  // Other writers wait on the turn's gate, so a bump target can't vanish
-  // before apply. The handler reads no row, so if one did it logs a delta whose
-  // UPDATE matches nothing; the turn must survive with the table untouched —
-  // failing here would reverse the user's whole turn over a counter.
+  // Under the turn's gate the target can't vanish; if it did, the row-blind handler
+  // logs a no-op UPDATE — failing would reverse the user's whole turn over a counter.
   it('survives a vanished bump target without touching the table', async () => {
     const { ctx } = await setup([awarenessRow('haw_1', 4)])
 

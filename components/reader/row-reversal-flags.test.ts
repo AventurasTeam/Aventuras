@@ -73,8 +73,7 @@ describe('rowReversalFlags', () => {
       })
   })
 
-  // An edit off the head turn can't interrupt a pass, but its row's ↻ and × can
-  // (principles.md → Edit restrictions during in-flight generation).
+  // principles.md → Edit restrictions during in-flight generation.
   it("keeps an older entry's edit on the whole gate while its reversals stay live", () => {
     expect(rowReversalFlags({ rowId: 'e2', headTurnIds, editGate: 'interruptible' })).toEqual({
       editDisabled: true,

@@ -19,9 +19,8 @@ const WORLD_TIME_BREAK_LABEL = new RegExp(
   ),
 )
 
-// The confirm's world-state line at any count. A count no story reaches resolves the `other`
-// plural, whose head and tail stay put around the number; `one` reads 1 alone, so it matches
-// literally. A non-numeric sentinel would resolve the bare key, the `one` copy.
+// A count no story reaches resolves the `other` plural, split at the number into head and tail;
+// `one` covers 1 alone, so matches literally. A non-numeric sentinel resolves the `one` copy.
 const COUNT_SENTINEL = 987_654_321
 const [WORLD_STATE_HEAD, WORLD_STATE_TAIL = ''] = t('reader:rollbackConfirm.worldState', {
   count: COUNT_SENTINEL,
@@ -132,8 +131,7 @@ export const reader = {
   // Its Cancel shares `common:cancel` with the composer's and the memory banner's.
   rollbackCancel: (page: Page): Locator =>
     rollbackDialog(page).getByRole('button', { name: t('cancel'), exact: true }),
-  // The confirm's world-state line at whatever count it reads (rollback-confirm.tsx); a regex
-  // is tested against raw text, which carries the line's leading newline.
+  // At any count (rollback-confirm.tsx); a regex sees raw text, including the leading newline.
   rollbackWorldStateLine: (page: Page): Locator =>
     rollbackDialog(page)
       .getByText(new RegExp(`${WORLD_STATE_OTHER}\\s*$`))

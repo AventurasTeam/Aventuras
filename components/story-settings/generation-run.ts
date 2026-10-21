@@ -65,11 +65,7 @@ export function generationGateReason(
   return t('generationGate.inFlight')
 }
 
-/**
- * The pill's run kind, whether it runs before the user's turn, whether and why edits are blocked,
- * and the pill's Cancel. `branchId` scopes the pill's run to that branch (World, Plot); omitted,
- * to the story.
- */
+/** `branchId` scopes the pill's run to that branch (World, Plot); omitted, to the story. */
 export function useStoryGenerationGate(
   storyId: string | undefined,
   branchId?: string,
@@ -78,7 +74,7 @@ export function useStoryGenerationGate(
   editBlocked: boolean
   gateReason: string | undefined
   beforeTurn: boolean
-  /** Ends the run the pill names; an interruptible one (pass, close) is deferred to the next Send. */
+  /** Ends the pill's run; an interruptible one (pass, close) is deferred to the next Send. */
   cancelPillRun: () => void
 } {
   const activeRunKind = generationStore.useGeneration(

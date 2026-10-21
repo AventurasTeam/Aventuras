@@ -52,9 +52,8 @@ export function composerShowsCancel(
 }
 
 /**
- * The composer's Cancel, read at click time: a turn's commit can chain a pass in between. Inside
- * the host's Send, with its turn pending and no run, it cancels the run that registers next, or
- * resolves once the mark ends with none.
+ * Read at click time: a turn's commit can chain a pass in between. In the host's pending Send
+ * with no run yet, cancels the next run to register, or resolves if the mark ends with none.
  */
 export function cancelComposerRun(branchId: string, sendPending: boolean): Promise<void> {
   const txState = generationStore.getTxState()

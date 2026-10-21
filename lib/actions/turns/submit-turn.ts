@@ -24,10 +24,7 @@ export type SubmitTurnMeta = { content: string; composerMode: string }
 /** Send's deferred pass was cancelled, so the whole Send was, before it wrote anything. */
 export type DeferredPassAborted = TxResult & { outcome: 'aborted'; beforeTurn: true }
 
-/**
- * `converged: false` means the refused turn's user_action is still in the branch, so nothing may
- * offer its text for resubmission.
- */
+/** `converged: false`: the refused user_action is still in the branch; never re-offer its text. */
 export type SubmitTurnResult =
   | TxResult
   | DeferredPassAborted

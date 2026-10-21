@@ -48,9 +48,8 @@ export async function commitRowDelete(
   actions: readonly PipelineAction[],
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  // generation-pipeline.md → Action rejection — defense in depth: the UI disables first. No await
-  // may sit between this and the write registering: a prose reversal raised before it is refused
-  // here, and one raised after settles the write before reading the log.
+  // generation-pipeline.md → Action rejection — defense in depth. No await may precede the write
+  // registering: reversals raised before are refused here; later ones settle it, then read the log.
   if (generationStore.isUserEditBlocked()) {
     const code = ROW_DELETE_REJECTION.inFlight
     logger.warn(`action_layer.${kind}_delete_rejected`, { branchId, id, code })

@@ -22,9 +22,8 @@ type AppActionsMenuProps = {
    */
   beforeNavigate?: (proceed: () => void) => void
   /**
-   * Wraps the jumps that leave the story (the Diagnostics Hub), inside `beforeNavigate`; `GO TO`
-   * stays in the story and skips it. In-story surfaces pass `guardLeave`; off-story screens pass
-   * null, as there is no story to leave.
+   * Wraps story-leaving jumps (the Diagnostics Hub) inside `beforeNavigate`; `GO TO` skips it.
+   * In-story surfaces pass `guardLeave`; off-story screens pass null, having no story to leave.
    */
   beforeLeaveStory: ((proceed: () => void) => void) | null
   /**

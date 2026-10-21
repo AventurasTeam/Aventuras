@@ -504,8 +504,7 @@ describe('split start', () => {
     expect(expectRan(await origin).outcome).toBe('completed')
     await expect(chain).resolves.toBeUndefined()
     expect(successor?.kind).toBe('succ')
-    // The predecessor's run_complete fired with the successor still registered; only the
-    // successor's own reports the idle the drain worker waits for.
+    // Pred's run_complete fires with succ still registered, so only succ's reports idle.
     expect(completes).toEqual([
       { kind: 'pred', outcome: 'completed', idle: false },
       markerUnwound('succ'),

@@ -5,10 +5,9 @@ import { logger } from '@/lib/diagnostics'
 import { generationStore } from '@/lib/stores'
 
 /**
- * Keeps an open rollback or regenerate confirm's counts true while a run settles under it,
- * typically a pass committing (rollback-confirm.md → Counts). Recounts whenever the settle count
- * is past `countedAtSettle`, the one its counts were read at. A refused or failed recount keeps
- * the shown counts; the action's confirm-time check still guards the commit.
+ * Recounts an open rollback or regenerate confirm whenever the settle count exceeds the
+ * `countedAtSettle` its counts were read at (rollback-confirm.md → Counts). A refused or failed
+ * recount keeps the shown counts; the action's confirm-time check still guards the commit.
  */
 export function useLiveRollbackCounts({
   branchId,

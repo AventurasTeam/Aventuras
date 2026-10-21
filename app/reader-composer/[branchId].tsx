@@ -234,8 +234,8 @@ export default function ReaderComposerRoute() {
   )
   // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
   const [sendPending, setSendPending] = useState(false)
-  // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn leaves
-  // Send refused but the composer live. Primitives, so phase ticks don't re-render the reader.
+  // Send in flight (its deferred pass, its turn and the gap between) swaps Send for Cancel; a pass
+  // chained after a turn leaves Send refused, the composer live. Booleans: no re-render per phase.
   const isGenerating = generationStore.useGeneration((s) =>
     composerShowsCancel(s.txState, branchId, sendPending),
   )
@@ -458,11 +458,8 @@ export default function ReaderComposerRoute() {
     }
   }, [turnStreaming])
 
-  // Visible from the moment the turn starts (pre-first-chunk placeholder), and
-  // hidden the frame the committed row lands: the real commit hits entriesStore
-  // mid-phase, before turnStreaming flips false — checking against entries (not
-  // just turnStreaming) prevents a frame where both the synthetic and the real
-  // committed card are visible.
+  // The real commit hits entriesStore mid-phase, before turnStreaming flips false; checking
+  // entries too prevents a frame showing both the synthetic and the committed card.
   const streamingVisible =
     turnStreaming && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
 
@@ -687,12 +684,9 @@ export default function ReaderComposerRoute() {
           await restoreSystemTail(putBack)
           if (branchUnchanged(branchId)) {
             if (putBack != null) setLastSubmission(putBack.failure?.submission ?? null)
-            // Cancel reverses the whole turn (user_action included, C6) — hand
-            // the text back for edit/re-send. A retry has no raw pre-wrap text,
-            // so the wrapped content returns under 'free' (no re-wrap on send).
-            // Only into an empty composer: the composer clears itself on send, but
-            // Retry re-enters here without clearing, so text typed while the turn
-            // ran would otherwise be overwritten by the cancelled action.
+            // Cancel reverses the whole turn (user_action too, C6): hand the text back. A retry
+            // lacks raw pre-wrap text, so wrapped content returns under 'free' (no re-wrap). Only
+            // into an empty composer: Retry re-enters uncleared and would overwrite mid-turn text.
             if (isDraftEmpty(composerRef.current?.getDraft()))
               composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
             else toast.info(t('reader:turnCancelledDraftKept'))

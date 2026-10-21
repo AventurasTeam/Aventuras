@@ -9,8 +9,8 @@ export type RunState = {
   kind: string
   gateBehavior: 'hard-gate' | 'no-gate'
   /**
-   * Copied from the pipeline at reserve: the slot a head reversal or Cancel ends and defers this run
-   * in; null for a run never deferred.
+   * Copied from the pipeline at reserve: the slot a head reversal or Cancel ends and defers this
+   * run in; null for a run never deferred.
    */
   interruptible: DeferredWorkKind | null
   /** Send's deferred work, before the turn (generation-pipeline.md → chainsTo on predecessor). */
@@ -107,9 +107,8 @@ type GenerationState = {
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch and `'failed'` clears that record; `'unwound'` (a reservation whose marker insert
-   * failed, so the run never started) leaves the record alone. Returns the slot this call newly
-   * recorded, or null.
+   * branch, `'failed'` clears that record, `'unwound'` (marker insert failed; never started)
+   * leaves it. Returns the slot this call newly recorded, or null.
    */
   abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   setReversalInProgress: (value: boolean) => void
@@ -290,10 +289,7 @@ export function awaitRunTerminal(
   return run.terminal
 }
 
-/**
- * Aborts every interruptible run on the branch; resolves once each has ended. Records nothing
- * itself; each aborted pass or close records its own deferral.
- */
+/** Aborts the branch's interruptible runs and awaits their end; each records its own deferral. */
 export async function interruptMemoryRuns(branchId: string): Promise<void> {
   const runs = [...getTxState().runs.values()].filter(
     (r) => r.interruptible && r.branchId === branchId,

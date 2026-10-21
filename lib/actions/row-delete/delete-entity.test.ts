@@ -485,7 +485,7 @@ function afterStoreRead(then: () => void): { restore: () => void } {
   return { restore: () => spy.mockRestore() }
 }
 
-// generation-pipeline.md → Action rejection — defense in depth: the check covers a read in its tick.
+// generation-pipeline.md → Action rejection — defense in depth.
 describe('deleteEntityRow — reads the stores in the tick of its gate check', () => {
   it('a run reserving right after the read waits for the write', async () => {
     let settle = () => {}

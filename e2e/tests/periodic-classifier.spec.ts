@@ -742,7 +742,6 @@ test.describe('periodic classifier — the gated pass', () => {
     return rows[0][0] as string
   }
 
-  // The count on the open rollback confirm's world-state line, else null.
   async function shownWorldStateCount(): Promise<number | null> {
     const [line] = await reader.rollbackWorldStateLine(app.window).allTextContents()
     return line == null ? null : worldStateCountOf(line)

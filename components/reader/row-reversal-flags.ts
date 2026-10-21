@@ -16,7 +16,7 @@ export function headTurnIdsOf(
   return new Set(head.origin == null ? [head.tail.id] : [head.tail.id, head.origin.id])
 }
 
-/** The host's two gates as one; the head reversals' gate implies the whole gate, so it closes all. */
+/** The host's two gates as one; the head-reversal gate implies the whole gate, so it closes all. */
 export function editGateOf(gates: {
   editBlocked: boolean
   headReversalBlocked: boolean
@@ -26,9 +26,8 @@ export function editGateOf(gates: {
 }
 
 /**
- * Head reversals pass through a pass or a close (principles.md → Edit restrictions during
- * in-flight generation): ↻ and × on every row, and the pencil on the head turn alone, stay live
- * through an `interruptible` gate. Any other row's pencil keeps the whole gate.
+ * principles.md → Edit restrictions during in-flight generation: through an `interruptible` gate,
+ * ↻ and × on every row and the head turn's pencil stay live; any other pencil keeps the whole gate.
  */
 export function rowReversalFlags(args: {
   rowId: string

@@ -109,9 +109,8 @@ function reserveRun(kind: string, ctx: RunCtx): RunState {
   return run
 }
 
-// A failed marker insert unwinds the reservation so a half-registered run can't gate edits or hold
-// the branch against a retry. run_complete reports the idle: a chained successor's predecessor
-// emitted its own while this run was still registered. The terminal frees a waiter that grabbed it.
+// A failed marker insert unwinds the reservation, so it can't gate edits or block a retry, and
+// run_complete reports the idle: a successor's predecessor sent its own while this was registered.
 async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   try {
     await ctx.db.insert(pipelineRuns).values({
