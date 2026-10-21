@@ -621,6 +621,12 @@ probe is not a pipeline — it captures as a side-effect of the
 per-turn pipeline's retrieval phase, covered by that pipeline's
 pre-flight.
 
+A run cancelled before its pre-flight skips it and takes the
+user-cancel abort: a pass the interrupt reached as its predecessor's
+commit swapped it in, or Send's deferred pass cancelled as it
+reserved, is interrupted, not failed, so it uses no retry and stays
+deferred.
+
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
 emits a `run_complete` event with `outcome === 'failed'` and
