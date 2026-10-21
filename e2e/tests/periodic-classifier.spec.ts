@@ -23,8 +23,8 @@ import { reader, worldStateCountOf } from '../locators/reader'
 import { storyLeave } from '../locators/story-leave'
 import { toast } from '../locators/toast'
 
-// A turn's commit chaining its pass only happens in a running app; assert the graph through the
-// DB bridge (docs/testing.md -> Selector strategy, tier 1).
+// Unit tests drive a turn's commit chaining its pass; only a running app runs the real pass, so
+// read its writes back through the DB bridge (docs/testing.md -> Selector strategy, tier 1).
 test.describe('periodic classifier — graph population', () => {
   let app: LaunchedApp
   let mock: MockLlm

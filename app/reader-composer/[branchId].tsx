@@ -458,10 +458,10 @@ export default function ReaderComposerRoute() {
     }
   }, [turnStreaming])
 
-  // Visible from the moment the run starts (pre-first-chunk placeholder), and
+  // Visible from the moment the turn starts (pre-first-chunk placeholder), and
   // hidden the frame the committed row lands: the real commit hits entriesStore
-  // mid-phase, before isGenerating flips false — checking against entries (not
-  // just isGenerating) prevents a frame where both the synthetic and the real
+  // mid-phase, before turnStreaming flips false — checking against entries (not
+  // just turnStreaming) prevents a frame where both the synthetic and the real
   // committed card are visible.
   const streamingVisible =
     turnStreaming && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
