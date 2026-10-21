@@ -495,6 +495,24 @@ export const ShrinkDuringTouchHolds: Story = {
   },
 }
 
+/** A shrink skipped under a finger still moves the baseline the next shrink measures from. */
+export const ShrinkAfterTouchKeepsBaseline: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    await shrinkViewport(scroller)
+    scroller.dispatchEvent(new Event('touchend', { bubbles: true }))
+    // 40 px up: outside the tolerance against the current height, inside it (40 - 49) against
+    // the height before the skipped shrink.
+    await scrollToDistance(scroller, 40)
+    const scrollTop = scroller.scrollTop
+    await resizeViewport(scroller, -10)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
 /**
  * Content that grew below the viewport fires no scroll event, so only the geometry at the
  * shrink knows the reader had already left the bottom.

@@ -617,18 +617,28 @@ test.describe('periodic classifier — unassigned agent', () => {
 })
 
 // The reader's distance from the bottom once its geometry has held for 10 frames: an end
-// state, not the first sample that happens to pass.
+// state, not the first sample that happens to pass. Capped so a layout that never settles
+// fails with its last reading rather than the test timeout.
 function settledDistanceFromBottom(scroller: Locator): Promise<number> {
   return scroller.evaluate(
     (el) =>
-      new Promise<number>((resolve) => {
+      new Promise<number>((resolve, reject) => {
         let stableFrames = 0
+        let frames = 0
         let last = ''
         const tick = () => {
           const key = `${el.scrollHeight}|${el.clientHeight}|${el.scrollTop}`
           stableFrames = key === last ? stableFrames + 1 : 0
           last = key
-          if (stableFrames >= 10) resolve(el.scrollHeight - el.scrollTop - el.clientHeight)
+          frames += 1
+          const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+          if (stableFrames >= 10) resolve(distance)
+          else if (frames >= 300)
+            reject(
+              new Error(
+                `reader never settled; distance ${distance} (scrollHeight|clientHeight|scrollTop ${key})`,
+              ),
+            )
           else requestAnimationFrame(tick)
         }
         tick()

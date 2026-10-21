@@ -245,7 +245,7 @@ export function ReaderSurface({
   }, [branchKey])
   // Bottom pin: late layout (font swaps, image decode) can still grow content
   // after a scrollTop write, so re-assert per frame until the scroll height
-  // settles. The user's first gesture breaks it.
+  // settles. A wheel or touch drag breaks it.
   const pinRafRef = useRef(0)
   const stopBottomPin = useCallback(() => {
     pinActiveRef.current = false
