@@ -28,10 +28,8 @@ test.describe('periodic classifier — real provider smoke', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   const logs: { kind: string; text: string }[] = []
-  // Captured where it is written, not re-read later: the pass can complete before
-  // the test reads it back, and a post-hoc baseline would already hold the
-  // advanced value — then the poll waits out its timeout for a second advance
-  // that no further turn triggers.
+  // Captured where it is written, not re-read later: the pass can complete before the test
+  // reads it back, and a post-hoc baseline would already hold the advanced value.
   let parkedWatermark = 0
   // The fixture logs its own periodic_classifier happening; this run's writes sit above its log.
   let seededLogHead = 0
