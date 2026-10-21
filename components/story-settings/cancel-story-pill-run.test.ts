@@ -32,7 +32,7 @@ describe('cancelStoryPillRun on a pass', () => {
       phases: [{ name: 'held', run: holdUntilAborted }],
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: {},
     })
     const started = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)

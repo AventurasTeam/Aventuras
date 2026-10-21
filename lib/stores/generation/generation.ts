@@ -1,14 +1,18 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+export type DeferredWork = { readonly pass?: true; readonly close?: true }
+export type DeferredWorkKind = keyof DeferredWork
 
 export type RunState = {
   runId: string
   kind: string
   gateBehavior: 'hard-gate' | 'no-gate'
-  /** Copied from the pipeline at reserve: a head reversal or Cancel ends this run and defers it. */
-  interruptible: boolean
+  /**
+   * Copied from the pipeline at reserve: the slot a head reversal or Cancel ends and defers this run
+   * in; null for a run never deferred.
+   */
+  interruptible: DeferredWorkKind | null
   /** Send's deferred work, before the turn (generation-pipeline.md → chainsTo on predecessor). */
   beforeTurn: boolean
   actionId: string
@@ -29,9 +33,6 @@ export type RunState = {
 
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
-
-export type DeferredWork = { readonly pass?: true; readonly close?: true }
-export type DeferredWorkKind = keyof DeferredWork
 
 // reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
 // user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
@@ -66,19 +67,6 @@ export function isStoryBusy(txState: TxState, storyId: string, branchId: string)
   if (txState.reversalInProgress) return true
   for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
-}
-
-const DEFERRED_WORK_KIND: ReadonlyMap<string, DeferredWorkKind> = new Map([
-  [PERIODIC_CLASSIFIER_KIND, 'pass'],
-  ['chapter-close', 'close'],
-])
-
-export function deferredWorkKindOf(kind: string): DeferredWorkKind | null {
-  return DEFERRED_WORK_KIND.get(kind) ?? null
-}
-
-function deferralKeyOf(run: RunState | undefined): DeferredWorkKind | null {
-  return run?.interruptible ? deferredWorkKindOf(run.kind) : null
 }
 
 // An emptied record is deleted, not left as {}: readers test `deferred.has(branchId)`.
@@ -169,9 +157,9 @@ const store = createStore<GenerationState>()((set) => ({
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
       if (successor) runs.set(successor.runId, successor)
-      const key = deferralKeyOf(run)
-      const deferred =
-        run && key ? withDeferral(s.txState.deferred, run.branchId, key, false) : s.txState.deferred
+      const deferred = run?.interruptible
+        ? withDeferral(s.txState.deferred, run.branchId, run.interruptible, false)
+        : s.txState.deferred
       return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
     }),
   abortRun: (runId, outcome) => {
@@ -180,7 +168,7 @@ const store = createStore<GenerationState>()((set) => ({
       const run = s.txState.runs.get(runId)
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
-      const key = deferralKeyOf(run)
+      const key = run?.interruptible
       let deferred = s.txState.deferred
       if (run && key && outcome) {
         if (outcome === 'aborted' && deferred.get(run.branchId)?.[key] !== true) recorded = key

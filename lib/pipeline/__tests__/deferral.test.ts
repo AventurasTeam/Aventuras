@@ -14,7 +14,12 @@ import {
   type PipelineStart,
   type RunCtx,
 } from '@/lib/pipeline'
-import { awaitRunTerminal, generationStore, interruptMemoryRuns } from '@/lib/stores'
+import {
+  awaitRunTerminal,
+  generationStore,
+  interruptMemoryRuns,
+  type DeferredWorkKind,
+} from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -46,13 +51,13 @@ async function* writesThenHolds({
   return result
 }
 
-function defineStandIn(kind: string, interruptible = true): void {
+function defineStandIn(kind: string, interruptible: DeferredWorkKind | null = 'pass'): void {
   definePipeline({
     kind,
     phases: [{ name: 'pass', run: writesThenHolds }],
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
-    interruptible,
+    interruptible: interruptible ?? undefined,
     concurrencyPolicy: { blockedBy: [kind] },
   })
 }
@@ -136,7 +141,7 @@ describe('deferred work', () => {
 
     const { start } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
     const [held] = generationStore.getTxState().runs.values()
-    expect(held.interruptible).toBe(true)
+    expect(held.interruptible).toBe('pass')
     expect(await db.select().from(storyEntries)).toHaveLength(1)
 
     await interruptMemoryRuns('b1')
@@ -194,7 +199,7 @@ describe('deferred work', () => {
         ],
         affordance: 'pill-and-banner',
         gateBehavior: 'hard-gate',
-        interruptible: true,
+        interruptible: 'pass',
         concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND] },
         onPreflightFailure: async () => {
           preflightHookCalls++
@@ -320,7 +325,7 @@ describe('deferred work', () => {
       ],
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND] },
     })
     const seen = recordTerminalEvents()
@@ -335,41 +340,28 @@ describe('deferred work', () => {
     expect(seen.map((e) => e.type)).toEqual(['run_complete'])
   })
 
-  it('records an interrupted close in its own slot and names it on run_deferred', async () => {
+  it('records an interrupted run in the slot its declaration names, whatever its kind', async () => {
     const { ctx } = await makeHarness()
-    defineStandIn('chapter-close')
-    const seen = recordTerminalEvents()
-
-    const { start } = await startHeld('chapter-close', ctx)
-    await interruptMemoryRuns('b1')
-
-    expect(expectRan(await start.origin).outcome).toBe('aborted')
-    expect(deferredOnB1()).toEqual({ close: true })
-    expect(seen.filter((e) => e.type === 'run_deferred')).toEqual([
-      expect.objectContaining({ kind: 'chapter-close', work: 'close' }),
-    ])
-  })
-
-  it('records nothing for an interruptible run of a kind that maps to no deferred work', async () => {
-    const { ctx } = await makeHarness()
-    defineStandIn('other-interruptible')
+    defineStandIn('other-interruptible', 'close')
     const seen = recordTerminalEvents()
 
     const { start } = await startHeld('other-interruptible', ctx)
     await interruptMemoryRuns('b1')
 
     expect(expectRan(await start.origin).outcome).toBe('aborted')
-    expect(generationStore.getTxState().deferred.size).toBe(0)
-    expect(seen.map((e) => e.type)).toEqual(['run_complete'])
+    expect(deferredOnB1()).toEqual({ close: true })
+    expect(seen.filter((e) => e.type === 'run_deferred')).toEqual([
+      expect.objectContaining({ kind: 'other-interruptible', work: 'close' }),
+    ])
   })
 
   it('records nothing for a pass-kind run that is not interruptible', async () => {
     const { ctx } = await makeHarness()
-    defineStandIn(PERIODIC_CLASSIFIER_KIND, false)
+    defineStandIn(PERIODIC_CLASSIFIER_KIND, null)
     const seen = recordTerminalEvents()
 
     const { start } = await startHeld(PERIODIC_CLASSIFIER_KIND, ctx)
-    expect([...generationStore.getTxState().runs.values()][0].interruptible).toBe(false)
+    expect([...generationStore.getTxState().runs.values()][0].interruptible).toBeNull()
     await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, 'b1', 'cancel')
 
     expect(expectRan(await start.origin).outcome).toBe('aborted')

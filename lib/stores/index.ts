@@ -98,7 +98,6 @@ export type { WorkingSetStore } from './factory/working-set-store'
 export {
   awaitRunTerminal,
   cancelStoryRuns,
-  deferredWorkKindOf,
   interruptMemoryRuns,
   isHeadReversalBlocked,
   isStoryBusy,

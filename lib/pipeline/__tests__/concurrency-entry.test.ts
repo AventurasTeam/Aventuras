@@ -108,7 +108,7 @@ describe('runPipeline concurrency entry + coordination', () => {
       kind: 'memory-run',
       phases: [{ name: 'p', run: noop }],
       ...base,
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: {},
     })
     definePipeline({

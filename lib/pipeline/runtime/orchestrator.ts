@@ -85,7 +85,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     runId: generateId('run'),
     kind,
     gateBehavior: pipeline.gateBehavior,
-    interruptible: pipeline.interruptible ?? false,
+    interruptible: pipeline.interruptible ?? null,
     beforeTurn: ctx.beforeTurn ?? false,
     actionId: ctx.actionId ?? generateId('act'),
     storyId: ctx.storyId,

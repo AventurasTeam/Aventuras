@@ -228,7 +228,7 @@ describe('updateStoryEntryContent', () => {
       runId: 'r1',
       kind: 'per-turn',
       gateBehavior: 'hard-gate',
-      interruptible: false,
+      interruptible: null,
       beforeTurn: false,
       actionId: 'a',
       storyId: 's1',

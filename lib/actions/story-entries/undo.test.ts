@@ -1167,7 +1167,7 @@ describe('undo and redo during a pass', () => {
       runId: 'run_ending',
       kind: PERIODIC_CLASSIFIER_KIND,
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       beforeTurn: false,
       actionId: 'act_ending',
       storyId: 's1',

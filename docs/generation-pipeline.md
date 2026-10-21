@@ -58,7 +58,7 @@ interface Pipeline {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
-  interruptible?: boolean // a head reversal or Cancel ends me and defers me to the next turn; see Prose reversals and the interrupt
+  interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; see Prose reversals and the interrupt
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState, ctx) => string | null | Promise<string | null> // awaited at commit while the run holds the gate; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
@@ -528,7 +528,7 @@ type RunState = {
   actionId: string // globally unique; never reused
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
-  interruptible: boolean // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it
+  interruptible: 'pass' | 'close' | null // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it in this slot
   beforeTurn: boolean // started by Send to run deferred work before the turn
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
@@ -541,9 +541,9 @@ type RunState = {
 
 Only the orchestrator writes `deferred`, through the generation store
 and in the same update that removes the run: an `interruptible` run
-that ends `aborted` records its kind for its branch (a pass as
-`pass`, a close as `close`), and that kind's commit or failure clears
-it. So every way a pass or a close is cancelled — the interrupt, the
+that ends `aborted` records, for its branch, the slot its declaration
+names (the pass declares `pass`, the close `close`), and a commit or
+failure of a run declaring that slot clears it. So every way a pass or a close is cancelled — the interrupt, the
 pill's or the banner's Cancel, Cancel & leave — defers it, and a
 failed one is left to the next commit's retry. A newly recorded
 deferral emits `run_deferred` on the bus naming the slot it recorded,
@@ -1890,7 +1890,8 @@ to `detail` alone otherwise.
 head turn, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
 before the branch's next turn instead
 ([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
-The periodic classifier and chapter-close declare it.
+Its value names the `txState.deferred` slot that records me: the
+periodic classifier declares `'pass'`, chapter-close `'close'`.
 
 `concurrencyPolicy`:
 
@@ -1921,7 +1922,7 @@ const perTurnPipeline: Pipeline = {
 const periodicClassifierPipeline: Pipeline = {
   kind: 'periodic-classifier',
   gateBehavior: 'hard-gate',
-  interruptible: true,
+  interruptible: 'pass',
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
@@ -1931,7 +1932,7 @@ const periodicClassifierPipeline: Pipeline = {
 const chapterClosePipeline: Pipeline = {
   kind: 'chapter-close',
   gateBehavior: 'hard-gate',
-  interruptible: true,
+  interruptible: 'close',
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },

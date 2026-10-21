@@ -19,7 +19,7 @@ type RunOptions = {
   storyId?: string
   branchId?: string
   gateBehavior?: RunState['gateBehavior']
-  interruptible?: boolean
+  interruptible?: RunState['interruptible']
   beforeTurn?: boolean
 }
 
@@ -30,7 +30,7 @@ function run(kind: string, options: RunOptions = {}): RunState {
     runId: `run-${kind}-${storyId}-${branchId}`,
     kind,
     gateBehavior: options.gateBehavior ?? 'hard-gate',
-    interruptible: options.interruptible ?? false,
+    interruptible: options.interruptible ?? null,
     beforeTurn: options.beforeTurn ?? false,
     actionId: `action-${kind}`,
     storyId,
@@ -45,7 +45,7 @@ function run(kind: string, options: RunOptions = {}): RunState {
 
 // The periodic classifier as it declares itself: hard-gate and interruptible.
 function pass(options: Pick<RunOptions, 'storyId' | 'branchId' | 'beforeTurn'> = {}): RunState {
-  return run(PERIODIC_CLASSIFIER_KIND, { ...options, interruptible: true })
+  return run(PERIODIC_CLASSIFIER_KIND, { ...options, interruptible: 'pass' })
 }
 
 function tx(...runs: RunState[]): TxState {

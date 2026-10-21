@@ -63,7 +63,7 @@ function turnRun(over: Partial<RunState> = {}): RunState {
     runId: 'run_turn',
     kind: PER_TURN_KIND,
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: 'act_turn',
     storyId: 's1',
@@ -145,7 +145,7 @@ function defineRecordingPass(): string[] {
     phases: [{ name: 'classify', run: classify }],
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
-    interruptible: true,
+    interruptible: 'pass',
     concurrencyPolicy: {},
   })
   return actionIds
@@ -237,7 +237,7 @@ describe('nextMemoryRun', () => {
       const { db, ctx } = await makeHarness()
       await seedEntries(db, 2)
       openStory(2)
-      const interrupted = turnRun({ runId: `run_${kind}`, kind, interruptible: true })
+      const interrupted = turnRun({ runId: `run_${kind}`, kind, interruptible: slot })
       generationStore.startRun(interrupted)
       expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe(slot)
       expect(generationStore.getTxState().deferred.get('b1')).toEqual(recorded)
@@ -253,7 +253,7 @@ describe('nextMemoryRun', () => {
     const elsewhere = turnRun({
       runId: 'run_elsewhere',
       kind: PERIODIC_CLASSIFIER_KIND,
-      interruptible: true,
+      interruptible: 'pass',
       branchId: 'b2',
     })
     generationStore.startRun(elsewhere)

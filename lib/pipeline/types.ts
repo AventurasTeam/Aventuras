@@ -155,8 +155,8 @@ export type Pipeline = {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate'
-  /** A head reversal or Cancel ends me and defers me to the branch's next Send. */
-  interruptible?: boolean
+  /** A head reversal or Cancel ends me and defers me, in this slot, to the branch's next Send. */
+  interruptible?: DeferredWorkKind
   concurrencyPolicy: ConcurrencyPolicy
   /** Awaited at commit while the run still holds the gate; the swap after it stays synchronous. */
   chainsTo?: (run: RunState, ctx: DbCtx) => string | null | Promise<string | null>

@@ -29,7 +29,7 @@ function run(fields: Partial<RunState> & Pick<RunState, 'runId' | 'kind'>): RunS
     intermediates: {},
     terminal: Promise.resolve(),
     resolveTerminal: () => {},
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     ...fields,
   }
@@ -45,11 +45,15 @@ function txOf(...runs: RunState[]): TxState {
 }
 
 const TURN = run({ runId: 'run_turn', kind: PER_TURN_KIND })
-const CHAINED_PASS = run({ runId: 'run_pass', kind: PERIODIC_CLASSIFIER_KIND, interruptible: true })
+const CHAINED_PASS = run({
+  runId: 'run_pass',
+  kind: PERIODIC_CLASSIFIER_KIND,
+  interruptible: 'pass',
+})
 const DEFERRED_PASS = run({
   runId: 'run_deferred',
   kind: PERIODIC_CLASSIFIER_KIND,
-  interruptible: true,
+  interruptible: 'pass',
   beforeTurn: true,
 })
 const REFRESH = run({ runId: 'run_refresh', kind: SUGGESTION_REFRESH_KIND })

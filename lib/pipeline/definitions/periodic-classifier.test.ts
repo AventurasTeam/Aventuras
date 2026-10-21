@@ -1355,7 +1355,7 @@ describe('periodicClassifierPhase', () => {
     const pipeline = getPipeline(PERIODIC_CLASSIFIER_KIND)
     expect(pipeline).toMatchObject({
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       affordance: 'pill-and-banner',
       concurrencyPolicy: {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],

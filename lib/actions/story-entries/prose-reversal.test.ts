@@ -14,7 +14,7 @@ import {
   type PipelineEvent,
 } from '@/lib/pipeline'
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
-import { generationStore, interruptMemoryRuns } from '@/lib/stores'
+import { generationStore, interruptMemoryRuns, type DeferredWorkKind } from '@/lib/stores'
 
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { __resetBranchWriteLocks, withBranchWriteShared } from '../delta/branch-write-lock'
@@ -120,6 +120,7 @@ describe('bracketProseReversal — the interrupt', () => {
   // An interruptible stand-in: it writes one fact, then waits until it is cancelled.
   function defineInterruptible(
     kind: string,
+    slot: DeferredWorkKind,
     onAbort: () => void = () => {},
   ): { landed: Promise<void> } {
     let land!: () => void
@@ -167,7 +168,7 @@ describe('bracketProseReversal — the interrupt', () => {
       phases: [{ name: 'run', run: writeThenWait }],
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: slot,
       concurrencyPolicy: {},
     })
     return { landed }
@@ -176,7 +177,7 @@ describe('bracketProseReversal — the interrupt', () => {
   it('interrupts a pass in flight before the body, reversing its writes and deferring it', async () => {
     const { db, ctx } = await makeHarness()
     const flagAtAbort: boolean[] = []
-    const { landed } = defineInterruptible(PERIODIC_CLASSIFIER_KIND, () =>
+    const { landed } = defineInterruptible(PERIODIC_CLASSIFIER_KIND, 'pass', () =>
       flagAtAbort.push(generationStore.getTxState().reversalInProgress),
     )
     const deferrals: PipelineEvent[] = []
@@ -217,7 +218,7 @@ describe('bracketProseReversal — the interrupt', () => {
 
   it('interrupts a chapter close the same way, recording a deferred close', async () => {
     const { ctx } = await makeHarness()
-    const { landed } = defineInterruptible('chapter-close')
+    const { landed } = defineInterruptible('chapter-close', 'close')
     const close = startPipeline('chapter-close', ctx)
     await landed
 
@@ -249,7 +250,7 @@ describe('bracketProseReversal — the interrupt', () => {
   it('leaves an interruptible run on another branch running', async () => {
     const { db, ctx } = await makeHarness()
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
-    const { landed } = defineInterruptible(PERIODIC_CLASSIFIER_KIND)
+    const { landed } = defineInterruptible(PERIODIC_CLASSIFIER_KIND, 'pass')
     const other = startPipeline(PERIODIC_CLASSIFIER_KIND, { ...ctx, branchId: 'b2' })
     await landed
     const [run] = [...generationStore.getTxState().runs.values()]

@@ -309,7 +309,7 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
       runId: 'r1',
       kind: 'turn',
       gateBehavior: 'hard-gate',
-      interruptible: false,
+      interruptible: null,
       beforeTurn: false,
       actionId: 'act_r1',
       storyId: 's1',

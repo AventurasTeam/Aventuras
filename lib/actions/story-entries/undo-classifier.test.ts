@@ -376,7 +376,7 @@ describe('AC4 — CTRL-Z of the turn with a classifier run mid-flight', () => {
       runId: 'run_c',
       kind: 'periodic-classifier',
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       beforeTurn: false,
       actionId: 'act_c',
       storyId: 's1',

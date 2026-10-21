@@ -5,7 +5,6 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   awaitRunTerminal,
   cancelStoryRuns,
-  deferredWorkKindOf,
   generationStore,
   interruptMemoryRuns,
   isHeadReversalBlocked,
@@ -22,7 +21,7 @@ function run(id: string, kind = 'synthetic'): RunState {
     runId: id,
     kind,
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: `act_${id}`,
     storyId: 's1',
@@ -37,7 +36,7 @@ function run(id: string, kind = 'synthetic'): RunState {
 
 // An interruptible pass on b1, as the orchestrator reserves it.
 function pass(id: string, over: Partial<RunState> = {}): RunState {
-  return { ...run(id, PERIODIC_CLASSIFIER_KIND), interruptible: true, ...over }
+  return { ...run(id, PERIODIC_CLASSIFIER_KIND), interruptible: 'pass', ...over }
 }
 
 function tx(runs: RunState[], over: Partial<TxState> = {}): TxState {
@@ -146,16 +145,6 @@ describe('isStoryBusy', () => {
   })
 })
 
-describe('deferredWorkKindOf', () => {
-  it('maps the pass and the close, and nothing else', () => {
-    expect(deferredWorkKindOf(PERIODIC_CLASSIFIER_KIND)).toBe('pass')
-    expect(deferredWorkKindOf('chapter-close')).toBe('close')
-    expect(deferredWorkKindOf('per-turn')).toBeNull()
-    expect(deferredWorkKindOf('suggestion-refresh')).toBeNull()
-    expect(deferredWorkKindOf('toString')).toBeNull()
-  })
-})
-
 describe('deferred work', () => {
   beforeEach(() => {
     generationStore.__reset()
@@ -228,7 +217,7 @@ describe('deferred work', () => {
   it('keeps a pass and a close side by side and clears each on its own', () => {
     generationStore.startRun(pass('run_pass'))
     generationStore.abortRun('run_pass', 'aborted')
-    generationStore.startRun(pass('run_close', { kind: 'chapter-close' }))
+    generationStore.startRun(pass('run_close', { kind: 'chapter-close', interruptible: 'close' }))
     expect(generationStore.abortRun('run_close', 'aborted')).toBe('close')
     expect(deferredOn('b1')).toEqual({ pass: true, close: true })
 
@@ -248,14 +237,19 @@ describe('deferred work', () => {
     expect(generationStore.getTxState().deferred.has('b2')).toBe(false)
   })
 
-  it('records nothing for an interruptible run of an unmapped kind', () => {
-    generationStore.startRun(pass('run_other', { kind: 'some-interruptible' }))
-    expect(generationStore.abortRun('run_other', 'aborted')).toBeNull()
-    expect(generationStore.getTxState().deferred.size).toBe(0)
+  it('records and clears the slot the run carries, whatever its kind', () => {
+    const other = { kind: 'some-interruptible', interruptible: 'close' } as const
+    generationStore.startRun(pass('run_other', other))
+    expect(generationStore.abortRun('run_other', 'aborted')).toBe('close')
+    expect(deferredOn('b1')).toEqual({ close: true })
+
+    generationStore.startRun(pass('run_other_again', other))
+    generationStore.finishRun('run_other_again')
+    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
   })
 
   it('records nothing for a pass-kind run that is not interruptible', () => {
-    generationStore.startRun(pass('run_plain', { interruptible: false }))
+    generationStore.startRun(pass('run_plain', { interruptible: null }))
     expect(generationStore.abortRun('run_plain', 'aborted')).toBeNull()
     expect(generationStore.getTxState().deferred.size).toBe(0)
   })
@@ -453,7 +447,10 @@ describe('interruptMemoryRuns', () => {
 
   it('aborts every interruptible run on the branch and resolves once each has ended', async () => {
     const passRun = liveRun(pass('run_pass'), () => {})
-    const closeRun = liveRun(pass('run_close', { kind: 'chapter-close' }), () => {})
+    const closeRun = liveRun(
+      pass('run_close', { kind: 'chapter-close', interruptible: 'close' }),
+      () => {},
+    )
     const refresh = liveRun({ runId: 'run_refresh', kind: 'suggestion-refresh' })
     const elsewhere = liveRun(pass('run_b2', { branchId: 'b2' }))
     for (const r of [passRun, closeRun, refresh, elsewhere]) generationStore.startRun(r)

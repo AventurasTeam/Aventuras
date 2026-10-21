@@ -69,7 +69,7 @@ function inFlightRun(storyId: string, branchId = 'br_1'): RunState {
     intermediates: {},
     terminal: new Promise<void>(() => {}),
     resolveTerminal: () => {},
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
   }
 }

@@ -87,13 +87,13 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     return { status: 'completed' }
   }
 
-  // Mirrors the real pass's gate, interruptible flag and blockedBy (periodic-classifier.ts).
+  // Mirrors the real pass's gate, deferral slot and blockedBy (periodic-classifier.ts).
   registerPipeline({
     kind: PERIODIC_CLASSIFIER_KIND,
     phases: [{ name: 'classify', run: phase }],
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
-    interruptible: true,
+    interruptible: 'pass',
     concurrencyPolicy: {
       blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
     },
@@ -127,7 +127,7 @@ export function registerStoreOnlyRun(kind: string, branchId: string): RunState {
     runId: `run_${kind}_${branchId}`,
     kind,
     gateBehavior: 'hard-gate',
-    interruptible: false,
+    interruptible: null,
     beforeTurn: false,
     actionId: `act_${kind}_${branchId}`,
     storyId: 's1',

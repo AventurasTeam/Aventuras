@@ -369,7 +369,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         }
       },
       gateBehavior: 'hard-gate',
-      interruptible: true,
+      interruptible: 'pass',
       concurrencyPolicy: {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
       },
