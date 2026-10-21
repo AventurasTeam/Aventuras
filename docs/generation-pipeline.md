@@ -111,7 +111,7 @@ type PhaseResult =
 
 type PhaseEmittedEvent = Exclude<
   PipelineEvent,
-  { type: 'run_start' | 'run_complete' | 'phase_start' | 'phase_complete' }
+  { type: 'run_start' | 'run_complete' | 'phase_start' | 'phase_complete' | 'run_deferred' }
 >
 
 type PipelineEvent =
@@ -127,6 +127,7 @@ type PipelineEvent =
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string }
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction }
@@ -502,7 +503,8 @@ map of `RunState`s is enough.
 
 ```ts
 // src/ai/pipeline/orchestrator.ts
-export async function runPipeline(kind: string): Promise<TxResult>
+export async function runPipeline(kind: string): Promise<TxResult> // resolves once the whole chain has ended
+export function startPipeline(kind: string): { origin: Promise<TxResult>; chain: Promise<void> }
 export const pipelineEventBus: PipelineEventBus
 ```
 
@@ -568,8 +570,8 @@ because a failed or aborted regenerate runs its follow-up sweep after
 the mark has ended, with no run and no mark. Leaving the story
 (`cancelStoryRuns`) resolves only once no run is left on the story, no
 pending mark on its branch, no reversal in progress, and no turn body
-active on its branch. A prose reversal also closes the gate for its brief duration
-via `reversalInProgress` (see
+active on its branch. A prose reversal also closes the gate for its
+brief duration via `reversalInProgress` (see
 [Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
 The gate a pass or a close holds is the one a head reversal may pass
 through, by interrupting it.
@@ -1009,8 +1011,11 @@ in-progress (currentPhase iterates)
                                                       │  if user-cancel && rollback committed:
                                                       │    pipeline.onInterrupt(run, ctx) — a pass
                                                       │    restores its pre-run status here
-                                                      │  remove run from txState
+                                                      │  remove run from txState; an interruptible pass
+                                                      │    or close records ('aborted') or clears
+                                                      │    ('failed') its deferral in the same update
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
+                                                      │  emit run_deferred if the deferral is newly recorded
 ```
 
 ### Crash recovery via `pipeline_runs` marker table
@@ -1881,8 +1886,7 @@ The periodic classifier and chapter-close declare it.
 `concurrencyPolicy`:
 
 - `blockedBy` — incoming run's perspective: "these running kinds
-  block me from starting." Orchestrator consults on
-  `runPipeline(kind)` entry.
+  block me from starting." Orchestrator consults on start.
 - `yieldsTo` — running run's perspective: "if any of these kinds
   tries to start, I abort." Only suggestion refresh declares it, as a
   backstop.
@@ -2045,8 +2049,9 @@ with two cheap mechanisms.
 with one exception: when the only runs holding it are `interruptible`
 ones on its branch, a pass or a close, it ends them first
 (`interruptMemoryRuns`). While a suggestion
-refresh runs beside one, the reversal waits for the refresh, or for its
-✕, as it does when the refresh runs alone. The pill's Cancel, and
+refresh runs beside one, the reversal is refused, its controls disabled,
+until the refresh ends or its ✕ cancels it, as when the refresh runs
+alone. The pill's Cancel, and
 leaving the story through its confirm, interrupt a pass or a close the
 same way, with no reversal after.
 

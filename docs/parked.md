@@ -1015,11 +1015,11 @@ direct writes need auditing first.
 Seen again 2026-10-05 in the reversal-integrity PR's review, which
 found part of that fix in place: `handleEvent` dropped a `no-gate`
 run's write once the run had left txState. That drop went with the
-no-gate write phase when the periodic classifier became gated, so the
-straggler above is unguarded again. Dropping from the abort on, as
-above, is the fix. Waiting for every sibling to settle before the run
-aborts would also close it, but contradicts the abort's "no drain"
-step in
+no-gate write phase when the periodic classifier became gated, and it
+covered only `no-gate` runs, so the straggler above is unguarded.
+Dropping from the abort on, as above, is the fix. Waiting for every
+sibling to settle before the run aborts would also close it, but
+contradicts the abort's "no drain" step in
 [Run state transitions](./generation-pipeline.md#run-state-transitions),
 so it needs a canon edit first.
 
@@ -2877,9 +2877,10 @@ narrowed 2026-07-22 and 2026-08-18.
 
 #### Background content behind AlertDialog is not aria-hidden
 
-**Background content behind an open `AlertDialog` is not
-`aria-hidden`.** Contrary to the usual Radix `hideOthers`
-assumption, an E2E locator scoped only by role matched both the
+**Open question: why did a role locator match both Discard buttons
+behind an open `AlertDialog`?** It read as the background not being
+`aria-hidden`, contrary to the usual Radix `hideOthers`
+assumption: an E2E locator scoped only by role matched both the
 save bar's Discard button and the unsaved-changes dialog's Discard
 button while the dialog was open — confirmed by an actual run
 (`e2e/locators/story-settings.ts`). Fixed in the spec by scoping
@@ -3010,18 +3011,19 @@ classifier, which links a character's awareness to a happening it
 lists, and chapter-close, which rewrites links on existing happenings
 ([awareness pin tuning](./memory/chapter-close.md#3d--awareness-pin-tuning),
 [happenings consolidation](./memory/chapter-close.md#3e--happenings-consolidation))
-— and none starts from Plot or World, while leaving a dirty pane asks
-first. The fix is a three-way merge: record each links field's
-baseline when it goes dirty, then apply the user's diff onto the
-latest rows — about 60–100 lines across the hook and the draft
-builder. World's pane Save carried such a merge for keywords and
+— and no pass starts from Plot or World, while the Actions menu's
+close will, and leaving a dirty pane asks first. The fix is a
+three-way merge: record each links field's baseline when it goes
+dirty, then apply the user's diff onto the latest rows — about 60–100
+lines across the hook and the draft builder. World's pane Save carried such a merge for keywords and
 relationships until the gated classifier removed it on the same
 reasoning, so a change to either premise needs both.
 
 Parked 2026-09-23. Revisit when a `no-gate` writer links an existing
 happening, or when a gated run becomes startable while a Plot or World
-pane is dirty. M5.2's chapter close and M7.2's `[Run classifier now]`
-are the first candidates. Raised 2026-09-22 by Slice 4.3.
+pane is dirty. M5.2's chapter close, startable from the Actions menu
+on either surface, is the first candidate. Raised 2026-09-22 by
+Slice 4.3.
 
 #### Select's dropdown popover is pinned to its trigger's width
 

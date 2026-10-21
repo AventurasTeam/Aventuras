@@ -588,16 +588,6 @@ slice-planning gate forces its resolution before that slice is planned.
   its disabled-controls rule).
   Raised 2026-10-21 by the gated classifier slice's task reviews.
 
-- **The Toaster's layering contradicts `toast.md → Z-index`.** The
-  `Toaster` in `components/ui/toast.tsx` sets `z-[100]`, which
-  [`toast.md → Z-index`](../ui/patterns/toast.md#z-index) says is
-  above Sheet and AlertDialog. On web RN-Web's `z-index: 0` stacking
-  contexts trap it and Radix dialogs portal to the body, so a toast
-  fired under a dialog sits beneath the scrim. The accessibility half
-  is the M9.5 entry on toasts under a modal Sheet in
-  [`roadmap.md`](./roadmap.md). Raised 2026-10-21 by the gated
-  classifier slice's task reviews.
-
 - **The `sseFetch` fixture answers non-streaming calls with SSE.**
   `lib/actions/turns/__tests__/fixtures.ts` stubs every request with an
   event stream. The piggyback fallback's non-streaming call gets that
@@ -609,7 +599,7 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **`recentDeltaRows` reads the whole delta log.**
   `lib/actions/story-entries/undo.ts` selects every delta on the
-  branch with no limit, and `undoLastAction` now reads it twice while a
+  branch with no limit, and `undoLastAction` reads it twice while a
   pass runs, once before the gate decision and once in the bracket.
   Raised 2026-10-21 by the gated classifier slice's task reviews.
 
@@ -617,5 +607,5 @@ slice-planning gate forces its resolution before that slice is planned.
   `adb input text` leaves touch mode, and with focus on the top bar's
   back arrow a space presses it, so `router.back()` pops the reader
   and logs two "GO_BACK was not handled" warnings. Seen before and
-  after the gated classifier's changes, so it is not theirs. Raised 2026-10-21 by the gated
-  classifier slice's task reviews.
+  after the gated classifier's changes, so the branch didn't cause it.
+  Raised 2026-10-21 by the gated classifier slice's task reviews.

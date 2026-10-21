@@ -574,7 +574,9 @@ registry, gated like per-turn and chapter-close:
 
 **When it runs.** Per-turn's `chainsTo` starts a pass when the turn's
 commit brings the cadence due — the unprocessed entries reach
-`classifierCadence` — unless the classifier is `failed-persistent`
+`classifierCadence` — unless the classifier is `failed-persistent` or
+`running` (a boot quarantine: a persisted `running` means the previous
+session ended mid-pass)
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 The pass runs while the user reads the reply. A pass's own `chainsTo`
 returns another pass while a chapter close is pending and entries

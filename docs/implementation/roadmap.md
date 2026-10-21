@@ -196,14 +196,12 @@ companions.
   and builds the chapter-close pipeline. The close branch of
   `nextMemoryRun` reads at commit under the gate, in SQL as the pass
   branch does, with no in-memory mirror of the open region's tokens.
-  The chain it extends is in
-  place: the orchestrator awaits `chainsTo` at commit while the run
-  holds the gate and starts the successor with a fresh `actionId`, and
-  an `interruptible` run's abort records its kind in
-  `txState.deferred`, so a close declared `interruptible` is
+  The chain it extends is in place: the orchestrator awaits `chainsTo`
+  at commit while the run holds the gate and starts the successor with
+  a fresh `actionId`, and an `interruptible` run's abort records its
+  kind in `txState.deferred`, so a close declared `interruptible` is
   interrupted, recorded and toasted (`chrome.deferredWork.close`) like
-  a pass. Send runs a deferred pass before the turn (`submitTurn`); the
-  deferred close after it is this slice's to add.
+  a pass.
   Slice-authoring note: the reader's rollback and regenerate confirms
   recount whenever a run settles while they are open, and
   `rollbackToEntry` / `regenerateTurn` refuse `counts-changed` when
@@ -218,21 +216,38 @@ companions.
   its runs mis-stamp their anchors (surfaced by Slice 2.7).
   Slice-authoring note: `interruptMemoryRuns`
   (`lib/stores/generation/generation.ts`) aborts one snapshot of the
-  branch's interruptible runs. A pass committing during the interrupt
-  can now chain a close that the snapshot misses and that then runs
-  beside the reversal's sweep. This slice must loop as `cancelStoryRuns`
-  does, or have `commitRun` refuse an interruptible successor while
+  branch's interruptible runs. Once this slice gives the pass its
+  `chainsTo`, a pass committing during the interrupt can chain a close
+  that the snapshot misses and that then runs beside the reversal's
+  sweep. This slice must loop as `cancelStoryRuns` does, or have
+  `commitRun` refuse an interruptible successor while
   `reversalInProgress`.
-  Slice-authoring note: `submitTurn` runs only `deferred.pass`, and
-  `nextMemoryRun` returns null while the branch holds a `close` record,
-  so a `{ close: true }` record would stop all memory work on the
-  branch until a restart. This slice must run the deferred close after
-  the deferred pass.
+  Slice-authoring note: Send runs a deferred pass before the turn
+  (`submitTurn` reads only `deferred.pass`), and `nextMemoryRun`
+  returns null while the branch holds a `close` record, so a
+  `{ close: true }` record would stop all memory work on the branch
+  until a restart. This slice must run the deferred close after the
+  deferred pass.
   Slice-authoring note: `undoLastAction` reads its target before the
   gate decision, and `selectUndoTarget` skips only `periodic_classifier`
-  deltas. A close logs its own under `chapter_close`, so CTRL-Z of the
-  turn would find the close's group and be refused while it runs. This
-  slice must settle which target CTRL-Z picks during a close.
+  deltas. A close logs its own under `chapter_close` and emits
+  `createStoryEntry`, so the selector may classify the close's group as
+  a `turn` and CTRL-Z may reverse it as one, or refuse it while the
+  close runs. This slice must settle which target CTRL-Z picks for a
+  close.
+  Slice-authoring note: the Actions menu puts `Close chapter…` under
+  `STORY TOOLS` on every in-story surface
+  ([`actions-menu.md`](../ui/patterns/actions-menu.md)), so a close is
+  the first run startable from World, Plot or Story Settings, and a
+  screen that is both dirty and busy answers one back with two dialogs,
+  the story-leave confirm and the unsaved-changes one. It is
+  unreachable today: busy means edit-blocked, those screens disable
+  their inputs then, and nothing starts work from them. The fix shape:
+  the story-leave guard takes `dirty`, drops its own `usePreventRemove`
+  while dirty and exposes a removal-aware `guardRemoval(proceed)`, and
+  each route's unsaved guard calls
+  `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
+  through `useRowSessionGuard`).
 - M5.3 — Chapter timeline screen per
   [`docs/ui/screens/chapter-timeline/chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md);
   chapter delete routes through the deep-rollback surface (M5.5).
@@ -1139,18 +1154,10 @@ code before it moved; resolve with the slice it names.
   `failed-persistent` is unbuilt — the story pill's error slot knows
   only `swap-paused` and `memory-incomplete`. Reachable on any build
   whose provider or apply step fails repeatedly. The developer chose
-  not to pull an interim pill forward. Known gap, unreachable in v1: a
-  screen that is both dirty and busy answers one back with two
-  dialogs, the story-leave confirm and the unsaved-changes one. Busy
-  means edit-blocked, World, Plot and Story Settings disable their
-  inputs then, and nothing starts work from those screens;
-  `[Run classifier now]` is the first thing that does. The fix shape:
-  the story-leave guard takes `dirty`, drops its own `usePreventRemove`
-  while dirty and exposes a removal-aware `guardRemoval(proceed)`, and
-  each route's unsaved guard calls
-  `requestLeave(() => guardRemoval(proceed))` (World and Plot thread it
-  through `useRowSessionGuard`). Routed from triage 2026-09-27;
-  rewritten when the gated classifier replaced the scheduler.
+  not to pull an interim pill forward. `[Run classifier now]` lives on
+  Story Settings, and leaving a dirty pane asks first; the dirty-and-busy
+  two-dialog gap is M5.2's. Routed from triage 2026-09-27; rewritten when
+  the gated classifier replaced the scheduler.
 - **M7.3 — Reader jump-to-entry from a delta row.** The reader route
   takes only `branchId` and `ReaderSurfaceHandle` exposes
   `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log
@@ -1842,8 +1849,10 @@ own.
   the `Toaster`. New instances: the rollback and regenerate
   `counts-changed` refusal toast, the deferral toast an interrupt fires
   before a refusal, and the deferral toast during Story-leave
-  Cancel & leave while its confirm spins. Routed from triage
-  2026-10-09.
+  Cancel & leave while its confirm spins. The same trap contradicts
+  [`toast.md → Z-index`](../ui/patterns/toast.md#z-index), which puts
+  the `Toaster` (`z-[100]` in `components/ui/toast.tsx`) above Sheet and
+  AlertDialog. Routed from triage 2026-10-09.
 - **M9.5 — A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
   native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
   a closing Sheet's scrim keeps catching touches until its animation ends

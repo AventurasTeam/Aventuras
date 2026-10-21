@@ -122,7 +122,7 @@
   .gen-cancel-action { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; background: transparent; color: var(--ink); font-size: 11px; cursor: pointer; border-radius: 2px; font-family: inherit; }
   .gen-cancel-action:hover { background: var(--bg-region); }
 
-  /* chapter-close banner — sticky below chrome for the duration of the close transaction */
+  /* memory-run banner — sticky below chrome for the duration of a pass or a close */
   .gen-banner { display: none; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); align-items: center; gap: 12px; font-size: 12px; color: var(--ink); }
   .gen-banner.visible { display: flex; }
 
@@ -843,7 +843,7 @@
   <span class="chip browse recent-1" id="phone-browse-chip" title="Open Browse (rail) as Sheet — background tints when any rail-surfaceable category has recent classifier activity (aggregate across all 7 categories)">&#9776; Browse</span>
 </div>
 
-<!-- Chapter-close banner — sticky below chrome during chapter-close transaction -->
+<!-- Memory-run banner — sticky below chrome during a pass (updating-memory) or a chapter close -->
 <div class="gen-banner" id="gen-banner">
   <span class="gen-banner-icon"></span>
   <span class="gen-banner-label" id="gen-banner-label">Closing chapter: 2 of 4 &mdash; generating chapter metadata&hellip;</span>
@@ -1594,7 +1594,7 @@
 })();
 
 (function() {
-  // gen state → status pill + streaming entry + composer send/cancel + chapter-close banner
+  // gen state → status pill + streaming entry + composer send/cancel + memory-run banner
   const genStatus = document.getElementById('gen-pill');
   const genLabel = document.getElementById('gen-label');
   const streamingEntry = document.getElementById('streaming-entry');
@@ -1681,7 +1681,7 @@
           streamingEntry.classList.remove('visible');
         }
 
-        // Banner shows only during chapter-close
+        // The banner shows for a pass or a close; updating-memory has its own branch above
         if (state === 'chapter-close') bannerLabel.textContent = 'Closing chapter: 2 of 4 \u2014 generating chapter metadata\u2026';
         banner.classList.toggle('visible', state === 'chapter-close');
         cancelAction.textContent = state === 'chapter-close' ? 'Cancel chapter close' : 'Cancel generation';
