@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+
 import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
@@ -44,12 +46,8 @@ export function selectStorySettingsGenerationRunKind(
   return pillRun(txState, { storyId })?.kind ?? null
 }
 
-/**
- * Cancels the pill's run; an interruptible one (pass, close) is deferred to the next Send. Pass the
- * same `branchId` as `useStoryGenerationGate`, so Cancel ends the run the pill names.
- */
-export function cancelStoryPillRun(storyId: string | undefined, branchId?: string): void {
-  const run = pillRun(generationStore.getTxState(), { storyId, branchId })
+function cancelPillRunIn(scope: PillScope): void {
+  const run = pillRun(generationStore.getTxState(), scope)
   if (run == null) return
   if (run.interruptible) void interruptMemoryRuns(run.branchId)
   else void awaitRunTerminal(run.kind, run.branchId, 'cancel')
@@ -68,8 +66,9 @@ export function generationGateReason(
 }
 
 /**
- * The pill's run kind, whether it runs before the user's turn, and whether and why edits are
- * blocked. `branchId` scopes the pill's run to that branch (World, Plot); omitted, to the story.
+ * The pill's run kind, whether it runs before the user's turn, whether and why edits are blocked,
+ * and the pill's Cancel. `branchId` scopes the pill's run to that branch (World, Plot); omitted,
+ * to the story.
  */
 export function useStoryGenerationGate(
   storyId: string | undefined,
@@ -79,6 +78,8 @@ export function useStoryGenerationGate(
   editBlocked: boolean
   gateReason: string | undefined
   beforeTurn: boolean
+  /** Ends the run the pill names; an interruptible one (pass, close) is deferred to the next Send. */
+  cancelPillRun: () => void
 } {
   const activeRunKind = generationStore.useGeneration(
     (s) => pillRun(s.txState, { storyId, branchId })?.kind ?? null,
@@ -88,7 +89,11 @@ export function useStoryGenerationGate(
   )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   const gateReason = generationGateReason(editBlocked, activeRunKind)
-  return { activeRunKind, editBlocked, gateReason, beforeTurn }
+  const cancelPillRun = useCallback(
+    () => cancelPillRunIn({ storyId, branchId }),
+    [storyId, branchId],
+  )
+  return { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun }
 }
 
 export function storySettingsGenerationPhase(kind: string): StorySettingsGenerationPhase {

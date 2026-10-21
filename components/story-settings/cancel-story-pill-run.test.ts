@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -5,7 +7,7 @@ import { definePipeline, startPipeline, type PhaseContext, type PhaseResult } fr
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import { generationStore, selectMemoryRun } from '@/lib/stores'
 
-import { cancelStoryPillRun } from './generation-run'
+import { useStoryGenerationGate } from './generation-run'
 
 async function* holdUntilAborted({
   abortSignal,
@@ -17,11 +19,12 @@ async function* holdUntilAborted({
   return { status: 'aborted' }
 }
 
-describe('cancelStoryPillRun on a pass', () => {
+describe("the pill's Cancel on a pass", () => {
   beforeEach(() => {
     resetSingletons()
   })
   afterEach(() => {
+    cleanup()
     resetSingletons()
   })
 
@@ -41,12 +44,17 @@ describe('cancelStoryPillRun on a pass', () => {
         'held',
       ),
     )
+    const { result } = renderHook(() => useStoryGenerationGate('s1'))
+    expect(result.current.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
 
-    cancelStoryPillRun('s1')
+    await act(async () => {
+      result.current.cancelPillRun()
+      expect(await started.origin).toMatchObject({ outcome: 'aborted' })
+      await started.chain
+    })
 
-    expect(await started.origin).toMatchObject({ outcome: 'aborted' })
-    await started.chain
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    expect(result.current.activeRunKind).toBeNull()
   })
 })

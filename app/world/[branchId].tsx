@@ -15,11 +15,7 @@ import { distinctCategories } from '@/components/plot/plot-route-data'
 import { plotHref } from '@/components/plot/plot-selection'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
-import {
-  cancelStoryPillRun,
-  storyPillPhase,
-  useStoryGenerationGate,
-} from '@/components/story-settings/generation-run'
+import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { CollisionReviewPill } from '@/components/world/collision-review-pill'
@@ -221,10 +217,8 @@ export default function WorldRoute() {
     ],
   )
 
-  const { activeRunKind, editBlocked, gateReason, beforeTurn } = useStoryGenerationGate(
-    storyId ?? undefined,
-    branchId,
-  )
+  const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =
+    useStoryGenerationGate(storyId ?? undefined, branchId)
   const openRegionPct = useOpenRegionTokens(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
@@ -613,7 +607,7 @@ export default function WorldRoute() {
             swapTarget={open?.settings.embedding_swap_target}
             activePhase={storyPillPhase(activeRunKind)}
             beforeTurn={beforeTurn}
-            onCancel={() => cancelStoryPillRun(storyId ?? undefined, branchId)}
+            onCancel={cancelPillRun}
             onOpenMemory={() => {
               if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
             }}
