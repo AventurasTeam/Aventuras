@@ -552,10 +552,13 @@ slice-planning gate forces its resolution before that slice is planned.
   `failed`, and a `failed` outcome clears the run's deferral.
   `submitTurn` treats a `failed` deferred pass as "go ahead", so the
   turn then runs over the unreversed orphans that boot recovery will
-  see. Rare: the reversal's SQLite transaction has to fail. The fix
-  belongs in the orchestrator: a user-cancel whose reversal fails ends
-  `aborted` with an error, so the deferral stays and the Send is
-  cancelled. Raised 2026-10-21 by the gated classifier slice's task
+  see. Rare: the reversal's SQLite transaction has to fail. A reversal
+  that commits but whose store sync then fails settles `failed` too,
+  so that Cancel also lets the turn run (over no orphans, but against
+  the user's Cancel). The fix belongs in the orchestrator: a
+  user-cancel whose reversal or its store sync fails ends `aborted`
+  with an error, so the deferral stays and the Send is cancelled.
+  Raised 2026-10-21 by the gated classifier slice's task and branch
   reviews.
 
 - **The head turn's membership test is written out four times.**
