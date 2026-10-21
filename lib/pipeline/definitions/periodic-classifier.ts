@@ -360,10 +360,11 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
           await writeStatus(ctx, status)
         } catch (e) {
           // Left running, the cadence stays suspended until the next boot.
-          logger.warn('classifier.interrupt_restore_retried', {
-            branchId: ctx.branchId,
-            error: e instanceof Error ? e.message : String(e),
-          })
+          logger.warn(
+            'classifier.interrupt_restore_retried',
+            { branchId: ctx.branchId, error: e instanceof Error ? e.message : String(e) },
+            { actionId: ctx.actionId },
+          )
           await writeStatus(ctx, status)
         }
       },

@@ -1936,7 +1936,9 @@ describe('periodicClassifierPhase via runPipeline', () => {
   })
 
   // Left `running`, the cadence would stay suspended for the rest of the session.
-  it('retries a status restore that fails once after an interrupt', async () => {
+  it('retries a status restore that fails once after an interrupt, logging it as the run', async () => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, RETRYING)
     ensurePeriodicClassifierPipelineRegistered()
@@ -1959,12 +1961,17 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     const pass = runOutcome({ storyId: 's1', branchId: 'b1', db: flaky, runInTransaction })
     await inCall
+    const [held] = generationStore.getTxState().runs.values()
     failRestore = true
     await interruptMemoryRuns('b1')
 
     expect(await pass).toBe('aborted')
     expect(failRestore).toBe(false)
     expect(await storedStatus(db)).toEqual(RETRYING)
+    const retried = getDiagnosticsSnapshot().logEntries.filter(
+      (e) => e.kind === 'classifier.interrupt_restore_retried',
+    )
+    expect(retried.map((e) => e.actionId)).toEqual([held.actionId])
   })
 
   // generation-pipeline.md → Prose reversals and the interrupt: the restore lands before the sweep.
