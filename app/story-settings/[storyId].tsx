@@ -43,6 +43,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
+import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
@@ -56,7 +57,7 @@ import {
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { rehydrateStories, storiesStore } from '@/lib/stores'
+import { currentStoryStore, rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -147,6 +148,12 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const surfaceNavigate = useSurfaceNavigate()
   const isPhone = useTier() === 'phone'
   const isFocused = useIsFocused()
+  // The route carries no branch: the open story's, when it is this story. Runs, turns and
+  // reversals all come from the open story, so another story's settings have none in flight.
+  const openBranchId = currentStoryStore.useCurrentStory((open) =>
+    open != null && open.storyId === storyId ? open.branchId : null,
+  )
+  const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId ?? null, openBranchId)
   const params = useLocalSearchParams<{ tab?: string | string[] }>()
   const tab = singleParam(params.tab)
   const session = useStorySettingsSaveSession()
@@ -200,7 +207,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     activeRunKind,
     editBlocked,
     gateReason: disabledReason,
-    classifierRunning,
+    beforeTurn,
   } = useStoryGenerationGate(storyId)
 
   // Scoped to THIS route's story: the open story survives navigation, so an
@@ -351,6 +358,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               : undefined
           }
           beforeNavigate={session.requestLeave}
+          beforeLeaveStory={guardLeave}
           blocked={session.pendingLeave || session.pendingConfirmation}
         />
       }
@@ -358,7 +366,8 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         <StoryStatusPill
           storyId={storyId ?? null}
           swapTarget={settings?.embedding_swap_target}
-          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
+          activePhase={storyPillPhase(activeRunKind)}
+          beforeTurn={beforeTurn}
           onCancel={() => cancelStoryPillRun(storyId)}
           onOpenMemory={() => selectTab('memory')}
         />
@@ -379,6 +388,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         }
       />
       <StorySettingsDialogs blocked={editBlocked} disabledReason={disabledReason} />
+      {storyLeaveDialog}
     </ScreenShell>
   )
 }

@@ -251,6 +251,34 @@ describe('useConfigFixAction', () => {
     const { result } = renderHook(() => useConfigFixAction('from-a-newer-build', 'story_1'))
     expect(result.current?.label).toBe(t('reader:systemEntry.fixDefault'))
   })
+
+  // App Settings is outside the story, so the push waits on the story-leave guard.
+  it('routes the App Settings fix through the story-leave guard', () => {
+    const held: (() => void)[] = []
+    const leaveStory = vi.fn((proceed: () => void) => {
+      held.push(proceed)
+    })
+    const { result } = renderHook(() =>
+      useConfigFixAction('provider-missing', 'story_1', leaveStory),
+    )
+
+    act(() => result.current?.onPress())
+    expect(leaveStory).toHaveBeenCalledTimes(1)
+    expect(router.push).not.toHaveBeenCalled()
+
+    act(() => held.forEach((proceed) => proceed()))
+    expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+  })
+
+  it('keeps the in-story override fix off the story-leave guard', () => {
+    const leaveStory = vi.fn()
+    const { result } = renderHook(() =>
+      useConfigFixAction('override-provider-missing', 'story_1', leaveStory),
+    )
+    act(() => result.current?.onPress())
+    expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    expect(leaveStory).not.toHaveBeenCalled()
+  })
 })
 
 describe('useSystemEntryActions', () => {
@@ -288,5 +316,20 @@ describe('useSystemEntryActions', () => {
     expect(
       actionsFor({ kind: 'config-resolver', failure: 'override-provider-missing' }, null).fixAction,
     ).toBeUndefined()
+  })
+
+  it('threads the story-leave guard to the config fix', () => {
+    const leaveStory = vi.fn()
+    const { result } = renderHook(() =>
+      useSystemEntryActions(
+        { kind: 'config-resolver', failure: 'profile-missing' },
+        onRetry,
+        'story_1',
+        leaveStory,
+      ),
+    )
+    act(() => result.current.fixAction?.onPress())
+    expect(leaveStory).toHaveBeenCalledTimes(1)
+    expect(router.push).not.toHaveBeenCalled()
   })
 })

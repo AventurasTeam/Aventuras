@@ -256,9 +256,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
       return
     }
     if (sameValue(applied.values, values)) return
-    // Refreshes untouched fields on a store patch (classifier, undo), else a later save writes
-    // stale values back. Per top-level field: a path-wise merge would graft a patch onto whichever
-    // array row shifted into its index.
+    // Refreshes untouched fields on a store patch (a pass under a blocked pane, an undo), else a
+    // later save writes stale values back. Per top-level field: a path-wise merge would graft onto
+    // whichever array row shifted into the index.
     const current: Record<string, unknown> = form.getValues()
     const touched: Record<string, unknown> = form.formState.dirtyFields
     const merged: Record<string, unknown> = { ...values }

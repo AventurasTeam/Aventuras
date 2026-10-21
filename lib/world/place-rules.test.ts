@@ -65,7 +65,6 @@ const locationSave = ({
 }: LocationArgs) => ({
   kind: 'location' as const,
   draft: { ...locationDraftFrom(row), ...draft },
-  keywordsBase: [],
   row,
   branchEntities: entities,
   story: storyAt(story, tail),
@@ -407,8 +406,6 @@ describe('placeSaveRefusal — entering a retired place', () => {
     kind: 'character' as const,
     draft: { ...characterDraftFrom(row, []), currentLocationId },
     relationships: [],
-    relationshipsBase: [],
-    keywordsBase: [],
     row,
     branchEntities: world,
     story: storyAt(null),
@@ -439,7 +436,6 @@ describe('placeSaveRefusal — entering a retired place', () => {
     const itemSave = {
       kind: 'item' as const,
       draft: { ...itemDraftFrom(lamp), atLocationId: 'loc_market' },
-      keywordsBase: [],
       row: lamp,
       branchEntities: world,
       story: storyAt(null),

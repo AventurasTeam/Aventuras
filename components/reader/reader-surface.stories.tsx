@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useEffect, useState, type ComponentProps } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
@@ -88,6 +89,48 @@ const noopHandlers = {
 
 const HEAD_TURN_ROWS = ROWS.slice(0, 3)
 const EDITED_ACTION = 'I step through the frame of the second painting.'
+
+const PASS_ROWS: StoryEntry[] = [
+  entry({
+    id: 'p1',
+    kind: 'opening',
+    content: 'The gallery had no doors, and yet every visitor arrived.',
+    position: 1,
+  }),
+  entry({
+    id: 'p2',
+    kind: 'user_action',
+    content: 'I step through the frame of the first painting.',
+    position: 2,
+  }),
+  entry({ id: 'p3', kind: 'ai_reply', content: 'Paint parts around you like water.', position: 3 }),
+  entry({
+    id: 'p4',
+    kind: 'user_action',
+    content: 'I map the two wings against each other.',
+    position: 4,
+  }),
+  entry({
+    id: 'p5',
+    kind: 'ai_reply',
+    content: 'The wings refuse to line up.',
+    position: 5,
+    metadata: BASE_META,
+  }),
+]
+
+// Tail's time and scene editors would be live ungated: their absence is the gate's doing.
+const PASS_IN_FLIGHT_ARGS = {
+  rows: PASS_ROWS,
+  tailEntryId: 'p5',
+  worldTimeDecorations: { p5: { label: 'Day 12 · 14:33', raw: 90 } },
+  worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: WORLD_TIME_ORIGIN },
+  editBlocked: true,
+}
+
+function rowButton(id: string, name: string): HTMLElement {
+  return within(entryRow(id)).getByRole('button', { name })
+}
 
 function entryRow(id: string): HTMLElement {
   const row = document.querySelector(`[data-entry-row="${id}"]`)
@@ -291,6 +334,318 @@ export const SaveAndRegenerateAbsentOffHead: Story = {
     expect(
       screen.queryByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
     ).not.toBeInTheDocument()
+  },
+}
+
+/**
+ * Head reversals interrupt a pass: every ↻ and ×, and the head turn's pencils, stay live;
+ * the rest keeps the gate (principles.md → Edit restrictions during in-flight generation).
+ */
+export const PassInFlightHeadTurnLive: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, headReversalBlocked: false },
+  play: async () => {
+    const edit = t('reader:entryCard.editEntry')
+    await waitFor(() => expect(rowButton('p5', edit)).not.toBeDisabled())
+    expect(rowButton('p4', edit)).not.toBeDisabled()
+    for (const id of ['p1', 'p2', 'p3']) expect(rowButton(id, edit)).toBeDisabled()
+    for (const id of ['p3', 'p5'])
+      expect(rowButton(id, t('reader:entryCard.regenerate'))).not.toBeDisabled()
+    for (const id of ['p2', 'p3', 'p4', 'p5'])
+      expect(rowButton(id, t('reader:entryCard.deleteEntry'))).not.toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: t('reader:worldTimeEdit.title') }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(rowButton('p5', t('reader:entryCard.showState')))
+    expect(
+      within(entryRow('p5')).queryByRole('button', { name: t('reader:entryCard.stateEditScene') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+/** A host that passes no `headReversalBlocked` keeps one gate for every row control. */
+export const GateHeldWithoutHeadReversalSplit: Story = {
+  args: PASS_IN_FLIGHT_ARGS,
+  play: async () => {
+    await waitFor(() => expect(rowButton('p5', t('reader:entryCard.editEntry'))).toBeDisabled())
+    expect(rowButton('p5', t('reader:entryCard.regenerate'))).toBeDisabled()
+    expect(rowButton('p5', t('reader:entryCard.deleteEntry'))).toBeDisabled()
+    expect(rowButton('p4', t('reader:entryCard.editEntry'))).toBeDisabled()
+  },
+}
+
+// Enough rows to overflow the 480 px box, so the viewport can shrink under a reader at the bottom.
+const OVERFLOW_ROWS: StoryEntry[] = Array.from({ length: 14 }, (_, i) =>
+  entry({
+    id: `o${i + 1}`,
+    kind: i % 2 === 0 ? 'user_action' : 'ai_reply',
+    content: `Corridor ${i + 1}: the gallery adds another wing each time you look away from it.`,
+    position: i + 1,
+  }),
+)
+// The memory banner's desktop height: it mounts above the reader as a pass starts.
+const BANNER_HEIGHT_PX = 49
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+function readerScroller(): HTMLElement {
+  const scroller = entryRow('o1').parentElement
+  if (scroller == null) throw new Error('no reader scroller')
+  return scroller
+}
+
+function distanceFromBottom(el: HTMLElement): number {
+  return el.scrollHeight - el.scrollTop - el.clientHeight
+}
+
+// The landing pin re-asserts the bottom per frame until the scroll height holds for 10
+// frames; outlasting that keeps the pin from passing the shrink stories by itself.
+async function settleLanding(scroller: HTMLElement) {
+  await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  let stable = 0
+  let lastHeight = -1
+  while (stable < 20) {
+    await nextFrame()
+    stable = scroller.scrollHeight === lastHeight ? stable + 1 : 0
+    lastHeight = scroller.scrollHeight
+  }
+}
+
+async function scrollToDistance(scroller: HTMLElement, distancePx: number) {
+  scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - distancePx
+  await waitFor(() => expect(distanceFromBottom(scroller)).toBeCloseTo(distancePx, 0))
+  await nextFrame()
+}
+
+// The decorator's fixed-height box is the reader's container, standing in for the shell.
+async function resizeViewport(scroller: HTMLElement, deltaPx: number) {
+  const box = scroller.parentElement?.parentElement
+  if (box == null) throw new Error('no viewport box')
+  const before = scroller.clientHeight
+  box.style.height = `${box.offsetHeight + deltaPx}px`
+  await waitFor(() => expect(scroller.clientHeight).toBe(before + deltaPx))
+  await nextFrame()
+  await nextFrame()
+}
+
+const shrinkViewport = (scroller: HTMLElement) => resizeViewport(scroller, -BANNER_HEIGHT_PX)
+
+/** A reader at the bottom stays there when the banner mounts and takes viewport height. */
+export const ShrinkAtBottomRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await shrinkViewport(scroller)
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+
+/** Inside the jump button's 20 px near-bottom tolerance counts as at the bottom. */
+export const ShrinkNearBottomRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 15)
+    await shrinkViewport(scroller)
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+
+/** Further up than the tolerance, the reader is reading back: its position holds. */
+export const ShrinkAwayFromBottomHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 30)
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeCloseTo(30 + BANNER_HEIGHT_PX, 0)
+  },
+}
+
+/** Growth needs no re-pin: a reader inside the tolerance keeps its scrollTop as the box grows. */
+export const GrowNearBottomHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 15)
+    const scrollTop = scroller.scrollTop
+    await resizeViewport(scroller, 5)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeCloseTo(10, 0)
+  },
+}
+
+/** No programmatic write lands under a finger: a shrink while a touch is down holds. */
+export const ShrinkDuringTouchHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeCloseTo(BANNER_HEIGHT_PX, 0)
+  },
+}
+
+/** A shrink skipped under a finger still moves the baseline the next shrink measures from. */
+export const ShrinkAfterTouchKeepsBaseline: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    await shrinkViewport(scroller)
+    scroller.dispatchEvent(new Event('touchend', { bubbles: true }))
+    // 40 px up: outside the tolerance against the current height, inside it (40 - 49) against
+    // the height before the skipped shrink.
+    await scrollToDistance(scroller, 40)
+    const scrollTop = scroller.scrollTop
+    await resizeViewport(scroller, -10)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/**
+ * Content that grew below the viewport fires no scroll event, so only the geometry at the
+ * shrink knows the reader had already left the bottom.
+ */
+export const ShrinkAfterSilentGrowthHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    entryRow('o14').style.paddingBottom = '80px'
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeGreaterThan(60))
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+const REPLY_TEXT = 'The corridor folds shut behind you.'
+// Frames between the commit and the reply's late growth, inside the settle window: the per-frame
+// loop is what absorbs layout that lands after the pin's first write.
+const LATE_GROWTH_FRAMES = 5
+
+// The surface across a stream's end: the streaming card gives way to its committed row, which
+// then grows a few frames later.
+function StreamEndHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const [phase, setPhase] = useState<'streaming' | 'committed' | 'grown'>('streaming')
+  useEffect(() => {
+    if (phase !== 'committed') return
+    let frames = 0
+    let raf = 0
+    const tick = () => {
+      frames += 1
+      if (frames >= LATE_GROWTH_FRAMES) setPhase('grown')
+      else raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [phase])
+  const reply = entry({
+    id: 'reply',
+    kind: 'ai_reply',
+    content: phase === 'grown' ? `${REPLY_TEXT}\n\n${REPLY_TEXT}\n\n${REPLY_TEXT}` : REPLY_TEXT,
+    position: OVERFLOW_ROWS.length + 1,
+  })
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <button type="button" onClick={() => setPhase('committed')}>
+        End stream
+      </button>
+      <div data-grown={phase === 'grown'} style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface
+          {...props}
+          rows={phase === 'streaming' ? OVERFLOW_ROWS : [...OVERFLOW_ROWS, reply]}
+          streaming={phase === 'streaming' ? { content: REPLY_TEXT, reasoning: '' } : null}
+        />
+      </div>
+    </div>
+  )
+}
+
+// A plain click, so the play keeps its place inside the settle window; React commits the
+// stream's end on the next microtask, before the frame waited for here.
+async function endStream() {
+  screen.getByRole('button', { name: 'End stream' }).click()
+  await nextFrame()
+}
+
+async function replyGrown() {
+  await waitFor(() =>
+    expect(document.querySelector('[data-grown="true"]')).toBeInstanceOf(HTMLElement),
+  )
+  for (let i = 0; i < 3; i++) await nextFrame()
+}
+
+/** An engaged stream's end holds the bottom while the committed reply settles. */
+export const StreamEndSettlesAtBottom: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    await replyGrown()
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+
+/** A disengaged reader keeps its position through the stream's end. */
+export const StreamEndDisengagedHolds: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 200)
+    const scrollTop = scroller.scrollTop
+    await endStream()
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A wheel during the settle hands the position back to the user. */
+export const StreamEndSettleBrokenByWheel: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    // Inside the settle: the reply has committed and not yet grown.
+    expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
+    expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
+    scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }))
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A touch drag during the settle hands the position back to the user. */
+export const StreamEndSettleBrokenByTouch: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
+    expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
+    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    scroller.dispatchEvent(new Event('touchmove', { bubbles: true }))
+    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
   },
 }
 

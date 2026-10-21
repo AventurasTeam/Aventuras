@@ -63,9 +63,12 @@ type ErrorState =
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
+  // `updating-memory` running before the user's turn (Send's deferred work);
+  // ignored for every other phase.
+  beforeTurn?: boolean
   error?: ErrorState
-  // Optional: ignored while the phase is uncancellable for its own reasons
-  // (a committing transaction, say), so a caller may pass it unconditionally.
+  // Absent, the tag renders bare with no popover: the caller omits it
+  // while its run can't be cancelled.
   onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }
@@ -249,10 +252,9 @@ props on every render.
   node name to a `GenerationPhase` — exhaustively over the per-turn
   phase-name union, so a phase added to that pipeline fails the
   build until it is labelled, and with a generic-label fallback so an
-  unmapped name never blanks the pill mid-run. Story Settings, World
-  and Plot still derive their phase from the run's _kind_, falling
-  back to the periodic classifier's `updating-memory`; Chapter
-  Timeline is unwired.
+  unmapped name never blanks the pill mid-run; a pass maps by its
+  kind. Story Settings, World and Plot derive their phase from the
+  run's _kind_; Chapter Timeline is unwired.
 - **Memory error observation.** `memory-incomplete` from staleness
   detection per
   [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)

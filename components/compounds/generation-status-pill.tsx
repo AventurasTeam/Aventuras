@@ -18,13 +18,8 @@ type GenerationPhase =
   | 'closing-chapter'
   | 'refreshing-suggestions'
 
-// `blocking` is whether the phase holds the turn up, and it drives both columns
-// beside it and the priority rule below. A blocking phase also owns the cancel
-// affordance, so it keeps the slot even against an error; a background one drops
-// the accent fill and yields, since nothing is lost by waiting for it and the
-// error may be waiting on the user. Tracked separately from a null `cancelCopy`,
-// which the two coincide with today only because the one background phase is
-// also the one nothing can cancel.
+// `blocking`: the user waits, so it owns the cancel and outranks an error; a background
+// phase yields, as the error may await the user. None in v1: the pass holds the gate too.
 const PHASE_APPEARANCE: Record<
   GenerationPhase,
   { blocking: boolean; tone: TagTone; spinnerSlot: keyof ThemeColorSlots }
@@ -33,7 +28,7 @@ const PHASE_APPEARANCE: Record<
   'recalling-memory': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
   'generating-narrative': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
   classifying: { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
-  'updating-memory': { blocking: false, tone: 'default', spinnerSlot: '--fg-muted' },
+  'updating-memory': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
   'closing-chapter': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
   'refreshing-suggestions': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
 }
@@ -53,14 +48,15 @@ type ErrorState =
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
+  /** `updating-memory` running before the user's turn (Send's deferred work); else ignored. */
+  beforeTurn?: boolean
   error?: ErrorState
-  // Ignored for phases `cancelCopy` marks cancel-less, so a caller that can't
-  // tell which phase is up may pass it unconditionally.
+  // Absent, the tag renders bare with no popover: omit it while the run can't be cancelled.
   onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }
 
-function phaseCopy(phase: GenerationPhase): string {
+function phaseCopy(phase: GenerationPhase, beforeTurn: boolean): string {
   switch (phase) {
     case 'reasoning':
       return t('chrome.generationStatusPill.phase.reasoning')
@@ -71,7 +67,9 @@ function phaseCopy(phase: GenerationPhase): string {
     case 'classifying':
       return t('chrome.generationStatusPill.phase.classifying')
     case 'updating-memory':
-      return t('chrome.generationStatusPill.phase.updatingMemory')
+      return beforeTurn
+        ? t('chrome.generationStatusPill.phase.updatingMemoryBeforeTurn')
+        : t('chrome.generationStatusPill.phase.updatingMemory')
     case 'closing-chapter':
       return t('chrome.generationStatusPill.phase.closingChapter')
     case 'refreshing-suggestions':
@@ -94,8 +92,7 @@ function errorCopy(error: ErrorState): string {
 
 // Exhaustive switch rather than a default-carrying ternary: a new phase must
 // fail the build here instead of silently inheriting "Cancel generation".
-// `null` is the cancel-less answer — nothing the user started, nothing to stop.
-function cancelCopy(phase: GenerationPhase): string | null {
+function cancelCopy(phase: GenerationPhase): string {
   switch (phase) {
     case 'reasoning':
     case 'recalling-memory':
@@ -103,7 +100,7 @@ function cancelCopy(phase: GenerationPhase): string | null {
     case 'classifying':
       return t('chrome.generationStatusPill.cancelGeneration')
     case 'updating-memory':
-      return null
+      return t('chrome.generationStatusPill.cancelMemoryUpdate')
     case 'closing-chapter':
       return t('chrome.generationStatusPill.cancelChapterClose')
     case 'refreshing-suggestions':
@@ -113,6 +110,7 @@ function cancelCopy(phase: GenerationPhase): string | null {
 
 export function GenerationStatusPill({
   activePhase,
+  beforeTurn = false,
   error,
   onCancel,
   onErrorTap,
@@ -124,7 +122,7 @@ export function GenerationStatusPill({
   if (activePhase != null && (PHASE_APPEARANCE[activePhase].blocking || error == null)) {
     const isPhone = tier === 'phone'
     const appearance = PHASE_APPEARANCE[activePhase]
-    const phase = phaseCopy(activePhase)
+    const phase = phaseCopy(activePhase, beforeTurn)
     const tag = (
       <Tag
         tone={appearance.tone}
@@ -140,8 +138,7 @@ export function GenerationStatusPill({
         {isPhone ? null : phase}
       </Tag>
     )
-    const cancelLabel = cancelCopy(activePhase)
-    if (onCancel == null || cancelLabel == null) return tag
+    if (onCancel == null) return tag
     return (
       <Popover ariaLabel={phase}>
         <PopoverTrigger ref={triggerRef} accessibilityLabel={phase} hitSlop={TAG_HIT_SLOP}>
@@ -155,7 +152,7 @@ export function GenerationStatusPill({
               onCancel()
             }}
           >
-            <Text>{cancelLabel}</Text>
+            <Text>{cancelCopy(activePhase)}</Text>
           </Button>
         </PopoverContent>
       </Popover>

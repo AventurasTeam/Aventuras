@@ -123,6 +123,13 @@ export type MockLlm = {
   holdNextNarrative: () => void
   /** Finish any held narrative streams with the current narrative content. */
   releaseNarrative: () => void
+  /**
+   * One-shot: the next structured call matching the `agentName` shape is recorded in `requests`,
+   * then held unanswered until releaseStructured() or a client abort (the in-flight window).
+   */
+  holdNextStructured: (agentName: string) => void
+  /** Answer every held structured call with its shape's reply as set now. */
+  releaseStructured: () => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
   close: () => Promise<void>
@@ -213,6 +220,9 @@ export async function startMockLlm(): Promise<MockLlm> {
   // Streams held open (hold mode): tracked so release/close can finish them and
   // a client abort can drop them — an unfinished socket would hang server.close().
   const heldResponses = new Set<ServerResponse>()
+  let holdStructuredNext: string | null = null
+  // res → shape name to answer with; a client abort drops it, like heldResponses.
+  const heldStructured = new Map<ServerResponse, string>()
 
   // The renderer fetches cross-origin (its own origin → this server), which
   // triggers a CORS preflight; answer it and tag every response, so the call
@@ -221,6 +231,18 @@ export async function startMockLlm(): Promise<MockLlm> {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'POST, OPTIONS',
     'access-control-allow-headers': '*',
+  }
+
+  const answerStructured = (res: ServerResponse, agentName: string | null): void => {
+    const value = agentName !== null ? (overrides.get(agentName) ?? EXAMPLES[agentName]) : {}
+    res.writeHead(200, { ...cors, 'content-type': 'application/json' })
+    res.end(structuredCompletion(value))
+  }
+
+  const releaseHeldStructured = (): void => {
+    const held = [...heldStructured]
+    heldStructured.clear()
+    for (const [res, agentName] of held) answerStructured(res, agentName)
   }
 
   const server = createServer((req, res) => {
@@ -269,9 +291,13 @@ export async function startMockLlm(): Promise<MockLlm> {
       const text = promptText(body)
       const agent = matchShape(null, text)
       requests.push({ body, streamed, agent: agent?.name ?? null })
-      const value = agent ? (overrides.get(agent.name) ?? EXAMPLES[agent.name]) : {}
-      res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-      res.end(structuredCompletion(value))
+      if (agent !== null && agent.name === holdStructuredNext) {
+        holdStructuredNext = null
+        heldStructured.set(res, agent.name)
+        res.on('close', () => heldStructured.delete(res))
+        return
+      }
+      answerStructured(res, agent?.name ?? null)
     })()
   })
 
@@ -296,12 +322,17 @@ export async function startMockLlm(): Promise<MockLlm> {
       for (const res of heldResponses) res.end(narrativeTail(narrative))
       heldResponses.clear()
     },
+    holdNextStructured: (agentName) => {
+      holdStructuredNext = agentName
+    },
+    releaseStructured: releaseHeldStructured,
     requests,
     close: () =>
       new Promise<void>((resolve) => {
-        // Finish held streams first, else an open socket hangs server.close().
+        // Finish held calls first, else an open socket hangs server.close().
         for (const res of heldResponses) res.end(narrativeTail(narrative))
         heldResponses.clear()
+        releaseHeldStructured()
         server.close(() => resolve())
       }),
   }

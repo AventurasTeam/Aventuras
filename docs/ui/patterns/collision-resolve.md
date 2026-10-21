@@ -196,8 +196,8 @@ which column a side sat in. A field that stopped diverging while the
 dialog was open isn't sent.
 
 The merge sends the terms the user dropped, never the final lists.
-The action builds those inside the branch lock from the rows as they
-are then (`mergedTerms`, lib/world): the union of both rows' terms
+The action builds those in the tick of its gate check, from the rows
+as they are then (`mergedTerms`, lib/world): the union of both rows' terms
 minus the dropped, keywords de-duplicated under the normalization
 `matchTerms` uses so a case variant does not survive as a second
 entry (a shared one in the canonical's spelling), tags trimmed and
@@ -208,8 +208,7 @@ answers to it through its kept name or a keyword in the union; a drop
 of it is sent like any other. Each list keeps the canonical's own entries
 in their stored order, then the other row's remaining additions
 sorted, and a list that comes out equal to the canonical's isn't
-written. So a keyword the classifier adds to either row while the
-merge waits for the lock is kept. Dropping every term is allowed
+written. Dropping every term is allowed
 (the entity becomes untagged). Only drops among the chips still
 shown are sent: when the two sides come to agree on a list while
 the dialog is open, its chips go and so do its drops.

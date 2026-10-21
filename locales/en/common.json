@@ -47,6 +47,7 @@
   },
   "generationGate": {
     "inFlight": "Generation is in flight. Cancel to edit.",
+    "updatingMemory": "Updating memory. Cancel to edit.",
     "chapterClose": "Chapter close in progress. Cancel to edit.",
     "suggestionRefresh": "Refreshing suggestions. Cancel to edit."
   },
@@ -131,6 +132,7 @@
         "generatingNarrative": "generating narrative…",
         "classifying": "classifying…",
         "updatingMemory": "updating memory…",
+        "updatingMemoryBeforeTurn": "updating memory before your turn…",
         "closingChapter": "closing chapter…",
         "refreshingSuggestions": "refreshing suggestions…"
       },
@@ -142,7 +144,16 @@
       },
       "cancelGeneration": "Cancel generation",
       "cancelChapterClose": "Cancel chapter close",
+      "cancelMemoryUpdate": "Cancel memory update",
       "cancelSuggestionRefresh": "Cancel suggestion refresh"
+    },
+    "memoryBanner": {
+      "updating": "Updating memory…",
+      "updatingBeforeTurn": "Updating memory before your turn…"
+    },
+    "deferredWork": {
+      "pass": "Memory update moved to your next turn.",
+      "close": "Chapter close moved to your next turn."
     }
   },
   "collisionRow": {
@@ -295,6 +306,12 @@
     "body": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
     "discard": "Discard",
     "save": "Save"
+  },
+  "storyLeave": {
+    "title": "Generation in flight",
+    "body": "Leaving will cancel the in-flight generation and revert any changes.",
+    "stay": "Stay",
+    "cancelAndLeave": "Cancel & leave"
   },
   "storyCard": {
     "genreNotSet": "Genre not set",

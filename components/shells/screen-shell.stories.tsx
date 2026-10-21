@@ -1,11 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
+import { t } from '@/lib/i18n'
+import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 import { themes } from '@/lib/themes'
 
 import { ScreenShell } from './screen-shell'
@@ -22,6 +26,49 @@ function BodyPlaceholder({ label }: { label: string }) {
       </Text>
     </View>
   )
+}
+
+let memoryRun: RunState | undefined
+
+// A pass in flight on the open story's branch, as the shell's banner reads it.
+function openStoryWithPass(): void {
+  currentStoryStore.set({
+    storyId: 'story-1',
+    branchId: 'branch-1',
+    definition: storyDefinitionSchema.parse({
+      mode: 'adventure',
+      leadEntityId: 'char_kael',
+      narration: 'second',
+      genre: { label: 'Fantasy', promptBody: '' },
+      tone: { label: 'Wry', promptBody: '' },
+      setting: '',
+      calendarSystemId: 'gregorian',
+      worldTimeOrigin: { year: 0 },
+    }),
+    settings: STORY_SETTINGS_DEFAULTS,
+  })
+  memoryRun = {
+    runId: 'run-pass',
+    kind: PERIODIC_CLASSIFIER_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: true,
+    beforeTurn: false,
+    actionId: 'action-pass',
+    storyId: 'story-1',
+    branchId: 'branch-1',
+    abortController: new AbortController(),
+    currentPhase: 'classify',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  }
+  generationStore.startRun(memoryRun)
+}
+
+function clearPass(): void {
+  generationStore.__reset()
+  currentStoryStore.__reset()
+  memoryRun = undefined
 }
 
 const meta: Meta<typeof ScreenShell> = {
@@ -319,5 +366,89 @@ export const ActionsSlot: Story = {
     await expect(screen.getByText('ACTIONS_SLOT')).toBeInTheDocument()
     // The default Actions IconAction is replaced, not rendered alongside.
     expect(screen.queryByRole('button', { name: 'Actions' })).toBeNull()
+  },
+}
+
+const IN_STORY_MEMORY_RUN_BODY =
+  'in-story variant — a pass in flight shows the memory-run banner below the chrome'
+
+export const InStoryMemoryRun: Story = {
+  beforeEach: () => {
+    openStoryWithPass()
+    return clearPass
+  },
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={35}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label={IN_STORY_MEMORY_RUN_BODY} />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const banner = await screen.findByTestId('memory-run-banner')
+    expect(within(banner).getByText(t('chrome.memoryBanner.updating'))).toBeInTheDocument()
+    const progress = screen.getByRole('progressbar', { name: t('chrome.chapterProgress') })
+    expect(progress.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const body = screen.getByText(IN_STORY_MEMORY_RUN_BODY)
+    expect(banner.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await userEvent.click(within(banner).getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(memoryRun?.abortController.signal.aborted).toBe(true))
+  },
+}
+
+// The banner sits below the phone chip strip too, not between the progress strip and it.
+export const InStoryMemoryRunPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  beforeEach: () => {
+    openStoryWithPass()
+    return clearPass
+  },
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={35}
+      centerExtras={<Tag tone="soft">Chap 3</Tag>}
+      mobileChipAction={<Tag tone="default">Browse</Tag>}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story phone — the banner sits below the chip strip" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const banner = await screen.findByTestId('memory-run-banner')
+    await waitFor(() => {
+      const chip = screen.getByText('Browse')
+      expect(chip.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  },
+}
+
+export const AppVariantHasNoMemoryBanner: Story = {
+  beforeEach: () => {
+    openStoryWithPass()
+    return clearPass
+  },
+  render: () => (
+    <ScreenShell
+      variant="app"
+      title={<Text size="base">App Settings</Text>}
+      hideSelfReferentialIcon
+      onBack={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="app variant — no memory-run banner, even with a pass in flight" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    await screen.findByText('app variant — no memory-run banner, even with a pass in flight')
+    expect(screen.queryByTestId('memory-run-banner')).toBeNull()
   },
 }

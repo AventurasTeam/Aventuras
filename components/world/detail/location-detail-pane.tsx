@@ -56,7 +56,7 @@ export function LocationDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
-    onSave: (draft, keywordsBase) => onSave({ kind: 'location', draft, keywordsBase }),
+    onSave: (draft) => onSave({ kind: 'location', draft }),
     onSaved,
     onRejected,
     onSession,
@@ -66,7 +66,6 @@ export function LocationDetailPane({
       const confirm = placeSaveConfirm({
         kind: 'location',
         draft,
-        keywordsBase: values.keywords,
         row,
         branchEntities: data.entities,
         story: data.story,

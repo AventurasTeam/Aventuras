@@ -77,10 +77,8 @@ function update(draft: ReturnType<typeof characterDraftFrom>, links = [MIRA_LINK
     branchEntities: [],
     kind: 'character',
     row: KAEL,
-    keywordsBase: KAEL.keywords,
     draft,
     relationships: links,
-    relationshipsBase: links,
     ...AT,
   })
 }
@@ -177,7 +175,6 @@ describe('entityActions — update', () => {
         branchEntities: [],
         kind: 'item',
         row: rope,
-        keywordsBase: rope.keywords,
         draft,
         ...AT,
         id: 'item_rope',
@@ -209,7 +206,6 @@ describe('entityActions — update', () => {
         branchEntities: [],
         kind: 'faction',
         row: guild,
-        keywordsBase: guild.keywords,
         draft,
         ...AT,
         id: 'fac_guild',
@@ -229,7 +225,6 @@ describe('entityActions — update', () => {
         branchEntities: [],
         kind: 'location',
         row: KAEL,
-        keywordsBase: KAEL.keywords,
         draft: locationDraftFrom(KAEL),
         ...AT,
       }),
@@ -285,7 +280,7 @@ describe('entityActions — relationships', () => {
   })
 })
 
-describe('entityActions — relationships, three-way', () => {
+describe('entityActions — relationships against the stored links', () => {
   const mira = (selfToOther: string | null, otherToSelf: string | null): RelationshipLink => ({
     rowId: 'rel_1',
     otherId: 'char_mira',
@@ -299,121 +294,77 @@ describe('entityActions — relationships, three-way', () => {
     otherToSelf: null,
   })
 
-  function threeWay(
-    relationships: RelationshipDraft[],
-    current: readonly RelationshipLink[],
-    base: readonly RelationshipLink[],
-  ) {
+  function save(relationships: RelationshipDraft[], current: readonly RelationshipLink[]) {
     return entityActions({
       branchEntities: [],
       kind: 'character',
       row: KAEL,
-      keywordsBase: KAEL.keywords,
-      draft: { ...characterDraftFrom(KAEL, base), relationships },
+      draft: { ...characterDraftFrom(KAEL, current), relationships },
       relationships: current,
-      relationshipsBase: base,
       ...AT,
     })
   }
 
-  it('leaves a pair added after the baseline alone', () => {
+  it('deletes a stored pair the draft lacks', () => {
     expect(
-      threeWay(
+      save(
         [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: ' ally', otherToSelf: 'wary' }],
         [MIRA_LINK, vorne('rival')],
-        [MIRA_LINK],
       ),
-    ).toEqual([upsert('char_mira', ' ally', 'wary')])
+    ).toEqual([upsert('char_mira', ' ally', 'wary'), remove('rel_2')])
   })
 
-  it('keeps the text the classifier stored in a view the user left alone', () => {
+  it('writes the edited view and keeps the stored text of the one left alone', () => {
     expect(
-      threeWay(
+      save(
         [
           {
             cardKey: 'card_mira',
             otherId: 'char_mira',
             selfToOther: 'friend',
-            otherToSelf: 'ally',
+            otherToSelf: 'fond of you',
           },
         ],
-        [mira('ally', 'fond of you')],
-        [mira('ally', 'ally')],
+        [mira('ally', ' fond of you ')],
       ),
-    ).toEqual([upsert('char_mira', 'friend', 'fond of you')])
+    ).toEqual([upsert('char_mira', 'friend', ' fond of you ')])
   })
 
-  it('does not write an untouched pair the classifier changed', () => {
+  it('writes nothing for an untouched pair', () => {
     expect(
-      threeWay(
+      save(
         [
           { cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' },
-          { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'rival', otherToSelf: '' },
+          { cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'enemy', otherToSelf: '' },
         ],
         [mira('ally', 'ally'), vorne('enemy')],
-        [mira('ally', 'ally'), vorne('rival')],
       ),
     ).toEqual([upsert('char_mira', 'ally', 'wary')])
   })
 
-  it('keeps what is stored in a view the user left blank on a pair new to the draft', () => {
+  it('writes a pair new to the draft, its blank view as null', () => {
     expect(
-      threeWay(
+      save(
         [{ cardKey: 'card_vorne', otherId: 'char_vorne', selfToOther: 'enemy', otherToSelf: '' }],
-        [{ ...vorne('ally'), otherToSelf: 'rival' }],
         [],
       ),
-    ).toEqual([upsert('char_vorne', 'enemy', 'rival')])
-  })
-
-  it('rewrites an edited pair whose row has gone with the view the user saw', () => {
-    expect(
-      threeWay(
-        [
-          {
-            cardKey: 'card_mira',
-            otherId: 'char_mira',
-            selfToOther: 'friend',
-            otherToSelf: 'ally',
-          },
-        ],
-        [],
-        [mira('ally', 'ally')],
-      ),
-    ).toEqual([upsert('char_mira', 'friend', 'ally')])
-  })
-
-  it('does not bring back an untouched pair whose row has gone', () => {
-    expect(
-      threeWay(
-        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'ally' }],
-        [],
-        [mira('ally', 'ally')],
-      ),
-    ).toEqual([])
-  })
-
-  it('deletes the current row of a removed pair, and nothing for a pair already gone', () => {
-    expect(threeWay([], [{ ...MIRA_LINK, rowId: 'rel_9' }], [MIRA_LINK])).toEqual([remove('rel_9')])
-    expect(threeWay([], [], [MIRA_LINK])).toEqual([])
+    ).toEqual([upsert('char_vorne', 'enemy', null)])
   })
 
   it('deletes the row when both views resolve to null', () => {
     expect(
-      threeWay(
-        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: '', otherToSelf: 'rival' }],
+      save(
+        [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: '', otherToSelf: '  ' }],
         [mira('ally', null)],
-        [mira('ally', 'rival')],
       ),
     ).toEqual([remove('rel_1')])
   })
 
-  it('writes nothing for an edit back to what is now stored', () => {
+  it('writes nothing for an edit back to what is stored', () => {
     expect(
-      threeWay(
+      save(
         [{ cardKey: 'card_mira', otherId: 'char_mira', selfToOther: 'ally', otherToSelf: 'wary' }],
         [mira('ally', 'wary ')],
-        [mira('ally', 'ally')],
       ),
     ).toEqual([])
   })
@@ -427,7 +378,6 @@ describe('entityActions — create', () => {
         branchEntities: [],
         kind: 'location',
         row: null,
-        keywordsBase: [],
         draft,
         branchId: 'br_1',
         id: 'loc_new',
@@ -465,10 +415,8 @@ describe('entityActions — create', () => {
       branchEntities: [],
       kind: 'character',
       row: null,
-      keywordsBase: [],
       draft: characterDraftFrom(null, []),
       relationships: [],
-      relationshipsBase: [],
       branchId: 'br_1',
       id: 'char_new',
       now: 42,
@@ -491,10 +439,8 @@ describe('entityActions — create', () => {
       branchEntities: [],
       kind: 'character',
       row: null,
-      keywordsBase: [],
       draft,
       relationships: [],
-      relationshipsBase: [],
       branchId: 'br_1',
       id: 'char_new',
       now: 42,
@@ -506,7 +452,6 @@ describe('entityActions — create', () => {
   })
 })
 
-// A classifier alias can land while the pane has keywords dirty; Save merges the user's changes.
 describe('entityActions — keywords against the stored list', () => {
   const place = (keywords: string[]): Entity => ({
     ...KAEL,
@@ -516,46 +461,33 @@ describe('entityActions — keywords against the stored list', () => {
     state: { parent_location_id: null },
     keywords,
   })
-  const savedKeywords = (stored: string[], base: string[], draft: string[]) => {
+  const savedKeywords = (stored: string[], draft: string[]) => {
     const row = place(stored)
     const [action] = entityActions({
       branchEntities: [],
       kind: 'location',
       row,
       draft: { ...locationDraftFrom(row), keywords: draft },
-      keywordsBase: base,
       ...AT,
       id: 'loc_keep',
     })
     return action?.kind === 'updateEntity' ? action.payload.patch.keywords : undefined
   }
 
-  it('writes the list as edited while the stored one is still its base', () => {
-    expect(savedKeywords(['a', 'b'], ['a', 'b'], ['b', 'a', 'c'])).toEqual(['b', 'a', 'c'])
+  it('writes the list as edited', () => {
+    expect(savedKeywords(['a', 'b'], ['b', 'a', 'c'])).toEqual(['b', 'a', 'c'])
   })
 
-  it('keeps an alias the classifier appended since the base', () => {
-    expect(savedKeywords(['a', 'b', 'z'], ['a', 'b'], ['a', 'b', 'c'])).toEqual([
-      'a',
-      'b',
-      'z',
-      'c',
-    ])
+  it('removes a stored alias the draft lacks', () => {
+    expect(savedKeywords(['a', 'b', 'z'], ['a', 'b'])).toEqual(['a', 'b'])
   })
 
-  it('drops what the user removed and keeps the append', () => {
-    expect(savedKeywords(['a', 'b', 'z'], ['a', 'b'], ['a'])).toEqual(['a', 'z'])
+  it("writes the user's spelling of a kept term", () => {
+    expect(savedKeywords(['grey wolf'], ['Grey Wolf'])).toEqual(['Grey Wolf'])
   })
 
-  it("keeps the user's spelling of a term they kept", () => {
-    expect(savedKeywords(['grey wolf', 'z'], ['grey wolf'], ['Grey Wolf'])).toEqual([
-      'Grey Wolf',
-      'z',
-    ])
-  })
-
-  it('writes nothing when the merge leaves the stored list as it is', () => {
-    expect(savedKeywords(['a', 'z'], ['a'], ['a', 'z'])).toBeUndefined()
+  it('writes nothing when the draft holds the stored list', () => {
+    expect(savedKeywords(['a', 'z'], ['a', 'z'])).toBeUndefined()
   })
 })
 
@@ -590,10 +522,8 @@ describe('one position per item', () => {
           branchEntities: [KAEL, MIRA, ROPE, BLADE],
           kind: 'character',
           row: KAEL,
-          keywordsBase: KAEL.keywords,
           draft,
           relationships: [],
-          relationshipsBase: [],
           ...AT,
         }),
       ),
@@ -620,10 +550,8 @@ describe('one position per item', () => {
           branchEntities: [KAEL, doubled, BLADE],
           kind: 'character',
           row: KAEL,
-          keywordsBase: KAEL.keywords,
           draft,
           relationships: [],
-          relationshipsBase: [],
           ...AT,
         }),
       ),
@@ -638,7 +566,6 @@ describe('one position per item', () => {
           branchEntities: [KAEL, MIRA, BLADE],
           kind: 'item',
           row: BLADE,
-          keywordsBase: BLADE.keywords,
           draft,
           ...AT,
           id: 'item_blade',
@@ -675,10 +602,8 @@ describe('collision flags a rename breaks', () => {
       branchEntities,
       kind: 'character',
       row,
-      keywordsBase: row.keywords,
       draft: { ...characterDraftFrom(row, []), ...changes },
       relationships: [],
-      relationshipsBase: [],
       ...AT,
       id: row.id,
     })
@@ -773,7 +698,6 @@ describe('collision flags a re-parent breaks', () => {
       branchEntities,
       kind: 'location',
       row,
-      keywordsBase: row.keywords,
       draft: { ...locationDraftFrom(row), ...changes },
       branchId: 'br_1',
       id: row.id,
@@ -865,7 +789,6 @@ describe('retiring a place', () => {
       branchEntities: [VELLIS, ANCHOR, ROOM, QUAY],
       kind: 'location',
       row: VELLIS,
-      keywordsBase: [],
       draft: { ...locationDraftFrom(VELLIS), status: 'retired', retiredReason: 'sank' },
       branchId: 'br_1',
       id: VELLIS.id,

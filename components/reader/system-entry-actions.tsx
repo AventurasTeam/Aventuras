@@ -8,6 +8,9 @@ import { openEmbedderSwapDialog } from '@/lib/stores'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
 
+type LeaveStory = (proceed: () => void) => void
+const leaveAtOnce: LeaveStory = (proceed) => proceed()
+
 /**
  * Hand the draft back only once the entry is gone: a rejected clear keeps Retry, and a
  * composer copy would run the turn twice. Off-branch, the hand-back is dropped, not pasted.
@@ -83,6 +86,8 @@ export function toSystemFailureMeta(
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
   storyId: string | null,
+  /** App Settings is outside the story: an in-story host passes its story-leave guard. */
+  leaveStory: LeaveStory = leaveAtOnce,
 ): SystemEntryFixAction {
   const router = useRouter()
   if (failure === undefined) return undefined
@@ -101,7 +106,10 @@ export function useConfigFixAction(
       : failure === 'profile-missing'
         ? 'reader:systemEntry.fixProfile'
         : 'reader:systemEntry.fixDefault'
-  return { label: t(labelKey), onPress: () => router.push('/settings?tab=providers') }
+  return {
+    label: t(labelKey),
+    onPress: () => leaveStory(() => router.push('/settings?tab=providers')),
+  }
 }
 
 // components/story-settings/memory-panel.tsx is the swap dialog's only mount
@@ -123,10 +131,12 @@ export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
   storyId: string | null,
+  leaveStory: LeaveStory = leaveAtOnce,
 ): { onRetry: () => void; fixAction: SystemEntryFixAction } {
   const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,
     storyId,
+    leaveStory,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
   // The two gates are kind-exclusive, so the `??` order carries no meaning.

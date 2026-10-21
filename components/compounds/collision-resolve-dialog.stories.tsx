@@ -801,7 +801,7 @@ export const MergeKeywordDeselectSurvivesFlip: Story = {
   },
 }
 
-// A no-gate classifier write can make a field differ while the dialog is open.
+// The dialog derives its rows from the entities it is handed; this changes one while it is open.
 let divergeNow: (() => void) | null = null
 function DivergesWhileOpen() {
   const [b, setB] = useState(baseEntity({ id: 'ent_kael_2' }))

@@ -155,6 +155,10 @@ type EntryCardProps = {
   // edit-restrictions (uniform):
   disabled?: boolean
   disabledReason?: string
+  /** Gates the pencil and every edit-mode control; falls back to `disabled`. */
+  editDisabled?: boolean
+  /** Gates ↻, × and Save & regenerate (with `editDisabled`); falls back to `disabled`. */
+  reversalDisabled?: boolean
 
   // edit mode (host-controlled):
   editing?: boolean
@@ -829,6 +833,8 @@ export function EntryCard({
   onDismiss,
   disabled,
   disabledReason,
+  editDisabled,
+  reversalDisabled,
   editing,
   contentEditNotice,
   editDirty = true,
@@ -842,6 +848,9 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const [sceneEditOpen, setSceneEditOpen] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
+  // Head reversals are gated apart from `disabled`: they pass through a pass or a close.
+  const editOff = editDisabled ?? disabled
+  const reversalOff = reversalDisabled ?? disabled
 
   // Carries the narrowed values rather than a bare boolean so the footer can
   // forward them without a non-null assertion.
@@ -1019,7 +1028,7 @@ export function EntryCard({
           <Textarea
             value={content}
             onChangeText={onContentChange}
-            editable={!disabled}
+            editable={!editOff}
             autoFocus
             aria-label={t('reader:entryCard.editContent')}
             onKeyPress={(e) => {
@@ -1027,7 +1036,7 @@ export function EntryCard({
             }}
           />
           <View className="flex-row flex-wrap justify-end gap-2">
-            <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={disabled}>
+            <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={editOff}>
               <Text>{t('cancel')}</Text>
             </Button>
             {onCommitEditAndRegen != null ? (
@@ -1035,7 +1044,7 @@ export function EntryCard({
                 variant="secondary"
                 size="sm"
                 onPress={onCommitEditAndRegen}
-                disabled={disabled || !editDirty}
+                disabled={editOff || reversalOff || !editDirty}
               >
                 <Icon as={RefreshCw} size="sm" />
                 <Text>{t('reader:entryCard.saveAndRegenerate')}</Text>
@@ -1045,7 +1054,7 @@ export function EntryCard({
               variant="primary"
               size="sm"
               onPress={onCommitEdit}
-              disabled={disabled || !editDirty}
+              disabled={editOff || !editDirty}
             >
               <Text>{t('save')}</Text>
             </Button>
@@ -1101,7 +1110,7 @@ export function EntryCard({
               label={t('reader:entryCard.editEntry')}
               size="sm"
               onPress={onEdit}
-              disabled={disabled}
+              disabled={editOff}
               disabledReason={disabledReason}
             />
           ) : null}
@@ -1111,7 +1120,7 @@ export function EntryCard({
               label={t('reader:entryCard.regenerate')}
               size="sm"
               onPress={onRegen}
-              disabled={disabled}
+              disabled={reversalOff}
               disabledReason={disabledReason}
             />
           ) : null}
@@ -1142,7 +1151,7 @@ export function EntryCard({
               size="sm"
               variant="destructive"
               onPress={onDelete}
-              disabled={disabled}
+              disabled={reversalOff}
               disabledReason={disabledReason}
             />
           ) : null}

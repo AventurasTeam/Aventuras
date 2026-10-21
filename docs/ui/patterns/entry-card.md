@@ -81,6 +81,8 @@ type EntryCardProps = {
   // Edit-restrictions (uniform with principles):
   disabled?: boolean
   disabledReason?: string
+  editDisabled?: boolean // pencil and every edit-mode control; falls back to disabled
+  reversalDisabled?: boolean // regen and delete; Save & regenerate needs both flags; falls back to disabled
 
   // Edit mode (host-controlled):
   editing?: boolean
@@ -699,7 +701,9 @@ holds, cleared on next render when the user fixes it.
 **Edit-restrictions interaction.** Footer click respects the
 `disabled` prop (per
 [`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation))
-— same gating as content edit, regen, and delete. No new mechanism.
+— same gating as branch and flip era. Content edit, regen and delete
+take their own props during a pass ([Action cluster](#action-cluster)).
+No new mechanism.
 
 ## Action cluster
 
@@ -721,6 +725,19 @@ Position: absolute top-right of bubble; opacity 0.55 default,
 1.0 on hover or focus per the
 [icon-actions pattern](./icon-actions.md). Cluster gap and
 density-aware sizing inherit from icon-actions.
+
+**During a pass or a close.** Head reversals pass through either
+([`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation)),
+so the gate splits in three. `reversalDisabled` gates regen and
+delete, `editDisabled` gates the pencil and every edit-mode control,
+and `disabled` gates the rest: branch, flip era, the world-time
+footer, the scene editor and the system-entry buttons. Save &
+regenerate saves, then regenerates, so it needs both flags clear. Each
+split prop falls back to `disabled` when absent. The reader leaves regen and
+delete live while only a pass or a close holds the gate, and the
+pencil live on the head turn's entries alone: the tail and, when the
+tail answers one, its `user_action`. An edit off the head turn
+interrupts nothing, so it waits like any other edit.
 
 ## Variable-height plus virtualization compatibility
 
@@ -746,7 +763,7 @@ Live demos for: user kind, ai kind (with reasoning expanded /
 collapsed), opening kind (no delete action), system kind (with
 detail expanded), streaming kind (reasoning-phase, reply-phase),
 edit mode (textarea, with and without `Save & regenerate`),
-disabled state, world-time footer
+disabled state, the gate split during a pass (older entry, head turn, head-turn edit), world-time footer
 shown/hidden by kind, world-state panel (reported, fallback-layer
 badge, rejected location, clamped delta, parse failure with raw
 block, legacy row, unknown-entity chip), scene editor (tail entry

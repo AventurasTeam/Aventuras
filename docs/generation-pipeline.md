@@ -60,13 +60,15 @@ interface Pipeline {
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
   interruptible?: boolean // a head reversal or Cancel ends me and defers me to the next turn; see Prose reversals and the interrupt
   concurrencyPolicy: ConcurrencyPolicy
-  chainsTo?: (run: RunState) => string | null // consulted at commit; sources its own deps
+  chainsTo?: (run: RunState, ctx) => string | null | Promise<string | null> // awaited at commit while the run holds the gate; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
   // a phase threw; runs once its rollback has committed, before the run releases
   onPhaseException?: (
     ctx,
     error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
   ) => Promise<void>
+  // a user Cancel or a head reversal ended me; runs once the abort's reversal has committed, before the run releases
+  onInterrupt?: (run: RunState, ctx) => Promise<void>
 }
 
 export const pipelines: ReadonlyMap<string, Pipeline>
@@ -109,7 +111,7 @@ type PhaseResult =
 
 type PhaseEmittedEvent = Exclude<
   PipelineEvent,
-  { type: 'run_start' | 'run_complete' | 'phase_start' | 'phase_complete' }
+  { type: 'run_start' | 'run_complete' | 'phase_start' | 'phase_complete' | 'run_deferred' }
 >
 
 type PipelineEvent =
@@ -125,6 +127,7 @@ type PipelineEvent =
     }
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
+  | { type: 'run_deferred'; runId: string; kind: string; branchId: string }
   // phase-emitted core
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction }
@@ -500,7 +503,8 @@ map of `RunState`s is enough.
 
 ```ts
 // src/ai/pipeline/orchestrator.ts
-export async function runPipeline(kind: string): Promise<TxResult>
+export async function runPipeline(kind: string): Promise<TxResult> // resolves once the whole chain has ended
+export function startPipeline(kind: string): { origin: Promise<TxResult>; chain: Promise<void> }
 export const pipelineEventBus: PipelineEventBus
 ```
 
@@ -511,7 +515,7 @@ type TxState = {
   runs: ReadonlyMap<string /* runId */, RunState>
   reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates memory-run starts + user edits + user-originated delta dispatch
   pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see Gate derivation as a selector
-  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only
+  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator writes it
   pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string | null }> // a close owed once phase 0's passes catch up; null end = boundary selection
 }
 
@@ -523,6 +527,8 @@ type RunState = {
   actionId: string // globally unique; never reused
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
+  interruptible: boolean // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it
+  beforeTurn: boolean // started by Send to run deferred work before the turn
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
   intermediates: Record<string, unknown> // phase outputs threaded through the run
@@ -531,6 +537,15 @@ type RunState = {
   resolveTerminal: () => void
 }
 ```
+
+Only the orchestrator writes `deferred`, through the generation store
+and in the same update that removes the run: an `interruptible` run
+that ends `aborted` records its kind for its branch (a pass as
+`pass`, a close as `close`), and that kind's commit or failure clears
+it. So every way a pass or a close is cancelled — the interrupt, the
+pill's or the banner's Cancel, Cancel & leave — defers it, and a
+failed one is left to the next commit's retry. A newly recorded
+deferral emits `run_deferred` on the bus, which raises the toast.
 
 ### Gate derivation as a selector
 
@@ -549,8 +564,14 @@ the branch queue (regenerate after its own gate check, which the mark
 would fail), and the mark ends the moment the turn's run is in
 `txState`, or when the turn returns without one, refused or thrown. So
 a reversal opened in that gap can't get a Send's queued user_action
-refused. A prose reversal also closes the gate for its brief duration
-via `reversalInProgress` (see
+refused. The mark ends early, but the turn's body does not: the store
+also tracks each body's lifetime (`turnBodies`, outside `TxState`),
+because a failed or aborted regenerate runs its follow-up sweep after
+the mark has ended, with no run and no mark. Leaving the story
+(`cancelStoryRuns`) resolves only once no run is left on the story, no
+pending mark on its branch, no reversal in progress, and no turn body
+active on its branch. A prose reversal also closes the gate for its
+brief duration via `reversalInProgress` (see
 [Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
 The gate a pass or a close holds is the one a head reversal may pass
 through, by interrupting it.
@@ -965,7 +986,7 @@ beginRun(kind)
 in-progress (currentPhase iterates)
    │
    ├── last phase returns completed ────────────► commitRun
-   │                                                  │  consult pipeline.chainsTo
+   │                                                  │  await pipeline.chainsTo (run still in txState)
    │                                                  │
    │                                                  ├── returns next kind ───► beginRun(next) (atomic transition, no idle)
    │                                                  │
@@ -987,8 +1008,14 @@ in-progress (currentPhase iterates)
                                                       │  if threw && rollback committed:
                                                       │    pipeline.onPhaseException(ctx, error) —
                                                       │    skipped when the rollback itself could not commit
-                                                      │  remove run from txState
+                                                      │  if user-cancel && rollback committed:
+                                                      │    pipeline.onInterrupt(run, ctx) — a pass
+                                                      │    restores its pre-run status here
+                                                      │  remove run from txState; an interruptible pass
+                                                      │    or close records ('aborted') or clears
+                                                      │    ('failed') its deferral in the same update
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
+                                                      │  emit run_deferred if the deferral is newly recorded
 ```
 
 ### Crash recovery via `pipeline_runs` marker table
@@ -1204,24 +1231,31 @@ pause.
 ### `chainsTo` on predecessor
 
 ```ts
-// Shared by per-turn's and the classifier's chainsTo; every read is
-// synchronous, from in-memory mirrors of the cadence count and the
-// open-region tokens.
-function nextMemoryRun(branchId: string, story: Story): 'periodic-classifier' | 'chapter-close' | null {
-  if (deferred.has(branchId)) return null // interrupted work waits for the next Send
-  const passable = unprocessedEntries(branchId) > 0 && !classifierFailedPersistent(branchId)
-  if (closeOwed(branchId, story)) return passable ? 'periodic-classifier' : 'chapter-close'
-  return passable && unprocessedEntries(branchId) >= story.settings.classifierCadence
-    ? 'periodic-classifier'
-    : null
+// Shared by per-turn's and the classifier's chainsTo. Awaited at commit while
+// the run still holds the gate, so nothing writes during its SQL reads.
+async function nextMemoryRun(
+  run: RunState,
+  ctx,
+): Promise<'periodic-classifier' | 'chapter-close' | null> {
+  if (deferred.has(run.branchId)) return null // interrupted work waits for the next Send
+  const story = openStory(run) // the run's story, while it is open on the run's branch
+  if (!story) return null
+  const status = await readClassifierStatus(run.branchId, ctx)
+  const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
+  // failed-persistent waits for the user; a persisted 'running' is a boot quarantine
+  const held = status.state === 'failed-persistent' || status.state === 'running'
+  const passable = unprocessed > 0 && !held
+  if (await closeOwed(run.branchId, story, ctx))
+    return passable ? 'periodic-classifier' : 'chapter-close'
+  return passable && unprocessed >= story.settings.classifierCadence ? 'periodic-classifier' : null
 }
 
 // A close the user asked for, or the open region past the threshold
 // with auto-close on.
-const closeOwed = (branchId: string, story: Story): boolean =>
+const closeOwed = async (branchId: string, story: Story, ctx): Promise<boolean> =>
   pendingClose.has(branchId) ||
   (story.settings.chapterAutoClose &&
-    openRegionTokens(branchId) >= story.settings.chapterTokenThreshold)
+    (await openRegionTokens(branchId, ctx)) >= story.settings.chapterTokenThreshold)
 
 const perTurnPipeline: Pipeline = {
   kind: 'per-turn',
@@ -1229,25 +1263,30 @@ const perTurnPipeline: Pipeline = {
   gateBehavior: 'hard-gate',
   affordance: 'pill-and-banner',
   concurrencyPolicy: { blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close'] },
-  chainsTo: (run) => nextMemoryRun(run.branchId, getStory(run.storyId)),
+  chainsTo: nextMemoryRun,
 }
 
 const periodicClassifierPipeline: Pipeline = {
   kind: 'periodic-classifier',
   // ...
   // Passes chain one another only to catch up for a close (phase 0).
-  chainsTo: (run) => {
-    const story = getStory(run.storyId)
-    return closeOwed(run.branchId, story) ? nextMemoryRun(run.branchId, story) : null
+  chainsTo: async (run, ctx) => {
+    const story = openStory(run)
+    return story && (await closeOwed(run.branchId, story, ctx)) ? nextMemoryRun(run, ctx) : null
   },
 }
 ```
 
 Reading a declaration tells you what it chains to. The predicate takes
-only `run` and sources its own dependencies (story settings, the
-cadence count, the open-region token count) at the definition site,
-read synchronously at commit — the orchestrator passes nothing but
-`run` and stays agnostic to app state. A turn chains a pass when the
+`run` and the database context and sources its own dependencies (the
+open story's settings, the classifier status and unprocessed count,
+the open-region token count) at the definition site, read at commit
+while the run still holds the gate — the orchestrator passes nothing
+else and stays agnostic to app state. The reads are SQL, not
+in-memory mirrors: under the gate nothing writes the entries or the
+watermark while they run, and a mirror kept in step with every entry
+write, reversal and watermark move could drift unseen. A predicate
+that throws chains nothing. A turn chains a pass when the
 cadence comes due, a close when one is owed and nothing is
 unprocessed, and a pass first when a close is owed and something is
 ([`memory/chapter-close.md → Phase 0`](./memory/chapter-close.md#phase-0--catch-up-passes)).
@@ -1282,15 +1321,16 @@ owed anyway.
 ### Chained transition — "no user-edit window"
 
 ```ts
-function commitRun(run: RunState): void {
+async function commitRun(run: RunState, ctx): Promise<void> {
   const pipeline = pipelines.get(run.kind)!
-  const nextKind = pipeline.chainsTo?.(run)
+  // Awaited while `run` is still in txState, so the gate stays up through the read.
+  const nextKind = await pipeline.chainsTo?.(run, ctx)
 
   useGenerationStore.setState((s) => {
     const runs = new Map(s.txState.runs)
     runs.delete(run.runId)
     if (nextKind) {
-      const next = createRunRecord(nextKind)
+      const next = createRunRecord(nextKind) // its own fresh actionId
       runs.set(next.runId, next)
     }
     return { txState: { runs } }
@@ -1304,7 +1344,9 @@ The setState is synchronous. Between predecessor removal and
 successor addition there's no async boundary, no microtask, no
 React render. The gate-blocking selector evaluates against the
 new `txState` (still has a hard-gate run present) on the next
-render. User edit window: zero.
+render. User edit window: zero. `chainsTo` may await before the
+swap, and does so while the predecessor is still in `txState`, so
+the gate stays closed through its reads too.
 
 The swap only _places_ the successor; the orchestrator then begins it
 (its own marker row, fresh `actionId`, active-run pointer, `run_start`)
@@ -1312,6 +1354,14 @@ and drives its phases to its own commit/abort — see
 [Run state transitions](#run-state-transitions). `runPipeline` awaits the whole chain
 and returns the **origin** run's result; downstream chain outcomes are
 observed on the event bus, not the return value.
+
+`startPipeline` splits the two: its `origin` settles with the
+starting run's result at that run's commit or abort, its `chain` when
+the chain's last run ends. Submit and regenerate await only `origin`,
+so they release the branch queue at the turn's commit while a
+chained pass runs on, and a head reversal reaches the pass to
+interrupt it rather than queueing behind it. A successor whose marker
+insert fails is unwound, and the chain ends there.
 
 (Invariant depends on Zustand's setState being synchronous; pin
 in tests if a state-library swap ever happens.)
@@ -1828,7 +1878,7 @@ to `detail` alone otherwise.
   overlapping my `writeSet`; ships when `writeSet` does).
 
 `interruptible` — a head reversal (regenerate, swipe, an edit of the
-head reply, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
+head turn, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
 before the branch's next turn instead
 ([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
 The periodic classifier and chapter-close declare it.
@@ -1836,8 +1886,7 @@ The periodic classifier and chapter-close declare it.
 `concurrencyPolicy`:
 
 - `blockedBy` — incoming run's perspective: "these running kinds
-  block me from starting." Orchestrator consults on
-  `runPipeline(kind)` entry.
+  block me from starting." Orchestrator consults on start.
 - `yieldsTo` — running run's perspective: "if any of these kinds
   tries to start, I abort." Only suggestion refresh declares it, as a
   backstop.
@@ -1988,7 +2037,7 @@ function checkConcurrencyContract(
 ### Prose reversals and the interrupt
 
 Reversing prose — regenerate, entry-delete rollback, swipe-switch, an
-edit of the head reply, and CTRL-Z of a turn (see
+edit of the head turn, and CTRL-Z of a turn (see
 [`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback))
 — must not leave a pass or a close deriving rows from prose that is
 about to vanish. A reversal is a synchronous, destructive log
@@ -1998,33 +2047,45 @@ with two cheap mechanisms.
 
 **The interrupt.** A reversal is refused while the gate is closed,
 with one exception: when the only runs holding it are `interruptible`
-ones, a pass or a close, it ends them first. While a suggestion
-refresh runs beside one, the reversal waits for the refresh, or for its
-✕, as it does when the refresh runs alone. The pill's Cancel, and
+ones on its branch, a pass or a close, it ends them first
+(`interruptMemoryRuns`). While a suggestion
+refresh runs beside one, the reversal is refused, its controls disabled,
+until the refresh ends or its ✕ cancels it, as when the refresh runs
+alone. The pill's Cancel, and
 leaving the story through its confirm, interrupt a pass or a close the
 same way, with no reversal after.
 
-The framework primitive is **`awaitRunTerminal(kind, branchId, disposition)`**
-— find the in-flight run of `kind` on the branch, optionally abort it,
-and await its terminal (no-op when none is running). The waiter need
-not have started the run — each `RunState` carries a `terminal`
-deferred the orchestrator resolves at commit/abort. Dispositions:
+The interrupt is **`interruptMemoryRuns(branchId)`**: it aborts every
+`interruptible` run on the branch and awaits each one's terminal (no-op
+when none is running), cancelling the doomed LLM call so the user is
+not made to wait it out. Its sibling is the framework primitive
+**`awaitRunTerminal(kind, branchId, disposition)`** — find the
+in-flight run of `kind` on the branch, optionally abort it, and await
+its terminal (no-op when none is running). Both wait on the same
+`terminal` deferred each `RunState` carries, which the orchestrator
+resolves at commit/abort, so the waiter need not have started the run.
+Dispositions:
 
-- `'cancel'` — fire `signal.abort()` first, then await terminal,
-  cancelling the doomed LLM call so the user is not made to wait it
-  out. What the interrupt uses.
+- `'cancel'` — fire `signal.abort()` first, then await terminal. What
+  cancelling a run of one known kind uses, such as a suggestion
+  refresh's ✕.
 - `'finish'` — await the natural commit. No v1 caller.
 
 An interrupted run takes the standard abort path: a pass or a close
 cancelled before its writes has committed nothing, and one cancelled
 during them reverse-replays its own group. Under the gate nothing else
 wrote meanwhile, so that reversal never meets a user write. The
-interrupt then records the run in `txState.deferred` for its branch,
-so the next Send runs it before the turn
-([chainsTo on predecessor](#chainsto-on-predecessor)), and raises a
-toast saying the memory update, or the chapter close, moved to the
-next turn. An interrupted pass restores its pre-run status, uses no
-retry and leaves the watermark where it was.
+run's abort then records it in `txState.deferred` for its branch
+([Multi-run txState](#multi-run-txstate)), so the next Send runs it
+before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),
+and a toast says the memory update, or the chapter close, moved to
+the next turn. An interrupted pass restores its pre-run status, uses no
+retry and leaves the watermark where it was. The status is restored by
+the pipeline's `onInterrupt` hook, which the orchestrator runs after
+the abort's reversal has committed and before the run releases the
+gate; a reversal that cannot commit skips it and leaves the pass
+`running` for boot recovery
+([Recovery-failure policy](#recovery-failure-policy)).
 
 **`reversalInProgress`** (a `txState` flag) brackets the
 interrupt→sweep window: a reversal sets it before the interrupt and
@@ -2076,12 +2137,18 @@ anchor for committed positions.
 
 Every `applyDeltaAction` and `applyDeltaActionGroup` takes a per-branch
 write lock in shared mode, inside the entry metadata lock and before
-its row keys. A prose reversal takes it exclusive around its sweep,
-once the interrupt has ended any pass or close, and boot recovery runs
-before any branch loads. The rollback preview writes nothing but takes
-the lock shared around its set selection, so no reversal can land
-between the closure's reads. A write arriving meanwhile waits a few
-milliseconds; nothing is disabled or refused.
+its row keys. Two reversals take it exclusive: a prose reversal around
+its sweep, once the interrupt has ended any pass or close, and an
+`interruptible` run's abort around its own reverse-replay, which the
+orchestrator holds under the run's `actionId` through the action port
+(`holdBranchWriteExclusive` / `releaseBranchWriteExclusive`). Boot
+recovery runs before any branch loads. The rollback preview writes
+nothing but takes the lock shared around its set selection, so
+neither reversal can land between the closure's reads. A pass's burst
+takes no hold across its writes, so a preview may see part of one; the
+confirm-time count check (`counts-changed`) keeps the confirm exact. A
+write arriving meanwhile waits a few milliseconds; nothing is disabled
+or refused.
 
 The writers of story state otherwise never meet: every kind holds the
 gate, chains start a successor only after the predecessor commits, and
@@ -2100,10 +2167,11 @@ requests (UI, Run now, Send's deferred work); chains aren't external.
 
 No scheduler runs beside the framework. The cadence is checked at each
 turn's commit by per-turn's `chainsTo`
-([chainsTo on predecessor](#chainsto-on-predecessor)), against an
-in-memory mirror of each branch's unprocessed-entry count, kept in step
-with `branches.classifier_status` and with every entry write and
-reversal on the branch. `[Run classifier now]` calls
+([chainsTo on predecessor](#chainsto-on-predecessor)), which reads the
+branch's `classifier_status` and counts its unprocessed entries in
+SQL while the turn still holds the gate, so nothing moves either
+during the read and no in-memory copy has to be kept in step.
+`[Run classifier now]` calls
 `runPipeline('periodic-classifier')`; deferred work starts from Send. A
 rejected start waits for the next turn — no retry queue, no timers
 ([`memory/classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy)).
@@ -2126,6 +2194,8 @@ to any of these alongside whatever causes the relaxation.
 - **Chained transitions are synchronous.** Relies on Zustand's
   setState being synchronous; if the state library swaps and the
   property breaks, the no-user-edit-window guarantee breaks too.
+  `chainsTo` may await before the swap, only while the predecessor
+  still holds the gate.
 - **Phase functions are zero-parameter.** Forced by the
   single-run-per-kind invariant — phases identify "their" run via
   the kind-keyed `generationContext` getter.

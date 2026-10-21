@@ -9,7 +9,7 @@ import {
   type LocationState,
   type NewEntity,
 } from '@/lib/db'
-import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms } from '@/lib/keyword-terms'
 import { blankToNull } from '@/lib/text'
 
 import { brokenFlags, withFlagClears } from './collision-flags'
@@ -26,33 +26,20 @@ import {
   type ItemDraft,
   type LocationDraft,
   type RelationshipDraft,
-  type RelationshipBaseLink,
   type RelationshipLink,
 } from './entity-draft'
 import { retireCascade } from './place-rules'
 
-export type EntitySaveInput = (
+export type EntitySaveInput =
   | {
       kind: 'character'
       draft: CharacterDraft
-      /** The committed links at Save. */
+      /** The committed links at Save; the draft's pairs are diffed against them. */
       relationships: readonly RelationshipLink[]
-      /**
-       * Committed links the draft was based on (frozen once dirty; `relationships` while clean).
-       * Untouched pairs/views keep what is stored; an edited pair whose row is gone is rewritten.
-       */
-      relationshipsBase: readonly RelationshipBaseLink[]
     }
   | { kind: 'location'; draft: LocationDraft }
   | { kind: 'item'; draft: ItemDraft }
   | { kind: 'faction'; draft: FactionDraft }
-) & {
-  /**
-   * The stored keywords the draft's list was based on (frozen once dirty). A term the classifier
-   * appended since stays unless the user removed it.
-   */
-  keywordsBase: readonly string[]
-}
 
 type EntityActionArgs = EntitySaveInput & {
   branchId: string
@@ -121,30 +108,8 @@ function sameRecord(
   )
 }
 
-/**
- * The stored list with the user's changes against `base` applied: their removals dropped, their
- * additions appended, their spelling of a kept term used. As edited while nothing moved underneath.
- */
-function mergedKeywords(
-  stored: readonly string[],
-  base: readonly string[],
-  draft: readonly string[],
-): string[] {
-  if (sameList(stored, base)) return [...draft]
-  const drafted = new Map(draft.map((term) => [normalizeTerm(term), term]))
-  const removed = new Set(base.map(normalizeTerm).filter((key) => !drafted.has(key)))
-  const kept = stored
-    .filter((term) => !removed.has(normalizeTerm(term)))
-    .map((term) => drafted.get(normalizeTerm(term)) ?? term)
-  return [...kept, ...newTerms(kept, newTerms(base, draft))]
-}
-
 /** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
-function columnPatch(
-  row: Entity,
-  draft: EntityBaseDraft,
-  keywordsBase: readonly string[],
-): ColumnPatch {
+function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   const patch: ColumnPatch = {}
   const name = draft.name.trim()
   if (name !== row.name.trim()) patch.name = name
@@ -156,9 +121,8 @@ function columnPatch(
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   const tags = cleanList(draft.tags)
   if (!sameList(tags, cleanList(row.tags))) patch.tags = tags
-  const stored = dedupeTerms(row.keywords)
-  const keywords = mergedKeywords(stored, dedupeTerms(keywordsBase), dedupeTerms(draft.keywords))
-  if (!sameList(keywords, stored)) patch.keywords = keywords
+  const keywords = dedupeTerms(draft.keywords)
+  if (!sameList(keywords, dedupeTerms(row.keywords))) patch.keywords = keywords
   if (draft.priority !== row.priority) patch.priority = draft.priority
   return patch
 }
@@ -254,55 +218,43 @@ function nextState(args: EntityActionArgs): EntityState | null {
   }
 }
 
-/** Whether the user edited a view relative to the baseline, and the value Save sends for it. */
+/** Whether the user edited a view against what is stored, and the value Save sends for it. */
 function viewWrite(
   draft: RelationshipDraft,
-  was: RelationshipBaseLink | undefined,
   now: RelationshipLink | undefined,
   view: 'selfToOther' | 'otherToSelf',
 ): { edited: boolean; value: string | null } {
   const value = blankToNull(draft[view])
-  // A pair new to the draft compares as blank, so a view left empty keeps what is stored.
-  const edited = value !== blankToNull(was?.[view] ?? '')
-  // A gone row is rewritten from the draft, which holds the view the user saw.
-  if (now == null) return { edited, value }
-  const stored = now[view]
+  const stored = now?.[view] ?? null
   // An untouched view keeps the stored raw text, as does an edit that normalizes to it.
-  return { edited, value: edited && value !== blankToNull(stored ?? '') ? value : stored }
+  const edited = value !== blankToNull(stored ?? '')
+  return { edited, value: edited ? value : stored }
 }
 
-/**
- * Three-way: only the user's changes relative to the links the draft was based on are written; the
- * rest of what is stored stays. Diffed by the other character, so a pair is written at most once.
- */
+/** The draft against the links stored at Save, per other character; no pair is written twice. */
 function relationshipActions(
   branchId: string,
   selfId: string,
   current: readonly RelationshipLink[],
-  base: readonly RelationshipBaseLink[],
   drafts: readonly RelationshipDraft[],
 ): PipelineAction[] {
   const actions: PipelineAction[] = []
   const nowByOther = new Map(current.map((r) => [r.otherId, r]))
-  const wasByOther = new Map(base.map((r) => [r.otherId, r]))
   const remove = (id: string): PipelineAction => ({
     kind: 'deleteCharacterRelationship',
     source: 'user_edit',
     payload: { branchId, id },
   })
   for (const draft of drafts) {
-    const was = wasByOther.get(draft.otherId)
     const now = nowByOther.get(draft.otherId)
-    const self = viewWrite(draft, was, now, 'selfToOther')
-    const other = viewWrite(draft, was, now, 'otherToSelf')
-    // Left alone, a pair stays as stored, even when its row has gone since the baseline.
+    const self = viewWrite(draft, now, 'selfToOther')
+    const other = viewWrite(draft, now, 'otherToSelf')
     if (!self.edited && !other.edited) continue
     if (self.value === null && other.value === null) {
       // The handler refuses a both-null upsert: the pair has no view left.
       if (now != null) actions.push(remove(now.rowId))
       continue
     }
-    if (now != null && self.value === now.selfToOther && other.value === now.otherToSelf) continue
     actions.push({
       kind: 'upsertCharacterRelationship',
       source: 'user_edit',
@@ -316,11 +268,7 @@ function relationshipActions(
     })
   }
   const kept = new Set(drafts.map((d) => d.otherId))
-  for (const was of base) {
-    if (kept.has(was.otherId)) continue
-    const now = nowByOther.get(was.otherId)
-    if (now != null) actions.push(remove(now.rowId))
-  }
+  for (const now of current) if (!kept.has(now.otherId)) actions.push(remove(now.rowId))
   return actions
 }
 
@@ -386,7 +334,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
     throw new Error(`entityActions: ${row.kind} row saved as ${args.kind}`)
   const actions: PipelineAction[] = []
   const state = nextState(args)
-  const columns = row == null ? null : columnPatch(row, draft, args.keywordsBase)
+  const columns = row == null ? null : columnPatch(row, draft)
   if (row == null) {
     const entry: NewEntity = {
       id,
@@ -427,7 +375,6 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
         branchId,
         id,
         row == null ? [] : args.relationships,
-        row == null ? [] : args.relationshipsBase,
         args.draft.relationships,
       ),
     )

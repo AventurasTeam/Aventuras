@@ -62,6 +62,7 @@ import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useRowSignals } from '@/hooks/use-row-signals'
+import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useStoryPlace } from '@/hooks/use-story-place'
 import { useTier } from '@/hooks/use-tier'
 import {
@@ -139,6 +140,7 @@ export default function WorldRoute() {
 
   const open = useColdOpenStory(branchId, 'world')
   const storyId = open?.storyId ?? null
+  const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 
   // Raw maps from the selectors (stable between patches); arrays via useMemo.
@@ -219,7 +221,7 @@ export default function WorldRoute() {
     ],
   )
 
-  const { activeRunKind, editBlocked, gateReason, classifierRunning } = useStoryGenerationGate(
+  const { activeRunKind, editBlocked, gateReason, beforeTurn } = useStoryGenerationGate(
     storyId ?? undefined,
     branchId,
   )
@@ -601,6 +603,7 @@ export default function WorldRoute() {
           contextual={open != null ? contextual : undefined}
           story={storyId != null ? { storyId, branchId, surface: 'world' } : undefined}
           beforeNavigate={guard}
+          beforeLeaveStory={guardLeave}
         />
       }
       statusSlot={
@@ -608,8 +611,9 @@ export default function WorldRoute() {
           <StoryStatusPill
             storyId={storyId}
             swapTarget={open?.settings.embedding_swap_target}
-            activePhase={storyPillPhase(activeRunKind, classifierRunning)}
-            onCancel={() => cancelStoryPillRun(storyId ?? undefined)}
+            activePhase={storyPillPhase(activeRunKind)}
+            beforeTurn={beforeTurn}
+            onCancel={() => cancelStoryPillRun(storyId ?? undefined, branchId)}
             onOpenMemory={() => {
               if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
             }}
@@ -707,6 +711,7 @@ export default function WorldRoute() {
           onValidated={loreImport.onValidated}
         />
       )}
+      {storyLeaveDialog}
     </ScreenShell>
   )
 }

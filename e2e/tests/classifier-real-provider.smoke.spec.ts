@@ -9,12 +9,28 @@ import { createSeededUserDataDir, setClassifierCadence } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// The slice's outstanding manual smoke, automated: a REAL provider, cadence 2,
-// three turns, asserting the graph the pass actually wrote. Opt-in — it needs a
-// local OpenAI-compatible server, so it skips unless SMOKE_LLM_URL is set:
+// The periodic classifier against a REAL provider: cadence 2, a turn, then the pass it chains.
+// Opt-in — needs a local OpenAI-compatible server, so it skips unless SMOKE_LLM_URL is set:
 //   SMOKE_LLM_URL=http://localhost:5001/v1 SMOKE_LLM_MODEL=<id> pnpm test:e2e classifier-real-provider
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
+
+// A pass's call expires at CALL_TIMEOUT_MS (lib/pipeline/definitions/periodic-classifier.ts),
+// which a spec can't import; the margin covers reconcile's embeds and the write burst after it.
+const PASS_WAIT_MS = 300_000 + 60_000
+// One turn attempt: the composer turning editable, then the run settling.
+const EDITABLE_WAIT_MS = 120_000
+const TURN_SETTLE_MS = 240_000
+// The pass's row is inserted right after the turn's marker; no row by then means no chain.
+const CHAIN_WAIT_MS = 15_000
+
+const PROMPTS = [
+  'I ask Mira who bought the amulet.',
+  'I follow the name down to the waterline.',
+  'I draw the blade when the broker reaches for the satchel.',
+  'I take the satchel and run for the keep.',
+  'I bar the door behind me and catch my breath.',
+]
 
 test.describe('periodic classifier — real provider smoke', () => {
   test.skip(!LLM_URL || !LLM_MODEL, 'set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
@@ -22,10 +38,8 @@ test.describe('periodic classifier — real provider smoke', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   const logs: { kind: string; text: string }[] = []
-  // Captured where it is written, not re-read later: the pass can complete before
-  // the test reads it back, and a post-hoc baseline would already hold the
-  // advanced value — then the poll waits out its timeout for a second advance
-  // that no further turn triggers.
+  // Captured where it is written, not re-read later: the pass can complete before the test
+  // reads it back, and a post-hoc baseline would already hold the advanced value.
   let parkedWatermark = 0
   // The fixture logs its own periodic_classifier happening; this run's writes sit above its log.
   let seededLogHead = 0
@@ -130,88 +144,125 @@ test.describe('periodic classifier — real provider smoke', () => {
     await app?.close()
   })
 
-  test('three turns against a real model populate the graph', async () => {
-    test.setTimeout(600_000)
+  test('a real model populates the graph, and a failed pass retries at the next turn', async () => {
+    // landTurn spends at most one attempt per prompt across both turns; each turn then
+    // waits for its pass to chain and settle; the reports take the rest.
+    test.setTimeout(
+      PROMPTS.length * (EDITABLE_WAIT_MS + TURN_SETTLE_MS) +
+        2 * (CHAIN_WAIT_MS + PASS_WAIT_MS) +
+        120_000,
+    )
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 30_000 })
 
     const branchId = (
       await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
     )[0][0] as string
-
+    const count = async (sql: string, params: unknown[] = []): Promise<number> =>
+      (await queryApp(app.window, sql, params))[0][0] as number
     // Counted on ai_reply alone: submitting a turn prunes the branch's `system`
     // rows, so a total-row count moves in both directions.
-    const repliesSql = `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'`
-    const before = (await queryApp(app.window, repliesSql, [branchId]))[0][0] as number
-
-    const prompts = [
-      'I ask Mira who bought the amulet.',
-      'I follow the name down to the waterline.',
-      'I draw the blade when the broker reaches for the satchel.',
-      'I take the satchel and run for the keep.',
-      'I bar the door behind me and catch my breath.',
-    ]
-    // A real model fails turns: an entity patch that restates current state is
-    // rejected by the action layer and takes the whole run down (see the report
-    // below). Keep submitting until three replies land rather than asserting a
-    // clean first try — the classifier only needs committed turns to count.
-    const TARGET_TURNS = 1
-    let attempts = 0
-    let failures = 0
-    const runsSql0 = `SELECT outcome, COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' GROUP BY outcome`
-    let completedOrFailed = ((await queryApp(app.window, runsSql0)) as [string | null, number][])
-      .filter((r) => r[0] != null)
-      .reduce((n, r) => n + r[1], 0)
-    while (
-      ((await queryApp(app.window, repliesSql, [branchId]))[0][0] as number) <
-      before + TARGET_TURNS
-    ) {
-      if (attempts >= prompts.length) break
-      // A failed turn leaves the reversal sweep holding the edit barrier; start
-      // each attempt from a quiescent composer rather than racing it.
-      await expect(reader.composer(app.window)).toBeEditable({ timeout: 120_000 })
-      const text = prompts[attempts]!
-      attempts++
-      await reader.composer(app.window).fill(text)
-      await reader.send(app.window).click()
-      // Settle on the run's own outcome, never on the reply row: the narrative
-      // phase commits prose before later phases run, so a reply can appear and
-      // then be reversed when a subsequent phase's action is rejected.
-      const runsSql = `SELECT outcome, COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' GROUP BY outcome`
-      await expect
-        .poll(
-          async () => {
-            const rows = (await queryApp(app.window, runsSql)) as [string | null, number][]
-            const done = rows.filter((r) => r[0] != null).reduce((n, r) => n + r[1], 0)
-            return done > completedOrFailed ? 'settled' : 'pending'
-          },
-          { timeout: 240_000, intervals: [2000] },
-        )
-        .toBe('settled')
-      const rows = (await queryApp(app.window, runsSql)) as [string | null, number][]
-      completedOrFailed = rows.filter((r) => r[0] != null).reduce((n, r) => n + r[1], 0)
-      failures = rows.find((r) => r[0] === 'failed')?.[1] ?? 0
-    }
-    const landed = ((await queryApp(app.window, repliesSql, [branchId]))[0][0] as number) - before
-    process.stdout.write(
-      `\n### turns: ${landed} landed of ${attempts} attempts (${failures} run failures)\n`,
-    )
-    expect(landed).toBeGreaterThanOrEqual(1)
-
-    // Cadence 2: the watermark must move past where beforeAll parked it.
-    await expect
-      .poll(
-        async () =>
-          (
-            await queryApp(
-              app.window,
-              `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
-              [branchId],
-            )
-          )[0][0] as number,
-        { timeout: 300_000, intervals: [3000] },
+    const replies = () =>
+      count(`SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'`, [
+        branchId,
+      ])
+    const settledTurns = () =>
+      count(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' AND outcome IS NOT NULL`)
+    const chainedPasses = () =>
+      count(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'periodic-classifier'`)
+    const settledPasses = () =>
+      count(
+        `SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'periodic-classifier' AND outcome IS NOT NULL`,
       )
-      .toBeGreaterThan(parkedWatermark)
+    const classifierStatus = async (): Promise<{
+      state: string
+      processedThrough: number | null
+    }> =>
+      JSON.parse(
+        (
+          await queryApp(app.window, `SELECT classifier_status FROM branches WHERE id = ?`, [
+            branchId,
+          ])
+        )[0][0] as string,
+      )
+
+    let attempts = 0
+    // A real model fails turns (an entity patch restating current state is rejected and takes the
+    // run down): keep submitting until a reply lands — the classifier only needs committed turns.
+    const landTurn = async (): Promise<void> => {
+      const target = (await replies()) + 1
+      while ((await replies()) < target) {
+        expect(attempts, 'every prompt spent without a reply landing').toBeLessThan(PROMPTS.length)
+        // The textarea is editable once hydrated; the Send click below waits for an enabled
+        // Send, which is what outlasts a failed turn's reversal sweep.
+        await expect(reader.composer(app.window)).toBeEditable({ timeout: EDITABLE_WAIT_MS })
+        const settled = await settledTurns()
+        await reader.composer(app.window).fill(PROMPTS[attempts]!)
+        attempts++
+        await reader.send(app.window).click()
+        // Settle on the run's outcome, never the reply row: the narrative phase commits prose
+        // before later phases, so a reply can appear, then be reversed when a later action fails.
+        await expect
+          .poll(settledTurns, { timeout: TURN_SETTLE_MS, intervals: [2000] })
+          .toBeGreaterThan(settled)
+      }
+    }
+
+    let passCount = 0
+    const turnAndPass = async (): Promise<void> => {
+      const from = (await classifierStatus()).processedThrough ?? 0
+      const chained = await chainedPasses()
+      const settled = await settledPasses()
+      await landTurn()
+      // Cadence not due, a standing deferral or a failed chain leaves no pass row; say so
+      // here rather than as a hung pass after the full wait.
+      await expect
+        .poll(chainedPasses, {
+          timeout: CHAIN_WAIT_MS,
+          message: "the landed turn's commit chained no pass",
+        })
+        .toBeGreaterThan(chained)
+      await expect
+        .poll(settledPasses, {
+          timeout: PASS_WAIT_MS,
+          intervals: [3000],
+          message: 'the chained pass did not settle within one call bound',
+        })
+        .toBeGreaterThan(settled)
+      // A failed burst commits the run's failed marker before onPhaseException writes `retrying`.
+      await expect
+        .poll(async () => (await classifierStatus()).state, { timeout: 10_000 })
+        .not.toBe('running')
+      const [[startedAt, finishedAt, outcome]] = (await queryApp(
+        app.window,
+        `SELECT started_at, finished_at, outcome FROM pipeline_runs
+         WHERE kind = 'periodic-classifier' ORDER BY started_at DESC LIMIT 1`,
+      )) as [number, number, string][]
+      const to = (await classifierStatus()).processedThrough ?? 0
+      const entries = await count(
+        `SELECT COUNT(*) FROM story_entries
+         WHERE branch_id = ? AND kind <> 'system' AND position > ? AND position <= ?`,
+        [branchId, from, to],
+      )
+      const line =
+        `pass ${++passCount}: ${outcome} after ${((finishedAt - startedAt) / 1000).toFixed(1)} s, ` +
+        `watermark ${from} -> ${to}, ${entries} entries classified`
+      // Written as it settles, so a throw in the second wait keeps the first pass's line.
+      process.stdout.write(`${line}\n`)
+    }
+
+    process.stdout.write('\n### passes\n')
+    await turnAndPass()
+    // classifier.md → Auto-retry policy: the next turn's commit reruns a failed pass.
+    if ((await classifierStatus()).state === 'retrying') await turnAndPass()
+    const failedTurns = await count(
+      `SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' AND outcome = 'failed'`,
+    )
+    process.stdout.write(`\n### turns: ${attempts} attempts (${failedTurns} run failures)\n`)
+    expect(
+      (await classifierStatus()).processedThrough ?? 0,
+      'watermark never passed where beforeAll parked it (see ### passes)',
+    ).toBeGreaterThan(parkedWatermark)
 
     const report = async (label: string, sql: string, params: unknown[] = []) => {
       const rows = await queryApp(app.window, sql, params)

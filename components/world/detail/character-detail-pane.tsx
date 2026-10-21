@@ -14,7 +14,6 @@ import { entityFieldLabel, entityIssueText, lastSeenLine, leadDisabledReason } f
 import { OverviewTab, TrailingTabs } from './common-tabs'
 import { asBaseControl, EntityDetailFrame, useEntityTab } from './entity-detail-frame'
 import type { EntityPaneProps } from './entity-pane-props'
-import { useRelationshipsBase } from './use-relationships-base'
 
 const resolver = zodResolver(characterDraftSchema)
 const fieldLabel = (field: string) => entityFieldLabel('character', field)
@@ -49,27 +48,11 @@ export function CharacterDetailPane({
     resolver,
     fieldLabel,
     issueText: entityIssueText,
-    // Runs at save time; `relationshipsBase` below needs this session's dirty fields.
-    onSave: async (draft, keywordsBase) => {
-      const result = await onSave({
-        kind: 'character',
-        draft,
-        keywordsBase,
-        relationships: data.relationships,
-        relationshipsBase: relationshipsBase.base,
-      })
-      if (result.status === 'ok') relationshipsBase.markSaved(draft.relationships)
-      return result
-    },
+    onSave: (draft) => onSave({ kind: 'character', draft, relationships: data.relationships }),
     onSaved,
     onRejected,
     onSession,
   })
-  // `dirtyFields` holds labels, not keys.
-  const relationshipsBase = useRelationshipsBase(
-    session.dirtyFields.includes(fieldLabel('relationships')),
-    data.relationships,
-  )
   const { control, trigger } = session.form
   const [tab, setTab] = useEntityTab(row == null, createSeq, initialTab)
   // Lengths only, so typing in a row doesn't re-render the whole pane.

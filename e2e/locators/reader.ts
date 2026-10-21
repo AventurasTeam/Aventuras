@@ -19,8 +19,17 @@ const WORLD_TIME_BREAK_LABEL = new RegExp(
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
   send: (page: Page): Locator => page.getByRole('button', { name: t('reader:send') }),
-  // Composer swaps Send → Cancel (t('cancel')) while a turn is generating.
-  cancel: (page: Page): Locator => page.getByRole('button', { name: t('cancel') }),
+  // Send swaps to Cancel mid-run, and the memory banner's Cancel shares the name. The composer has
+  // no role or testID: its box is the deepest ancestor of the textarea holding Send-or-Cancel.
+  cancel: (page: Page): Locator => {
+    const cancel = page.getByRole('button', { name: t('cancel'), exact: true })
+    return page
+      .locator('*')
+      .filter({ has: reader.composer(page) })
+      .filter({ has: reader.send(page).or(cancel) })
+      .last()
+      .getByRole('button', { name: t('cancel'), exact: true })
+  },
 
   // Composer mode dropdown (web: Radix Select). The trigger carries the "Mode"
   // label; each option renders the mode label + its hint.
@@ -32,6 +41,8 @@ export const reader = {
   // Each entry renders in a `data-entry-row` div (components/reader/reader-surface.tsx),
   // a stable DOM scope anchor — no component change needed.
   row: (page: Page, entryId: string): Locator => page.locator(`[data-entry-row="${entryId}"]`),
+  // The rows' scroll container, the parent every `data-entry-row` shares.
+  scroller: (page: Page): Locator => page.locator('[data-entry-row]').first().locator('..'),
   editEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.editEntry') }),
   deleteEntry: (page: Page, entryId: string): Locator =>
@@ -93,10 +104,25 @@ export const reader = {
   // Undo / Redo live in the chrome Actions menu's contextual group (chrome.ts opens it).
   undoRow: (page: Page): Locator => page.getByText(t('reader:actions.undo'), { exact: true }),
   redoRow: (page: Page): Locator => page.getByText(t('reader:actions.redo'), { exact: true }),
+  // The Undo row itself (a listbox option), which carries the disabled state its label doesn't.
+  undoMenuRow: (page: Page): Locator =>
+    page.getByRole('option', { name: t('reader:actions.undo'), exact: true }),
 
   // Rollback (delete-to-entry) confirm modal.
   rollbackConfirm: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:rollbackConfirm.confirm') }),
+  // Its Cancel shares `common:cancel` with the composer's and the memory banner's.
+  rollbackCancel: (page: Page): Locator =>
+    page
+      .getByRole('alertdialog')
+      .filter({ has: reader.rollbackConfirm(page) })
+      .getByRole('button', { name: t('cancel'), exact: true }),
+  // The confirm's world-state line when it reads `count` (rollback-confirm.tsx).
+  rollbackWorldStateLine: (page: Page, count: number): Locator =>
+    page
+      .getByRole('alertdialog')
+      .filter({ has: reader.rollbackConfirm(page) })
+      .getByText(`• ${t('reader:rollbackConfirm.worldState', { count })}`, { exact: true }),
 
   // Regenerate cascade confirm modal (RollbackConfirmModal variant="regenerate").
   // exact:true — see regenEntry's comment; the copy contains "regenerate" too.
@@ -110,4 +136,10 @@ export const reader = {
     page.getByRole('button', { name: t('reader:suggestions.chipLabel', { category, text }) }),
   suggestionRefresh: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:suggestions.refresh') }),
+  // The strip's one ⟳: the body's Generate while it shows no chips and nothing holds it, else
+  // the header's refresh (suggestion-strip.tsx, bodyOwnsRefresh).
+  suggestionRefreshAny: (page: Page): Locator =>
+    reader
+      .suggestionRefresh(page)
+      .or(page.getByRole('button', { name: t('reader:suggestions.generate'), exact: true })),
 }

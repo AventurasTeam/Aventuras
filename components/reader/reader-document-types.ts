@@ -36,6 +36,11 @@ export type ReaderSurfaceProps = {
    */
   hasOlder: boolean
   editBlocked: boolean
+  /**
+   * Head reversals' gate (↻, ×, the head turn's pencil): isHeadReversalBlocked for the branch,
+   * OR'd with the host's dispatch guard as `editBlocked` is. Implies `editBlocked`; defaults to it.
+   */
+  headReversalBlocked?: boolean
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */
   systemFixLabel?: string
