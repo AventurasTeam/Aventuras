@@ -78,16 +78,44 @@ export const ActiveClassifying: Story = {
   ),
 }
 
-// `onCancel` is passed and deliberately has no effect: the background pass is
-// cancel-less, so the tag carries no popover trigger.
+// The pass holds the gate, so it owns a Cancel like any blocking phase.
 export const ActiveUpdatingMemory: Story = {
-  render: () => (
-    <GenerationStatusPill
-      activePhase="updating-memory"
-      onCancel={onCancel}
-      onErrorTap={onErrorTap}
-    />
-  ),
+  args: { activePhase: 'updating-memory', onCancel: fn(), onErrorTap: fn() },
+  play: async ({ args }) => {
+    await userEvent.click(
+      screen.getByRole('button', { name: t('chrome.generationStatusPill.phase.updatingMemory') }),
+    )
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: t('chrome.generationStatusPill.cancelMemoryUpdate'),
+      }),
+    )
+    await waitFor(() => expect(args.onCancel).toHaveBeenCalledTimes(1))
+  },
+}
+
+// Send's deferred work: the pass runs first and the turn waits behind it.
+export const ActiveUpdatingMemoryBeforeTurn: Story = {
+  args: { activePhase: 'updating-memory', beforeTurn: true, onCancel: fn(), onErrorTap: fn() },
+  play: async () => {
+    const label = t('chrome.generationStatusPill.phase.updatingMemoryBeforeTurn')
+    expect(await screen.findByRole('button', { name: label })).toBeInTheDocument()
+    expect(screen.getByText(label)).toBeInTheDocument()
+  },
+}
+
+export const BeforeTurnIgnoredOutsideMemory: Story = {
+  args: { activePhase: 'generating-narrative', beforeTurn: true, onCancel: fn(), onErrorTap: fn() },
+  play: async () => {
+    expect(
+      await screen.findByRole('button', {
+        name: t('chrome.generationStatusPill.phase.generatingNarrative'),
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(t('chrome.generationStatusPill.phase.updatingMemoryBeforeTurn')),
+    ).toBeNull()
+  },
 }
 
 export const ActiveClosingChapter: Story = {
@@ -177,30 +205,28 @@ export const ActivePlusError: Story = {
   ),
 }
 
-export const BackgroundPhasePlusError: Story = {
-  render: () => {
-    const tap = fn()
-    tapSpy = tap
-    return (
-      <View className="gap-2">
-        <Text variant="muted" size="sm">
-          Both inputs set and the phase is non-blocking — the error wins. `swap-paused` needs a
-          decision, so a cadence-driven pass must not blank it.
-        </Text>
-        <GenerationStatusPill
-          activePhase="updating-memory"
-          error={{ code: 'swap-paused' }}
-          onCancel={onCancel}
-          onErrorTap={tap}
-        />
-      </View>
-    )
-  },
+export const MemoryPhasePlusError: Story = {
+  render: () => (
+    <View className="gap-2">
+      <Text variant="muted" size="sm">
+        Both inputs set and the phase is the memory pass — it holds the gate and owns the Cancel, so
+        it keeps the slot; `swap-paused` shows again when the pass ends.
+      </Text>
+      <GenerationStatusPill
+        activePhase="updating-memory"
+        error={{ code: 'swap-paused' }}
+        onCancel={onCancel}
+        onErrorTap={onErrorTap}
+      />
+    </View>
+  ),
   play: async () => {
-    const pill = await screen.findByText(t('chrome.generationStatusPill.error.swapPaused'))
-    await userEvent.click(pill)
-    // Still routes: yielding the slot has to yield the affordance with it.
-    expect(tapSpy).toHaveBeenCalledWith('swap-paused')
+    expect(
+      await screen.findByRole('button', {
+        name: t('chrome.generationStatusPill.phase.updatingMemory'),
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(t('chrome.generationStatusPill.error.swapPaused'))).toBeNull()
   },
 }
 
@@ -217,7 +243,7 @@ export const PhonePopover: Story = {
   ),
 }
 
-// Cancel-less, so the pill renders bare — no trigger to carry the name.
+// No onCancel, so the pill renders bare — no trigger to carry the name.
 export const PhoneBareNamedByPhase: Story = {
   globals: { viewport: { value: 'mobile1' } },
   render: () => <GenerationStatusPill activePhase="updating-memory" onErrorTap={onErrorTap} />,

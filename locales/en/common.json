@@ -132,6 +132,7 @@
         "generatingNarrative": "generating narrative…",
         "classifying": "classifying…",
         "updatingMemory": "updating memory…",
+        "updatingMemoryBeforeTurn": "updating memory before your turn…",
         "closingChapter": "closing chapter…",
         "refreshingSuggestions": "refreshing suggestions…"
       },
@@ -143,6 +144,7 @@
       },
       "cancelGeneration": "Cancel generation",
       "cancelChapterClose": "Cancel chapter close",
+      "cancelMemoryUpdate": "Cancel memory update",
       "cancelSuggestionRefresh": "Cancel suggestion refresh"
     }
   },

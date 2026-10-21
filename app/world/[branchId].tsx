@@ -219,7 +219,7 @@ export default function WorldRoute() {
     ],
   )
 
-  const { activeRunKind, editBlocked, gateReason } = useStoryGenerationGate(
+  const { activeRunKind, editBlocked, gateReason, beforeTurn } = useStoryGenerationGate(
     storyId ?? undefined,
     branchId,
   )
@@ -609,6 +609,7 @@ export default function WorldRoute() {
             storyId={storyId}
             swapTarget={open?.settings.embedding_swap_target}
             activePhase={storyPillPhase(activeRunKind)}
+            beforeTurn={beforeTurn}
             onCancel={() => cancelStoryPillRun(storyId ?? undefined, branchId)}
             onOpenMemory={() => {
               if (storyId != null) navigateGuarded(`/story-settings/${storyId}?tab=memory`)
