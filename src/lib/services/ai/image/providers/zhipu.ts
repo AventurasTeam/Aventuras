@@ -1,12 +1,11 @@
 /**
- * Zhipu CogView Provider
+ * Z.AI (Zhipu) Image Provider
  *
- * Direct HTTP calls to Zhipu's CogView API for image generation.
- * - txt2img: POST to open.bigmodel.cn
- * - img2img: Not supported
+ * Generates `glm-image` through the OpenAI Compatible SDK path against api.z.ai. Z.AI answers
+ * `data[].url`, which the SDK downloads through the plugin transport. No endpoint lists models.
  */
 
-import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
+import { specToPixels, formatImageSize, type ImageSpec } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -14,76 +13,48 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch } from './fetchAdapter'
+import { generateOpenAICompatibleImage } from './openaiCompatibleProvider'
 
-const DEFAULT_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4'
+const DEFAULT_BASE_URL = 'https://api.z.ai/api/paas/v4'
+
+// glm-image: each side 1024-2048 and a multiple of 32.
+const MIN_SIDE = 1024
+const MAX_SIDE = 2048
+const SIDE_GRID = 32
+
+/** The spec's pixels scaled to glm-image's limits, keeping the ratio. */
+function fitSize(spec: ImageSpec): `${number}x${number}` {
+  const { width, height } = specToPixels(spec)
+  const upscale = Math.max(1, MIN_SIDE / Math.min(width, height))
+  const downscale = Math.min(1, MAX_SIDE / (Math.max(width, height) * upscale))
+  const scale = upscale * downscale
+  const snap = (side: number) => Math.round((side * scale) / SIDE_GRID) * SIDE_GRID
+  return formatImageSize({ width: snap(width), height: snap(height) })
+}
 
 export function createZhipuProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL
+  const baseUrl = config.baseUrl?.trim().replace(/\/+$/, '') || DEFAULT_BASE_URL
 
   return {
     id: 'zhipu',
-    name: 'Zhipu CogView',
+    name: 'Z.AI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, signal } = options
-      const size = formatImageSize(specToPixels(spec))
 
-      const body = {
-        model: model || 'cogview-4-250304',
-        prompt,
-        size,
-        response_format: 'b64_json',
-      }
-
-      const response = await imageFetch({
-        url: `${baseUrl}/images/generations`,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal,
+      return generateOpenAICompatibleImage({
+        baseUrl,
+        apiKey: config.apiKey,
         serviceId: 'zhipu-image',
+        model,
+        prompt,
+        size: fitSize(spec),
+        signal,
       })
-
-      const data = await response.json()
-      const imageData = data?.data?.[0]
-
-      if (imageData?.b64_json) {
-        return { base64: imageData.b64_json }
-      }
-      if (imageData?.url) {
-        const imgResponse = await fetch(imageData.url)
-        const blob = await imgResponse.blob()
-        const buffer = await blob.arrayBuffer()
-        const bytes = new Uint8Array(buffer)
-        let binary = ''
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i])
-        }
-        const base64 = btoa(binary)
-        return { base64 }
-      }
-
-      throw new Error('No image data in Zhipu response')
     },
 
     async listModels(): Promise<ImageModelInfo[]> {
-      return [
-        {
-          id: 'cogview-4-250304',
-          name: 'CogView 4',
-          description: 'Zhipu CogView image generation',
-          supportsImg2Img: false,
-        },
-        {
-          id: 'cogview-3-flash',
-          name: 'CogView 3 Flash',
-          description: 'Fast image generation',
-          supportsImg2Img: false,
-        },
-      ]
+      return [{ id: 'glm-image', name: 'GLM-Image', supportsImg2Img: false }]
     },
   }
 }

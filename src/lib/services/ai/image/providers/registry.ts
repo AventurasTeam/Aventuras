@@ -56,7 +56,7 @@ export const IMAGE_PROVIDER_LABELS: Record<ImageProviderType, string> = {
   openrouter: 'OpenRouter',
   pollinations: 'Pollinations',
   google: 'Google AI Studio',
-  zhipu: 'Zhipu CogView',
+  zhipu: 'Z.AI',
   comfyui: 'ComfyUI',
   a1111: 'A1111 / SD.cpp / Kobold',
 }

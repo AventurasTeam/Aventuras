@@ -569,31 +569,36 @@ its own lore management refused.
 ## Images
 
 Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenAI Compatible,
-OpenRouter, Google, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111.
+OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
 steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google, a
 ratio plus a resolution tier matched to the pixel tier for OpenRouter, the model's own published
 resolution list for NanoGPT, real dimensions for ComfyUI/A1111/Pollinations
-(`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
+(`src/lib/utils/image.ts`). Z.AI's `glm-image` wants each side 1024–2048 and a multiple of 32, so
+the pixels are scaled up to a 1024 short side, capped at a 2048 long side and snapped to the
+grid, keeping the ratio. A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 
 NanoGPT calls its unified `POST /images` through a small custom `ImageModelV4`
 (`nanogptImage.ts`): one JSON request for text-to-image and edits, references as `input_references`
 data URLs, and the model's resolution tier (`1k`, `1344*576`) in `providerOptions.nanogpt` because the
 SDK's `size` takes only `WxH`. Models that list aspect ratios also get one, so orientation survives
-a tier-only resolution. Zhipu and A1111 still keep hand-written requests. OpenAI
+a tier-only resolution. Only A1111 still keeps a hand-written request. OpenAI
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
-key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, NanoGPT and Google call
-the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations reuses the OpenAI Compatible helper
-(`generateOpenAICompatibleImage`) with its fixed base URL and `safe: false`. Each adapter keeps its
+key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, Z.AI, NanoGPT and Google call
+the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations and Z.AI reuse the OpenAI Compatible helper
+(`generateOpenAICompatibleImage`): Pollinations with its fixed base URL and `safe: false`, Z.AI
+with `api.z.ai` and no references. Z.AI answers `data[].url`; the SDK downloads an OpenAI-compatible `url` reply
+through `createSdkFetch`, and sends the key only to the API's own origin. Each adapter keeps its
 own model discovery and size handling; discovery throws on a failed request rather than
 substituting a list. Whether a provider takes an API key or a base URL is declared per provider in
 the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
 `hasRequiredCredentials` read those tables. Migration `042` turned image settings that still named
 an API profile into image profiles, then moved `openai` profiles that point at a proxy, and every
 `chutes` profile (that provider is gone; its generation route no longer exists), over to OpenAI
-Compatible. The registry hands references only to the providers
+Compatible. It also pins `zhipu` API and image profiles with an empty base URL to
+`open.bigmodel.cn`, which they were using before the default became `api.z.ai`. The registry hands references only to the providers
 that send them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to
 base64, so every adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
 from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
@@ -623,8 +628,8 @@ user-configured, so CORS, Android's cleartext block and iOS ATS (above) would ea
 them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
 any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
 AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, OpenRouter and NanoGPT use it),
-`imageFetch` (Zhipu and A1111, the hand-written generation adapters) / `imageGetFetch` / `fetchPublicImageBase64` for model
+debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI, OpenRouter and NanoGPT use it),
+`imageFetch` (A1111, the hand-written generation adapter) / `imageGetFetch` / `fetchPublicImageBase64` for model
 discovery and reference fetching, `corsFetch` for discovery.
 
 What the plugin changes for the server on the other end:

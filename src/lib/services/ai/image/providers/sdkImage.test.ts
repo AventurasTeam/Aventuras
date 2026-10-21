@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { APICallError } from 'ai'
 import type { ImageModelV4 } from '@ai-sdk/provider'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { apiSettings: { llmTimeoutMs: 60_000 } },
@@ -143,5 +144,47 @@ describe('createImageSdkFetch', () => {
       timeoutMs: 300000,
       what: 'Image generation',
     })
+  })
+})
+
+describe('a url-only OpenAI-compatible reply', () => {
+  const PNG_BYTES = Uint8Array.from([137, 80, 78, 71])
+
+  const run = async (imageUrl: string) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) =>
+      String(input).endsWith('/images/generations')
+        ? Response.json({ data: [{ url: imageUrl }] })
+        : new Response(PNG_BYTES, { headers: { 'content-type': 'image/png' } }),
+    )
+    const provider = createOpenAICompatible({
+      name: 'openaiCompatible',
+      baseURL: 'https://api.test/v1',
+      apiKey: 'secret',
+      fetch: fetchMock,
+    })
+    const result = await generateSdkImage({ model: provider.imageModel('m'), prompt: 'x' })
+    return { result, fetchMock }
+  }
+
+  const authorization = (call: Parameters<typeof fetch>) =>
+    new Headers(call[1]?.headers).get('authorization')
+
+  it('downloads the image through the injected fetch', async () => {
+    const { result, fetchMock } = await run('https://cdn.test/a.png')
+
+    expect(result).toEqual({ base64: 'iVBORw==' })
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://api.test/v1/images/generations',
+      'https://cdn.test/a.png',
+    ])
+  })
+
+  it('sends the key to the API origin only', async () => {
+    const cross = await run('https://cdn.test/a.png')
+    expect(authorization(cross.fetchMock.mock.calls[0])).toBe('Bearer secret')
+    expect(authorization(cross.fetchMock.mock.calls[1])).toBeNull()
+
+    const same = await run('https://api.test/files/a.png')
+    expect(authorization(same.fetchMock.mock.calls[1])).toBe('Bearer secret')
   })
 })
