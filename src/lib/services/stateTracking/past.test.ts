@@ -23,7 +23,7 @@ const entries = [1, 2, 3, 4].map(
 )
 
 const mark = (entityType: 'snapshot' | 'checkpoint', entityId: string, seq: number) =>
-  ({ entityType, entityId, seq }) as WorldStateMark
+  ({ id: `mark:${entityType}:${entityId}`, entityType, entityId, seq }) as WorldStateMark
 
 /** Every snapshot and checkpoint marked at its creation time, unless `marks` is given. */
 function sources(overrides: Partial<PastSources> = {}): PastSources {

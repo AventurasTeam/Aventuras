@@ -14,6 +14,7 @@
     onCancel,
     onConfirm,
     busy = false,
+    cancelWhileBusy = false,
     disabled = false,
     tone = 'default',
   }: {
@@ -21,8 +22,9 @@
     icon: Component<{ class?: string }>
     onCancel: () => void
     onConfirm: () => void
-    /** The action runs: both buttons are disabled and the icon spins. */
+    /** The action runs: the action is disabled and its icon spins; Cancel too, unless `cancelWhileBusy`. */
     busy?: boolean
+    cancelWhileBusy?: boolean
     disabled?: boolean
     tone?: Tone
   } = $props()
@@ -37,7 +39,12 @@
 
 <ResponsiveModal.Footer class="border-t px-6 py-4">
   <span class="flex w-full gap-2 sm:w-auto">
-    <Button variant="outline" class="flex-1 sm:flex-none" onclick={onCancel} disabled={busy}>
+    <Button
+      variant="outline"
+      class="flex-1 sm:flex-none"
+      onclick={onCancel}
+      disabled={busy && !cancelWhileBusy}
+    >
       Cancel
     </Button>
     <Button

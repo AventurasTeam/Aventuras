@@ -92,6 +92,7 @@ async function startManualLoreManagement(
         ? { chapter: newChapter, entries: story.getChapterEntries(newChapter) }
         : undefined,
       chapterBuffer: story.memoryConfig.chapterBuffer,
+      readAfterChapter,
     },
     buildLoreManagementCallbacks(
       { storyId: currentStory.id, branchId: currentStory.currentBranchId },
@@ -99,7 +100,7 @@ async function startManualLoreManagement(
         ? { origin: 'chapter', entryId: newChapter.endEntryId }
         : { origin: 'tidy', entryId: story.lastCompletedEntryId ?? undefined },
     ),
-    buildLoreManagementUICallbacks('panel', { readAfterChapter }),
+    buildLoreManagementUICallbacks(),
     reporting,
   )
 }

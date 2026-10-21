@@ -18,7 +18,6 @@ import { aiService } from '#lib/services/ai/index.ts'
 import { database } from '#lib/services/database.ts'
 import { pairKeys, scopeToPool } from '#lib/services/duplicates/index.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
-import type { Chapter } from '#lib/types/index.ts'
 import type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,
@@ -109,18 +108,16 @@ export type LoreProgressTarget = 'panel' | { onStatus: (status: string | null) =
  */
 export function buildLoreManagementUICallbacks(
   target: LoreProgressTarget = 'panel',
-  /** How a failed chapter session read the story, for Retry to read it the same way. */
-  options: { readAfterChapter?: boolean } = {},
 ): LoreManagementUICallbacks {
-  const failed = (error: string, chapter?: Chapter) =>
+  const failed: LoreManagementUICallbacks['onError'] = (error, session) =>
     ui.setLoreManagementError(
       error,
-      chapter
+      session
         ? {
-            storyId: chapter.storyId,
-            branchId: chapter.branchId ?? null,
-            chapterId: chapter.id,
-            readAfterChapter: options.readAfterChapter ?? true,
+            storyId: session.chapter.storyId,
+            branchId: session.chapter.branchId ?? null,
+            chapterId: session.chapter.id,
+            readAfterChapter: session.readAfterChapter,
           }
         : null,
     )
@@ -142,9 +139,9 @@ export function buildLoreManagementUICallbacks(
     // after this, and `onComplete` sets the status back to null in the same tick — so a
     // failure written only there is erased before anyone reads it. The stored error
     // outlives the run and is what the lorebook view shows.
-    onError: (err, chapter) => {
+    onError: (err, session) => {
       target.onStatus(`Lore management failed: ${err}`)
-      failed(err, chapter)
+      failed(err, session)
     },
     onComplete: () => target.onStatus(null),
   }

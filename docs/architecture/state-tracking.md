@@ -31,10 +31,9 @@ the insert itself. Four kinds of row:
   transaction that makes it, whether tracking is on or not; `entity_type` and `entity_id` name it
   (migration 041). A snapshot or checkpoint holds every record before its mark, and a chapter's
   lore sessions are recorded after its own, so whatever reads the order compares `seq`, never
-  creation times. A mark lives as long as what it marks: each delete of a snapshot, checkpoint or
-  chapter takes its mark in the same statement batch, and deleting an entry or a branch takes it
-  with their records. One left behind is never read, since it is looked up from its owner. A
-  checkpoint rebuilt from the records gets none. The record queries leave marks out
+  creation times. A mark lives as long as what it marks: its id is `mark:<entity_type>:<entity_id>`
+  (`markId`), and triggers from migration 041 delete it with its snapshot, checkpoint or chapter,
+  whichever path deletes that. A checkpoint rebuilt from the records gets none. The record queries leave marks out
   (`getWorldStateMarks` reads them), so nothing that counts or lists records sees them.
 
 A SillyTavern chat import replaces the whole main branch, its records included, so nothing tracked
@@ -82,7 +81,9 @@ migration also stripped the deltas from every checkpoint's copy of the entries. 
 entries carry deltas next to change records came only from a development build, and import
 refuses it.
 
-The same migration gave every existing snapshot, checkpoint and chapter its mark and renumbered
+The same migration gave every existing snapshot, checkpoint and chapter its mark (save a
+checkpoint at a fork point, which may hold a child branch's state and is left unmarked, so never
+an anchor) and renumbered
 each story's rows from 1 in that order. Among converted rows a mark goes after those of entries up
 to its own: an old snapshot or checkpoint was taken with its entry the latest classified, and a
 converted row's time is its entry's, which a sync or import resets. Among rows written since, it
@@ -121,8 +122,9 @@ past-checkpoint form shows the revert lines.
 
 Deleting an entry without a rollback (the switch, Revert on Delete off, an error entry dismissed)
 leaves its changes live, so its changes and breaks move to a neighbouring entry in the same
-transaction (`recordsHolder`). Its header goes with it unless it marks a gap (not continuous): that
-is the only record of the gap, and moves too. A narration's move to the entry after
+transaction (`recordsHolder`). Its header goes with it unless it marks a gap or is a converted one
+(not continuous either way): that is the only record of the gap, or of the changes being the
+classifier's alone, and moves too. A narration's move to the entry after
 it: they were made after the entry before, whose state still leaves them out, and a revert from the
 entry after lists and undoes them. A user action's move to the entry before it: they were made
 before the narration answering it, so regenerating that narration must keep them. Either takes the
@@ -151,7 +153,11 @@ delete never lists the undone records again, and a past state is rebuilt from a 
 the live one at worst. A past checkpoint only reads records, and invalidates nothing. The undo is
 refused unless everything since was recorded (tracking on since before the chapter's records, and
 no break or non-continuous header after them), since an unrecorded edit would be overwritten; that
-also means no closing snapshot lies in the span it deletes. A chapter the open branch inherits
+also means no closing snapshot lies in the span it deletes. It is refused when a later save merged an
+entry the chapter wrote, since the survivor carries a new id no record ties to its sources and
+undoing the source's removal would split the merge, and when a branch forks at or after the
+chapter's end, since that branch inherits the lore and the history that records it. A chapter the
+open branch inherits
 cannot be deleted from it at all (`ownsChapter`): its row belongs to the branch it was cut on, and the
 records reached through the line would revert that branch's lorebook instead of this one's.
 

@@ -7,8 +7,12 @@ mod db;
 mod db_tx;
 mod migration_patch;
 mod sync;
+#[cfg(test)]
+mod test_db;
 mod time_anchors;
+#[cfg(test)]
 mod world_state_delta_migration;
+#[cfg(test)]
 mod world_state_marks_migration;
 
 use backup::{

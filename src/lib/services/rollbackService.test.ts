@@ -233,7 +233,7 @@ describe('undoing a chapter lore', () => {
     origin: 'chapter' | 'manual' | 'tidy',
     entryId: string,
     entityId: string,
-    op: 'create' | 'update',
+    op: 'create' | 'update' | 'delete',
     before: Record<string, unknown> | null,
     after: Record<string, unknown> | null,
   ): WorldStateRecord => ({
@@ -440,6 +440,26 @@ describe('undoing a chapter lore', () => {
     // The break before this chapter was cut does not refuse its own lore.
     const revert = query([old, brk, anew])
     expect(revert.ok && revert.undone.map((r) => r.id)).toEqual([anew.id])
+  })
+
+  it('is refused when a later save merged an entry the chapter wrote', () => {
+    const made = change('chapter', 'e5', 'made', 'create', null, lore('made'))
+    // One Tidy save: the survivor under a new id, then its sources removed.
+    const merged = change('tidy', 'e8', 'survivor', 'create', null, lore('survivor'))
+    const source = change('tidy', 'e8', 'made', 'delete', lore('made'), null)
+    const query = (records: WorldStateRecord[]) =>
+      planChapterLoreRevert({
+        endEntryId: 'e5',
+        chapterSeq: -Infinity,
+        records,
+        entryPositions: positions,
+        state: loreState(lore('survivor')),
+        tracking,
+      })
+    expect(query([made, merged, source])).toEqual({ ok: false, reason: 'merged' })
+    // A plain later delete is undone with the rest.
+    const deleted = change('manual', 'e8', 'made', 'delete', lore('made'), null)
+    expect(query([made, deleted]).ok).toBe(true)
   })
 
   it('is refused when nothing was recorded, or recording broke since the chapter', () => {

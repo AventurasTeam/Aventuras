@@ -14,6 +14,7 @@
   import { BookOpen, Plus, ArrowLeft, Loader2, Bot, AlertCircle, RotateCcw } from '@lucide/svelte'
   import { runManualLoreManagement } from '#lib/services/generation/index.ts'
   import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
+  import { sameBranchScope } from '#lib/utils/branchScope.ts'
 
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Alert, AlertDescription, AlertTitle } from '#lib/components/ui/alert/index.ts'
@@ -33,23 +34,13 @@
       void runManualLoreManagement()
       return
     }
-    const open =
-      story.currentStory?.id === retry.storyId &&
-      (story.currentStory.currentBranchId ?? null) === retry.branchId
+    const open = !!story.currentScope && sameBranchScope(story.currentScope, retry)
     const chapter = open ? story.chapters.find((ch) => ch.id === retry.chapterId) : undefined
     if (!chapter) {
       ui.showToast(
         open
           ? 'The chapter whose lore management failed no longer exists.'
           : 'Open the branch of the chapter whose lore management failed to retry it.',
-        'warning',
-      )
-      return
-    }
-    // A later chapter changes what the session reads after it; its lore would not be this one's.
-    if (!story.isLastChapter(chapter.id)) {
-      ui.showToast(
-        `Chapter ${chapter.number} is no longer the last one, so its lore management cannot be run again.`,
         'warning',
       )
       return

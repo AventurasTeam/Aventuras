@@ -131,7 +131,7 @@ describe('the per-branch lock', () => {
     await coordinator.runSession(input({ storyId: 'story-9' }), callbacks(), ui)
 
     expect(ui.onError.mock.calls).toEqual([
-      ['branch switched', chapter],
+      ['branch switched', { chapter, readAfterChapter: true }],
       ['branch switched', undefined],
     ])
   })

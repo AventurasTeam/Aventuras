@@ -4,25 +4,12 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::test_db::{memory_pool, run_migrations};
     use serde_json::Value;
-    use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::{Row, SqlitePool};
 
     const FIXTURE: &str =
         include_str!("../../src/lib/services/stateTracking/legacy-deltas.fixture.json");
-
-    /// Runs the migrations after `after`, up to and including `through`, as the plugin does.
-    async fn run_migrations(pool: &SqlitePool, after: i64, through: i64) {
-        for migration in crate::migrations() {
-            if migration.version <= after || migration.version > through {
-                continue;
-            }
-            sqlx::raw_sql(migration.sql)
-                .execute(pool)
-                .await
-                .unwrap_or_else(|e| panic!("migration {} failed: {e}", migration.version));
-        }
-    }
 
     fn text(value: &Value) -> Option<String> {
         match value {
@@ -35,11 +22,7 @@ mod tests {
     /// A database at migration 040 holding the fixture's entries, existing records and
     /// checkpoints, then upgraded through 041.
     async fn upgraded(fixture: &Value) -> SqlitePool {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = memory_pool().await;
         run_migrations(&pool, 0, 40).await;
 
         for story in ["s1", "s2"] {

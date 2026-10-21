@@ -1227,10 +1227,12 @@ class StoryStore {
    * before any rollback: a branch forked at or after that position would survive with a fork
    * point that no longer exists, and a rollback already applied cannot be taken back.
    */
+  private forksAtOrAfter(branch: Branch, position: number): boolean {
+    return this.entries.some((e) => e.id === branch.forkEntryId && e.position >= position)
+  }
+
   private assertNoBranchForkAtOrAfter(position: number): void {
-    const forked = this.branches.find((b) =>
-      this.entries.some((e) => e.id === b.forkEntryId && e.position >= position),
-    )
+    const forked = this.branches.find((b) => this.forksAtOrAfter(b, position))
     if (forked) {
       throw new Error(
         `Cannot remove these entries because branch "${forked.name}" forks from one of them. ` +
@@ -1390,10 +1392,21 @@ class StoryStore {
     }
   }
 
+  private entryNumbers = $derived<Record<string, number>>(
+    Object.fromEntries(this.entries.map((e) => [e.id, entryNumber(e)])),
+  )
+
   /** The number an entry on the open line is shown with, or null when it is not on it. */
   entryNumberOf(entryId: string): number | null {
-    const entry = this.entries.find((e) => e.id === entryId)
-    return entry ? entryNumber(entry) : null
+    return this.entryNumbers[entryId] ?? null
+  }
+
+  /** The numbers of those of these entries on the open line. */
+  entryNumbersOf(entryIds: string[]): number[] {
+    return entryIds.flatMap((id) => {
+      const number = this.entryNumberOf(id)
+      return number === null ? [] : [number]
+    })
   }
 
   /**
@@ -1426,10 +1439,7 @@ class StoryStore {
       this.currentStory.currentBranchId ?? null,
     )
     const numbers = (keep: (s: (typeof snapshots)[number]) => boolean) =>
-      snapshots.filter(keep).flatMap((s) => {
-        const number = this.entryNumberOf(s.entryId)
-        return number === null ? [] : [number]
-      })
+      this.entryNumbersOf(snapshots.filter(keep).map((s) => s.entryId))
     return {
       fromHere: numbers((s) => s.entryPosition >= position),
       here: numbers((s) => s.entryId === entryId),
@@ -2294,6 +2304,7 @@ class StoryStore {
   private async lineRecords(
     kinds?: WorldStateRecord['kind'][],
     fromPosition?: number,
+    afterSeq?: number,
   ): Promise<WorldStateRecord[]> {
     if (!this.currentStory) return []
     const records = await database.getWorldStateRecords(
@@ -2301,6 +2312,7 @@ class StoryStore {
       this.lineBranchIds(),
       kinds,
       fromPosition,
+      afterSeq,
     )
     const onLine = new Set(this.entries.map((e) => e.id))
     return records.filter((r) => onLine.has(r.entryId))
@@ -3141,15 +3153,15 @@ class StoryStore {
     if (!this.isOpen({ storyId, branchId: branchId ?? null })) return
     // Applied to the lorebook as it is now, not the copy taken before the await.
     const unchanged = new Set(before)
-    const changed = rows.filter((e) => !unchanged.has(e))
+    const changed: Record<string, Entry> = Object.fromEntries(
+      rows.filter((e) => !unchanged.has(e)).map((e) => [e.id, e]),
+    )
     const kept = new Set(rows.map((e) => e.id))
     const removed = new Set(before.filter((e) => !kept.has(e.id)).map((e) => e.id))
     const current = new Set(this.lorebookEntries.map((e) => e.id))
     this.lorebookEntries = [
-      ...this.lorebookEntries
-        .filter((e) => !removed.has(e.id))
-        .map((e) => changed.find((c) => c.id === e.id) ?? e),
-      ...changed.filter((c) => !current.has(c.id)),
+      ...this.lorebookEntries.filter((e) => !removed.has(e.id)).map((e) => changed[e.id] ?? e),
+      ...Object.values(changed).filter((c) => !current.has(c.id)),
     ]
     this.invalidateRetrievalCache()
     log('Lore session saved:', {
@@ -3982,6 +3994,24 @@ class StoryStore {
   }
 
   // Delete a chapter
+  /**
+   * Why a chapter cannot be cut by hand now, or null: one cut over a range still being cut, or
+   * while a lore session holds the branch, would overlap it or lose its own lore session.
+   */
+  manualChapterBlock(): string | null {
+    if (!this.currentStory) return null
+    const { id, currentBranchId } = this.currentStory
+    const busy = chapterCards.busyReason(id, currentBranchId ?? null)
+    if (busy) return busy
+    if (ui.backgroundTasksActiveFor(id, currentBranchId)) {
+      return "This turn's background tasks are still running."
+    }
+    return null
+  }
+
+  /** Bumped when snapshots go without an entry going: what lists them reads it. */
+  snapshotsRevision = $state(0)
+
   /** Whether the open branch cut this chapter itself, rather than inheriting it. */
   ownsChapter(chapterId: string): boolean {
     const chapter = this.chapters.find((ch) => ch.id === chapterId)
@@ -4011,15 +4041,12 @@ class StoryStore {
     if (!this.currentStory) throw new Error('No story loaded')
     // The chapter's own branch too: a child branch shows a parent's chapter as its own.
     const owner = this.chapters.find((ch) => ch.id === chapterId)?.branchId ?? null
-    if (
-      chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null) ||
-      chapterCards.busy(this.currentStory.id, owner)
-    ) {
+    const busy =
+      chapterCards.busyReason(this.currentStory.id, this.currentStory.currentBranchId ?? null) ??
+      chapterCards.busyReason(this.currentStory.id, owner)
+    if (busy) {
       log('Chapter work in flight, refusing to delete a chapter:', chapterId)
-      ui.showToast(
-        'A chapter is being written on this branch. Try again once it is done.',
-        'warning',
-      )
+      ui.showToast(`${busy} Try again once it is done.`, 'warning')
       return false
     }
     if (!this.isLastChapter(chapterId)) {
@@ -4040,7 +4067,7 @@ class StoryStore {
       if (!undo.revert.ok) throw new Error("This chapter's lore can no longer be undone.")
       const { revert } = undo
       await database.transaction([
-        ...database.deleteChapterStatements(chapterId),
+        database.deleteChapterStatement(chapterId),
         ...chapterLoreStatements({
           storyId: this.currentStory.id,
           plan: revert.plan,
@@ -4050,6 +4077,7 @@ class StoryStore {
         }),
       ])
       this.lorebookEntries = revert.plan.state.lorebookEntries
+      if (undo.snapshots.length > 0) this.snapshotsRevision++
       this.invalidateRetrievalCache()
     } else {
       await database.deleteChapter(chapterId)
@@ -4079,10 +4107,22 @@ class StoryStore {
     if (!this.ownsChapter(chapter.id)) {
       return { revert: { ok: false, reason: 'inherited' }, ...none }
     }
-    const [records, marks] = await Promise.all([this.lineRecords(), this.lineMarks()])
+    // A branch forked after the chapter inherits its lore and the history that records it.
+    const end = this.entries.find((e) => e.id === chapter.endEntryId)
+    if (end && this.branches.some((b) => this.forksAtOrAfter(b, end.position))) {
+      return { revert: { ok: false, reason: 'forked' }, ...none }
+    }
+    // Its records come after its mark; nothing before is read.
+    const marks = await this.lineMarks()
+    const chapterSeq = chapterMark(marks, chapter.id)
+    const records = await this.lineRecords(
+      undefined,
+      undefined,
+      chapterSeq === -Infinity ? undefined : chapterSeq,
+    )
     const revert = planChapterLoreRevert({
       endEntryId: chapter.endEntryId,
-      chapterSeq: chapterMark(marks, chapter.id),
+      chapterSeq,
       records,
       entryPositions: new Map(this.entries.map((e) => [e.id, e.position])),
       state: this.trackedState(),
@@ -4115,10 +4155,7 @@ class StoryStore {
       manual: revert.plan.manual,
       tidy: revert.plan.tidy,
       deletedChapters: revert.deletedChapters,
-      snapshots: snapshots.flatMap((m) => {
-        const number = this.entryNumberOf(m.entryId)
-        return number === null ? [] : [number]
-      }),
+      snapshots: this.entryNumbersOf(snapshots.map((m) => m.entryId)),
     }
   }
 
@@ -4382,17 +4419,12 @@ class StoryStore {
     // `buildAndSaveChapter` over `lastChapterEndIndex`, and two of them racing produce two
     // chapters covering the same entries.
     // A card's retried summary runs outside the turn's background tasks, so it is checked too.
-    if (
-      ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId) ||
-      chapterCards.busy(this.currentStory.id, this.currentStory.currentBranchId ?? null)
-    ) {
+    const blocked = this.manualChapterBlock()
+    if (blocked) {
       log('Background chapter work in flight, refusing manual chapter creation')
       // Said out loud as well as returned: the caller closes the modal either way, so a
       // silent refusal looks exactly like a chapter that was created.
-      ui.showToast(
-        'A chapter is already being written for this turn. Try again once it is done.',
-        'warning',
-      )
+      ui.showToast(`${blocked} Try again once it is done.`, 'warning')
       return null
     }
 
@@ -4640,18 +4672,20 @@ class StoryStore {
     }
   }
 
-  /** The state at `entry`, from a resolved run: the anchor's state with the run undone. */
+  /**
+   * The state at `entry`, from a resolved run: the anchor's state with the run undone, the
+   * reader's and Tidy's changes included.
+   */
   private async planPast(
     entry: StoryEntry,
     run: Extract<RunResult, { ok: true }>,
-    keep: RevertKeep,
   ): Promise<ReversalPlan> {
     return planReversal({
       state: await this.anchorState(run.anchor),
       records: run.records,
       late: run.late,
       entryPositions: new Map(this.entries.map((e) => [e.id, e.position])),
-      keep,
+      keep: KEEP_NONE,
       // Never the anchor's clock: the entry's own end time.
       clock: clockAfter(this.entries, entry.position + 1),
     })
@@ -4663,14 +4697,13 @@ class StoryStore {
    */
   private async rebuildPastState(
     entryId: string,
-    keep: RevertKeep,
     override?: GapOverride,
   ): Promise<{ entry: StoryEntry; plan: ReversalPlan; anchor: AnchorCandidate }> {
     const entry = this.pastTarget(entryId)
     const query = pastQuery(await this.pastSources(), entry.position)
     const run = override ? resolveOverride(query, override) : resolveRun(query)
     if (!run.ok) throw new RefusalError(run.reason, run.diagnosis)
-    return { entry, plan: await this.planPast(entry, run, keep), anchor: run.anchor }
+    return { entry, plan: await this.planPast(entry, run), anchor: run.anchor }
   }
 
   private async anchorState(anchor: AnchorCandidate): Promise<TrackedState> {
@@ -4727,7 +4760,7 @@ class StoryStore {
     const run = resolveRun(query)
 
     if (run.ok) {
-      const plan = await this.planPast(entry, run, KEEP_NONE)
+      const plan = await this.planPast(entry, run)
       return {
         ...refused(''),
         refusal: null,
@@ -4750,7 +4783,7 @@ class StoryStore {
     const next = resolveOverride(query, 'nextAsIs')
     const previous = resolveOverride(query, 'previousAsIs')
     const undo = resolveOverride(query, 'undoRecorded')
-    const undoPlan = undo.ok ? await this.planPast(entry, undo, KEEP_NONE).catch(() => null) : null
+    const undoPlan = undo.ok ? await this.planPast(entry, undo).catch(() => null) : null
     return {
       ...refused(refusalMessage(run.reason)),
       reason: run.reason,
@@ -4790,7 +4823,7 @@ class StoryStore {
       throw new Error('This entry already has a checkpoint')
     }
 
-    const { entry, plan } = await this.rebuildPastState(entryId, KEEP_NONE, opts.override)
+    const { entry, plan } = await this.rebuildPastState(entryId, opts.override)
     const entries = this.entries.filter((e) => e.position <= entry.position)
     const kept = new Set(entries.map((e) => e.id))
     const record: CheckpointRecord = {

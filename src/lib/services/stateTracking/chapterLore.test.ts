@@ -5,7 +5,7 @@ import { chapterMark, loreOwners, marksHolding } from '.'
 const lore = (entryId: string, seq: number) =>
   ({ id: `r${seq}`, entryId, seq, kind: 'change', origin: 'chapter' }) as WorldStateChangeRecord
 const mark = (entityId: string, seq: number) =>
-  ({ entityType: 'chapter', entityId, seq }) as WorldStateMark
+  ({ id: `mark:chapter:${entityId}`, entityType: 'chapter', entityId, seq }) as WorldStateMark
 
 describe('chapterMark', () => {
   it("is the chapter's mark, or -Infinity for one without", () => {

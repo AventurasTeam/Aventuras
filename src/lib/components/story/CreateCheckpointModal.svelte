@@ -90,11 +90,6 @@
     return `The snapshot at entry ${position + 1} was saved without the lorebook, so it can't be used.`
   }
 
-  function entryNumberOf(id: string): number | null {
-    const at = story.entries.find((e) => e.id === id)
-    return at ? entryNumber(at) : null
-  }
-
   const capitalize = (text: string) => text[0].toUpperCase() + text.slice(1)
 
   function anchorText(label: AnchorLabel): string {
@@ -265,7 +260,7 @@
                   {#each diagnosis.gaps as gap, i (i)}
                     {@render finding(
                       gap.cause === 'classifierOnly' ? 'warn' : 'fail',
-                      gapMessage(gap, entryNumberOf),
+                      gapMessage(gap, (id) => story.entryNumberOf(id)),
                     )}
                   {:else}
                     {@render finding(

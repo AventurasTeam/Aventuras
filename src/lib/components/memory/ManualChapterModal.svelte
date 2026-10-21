@@ -2,7 +2,8 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import { BookPlus } from '@lucide/svelte'
   import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { Badge } from '#lib/components/ui/badge/index.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
@@ -99,16 +100,15 @@
         </label>
       {/if}
 
-      <ResponsiveModal.Footer class="border-t px-4 py-4">
-        <Button variant="outline" onclick={onClose}>Cancel</Button>
-        <Button onclick={handleConfirm} disabled={entries.length === 0 || ui.memoryLoading}>
-          {#if ui.memoryLoading}
-            Creating...
-          {:else}
-            Create Chapter
-          {/if}
-        </Button>
-      </ResponsiveModal.Footer>
+      <ModalActions
+        label="Create Chapter"
+        icon={BookPlus}
+        onCancel={onClose}
+        onConfirm={handleConfirm}
+        busy={ui.memoryLoading}
+        cancelWhileBusy
+        disabled={entries.length === 0}
+      />
     </div>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

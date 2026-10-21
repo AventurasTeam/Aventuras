@@ -45,7 +45,7 @@ describe('deleting entries without a rollback', () => {
 
     const statements = submittedStatements()
     expect(squashed(statements[0].sql)).toBe(
-      "UPDATE world_state_changes SET entry_id = ? WHERE (kind IN ('change', 'break') OR (kind = 'header' AND continuous = 0 AND origin IS NULL)) AND entry_id IN (?)",
+      "UPDATE world_state_changes SET entry_id = ? WHERE (kind IN ('change', 'break') OR (kind = 'header' AND continuous = 0)) AND entry_id IN (?)",
     )
     expect(statements[0].params).toEqual(['e8', 'e9'])
     expect(statements.at(-1)?.sql).toContain('DELETE FROM story_entries')

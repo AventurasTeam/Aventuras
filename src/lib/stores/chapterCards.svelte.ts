@@ -8,6 +8,7 @@
 import { ChapterCards, type ChapterCard } from '#lib/services/chapterCreation/index.ts'
 import { ui } from '#lib/stores/ui.svelte.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
+import { story } from '#lib/stores/story.svelte.ts'
 import type { Chapter } from '#lib/types/index.ts'
 import { isLoreManagementRunning, runManualLoreManagement } from '#lib/services/generation/index.ts'
 
@@ -51,6 +52,14 @@ class ChapterCardsStore {
    * Resolves once the run ends.
    */
   async restartLore(chapter: Chapter, options: { readAfterChapter?: boolean } = {}): Promise<void> {
+    // A later chapter changes what the session reads after this one; its lore would not be this one's.
+    if (!story.isLastChapter(chapter.id)) {
+      ui.showToast(
+        `Chapter ${chapter.number} is no longer the last one, so its lore management cannot be run again.`,
+        'warning',
+      )
+      return
+    }
     const card = this.cards.withChapter(chapter.id)[0]
     if (card) this.cards.loreRestarted(card.id)
     const recordId = card ? activity.reopenRecord(card.recordKey) : null
@@ -73,11 +82,18 @@ class ChapterCardsStore {
    * Not the turn's background tasks as a whole, which include the style review.
    */
   busy(storyId: string, branchId: string | null): boolean {
-    return (
-      ui.chapterCheckActiveFor(storyId, branchId) ||
-      this.pending(storyId, branchId) ||
-      isLoreManagementRunning(storyId, branchId)
-    )
+    return this.busyReason(storyId, branchId) !== null
+  }
+
+  /** What makes the branch `busy`, for the reader; null when nothing does. */
+  busyReason(storyId: string, branchId: string | null): string | null {
+    if (ui.chapterCheckActiveFor(storyId, branchId) || this.pending(storyId, branchId)) {
+      return 'A chapter is being written on this branch.'
+    }
+    if (isLoreManagementRunning(storyId, branchId)) {
+      return 'Lore management is running on this branch.'
+    }
+    return null
   }
 }
 

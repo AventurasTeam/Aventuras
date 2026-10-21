@@ -4,6 +4,7 @@ import type {
   WorldStateMarkType,
   WorldStateRecord,
 } from '#lib/types/index.ts'
+import { markId } from '#lib/services/stateTracking/index.ts'
 
 /** Every entity id a record names, including the ids inside the rows it carries. */
 export function recordEntityIds(record: WorldStateRecord): string[] {
@@ -87,7 +88,7 @@ export function remapMark(mark: WorldStateMark, m: MarkMappers): WorldStateMark 
   if (!entryId || !entityId) return null
   return {
     ...mark,
-    id: crypto.randomUUID(),
+    id: markId(mark.entityType, entityId),
     storyId: m.newStoryId,
     branchId: m.mapBranchId(mark.branchId),
     entryId,
@@ -118,41 +119,68 @@ export interface WriteOrderInput {
  * while an old snapshot or checkpoint was taken with its entry the latest classified.
  */
 export function inWriteOrder(input: WriteOrderInput): Written[] {
-  type Item = Written & { at: number; converted: boolean; position: number }
+  type Item = { written: Written; at: number; converted: boolean; position: number }
   const position = (entryId: string) => input.positionOf(entryId) ?? -Infinity
   const items: Item[] = input.converted.map((record) => ({
-    record,
+    written: { record },
     at: record.createdAt,
     converted: true,
     position: position(record.entryId),
   }))
-  const timed = (w: Written, at: number): Item => ({ ...w, at, converted: false, position: 0 })
-  const pending = [...input.marks].sort((a, b) => a.seq - b.seq)
+  const timed = (written: Written, at: number): Item => ({
+    written,
+    at,
+    converted: false,
+    position: 0,
+  })
+  const marks = [...input.marks].sort((a, b) => a.seq - b.seq)
+  let next = 0
   for (const record of input.records) {
-    while (pending.length > 0 && pending[0].seq < record.seq) {
-      const mark = pending.shift()!
-      items.push(timed({ mark }, mark.createdAt))
+    for (; next < marks.length && marks[next].seq < record.seq; next++) {
+      items.push(timed({ mark: marks[next] }, marks[next].createdAt))
     }
     items.push(timed({ record }, record.createdAt))
   }
-  for (const mark of pending) items.push(timed({ mark }, mark.createdAt))
+  for (const mark of marks.slice(next)) items.push(timed({ mark }, mark.createdAt))
 
-  for (const mark of [...input.unmarked].sort((a, b) => a.createdAt - b.createdAt)) {
-    const at = position(mark.entryId)
-    let after = -1
-    items.forEach((item, i) => {
-      if (!item.converted && item.at <= mark.createdAt) after = i
-    })
-    if (after >= 0) {
-      items.splice(after + 1, 0, timed({ mark }, mark.createdAt))
-      continue
+  // Each owner goes after the last of the file's own items written by its time, or else after
+  // the last converted record at or before its entry. Found by binary search over suffix minima,
+  // which never decrease, then inserted in one pass; owners sharing a place keep their time order.
+  const lastAtOrBefore = (picked: number[], key: (index: number) => number) => {
+    const suffixMin = new Array<number>(picked.length)
+    for (let k = picked.length - 1, min = Infinity; k >= 0; k--) {
+      min = Math.min(min, key(picked[k]))
+      suffixMin[k] = min
     }
-    items.forEach((item, i) => {
-      if (item.converted && item.position <= at) after = i
-    })
-    items.splice(after + 1, 0, { mark, at: mark.createdAt, converted: true, position: at })
+    return (limit: number) => {
+      let lo = 0
+      let hi = picked.length - 1
+      let found = -1
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1
+        if (suffixMin[mid] <= limit) {
+          found = mid
+          lo = mid + 1
+        } else hi = mid - 1
+      }
+      return found < 0 ? -1 : picked[found]
+    }
   }
-  return items.map(
-    ({ at: _at, converted: _converted, position: _position, ...item }) => item as Written,
+  const indices = items.map((_, i) => i)
+  const byTime = lastAtOrBefore(
+    indices.filter((i) => !items[i].converted),
+    (i) => items[i].at,
   )
+  const byEntry = lastAtOrBefore(
+    indices.filter((i) => items[i].converted),
+    (i) => items[i].position,
+  )
+  const after: Written[][] = items.map(() => [])
+  const first: Written[] = []
+  for (const mark of [...input.unmarked].sort((a, b) => a.createdAt - b.createdAt)) {
+    const timed = byTime(mark.createdAt)
+    const at = timed >= 0 ? timed : byEntry(position(mark.entryId))
+    ;(at >= 0 ? after[at] : first).push({ mark })
+  }
+  return [...first, ...items.flatMap((item, i) => [item.written, ...after[i]])]
 }

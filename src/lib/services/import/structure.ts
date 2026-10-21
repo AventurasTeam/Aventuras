@@ -411,30 +411,36 @@ export async function importStructure(
       }),
     )
     .filter((mark) => mark !== null)
+    .filter((mark, i, all) => all.findIndex((m) => m.id === mark.id) === i)
   // A file from before marks: each chapter and checkpoint is placed by when it was made.
   const unmarked: WorldStateMark[] = []
   if (!data.worldStateMarks) {
-    for (const cp of data.checkpoints ?? []) {
-      const entry = importedEntries.get(cp.lastEntryId)
-      const id = checkpointIdMap.get(cp.id)
-      if (!entry || !id) continue
-      const scope = {
-        storyId: newStoryId,
-        branchId: mapBranchId(entry.branchId ?? null),
-        entryId: oldToNewId.get(entry.id)!,
-      }
-      unmarked.push({ ...markRecord(scope, 'checkpoint', id), createdAt: cp.createdAt ?? 0 })
-    }
-    for (const chapter of data.chapters ?? []) {
-      const entry = importedEntries.get(chapter.endEntryId)
-      const id = oldToNewId.get(chapter.id)
-      if (!entry || !id) continue
-      const scope = {
-        storyId: newStoryId,
-        branchId: chapter.branchId ? (branchIdMap.get(chapter.branchId) ?? null) : null,
-        entryId: oldToNewId.get(entry.id)!,
-      }
-      unmarked.push({ ...markRecord(scope, 'chapter', id), createdAt: chapter.createdAt })
+    // At a fork point a checkpoint may hold a child's state; unmarked, it is never an anchor.
+    const forks = new Set((data.branches ?? []).map((b) => b.forkEntryId))
+    const owners = [
+      ...(data.checkpoints ?? [])
+        .filter((cp) => !forks.has(cp.lastEntryId))
+        .map((cp) => ({
+          type: 'checkpoint' as const,
+          id: checkpointIdMap.get(cp.id),
+          entryId: cp.lastEntryId,
+          // A checkpoint belongs to its entry's branch.
+          branchId: importedEntries.get(cp.lastEntryId)?.branchId ?? null,
+          createdAt: cp.createdAt ?? 0,
+        })),
+      ...(data.chapters ?? []).map((ch) => ({
+        type: 'chapter' as const,
+        id: oldToNewId.get(ch.id),
+        entryId: ch.endEntryId,
+        branchId: ch.branchId ?? null,
+        createdAt: ch.createdAt,
+      })),
+    ]
+    for (const owner of owners) {
+      const entryId = importedEntries.has(owner.entryId) && oldToNewId.get(owner.entryId)
+      if (!entryId || !owner.id) continue
+      const scope = { storyId: newStoryId, branchId: mapBranchId(owner.branchId), entryId }
+      unmarked.push({ ...markRecord(scope, owner.type, owner.id), createdAt: owner.createdAt })
     }
   }
   const positions = new Map(data.entries.map((e) => [oldToNewId.get(e.id), e.position]))

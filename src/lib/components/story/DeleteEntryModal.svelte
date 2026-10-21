@@ -2,9 +2,8 @@
   import type { StoryEntry } from '#lib/types/index.ts'
   import {
     KEEP_NONE,
-    deletedChaptersLine,
     deletedSnapshotsLine,
-    revertLines,
+    removalLines,
   } from '#lib/services/stateTracking/index.ts'
   import { story, type RevertPreview } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
@@ -15,7 +14,7 @@
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Trash2 } from '@lucide/svelte'
   import ModalActions from '#lib/components/shared/ModalActions.svelte'
-  import ChangeList from './ChangeList.svelte'
+  import RevertSummary from './RevertSummary.svelte'
 
   let entry = $state<StoryEntry | null>(null)
   // What the revert would undo; null until known.
@@ -33,7 +32,6 @@
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
   )
   const number = $derived(entry ? entryNumber(entry) : 0)
-  const othersListed = $derived(!!preview && preview.manual.length + preview.tidy.length > 0)
 
   $effect(() => {
     const id = ui.deleteEntryId
@@ -145,33 +143,17 @@
             Checking the recorded world state changes…
           </p>
         {:else if rollsBack && preview && entry}
-          {@const deleted = deletedChaptersLine(story.chaptersRemovedFrom(entry.position))}
-          {@const gone = deletedSnapshotsLine(snapshots.fromHere)}
-          {@const lines = [
-            ...(deleted ? [deleted] : []),
-            ...(gone ? [gone] : []),
-            ...revertLines(preview.classifier, preview.lore),
-          ]}
-          {#if lines.length > 0}
-            <div class="space-y-1">
-              {#each lines as line, i (i)}
-                <p class="text-muted-foreground text-sm">{line}</p>
-              {/each}
-            </div>
-          {/if}
-          {#if othersListed}
-            <div class="space-y-1">
-              <p class="text-muted-foreground text-sm">These changes will be reverted too:</p>
-              {#if preview.manual.length > 0}
-                <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-                <ChangeList changes={preview.manual} />
-              {/if}
-              {#if preview.tidy.length > 0}
-                <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-                <ChangeList changes={preview.tidy} />
-              {/if}
-            </div>
-          {/if}
+          <RevertSummary
+            lines={removalLines(
+              story.chaptersRemovedFrom(entry.position),
+              snapshots.fromHere,
+              preview.classifier,
+              preview.lore,
+            )}
+            heading="These changes will be reverted too:"
+            manual={preview.manual}
+            tidy={preview.tidy}
+          />
         {/if}
       </div>
       <ModalActions

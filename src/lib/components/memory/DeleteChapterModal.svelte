@@ -9,6 +9,7 @@
   import { Trash2 } from '@lucide/svelte'
   import ModalActions from '#lib/components/shared/ModalActions.svelte'
   import ChangeList from '#lib/components/story/ChangeList.svelte'
+  import RevertSummary from '#lib/components/story/RevertSummary.svelte'
 
   let chapter = $state<Chapter | null>(null)
   // What undoing the chapter's lore would undo; null until known.
@@ -110,27 +111,12 @@
             {/if}
             <ChangeList changes={preview.undone} />
           </div>
-          {#if preview.manual.length + preview.tidy.length + preview.deletedChapters.length > 0}
-            <div class="space-y-1">
-              <p class="text-muted-foreground text-sm">
-                Later changes to the same entries will be reverted too:
-              </p>
-              {#if preview.manual.length > 0}
-                <p class="text-muted-foreground text-xs">Changes you made by hand:</p>
-                <ChangeList changes={preview.manual} />
-              {/if}
-              {#if preview.tidy.length > 0}
-                <p class="text-muted-foreground text-xs">Changes from lore management you ran:</p>
-                <ChangeList changes={preview.tidy} />
-              {/if}
-              {#if preview.deletedChapters.length > 0}
-                <p class="text-muted-foreground text-xs">
-                  Changes from a deleted chapter's lore management:
-                </p>
-                <ChangeList changes={preview.deletedChapters} />
-              {/if}
-            </div>
-          {/if}
+          <RevertSummary
+            heading="Later changes to the same entries will be reverted too:"
+            manual={preview.manual}
+            tidy={preview.tidy}
+            deletedChapters={preview.deletedChapters}
+          />
         {:else if offered}
           <div class="space-y-1">
             <p class="text-muted-foreground text-sm">
@@ -142,9 +128,13 @@
           <p class="text-muted-foreground text-sm">
             {preview.refusal === 'interrupted' || preview.refusal === 'untracked'
               ? "The chapter's lore will stay in the lorebook: changes made since it may not have been recorded."
-              : preview.refusal === 'inherited'
-                ? 'This chapter was cut on another branch, and can only be deleted there.'
-                : 'No lore management changes were recorded for this chapter.'}
+              : preview.refusal === 'merged'
+                ? "The chapter's lore will stay in the lorebook: an entry it wrote was merged into another since, which undoing would split."
+                : preview.refusal === 'forked'
+                  ? "The chapter's lore will stay in the lorebook: a branch forked after it inherits that lore."
+                  : preview.refusal === 'inherited'
+                    ? 'This chapter was cut on another branch, and can only be deleted there.'
+                    : 'No lore management changes were recorded for this chapter.'}
           </p>
         {/if}
       </div>

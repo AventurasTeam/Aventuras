@@ -68,8 +68,8 @@ export interface LoreManagementUICallbacks {
    * `onComplete` two seconds later — and this is the only record of what a run did.
    */
   onSummary?: (summary: string, changeCount: number) => void
-  /** `chapter`: the chapter the failed session followed; absent for a Tidy or batch run. */
-  onError?: (error: string, chapter?: Chapter) => void
+  /** `failed`: the chapter session that failed and how it read; absent for a Tidy or batch run. */
+  onError?: (error: string, failed?: { chapter: Chapter; readAfterChapter: boolean }) => void
   onComplete: () => void
 }
 
@@ -97,6 +97,8 @@ export interface LoreSessionInput {
   newChapter?: LoreNewChapterInput
   /** The story's Buffer Messages; sizes the post-chapter tail when `chapterBufferTail` is on. */
   chapterBuffer?: number
+  /** Off, a chapter session read nothing after its chapter; a retry reads the same. */
+  readAfterChapter?: boolean
 }
 
 export type LoreRunOptions = Pick<
@@ -202,11 +204,8 @@ export class LoreManagementCoordinator {
     }
     uiCallbacks?.onStart()
 
-    let changeCount = 0
-    const bumpChanges = (delta = 1) => {
-      changeCount += delta
-      return changeCount
-    }
+    // The session saves once, so nothing is saved until all of it is.
+    let saved = 0
 
     // The completion message is left up for a moment, but the lock is not: it is released
     // as soon as the writes are done, so the next run is not blocked by a UI delay.
@@ -228,14 +227,14 @@ export class LoreManagementCoordinator {
         input.chapters,
         {
           onSaveSession: async (writes) => {
-            uiCallbacks?.onProgress('Saving changes...', changeCount)
+            uiCallbacks?.onProgress('Saving changes...', 0)
             await callbacks.onSaveSession(writes)
-            const count =
+            saved =
               writes.creates.length +
               writes.updates.length +
               writes.merges.length +
               writes.deletes.length
-            uiCallbacks?.onProgress('Saved changes', bumpChanges(count))
+            uiCallbacks?.onProgress('Saved changes', saved)
           },
           onQueryChapter: callbacks.onQueryChapter,
           getKeptSeparate: callbacks.getKeptSeparate,
@@ -271,7 +270,13 @@ export class LoreManagementCoordinator {
     } catch (error) {
       log('Lore management failed', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      uiCallbacks?.onError?.(errorMessage, input.newChapter?.chapter)
+      uiCallbacks?.onError?.(
+        errorMessage,
+        input.newChapter && {
+          chapter: input.newChapter.chapter,
+          readAfterChapter: input.readAfterChapter ?? true,
+        },
+      )
       if (reporting) failStep(reporting.activity, stepId, error)
 
       // Still clear the UI state: a failed run must not leave the lorebook read-only.
@@ -279,7 +284,7 @@ export class LoreManagementCoordinator {
 
       return {
         completed: false,
-        changeCount,
+        changeCount: saved,
         error: describeActivityError(error),
       }
     } finally {

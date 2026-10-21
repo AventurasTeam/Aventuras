@@ -2,31 +2,15 @@
 
 #[cfg(test)]
 mod tests {
-    use sqlx::sqlite::SqlitePoolOptions;
+    use crate::test_db::{memory_pool, run_migrations};
     use sqlx::{Row, SqlitePool};
-
-    async fn run_migrations(pool: &SqlitePool, after: i64, through: i64) {
-        for migration in crate::migrations() {
-            if migration.version <= after || migration.version > through {
-                continue;
-            }
-            sqlx::raw_sql(migration.sql)
-                .execute(pool)
-                .await
-                .unwrap_or_else(|e| panic!("migration {} failed: {e}", migration.version));
-        }
-    }
 
     async fn exec(pool: &SqlitePool, sql: &'static str) {
         sqlx::raw_sql(sql).execute(pool).await.unwrap();
     }
 
     async fn upgraded() -> SqlitePool {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
+        let pool = memory_pool().await;
         run_migrations(&pool, 0, 40).await;
         exec(
             &pool,
@@ -143,5 +127,28 @@ mod tests {
             Some("b1")
         );
         assert_eq!(rows[0].get::<String, _>("entry_id"), "e3");
+    }
+
+    #[tokio::test]
+    async fn deleting_what_a_mark_marks_takes_the_mark() {
+        let pool = upgraded().await;
+        exec(
+            &pool,
+            "DELETE FROM world_state_snapshots WHERE id = 'snap';
+             DELETE FROM checkpoints WHERE id = 'cp';
+             DELETE FROM chapters WHERE id = 'ch';",
+        )
+        .await;
+        let left: Vec<String> = sqlx::query(
+            "SELECT entity_id FROM world_state_changes WHERE story_id = 's1' AND kind = 'mark'
+             ORDER BY seq",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get("entity_id"))
+        .collect();
+        assert_eq!(left, ["early"]);
     }
 }

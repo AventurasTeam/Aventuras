@@ -116,6 +116,7 @@
     // A new entry can bring a new snapshot; a branch or story switch brings another set.
     void story.entries.length
     void story.currentStory?.currentBranchId
+    void story.snapshotsRevision
     if (!showSnapshots || !tracking) return
     let stale = false
     story

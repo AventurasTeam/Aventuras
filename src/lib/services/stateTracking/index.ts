@@ -43,6 +43,7 @@ export {
   changedFields,
   diffStates,
   headerRecord,
+  markId,
   markRecord,
   type RecordContext,
   type RecordScope,
@@ -53,6 +54,7 @@ export {
   describeChange,
   gapMessage,
   refusalMessage,
+  removalLines,
   revertLines,
   type LoreChapter,
 } from './describe'

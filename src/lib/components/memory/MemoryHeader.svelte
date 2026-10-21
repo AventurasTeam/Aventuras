@@ -2,7 +2,6 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
-  import { isLoreManagementRunning } from '#lib/services/generation/index.ts'
   import { Plus, Settings } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
@@ -21,23 +20,13 @@
   const threshold = $derived(story.memoryConfig.tokenThreshold)
   const autoSummarize = $derived(story.memoryConfig.autoSummarize)
   const messagesSinceLastChapter = $derived(story.messagesSinceLastChapter)
-  // Why a chapter cannot be made by hand now. A chapter cut over a range still being cut, or
-  // while a lore session holds the branch, would overlap it or lose its own lore session.
+  // Why a chapter cannot be made by hand now.
   const unavailableReason = $derived.by(() => {
-    const current = story.currentStory
-    if (!current) return null
-    const branchId = current.currentBranchId ?? null
-    // The run set is not reactive; this flag starts and ends with every run.
+    // The lore run set is not reactive; this flag starts and ends with every run.
     void ui.loreManagementActive
-    if (
-      ui.chapterCheckActiveFor(current.id, branchId) ||
-      chapterCards.pending(current.id, branchId)
-    )
-      return 'A chapter is being written on this branch.'
-    if (isLoreManagementRunning(current.id, branchId))
-      return 'Lore management is running on this branch.'
-    if (ui.backgroundTasksActiveFor(current.id, current.currentBranchId))
-      return "This turn's background tasks are still running."
+    void chapterCards.version
+    const blocked = story.manualChapterBlock()
+    if (blocked) return blocked
     if (messagesSinceLastChapter === 0) return 'No new entries since the last chapter.'
     return null
   })

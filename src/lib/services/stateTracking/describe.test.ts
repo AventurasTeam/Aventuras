@@ -5,6 +5,7 @@ import {
   deletedSnapshotsLine,
   describeChange,
   gapMessage,
+  removalLines,
   revertLines,
 } from '.'
 
@@ -154,5 +155,17 @@ describe('deletedSnapshotsLine', () => {
     expect(deletedSnapshotsLine([10, 20, 30, 40, 50])).toBe(
       '5 world-state snapshots between entries 10 and 50 will be deleted.',
     )
+  })
+})
+
+describe('removalLines', () => {
+  it('says what is deleted before what is reverted', () => {
+    const chapter = { number: 4, first: 31, last: 45 }
+    expect(removalLines([chapter], [40], true, [])).toEqual([
+      'Chapter 4 (entries 31–45) will be deleted.',
+      'The world-state snapshot at entry 40 will be deleted.',
+      'Classifier changes will be reverted.',
+    ])
+    expect(removalLines([], [], false, [])).toEqual([])
   })
 })

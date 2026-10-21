@@ -59,13 +59,18 @@ export function headerRecord(
   }
 }
 
+/** A mark's id follows from what it marks: deleting that deletes the mark (migration 041). */
+export function markId(entityType: WorldStateMarkType, entityId: string): string {
+  return `mark:${entityType}:${entityId}`
+}
+
 export function markRecord(
   scope: RecordScope,
   entityType: WorldStateMarkType,
   entityId: string,
 ): WorldStateMark {
   return {
-    id: crypto.randomUUID(),
+    id: markId(entityType, entityId),
     ...scope,
     seq: 0,
     entityType,

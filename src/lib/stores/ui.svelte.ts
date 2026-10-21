@@ -16,6 +16,7 @@ import type {
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
 import * as z from 'zod'
+import type { BranchScope } from '#lib/utils/branchScope.ts'
 import type { ActionChoice } from '#lib/services/ai/sdk/schemas/actionchoices.ts'
 import type { Suggestion } from '#lib/services/ai/sdk/schemas/suggestions.ts'
 import { actionChoiceSchema, suggestionSchema } from '#lib/services/ai/sdk/schemas/index.ts'
@@ -126,9 +127,7 @@ export const NAV_FILTER_SETTING: Record<LandmarkFilterGroup, string> = {
 }
 
 /** A chapter's failed lore management session, to run again as it was. */
-export interface LoreRetry {
-  storyId: string
-  branchId: string | null
+export interface LoreRetry extends BranchScope {
   chapterId: string
   readAfterChapter: boolean
 }

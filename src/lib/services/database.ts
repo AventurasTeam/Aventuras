@@ -39,7 +39,6 @@ import type {
   VisualDescriptors,
   WorldStateSnapshot,
   WorldStateMark,
-  WorldStateMarkType,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 import type {
@@ -96,20 +95,14 @@ function statement(sql: string, params: unknown[]): DbStatement {
   return { sql, params }
 }
 
-/** Removes the marks of the snapshots `where` selects; run before deleting the snapshots. */
-function snapshotMarksStatement(where: string, params: unknown[]): DbStatement {
-  return statement(
-    `DELETE FROM world_state_changes WHERE kind = 'mark' AND entity_type = 'snapshot'
-     AND entity_id IN (SELECT id FROM world_state_snapshots WHERE ${where})`,
-    params,
-  )
-}
-
-function markDeleteStatement(entityType: WorldStateMarkType, entityId: string): DbStatement {
-  return statement(
-    "DELETE FROM world_state_changes WHERE kind = 'mark' AND entity_type = ? AND entity_id = ?",
-    [entityType, entityId],
-  )
+/** `branch_id` matching one of `branchIds`, `null` being the main branch; null for none. */
+function branchClause(branchIds: (string | null)[]): { sql: string; params: string[] } | null {
+  const named = branchIds.filter((id): id is string => id !== null)
+  const clauses = [
+    ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
+    ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
+  ]
+  return clauses.length > 0 ? { sql: `(${clauses.join(' OR ')})`, params: named } : null
 }
 
 /** Statements over `ids` in chunks that stay under SQLite's bound-parameter limit. */
@@ -1523,12 +1516,18 @@ class DatabaseService {
         chapter.createdAt,
       ],
     )
-    if (opts.mark === false) return this.runStatement(insert)
-    const mark = markRecord(
-      { storyId: chapter.storyId, branchId: chapter.branchId || null, entryId: chapter.endEntryId },
-      'chapter',
-      chapter.id,
+    const scope = { storyId: chapter.storyId, branchId: chapter.branchId || null }
+    await this.insertMarked(
+      insert,
+      opts.mark === false
+        ? null
+        : markRecord({ ...scope, entryId: chapter.endEntryId }, 'chapter', chapter.id),
     )
+  }
+
+  /** An insert and, unless `mark` is null, the mark placing it in the write order, together. */
+  private async insertMarked(insert: DbStatement, mark: WorldStateMark | null): Promise<void> {
+    if (!mark) return this.runStatement(insert)
     await this.transaction([insert, this.worldStateMarkStatement(mark)])
   }
 
@@ -1579,15 +1578,12 @@ class DatabaseService {
     await db.execute(`UPDATE chapters SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
-  deleteChapterStatements(id: string): DbStatement[] {
-    return [
-      statement('DELETE FROM chapters WHERE id = ?', [id]),
-      markDeleteStatement('chapter', id),
-    ]
+  deleteChapterStatement(id: string): DbStatement {
+    return statement('DELETE FROM chapters WHERE id = ?', [id])
   }
 
   async deleteChapter(id: string): Promise<void> {
-    await this.transaction(this.deleteChapterStatements(id))
+    await this.runStatement(this.deleteChapterStatement(id))
   }
 
   // Checkpoint operations
@@ -1668,16 +1664,11 @@ class DatabaseService {
         checkpoint.createdAt,
       ],
     )
-    if (!mark) return this.runStatement(insert)
-    const scope = {
-      storyId: checkpoint.storyId,
-      branchId: mark.branchId,
-      entryId: checkpoint.lastEntryId,
-    }
-    await this.transaction([
+    const scope = { storyId: checkpoint.storyId, entryId: checkpoint.lastEntryId }
+    await this.insertMarked(
       insert,
-      this.worldStateMarkStatement(markRecord(scope, 'checkpoint', checkpoint.id)),
-    ])
+      mark ? markRecord({ ...scope, branchId: mark.branchId }, 'checkpoint', checkpoint.id) : null,
+    )
   }
 
   async renameCheckpoint(id: string, name: string): Promise<void> {
@@ -1698,8 +1689,6 @@ class DatabaseService {
         'Checkpoint could not be deleted because it does not exist or was used to create a branch',
       )
     }
-    // Apart from the delete: a mark left behind is never read, its checkpoint being gone.
-    await this.runStatement(markDeleteStatement('checkpoint', id))
   }
 
   // ===== World State Change Records =====
@@ -1727,12 +1716,8 @@ class DatabaseService {
     return deleteInStatements('world_state_changes', 'id', ids)
   }
 
-  /** These snapshots, with their marks. */
   deleteWorldStateSnapshotsStatements(ids: string[]): DbStatement[] {
-    return chunkedStatements(ids, (slice, list) => [
-      snapshotMarksStatement(`id IN (${list})`, slice),
-      statement(`DELETE FROM world_state_snapshots WHERE id IN (${list})`, slice),
-    ])
+    return deleteInStatements('world_state_snapshots', 'id', ids)
   }
 
   /** Records written on the given branches, in write order. */
@@ -1742,28 +1727,28 @@ class DatabaseService {
     kinds?: WorldStateRecord['kind'][],
     /** Only records on entries at or after this position, on any branch. */
     fromPosition?: number,
+    /** Only records written after this one. */
+    afterSeq?: number,
   ): Promise<WorldStateRecord[]> {
     const db = await this.getDb()
-    const named = branchIds.filter((id): id is string => id !== null)
-    const clauses = [
-      ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
-      ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
-    ]
-    if (clauses.length === 0) return []
+    const branches = branchClause(branchIds)
+    if (!branches) return []
     const kindClause = kinds ? ` AND kind IN (${kinds.map(() => '?').join(', ')})` : ''
     const positionClause =
       fromPosition === undefined
         ? ''
         : ' AND entry_id IN (SELECT id FROM story_entries WHERE story_id = ? AND position >= ?)'
+    const seqClause = afterSeq === undefined ? '' : ' AND seq > ?'
     const rows = await db.select<Record<string, unknown>[]>(
       `SELECT * FROM world_state_changes WHERE story_id = ? AND kind <> 'mark'
-       AND (${clauses.join(' OR ')})${kindClause}${positionClause}
+       AND ${branches.sql}${kindClause}${positionClause}${seqClause}
        ORDER BY seq ASC`,
       [
         storyId,
-        ...named,
+        ...branches.params,
         ...(kinds ?? []),
         ...(fromPosition === undefined ? [] : [storyId, fromPosition]),
+        ...(afterSeq === undefined ? [] : [afterSeq]),
       ],
     )
     return rows.map(rowToRecord)
@@ -1784,16 +1769,12 @@ class DatabaseService {
     branchIds: (string | null)[],
   ): Promise<WorldStateMark[]> {
     const db = await this.getDb()
-    const named = branchIds.filter((id): id is string => id !== null)
-    const clauses = [
-      ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
-      ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
-    ]
-    if (clauses.length === 0) return []
+    const branches = branchClause(branchIds)
+    if (!branches) return []
     const rows = await db.select<Record<string, unknown>[]>(
       `SELECT * FROM world_state_changes WHERE story_id = ? AND kind = 'mark'
-       AND (${clauses.join(' OR ')}) ORDER BY seq ASC`,
-      [storyId, ...named],
+       AND ${branches.sql} ORDER BY seq ASC`,
+      [storyId, ...branches.params],
     )
     return rows.map(rowToMark)
   }
@@ -1889,10 +1870,7 @@ class DatabaseService {
       branchId: snapshot.branchId ?? null,
       entryId: snapshot.entryId,
     }
-    await this.transaction([
-      insert,
-      this.worldStateMarkStatement(markRecord(scope, 'snapshot', snapshot.id)),
-    ])
+    await this.insertMarked(insert, markRecord(scope, 'snapshot', snapshot.id))
   }
 
   async getWorldStateSnapshots(
@@ -1929,29 +1907,21 @@ class DatabaseService {
     branchId: string | null,
     position: number,
   ): Promise<void> {
-    const where =
-      branchId === null
-        ? 'story_id = ? AND branch_id IS NULL AND entry_position > ?'
-        : 'story_id = ? AND branch_id = ? AND entry_position > ?'
-    const params = branchId === null ? [storyId, position] : [storyId, branchId, position]
-    await this.transaction([
-      snapshotMarksStatement(where, params),
-      statement(`DELETE FROM world_state_snapshots WHERE ${where}`, params),
-    ])
+    const db = await this.getDb()
+    await db.execute(
+      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS ? AND entry_position > ?',
+      [storyId, branchId, position],
+    )
   }
 
   async deleteWorldStateSnapshotsForBranch(branchId: string): Promise<void> {
-    await this.transaction([
-      snapshotMarksStatement('branch_id = ?', [branchId]),
-      statement('DELETE FROM world_state_snapshots WHERE branch_id = ?', [branchId]),
-    ])
+    const db = await this.getDb()
+    await db.execute('DELETE FROM world_state_snapshots WHERE branch_id = ?', [branchId])
   }
 
   async deleteWorldStateSnapshotsForStory(storyId: string): Promise<void> {
-    await this.transaction([
-      snapshotMarksStatement('story_id = ?', [storyId]),
-      statement('DELETE FROM world_state_snapshots WHERE story_id = ?', [storyId]),
-    ])
+    const db = await this.getDb()
+    await db.execute('DELETE FROM world_state_snapshots WHERE story_id = ?', [storyId])
   }
 
   /**
@@ -2862,8 +2832,9 @@ class DatabaseService {
     checkpointIds?: string[]
     /**
      * The entry the deleted entries' changes and breaks move to, their effects staying live, with
-     * a header that marks a gap: it is the only record of one. Other headers go with their entry.
-     * Without it, every record goes.
+     * a header that marks a gap or a converted one: it is the only record of the gap, or of the
+     * changes being the classifier's alone. Other headers go with their entry. Without it, every
+     * record goes.
      */
     recordsTo?: string
   }): Promise<void> {
@@ -2871,8 +2842,7 @@ class DatabaseService {
       ? chunkedStatements(entryIds, (slice, list) => [
           statement(
             `UPDATE world_state_changes SET entry_id = ?
-             WHERE (kind IN ('change', 'break')
-                    OR (kind = 'header' AND continuous = 0 AND origin IS NULL))
+             WHERE (kind IN ('change', 'break') OR (kind = 'header' AND continuous = 0))
                AND entry_id IN (${list})`,
             [recordsTo, ...slice],
           ),

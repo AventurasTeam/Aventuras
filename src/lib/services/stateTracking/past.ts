@@ -1,4 +1,5 @@
 import type { StoryEntry, WorldStateMark, WorldStateRecord } from '#lib/types/index.ts'
+import { markId } from './record'
 import type { AnchorCandidate, RunQuery } from './runs'
 
 /** Everything a past state on the open branch is resolved from, loaded once. */
@@ -45,8 +46,9 @@ export function anchorCandidates(src: PastSources): AnchorCandidate[] {
   const line = new Set(src.lineBranchIds)
   const last = src.entries[src.entries.length - 1]
   const nextAfter = (position: number) => src.entries.find((e) => e.position > position)
+  const seqs: Record<string, number> = Object.fromEntries(src.marks.map((m) => [m.id, m.seq]))
   const markOf = (type: 'snapshot' | 'checkpoint', id: string) =>
-    src.marks.find((m) => m.entityType === type && m.entityId === id)?.seq
+    seqs[markId(type, id)] as number | undefined
   return [
     ...src.snapshots.flatMap((s) => {
       const seq = markOf('snapshot', s.id)

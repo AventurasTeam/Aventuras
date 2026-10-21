@@ -169,3 +169,15 @@ function listOf(items: string[]): string {
     ? items[0]
     : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
+
+/** What removing entries also does: the chapters and snapshots it deletes, then what it reverts. */
+export function removalLines(
+  chapters: LoreChapter[],
+  snapshots: number[],
+  classifier: boolean,
+  lore: LoreChapter[],
+): string[] {
+  const deleted = deletedChaptersLine(chapters)
+  const gone = deletedSnapshotsLine(snapshots)
+  return [...(deleted ? [deleted] : []), ...(gone ? [gone] : []), ...revertLines(classifier, lore)]
+}

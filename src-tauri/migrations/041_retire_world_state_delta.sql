@@ -12,35 +12,29 @@ WITH src AS MATERIALIZED (
       AND NOT EXISTS (
           SELECT 1 FROM world_state_changes w WHERE w.entry_id = e.id AND w.kind = 'header')
 ),
+-- The delta's lists, in the order their records are numbered; the scene comes between them (5).
+lists (grp, path, entity_type, op) AS (
+    VALUES (1, '$.previousState.characters', 'character', 'update'),
+           (2, '$.previousState.locations', 'location', 'update'),
+           (3, '$.previousState.items', 'item', 'update'),
+           (4, '$.previousState.storyBeats', 'story_beat', 'update'),
+           (6, '$.createdEntities.characterIds', 'character', 'create'),
+           (7, '$.createdEntities.locationIds', 'location', 'create'),
+           (8, '$.createdEntities.itemIds', 'item', 'create'),
+           (9, '$.createdEntities.storyBeatIds', 'story_beat', 'create')
+),
 parts (entry_id, story_id, branch_id, position, created_at, grp, k, kind, origin, entity_type,
        entity_id, op, before) AS (
     SELECT id, story_id, branch_id, position, created_at, 0, 0, 'header', 'legacy',
            NULL, NULL, NULL, NULL
     FROM src
     UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 1, j.key, 'change',
-           'classifier', 'character', json_extract(j.value, '$.id'), 'update',
-           json_remove(j.value, '$.id', '$.name', '$.title')
-    FROM src s, json_each(s.d, '$.previousState.characters') j
-    WHERE json_type(s.d, '$.previousState.characters') = 'array'
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 2, j.key, 'change',
-           'classifier', 'location', json_extract(j.value, '$.id'), 'update',
-           json_remove(j.value, '$.id', '$.name', '$.title')
-    FROM src s, json_each(s.d, '$.previousState.locations') j
-    WHERE json_type(s.d, '$.previousState.locations') = 'array'
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 3, j.key, 'change',
-           'classifier', 'item', json_extract(j.value, '$.id'), 'update',
-           json_remove(j.value, '$.id', '$.name', '$.title')
-    FROM src s, json_each(s.d, '$.previousState.items') j
-    WHERE json_type(s.d, '$.previousState.items') = 'array'
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 4, j.key, 'change',
-           'classifier', 'story_beat', json_extract(j.value, '$.id'), 'update',
-           json_remove(j.value, '$.id', '$.name', '$.title')
-    FROM src s, json_each(s.d, '$.previousState.storyBeats') j
-    WHERE json_type(s.d, '$.previousState.storyBeats') = 'array'
+    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, l.grp, j.key, 'change',
+           'classifier', l.entity_type,
+           CASE l.op WHEN 'update' THEN json_extract(j.value, '$.id') ELSE j.value END, l.op,
+           CASE l.op WHEN 'update' THEN json_remove(j.value, '$.id', '$.name', '$.title') END
+    FROM src s, lists l, json_each(s.d, l.path) j
+    WHERE json_type(s.d, l.path) = 'array'
     UNION ALL
     -- The scene the entry left: the new one's before-state is among the locations, or it was
     -- created. Skipped when there was none, or its own before-state is listed.
@@ -53,26 +47,6 @@ parts (entry_id, story_id, branch_id, position, created_at, grp, k, kind, origin
           SELECT 1 FROM json_each(s.d, '$.previousState.locations') l
           WHERE json_extract(l.value, '$.id')
               = json_extract(s.d, '$.previousState.currentLocationId'))
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 6, j.key, 'change',
-           'classifier', 'character', j.value, 'create', NULL
-    FROM src s, json_each(s.d, '$.createdEntities.characterIds') j
-    WHERE json_type(s.d, '$.createdEntities.characterIds') = 'array'
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 7, j.key, 'change',
-           'classifier', 'location', j.value, 'create', NULL
-    FROM src s, json_each(s.d, '$.createdEntities.locationIds') j
-    WHERE json_type(s.d, '$.createdEntities.locationIds') = 'array'
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 8, j.key, 'change',
-           'classifier', 'item', j.value, 'create', NULL
-    FROM src s, json_each(s.d, '$.createdEntities.itemIds') j
-    WHERE json_type(s.d, '$.createdEntities.itemIds') = 'array'
-    UNION ALL
-    SELECT s.id, s.story_id, s.branch_id, s.position, s.created_at, 9, j.key, 'change',
-           'classifier', 'story_beat', j.value, 'create', NULL
-    FROM src s, json_each(s.d, '$.createdEntities.storyBeatIds') j
-    WHERE json_type(s.d, '$.createdEntities.storyBeatIds') = 'array'
 ),
 numbered AS (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY grp, k) - 1 AS n
@@ -120,6 +94,8 @@ SELECT 'mark:checkpoint:' || c.id, c.story_id, e.branch_id, c.last_entry_id, 0, 
        'checkpoint', c.id, NULL, NULL, NULL, NULL, c.created_at
 FROM checkpoints c
 JOIN story_entries e ON e.id = c.last_entry_id
+-- At a fork point it may hold a child's state; unmarked, it is never an anchor.
+WHERE NOT EXISTS (SELECT 1 FROM branches b WHERE b.fork_entry_id = c.last_entry_id)
 UNION ALL
 SELECT 'mark:chapter:' || ch.id, ch.story_id, ch.branch_id, ch.end_entry_id, 0, 'mark', NULL,
        'chapter', ch.id, NULL, NULL, NULL, NULL, ch.created_at
@@ -157,4 +133,23 @@ ordered AS (
 UPDATE world_state_changes
 SET seq = ordered.rn
 FROM ordered
-WHERE ordered.id = world_state_changes.id;
+WHERE ordered.id = world_state_changes.id AND world_state_changes.seq IS NOT ordered.rn;
+
+-- A mark's id is 'mark:<entity_type>:<entity_id>', so it goes with what it marks by key.
+CREATE INDEX IF NOT EXISTS idx_wsc_marks ON world_state_changes(story_id, branch_id, seq)
+    WHERE kind = 'mark';
+
+CREATE TRIGGER IF NOT EXISTS wsc_mark_snapshot_gone AFTER DELETE ON world_state_snapshots
+BEGIN
+    DELETE FROM world_state_changes WHERE id = 'mark:snapshot:' || OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS wsc_mark_checkpoint_gone AFTER DELETE ON checkpoints
+BEGIN
+    DELETE FROM world_state_changes WHERE id = 'mark:checkpoint:' || OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS wsc_mark_chapter_gone AFTER DELETE ON chapters
+BEGIN
+    DELETE FROM world_state_changes WHERE id = 'mark:chapter:' || OLD.id;
+END;

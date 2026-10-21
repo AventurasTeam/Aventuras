@@ -1,5 +1,6 @@
 import type { WorldStateChangeRecord, WorldStateMark, WorldStateRecord } from '#lib/types/index.ts'
 import { KEEP_NONE, planReversal, type ReversalPlan } from './reverse'
+import { markId } from './record'
 import type { TrackedState } from './state'
 
 export interface ChapterLoreQuery {
@@ -19,7 +20,8 @@ export interface ChapterLoreQuery {
 
 /** A chapter's mark; -Infinity for one without, every record on its entry then being its own. */
 export function chapterMark(marks: WorldStateMark[], chapterId: string): number {
-  return marks.find((m) => m.entityType === 'chapter' && m.entityId === chapterId)?.seq ?? -Infinity
+  const id = markId('chapter', chapterId)
+  return marks.find((m) => m.id === id)?.seq ?? -Infinity
 }
 
 /**
@@ -67,7 +69,8 @@ export function marksHolding(
  * Why a chapter's lore cannot be undone: none was recorded, what came after may not be, or the
  * chapter belongs to the branch it was cut on, whose records the open branch only inherits.
  */
-export type ChapterLoreRefusal = 'nothing' | 'untracked' | 'interrupted' | 'inherited'
+export type ChapterLoreRefusal =
+  'nothing' | 'untracked' | 'interrupted' | 'inherited' | 'merged' | 'forked'
 
 export type ChapterLoreRevert =
   | { ok: false; reason: ChapterLoreRefusal }
@@ -118,6 +121,11 @@ export function planChapterLoreRevert(query: ChapterLoreQuery): ChapterLoreRever
     if (shadows) ids.add(r.entityId)
     if (ids.has(r.entityId)) later.push(r)
   }
+  // A merge writes its survivor under a new id, which no record ties to its sources: undoing a
+  // source's removal would leave the survivor holding the chapter's text.
+  if (later.some((r) => r.op === 'delete' && savedWithCreate(r, since))) {
+    return { ok: false, reason: 'merged' }
+  }
 
   const plan = planReversal({
     state: query.state,
@@ -131,5 +139,20 @@ export function planChapterLoreRevert(query: ChapterLoreQuery): ChapterLoreRever
     reverted: [...undone, ...later],
     deletedChapters: later.filter((r) => r.origin === 'chapter'),
     plan,
+  }
+}
+
+/**
+ * Whether a lorebook entry was created in the save that wrote `record`. A save is one
+ * transaction, so its records run in unbroken `seq` order with the same origin and entry.
+ */
+function savedWithCreate(record: WorldStateChangeRecord, records: WorldStateRecord[]): boolean {
+  const bySeq = new Map(records.map((r) => [r.seq, r]))
+  const sameSave = (r: WorldStateRecord | undefined): r is WorldStateChangeRecord =>
+    r?.kind === 'change' && r.origin === record.origin && r.entryId === record.entryId
+  for (let seq = record.seq - 1; ; seq--) {
+    const r = bySeq.get(seq)
+    if (!sameSave(r)) return false
+    if (r.entityType === 'lorebook_entry' && r.op === 'create' && r.before === null) return true
   }
 }
