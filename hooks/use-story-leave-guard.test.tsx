@@ -141,9 +141,14 @@ describe('useStoryLeaveGuard', () => {
     })
   })
 
-  // In-story moves never ask: World popped back onto the reader keeps the story open.
-  it('lets a back that lands on another in-story screen through', () => {
-    nav.routes = [HOME, READER, WORLD]
+  // In-story moves never ask: a pop onto any in-story screen keeps the story open.
+  it.each([
+    'reader-composer/[branchId]',
+    'world/[branchId]',
+    'plot/[branchId]',
+    'story-settings/[storyId]',
+  ])('lets a back that lands on %s through', (below) => {
+    nav.routes = [HOME, { key: 'below', name: below }, WORLD]
     nav.routeKey = 'world'
     generationStore.startRun(inFlightRun('story_1'))
     renderHook(() => useStoryLeaveGuard('story_1', 'br_1'))
