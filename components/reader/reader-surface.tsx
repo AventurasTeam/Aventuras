@@ -441,6 +441,26 @@ export function ReaderSurface({
     }
   }, [streaming])
 
+  // A viewport shrinking under a reader at the bottom (the memory banner mounting as a pass
+  // starts) would otherwise hide the newest lines.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el == null) return
+    let lastClientHeight = el.clientHeight
+    const observer = new ResizeObserver(() => {
+      const previousClientHeight = lastClientHeight
+      lastClientHeight = el.clientHeight
+      if (el.clientHeight >= previousClientHeight) return
+      // Read from geometry, not lastDistanceRef: content can grow below without a scroll
+      // event, and a shrink never clamps scrollTop.
+      const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight
+      if (distanceBeforePx > NEAR_BOTTOM_THRESHOLD_PX) return
+      el.scrollTop = el.scrollHeight
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   const jumpToBottom = useCallback(() => {
     // Cancel any active landing pin / anchor-hold loop first: otherwise a hold
     // spawned by a just-fired boundary prepend keeps yanking scrollTop toward

@@ -373,6 +373,113 @@ export const GateHeldWithoutHeadReversalSplit: Story = {
   },
 }
 
+// Enough rows to overflow the 480 px box, so the viewport can shrink under a reader at the bottom.
+const OVERFLOW_ROWS: StoryEntry[] = Array.from({ length: 14 }, (_, i) =>
+  entry({
+    id: `o${i + 1}`,
+    kind: i % 2 === 0 ? 'user_action' : 'ai_reply',
+    content: `Corridor ${i + 1}: the gallery adds another wing each time you look away from it.`,
+    position: i + 1,
+  }),
+)
+// The memory banner's desktop height: it mounts above the reader as a pass starts.
+const BANNER_HEIGHT_PX = 49
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+function readerScroller(): HTMLElement {
+  const scroller = entryRow('o1').parentElement
+  if (scroller == null) throw new Error('no reader scroller')
+  return scroller
+}
+
+function distanceFromBottom(el: HTMLElement): number {
+  return el.scrollHeight - el.scrollTop - el.clientHeight
+}
+
+// The landing pin re-asserts the bottom per frame until the scroll height holds for 10
+// frames; outlasting that keeps the pin from passing the shrink stories by itself.
+async function settleLanding(scroller: HTMLElement) {
+  await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  let stable = 0
+  let lastHeight = -1
+  while (stable < 20) {
+    await nextFrame()
+    stable = scroller.scrollHeight === lastHeight ? stable + 1 : 0
+    lastHeight = scroller.scrollHeight
+  }
+}
+
+async function scrollToDistance(scroller: HTMLElement, distancePx: number) {
+  scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - distancePx
+  await waitFor(() => expect(distanceFromBottom(scroller)).toBeCloseTo(distancePx, 0))
+  await nextFrame()
+}
+
+// The decorator's fixed-height box is the reader's container, standing in for the shell.
+async function resizeViewport(scroller: HTMLElement, deltaPx: number) {
+  const box = scroller.parentElement?.parentElement
+  if (box == null) throw new Error('no viewport box')
+  const before = scroller.clientHeight
+  box.style.height = `${box.offsetHeight + deltaPx}px`
+  await waitFor(() => expect(scroller.clientHeight).toBe(before + deltaPx))
+  await nextFrame()
+  await nextFrame()
+}
+
+const shrinkViewport = (scroller: HTMLElement) => resizeViewport(scroller, -BANNER_HEIGHT_PX)
+
+/** A reader at the bottom stays there when the banner mounts and takes viewport height. */
+export const ShrinkAtBottomRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await shrinkViewport(scroller)
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+
+/** Inside the jump button's 20 px near-bottom tolerance counts as at the bottom. */
+export const ShrinkNearBottomRepins: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 15)
+    await shrinkViewport(scroller)
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
+  },
+}
+
+/** Further up than the tolerance, the reader is reading back: its position holds. */
+export const ShrinkAwayFromBottomHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 30)
+    const scrollTop = scroller.scrollTop
+    await shrinkViewport(scroller)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeCloseTo(30 + BANNER_HEIGHT_PX, 0)
+  },
+}
+
+/** Growth needs no re-pin: a reader inside the tolerance keeps its scrollTop as the box grows. */
+export const GrowNearBottomHolds: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 15)
+    const scrollTop = scroller.scrollTop
+    await resizeViewport(scroller, 5)
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeCloseTo(10, 0)
+  },
+}
+
 export const OlderBoundaryShimmer: Story = {
   args: { hasOlder: true },
 }
