@@ -590,7 +590,18 @@ key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinatio
 the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations and Z.AI reuse the OpenAI Compatible helper
 (`generateOpenAICompatibleImage`): Pollinations with its fixed base URL and `safe: false`, Z.AI
 with `api.z.ai` and no references. Z.AI answers `data[].url`; the SDK downloads an OpenAI-compatible `url` reply
-through `createSdkFetch`, and sends the key only to the API's own origin. Each adapter keeps its
+through `createSdkFetch`, sends the key only to the API's own origin, and checks each redirect hop
+itself (`createSdkFetch` has the plugin return a 3xx when the SDK asks for `redirect: 'manual'`).
+NanoGPT's custom model downloads its `url` items through the same injected fetch, without the key.
+A non-2xx on the SDK's own download is an `APICallError` like a generation failure, so a 429 from
+the image host makes `retryOn429ImageMiddleware` re-run the whole call, POST included, and the
+generation is billed again. `generateImage`'s own retry is off (`maxRetries: 0`), so other
+statuses, 5xx included, fail at once. NanoGPT's download throws a plain `Error` to stay out of this.
+Open: the middleware cannot see the endpoint, but a download error carries `requestBodyValues: {}`
+and the original `data[].url` (not a redirect hop), where a generation error carries the request
+body, so that is the field to tell them apart by. Checked for `@ai-sdk/openai-compatible` only.
+The generation POST's own redirects are followed by the plugin (reqwest's default), not the SDK.
+Each adapter keeps its
 own model discovery and size handling; discovery throws on a failed request rather than
 substituting a list. Whether a provider takes an API key or a base URL is declared per provider in
 the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
