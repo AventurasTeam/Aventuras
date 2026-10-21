@@ -307,6 +307,12 @@
     "discard": "Discard",
     "save": "Save"
   },
+  "storyLeave": {
+    "title": "Generation in flight",
+    "body": "Leaving will cancel the in-flight generation and revert any changes.",
+    "stay": "Stay",
+    "cancelAndLeave": "Cancel & leave"
+  },
   "storyCard": {
     "genreNotSet": "Genre not set",
     "noDescription": "(no description yet)",
