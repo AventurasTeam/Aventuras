@@ -256,6 +256,45 @@ describe('chained transition', () => {
     expect(starts).toEqual(['pred', 'succ'])
   })
 
+  it('an abort landing during the chainsTo read commits the run and chains nothing', async () => {
+    const { db, ctx } = await makeHarness()
+    let entered!: (run: RunState) => void
+    const inChainsTo = new Promise<RunState>((resolve) => {
+      entered = resolve
+    })
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: () => entryThen('entry_pred', { status: 'completed' }) }],
+      chainsTo: async (run) => {
+        entered(run)
+        await held
+        return 'succ'
+      },
+      ...base,
+    })
+    const starts: string[] = []
+    const off = pipelineEventBus.subscribe('run_start', (e) => starts.push(e.kind))
+
+    const running = runPipeline('pred', ctx)
+    const run = await inChainsTo
+    run.abortController.abort()
+    release()
+    const result = expectRan(await running)
+    off()
+
+    expect(result.outcome).toBe('completed')
+    expect((await db.select().from(storyEntries)).map((e) => e.id)).toEqual(['entry_pred'])
+    const rows = await db.select().from(pipelineRuns)
+    expect(rows.map((r) => [r.kind, r.outcome])).toEqual([['pred', 'completed']])
+    expect(starts).toEqual(['pred'])
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
   const failingChains: [string, NonNullable<Pipeline['chainsTo']>][] = [
     [
       'throws',
