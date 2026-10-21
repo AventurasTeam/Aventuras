@@ -562,7 +562,7 @@ describe('appendEntityKeywords', () => {
     payload: { branchId: 'br_1', id: 'char_1', keywords, proseEntryId: null },
   })
 
-  it('appends only what the live row lacks, keeping an alias the user added mid-pass', async () => {
+  it('appends only what the live row lacks, keeping an alias the user added before the pass', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight'] })
     expect(
@@ -582,7 +582,7 @@ describe('appendEntityKeywords', () => {
     ])
   })
 
-  it('extends the live list, so an alias removed mid-pass stays out when the payload omits it', async () => {
+  it('extends the live list, so an alias removed before the pass stays out when the payload omits it', async () => {
     const { db, ctx } = await setup()
     await create(ctx, { ...CHAR, keywords: ['the knight', 'the drunk'] })
     expect((await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')).status).toBe('ok')
@@ -656,7 +656,7 @@ describe('retireEntity', () => {
     expect((await rowFor(db, 'char_1')).retiredReason).toBeNull()
   })
 
-  it("no-ops on a row the user retired mid-pass, keeping the user's reason", async () => {
+  it("no-ops on a row the user retired before the pass, keeping the user's reason", async () => {
     const { db, ctx } = await setup()
     await create(ctx, ACTIVE)
     expect(

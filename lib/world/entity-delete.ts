@@ -91,8 +91,8 @@ export function tailSceneActions(
 /**
  * world.md → Delete, collision flags naming the target included. Handlers read pre-group state:
  * order is free. Replaces the whole `state` from `branchEntities`, so a write landing between that
- * read and the commit is lost: the caller builds under the branch lock's shared hold, which keeps
- * a pass's writes out (cadence.md → Concurrency).
+ * read and the commit is lost: `deleteEntityRow` reads the stores in the tick of its gate check and
+ * dispatch, so a run's writes land before that read or after the commit.
  */
 export function entityDeleteActions({
   branchId,

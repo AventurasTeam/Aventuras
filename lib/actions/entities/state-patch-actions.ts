@@ -301,8 +301,8 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
 }
 
 /**
- * Appends only the payload terms the live row lacks, so a mid-pass removal stays removed;
- * with `proseEntryId`, a term the user removed after that prose also stays removed.
+ * Appends only the payload terms the row lacks as the write lands (cadence.md → User edits and
+ * classifier writes); with `proseEntryId`, a term the user removed after that prose stays removed.
  */
 export const appendEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'appendEntityKeywords')
@@ -343,7 +343,10 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   }
 }
 
-/** active → retired only: a row moved since the pass read it keeps the user's status. */
+/**
+ * active → retired only, checked on the row as the write lands, so a row the user moved off active
+ * keeps its status.
+ */
 export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'retireEntity')
     throw new Error(`handler/kind mismatch: expected 'retireEntity', got '${action.kind}'`)
