@@ -29,6 +29,7 @@ const CONFIRMED: ConfirmState = {
   targetId: 'e3',
   targetNumber: 3,
   counts: OPENED,
+  countedAtSettle: 4,
 }
 
 describe('rollbackRefusalCopy', () => {

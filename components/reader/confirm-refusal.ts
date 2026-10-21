@@ -13,6 +13,8 @@ export type ConfirmState = {
   targetId: string
   targetNumber: number
   counts: RollbackCounts
+  /** The settle count read just before the opener counted; a re-open after a refusal keeps it. */
+  countedAtSettle: number
 }
 
 export type RegenerateRefusal = Extract<RegenerateTurnResult, { status: 'rejected' }>

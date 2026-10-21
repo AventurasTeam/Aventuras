@@ -6,9 +6,9 @@ import { generationStore } from '@/lib/stores'
 
 /**
  * Keeps an open rollback or regenerate confirm's counts true while a run settles under it,
- * typically a pass committing (rollback-confirm.md → Counts). Recounts on each settle after
- * the modal opened, never on open, since the opener just counted. A refused or failed
- * recount keeps the shown counts; the action's confirm-time check still guards the commit.
+ * typically a pass committing (rollback-confirm.md → Counts). Recounts whenever the settle count
+ * is past `countedAtSettle`, the one its counts were read at. A refused or failed recount keeps
+ * the shown counts; the action's confirm-time check still guards the commit.
  */
 export function useLiveRollbackCounts({
   branchId,
@@ -17,28 +17,22 @@ export function useLiveRollbackCounts({
   onCounts,
 }: {
   branchId: string
-  target: { targetId: string; counts: RollbackCounts } | null
+  target: { targetId: string; countedAtSettle: number } | null
   load: (branchId: string, targetId: string) => Promise<RollbackCounts | StoryEntryRejection>
   onCounts: (counts: RollbackCounts) => void
 }): void {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const targetId = target?.targetId ?? null
+  const countedAtSettle = target?.countedAtSettle ?? null
   // The recount effect's cleanup is what drops a stale recount, so a host's fresh callbacks
   // each render must not re-run it: they ride in a ref.
   const latest = useRef({ load, onCounts })
   useEffect(() => {
     latest.current = { load, onCounts }
   })
-  const countedAt = useRef<{ targetId: string; settle: number } | null>(null)
 
   useEffect(() => {
-    if (targetId == null) {
-      countedAt.current = null
-      return undefined
-    }
-    const counted = countedAt.current
-    countedAt.current = { targetId, settle: settleCount }
-    if (counted == null || counted.targetId !== targetId || counted.settle === settleCount)
+    if (targetId == null || countedAtSettle == null || settleCount <= countedAtSettle)
       return undefined
     let live = true
     latest.current.load(branchId, targetId).then(
@@ -67,5 +61,5 @@ export function useLiveRollbackCounts({
     return () => {
       live = false
     }
-  }, [branchId, targetId, settleCount])
+  }, [branchId, targetId, countedAtSettle, settleCount])
 }

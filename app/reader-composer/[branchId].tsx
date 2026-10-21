@@ -881,6 +881,7 @@ export default function ReaderComposerRoute() {
       // A tapped delete silently doing nothing reads as broken — and the count
       // read is a DB round trip that can reject as well as refuse.
       let counts: RollbackCounts | StoryEntryRejection
+      const countedAtSettle = generationStore.getSettleCount()
       try {
         counts = await getRollbackCounts(branchId, targetId, ctx)
       } catch (err) {
@@ -897,7 +898,13 @@ export default function ReaderComposerRoute() {
         return
       }
       const target = entriesStore.getById(targetId)
-      setRollback({ mode: 'rollback', targetId, targetNumber: target?.position ?? 0, counts })
+      setRollback({
+        mode: 'rollback',
+        targetId,
+        targetNumber: target?.position ?? 0,
+        counts,
+        countedAtSettle,
+      })
     },
     [branchId],
   )
@@ -954,6 +961,7 @@ export default function ReaderComposerRoute() {
       if (dispatchInFlightRef.current) return
       const startedBranchId = branchId
       let counts: RollbackCounts | StoryEntryRejection | null
+      const countedAtSettle = generationStore.getSettleCount()
       try {
         counts = await loadRegenerateCountsIfCurrent(
           () => getRollbackCounts(startedBranchId, entryId, ctx),
@@ -993,6 +1001,7 @@ export default function ReaderComposerRoute() {
         targetId: entryId,
         targetNumber: target?.position ?? 0,
         counts,
+        countedAtSettle,
       })
     },
     [branchId, runRegenerate],

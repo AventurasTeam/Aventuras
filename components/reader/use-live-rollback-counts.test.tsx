@@ -3,14 +3,13 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { RollbackCounts, StoryEntryRejection } from '@/lib/actions'
+import { STORY_ENTRY_REJECTION, type RollbackCounts, type StoryEntryRejection } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { generationStore } from '@/lib/stores'
 
-import { countsAfterRefusal } from './confirm-refusal'
+import { reopenAfterRefusal, type ConfirmState } from './confirm-refusal'
 import { useLiveRollbackCounts } from './use-live-rollback-counts'
 
-type Target = { targetId: string; counts: RollbackCounts }
 type Load = (branchId: string, targetId: string) => Promise<RollbackCounts | StoryEntryRejection>
 
 const OPENED: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 2 }
@@ -20,6 +19,24 @@ const LATER: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 9 }
 
 function refused<C extends string>(code: C) {
   return { status: 'rejected', code, reason: `refused: ${code}` } as const
+}
+
+// As the reader's opener reads it: the settle count first, then the counts.
+function opened(): ConfirmState {
+  return {
+    mode: 'rollback',
+    targetId: 'e3',
+    targetNumber: 3,
+    counts: OPENED,
+    countedAtSettle: generationStore.getSettleCount(),
+  }
+}
+
+function reopened(
+  confirmed: ConfirmState,
+  refusal: Parameters<typeof reopenAfterRefusal>[0]['refusal'],
+) {
+  return reopenAfterRefusal({ current: null, confirmed, refusal, stillOnBranch: true })
 }
 
 // A falling reversal flag is one of the points settleCount bumps at; it needs no run fixture.
@@ -44,9 +61,9 @@ function deferred<T>() {
 function useHarness(
   load: Load,
   onCounts: (counts: RollbackCounts) => void,
-  initial: Target | null,
+  initial: ConfirmState | null,
 ) {
-  const [target, setTarget] = useState<Target | null>(initial)
+  const [target, setTarget] = useState<ConfirmState | null>(initial)
   useLiveRollbackCounts({
     branchId: 'br_1',
     target,
@@ -73,9 +90,7 @@ describe('useLiveRollbackCounts', () => {
   it('recounts when a run settles while the modal is open', async () => {
     const load = vi.fn<Load>(async () => AFTER_PASS)
     const onCounts = vi.fn()
-    const { result } = renderHook(() =>
-      useHarness(load, onCounts, { targetId: 'e3', counts: OPENED }),
-    )
+    const { result } = renderHook(() => useHarness(load, onCounts, opened()))
     // The opener just counted: opening alone reads nothing.
     expect(load).not.toHaveBeenCalled()
 
@@ -83,6 +98,23 @@ describe('useLiveRollbackCounts', () => {
 
     await waitFor(() => expect(result.current.target?.counts).toEqual(AFTER_PASS))
     expect(load).toHaveBeenCalledWith('br_1', 'e3')
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  // The opener read its counts before the run settled; the settle lands in the same commit.
+  it('recounts when a run settles in the same commit that opens the modal', async () => {
+    const load = vi.fn<Load>(async () => AFTER_PASS)
+    const { result } = renderHook(() => useHarness(load, vi.fn(), null))
+    const confirm = opened()
+
+    act(() => {
+      result.current.setTarget(confirm)
+      generationStore.setReversalInProgress(true)
+      generationStore.setReversalInProgress(false)
+    })
+
+    await waitFor(() => expect(result.current.target?.counts).toEqual(AFTER_PASS))
+    expect(load).toHaveBeenCalledTimes(1)
   })
 
   it('reads nothing while no modal is open', () => {
@@ -96,9 +128,7 @@ describe('useLiveRollbackCounts', () => {
     const pending = deferred<RollbackCounts>()
     const load = vi.fn<Load>(() => pending.promise)
     const onCounts = vi.fn()
-    const { result } = renderHook(() =>
-      useHarness(load, onCounts, { targetId: 'e3', counts: OPENED }),
-    )
+    const { result } = renderHook(() => useHarness(load, onCounts, opened()))
     settleARun()
     expect(load).toHaveBeenCalledTimes(1)
 
@@ -118,9 +148,7 @@ describe('useLiveRollbackCounts', () => {
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
     const onCounts = vi.fn()
-    const { result } = renderHook(() =>
-      useHarness(load, onCounts, { targetId: 'e3', counts: OPENED }),
-    )
+    const { result } = renderHook(() => useHarness(load, onCounts, opened()))
     settleARun()
     settleARun()
 
@@ -142,9 +170,7 @@ describe('useLiveRollbackCounts', () => {
       reason: 'below the rollback floor',
     }))
     const onCounts = vi.fn()
-    const { result } = renderHook(() =>
-      useHarness(load, onCounts, { targetId: 'e3', counts: OPENED }),
-    )
+    const { result } = renderHook(() => useHarness(load, onCounts, opened()))
 
     settleARun()
 
@@ -163,9 +189,7 @@ describe('useLiveRollbackCounts', () => {
       throw new Error('database is locked')
     })
     const onCounts = vi.fn()
-    const { result } = renderHook(() =>
-      useHarness(load, onCounts, { targetId: 'e3', counts: OPENED }),
-    )
+    const { result } = renderHook(() => useHarness(load, onCounts, opened()))
 
     settleARun()
 
@@ -180,17 +204,23 @@ describe('useLiveRollbackCounts', () => {
   })
 
   // AlertDialogAction closes the modal on press; a counts-changed refusal re-opens it on the
-  // returned counts. Settles while shut read nothing, and the re-opened modal stays live.
+  // returned counts, and the re-opened modal stays live.
   it('keeps counts swapped in by a counts-changed refusal live', async () => {
     const load = vi.fn<Load>(async () => AFTER_PASS)
-    const onCounts = vi.fn()
-    const { result } = renderHook(() =>
-      useHarness(load, onCounts, { targetId: 'e3', counts: OPENED }),
-    )
+    const confirmed = opened()
+    const { result } = renderHook(() => useHarness(load, vi.fn(), confirmed))
 
     act(() => result.current.setTarget(null))
-    settleARun()
-    act(() => result.current.setTarget({ targetId: 'e3', counts: REFUSED_FRESH }))
+    act(() =>
+      result.current.setTarget(
+        reopened(confirmed, {
+          status: 'rejected',
+          code: STORY_ENTRY_REJECTION.countsChanged,
+          reason: 'counts changed',
+          counts: REFUSED_FRESH,
+        }),
+      ),
+    )
     expect(load).not.toHaveBeenCalled()
     expect(result.current.target?.counts).toEqual(REFUSED_FRESH)
 
@@ -204,21 +234,30 @@ describe('useLiveRollbackCounts', () => {
   // confirmed (rollback-confirm.md → Edge cases), and that modal stays live.
   it('keeps a modal re-opened by any other refusal live on the confirmed counts', async () => {
     const load = vi.fn<Load>(async () => AFTER_PASS)
-    const { result } = renderHook(() =>
-      useHarness(load, vi.fn(), { targetId: 'e3', counts: OPENED }),
-    )
+    const confirmed = opened()
+    const { result } = renderHook(() => useHarness(load, vi.fn(), confirmed))
 
     act(() => result.current.setTarget(null))
-    act(() =>
-      result.current.setTarget({
-        targetId: 'e3',
-        counts: countsAfterRefusal(OPENED, refused('in-flight-gated')),
-      }),
-    )
+    act(() => result.current.setTarget(reopened(confirmed, refused('in-flight-gated'))))
     expect(result.current.target?.counts).toEqual(OPENED)
 
     settleARun()
 
     await waitFor(() => expect(result.current.target?.counts).toEqual(AFTER_PASS))
+  })
+
+  // Settles while shut read nothing, but the counts the modal re-opens on predate them.
+  it('recounts a modal re-opened after a run settled while it was shut', async () => {
+    const load = vi.fn<Load>(async () => AFTER_PASS)
+    const confirmed = opened()
+    const { result } = renderHook(() => useHarness(load, vi.fn(), confirmed))
+
+    act(() => result.current.setTarget(null))
+    settleARun()
+    expect(load).not.toHaveBeenCalled()
+    act(() => result.current.setTarget(reopened(confirmed, refused('in-flight-gated'))))
+
+    await waitFor(() => expect(result.current.target?.counts).toEqual(AFTER_PASS))
+    expect(load).toHaveBeenCalledTimes(1)
   })
 })
