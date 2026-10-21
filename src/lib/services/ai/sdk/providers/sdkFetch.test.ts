@@ -293,6 +293,25 @@ describe('debug logging', () => {
     expect(response.bodyUsed).toBe(false)
   })
 
+  it('logs any octet-stream type as binary too', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(new Uint8Array(4), {
+        status: 200,
+        headers: { 'content-type': 'binary/octet-stream', 'content-length': '4' },
+      }),
+    )
+
+    const response = await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
+
+    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+      'dbg',
+      'google-image',
+      { contentType: 'binary/octet-stream', size: 4 },
+      expect.any(Number),
+    )
+    expect(response.bodyUsed).toBe(false)
+  })
+
   it('logs an error response and still returns it', async () => {
     mockFetch.mockResolvedValueOnce(new Response('{"error":"bad"}', { status: 400 }))
 
