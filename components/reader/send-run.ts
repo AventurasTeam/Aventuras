@@ -34,10 +34,43 @@ export function cancelSendRun(run: RunState): Promise<void> {
     : awaitRunTerminal(run.kind, run.branchId, 'cancel')
 }
 
-/** The composer's Cancel, read at click time: a turn's commit can chain a pass in between. */
-export function cancelComposerRun(branchId: string): Promise<void> {
-  const run = findSendRun(generationStore.getTxState(), branchId)
-  return run != null ? cancelSendRun(run) : Promise.resolve()
+function turnPendingOn(txState: TxState, branchId: string): boolean {
+  for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
+  return false
+}
+
+/**
+ * Send's run swaps Send for Cancel, and so does the host's own Send while its turn is pending with
+ * no run: before its deferred pass registers, and between that pass and the turn.
+ */
+export function composerShowsCancel(
+  txState: TxState,
+  branchId: string,
+  sendPending: boolean,
+): boolean {
+  return findSendRun(txState, branchId) != null || (sendPending && turnPendingOn(txState, branchId))
+}
+
+/**
+ * The composer's Cancel, read at click time: a turn's commit can chain a pass in between. Inside
+ * the host's Send, with its turn pending and no run, it cancels the run that registers next, or
+ * resolves once the mark ends with none.
+ */
+export function cancelComposerRun(branchId: string, sendPending: boolean): Promise<void> {
+  const txState = generationStore.getTxState()
+  const run = findSendRun(txState, branchId)
+  if (run != null) return cancelSendRun(run)
+  if (!sendPending || !turnPendingOn(txState, branchId)) return Promise.resolve()
+  return new Promise((resolve) => {
+    const off = generationStore.subscribe(() => {
+      const next = generationStore.getTxState()
+      const registered = findSendRun(next, branchId)
+      if (registered == null && turnPendingOn(next, branchId)) return
+      off()
+      if (registered == null) resolve()
+      else void cancelSendRun(registered).then(resolve)
+    })
+  })
 }
 
 /** The pill's Cancel: its run, else the suggestion refresh it shows. */

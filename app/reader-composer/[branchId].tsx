@@ -43,7 +43,7 @@ import {
   abortedBeforeTurn,
   cancelComposerRun,
   cancelPillRun,
-  findSendRun,
+  composerShowsCancel,
   pillRunOf,
   sendRunStreams,
 } from '@/components/reader/send-run'
@@ -232,10 +232,12 @@ export default function ReaderComposerRoute() {
   const headReversalGateHeld = generationStore.useGeneration((s) =>
     isHeadReversalBlocked(s.txState, branchId),
   )
+  // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
+  const [sendPending, setSendPending] = useState(false)
   // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn leaves
   // Send refused but the composer live. Primitives, so phase ticks don't re-render the reader.
-  const isGenerating = generationStore.useGeneration(
-    (s) => findSendRun(s.txState, branchId) != null,
+  const isGenerating = generationStore.useGeneration((s) =>
+    composerShowsCancel(s.txState, branchId, sendPending),
   )
   const turnStreaming = generationStore.useGeneration((s) => sendRunStreams(s.txState, branchId))
   const refreshingSuggestions = generationStore.useGeneration((s) =>
@@ -648,7 +650,12 @@ export default function ReaderComposerRoute() {
       try {
         const dropped = await dropSystemTail()
         setLastSubmission(submission)
-        const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
+        setSendPending(true)
+        const result = await submitTurn(
+          { storyId, branchId },
+          { content, composerMode },
+          ctx,
+        ).finally(() => setSendPending(false))
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected' && !result.converged) {
           // The refused turn's user_action is still in the branch, so a Retry would duplicate
@@ -1030,7 +1037,10 @@ export default function ReaderComposerRoute() {
     void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
   }, [branchId])
 
-  const handleCancelComposer = useCallback(() => void cancelComposerRun(branchId), [branchId])
+  const handleCancelComposer = useCallback(
+    () => void cancelComposerRun(branchId, sendPending),
+    [branchId, sendPending],
+  )
   const handleCancelPill = useCallback(() => void cancelPillRun(branchId), [branchId])
 
   // Read at settle time, not from the closure: a branch-switch abort whose

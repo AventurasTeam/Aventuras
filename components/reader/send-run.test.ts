@@ -15,6 +15,7 @@ import {
   cancelComposerRun,
   cancelPillRun,
   cancelSendRun,
+  composerShowsCancel,
   findSendRun,
   pillRunOf,
   sendRunStreams,
@@ -96,6 +97,35 @@ const DEFERRED_PASS = run({
   beforeTurn: true,
 })
 const REFRESH = run({ runId: 'run_refresh', kind: SUGGESTION_REFRESH_KIND })
+
+function pendingOn(branchId: string, ...runs: RunState[]): TxState {
+  return { ...txOf(...runs), pendingTurns: new Set([{ branchId }]) }
+}
+
+// A turn marked pending in the real store, as a Send holds it until its run registers.
+function holdPendingTurn(branchId: string): { end: () => Promise<void> } {
+  let finish!: () => void
+  const body = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  const bracket = generationStore.bracketPendingTurn(branchId, () => body)
+  return {
+    end: () => {
+      finish()
+      return bracket
+    },
+  }
+}
+
+// Whether `promise` settled within a macrotask, so a test can say it is still waiting.
+async function settledYet(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false
+  void promise.then(() => {
+    settled = true
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  return settled
+}
 
 beforeEach(() => {
   generationStore.__reset()
@@ -208,7 +238,7 @@ describe('cancelComposerRun', () => {
   it("interrupts Send's deferred pass, keeping the work deferred", async () => {
     const pass = startLive(DEFERRED_PASS)
 
-    await cancelComposerRun('br_1')
+    await cancelComposerRun('br_1', true)
 
     expect(pass.abortController.signal.aborted).toBe(true)
     expect(generationStore.getTxState().runs.size).toBe(0)
@@ -218,7 +248,7 @@ describe('cancelComposerRun', () => {
   it('cancels the turn', async () => {
     const turn = startLive(TURN)
 
-    await cancelComposerRun('br_1')
+    await cancelComposerRun('br_1', true)
 
     expect(turn.abortController.signal.aborted).toBe(true)
   })
@@ -227,9 +257,83 @@ describe('cancelComposerRun', () => {
   it('leaves a chained pass running', async () => {
     const pass = startLive(CHAINED_PASS)
 
-    await cancelComposerRun('br_1')
+    await cancelComposerRun('br_1', true)
 
     expect(pass.abortController.signal.aborted).toBe(false)
+  })
+})
+
+describe('composerShowsCancel', () => {
+  it("shows Cancel over Send's run", () => {
+    expect(composerShowsCancel(txOf(TURN), 'br_1', true)).toBe(true)
+    expect(composerShowsCancel(txOf(DEFERRED_PASS), 'br_1', false)).toBe(true)
+  })
+
+  // Between Send's deferred pass and its turn, only the pending mark holds.
+  it("holds Cancel through the gap while this host's Send has a turn pending", () => {
+    expect(composerShowsCancel(pendingOn('br_1'), 'br_1', true)).toBe(true)
+  })
+
+  // A regenerate's mark spans its sweep; its composer keeps the disabled Send.
+  it("keeps Send for a pending turn that isn't this host's Send", () => {
+    expect(composerShowsCancel(pendingOn('br_1'), 'br_1', false)).toBe(false)
+  })
+
+  it("keeps Send once the Send's mark has ended, as a chained pass runs on", () => {
+    expect(composerShowsCancel(txOf(CHAINED_PASS), 'br_1', true)).toBe(false)
+  })
+
+  it("keeps Send for another branch's pending turn", () => {
+    expect(composerShowsCancel(pendingOn('br_2'), 'br_1', true)).toBe(false)
+  })
+})
+
+describe('cancelComposerRun in the handoff gap', () => {
+  it('waits for the turn a pending Send registers, then cancels it', async () => {
+    const mark = holdPendingTurn('br_1')
+
+    const cancel = cancelComposerRun('br_1', true)
+    expect(await settledYet(cancel)).toBe(false)
+    const turn = startLive(TURN)
+    await cancel
+
+    expect(turn.abortController.signal.aborted).toBe(true)
+    await mark.end()
+  })
+
+  it('cancels the deferred pass a pending Send registers', async () => {
+    const mark = holdPendingTurn('br_1')
+
+    const cancel = cancelComposerRun('br_1', true)
+    const pass = startLive(DEFERRED_PASS)
+    await cancel
+
+    expect(pass.abortController.signal.aborted).toBe(true)
+    await mark.end()
+  })
+
+  it('resolves, aborting nothing, when the mark ends with no Send run', async () => {
+    const mark = holdPendingTurn('br_1')
+    const cancel = cancelComposerRun('br_1', true)
+    const refresh = startLive(REFRESH)
+    expect(await settledYet(cancel)).toBe(false)
+
+    await mark.end()
+    await cancel
+
+    expect(refresh.abortController.signal.aborted).toBe(false)
+    const turn = startLive(TURN)
+    expect(turn.abortController.signal.aborted).toBe(false)
+  })
+
+  it("waits on no pending turn that isn't this host's Send", async () => {
+    const mark = holdPendingTurn('br_1')
+
+    expect(await settledYet(cancelComposerRun('br_1', false))).toBe(true)
+    const turn = startLive(TURN)
+
+    expect(turn.abortController.signal.aborted).toBe(false)
+    await mark.end()
   })
 })
 
