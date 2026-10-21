@@ -558,32 +558,6 @@ slice-planning gate forces its resolution before that slice is planned.
   cancelled. Raised 2026-10-21 by the gated classifier slice's task
   reviews.
 
-- **M5.2: `interruptMemoryRuns` takes one snapshot.** It aborts the
-  interruptible runs on the branch as they stand and awaits those
-  terminals. A pass committing during the interrupt could chain a
-  close, which canon's pass-to-close chain allows, that the snapshot
-  misses and that then runs beside the reversal's sweep.
-  `cancelStoryRuns` already loops until the story is idle. Fix: loop
-  the same way, or have `commitRun` refuse an interruptible successor
-  while `reversalInProgress`. Owner: M5.2, the first close that can
-  chain. Raised 2026-10-21 by the gated classifier slice's task
-  reviews.
-
-- **M5.2: Send must also run a deferred close.** `submitTurn` runs
-  only `deferred.pass`, and `nextMemoryRun` returns null while the
-  branch holds a `close` record, so a `{ close: true }` record would
-  stop all memory work on that branch until a restart. Owner: M5.2,
-  which adds the close pipeline. Raised 2026-10-21 by the gated
-  classifier slice's task reviews.
-
-- **M5.2: CTRL-Z of the turn during a close.** `undoLastAction` reads
-  its target before the gate decision. `selectUndoTarget` skips
-  `periodic_classifier` deltas, but a close logs its own under the
-  `chapter_close` source, so the target it finds is the close's group
-  and CTRL-Z of the turn is refused for as long as the close runs.
-  Owner: M5.2. Raised 2026-10-21 by the gated classifier slice's task
-  reviews.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of
@@ -597,19 +571,6 @@ slice-planning gate forces its resolution before that slice is planned.
   then do a bare write, or the reader could offer an edit the action
   layer refuses. Raised 2026-10-21 by the gated classifier slice's
   task reviews.
-
-- **The reader's pill run is a second definition.** `pillRunOf` in
-  `app/reader-composer/[branchId].tsx` picks Send's run with
-  `findSendRun` (`components/reader/send-run.ts`, an allowlist of
-  per-turn and Send's deferred pass), then the branch's pass or close.
-  World and Plot use `pillRun` and `cancelStoryPillRun`
-  (`components/story-settings/generation-run.ts`, tested), which pick
-  by interruptibility and gate. The two agree for today's kinds. A
-  hard-gate, non-interruptible, non-turn kind, such as canon's
-  `translation-retry`, would get a Cancel on World and Plot but none
-  in the reader. Trigger: M8.1. Fix: have the reader reuse the
-  branch-scoped `pillRun`. Raised 2026-10-21 by the gated classifier
-  slice's task reviews.
 
 - **Undo's tooltip names the pass when a refresh blocks it.** With a
   suggestion refresh running beside a pass, `gateReason` follows the
@@ -656,6 +617,5 @@ slice-planning gate forces its resolution before that slice is planned.
   `adb input text` leaves touch mode, and with focus on the top bar's
   back arrow a space presses it, so `router.back()` pops the reader
   and logs two "GO_BACK was not handled" warnings. Seen before and
-  after the gated classifier's changes, so it is not theirs; real
-  hardware keyboards may meet it too. Raised 2026-10-21 by the gated
+  after the gated classifier's changes, so it is not theirs. Raised 2026-10-21 by the gated
   classifier slice's task reviews.

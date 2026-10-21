@@ -566,9 +566,9 @@ refused. The mark ends early, but the turn's body does not: the store
 also tracks each body's lifetime (`turnBodies`, outside `TxState`),
 because a failed or aborted regenerate runs its follow-up sweep after
 the mark has ended, with no run and no mark. Leaving the story
-(`cancelStoryRuns`) resolves only once no run, pending mark or
-reversal is left on the story and no turn body is active on its
-branch. A prose reversal also closes the gate for its brief duration
+(`cancelStoryRuns`) resolves only once no run is left on the story, no
+pending mark on its branch, no reversal in progress, and no turn body
+active on its branch. A prose reversal also closes the gate for its brief duration
 via `reversalInProgress` (see
 [Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
 The gate a pass or a close holds is the one a head reversal may pass
@@ -2053,12 +2053,13 @@ same way, with no reversal after.
 The interrupt is **`interruptMemoryRuns(branchId)`**: it aborts every
 `interruptible` run on the branch and awaits each one's terminal (no-op
 when none is running), cancelling the doomed LLM call so the user is
-not made to wait it out. It rests on the framework primitive
+not made to wait it out. Its sibling is the framework primitive
 **`awaitRunTerminal(kind, branchId, disposition)`** — find the
 in-flight run of `kind` on the branch, optionally abort it, and await
-its terminal (no-op when none is running). The waiter need not have
-started the run — each `RunState` carries a `terminal` deferred the
-orchestrator resolves at commit/abort. Dispositions:
+its terminal (no-op when none is running). Both wait on the same
+`terminal` deferred each `RunState` carries, which the orchestrator
+resolves at commit/abort, so the waiter need not have started the run.
+Dispositions:
 
 - `'cancel'` — fire `signal.abort()` first, then await terminal. What
   cancelling a run of one known kind uses, such as a suggestion

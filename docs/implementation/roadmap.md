@@ -216,6 +216,23 @@ companions.
   `createStoryEntry` deltas, so this slice must gate the stamping
   on `run.kind === 'per-turn'` (or "beginTurn set no anchor") or
   its runs mis-stamp their anchors (surfaced by Slice 2.7).
+  Slice-authoring note: `interruptMemoryRuns`
+  (`lib/stores/generation/generation.ts`) aborts one snapshot of the
+  branch's interruptible runs. A pass committing during the interrupt
+  can now chain a close that the snapshot misses and that then runs
+  beside the reversal's sweep. This slice must loop as `cancelStoryRuns`
+  does, or have `commitRun` refuse an interruptible successor while
+  `reversalInProgress`.
+  Slice-authoring note: `submitTurn` runs only `deferred.pass`, and
+  `nextMemoryRun` returns null while the branch holds a `close` record,
+  so a `{ close: true }` record would stop all memory work on the
+  branch until a restart. This slice must run the deferred close after
+  the deferred pass.
+  Slice-authoring note: `undoLastAction` reads its target before the
+  gate decision, and `selectUndoTarget` skips only `periodic_classifier`
+  deltas. A close logs its own under `chapter_close`, so CTRL-Z of the
+  turn would find the close's group and be refused while it runs. This
+  slice must settle which target CTRL-Z picks during a close.
 - M5.3 — Chapter timeline screen per
   [`docs/ui/screens/chapter-timeline/chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md);
   chapter delete routes through the deep-rollback surface (M5.5).
@@ -1203,6 +1220,18 @@ already-shipped calendar editor.
   kind with `hard-gate` concurrency per
   [`generation-pipeline.md → V1 declarations`](../generation-pipeline.md#v1-declarations))
   lands alongside.
+  Slice-authoring note: the reader picks its pill run in `pillRunOf`
+  (`app/reader-composer/[branchId].tsx`) from `findSendRun`, an
+  allowlist of per-turn and Send's deferred pass
+  (`components/reader/send-run.ts`), then the branch's pass or close.
+  World and Plot pick theirs by interruptibility and gate in `pillRun`
+  (`components/story-settings/generation-run.ts`, private to that file;
+  they reach it through `cancelStoryPillRun` and
+  `selectStorySettingsGenerationRunKind`). The two agree for today's
+  kinds, but `translation-retry` is hard-gate, non-interruptible and not
+  a turn, so it would get a Cancel on World and Plot and none in the
+  reader. This slice must export the branch-scoped `pillRun` and have
+  the reader use it.
 - M8.2 — Translation UI: the reactive `useTranslation`
   subscription over the M1.5 store (render reactivity was scoped
   out of the content slice to land with this display-translation
