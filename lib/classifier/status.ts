@@ -1,7 +1,6 @@
 import type { ClassifierStatus } from '@/lib/db'
 
-// classifier.md -> Auto-retry policy: one attempt plus three retries, each at a later turn's
-// commit, then failed-persistent.
+// classifier.md -> Auto-retry policy: one attempt, three retries, each at a later turn's commit.
 export const CLASSIFIER_MAX_RETRIES = 3
 
 export function idleStatus(): ClassifierStatus {

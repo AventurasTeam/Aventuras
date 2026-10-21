@@ -121,9 +121,8 @@ import { resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
-// The classes differ in what the user can do about it: wait for the turn, resume the swap, check
-// the counts again, or nothing (the rest are invariant violations, where inviting a retry sends
-// them into a loop that cannot succeed).
+// Copy follows the user's remedy (wait, resume the swap, recheck counts); invariant violations get
+// no retry invitation: a retry cannot succeed and would loop.
 const REGENERATE_REJECTION_COPY = {
   'embedder-swap': 'reader:actions.blockedWhileSwapping',
   'generation-in-flight': 'reader:actions.blockedWhileGenerating',

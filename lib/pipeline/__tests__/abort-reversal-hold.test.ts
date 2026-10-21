@@ -56,7 +56,6 @@ const grantedWithin = (what: string) =>
     what,
   )
 
-// A stand-in run that writes one fact, then waits until it is cancelled.
 function defineRun(kind: string, interruptible: boolean): { landed: Promise<void> } {
   let land!: () => void
   const landed = new Promise<void>((resolve) => {
@@ -101,7 +100,6 @@ function abortRuns(): void {
   for (const run of generationStore.getTxState().runs.values()) run.abortController.abort()
 }
 
-// A rollback preview holds the lock shared across its closure reads.
 function openPreview(): { end: () => void; done: Promise<void> } {
   let end!: () => void
   const done = withBranchWriteShared(

@@ -5,10 +5,9 @@ import { generationStore } from '@/lib/stores'
 import { settleUserWrites } from '../apply-delta-action'
 
 /**
- * Models a hard-gate run reserving right after the `callNo`th user-edit gate check passes: in a
- * microtask, so its settleUserWrites sees the write under test only if that write was dispatched
- * in the check's own tick. `settled` resolves when that run's wait ends; `checks()` counts the
- * gate checks so far, to pin which one `callNo` names.
+ * Reserves a hard-gate run in a microtask after the `callNo`th user-edit gate check passes, so its
+ * settleUserWrites sees the write under test only if dispatched in that check's tick. `settled`
+ * resolves when the run's wait ends; `checks()` counts gate checks, to pin which `callNo` names.
  */
 export function reserveRunAfterGateCheck(
   callNo: number,

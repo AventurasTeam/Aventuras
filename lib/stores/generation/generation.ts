@@ -9,10 +9,7 @@ export type RunState = {
   gateBehavior: 'hard-gate' | 'no-gate'
   /** Copied from the pipeline at reserve: a head reversal or Cancel ends this run and defers it. */
   interruptible: boolean
-  /**
-   * Started by Send to run deferred work before the turn
-   * (generation-pipeline.md → chainsTo on predecessor).
-   */
+  /** Send's deferred work, before the turn (generation-pipeline.md → chainsTo on predecessor). */
   beforeTurn: boolean
   actionId: string
   storyId: string | null
@@ -36,10 +33,9 @@ export type PendingTurn = { readonly branchId: string }
 export type DeferredWork = { readonly pass?: true; readonly close?: true }
 export type DeferredWorkKind = keyof DeferredWork
 
-// reversalInProgress brackets a prose reversal's interrupt->sweep window, blocking interruptible
-// starts (concurrency.ts) and user dispatch. pendingTurns: generation-pipeline.md → Gate
-// derivation as a selector. ReadonlyMap keeps consumers off the mutators; intermediates stays
-// mutable.
+// reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
+// user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
+// ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
 export type TxState = {
   runs: ReadonlyMap<string, RunState>
   reversalInProgress: boolean
@@ -295,13 +291,9 @@ export function backgroundClassifierRunning(txState: TxState, branchId: string):
   )
 }
 
-// Generic wait on an in-flight run of `kind` on `branchId`; no-op when none is
-// running. 'cancel' aborts then awaits terminal, 'finish' awaits the natural
-// commit. Lives here so callers can await a terminal without importing the
-// orchestrator.
-//
-// branchId is required, not optional: matching on kind alone would let a
-// caller on one branch abort another branch's run.
+// Waits on an in-flight run of `kind` on `branchId` (no-op if none): 'cancel' aborts it first,
+// 'finish' awaits the natural commit. Lives here so callers needn't import the orchestrator.
+// branchId is required: kind alone would let a caller on one branch abort another's run.
 export function awaitRunTerminal(
   kind: string,
   branchId: string,
@@ -334,9 +326,8 @@ function nextStoreChange(): Promise<void> {
 }
 
 /**
- * Aborts every run on the story until `isStoryBusy` is false and no turn body is active on the
- * branch: a turn ending during the wait can chain a pass, a pending turn or a reversal registers
- * its run later, and a regenerate's follow-up sweep starts after its run ended. Records nothing.
+ * Aborts every run on the story until `isStoryBusy` is false and no turn body runs on the branch:
+ * a chained pass, pending turn, reversal or regenerate sweep registers late. Records nothing.
  */
 export async function cancelStoryRuns(storyId: string, branchId: string): Promise<void> {
   for (;;) {

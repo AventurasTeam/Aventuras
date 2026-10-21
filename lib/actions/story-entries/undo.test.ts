@@ -1067,8 +1067,7 @@ describe('redo restores the order the writes first logged in', () => {
   })
 })
 
-// principles.md → Edit restrictions during in-flight generation: CTRL-Z of the turn passes a pass
-// by interrupting it; no other undo target, and no redo, does.
+// principles.md → Edit restrictions during in-flight generation: only CTRL-Z of the turn passes.
 describe('undo and redo during a pass', () => {
   async function seedWithPass(options: { onAbort?: (phase: PhaseContext) => Promise<void> } = {}) {
     const { db, runInTransaction } = await createTestDb()

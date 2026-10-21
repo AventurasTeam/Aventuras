@@ -117,7 +117,7 @@ function entry(kind: 'user_action' | 'ai_reply'): PhaseEmittedEvent {
   return { type: 'delta_emitted', action }
 }
 
-// Stands in for the turn: it writes a user_action and a reply, and chains as per-turn does.
+// Stands in for per-turn, chaining as it does.
 function defineTurn(end: PhaseResult = { status: 'completed' }): void {
   async function* writeTurn(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
     yield entry('user_action')
@@ -134,7 +134,6 @@ function defineTurn(end: PhaseResult = { status: 'completed' }): void {
   })
 }
 
-// Stands in for the pass: it records the actionId it ran under.
 function defineRecordingPass(): string[] {
   const actionIds: string[] = []
   async function* classify(ctx: PhaseContext): AsyncGenerator<never, PhaseResult> {

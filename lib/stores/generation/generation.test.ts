@@ -464,8 +464,7 @@ describe('isForegroundGenerating', () => {
   })
 })
 
-// A run with a real terminal. By default an abort ends it the way the orchestrator does: the run
-// leaves txState, then its terminal resolves.
+// Default abort ends the run as the orchestrator does: leaves txState, then resolves its terminal.
 function liveRun(over: Partial<RunState> & { runId: string }, onAbort?: (r: RunState) => void) {
   let resolveTerminal!: () => void
   const terminal = new Promise<void>((resolve) => {

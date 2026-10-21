@@ -159,8 +159,8 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
 async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action, actionId, branchId } = args
   const entryId = args.entryId ?? null
-  // The bracket (prose-reversal.ts) raises reversalInProgress before it interrupts a pass, whose
-  // write already dispatched must land for its abort to reverse: refused, it would fail the run.
+  // The bracket (prose-reversal.ts) raises reversalInProgress before it interrupts a pass; a pass
+  // write already dispatched must land so its abort reverses it — refused, it would fail the run.
   if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
     return {
       status: 'rejected',

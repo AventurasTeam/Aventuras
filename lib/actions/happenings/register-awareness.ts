@@ -194,10 +194,8 @@ const bumpRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   // and a read each would double the round trips on the device least able to
   // absorb them.
   //
-  // Nothing can delete one of these rows between retrieval and this apply: every other writer
-  // waits on the turn's gate. Were one gone, this writes a delta whose UPDATE matches nothing and
-  // whose undo no-ops; failing would reverse the user's whole turn over a counter that feeds
-  // chapter-close ranking.
+  // Other writers wait on the turn's gate, so these rows can't vanish before apply; if one did, the
+  // UPDATE and its undo no-op — failing would reverse the whole turn over a chapter-close counter.
   const next = priorCount + 1
   return {
     status: 'ok',

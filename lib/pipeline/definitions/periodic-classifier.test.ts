@@ -458,7 +458,7 @@ describe('periodicClassifierPhase', () => {
     expect(stateAtCallTime).toBe('running')
   })
 
-  // The phase can't know whether the orchestrator's reversal will commit, so the restore is the hook's.
+  // The phase can't know whether the reversal will commit, so the restore is the hook's.
   it('leaves running on an abort, for its interrupt hook to restore the status it read', async () => {
     const h = await ctxWith({
       processedThrough: 0,
@@ -675,9 +675,8 @@ describe('periodicClassifierPhase', () => {
     expect(embedder).toHaveBeenCalledTimes(1)
   })
 
-  // A provider that accepts the request and never answers would hold the gate until the cap. The
-  // expiry must land as a failure, not an abort: an abort burns no retry, so every later turn
-  // would rediscover the same dead provider.
+  // A never-answering provider must expire as a failure, not an abort: an abort burns no retry,
+  // so every later turn would rediscover the same dead provider.
   it('treats a call that outlives the timeout as a retryable failure', async () => {
     vi.useFakeTimers()
     try {
@@ -2034,8 +2033,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
-  // generation-pipeline.md → Recovery-failure policy: the writes stay on disk, so the status must
-  // not reopen the cadence over them.
+  // generation-pipeline.md → Recovery-failure policy: the writes stay, so the cadence stays shut.
   it('leaves running when interrupted mid-burst and its reversal cannot commit', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await seedStatus(db, RETRYING)

@@ -17,7 +17,7 @@ import { generationStore, type RunState } from '@/lib/stores'
 export type HeldPass = {
   readonly actionId: string
   readonly beforeTurn: boolean
-  /** `completed` keeps the write and advances the watermark, as a real pass does; `failed` reverses it. */
+  /** `completed` keeps the write and advances the watermark; `failed` reverses it. */
   finish: (outcome: 'completed' | 'failed') => void
 }
 
@@ -42,9 +42,8 @@ export function standInHappeningId(actionId: string): string {
 }
 
 /**
- * An interruptible hard-gate pipeline under the pass's kind, so its abort records a deferral.
- * Register it before anything calls `ensurePeriodicClassifierPipelineRegistered`, which
- * registers only a missing kind.
+ * Interruptible hard-gate pipeline under the pass's kind, so its abort records a deferral.
+ * Register before `ensurePeriodicClassifierPipelineRegistered`, which only fills a missing kind.
  */
 export function registerStandInPass(options: StandInPassOptions): StandInPass {
   const runs: HeldPass[] = []
@@ -88,8 +87,7 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     return { status: 'completed' }
   }
 
-  // Mirrors the real pass's gate, interruptible flag and blockedBy
-  // (lib/pipeline/definitions/periodic-classifier.ts).
+  // Mirrors the real pass's gate, interruptible flag and blockedBy (periodic-classifier.ts).
   registerPipeline({
     kind: PERIODIC_CLASSIFIER_KIND,
     phases: [{ name: 'classify', run: phase }],

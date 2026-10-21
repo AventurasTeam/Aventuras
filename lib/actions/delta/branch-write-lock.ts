@@ -1,7 +1,5 @@
-// Per-branch write lock (generation-pipeline.md → Branch write lock). A rollback preview's shared
-// hold keeps a prose reversal or an interruptible run's abort reversal, both exclusive, from
-// landing between its reads; every delta write holds it shared too. FIFO and writer-preferring, so
-// shared holders can't starve a reversal. Shared isn't reentrant: no applyDeltaAction nests.
+// Per-branch write lock (generation-pipeline.md → Branch write lock). FIFO and writer-preferring,
+// so shared holders can't starve a reversal. Shared isn't reentrant: no applyDeltaAction nests.
 
 type Waiter =
   | { readonly mode: 'shared'; readonly grant: () => void }

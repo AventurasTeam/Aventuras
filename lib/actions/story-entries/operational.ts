@@ -63,17 +63,15 @@ export async function updateStoryEntryContent(
   const headAtStart =
     onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
   if (contentEditBlocked(branchId, headAtStart)) return inFlightRejection()
-  // Ahead of the bracket, which interrupts a pass before its body runs: an unchanged save must
-  // not cost a pass. Safe outside the barrier because no other writer touches this column,
-  // unlike the tail read the scope needs.
+  // Ahead of the bracket, which interrupts a pass: an unchanged save must not cost one. Safe
+  // outside the barrier because no other writer touches this column, unlike the scope's tail read.
   const [existing] = await ctx.db
     .select({ content: storyEntries.content })
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
   if (existing?.content === content) return { status: 'ok' }
-  // Re-checked past the reads, so this gate and the bracket's flag set are one synchronous
-  // block: a second Save that read alongside the first is refused, not thrown as re-entry.
-  // Not inside the bracket, where the flag itself reads as blocked.
+  // Re-checked past the reads: gate and the bracket's flag set stay one synchronous block, so a
+  // second Save is refused, not thrown as re-entry. Not inside the bracket (flag reads blocked).
   const inHeadTurn =
     onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
   if (contentEditBlocked(branchId, inHeadTurn)) return inFlightRejection()
@@ -82,11 +80,8 @@ export async function updateStoryEntryContent(
   )
 }
 
-/**
- * True when only interruptible runs on the branch hold the gate, the one case an edit of the
- * head turn may pass by interrupting them (principles.md → Edit restrictions during in-flight
- * generation). Head membership is read only then, so the awaits stay off every other path.
- */
+// Only interruptible runs hold the gate: the one case a head-turn edit may pass, by interrupting
+// them (principles.md → Edit restrictions during in-flight generation). Gates the head-turn read.
 function onlyInterruptibleRunsHold(branchId: string): boolean {
   return generationStore.isUserEditBlocked() && !generationStore.isHeadReversalBlocked(branchId)
 }
@@ -314,8 +309,7 @@ export async function getRollbackCounts(
 ): Promise<RollbackCounts | StoryEntryRejection> {
   // The closed set, not the window: a fact on a surviving turn naming a row the sweep
   // removes goes too (rollback-confirm.md → Counts).
-  // Held shared, so neither a prose reversal nor an interruptible run's abort reversal lands
-  // between the closure's reads and refuses it.
+  // Held shared: a prose reversal or interruptible-run abort reversal landing mid-read refuses it.
   const swept = await withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, () =>
     resolveSweep(branchId, targetId, ctx),
   )

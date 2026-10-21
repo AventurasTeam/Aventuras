@@ -22,9 +22,8 @@ describe('reversalInProgress guard scope at the delta choke point', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
 
-  // Mirrors bracketProseReversal: the flag rises before the interrupt aborts the pass. A write
-  // already past the pass's abort check must land, so the abort reverses it; refused at the
-  // choke point it would fail the run and burn a retry instead.
+  // Mirrors bracketProseReversal: the flag rises before the interrupt aborts the pass. A write past
+  // the abort check must land so the abort reverses it; refused, it fails the run, burning a retry.
   it('lets an interruptible run already in flight land its periodic_classifier delta', async () => {
     const { db, ctx } = await makeHarness()
     let release!: () => void

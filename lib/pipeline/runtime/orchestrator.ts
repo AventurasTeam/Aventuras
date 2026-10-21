@@ -495,9 +495,8 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   return { kind: 'completed' }
 }
 
-// Pre-flight, phases, then commit or abort. A throwing resolver predicate (or any pre-flight
-// error) winds the run down through the normal abort path: rejecting here would orphan the
-// registered run and its unresolved terminal, blocking edits and deadlocking awaitRunTerminal.
+// A throwing resolver predicate (or any pre-flight error) takes the normal abort path: rejecting
+// would orphan the registered run and its terminal, blocking edits and deadlocking awaitRunTerminal.
 async function driveRun(
   run: RunState,
   ctx: RunCtx,
@@ -616,11 +615,7 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
   }
 }
 
-/**
- * Starts `kind` and drives its chain. `origin` settles at the starting run's commit or abort (or
- * its refusal) and rejects only on a throw during that run's own drive; `chain` settles once the
- * chain's last run ends.
- */
+/** Starts `kind` and drives its chain; see `PipelineStart` for `origin` and `chain`. */
 export function startPipeline<K extends string>(kind: K, ctx: RunCtxFor<K>): PipelineStart {
   const started = driveOrigin(kind, ctx)
   return {

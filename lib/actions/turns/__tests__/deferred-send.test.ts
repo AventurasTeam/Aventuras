@@ -80,7 +80,6 @@ async function chainAPass(ctx: RunCtx, pass: StandInPass) {
   return { turn, held: await within(pass.nextHeld(), 'the chained pass') }
 }
 
-/** Interrupts the chained pass by a regenerate of the reply, or by the pill's Cancel. */
 async function deferAPass(ctx: RunCtx, pass: StandInPass, via: 'regenerate' | 'cancel') {
   const { held } = await chainAPass(ctx, pass)
   if (via === 'cancel') {

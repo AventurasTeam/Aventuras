@@ -1568,7 +1568,7 @@ describe('head-turn edits during a pass', () => {
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
-  // Both Saves read membership before either enters the bracket; the second check refuses the second.
+  // Both Saves read membership before either enters the bracket; the re-check refuses the second.
   it('refuses the second of two head-reply saves that race through the pass', async () => {
     const { ctx, start } = await seedHeadTurnWithPass()
 

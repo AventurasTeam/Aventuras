@@ -321,8 +321,7 @@ describe('regenerateTurn', () => {
     expect(rows.map((r) => r.id)).toEqual(['e_opening', 'e_u1', 'e_r1'])
   })
 
-  // principles.md → Edit restrictions during in-flight generation: a head reversal passes a pass
-  // by interrupting it.
+  // principles.md → Edit restrictions during in-flight generation: head reversal interrupts a pass.
   it('interrupts a pass in flight, reversing its write and deferring it before the sweep', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
@@ -941,8 +940,7 @@ describe('regenerateTurn', () => {
     return counts
   }
 
-  // rollback-confirm.md → Counts: the confirm consents to what it showed, and a pass may commit
-  // while it is open.
+  // rollback-confirm.md → Counts: the confirm consents to what it showed, not to a later commit.
   it('refuses with the fresh counts when a pass committed since the confirm opened', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
@@ -1024,7 +1022,7 @@ describe('regenerateTurn', () => {
     expect(await start.origin).toMatchObject({ outcome: 'aborted' })
   })
 
-  // The user consented to the regenerate, not to the unwind, so the follow-up sweep takes no counts.
+  // The user consented to the regenerate, not the unwind, so the follow-up sweep takes no counts.
   it('unwinds a failed regenerate given confirmed counts', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)

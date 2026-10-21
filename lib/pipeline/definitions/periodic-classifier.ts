@@ -72,10 +72,9 @@ async function readWindowEntries(
     .limit(maxEntries + 1)) as StoryEntry[]
 }
 
-// A pass holds the user-edit gate for the whole call, so a provider that accepts the request and
-// never answers would hold it until the user cancels. This bounds the structured call (retries
-// included) so the expiry becomes an ordinary failure the next turn's commit retries. A profile
-// `timeout` shorter than this still wins — the SDK aborts first; a longer one is capped.
+// Bounds the structured call (retries included): a hung provider would hold the pass's user-edit
+// gate until the user cancels. Expiry is an ordinary failure the next turn retries; a shorter
+// profile `timeout` still wins (the SDK aborts first), a longer one is capped.
 const CALL_TIMEOUT_MS = 300_000
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>

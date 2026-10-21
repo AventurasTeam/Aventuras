@@ -5,10 +5,8 @@ import { branches, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib
 import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 
 /**
- * Classifiable turns past the watermark — the cadence's input. Counts rows rather
- * than differencing positions: `system` entries occupy positions but are filtered
- * out of the window, so a position delta fires the cadence early on a branch that
- * carries technical rows.
+ * Classifiable turns past the watermark — the cadence's input. Counts rows, not position deltas:
+ * `system` entries occupy positions but are filtered from the window, so a delta fires it early.
  */
 export async function unprocessedEntryCount(
   branchId: string,
@@ -40,9 +38,8 @@ export async function readClassifierStatus(
 }
 
 /**
- * per-turn's `chainsTo` (generation-pipeline.md → chainsTo on predecessor). Awaited at the turn's
- * commit while the turn still holds the gate, so no writer moves the count or the status between
- * these reads and the pass's start.
+ * per-turn's `chainsTo` (generation-pipeline.md → chainsTo on predecessor). Awaited at commit under
+ * the turn's gate, so no writer moves the count or status between these reads and the pass's start.
  */
 export async function nextMemoryRun(
   run: RunState,

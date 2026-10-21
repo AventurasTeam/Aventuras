@@ -65,7 +65,6 @@ function failingMarkerInsert(db: RunCtx['db'], kind: string): RunCtx['db'] {
   })
 }
 
-// A phase held until the test releases it.
 function heldPhase(): { run: () => AsyncGenerator<never, PhaseResult>; release: () => void } {
   let release!: () => void
   const gate = new Promise<void>((resolve) => {

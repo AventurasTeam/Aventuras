@@ -34,7 +34,6 @@ function createEntry(id: string): { type: 'delta_emitted'; action: PipelineActio
   }
 }
 
-// Writes one entry, then holds until the test finishes it or the run is aborted.
 async function* writesThenHolds({
   abortSignal,
 }: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
@@ -58,7 +57,6 @@ function defineStandIn(kind: string, interruptible = true): void {
   })
 }
 
-// Starts `kind` and resolves once its phase has written its entry and holds.
 async function startHeld(
   kind: string,
   ctx: RunCtx,
