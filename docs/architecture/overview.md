@@ -584,9 +584,13 @@ NanoGPT calls its unified `POST /images` through a small custom `ImageModelV4`
 (`nanogptImage.ts`): one JSON request for text-to-image and edits, references as `input_references`
 data URLs, and the model's resolution tier (`1k`, `1344*576`) in `providerOptions.nanogpt` because the
 SDK's `size` takes only `WxH`. Models that list aspect ratios also get one, so orientation survives
-a tier-only resolution. Only A1111 still keeps a hand-written request. OpenAI
+a tier-only resolution. A1111 (and Forge, SD.Next, KoboldCpp, which speak its API) is a second custom
+model (`a1111Image.ts`): `POST /sdapi/v1/txt2img` with the checkpoint as a per-request
+`override_settings` that is restored afterwards, sampler options in `providerOptions.a1111`, no
+references. The community `automatic1111-provider` package is not used: it targets spec v2, takes no
+`fetch` and decodes base64 with `Buffer`. OpenAI
 (`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
-key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, Z.AI, NanoGPT and Google call
+key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, Z.AI, NanoGPT, A1111 and Google call
 the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations and Z.AI reuse the OpenAI Compatible helper
 (`generateOpenAICompatibleImage`): Pollinations with its fixed base URL and `safe: false`, Z.AI
 with `api.z.ai` and no references. Z.AI answers `data[].url`; the SDK downloads an OpenAI-compatible `url` reply

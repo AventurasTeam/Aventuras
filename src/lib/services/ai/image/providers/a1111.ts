@@ -6,7 +6,7 @@
  * - Models:  GET  /sdapi/v1/sd-models
  */
 
-import { specToPixels } from '#lib/utils/image.ts'
+import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -15,12 +15,19 @@ import type {
   ImageModelInfo,
   ComfySamplerInfo,
 } from './types'
-import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { imageGetFetch } from './fetchAdapter'
+import { createA1111Image } from './a1111Image'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'http://localhost:7860'
 
 export function createA1111Provider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl?.trim().replace(/\/$/, '') || DEFAULT_BASE_URL
+  const a1111 = createA1111Image({
+    baseURL: baseUrl,
+    apiKey: config.apiKey,
+    fetch: createImageSdkFetch('a1111-image'),
+  })
 
   return {
     id: 'a1111',
@@ -28,51 +35,25 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, signal, providerOptions } = options
-      const { width, height } = specToPixels(spec)
 
       const opts = providerOptions ?? config.providerOptions ?? {}
-      const steps = Number(opts.steps) || 20
-      const cfgScale = Number(opts.cfg) || 7
-      const sampler = (opts.sampler as string) || 'Euler a'
       const scheduler = (opts.scheduler as string) || undefined
-      const negativePrompt = (opts.negativePrompt as string) || ''
 
-      const body: Record<string, unknown> = {
+      return generateSdkImage({
+        model: a1111.imageModel(model),
         prompt,
-        negative_prompt: negativePrompt,
-        width,
-        height,
-        steps,
-        cfg_scale: cfgScale,
-        sampler_name: sampler,
-        batch_size: 1,
-        n_iter: 1,
-        seed: -1,
-      }
-
-      if (scheduler) body.scheduler = scheduler
-
-      if (model) {
-        body.override_settings = { sd_model_checkpoint: model }
-        body.override_settings_restore_afterwards = true
-      }
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
-
-      const response = await imageFetch({
-        url: `${baseUrl}/sdapi/v1/txt2img`,
-        headers,
-        body: JSON.stringify(body),
+        size: formatImageSize(specToPixels(spec)),
+        providerOptions: {
+          a1111: {
+            negative_prompt: (opts.negativePrompt as string) || '',
+            steps: Number(opts.steps) || 20,
+            cfg_scale: Number(opts.cfg) || 7,
+            sampler_name: (opts.sampler as string) || 'Euler a',
+            ...(scheduler && { scheduler }),
+          },
+        },
         signal,
-        serviceId: 'a1111-image',
       })
-
-      const data = await response.json()
-      const base64 = data?.images?.[0]
-      if (!base64) throw new Error('No image data in A1111 response')
-
-      return { base64 }
     },
 
     async listModels(apiKey: string): Promise<ImageModelInfo[]> {
