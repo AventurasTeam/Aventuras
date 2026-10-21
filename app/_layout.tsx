@@ -16,6 +16,7 @@ import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-
 import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
+import { useDeferredWorkToasts } from '@/hooks/use-deferred-work-toasts'
 import { setAppearanceThemeId } from '@/lib/actions'
 import { registerRejectionHandler, useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
@@ -42,6 +43,11 @@ import { ThemeProvider } from '@/lib/themes'
 // lessons-learned/keyboard-resize-mode-must-be-claimed.md.
 function AndroidResizeMode() {
   useResizeMode()
+  return null
+}
+
+function DeferredWorkToasts() {
+  useDeferredWorkToasts()
   return null
 }
 
@@ -106,6 +112,7 @@ export default function RootLayout() {
                     <SwapResumeHost />
                     <EmbeddingUpgradeHost />
                     <Toaster />
+                    <DeferredWorkToasts />
                     <PortalHost />
                     <DrizzleStudioDevTools />
                   </BottomSheetModalProvider>
