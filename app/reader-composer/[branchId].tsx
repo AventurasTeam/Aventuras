@@ -55,7 +55,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
-import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useSwapState } from '@/hooks/use-memory-health'
 import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
@@ -1204,10 +1203,6 @@ export default function ReaderComposerRoute() {
     ignoreEditableTargets: true,
     enabled: isFocused,
   })
-  const leaveReader = useCallback(() => router.back(), [router])
-  // Android back goes through router.back(), so the story-leave guard sees it, as the other
-  // in-story routes do.
-  useMasterDetailBack(true, leaveReader)
   const contextualActions: ActionGroup = useMemo(() => {
     // Undo of the turn is a head reversal, live through a pass; the action refuses any other
     // target with `gated`. Redo never is one, so it keeps the whole gate.
@@ -1322,7 +1317,7 @@ export default function ReaderComposerRoute() {
           />
         ) : undefined
       }
-      onBack={leaveReader}
+      onBack={() => router.back()}
       onOpenStorySettings={() => {
         if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
       }}
