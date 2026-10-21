@@ -633,3 +633,46 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`dev-environment.md`](../dev-environment.md) or
   [lessons-learned](lessons-learned/README.md)). Raised 2026-10-21 by
   the gated classifier slice's task reviews.
+
+- **The reader's viewport-shrink re-pin may pull a focused in-row
+  editor out of view on Android.** The re-pin (the `ResizeObserver`
+  effect in `components/reader/reader-surface.tsx`) scrolls to the
+  bottom whenever the scroller shrinks while the reader is within 20 px
+  of it (`NEAR_BOTTOM_THRESHOLD_PX`) and no finger is down; it doesn't
+  check for a focused editable. On Android the in-row editor
+  autofocuses (the `Textarea`'s `autoFocus` in
+  `components/compounds/entry-card.tsx`), so the keyboard's shrink
+  re-pins. A short row's editor grows the row (its button row), moving
+  the reader off the bottom first, so nothing happens. But editing a
+  long entry above the last row, one over the `Textarea`'s 10 rows, so
+  the row shrinks and the reader stays at the bottom, could push its
+  editor up under the top of the viewport. Whether Android's WebView
+  then scrolls the focused field back into view, before or after the
+  observer runs, decides it. Read, not probed on a device: the check is
+  an emulator with `hw.keyboard=no`, the reader at the bottom, editing a
+  long entry above the last one. Raised 2026-10-21 by the gated
+  classifier slice review.
+
+- **`classifier.failure_record_retried` carries no `actionId`.** The
+  periodic classifier's `onPhaseException`
+  (`lib/pipeline/definitions/periodic-classifier.ts`) logs it when its
+  first failure-record write throws, without the run's `actionId`, so
+  the Logs tab can't tie it to its pass
+  ([`observability.md → Record shape`](../observability.md#record-shape):
+  a run-scoped emission carries the run's `actionId`). The hook's
+  context type (`PhaseExceptionHook` in `lib/pipeline/types.ts`) has no
+  `actionId` to pass; the fix widens it, as the slice review did for
+  `onInterrupt`, whose `InterruptHook` context now carries one.
+  Predates the gated classifier slice. Raised 2026-10-21 by the gated
+  classifier slice review.
+
+- **The reader's status pill blanks between Send's deferred pass and
+  its turn.** After the deferred pass commits, `submitTurn`
+  (`lib/actions/turns/submit-turn.ts`) runs two reads and the
+  user_action transaction before the turn registers, holding only the
+  pending mark. The pill picks its run from the registered runs
+  (`pillRunOf` in `components/reader/send-run.ts`), so for that gap it
+  shows nothing, then the turn's phase. The composer's Cancel holds
+  through the gap (`composerShowsCancel`, same file); the pill doesn't.
+  A frame or two on desktop. Read, not probed. Raised 2026-10-21 by the
+  gated classifier slice review.
