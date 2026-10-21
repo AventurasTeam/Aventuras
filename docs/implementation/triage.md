@@ -612,3 +612,16 @@ slice-planning gate forces its resolution before that slice is planned.
   and logs two "GO_BACK was not handled" warnings. Seen before and
   after the gated classifier's changes, so the branch didn't cause it.
   Raised 2026-10-21 by the gated classifier slice's task reviews.
+
+- **The reader's bottom pin ignores scrollbar drags and keyboard
+  scrolls.**
+  [`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
+  says the user's first gesture breaks the open-at-bottom pin, but
+  `components/reader/reader-surface.tsx` stops it only on wheel and
+  touch drag. A scrollbar drag or a keyboard scroll (arrows, Page Up)
+  inside the pin's window is pulled back to the bottom each frame.
+  The window is ~10 frames after landing or after an engaged stream
+  end, and a whole stream when one starts inside it or the reader
+  opens mid-stream. Pre-existing for the landing pin; the gated
+  classifier branch extends the same pin to stream end. Raised
+  2026-10-21 by the gated classifier slice's task reviews.
