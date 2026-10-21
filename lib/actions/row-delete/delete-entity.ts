@@ -33,8 +33,8 @@ export function deleteEntityRow(
   )
 }
 
-// No await between this read of the stores and commitRowDelete's gate check and dispatch: a run
-// that starts after the check settles the write before it reads.
+// No await from this store read through commitRowDelete's gate check and dispatch: a read made
+// under a run's gate is refused, and a run that starts after the check settles the write first.
 async function deleteEntityLocked(
   branchId: string,
   id: string,
