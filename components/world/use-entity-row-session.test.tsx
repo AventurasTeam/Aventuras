@@ -227,7 +227,7 @@ describe('useEntityRowSession', () => {
     await act(async () => {
       await hook.result.current.save()
     })
-    // The whole argument list: a base passed beside the draft fails this.
+    // toHaveBeenCalledWith matches the whole argument list.
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ keywords: ['the shop', 'the store'] }),
     )
