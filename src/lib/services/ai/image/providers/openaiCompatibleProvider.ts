@@ -32,7 +32,7 @@ const ModelEntry = z
     supportsImg2Img: true,
   }))
 
-/** Shared with Pollinations and Z.AI, whose reply format and endpoints match; `extraFields` join the request body. */
+/** Shared with Pollinations and Z.AI, whose endpoints match; `extraFields` join the request body. */
 export async function generateOpenAICompatibleImage(options: {
   baseUrl: string
   apiKey?: string
