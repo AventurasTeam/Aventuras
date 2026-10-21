@@ -590,7 +590,7 @@ the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pol
 own model discovery and size handling; discovery throws on a failed request rather than
 substituting a list. Whether a provider takes an API key or a base URL is declared per provider in
 the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
-`hasRequiredCredentials` read those tables. Migration `041` turned image settings that still named
+`hasRequiredCredentials` read those tables. Migration `042` turned image settings that still named
 an API profile into image profiles, then moved `openai` profiles that point at a proxy, and every
 `chutes` profile (that provider is gone; its generation route no longer exists), over to OpenAI
 Compatible. The registry hands references only to the providers

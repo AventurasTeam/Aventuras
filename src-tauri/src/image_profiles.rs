@@ -1,4 +1,4 @@
-//! Migration 041 rewrites the `image_profiles` and `system_services_settings` blobs in place.
+//! Migration 042 rewrites the `image_profiles` and `system_services_settings` blobs in place.
 //! The application reads them through the SQL plugin, so the rules are checked here.
 
 #[cfg(test)]
@@ -29,7 +29,7 @@ mod tests {
                 .unwrap();
         }
 
-        sqlx::raw_sql(include_str!("../migrations/041_image_profiles.sql"))
+        sqlx::raw_sql(include_str!("../migrations/042_image_profiles.sql"))
             .execute(&pool)
             .await
             .unwrap();

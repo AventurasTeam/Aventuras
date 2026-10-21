@@ -269,9 +269,9 @@ pub fn run() {
             kind: MigrationKind::Up,
         },
         Migration {
-            version: 41,
+            version: 42,
             description: "image_profiles",
-            sql: include_str!("../migrations/041_image_profiles.sql"),
+            sql: include_str!("../migrations/042_image_profiles.sql"),
             kind: MigrationKind::Up,
         },
     ];
