@@ -100,16 +100,15 @@ import {
 import {
   appSettingsStore,
   awaitRunTerminal,
-  backgroundClassifierRunning,
   blockingOverlaysStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
   generationStore,
-  isBackgroundKind,
   isUserEditBlocked,
   readerRailStore,
   rehydrateStories,
+  selectMemoryRun,
   storiesStore,
   type TxState,
   undoRedoStore,
@@ -230,19 +229,16 @@ export default function ReaderComposerRoute() {
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   // The phase, not a boolean: one source for whether a turn runs and what it
-  // does. Neither a refresh nor a background classifier pass is a turn — either
-  // counted here would swap Send for Cancel and raise the streaming placeholder
-  // over a branch that isn't streaming. Only the refresh is hard-gate, so
-  // `editBlocked` above still covers undo/redo for it.
+  // does. Neither a refresh nor a pass is a turn — either counted here would swap
+  // Send for Cancel and raise the streaming placeholder over a branch that isn't
+  // streaming. Both are hard-gate, so `editBlocked` above still covers undo/redo
+  // during them.
   // Two selectors over one predicate rather than one returning a pair: a fresh
   // object per read would re-render the reader on every unrelated store write.
   const findTurnRun = useCallback(
     (s: { txState: TxState }) =>
       [...s.txState.runs.values()].find(
-        (r) =>
-          r.branchId === branchId &&
-          r.kind !== SUGGESTION_REFRESH_KIND &&
-          !isBackgroundKind(r.kind),
+        (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND && !r.interruptible,
       ),
     [branchId],
   )
@@ -254,9 +250,14 @@ export default function ReaderComposerRoute() {
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
     ),
   )
-  const classifierRunning = generationStore.useGeneration((s) =>
-    backgroundClassifierRunning(s.txState, branchId),
+  // The pill's run: the turn, else the branch's pass, which owns the pill over a refresh
+  // beside it (generation-pipeline.md → Pill currentPhase — foreground-first).
+  const findPillRun = useCallback(
+    (s: { txState: TxState }) => findTurnRun(s) ?? selectMemoryRun(s.txState, { branchId }),
+    [findTurnRun, branchId],
   )
+  const pillRunPhase = generationStore.useGeneration((s) => findPillRun(s)?.currentPhase ?? null)
+  const pillRunKind = generationStore.useGeneration((s) => findPillRun(s)?.kind ?? null)
 
   const open = currentStoryStore.useCurrentStory((s) => s)
   const [hydration, setHydration] = useState<BranchHydrationState>({
@@ -359,10 +360,9 @@ export default function ReaderComposerRoute() {
   const swapPending = swapRunning || swapPaused
 
   const activePhase = readerPillPhase({
-    turnKind,
-    turnPhase,
+    turnKind: pillRunKind,
+    turnPhase: pillRunPhase,
     refreshingSuggestions,
-    classifierRunning,
   })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
@@ -1258,8 +1258,8 @@ export default function ReaderComposerRoute() {
           storyId={storyId}
           swapTarget={swapTarget}
           activePhase={activePhase}
-          // A background classifier pass has no cancel affordance, so the prop is
-          // absent rather than a no-op handler that would still open the dialog.
+          // Only a turn or a refresh is cancelled from here; otherwise the prop is
+          // absent rather than a no-op handler that would still open the popover.
           {...(isGenerating || refreshingSuggestions
             ? {
                 // The run's own kind, not PER_TURN_KIND: findTurnRun matches on a

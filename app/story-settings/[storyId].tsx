@@ -196,12 +196,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   )
   const settings = panelData.status === 'ready' ? panelData.settings : null
   const currentBranchId = row?.currentBranchId ?? null
-  const {
-    activeRunKind,
-    editBlocked,
-    gateReason: disabledReason,
-    classifierRunning,
-  } = useStoryGenerationGate(storyId)
+  const { activeRunKind, editBlocked, gateReason: disabledReason } = useStoryGenerationGate(storyId)
 
   // Scoped to THIS route's story: the open story survives navigation, so an
   // unscoped read would show whichever story the session last opened in the
@@ -358,7 +353,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         <StoryStatusPill
           storyId={storyId ?? null}
           swapTarget={settings?.embedding_swap_target}
-          activePhase={storyPillPhase(activeRunKind, classifierRunning)}
+          activePhase={storyPillPhase(activeRunKind)}
           onCancel={() => cancelStoryPillRun(storyId)}
           onOpenMemory={() => selectTab('memory')}
         />

@@ -1,31 +1,37 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { generationStore, type RunState, type TxState } from '@/lib/stores'
 
 import {
   cancelStoryPillRun,
   generationGateReason,
-  selectStoryClassifierRunning,
   selectStorySettingsGenerationRunKind,
   storyPillPhase,
   storySettingsGenerationPhase,
   useStoryGenerationGate,
 } from './generation-run'
 
-function run(
-  kind: string,
-  storyId = 'story-1',
-  gateBehavior: RunState['gateBehavior'] = 'hard-gate',
-  branchId = 'branch-1',
-): RunState {
+type RunOptions = {
+  storyId?: string
+  branchId?: string
+  gateBehavior?: RunState['gateBehavior']
+  interruptible?: boolean
+  beforeTurn?: boolean
+}
+
+function run(kind: string, options: RunOptions = {}): RunState {
+  const storyId = options.storyId ?? 'story-1'
+  const branchId = options.branchId ?? 'branch-1'
   return {
-    runId: `run-${kind}`,
+    runId: `run-${kind}-${storyId}-${branchId}`,
     kind,
-    gateBehavior,
-    interruptible: false,
-    beforeTurn: false,
+    gateBehavior: options.gateBehavior ?? 'hard-gate',
+    interruptible: options.interruptible ?? false,
+    beforeTurn: options.beforeTurn ?? false,
     actionId: `action-${kind}`,
     storyId,
     branchId,
@@ -37,6 +43,11 @@ function run(
   }
 }
 
+// The periodic classifier as it declares itself: hard-gate and interruptible.
+function pass(options: Pick<RunOptions, 'storyId' | 'branchId' | 'beforeTurn'> = {}): RunState {
+  return run(PERIODIC_CLASSIFIER_KIND, { ...options, interruptible: true })
+}
+
 function tx(...runs: RunState[]): TxState {
   return {
     runs: new Map(runs.map((item) => [item.runId, item])),
@@ -45,6 +56,8 @@ function tx(...runs: RunState[]): TxState {
     deferred: new Map(),
   }
 }
+
+type Gate = ReturnType<typeof useStoryGenerationGate>
 
 function Probe() {
   generationStore.useGeneration((s) => selectStorySettingsGenerationRunKind(s.txState, 'story-1'))
@@ -58,10 +71,9 @@ function GateProbe({
 }: {
   storyId: string
   branchId?: string
-  onResult: (classifierRunning: boolean) => void
+  onResult: (gate: Gate) => void
 }) {
-  const { classifierRunning } = useStoryGenerationGate(storyId, branchId)
-  onResult(classifierRunning)
+  onResult(useStoryGenerationGate(storyId, branchId))
   return null
 }
 
@@ -71,38 +83,49 @@ afterEach(() => {
 })
 
 describe('selectStorySettingsGenerationRunKind', () => {
-  it('keeps the actual chapter-close kind for the universal cancel action', () => {
+  it('prefers a turn over a pass, a pass over another hard-gate run, and either over a refresh', () => {
+    expect(selectStorySettingsGenerationRunKind(tx(pass(), run(PER_TURN_KIND)), 'story-1')).toBe(
+      PER_TURN_KIND,
+    )
+    expect(
+      selectStorySettingsGenerationRunKind(tx(run('translation-retry'), pass()), 'story-1'),
+    ).toBe(PERIODIC_CLASSIFIER_KIND)
     expect(
       selectStorySettingsGenerationRunKind(
-        tx(run('periodic-classifier', 'story-1', 'no-gate'), run('chapter-close')),
+        tx(run(SUGGESTION_REFRESH_KIND), run('chapter-close')),
         'story-1',
       ),
     ).toBe('chapter-close')
   })
 
-  it('prefers a narrative run over suggestion refresh and ignores another story', () => {
+  // generation-pipeline.md → Pill currentPhase: the pass owns the pill over a refresh beside
+  // it, so the pill's Cancel ends the pass, not the refresh.
+  it('gives the pill to a pass over a refresh running beside it', () => {
     expect(
-      selectStorySettingsGenerationRunKind(
-        tx(run('suggestion-refresh'), run('per-turn'), run('chapter-close', 'story-2')),
-        'story-1',
-      ),
-    ).toBe('per-turn')
+      selectStorySettingsGenerationRunKind(tx(run(SUGGESTION_REFRESH_KIND), pass()), 'story-1'),
+    ).toBe(PERIODIC_CLASSIFIER_KIND)
+    expect(selectStorySettingsGenerationRunKind(tx(run(SUGGESTION_REFRESH_KIND)), 'story-1')).toBe(
+      SUGGESTION_REFRESH_KIND,
+    )
   })
 
-  it('keeps a hard-gated suggestion refresh ahead of a no-gate classifier', () => {
+  it("covers every branch of the story and none of another story's", () => {
+    expect(
+      selectStorySettingsGenerationRunKind(tx(pass({ branchId: 'branch-2' })), 'story-1'),
+    ).toBe(PERIODIC_CLASSIFIER_KIND)
     expect(
       selectStorySettingsGenerationRunKind(
-        tx(run('periodic-classifier', 'story-1', 'no-gate'), run('suggestion-refresh')),
+        tx(run(PER_TURN_KIND, { storyId: 'story-2' })),
         'story-1',
       ),
-    ).toBe('suggestion-refresh')
+    ).toBeNull()
   })
 
   // `useGeneration` compares with Object.is, so a selector that allocates its
   // result loops the subscriber until React trips the update-depth limit — and
   // only once a run is in flight, which is exactly when this route matters.
   it('subscribes without re-render churn while a run is in flight', () => {
-    generationStore.startRun(run('per-turn'))
+    generationStore.startRun(pass())
 
     expect(() => render(<Probe />)).not.toThrow()
   })
@@ -110,83 +133,95 @@ describe('selectStorySettingsGenerationRunKind', () => {
 
 describe('storySettingsGenerationPhase', () => {
   it('maps each pill-facing kind to its phase', () => {
+    expect(storySettingsGenerationPhase(PERIODIC_CLASSIFIER_KIND)).toBe('updating-memory')
     expect(storySettingsGenerationPhase('chapter-close')).toBe('closing-chapter')
-    expect(storySettingsGenerationPhase('suggestion-refresh')).toBe('refreshing-suggestions')
-    expect(storySettingsGenerationPhase('per-turn')).toBe('generating-narrative')
-  })
-})
-
-describe('selectStoryClassifierRunning', () => {
-  it("is true only for the story's own no-gate classifier run", () => {
-    expect(
-      selectStoryClassifierRunning(tx(run('periodic-classifier', 'story-1', 'no-gate')), 'story-1'),
-    ).toBe(true)
-    expect(
-      selectStoryClassifierRunning(tx(run('periodic-classifier', 'story-2', 'no-gate')), 'story-1'),
-    ).toBe(false)
-    expect(selectStoryClassifierRunning(tx(run('per-turn')), 'story-1')).toBe(false)
+    expect(storySettingsGenerationPhase(SUGGESTION_REFRESH_KIND)).toBe('refreshing-suggestions')
+    expect(storySettingsGenerationPhase(PER_TURN_KIND)).toBe('generating-narrative')
   })
 })
 
 describe('storyPillPhase', () => {
-  it('shows a foreground run over the classifier pass', () => {
-    expect(storyPillPhase('chapter-close', true)).toBe('closing-chapter')
-  })
-
-  it('shows the classifier pass as updating memory when nothing else runs', () => {
-    expect(storyPillPhase(null, true)).toBe('updating-memory')
-    expect(storyPillPhase(null, false)).toBeUndefined()
+  it("is the pill run's phase, a pass included, and hides with no run", () => {
+    expect(storyPillPhase(PERIODIC_CLASSIFIER_KIND)).toBe('updating-memory')
+    expect(storyPillPhase('chapter-close')).toBe('closing-chapter')
+    expect(storyPillPhase(null)).toBeUndefined()
   })
 })
 
-describe('useStoryGenerationGate classifier running', () => {
+describe('useStoryGenerationGate', () => {
   // Pins the live subscription, not a selector re-evaluated by a fresh render.
-  it("flips the same mounted probe from true to false when the branch's classifier run finishes", () => {
-    generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-1'))
-    const captured: boolean[] = []
-    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(v) => captured.push(v)} />)
-    expect(captured.at(-1)).toBe(true)
+  it("names the branch's pass, its before-turn flag and the memory reason, and clears when it ends", () => {
+    const deferredPass = pass({ beforeTurn: true })
+    generationStore.startRun(deferredPass)
+    const captured: Gate[] = []
+    render(
+      <GateProbe storyId="story-1" branchId="branch-1" onResult={(gate) => captured.push(gate)} />,
+    )
+    expect(captured.at(-1)).toEqual({
+      activeRunKind: PERIODIC_CLASSIFIER_KIND,
+      editBlocked: true,
+      gateReason: 'Updating memory. Cancel to edit.',
+      beforeTurn: true,
+    })
 
     act(() => {
-      generationStore.finishRun('run-periodic-classifier')
+      generationStore.finishRun(deferredPass.runId)
     })
-    expect(captured.at(-1)).toBe(false)
+    expect(captured.at(-1)).toEqual({
+      activeRunKind: null,
+      editBlocked: false,
+      gateReason: undefined,
+      beforeTurn: false,
+    })
   })
 
-  it('keys by branch when branchId is given, and by story when it is not', () => {
-    generationStore.startRun(run('periodic-classifier', 'story-1', 'no-gate', 'branch-2'))
+  it('reads beforeTurn off the run, so a chained pass does not run before a turn', () => {
+    generationStore.startRun(pass())
+    let gate: Gate | undefined
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(g) => (gate = g)} />)
+    expect(gate?.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
+    expect(gate?.beforeTurn).toBe(false)
+  })
 
-    let byBranch = false
-    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(v) => (byBranch = v)} />)
-    expect(byBranch).toBe(false)
+  it("picks among the branch's runs when given a branch, among the story's when not", () => {
+    generationStore.startRun(pass({ branchId: 'branch-2' }))
 
-    let byStory = false
-    render(<GateProbe storyId="story-1" onResult={(v) => (byStory = v)} />)
-    expect(byStory).toBe(true)
+    let byBranch: Gate | undefined
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(g) => (byBranch = g)} />)
+    expect(byBranch?.activeRunKind).toBeNull()
+
+    let byStory: Gate | undefined
+    render(<GateProbe storyId="story-1" onResult={(g) => (byStory = g)} />)
+    expect(byStory?.activeRunKind).toBe(PERIODIC_CLASSIFIER_KIND)
   })
 })
 
 describe('generationGateReason', () => {
   it('is undefined while nothing blocks edits', () => {
-    expect(generationGateReason(false, 'chapter-close')).toBeUndefined()
+    expect(generationGateReason(false, PERIODIC_CLASSIFIER_KIND)).toBeUndefined()
   })
 
-  it('names a chapter close and a suggestion refresh, and any other run as generation in flight', () => {
+  it('names a pass, a chapter close and a suggestion refresh, and any other run as generation in flight', () => {
+    expect(generationGateReason(true, PERIODIC_CLASSIFIER_KIND)).toBe(
+      'Updating memory. Cancel to edit.',
+    )
     expect(generationGateReason(true, 'chapter-close')).toBe(
       'Chapter close in progress. Cancel to edit.',
     )
-    expect(generationGateReason(true, 'suggestion-refresh')).toBe(
+    expect(generationGateReason(true, SUGGESTION_REFRESH_KIND)).toBe(
       'Refreshing suggestions. Cancel to edit.',
     )
-    expect(generationGateReason(true, 'per-turn')).toBe('Generation is in flight. Cancel to edit.')
+    expect(generationGateReason(true, PER_TURN_KIND)).toBe(
+      'Generation is in flight. Cancel to edit.',
+    )
     expect(generationGateReason(true, null)).toBe('Generation is in flight. Cancel to edit.')
   })
 })
 
 describe('cancelStoryPillRun', () => {
   it("aborts the pill's run on its own branch, not a sibling's run of another kind", () => {
-    const refresh = run('suggestion-refresh', 'story-1', 'no-gate', 'branch-1')
-    const turn = run('per-turn', 'story-1', 'hard-gate', 'branch-2')
+    const refresh = run(SUGGESTION_REFRESH_KIND, { branchId: 'branch-1' })
+    const turn = run(PER_TURN_KIND, { branchId: 'branch-2' })
     generationStore.startRun(refresh)
     generationStore.startRun(turn)
 
@@ -196,15 +231,29 @@ describe('cancelStoryPillRun', () => {
     expect(refresh.abortController.signal.aborted).toBe(false)
   })
 
-  it('leaves another story and the background classifier running', () => {
-    const other = run('per-turn', 'story-2', 'hard-gate', 'branch-9')
-    const classifier = run('periodic-classifier', 'story-1', 'no-gate', 'branch-1')
+  it("interrupts the story's pass and leaves another story's run alone", async () => {
+    const mine = pass()
+    const other = run(PER_TURN_KIND, { storyId: 'story-2', branchId: 'branch-9' })
     generationStore.startRun(other)
-    generationStore.startRun(classifier)
+    generationStore.startRun(mine)
 
     cancelStoryPillRun('story-1')
 
+    await vi.waitFor(() => expect(mine.abortController.signal.aborted).toBe(true))
     expect(other.abortController.signal.aborted).toBe(false)
-    expect(classifier.abortController.signal.aborted).toBe(false)
+  })
+
+  // World and Plot pick their pill's run on their branch; Cancel must end that run, not the
+  // story pill's pick (a turn on a sibling branch outranks the pass story-wide).
+  it("with a branch, ends the run that branch's pill shows", async () => {
+    const mine = pass({ branchId: 'branch-1' })
+    const sibling = run(PER_TURN_KIND, { branchId: 'branch-2' })
+    generationStore.startRun(sibling)
+    generationStore.startRun(mine)
+
+    cancelStoryPillRun('story-1', 'branch-1')
+
+    await vi.waitFor(() => expect(mine.abortController.signal.aborted).toBe(true))
+    expect(sibling.abortController.signal.aborted).toBe(false)
   })
 })

@@ -15,6 +15,7 @@ import {
   navigationStore,
   recoveryReportStore,
   resetAllStores,
+  selectMemoryRun,
   storiesStore,
   type RunState,
 } from '@/lib/stores'
@@ -29,6 +30,10 @@ describe('lib/stores public surface', () => {
     expect(typeof generationStore.finishRun).toBe('function')
     expect(typeof generationStore.abortRun).toBe('function')
     expect(typeof generationStore.isHeadReversalBlocked).toBe('function')
+  })
+
+  it('exposes the memory-run selector', () => {
+    expect(typeof selectMemoryRun).toBe('function')
   })
 
   it('exposes the deferral and interrupt helpers', () => {

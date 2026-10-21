@@ -97,15 +97,13 @@ export type { OpenStory } from './current-story/current-story'
 export type { WorkingSetStore } from './factory/working-set-store'
 export {
   awaitRunTerminal,
-  backgroundClassifierRunning,
   cancelStoryRuns,
   deferredWorkKindOf,
   interruptMemoryRuns,
-  isBackgroundKind,
-  isForegroundGenerating,
   isHeadReversalBlocked,
   isStoryBusy,
   isUserEditBlocked,
+  selectMemoryRun,
 } from './generation/generation'
 export type {
   DeferredWork,

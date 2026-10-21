@@ -258,7 +258,7 @@ export const ReloadsOnRowPatchAndRunSettle: Story = {
     generationStore.startRun({
       runId,
       kind: 'test_run',
-      gateBehavior: 'no-gate',
+      gateBehavior: 'hard-gate',
       interruptible: false,
       beforeTurn: false,
       actionId: 'act_settle',

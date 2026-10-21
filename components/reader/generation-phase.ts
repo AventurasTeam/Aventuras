@@ -1,4 +1,5 @@
 import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { PerTurnPhaseName } from '@/lib/pipeline'
 
 // `satisfies` is the guard: a phase added to the per-turn pipeline widens
@@ -10,12 +11,14 @@ const PILL_PHASE_BY_TURN_PHASE: Record<string, GenerationPhase | undefined> = {
   'piggyback-fallback-classifier': 'classifying',
 } satisfies Record<PerTurnPhaseName, GenerationPhase>
 
-// Kind wins over phase: the map above only covers per-turn, so a second
-// foreground pipeline would otherwise borrow its labels and read "generating
-// narrative" here while Story Settings reads the real one for the same run.
-// Story Settings carries the matching entry in generation-run.ts.
+// Kind wins over phase: the map above only covers per-turn, so another pipeline
+// would otherwise borrow its labels and read "generating narrative" here while
+// Story Settings reads the real one for the same run. Story Settings carries the
+// matching entries in generation-run.ts.
 const PILL_PHASE_BY_RUN_KIND: Record<string, GenerationPhase | undefined> = {
   'chapter-close': 'closing-chapter',
+  // Not 'classifying': that phase is the per-turn piggyback fallback, the turn's own work.
+  [PERIODIC_CLASSIFIER_KIND]: 'updating-memory',
 }
 
 // A run holds the pill from the moment it enters txState, which is before phase
@@ -26,10 +29,9 @@ const UNMAPPED_TURN_PHASE: GenerationPhase = 'generating-narrative'
 
 /**
  * Resolves the reader's status-pill phase from live run state. `turnKind` and
- * `turnPhase` are the `kind` and `currentPhase` of the foreground non-refresh
- * run on this branch, both null when no turn is running. Background runs are
- * excluded from them, so the periodic classifier reaches the pill through
- * `classifierRunning` instead.
+ * `turnPhase` are the `kind` and `currentPhase` of the run that owns the pill on
+ * this branch, a turn else a pass, both null when neither runs. A pass owns the
+ * pill over a refresh beside it, so a refresh shows only while they are null.
  *
  * @returns The pill phase, or undefined when the pill should hide.
  */
@@ -37,7 +39,6 @@ export function readerPillPhase(input: {
   turnKind: string | null
   turnPhase: string | null
   refreshingSuggestions: boolean
-  classifierRunning: boolean
 }): GenerationPhase | undefined {
   if (input.turnPhase !== null)
     return (
@@ -45,8 +46,5 @@ export function readerPillPhase(input: {
       PILL_PHASE_BY_TURN_PHASE[input.turnPhase] ??
       UNMAPPED_TURN_PHASE
     )
-  if (input.refreshingSuggestions) return 'refreshing-suggestions'
-  // Not 'classifying': that phase is the per-turn piggyback fallback, which does
-  // hold the turn up. Same work, opposite answer to "can I keep writing?".
-  return input.classifierRunning ? 'updating-memory' : undefined
+  return input.refreshingSuggestions ? 'refreshing-suggestions' : undefined
 }

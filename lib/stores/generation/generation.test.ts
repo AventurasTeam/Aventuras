@@ -4,15 +4,14 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 
 import {
   awaitRunTerminal,
-  backgroundClassifierRunning,
   cancelStoryRuns,
   deferredWorkKindOf,
   generationStore,
   interruptMemoryRuns,
-  isForegroundGenerating,
   isHeadReversalBlocked,
   isStoryBusy,
   isUserEditBlocked,
+  selectMemoryRun,
   type RunState,
   type TxState,
 } from './generation'
@@ -429,41 +428,6 @@ describe('settleCount', () => {
   })
 })
 
-describe('isForegroundGenerating', () => {
-  beforeEach(() => {
-    generationStore.__reset()
-  })
-
-  function runFor(kind: string, branchId = 'branch_1'): RunState {
-    return { ...run(`run_${kind}`, kind), branchId }
-  }
-
-  it('is false for a periodic-classifier run', () => {
-    generationStore.startRun(runFor('periodic-classifier'))
-    const tx = generationStore.getTxState()
-    expect(isForegroundGenerating(tx, 'branch_1')).toBe(false)
-    expect(backgroundClassifierRunning(tx, 'branch_1')).toBe(true)
-    expect(backgroundClassifierRunning(tx, 'branch_other')).toBe(false)
-  })
-
-  it('is true for a per-turn run on the same branch', () => {
-    generationStore.startRun(runFor('per-turn'))
-    expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(true)
-  })
-
-  it('ignores runs on other branches', () => {
-    generationStore.startRun(runFor('per-turn', 'branch_other'))
-    expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(false)
-  })
-
-  // Denylist, not allowlist: a kind added later must default to foreground, so a
-  // new pipeline shows the pill rather than running invisibly.
-  it('treats an unknown kind as foreground', () => {
-    generationStore.startRun(runFor('some-future-pipeline'))
-    expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(true)
-  })
-})
-
 // Default abort ends the run as the orchestrator does: leaves txState, then resolves its terminal.
 function liveRun(over: Partial<RunState> & { runId: string }, onAbort?: (r: RunState) => void) {
   let resolveTerminal!: () => void
@@ -766,5 +730,33 @@ describe('awaitRunTerminal', () => {
     expect(run.abortController.signal.aborted).toBe(false)
     run.resolveTerminal()
     await waited
+  })
+})
+
+describe('selectMemoryRun', () => {
+  it('returns the interruptible run on the branch, as stored', () => {
+    const refresh = run('run_refresh', 'suggestion-refresh')
+    const memory = pass('run_pass')
+    const state = tx([refresh, memory])
+    expect(selectMemoryRun(state, { branchId: 'b1' })).toBe(memory)
+    // The stored reference, so it is stable under Object.is as a useGeneration selector.
+    expect(selectMemoryRun(state, { branchId: 'b1' })).toBe(
+      selectMemoryRun(state, { branchId: 'b1' }),
+    )
+  })
+
+  it('ignores a run that is not interruptible and a pass on another branch', () => {
+    const state = tx([run('run_turn', 'per-turn'), pass('run_elsewhere', { branchId: 'b2' })])
+    expect(selectMemoryRun(state, { branchId: 'b1' })).toBeUndefined()
+  })
+
+  it("finds a pass on any branch of the story, and none of another story's", () => {
+    const elsewhere = pass('run_elsewhere', { branchId: 'b2' })
+    expect(selectMemoryRun(tx([elsewhere]), { storyId: 's1' })).toBe(elsewhere)
+    expect(
+      selectMemoryRun(tx([pass('run_other', { storyId: 's2', branchId: 'b9' })]), {
+        storyId: 's1',
+      }),
+    ).toBeUndefined()
   })
 })

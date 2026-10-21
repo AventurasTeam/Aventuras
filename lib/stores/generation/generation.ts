@@ -269,26 +269,20 @@ export const generationStore = {
   __reset: api.__reset,
 }
 
-// Denylist, not an allowlist: an unlisted kind reads as foreground, so a pipeline
-// added later shows the pill instead of running invisibly.
-const BACKGROUND_KINDS: readonly string[] = [PERIODIC_CLASSIFIER_KIND]
-
-/** Exported so a caller narrowing further (the pill splits foreground by phase)
- * composes with the denylist instead of re-hardcoding it. */
-export function isBackgroundKind(kind: string): boolean {
-  return BACKGROUND_KINDS.includes(kind)
-}
-
-export function isForegroundGenerating(txState: TxState, branchId: string): boolean {
-  return [...txState.runs.values()].some(
-    (r) => r.branchId === branchId && !isBackgroundKind(r.kind),
-  )
-}
-
-export function backgroundClassifierRunning(txState: TxState, branchId: string): boolean {
-  return [...txState.runs.values()].some(
-    (r) => r.branchId === branchId && r.kind === PERIODIC_CLASSIFIER_KIND,
-  )
+/**
+ * The pass or close in flight on a branch, or anywhere in a story. Returns the stored run,
+ * so it is stable under Object.is and safe as a `useGeneration` selector.
+ */
+export function selectMemoryRun(
+  txState: TxState,
+  scope: { branchId: string } | { storyId: string },
+): RunState | undefined {
+  for (const run of txState.runs.values()) {
+    if (!run.interruptible) continue
+    if ('branchId' in scope ? run.branchId === scope.branchId : run.storyId === scope.storyId)
+      return run
+  }
+  return undefined
 }
 
 // Waits on an in-flight run of `kind` on `branchId` (no-op if none): 'cancel' aborts it first,
