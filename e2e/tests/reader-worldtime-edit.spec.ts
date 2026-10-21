@@ -62,12 +62,9 @@ test.describe('reader — edit an entry world time', () => {
     return rows[0][0] as number
   }
 
-  // The edit's own delta shape (lib/actions/story-entries/world-time.ts): one
-  // op=update row, source user_edit, anchored on the edited entry. Filtering on
-  // source keeps a classifier pass — which anchors ai_classifier rows
-  // on the same entry — out of the count.
-  // Keep the entry_id predicate: it is the only assertion anywhere that pins the
-  // survival anchor, so a regression to a null anchor fails the count below.
+  // Edit delta (lib/actions/story-entries/world-time.ts): op=update, source user_edit; the
+  // source filter drops ai_classifier rows on the same entry. Keep entry_id: the only
+  // assertion pinning the survival anchor, so a null anchor fails the count.
   async function editDeltaCount(entryId: string): Promise<number> {
     const rows = await queryApp(
       app.window,

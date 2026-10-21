@@ -18,11 +18,8 @@ type GenerationPhase =
   | 'closing-chapter'
   | 'refreshing-suggestions'
 
-// `blocking` is whether the user waits on the phase, and it drives both columns
-// beside it and the priority rule below. A blocking phase owns the cancel, so it
-// keeps the slot even against an error; a background one would drop the accent
-// fill and yield, since nothing is lost by waiting for it and the error may be
-// waiting on the user. No v1 phase is background: the pass holds the gate too.
+// `blocking`: the user waits, so it owns the cancel and outranks an error; a background
+// phase yields, as the error may await the user. None in v1: the pass holds the gate too.
 const PHASE_APPEARANCE: Record<
   GenerationPhase,
   { blocking: boolean; tone: TagTone; spinnerSlot: keyof ThemeColorSlots }

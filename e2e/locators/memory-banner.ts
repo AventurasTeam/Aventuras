@@ -2,10 +2,8 @@ import type { Locator, Page } from '@playwright/test'
 
 import { t } from '../harness/i18n'
 
-// The memory-run banner below every in-story top bar (components/compounds/memory-run-banner.tsx,
-// testID `memory-run-banner`), rendered only while a pass runs. Its Cancel shares `common:cancel`
-// with the composer's, so every query is scoped to the banner. A stack keeps the screens under the
-// top one mounted, each with its banner, so only the visible one counts.
+// components/compounds/memory-run-banner.tsx: Cancel shares `common:cancel` with the composer's, so
+// scope queries to it. A stack keeps lower screens' banners mounted; only the visible one counts.
 const banner = (page: Page): Locator =>
   page.getByTestId('memory-run-banner').filter({ visible: true })
 

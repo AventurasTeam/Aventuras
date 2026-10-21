@@ -23,9 +23,8 @@ import { reader } from '../locators/reader'
 import { storyLeave } from '../locators/story-leave'
 import { toast } from '../locators/toast'
 
-// A turn's commit chaining its pass, and the pass committing deltas, only happen in
-// a running app. Drive the UI, assert the graph through the DB bridge
-// (docs/testing.md -> Selector strategy, tier 1).
+// A turn's commit chaining its pass only happens in a running app; assert the graph through the
+// DB bridge (docs/testing.md -> Selector strategy, tier 1).
 test.describe('periodic classifier — graph population', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -394,14 +393,9 @@ test.describe('periodic classifier — factions', () => {
   })
 })
 
-// Covers the configureClassifierEmbedder wiring, which unit tests cannot reach:
-// reconcileNewEntity is tested with an injected embedder, so only a launch shows
-// boot handing it the real one. Needs a real name collision resolved by a real
-// embedding (docs/testing.md -> Embedder in E2E).
-//
-// Collision target: the fixture's staged "The Ashen Sage" (br_hero_main). The
-// paraphrase below scores ~0.87 against the seeded description on the real MiniLM
-// model, above TAU_HIGH (0.75).
+// configureClassifierEmbedder wiring: only a launch shows boot handing reconcileNewEntity the real
+// embedder (docs/testing.md -> Embedder in E2E). The paraphrase below scores ~0.87 against the
+// fixture's staged "The Ashen Sage" (br_hero_main) on real MiniLM, above TAU_HIGH (0.75).
 test.describe('periodic classifier — disambiguation seam', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -551,9 +545,8 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
   })
 })
 
-// A pre-flight halt never reaches the phase, so nothing records the failure: the
-// status would stay idle, never counting toward failed-persistent, and every
-// committed turn would chain the doomed run again.
+// A pre-flight halt never reaches the phase, so nothing records the failure: status would stay
+// idle, never counting toward failed-persistent, and every commit would chain the doomed run again.
 test.describe('periodic classifier — unassigned agent', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -635,10 +628,8 @@ function gatedPassReply(title: string) {
   }
 }
 
-// classifier.md → Pipeline framing: a pass holds the gate after the turn that brings it due, a
-// head reversal or Cancel interrupts it and defers it to the next Send, and leaving the story asks
-// first. The mock holds the pass's call open, so every step acts on a pass provably in flight.
-// The tests build on one another, so the describe is serial (see reader-regenerate.spec.ts).
+// classifier.md → Pipeline framing. The mock holds the pass's call open, so every step acts on a
+// pass provably in flight. Serial: the tests build on one another (see reader-regenerate.spec.ts).
 test.describe('periodic classifier — the gated pass', () => {
   test.describe.configure({ mode: 'serial' })
 

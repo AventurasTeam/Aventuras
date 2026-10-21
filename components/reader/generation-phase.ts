@@ -11,10 +11,8 @@ const PILL_PHASE_BY_TURN_PHASE: Record<string, GenerationPhase | undefined> = {
   'piggyback-fallback-classifier': 'classifying',
 } satisfies Record<PerTurnPhaseName, GenerationPhase>
 
-// Kind wins over phase: the map above only covers per-turn, so another pipeline
-// would otherwise borrow its labels and read "generating narrative" here while
-// Story Settings reads the real one for the same run. Story Settings carries the
-// matching entries in generation-run.ts.
+// Kind wins over phase: the map above covers only per-turn, so another pipeline
+// would borrow its labels and disagree with Story Settings (generation-run.ts).
 const PILL_PHASE_BY_RUN_KIND: Record<string, GenerationPhase | undefined> = {
   'chapter-close': 'closing-chapter',
   // Not 'classifying': that phase is the per-turn piggyback fallback, the turn's own work.
@@ -29,9 +27,8 @@ const UNMAPPED_TURN_PHASE: GenerationPhase = 'generating-narrative'
 
 /**
  * Resolves the reader's status-pill phase from live run state. `turnKind` and
- * `turnPhase` are the `kind` and `currentPhase` of the run that owns the pill on
- * this branch, a turn else a pass, both null when neither runs. A pass owns the
- * pill over a refresh beside it, so a refresh shows only while they are null.
+ * `turnPhase` are the `kind` and `currentPhase` of the run owning the pill on this
+ * branch (a turn, else a pass), both null when none runs; a refresh shows only then.
  *
  * @returns The pill phase, or undefined when the pill should hide.
  */

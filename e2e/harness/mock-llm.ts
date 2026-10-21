@@ -124,9 +124,8 @@ export type MockLlm = {
   /** Finish any held narrative streams with the current narrative content. */
   releaseNarrative: () => void
   /**
-   * One-shot: the next structured call whose prompt matches the `agentName` shape is recorded in
-   * `requests`, then held unanswered until releaseStructured() or a client abort — the in-flight
-   * window a gated pass's interrupt and Cancel specs act in.
+   * One-shot: the next structured call matching the `agentName` shape is recorded in `requests`,
+   * then held unanswered until releaseStructured() or a client abort (the in-flight window).
    */
   holdNextStructured: (agentName: string) => void
   /** Answer every held structured call with its shape's reply as set now. */
@@ -222,7 +221,7 @@ export async function startMockLlm(): Promise<MockLlm> {
   // a client abort can drop them — an unfinished socket would hang server.close().
   const heldResponses = new Set<ServerResponse>()
   let holdStructuredNext: string | null = null
-  // Held structured calls by shape name; a client abort drops one, like the held streams above.
+  // res → shape name to answer with; a client abort drops it, like heldResponses.
   const heldStructured = new Map<ServerResponse, string>()
 
   // The renderer fetches cross-origin (its own origin → this server), which

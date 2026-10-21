@@ -174,9 +174,8 @@ describe('useLiveRollbackCounts', () => {
     expect(result.current.target?.counts).toEqual(OPENED)
   })
 
-  // The confirm's AlertDialogAction closes the modal on press, and a counts-changed refusal
-  // re-opens it on the counts the action returned. Settles while it was shut read nothing;
-  // the re-opened modal stays live.
+  // AlertDialogAction closes the modal on press; a counts-changed refusal re-opens it on the
+  // returned counts. Settles while shut read nothing, and the re-opened modal stays live.
   it('keeps counts swapped in by a counts-changed refusal live', async () => {
     const load = vi.fn<Load>(async () => AFTER_PASS)
     const onCounts = vi.fn()

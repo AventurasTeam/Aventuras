@@ -20,9 +20,8 @@ type StorySettingsGenerationPhase =
 type PillScope = { storyId: string | undefined; branchId?: string }
 
 /**
- * The one run the story's status pill describes, so its Cancel ends the run it names: a turn,
- * else a pass or a close (which own the pill over a refresh beside them), else another
- * hard-gate run, else a refresh. `branchId` narrows the pick to that branch of the story.
+ * The one run the pill names, so its Cancel ends that run; a pass or close owns the pill over a
+ * refresh beside it. `branchId` narrows the pick to that branch.
  */
 function pillRun(txState: TxState, scope: PillScope): RunState | undefined {
   const runs = [...txState.runs.values()].filter(
@@ -46,9 +45,8 @@ export function selectStorySettingsGenerationRunKind(
 }
 
 /**
- * Cancels the pill's run on the branch it runs on; a pass or a close, being interruptible, is
- * deferred to the next Send. Pass the `branchId` the screen gave `useStoryGenerationGate`, so
- * Cancel ends the run that pill names.
+ * Cancels the pill's run; an interruptible one (pass, close) is deferred to the next Send. Pass the
+ * same `branchId` as `useStoryGenerationGate`, so Cancel ends the run the pill names.
  */
 export function cancelStoryPillRun(storyId: string | undefined, branchId?: string): void {
   const run = pillRun(generationStore.getTxState(), { storyId, branchId })
@@ -71,8 +69,7 @@ export function generationGateReason(
 
 /**
  * The pill's run kind, whether it runs before the user's turn, and whether and why edits are
- * blocked. `branchId` picks the pill's run among that branch's runs (World, Plot); omitted,
- * among the story's (Story Settings).
+ * blocked. `branchId` scopes the pill's run to that branch (World, Plot); omitted, to the story.
  */
 export function useStoryGenerationGate(
   storyId: string | undefined,

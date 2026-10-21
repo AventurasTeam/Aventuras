@@ -31,8 +31,7 @@ describe('headTurnIdsOf', () => {
     expect(headTurnIdsOf([], 'e1').size).toBe(0)
   })
 
-  // A window that stops short of the branch's live edge describes a different turn, which the
-  // action layer would refuse (the same check resolveSaveAndRegenTurn makes).
+  // A window short of the live edge describes another turn; the action layer would refuse it.
   it('is empty when the window ends on a turn the host did not name as the tail', () => {
     const rows = [entry('e1', 'user_action'), entry('e2', 'ai_reply')]
     expect(headTurnIdsOf(rows, 'e9').size).toBe(0)

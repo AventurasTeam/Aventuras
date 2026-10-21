@@ -44,7 +44,7 @@ vi.mock('@/lib/stores', async (importOriginal) => ({
   cancelStoryRuns,
 }))
 
-// Task 1's own cancel, for the case whose subject is its wait on a reversal.
+// The real cancel, for the case whose subject is its wait on a reversal.
 let realCancelStoryRuns: CancelStoryRuns
 beforeAll(async () => {
   const actual = await vi.importActual<Record<string, unknown>>('@/lib/stores')
@@ -207,7 +207,7 @@ describe('useStoryLeaveGuard', () => {
     expect(result.current.dialog?.props.leaving).toBe(false)
   })
 
-  // Through Task 1's real cancel: a reversal is in flight too, and nothing aborts it.
+  // Through the real cancel: a reversal is in flight too, and nothing aborts it.
   it('Cancel & leave waits for a reversal to finish before leaving', async () => {
     cancelStoryRuns.mockImplementation(realCancelStoryRuns)
     generationStore.setReversalInProgress(true)

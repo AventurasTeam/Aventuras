@@ -1,10 +1,9 @@
 import { resolveHeadTurn, type TurnEntry } from '@/lib/head-turn'
 
 /**
- * The head turn's entries: the narrative tail and, when the tail answers one, its
- * `user_action`. The same membership `updateStoryEntryContent` lets through a pass.
- * Empty unless the window's last turn is the tail the host named, as for
- * `resolveSaveAndRegenTurn`: a window short of the live edge describes another turn.
+ * The head turn's entries: the narrative tail plus the `user_action` it answers, if any — the
+ * membership `updateStoryEntryContent` lets through a pass. Empty unless the window's last turn
+ * is the host-named tail (as `resolveSaveAndRegenTurn`): short of the live edge it's another turn.
  */
 export function headTurnIdsOf(
   rows: readonly TurnEntry[],

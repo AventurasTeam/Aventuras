@@ -251,9 +251,8 @@ export default function ReaderComposerRoute() {
   const headReversalGateHeld = generationStore.useGeneration((s) =>
     isHeadReversalBlocked(s.txState, branchId),
   )
-  // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn
-  // leaves Send in place and refused, so the composer stays live. Primitives, so the pass's
-  // phase ticks don't re-render the reader.
+  // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn leaves
+  // Send refused but the composer live. Primitives, so phase ticks don't re-render the reader.
   const sendRunKind = generationStore.useGeneration(
     (s) => findSendRun(s.txState, branchId)?.kind ?? null,
   )
@@ -733,10 +732,8 @@ export default function ReaderComposerRoute() {
     ],
   )
 
-  // Guarded here rather than at the callers because both the immediate tap and
-  // the modal's confirm funnel through this one dispatch. When the action refuses a
-  // confirmed regenerate (one passed `expectedCounts`), resolves to the counts the
-  // confirm re-opens on; null on every other path.
+  // Guarded here, not at the callers: the immediate tap and the confirm both funnel through it.
+  // Resolves to the counts a refused confirmed regenerate re-opens the confirm on; null otherwise.
   const runRegenerate = useCallback(
     async (targetId: string, expectedCounts?: RollbackCounts): Promise<RollbackCounts | null> => {
       if (!storyId || !hydrationSucceeded) return null

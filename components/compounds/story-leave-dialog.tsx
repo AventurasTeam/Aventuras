@@ -21,7 +21,7 @@ type StoryLeaveDialogProps = {
   onConfirmLeave: () => void
 }
 
-/** Canon copy (principles.md → Affordance loci), which departs from the AlertDialog copy contract. */
+/** Canon copy (principles.md → Affordance loci), departing from the AlertDialog copy contract. */
 export function StoryLeaveDialog({
   open,
   leaving,

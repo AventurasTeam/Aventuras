@@ -98,8 +98,7 @@ describe('selectStorySettingsGenerationRunKind', () => {
     ).toBe('chapter-close')
   })
 
-  // generation-pipeline.md → Pill currentPhase: the pass owns the pill over a refresh beside
-  // it, so the pill's Cancel ends the pass, not the refresh.
+  // generation-pipeline.md → Pill currentPhase: the pill's Cancel ends the pass, not the refresh.
   it('gives the pill to a pass over a refresh running beside it', () => {
     expect(
       selectStorySettingsGenerationRunKind(tx(run(SUGGESTION_REFRESH_KIND), pass()), 'story-1'),

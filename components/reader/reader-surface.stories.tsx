@@ -118,8 +118,7 @@ const PASS_ROWS: StoryEntry[] = [
   }),
 ]
 
-// The tail carries a time footer and scene metadata, so both editors would be live
-// without the gate: their absence below is the gate's doing.
+// Tail's time and scene editors would be live ungated: their absence is the gate's doing.
 const PASS_IN_FLIGHT_ARGS = {
   rows: PASS_ROWS,
   tailEntryId: 'p5',
@@ -338,9 +337,8 @@ export const SaveAndRegenerateAbsentOffHead: Story = {
 }
 
 /**
- * A pass holds the gate. The head reversals interrupt it, so every ↻ and ×, and the head
- * turn's two pencils, stay live. An older entry's pencil and the tail's time and scene
- * editors keep the whole gate (principles.md → Edit restrictions during in-flight generation).
+ * Head reversals interrupt a pass: every ↻ and ×, and the head turn's pencils, stay live;
+ * the rest keeps the gate (principles.md → Edit restrictions during in-flight generation).
  */
 export const PassInFlightHeadTurnLive: Story = {
   args: { ...PASS_IN_FLIGHT_ARGS, headReversalBlocked: false },

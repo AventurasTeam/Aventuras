@@ -10,8 +10,8 @@ import {
 export type MemoryRunBannerState = { label: string; onCancel: () => void }
 
 /**
- * The banner for the open branch's pass: its label, and a Cancel that interrupts it, which
- * defers it to the next Send. Null while no pass runs there.
+ * The open branch's pass banner: its label and a Cancel that interrupts the pass (deferring it to
+ * the next Send). Null while no pass runs there.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)

@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STRUCTURED_SHAPES } from './shapes'
 import { EXAMPLES, startMockLlm, type MockLlm } from '../../e2e/harness/mock-llm'
 
-// A reply only a release can carry: set after the call arrived, so an answer at arrival
-// would carry the inert default instead.
+// Set after the call arrived: an answer at arrival would carry the inert default, not this.
 const PASS_REPLY = {
   happenings: [{ title: 'held', sourceTurn: 't1' }],
   relationships: [],
@@ -20,7 +19,7 @@ function blockOf(name: string): string {
   return shape.block
 }
 
-/** A structured request whose prompt carries `name`'s schema block, as the app's auto path sends it. */
+/** A request whose prompt carries `name`'s schema block, as the app's auto path sends it. */
 function structuredCall(mock: MockLlm, name: string): Promise<Response> {
   return fetch(`${mock.url}/chat/completions`, {
     method: 'POST',

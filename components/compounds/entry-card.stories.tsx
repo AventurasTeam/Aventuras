@@ -312,10 +312,7 @@ export const Disabled: StoryT = {
 
 const PASS_REASON = 'Updating memory. Cancel to edit.'
 
-/**
- * A pass holds the gate on an older reply: ↻ and × interrupt it, so they stay live, while
- * the pencil, branch, flip era and the world-time footer keep the whole gate.
- */
+/** Older reply during a pass: ↻ and × interrupt it and stay live; the rest keep the whole gate. */
 export const OlderEntryDuringPass: StoryT = {
   ...wrap,
   args: {

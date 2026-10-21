@@ -231,7 +231,7 @@ function viewWrite(
   return { edited, value: edited ? value : stored }
 }
 
-/** The draft against the links stored at Save, by the other character: a pair is written at most once. */
+/** The draft against the links stored at Save, per other character; no pair is written twice. */
 function relationshipActions(
   branchId: string,
   selfId: string,

@@ -9,9 +9,8 @@ import { createSeededUserDataDir, setClassifierCadence } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// The periodic classifier against a REAL provider: cadence 2, a turn, then the pass it chains,
-// asserting the graph the pass actually wrote. Opt-in — it needs a local OpenAI-compatible
-// server, so it skips unless SMOKE_LLM_URL is set:
+// The periodic classifier against a REAL provider: cadence 2, a turn, then the pass it chains.
+// Opt-in — needs a local OpenAI-compatible server, so it skips unless SMOKE_LLM_URL is set:
 //   SMOKE_LLM_URL=http://localhost:5001/v1 SMOKE_LLM_MODEL=<id> pnpm test:e2e classifier-real-provider
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
@@ -188,10 +187,8 @@ test.describe('periodic classifier — real provider smoke', () => {
       )
 
     let attempts = 0
-    // A real model fails turns: an entity patch that restates current state is
-    // rejected by the action layer and takes the whole run down. Keep submitting
-    // until a reply lands rather than asserting a clean first try — the
-    // classifier only needs committed turns to count.
+    // A real model fails turns (an entity patch restating current state is rejected and takes the
+    // run down): keep submitting until a reply lands — the classifier only needs committed turns.
     const landTurn = async (): Promise<void> => {
       const target = (await replies()) + 1
       while ((await replies()) < target) {
@@ -203,9 +200,8 @@ test.describe('periodic classifier — real provider smoke', () => {
         await reader.composer(app.window).fill(PROMPTS[attempts]!)
         attempts++
         await reader.send(app.window).click()
-        // Settle on the run's own outcome, never on the reply row: the narrative
-        // phase commits prose before later phases run, so a reply can appear and
-        // then be reversed when a subsequent phase's action is rejected.
+        // Settle on the run's outcome, never the reply row: the narrative phase commits prose
+        // before later phases, so a reply can appear, then be reversed when a later action fails.
         await expect
           .poll(settledTurns, { timeout: TURN_SETTLE_MS, intervals: [2000] })
           .toBeGreaterThan(settled)
@@ -213,7 +209,6 @@ test.describe('periodic classifier — real provider smoke', () => {
     }
 
     let passCount = 0
-    // The landed turn's commit chains the pass, which settles within its call's bound.
     const turnAndPass = async (): Promise<void> => {
       const from = (await classifierStatus()).processedThrough ?? 0
       const chained = await chainedPasses()
@@ -258,8 +253,7 @@ test.describe('periodic classifier — real provider smoke', () => {
 
     process.stdout.write('\n### passes\n')
     await turnAndPass()
-    // classifier.md → Auto-retry policy: a failed pass keeps the watermark, and the
-    // next turn's commit runs it again.
+    // classifier.md → Auto-retry policy: the next turn's commit reruns a failed pass.
     if ((await classifierStatus()).state === 'retrying') await turnAndPass()
     const failedTurns = await count(
       `SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn' AND outcome = 'failed'`,

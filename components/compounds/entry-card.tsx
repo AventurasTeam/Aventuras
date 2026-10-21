@@ -848,8 +848,7 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const [sceneEditOpen, setSceneEditOpen] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
-  // Head reversals pass through a pass or a close, so the host gates them apart from
-  // `disabled`, which every other control keeps.
+  // Head reversals are gated apart from `disabled`: they pass through a pass or a close.
   const editOff = editDisabled ?? disabled
   const reversalOff = reversalDisabled ?? disabled
 

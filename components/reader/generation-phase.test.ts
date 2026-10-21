@@ -17,9 +17,8 @@ describe('readerPillPhase', () => {
     expect(readerPillPhase({ ...TURN, turnPhase: 'retrieval' })).toBe('recalling-memory')
   })
 
-  // The per-turn phase map does not cover other pipelines, so without a kind
-  // check chapter-close borrows its labels and disagrees with the same run's
-  // label in Story Settings.
+  // The per-turn phase map covers only that pipeline: without a kind check, chapter-close borrows
+  // its labels and disagrees with the same run's label in Story Settings.
   it('labels a chapter-close run by kind rather than borrowing a per-turn label', () => {
     expect(
       readerPillPhase({ ...IDLE, turnKind: 'chapter-close', turnPhase: 'chapter-metadata' }),

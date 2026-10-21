@@ -37,10 +37,8 @@ export type ReaderSurfaceProps = {
   hasOlder: boolean
   editBlocked: boolean
   /**
-   * The head reversals' gate: isHeadReversalBlocked for the branch, OR'd with the host's
-   * dispatch guard as `editBlocked` is. ↻, × and the head turn's pencil follow it.
-   * Implies `editBlocked` (a head reversal is never blocked while edits are open).
-   * Defaults to `editBlocked`.
+   * Head reversals' gate (↻, ×, the head turn's pencil): isHeadReversalBlocked for the branch,
+   * OR'd with the host's dispatch guard as `editBlocked` is. Implies `editBlocked`; defaults to it.
    */
   headReversalBlocked?: boolean
   jumpButtonEnabled: boolean

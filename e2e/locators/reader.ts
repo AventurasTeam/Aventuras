@@ -19,10 +19,8 @@ const WORLD_TIME_BREAK_LABEL = new RegExp(
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
   send: (page: Page): Locator => page.getByRole('button', { name: t('reader:send') }),
-  // The composer swaps Send → Cancel (`common:cancel`) while Send's run is in flight; the memory
-  // banner's Cancel shares the name. The composer has no role or testID, so its box is the deepest
-  // element holding its textarea and its Send-or-Cancel: every candidate is an ancestor of the
-  // one textarea, so document order puts the deepest last.
+  // Send swaps to Cancel mid-run, and the memory banner's Cancel shares the name. The composer has
+  // no role or testID: its box is the deepest ancestor of the textarea holding Send-or-Cancel.
   cancel: (page: Page): Locator => {
     const cancel = page.getByRole('button', { name: t('cancel'), exact: true })
     return page
