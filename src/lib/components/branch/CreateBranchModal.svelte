@@ -58,7 +58,7 @@
   dismissible={!saving}
 >
   <ResponsiveModal.Content
-    class="max-w-md gap-0 p-0"
+    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
     interactOutsideBehavior="ignore"
     escapeKeydownBehavior={saving ? 'ignore' : 'close'}
   >
@@ -69,26 +69,29 @@
           at Entry {entryNumber(forkEntry)}{/if}
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
-    <div class="space-y-3 px-6 py-4">
-      <Input
-        type="text"
-        class="h-9 text-sm"
-        placeholder="Branch name..."
-        bind:value={name}
-        disabled={saving}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') void create()
-        }}
+    <!-- Buttons scroll with the content, as in the other confirmation modals. -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
+      <div class="space-y-3 px-6 py-4">
+        <Input
+          type="text"
+          class="h-9 text-sm"
+          placeholder="Branch name..."
+          bind:value={name}
+          disabled={saving}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') void create()
+          }}
+        />
+      </div>
+      <ModalActions
+        label="Create Branch"
+        icon={GitBranch}
+        tone="branch"
+        onCancel={cancel}
+        onConfirm={() => void create()}
+        busy={saving}
+        disabled={!name.trim() || !checkpoint}
       />
     </div>
-    <ModalActions
-      label="Create Branch"
-      icon={GitBranch}
-      tone="branch"
-      onCancel={cancel}
-      onConfirm={() => void create()}
-      busy={saving}
-      disabled={!name.trim() || !checkpoint}
-    />
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

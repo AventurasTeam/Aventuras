@@ -55,13 +55,14 @@
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
 
-    <div class="min-h-0 flex-1">
+    <!-- Buttons scroll with the content, so a phone reaches the switch above them. -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
       {#if entries.length === 0}
         <div class="text-muted-foreground flex h-40 items-center justify-center">
           No entries available for chapter creation.
         </div>
       {:else}
-        <ScrollArea class="h-[50vh] p-4">
+        <ScrollArea class="h-[50dvh] p-4">
           <div class="space-y-1">
             {#each entries as entry, idx (entry.id)}
               <button
@@ -97,17 +98,17 @@
           Lore management reads the story after this chapter
         </label>
       {/if}
-    </div>
 
-    <ResponsiveModal.Footer class="mt-auto border-t px-4 py-4">
-      <Button variant="outline" onclick={onClose}>Cancel</Button>
-      <Button onclick={handleConfirm} disabled={entries.length === 0 || ui.memoryLoading}>
-        {#if ui.memoryLoading}
-          Creating...
-        {:else}
-          Create Chapter
-        {/if}
-      </Button>
-    </ResponsiveModal.Footer>
+      <ResponsiveModal.Footer class="border-t px-4 py-4">
+        <Button variant="outline" onclick={onClose}>Cancel</Button>
+        <Button onclick={handleConfirm} disabled={entries.length === 0 || ui.memoryLoading}>
+          {#if ui.memoryLoading}
+            Creating...
+          {:else}
+            Create Chapter
+          {/if}
+        </Button>
+      </ResponsiveModal.Footer>
+    </div>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
