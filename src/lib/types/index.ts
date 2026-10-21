@@ -846,7 +846,6 @@ export type ImageProviderType =
   | 'openai'
   | 'openai-compatible'
   | 'openrouter'
-  | 'chutes'
   | 'pollinations'
   | 'google'
   | 'zhipu'

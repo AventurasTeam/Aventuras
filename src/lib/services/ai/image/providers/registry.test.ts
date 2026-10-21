@@ -68,7 +68,6 @@ describe('Image Provider Registry', () => {
       openai: true,
       'openai-compatible': true,
       openrouter: true,
-      chutes: true,
       pollinations: true,
       google: true,
       zhipu: true,
@@ -100,7 +99,6 @@ describe('Image Provider Registry', () => {
       'nanogpt',
       'openai',
       'openrouter',
-      'chutes',
       'google',
       'zhipu',
       // Its model list is open, its generation is not.
@@ -163,15 +161,12 @@ describe('Image Provider Registry', () => {
       },
     )
 
-    it.each([
-      'nanogpt',
-      'openrouter',
-      'chutes',
-      'pollinations',
-      'google',
-    ] satisfies ImageProviderType[])('offers none for the fixed endpoint of %s', (providerType) => {
-      expect(baseUrlMode(providerType)).toBe('none')
-    })
+    it.each(['nanogpt', 'openrouter', 'pollinations', 'google'] satisfies ImageProviderType[])(
+      'offers none for the fixed endpoint of %s',
+      (providerType) => {
+        expect(baseUrlMode(providerType)).toBe('none')
+      },
+    )
 
     it('offers none for an unknown provider', () => {
       expect(baseUrlMode('unknown-provider')).toBe('none')

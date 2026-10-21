@@ -22,7 +22,6 @@ import { fetchPublicImageBase64 } from './fetchAdapter'
 import { createNanoGPTProvider } from './nanogpt'
 import { createOpenAIProvider } from './openai'
 import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
-import { createChutesProvider } from './chutes'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider } from './google'
 import { createZhipuProvider } from './zhipu'
@@ -43,7 +42,6 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   openai: createOpenAIProvider,
   'openai-compatible': createOpenAICompatibleProvider,
   openrouter: createOpenRouterProvider,
-  chutes: createChutesProvider,
   pollinations: createPollinationsProvider,
   google: createGoogleProvider,
   zhipu: createZhipuProvider,
@@ -56,7 +54,6 @@ export const IMAGE_PROVIDER_LABELS: Record<ImageProviderType, string> = {
   openai: 'OpenAI',
   'openai-compatible': 'OpenAI Compatible',
   openrouter: 'OpenRouter',
-  chutes: 'Chutes',
   pollinations: 'Pollinations',
   google: 'Google AI Studio',
   zhipu: 'Zhipu CogView',
@@ -80,7 +77,6 @@ const PROVIDER_API_KEY: Record<ImageProviderType, FieldMode> = {
   openai: 'required',
   'openai-compatible': 'optional',
   openrouter: 'required',
-  chutes: 'required',
   google: 'required',
   zhipu: 'required',
   pollinations: 'required',
@@ -94,7 +90,6 @@ const PROVIDER_BASE_URL: Record<ImageProviderType, FieldMode> = {
   openai: 'optional',
   'openai-compatible': 'required',
   openrouter: 'none',
-  chutes: 'none',
   google: 'none',
   zhipu: 'optional',
   pollinations: 'none',
@@ -110,7 +105,6 @@ const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
   openrouter: true,
   pollinations: true,
   google: true,
-  chutes: false,
   zhipu: false,
   comfyui: false,
   a1111: false,
@@ -330,7 +324,7 @@ export async function listImageModelsByProvider(
  */
 export async function getProviderSamplerInfo(
   baseUrl?: string,
-  providerType: 'comfyui' | 'a1111' = 'comfyui',
+  providerType: Extract<ImageProviderType, 'comfyui' | 'a1111'> = 'comfyui',
 ): Promise<{ samplers: string[]; schedulers: string[] }> {
   try {
     const config: ImageProviderConfig = {

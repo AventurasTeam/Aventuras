@@ -191,12 +191,12 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
 
   chutes: {
     name: 'Chutes',
-    description: 'Text and image generation',
+    description: 'Text generation',
     baseUrl: 'https://llm.chutes.ai/v1',
     requiresApiKey: true,
     capabilities: {
       textGeneration: true,
-      imageGeneration: true,
+      imageGeneration: false,
       structuredOutput: false,
       reasoning: true,
     },

@@ -8,7 +8,6 @@ vi.mock('./sdkImage', () => ({ createImageSdkFetch: vi.fn(), generateSdkImage: v
 
 import { imageGetFetch } from './fetchAdapter'
 import { createNanoGPTProvider } from './nanogpt'
-import { createChutesProvider } from './chutes'
 import { createOpenRouterProvider } from './openrouter'
 import { createPollinationsProvider } from './pollinations'
 import { createOpenAIProvider } from './openai'
@@ -20,7 +19,6 @@ const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unkno
 // A successful fetch that lists no image model, per adapter.
 const EMPTY: [string, () => ImageProvider, unknown][] = [
   ['NanoGPT', () => createNanoGPTProvider({ apiKey: 'k' }), { models: { image: {} } }],
-  ['Chutes', () => createChutesProvider({ apiKey: 'k' }), { items: [] }],
   ['OpenRouter', () => createOpenRouterProvider({ apiKey: 'k' }), { data: [] }],
   ['Pollinations', () => createPollinationsProvider({ apiKey: 'k' }), []],
   ['OpenAI', () => createOpenAIProvider({ apiKey: 'k' }), { data: [{ id: 'gpt-4o' }] }],
@@ -87,24 +85,6 @@ describe('model discovery', () => {
     expect(models.map((m) => m.id)).toEqual(['google/gemini-2.5-flash-image'])
     expect(imageGetFetch).toHaveBeenCalledWith(
       'https://openrouter.ai/api/v1/models',
-      { Authorization: 'Bearer k' },
-      expect.anything(),
-    )
-  })
-
-  it('lists Chutes models through the Tauri transport', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(
-      reply({
-        items: [
-          { name: 'z-image-turbo', standard_template: 'diffusion' },
-          { name: 'some-llm', standard_template: 'vllm' },
-        ],
-      }),
-    )
-    const models = await createChutesProvider({ apiKey: 'k' }).listModels('k')
-    expect(models.map((m) => m.id)).toEqual(['z-image-turbo'])
-    expect(imageGetFetch).toHaveBeenCalledWith(
-      expect.stringContaining('api.chutes.ai/chutes/'),
       { Authorization: 'Bearer k' },
       expect.anything(),
     )
