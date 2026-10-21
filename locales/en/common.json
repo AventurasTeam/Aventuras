@@ -146,6 +146,10 @@
       "cancelChapterClose": "Cancel chapter close",
       "cancelMemoryUpdate": "Cancel memory update",
       "cancelSuggestionRefresh": "Cancel suggestion refresh"
+    },
+    "memoryBanner": {
+      "updating": "Updating memory…",
+      "updatingBeforeTurn": "Updating memory before your turn…"
     }
   },
   "collisionRow": {
