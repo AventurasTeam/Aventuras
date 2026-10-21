@@ -85,6 +85,10 @@ describe('Image Provider Registry', () => {
     it('returns false for unknown providers', () => {
       expect(supportsImageGeneration('unknown-provider')).toBe(false)
     })
+
+    it('does not mistake an inherited object key for a provider', () => {
+      expect(supportsImageGeneration('constructor')).toBe(false)
+    })
   })
 
   describe('requiresApiKey', () => {

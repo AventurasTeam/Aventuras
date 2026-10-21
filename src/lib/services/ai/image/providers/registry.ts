@@ -136,7 +136,7 @@ function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?:
  * Check if a provider type supports image generation.
  */
 export function supportsImageGeneration(providerType: string): providerType is ImageProviderType {
-  return providerType in PROVIDER_FACTORIES
+  return Object.hasOwn(PROVIDER_FACTORIES, providerType)
 }
 
 export const IMAGE_PROVIDER_OPTIONS = Object.entries(IMAGE_PROVIDER_LABELS).flatMap(
