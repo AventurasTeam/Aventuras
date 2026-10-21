@@ -2,21 +2,35 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import type { RunState, TxState } from '@/lib/stores'
+import {
+  awaitRunTerminal,
+  generationStore,
+  interruptMemoryRuns,
+  type RunState,
+  type TxState,
+} from '@/lib/stores'
 
-import { cancelSendRun, findSendRun } from './send-run'
+import {
+  cancelComposerRun,
+  cancelPillRun,
+  cancelSendRun,
+  findSendRun,
+  pillRunOf,
+  sendRunStreams,
+} from './send-run'
 
-const stores = vi.hoisted(() => ({
-  interruptMemoryRuns: vi.fn<(branchId: string) => Promise<void>>(),
-  awaitRunTerminal:
-    vi.fn<(kind: string, branchId: string, disposition: 'finish' | 'cancel') => Promise<void>>(),
-}))
-
-vi.mock('@/lib/stores', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  interruptMemoryRuns: stores.interruptMemoryRuns,
-  awaitRunTerminal: stores.awaitRunTerminal,
-}))
+// Spies that run the real thing, so a test can read either the call or the store it moved.
+vi.mock('@/lib/stores', async (importOriginal) => {
+  const actual = await importOriginal<{
+    interruptMemoryRuns: typeof interruptMemoryRuns
+    awaitRunTerminal: typeof awaitRunTerminal
+  }>()
+  return {
+    ...actual,
+    interruptMemoryRuns: vi.fn(actual.interruptMemoryRuns),
+    awaitRunTerminal: vi.fn(actual.awaitRunTerminal),
+  }
+})
 
 function run(fields: Partial<RunState> & Pick<RunState, 'runId' | 'kind'>): RunState {
   return {
@@ -44,6 +58,30 @@ function txOf(...runs: RunState[]): TxState {
   }
 }
 
+// In the real store, ending as the orchestrator does on an abort: removed, a pass deferred.
+function startLive(template: RunState): RunState {
+  let resolveTerminal!: () => void
+  const terminal = new Promise<void>((resolve) => {
+    resolveTerminal = resolve
+  })
+  const live: RunState = {
+    ...template,
+    abortController: new AbortController(),
+    terminal,
+    resolveTerminal,
+  }
+  live.abortController.signal.addEventListener(
+    'abort',
+    () => {
+      generationStore.abortRun(live.runId, 'aborted')
+      live.resolveTerminal()
+    },
+    { once: true },
+  )
+  generationStore.startRun(live)
+  return live
+}
+
 const TURN = run({ runId: 'run_turn', kind: PER_TURN_KIND })
 const CHAINED_PASS = run({
   runId: 'run_pass',
@@ -57,6 +95,12 @@ const DEFERRED_PASS = run({
   beforeTurn: true,
 })
 const REFRESH = run({ runId: 'run_refresh', kind: SUGGESTION_REFRESH_KIND })
+
+beforeEach(() => {
+  generationStore.__reset()
+  vi.mocked(interruptMemoryRuns).mockClear()
+  vi.mocked(awaitRunTerminal).mockClear()
+})
 
 describe('findSendRun', () => {
   it('finds the turn on the branch', () => {
@@ -83,30 +127,107 @@ describe('findSendRun', () => {
   })
 })
 
-describe('cancelSendRun', () => {
-  beforeEach(() => {
-    stores.interruptMemoryRuns.mockReset()
-    stores.interruptMemoryRuns.mockResolvedValue(undefined)
-    stores.awaitRunTerminal.mockReset()
-    stores.awaitRunTerminal.mockResolvedValue(undefined)
+describe('pillRunOf', () => {
+  it('gives the pill to a chained pass over a refresh beside it', () => {
+    expect(pillRunOf(txOf(REFRESH, CHAINED_PASS), 'br_1')).toBe(CHAINED_PASS)
   })
 
+  it("reads Send's deferred pass through, marked before the turn", () => {
+    expect(pillRunOf(txOf(DEFERRED_PASS), 'br_1')?.beforeTurn).toBe(true)
+  })
+
+  it('gives the turn the pill', () => {
+    expect(pillRunOf(txOf(REFRESH, TURN), 'br_1')).toBe(TURN)
+  })
+
+  it('leaves a lone refresh to the strip', () => {
+    expect(pillRunOf(txOf(REFRESH), 'br_1')).toBeUndefined()
+  })
+})
+
+describe('sendRunStreams', () => {
+  it('streams during the turn', () => {
+    expect(sendRunStreams(txOf(TURN), 'br_1')).toBe(true)
+  })
+
+  it("streams nothing during Send's deferred pass", () => {
+    expect(sendRunStreams(txOf(DEFERRED_PASS), 'br_1')).toBe(false)
+  })
+
+  it('streams nothing while no Send run is in flight', () => {
+    expect(sendRunStreams(txOf(CHAINED_PASS, REFRESH), 'br_1')).toBe(false)
+  })
+})
+
+describe('cancelSendRun', () => {
   it("interrupts Send's deferred pass", async () => {
     await cancelSendRun(DEFERRED_PASS)
-    expect(stores.interruptMemoryRuns).toHaveBeenCalledWith('br_1')
-    expect(stores.awaitRunTerminal).not.toHaveBeenCalled()
+    expect(interruptMemoryRuns).toHaveBeenCalledWith('br_1')
+    expect(awaitRunTerminal).not.toHaveBeenCalled()
   })
 
   // The pill's Cancel reaches a chained pass through the same call.
   it('interrupts a chained pass', async () => {
     await cancelSendRun(CHAINED_PASS)
-    expect(stores.interruptMemoryRuns).toHaveBeenCalledWith('br_1')
-    expect(stores.awaitRunTerminal).not.toHaveBeenCalled()
+    expect(interruptMemoryRuns).toHaveBeenCalledWith('br_1')
+    expect(awaitRunTerminal).not.toHaveBeenCalled()
   })
 
   it('cancels a turn through its terminal', async () => {
     await cancelSendRun(TURN)
-    expect(stores.awaitRunTerminal).toHaveBeenCalledWith(PER_TURN_KIND, 'br_1', 'cancel')
-    expect(stores.interruptMemoryRuns).not.toHaveBeenCalled()
+    expect(awaitRunTerminal).toHaveBeenCalledWith(PER_TURN_KIND, 'br_1', 'cancel')
+    expect(interruptMemoryRuns).not.toHaveBeenCalled()
+  })
+})
+
+describe('cancelPillRun', () => {
+  it('interrupts a chained pass, deferring it, and leaves the refresh beside it running', async () => {
+    const refresh = startLive(REFRESH)
+    const pass = startLive(CHAINED_PASS)
+
+    await cancelPillRun('br_1')
+
+    expect(pass.abortController.signal.aborted).toBe(true)
+    expect(generationStore.getTxState().deferred.get('br_1')).toEqual({ pass: true })
+    expect(refresh.abortController.signal.aborted).toBe(false)
+    expect(generationStore.getTxState().runs.has(refresh.runId)).toBe(true)
+  })
+
+  it('cancels the refresh when it runs alone', async () => {
+    const refresh = startLive(REFRESH)
+
+    await cancelPillRun('br_1')
+
+    expect(refresh.abortController.signal.aborted).toBe(true)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+})
+
+describe('cancelComposerRun', () => {
+  it("interrupts Send's deferred pass, keeping the work deferred", async () => {
+    const pass = startLive(DEFERRED_PASS)
+
+    await cancelComposerRun('br_1')
+
+    expect(pass.abortController.signal.aborted).toBe(true)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(generationStore.getTxState().deferred.get('br_1')).toEqual({ pass: true })
+  })
+
+  it('cancels the turn', async () => {
+    const turn = startLive(TURN)
+
+    await cancelComposerRun('br_1')
+
+    expect(turn.abortController.signal.aborted).toBe(true)
+  })
+
+  // The pill and the banner own a chained pass's Cancel; the composer has none to offer.
+  it('leaves a chained pass running', async () => {
+    const pass = startLive(CHAINED_PASS)
+
+    await cancelComposerRun('br_1')
+
+    expect(pass.abortController.signal.aborted).toBe(false)
   })
 })

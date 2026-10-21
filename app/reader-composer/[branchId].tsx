@@ -30,7 +30,13 @@ import {
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
-import { cancelSendRun, findSendRun } from '@/components/reader/send-run'
+import {
+  cancelComposerRun,
+  cancelPillRun,
+  findSendRun,
+  pillRunOf,
+  sendRunStreams,
+} from '@/components/reader/send-run'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
@@ -99,12 +105,7 @@ import {
   findSuggestionAnchor,
   shouldShowSuggestionStrip,
 } from '@/lib/piggyback'
-import {
-  PER_TURN_KIND,
-  pipelineEventBus,
-  SUGGESTION_REFRESH_KIND,
-  type PipelineError,
-} from '@/lib/pipeline'
+import { pipelineEventBus, SUGGESTION_REFRESH_KIND, type PipelineError } from '@/lib/pipeline'
 import {
   appSettingsStore,
   awaitRunTerminal,
@@ -117,10 +118,7 @@ import {
   isUserEditBlocked,
   readerRailStore,
   rehydrateStories,
-  type RunState,
-  selectMemoryRun,
   storiesStore,
-  type TxState,
   undoRedoStore,
 } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
@@ -172,11 +170,6 @@ function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
 
 function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
   return ev.key === 'End' && !blockingOverlaysStore.isBlocked()
-}
-
-// Send's run first, then the branch's pass or close, which owns the pill over a refresh.
-function pillRunOf(txState: TxState, branchId: string): RunState | undefined {
-  return findSendRun(txState, branchId) ?? selectMemoryRun(txState, { branchId })
 }
 
 type ReaderGateState = {
@@ -253,12 +246,10 @@ export default function ReaderComposerRoute() {
   )
   // A turn, or the pass Send runs first, swaps Send for Cancel; a pass chained after a turn leaves
   // Send refused but the composer live. Primitives, so phase ticks don't re-render the reader.
-  const sendRunKind = generationStore.useGeneration(
-    (s) => findSendRun(s.txState, branchId)?.kind ?? null,
+  const isGenerating = generationStore.useGeneration(
+    (s) => findSendRun(s.txState, branchId) != null,
   )
-  const isGenerating = sendRunKind !== null
-  // Only a turn streams a card; Send's deferred pass is a structured call.
-  const turnStreaming = sendRunKind === PER_TURN_KIND
+  const turnStreaming = generationStore.useGeneration((s) => sendRunStreams(s.txState, branchId))
   const refreshingSuggestions = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
@@ -1034,16 +1025,8 @@ export default function ReaderComposerRoute() {
     void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
   }, [branchId])
 
-  // Read at click time, not from render: a turn's commit can chain a pass in between.
-  const cancelComposerRun = useCallback(() => {
-    const run = findSendRun(generationStore.getTxState(), branchId)
-    if (run != null) void cancelSendRun(run)
-  }, [branchId])
-  const cancelPillRun = useCallback(() => {
-    const run = pillRunOf(generationStore.getTxState(), branchId)
-    if (run != null) void cancelSendRun(run)
-    else void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
-  }, [branchId])
+  const handleCancelComposer = useCallback(() => void cancelComposerRun(branchId), [branchId])
+  const handleCancelPill = useCallback(() => void cancelPillRun(branchId), [branchId])
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
@@ -1333,7 +1316,7 @@ export default function ReaderComposerRoute() {
           activePhase={activePhase}
           beforeTurn={pillBeforeTurn}
           // Absent while nothing runs on the branch: a no-op handler would still open the popover.
-          {...(pillRunKind != null || refreshingSuggestions ? { onCancel: cancelPillRun } : {})}
+          {...(pillRunKind != null || refreshingSuggestions ? { onCancel: handleCancelPill } : {})}
           onOpenMemory={() => {
             if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
           }}
@@ -1408,7 +1391,7 @@ export default function ReaderComposerRoute() {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={cancelComposerRun}
+                onCancel={handleCancelComposer}
               />
             </View>
           </View>
