@@ -321,7 +321,7 @@ export async function rollbackToEntry(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-  opts?: { expectedCounts?: RollbackCounts },
+  { expectedCounts }: { expectedCounts: RollbackCounts },
 ): Promise<
   { status: 'ok'; counts: RollbackCounts } | StoryEntryRejection | CountsChangedRejection
 > {
@@ -333,7 +333,7 @@ export async function rollbackToEntry(
     if ('status' in swept) return swept
     const counts = rollbackCountsOf(swept.set)
     // Compared with the set the commit reverses, so the consent covers exactly what goes.
-    if (opts?.expectedCounts && !sameRollbackCounts(counts, opts.expectedCounts))
+    if (!sameRollbackCounts(counts, expectedCounts))
       return {
         status: 'rejected',
         code: STORY_ENTRY_REJECTION.countsChanged,

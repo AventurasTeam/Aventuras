@@ -29,6 +29,7 @@ import {
 } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import { USER_EDITED_SINCE_PROSE } from './user-precedence'
+import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
@@ -1137,7 +1138,10 @@ describe('a kept create goes to the user write that kept its row', () => {
     // Re-owned below the reply's create, so the rollback's window misses it.
     expect(await relationshipCreates(db)).toEqual([expect.objectContaining({ actionId: 'act_u' })])
 
-    expect((await rollbackToEntry('b1', 'e_reply', ctx)).status).toBe('ok')
+    const shown = await shownCounts('b1', 'e_reply', ctx)
+    expect((await rollbackToEntry('b1', 'e_reply', ctx, { expectedCounts: shown })).status).toBe(
+      'ok',
+    )
 
     expect(await pair(db)).toEqual([])
     expect(await relationshipDeltas(db)).toEqual([])
