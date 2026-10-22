@@ -110,7 +110,9 @@ export const reader = {
   monotonicityIndicator: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 
-  // System (turn-failure) entry actions.
+  // System (failure) entry: its copy and actions.
+  systemEntryFailure: (page: Page, failure: 'memory' | 'memoryNoProfileAssigned'): Locator =>
+    page.getByText(t(`reader:systemEntry.failure.${failure}`), { exact: false }),
   retrySystemEntry: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.retry') }),
   dismissSystemEntry: (page: Page): Locator =>

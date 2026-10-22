@@ -625,9 +625,9 @@ test.describe('periodic classifier — unassigned agent', () => {
     const turnsBefore = await turnRuns()
     await reader.composer(page).fill(action)
     await reader.send(page).click()
-    await expect(
-      page.getByText(t('reader:systemEntry.failure.memoryNoProfileAssigned'), { exact: false }),
-    ).toBeVisible({ timeout: 20_000 })
+    await expect(reader.systemEntryFailure(page, 'memoryNoProfileAssigned')).toBeVisible({
+      timeout: 20_000,
+    })
     await expect(reader.assignProfileFix(page)).toBeVisible()
     await expect(reader.composer(page)).toHaveValue(action)
     expect(
@@ -1240,9 +1240,7 @@ test.describe('periodic classifier — failure policy', () => {
     const calls = passCalls()
 
     await send(U2, 'E2E-POLICY-R2 the far bank comes up out of the mist.')
-    await expect(
-      page.getByText(t('reader:systemEntry.failure.memory'), { exact: false }),
-    ).toBeVisible({ timeout: 20_000 })
+    await expect(reader.systemEntryFailure(page, 'memory')).toBeVisible({ timeout: 20_000 })
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     // Send's own pass reports through the entry: run_complete names it beforeTurn, and the root
     // hook stays quiet. Counted once, not awaited: a toast raised with it would still be up.
