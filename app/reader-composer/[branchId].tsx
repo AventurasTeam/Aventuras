@@ -958,7 +958,7 @@ export default function ReaderComposerRoute() {
       if (systemFailure?.pass === 'failed') {
         runAction(retryPass(), {
           event: 'reader.pass_retry_failed',
-          toastMessage: t('reader:systemEntry.failure.memory'),
+          toastMessage: t('reader:passRetryFinishFailed'),
         })
         return
       }
