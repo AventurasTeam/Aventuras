@@ -444,6 +444,41 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null })
   })
 
+  // A failed pass's Retry can land on a window the failure's prose has left (undone), so the
+  // empty pass must clear the failure it was owed for.
+  it('clears a failed status when the window is empty, leaving the watermark', async () => {
+    const h = await ctxWith({
+      processedThrough: 3,
+      headPosition: 3,
+      seedStatus: { state: 'failed', lastError: 'boom' },
+    })
+    const { result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'completed' })
+    expect(generateStructured).not.toHaveBeenCalled()
+    expect(h.status()).toMatchObject({
+      state: 'idle',
+      lastError: null,
+      processedThrough: 3,
+      lastSuccessAt: expect.any(Number),
+    })
+  })
+
+  it('clears a failed status and advances the watermark on a truncated system-only window', async () => {
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 25,
+      entryKind: 'system',
+      seedStatus: { state: 'failed', lastError: 'boom' },
+    })
+    await drain(h.ctx)
+    expect(h.status()).toMatchObject({
+      state: 'idle',
+      lastError: null,
+      processedThrough: 20,
+      lastSuccessAt: expect.any(Number),
+    })
+  })
+
   it('emits one delta per planned write, each with its own entryId', async () => {
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',

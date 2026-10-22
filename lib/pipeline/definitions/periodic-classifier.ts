@@ -168,6 +168,16 @@ function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
   return patchStatus(ctx, lifecycleKeys(status))
 }
 
+async function writeSuccess(
+  ctx: StatusCtx,
+  status: ClassifierStatus,
+  coversThrough: number,
+): Promise<void> {
+  const next = nextStatusOnSuccess(status, { coversThrough, at: Date.now() })
+  // One statement: the status never reports a success whose watermark didn't land.
+  await patchStatus(ctx, sql`${lifecycleKeys(next)}, ${watermarkKey(coversThrough)}`)
+}
+
 function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> {
   return patchStatus(ctx, watermarkKey(coversThrough))
 }
@@ -219,7 +229,9 @@ export async function* periodicClassifierPhase(
   if (window.isEmpty) {
     // Only a truncated window of system rows advances the watermark, and never onto the tail's
     // (writeSystemEntry keeps one system row, at the tail). Untruncated, the cadence counts none.
-    if (window.coversThrough > (status.processedThrough ?? 0))
+    // A completed pass over nothing still clears a failure it was owed for.
+    if (status.state !== 'idle') await writeSuccess(ctx, status, window.coversThrough)
+    else if (window.coversThrough > (status.processedThrough ?? 0))
       await advanceWatermark(ctx, window.coversThrough)
     return { status: 'completed' }
   }
@@ -355,9 +367,7 @@ export async function* periodicClassifierPhase(
   // The last point a cancel discards; past it the pass commits, watermark included.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
-  const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
-  // One statement: the status never reports a success whose watermark didn't land.
-  await patchStatus(ctx, sql`${lifecycleKeys(next)}, ${watermarkKey(window.coversThrough)}`)
+  await writeSuccess(ctx, status, window.coversThrough)
   return { status: 'completed' }
 }
 
