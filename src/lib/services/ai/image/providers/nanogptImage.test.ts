@@ -197,7 +197,31 @@ describe('response', () => {
     const [url, init] = fetchMock.mock.calls[1]
     expect(url).toBe('https://cdn.test/a.png')
     expect(init?.signal).toBe(signal)
+    expect(init?.redirect).toBe('manual')
     expect(new Headers(init?.headers).has('authorization')).toBe(false)
+  })
+
+  it('refuses to download a url that is not a public host', async () => {
+    fetchMock.mockImplementation(async () => json({ data: [{ url: 'http://127.0.0.1/a.png' }] }))
+
+    const error = await rejection(model().doGenerate(callOptions()))
+    expect(error).toBeInstanceOf(Error)
+    expect(APICallError.isInstance(error)).toBe(false)
+    expect((error as Error).message).toContain('public host')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not follow a redirect from the download url', async () => {
+    fetchMock.mockImplementation(async (input) =>
+      String(input).endsWith('/images')
+        ? json({ data: [{ url: 'https://cdn.test/a.png' }] })
+        : new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/a.png' } }),
+    )
+
+    const error = await rejection(model().doGenerate(callOptions()))
+    expect(error).toBeInstanceOf(Error)
+    expect(APICallError.isInstance(error)).toBe(false)
+    expect((error as Error).message).toContain('302')
   })
 
   it('prefers b64_json when an item has both, and handles a mix', async () => {

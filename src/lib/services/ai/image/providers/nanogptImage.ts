@@ -5,6 +5,7 @@ import * as z from 'zod'
 import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
 import { bytesToBase64 } from '#lib/utils/image.ts'
+import { isPublicHttpUrl } from '#lib/utils/url.ts'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
 import { definedHeaders, httpError, parseJson, responseExcerpt } from './imageModelUtils'
 
@@ -43,9 +44,11 @@ function errorMessage(parsed: unknown, text: string, status: number): string {
 }
 
 // A plain Error, not an APICallError: a 429 from the host would otherwise make the 429 middleware
-// re-run, and re-bill, the generation.
+// re-run, and re-bill, the generation. The URL comes from the reply, so it must be public and is
+// not redirected.
 async function downloadBase64(fetch: Fetch, url: string, signal?: AbortSignal): Promise<string> {
-  const response = await fetch(url, { signal })
+  if (!isPublicHttpUrl(url)) throw new Error('Image URL does not point at a public host')
+  const response = await fetch(url, { signal, redirect: 'manual' })
   if (!response.ok) throw new Error(`Image download failed: HTTP ${response.status}`)
   return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
 }
