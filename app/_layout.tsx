@@ -16,7 +16,7 @@ import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-
 import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
-import { useDeferredWorkToasts } from '@/hooks/use-deferred-work-toasts'
+import { useMemoryRunToasts } from '@/hooks/use-memory-run-toasts'
 import { setAppearanceThemeId } from '@/lib/actions'
 import { registerRejectionHandler, useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
@@ -46,8 +46,8 @@ function AndroidResizeMode() {
   return null
 }
 
-function DeferredWorkToasts() {
-  useDeferredWorkToasts()
+function MemoryRunToasts() {
+  useMemoryRunToasts()
   return null
 }
 
@@ -112,7 +112,7 @@ export default function RootLayout() {
                     <SwapResumeHost />
                     <EmbeddingUpgradeHost />
                     <Toaster />
-                    <DeferredWorkToasts />
+                    <MemoryRunToasts />
                     <PortalHost />
                     <DrizzleStudioDevTools />
                   </BottomSheetModalProvider>

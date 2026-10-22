@@ -154,7 +154,8 @@
     "deferredWork": {
       "pass": "Memory update moved to your next turn.",
       "close": "Chapter close moved to your next turn."
-    }
+    },
+    "memoryUpdateFailed": "Memory update failed. It runs again before your next turn."
   },
   "collisionRow": {
     "collidesWith": "⚠ Collides with {{name}}",
