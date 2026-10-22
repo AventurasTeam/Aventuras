@@ -107,8 +107,8 @@ type GenerationState = {
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch, `'failed'` clears that record, `'unwound'` (marker insert failed; never started)
-   * leaves it. Returns the slot this call newly recorded, or null.
+   * branch; `'failed'` and `'unwound'` leave the record as it was: only a commit clears it.
+   * Returns the slot this call newly recorded, or null.
    */
   abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   setReversalInProgress: (value: boolean) => void
@@ -170,9 +170,9 @@ const store = createStore<GenerationState>()((set) => ({
       runs.delete(runId)
       const key = run?.interruptible
       let deferred = s.txState.deferred
-      if (run && key && outcome !== 'unwound') {
-        if (outcome === 'aborted' && deferred.get(run.branchId)?.[key] !== true) recorded = key
-        deferred = withDeferral(deferred, run.branchId, key, outcome === 'aborted')
+      if (run && key && outcome === 'aborted') {
+        if (deferred.get(run.branchId)?.[key] !== true) recorded = key
+        deferred = withDeferral(deferred, run.branchId, key, true)
       }
       return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
     })

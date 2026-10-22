@@ -189,16 +189,29 @@ describe('deferred work', () => {
     expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
   })
 
-  it('clears the record when a pass fails, and records nothing new', () => {
+  // classifier.md → Failure policy: Send runs a failed deferred pass first again, so only a
+  // commit clears the record.
+  it('leaves the record when a pass fails, and records nothing new', () => {
     generationStore.startRun(pass('run_first'))
     generationStore.abortRun('run_first', 'aborted')
-    generationStore.startRun(pass('run_send'))
+    generationStore.startRun(pass('run_send', { beforeTurn: true }))
     expect(generationStore.abortRun('run_send', 'failed')).toBeNull()
-    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
+    expect(deferredOn('b1')).toEqual({ pass: true })
 
-    generationStore.startRun(pass('run_fresh'))
+    generationStore.startRun(pass('run_fresh', { branchId: 'b2' }))
     expect(generationStore.abortRun('run_fresh', 'failed')).toBeNull()
-    expect(generationStore.getTxState().deferred.size).toBe(0)
+    expect(generationStore.getTxState().deferred.has('b2')).toBe(false)
+  })
+
+  it("leaves a failed close's record, and the pass beside it", () => {
+    const close = { kind: 'chapter-close', interruptible: 'close' } as const
+    generationStore.startRun(pass('run_pass'))
+    generationStore.abortRun('run_pass', 'aborted')
+    generationStore.startRun(pass('run_close', close))
+    generationStore.abortRun('run_close', 'aborted')
+    generationStore.startRun(pass('run_close_send', close))
+    expect(generationStore.abortRun('run_close_send', 'failed')).toBeNull()
+    expect(deferredOn('b1')).toEqual({ pass: true, close: true })
   })
 
   it('leaves the record alone for an unwound reservation (a marker-insert failure)', () => {

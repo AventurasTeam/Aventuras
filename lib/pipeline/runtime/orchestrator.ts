@@ -509,8 +509,8 @@ async function driveRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
-  // A cancel that landed before pre-flight (at a chain's swap, or as a Send's deferred pass
-  // reserved) is an interrupt: a pre-flight failure would burn a retry and drop the deferral.
+  // A cancel that landed before pre-flight (at a chain's swap, or as Send's owed pass reserved)
+  // is an interrupt: a pre-flight failure would record a failed pass instead of a deferred one.
   if (run.abortController.signal.aborted)
     return { tx: await abortRun(run, ctx, { reason: 'user-cancel' }) }
   let preflightError: PipelineError | null
