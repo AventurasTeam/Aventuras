@@ -553,8 +553,7 @@ describe('scoreDescriptions', () => {
   })
 })
 
-// observability.md → Logger contract: a degraded path is a warn. An embedder outage turns
-// matching off without failing anything, so silence would hide it entirely.
+// observability.md → Logger contract: an embedder outage turns matching off silently, so it warns.
 describe('a description embed that throws', () => {
   beforeEach(() => {
     clearBuffers()

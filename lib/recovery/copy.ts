@@ -24,10 +24,9 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
   }
 }
 
-// The classifier writes `state: 'running'` before it emits any delta, so an orphan of that kind
-// which would not reverse holds its branch, and Send refuses it until a boot reverses the orphan:
-// the one failure that can promise its branch's turns stop rather than describe the fault.
-// An integrity refusal recurs at every boot, so it promises no retry.
+// The classifier writes `state: 'running'` before any delta, so an orphan of that kind that won't
+// reverse holds its branch (Send refuses until a boot reverses it): the one failure that can
+// promise its turns stop, not describe the fault. An integrity refusal recurs every boot: no retry.
 function formatFailure(failure: RecoveryFailure, storyName: string | undefined): string {
   const held = failure.kind === 'periodic-classifier'
   const refused = failure.refusal !== null

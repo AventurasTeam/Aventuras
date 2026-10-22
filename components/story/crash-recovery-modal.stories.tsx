@@ -36,8 +36,7 @@ const multiReport: RecoveryReport = {
   failures: [],
 }
 
-// Nothing reversed: the orphan's writes survive and its branch can't take turns, so the
-// modal must not title itself "Story recovered".
+// Nothing reversed (orphan's writes survive, branch held): must not title itself "Story recovered".
 const degradedReport: RecoveryReport = {
   reversed: [],
   failures: [

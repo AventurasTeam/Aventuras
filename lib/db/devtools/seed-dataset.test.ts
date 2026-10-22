@@ -374,8 +374,7 @@ describe('seeded rollback', () => {
   })
 })
 
-// docs/testing.md → Fixture + seed contract: a branch parked below its prose owes a pass at its
-// first Send, which would then run ahead of every spec's first turn.
+// docs/testing.md → Fixture + seed contract: a lagging watermark runs a pass before the first turn.
 describe('seeded classifier watermarks', () => {
   type BranchRow = { id: string; classifierStatus: unknown }
   type EntryRow = { branchId: string; kind: string; position: number }
@@ -396,8 +395,7 @@ describe('seeded classifier watermarks', () => {
     }
   })
 
-  // The first Send deletes the system row and writes its user_action at 72: a watermark there
-  // would cover a turn no pass read.
+  // A watermark at 72 would cover the user_action the first Send writes there, unread by any pass.
   it('parks br_hero_main on its last reply, below the system row it ends on', () => {
     const tail = (rowsOf('story_entries') as EntryRow[])
       .filter((e) => e.branchId === 'br_hero_main')

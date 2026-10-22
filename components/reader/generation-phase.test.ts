@@ -85,7 +85,7 @@ describe('readerPillPhase', () => {
     )
   })
 
-  // Between Send's pass and its turn no run holds the pill; a blank would hand the slot to an error.
+  // Between Send's pass and turn no run holds the pill; a blank would hand the slot to an error.
   it("keeps the turn's label while the host's Send waits with no run registered", () => {
     expect(readerPillPhase({ ...IDLE, turnPending: true })).toBe('generating-narrative')
   })

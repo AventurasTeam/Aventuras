@@ -100,8 +100,7 @@ function deferOnB1(kind: string, slot: 'pass' | 'close'): void {
   expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe(slot)
 }
 
-// Runs `during` as the first select is built: a run starting or ending while the status read is
-// in flight.
+// Runs `during` as the first select is built: a run starting or ending mid-read of the status.
 function onFirstSelect<T extends object>(db: T, during: () => void): T {
   let fired = false
   return new Proxy(db, {

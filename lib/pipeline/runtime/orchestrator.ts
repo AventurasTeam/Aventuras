@@ -363,8 +363,7 @@ async function runPhaseExceptionHook(
   if (error.kind !== 'action-layer' && error.kind !== 'orchestrator') return
   const onPhaseException = getPipeline(run.kind).onPhaseException
   if (!onPhaseException) return
-  // The run's own identity: a successor shares the origin's ctx, which may carry another run's
-  // actionId or none.
+  // Not ctx.actionId: a successor shares the origin's ctx, whose actionId isn't its own.
   await runHook(run, 'pipeline.phase_exception_hook_failed', () =>
     onPhaseException({ db: ctx.db, branchId: run.branchId, actionId: run.actionId }, error),
   )

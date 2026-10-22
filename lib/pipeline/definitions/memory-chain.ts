@@ -65,7 +65,7 @@ export async function isClassifierHeld(branchId: string, ctx: Pick<DbCtx, 'db'>)
   return status.state === 'running' && !passLive(branchId)
 }
 
-/** Send's check: a held branch first, then the deferral mark, then the cadence over the watermark. */
+/** Send's check, in order: held branch, deferral mark, then cadence over the watermark. */
 export async function owedPassAtSend(
   branchId: string,
   ctx: DbCtx,

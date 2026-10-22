@@ -5,14 +5,12 @@ import { branches, deltas, type DbCtx } from '@/lib/db'
 /**
  * Boot-time orphan reconciliation: a branch left `state: 'running'` was owned by a
  * process that no longer exists. Scoped to `$.state` and to 'running' only — a
- * 'failed' branch keeps its error for the status block, and its next Send runs the pass.
+ * 'failed' branch keeps its error for the status block.
  *
- * `unreversedActionIds` are the orphans whose boot reversal threw. A branch
- * still holding their deltas is NOT reconcilable, so it keeps `running`, which
- * already suspends the cadence — reconciling it would let the classifier re-read a
- * window whose partial writes are still on disk. Send and `[Run classifier now]`
- * refuse it too, until the boot that finally reverses them drops the branch from
- * this set and reconciles it normally.
+ * `unreversedActionIds` are the orphans whose boot reversal threw. A branch still holding
+ * their deltas is NOT reconcilable: it keeps `running`, which suspends the cadence
+ * (reconciling would let the classifier re-read a window whose partial writes are still on
+ * disk), and Send and `[Run classifier now]` refuse it until a boot reverses them.
  */
 export async function resetStuckClassifierRunState(
   ctx: DbCtx,

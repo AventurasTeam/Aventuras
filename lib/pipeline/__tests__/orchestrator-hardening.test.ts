@@ -157,8 +157,7 @@ describe('orchestrator hardening', () => {
     expect(result.outcome).toBe('failed')
   })
 
-  // observability.md → Record shape: the hook's logs must name the run, and a start that passes
-  // no actionId leaves the caller's ctx without one.
+  // observability.md → Record shape: hook logs must name the run; caller ctx may lack an actionId.
   it("hands onPhaseException the run's own actionId", async () => {
     const { ctx } = await makeHarness()
     const seen: (string | undefined)[] = []

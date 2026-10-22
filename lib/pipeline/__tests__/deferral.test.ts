@@ -177,7 +177,7 @@ describe('deferred work', () => {
     expect(await db.select().from(storyEntries)).toHaveLength(0)
   })
 
-  // No classifier profile is set, so this pass's pre-flight would fail and its hook record a failure.
+  // No classifier profile is set: this pass's pre-flight would fail and its hook record a failure.
   describe('a pass cancelled before its pre-flight', () => {
     let preflightHookCalls = 0
     let phaseEntered = false
@@ -272,8 +272,7 @@ describe('deferred work', () => {
     expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
   })
 
-  // classifier.md → Failure policy: Send runs the failed work first again, so a failure keeps the
-  // record and only a commit clears it.
+  // classifier.md → Failure policy: Send reruns failed work first, so only a commit clears it.
   it('keeps the record when the pass fails, emitting no new run_deferred, until a commit', async () => {
     const { ctx } = await makeHarness()
     defineStandIn(PERIODIC_CLASSIFIER_KIND)

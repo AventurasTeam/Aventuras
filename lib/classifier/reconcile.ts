@@ -167,7 +167,7 @@ export type ReconciledKind = Extract<Entity['kind'], 'character' | 'faction'>
 type ReconcileDeps = {
   entities: readonly Entity[]
   embedDescriptions: EmbedDescriptions
-  /** The run's logger, handed to scoreDescriptions. */
+  /** The run's logger. */
   log?: Pick<Logger, 'warn'>
 } & (
   | {

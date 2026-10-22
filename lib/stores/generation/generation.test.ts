@@ -189,8 +189,7 @@ describe('deferred work', () => {
     expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
   })
 
-  // classifier.md → Failure policy: Send runs a failed deferred pass first again, so only a
-  // commit clears the record.
+  // classifier.md → Failure policy: Send reruns a failed deferred pass; only a commit clears it.
   it('leaves the record when a pass fails, and records nothing new', () => {
     generationStore.startRun(pass('run_first'))
     generationStore.abortRun('run_first', 'aborted')

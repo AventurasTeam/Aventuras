@@ -39,10 +39,7 @@ const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', conver
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
 
-/**
- * Send's owed pass (classifier.md → Failure policy): its own run with its own actionId, awaited
- * to its end so it commits before the turn's first write.
- */
+/** Send's owed pass (classifier.md → Failure policy): own run and actionId, committed first. */
 function runOwedPass(
   ids: { storyId: string; branchId: string },
   ctx: DbCtx,

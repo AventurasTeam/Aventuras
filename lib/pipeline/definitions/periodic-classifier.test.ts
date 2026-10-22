@@ -681,11 +681,9 @@ describe('periodicClassifierPhase', () => {
     expect(embedder).toHaveBeenCalledTimes(1)
   })
 
-  // classifier.md → Failure policy: the profile's timeout bounds the whole call, ten minutes unset.
-  // A never-answering provider must expire as a failure, not an abort, or nothing would say why.
+  // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort.
   describe('the bound on the call', () => {
-    // The call settles only when its signal aborts, reporting how long it was in flight on the
-    // fake clock: the bound the phase armed.
+    // Resolves with the fake-clock ms in flight when its signal aborts: the bound the phase armed.
     function callAbortedAfter(): Promise<number> {
       return new Promise((reportElapsed) => {
         vi.mocked(generateStructured).mockImplementation(
@@ -799,9 +797,7 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toMatchObject({ state: 'running', lastError: null })
   })
 
-  // The timeout timer stayed armed after an outer abort, so a cancel landing near
-  // the boundary could still see it fire and be recorded as a provider timeout —
-  // a failure recorded for what the user deliberately cancelled.
+  // The timer must disarm on an outer abort, or a deliberate cancel records as a provider timeout.
   it('does not reclassify a late-cancel as a timeout once the outer signal aborts', async () => {
     vi.useFakeTimers()
     try {
@@ -880,7 +876,7 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  // observability.md → Record shape: inside the pass the warn carries the pass's actionId.
+  // observability.md → Record shape.
   it("logs a failed description embed under the pass's actionId and still completes", async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
@@ -1873,7 +1869,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(status?.lastError).toBe('classifier: forced test rejection')
   })
 
-  // observability.md → Record shape: the retry is the run's, so its log names the run.
+  // observability.md → Record shape.
   it('still reaches the failed status when the first failure write fails, logging the retry as the run', async () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })

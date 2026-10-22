@@ -338,8 +338,7 @@ test.describe('periodic classifier — factions', () => {
     const branchId = (
       await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
     )[0][0] as string
-    // The watermark the pass starts from, read before the turn moves it: t1 is the first prose
-    // row above it, this turn's own user_action.
+    // Read before the turn moves it; t1 is the first prose row above it: this turn's user_action.
     const [[watermark]] = await queryApp(
       app.window,
       `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
@@ -532,9 +531,8 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
         )
       )[0][0]
 
-    // The backlog is owed at Send, so its pass runs before the turn (classifier.md → Failure
-    // policy). Held at its narrative call, the turn has chained nothing, so the watermark read
-    // there is that first pass's alone.
+    // The backlog is owed at Send: its pass runs before the turn (classifier.md → Failure policy).
+    // Held at the narrative call, nothing is chained: the watermark there is that pass's alone.
     mock.holdNextNarrative()
     await reader.composer(app.window).fill('E2E-BACKLOG I keep riding.')
     await reader.send(app.window).click()
@@ -564,9 +562,8 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
   })
 })
 
-// classifier.md → Failure policy: a pre-flight halt never reaches the phase, so only the pipeline's
-// pre-flight hook records it. Unrecorded, the status would read idle over a failed pass; the next
-// Send owes the pass either way, since the cadence reads the watermark.
+// classifier.md → Failure policy: a pre-flight halt skips the phase, so only the pipeline's hook
+// records it; unrecorded, the status reads idle over a failed pass. Send owes it by the watermark.
 test.describe('periodic classifier — unassigned agent', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -613,7 +610,7 @@ test.describe('periodic classifier — unassigned agent', () => {
     const turnRuns = () => scalar(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn'`)
     const [, , parked] = await status()
 
-    // The seed parks the watermark at the last prose row, so this Send owes nothing and takes its turn.
+    // The watermark is parked at the last prose row, so this Send owes nothing and takes its turn.
     await reader.composer(page).fill('E2E-NOAGENT I light the lantern.')
     await reader.send(page).click()
     await expect(page.getByText('E2E-NOAGENT the lantern', { exact: false })).toBeVisible({
@@ -833,16 +830,14 @@ test.describe('periodic classifier — the gated pass', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     setProviderEndpoint(seeded.dbPath, mock.url)
-    // A turn writes two entries: with the watermark at the last reply, each
-    // committed turn brings exactly one pass due.
+    // A turn writes two entries, so with the watermark at the last reply each turn owes one pass.
     setClassifierCadence(seeded.dbPath, 'story_hero', 2)
     parkClassifierWatermarkAtLastReply(seeded.dbPath, 'br_hero_main')
     // The Actions menu's Diagnostics row, a jump out of the story from any in-story screen.
@@ -1142,8 +1137,7 @@ test.describe('periodic classifier — the gated pass', () => {
 })
 
 // classifier.md → Failure policy, at the seams only a running app reaches: the chained pass's
-// run_complete reaching the toast, Send's owed pass failing the Send through the reader's entry,
-// and that entry's Retry running the pass alone. Serial: each test builds on the last.
+// toast, Send's owed pass failing it via the entry, and its Retry. Serial: each builds on the last.
 test.describe('periodic classifier — failure policy', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -1153,8 +1147,7 @@ test.describe('periodic classifier — failure policy', () => {
   let parked: number
 
   test.beforeAll(async () => {
-    // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -1162,8 +1155,7 @@ test.describe('periodic classifier — failure policy', () => {
     mock = await startMockLlm()
     mock.setStructured('periodic-classifier', UNPARSEABLE_PASS_REPLY)
     setProviderEndpoint(seeded.dbPath, mock.url)
-    // A turn writes two entries: with the watermark at the last reply, each committed turn
-    // brings exactly one pass due.
+    // A turn writes two entries, so with the watermark at the last reply each turn owes one pass.
     setClassifierCadence(seeded.dbPath, 'story_hero', 2)
     parked = parkClassifierWatermarkAtLastReply(seeded.dbPath, 'br_hero_main')
     app = await launchApp({ userDataDir, cleanupUserData: true })
@@ -1326,8 +1318,7 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
   let parked: number
 
   test.beforeAll(async () => {
-    // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

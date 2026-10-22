@@ -96,11 +96,10 @@ export const entryMetadataSchema = z.object({
       refreshGuidance: z.string().optional(),
     })
     .optional(),
-  // System-entry failure record (reader-composer.md → Error surface): kind /
-  // failure mirror PipelineError / ResolveFailureKind as open strings — an
-  // unknown future pipeline kind must degrade to generic copy, not fail the
-  // whole metadata parse. submission keeps the turn's text across an app restart:
-  // a turn's Retry resends it; on a pass entry Dismiss or a committed Retry hands it back.
+  // System-entry failure record (reader-composer.md → Error surface). kind / failure are open
+  // strings so an unknown future kind degrades to generic copy, not a failed metadata parse.
+  // submission survives a restart: a turn's Retry resends it; a pass entry's Dismiss or a committed
+  // Retry hands it back.
   systemFailure: z
     .object({
       kind: z.string(),

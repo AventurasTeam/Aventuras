@@ -12,8 +12,8 @@ import {
 import { currentStoryStore } from '@/lib/stores'
 
 /**
- * `[Run classifier now]`: a pass whatever the cadence count. Refuses a branch held `running`,
- * whose unreversed writes a pass would re-read (classifier.md → Failure policy).
+ * A pass whatever the cadence count. Refuses a held branch: its unreversed writes would be re-read
+ * (classifier.md → Failure policy).
  */
 export async function runClassifierNow(
   branchId: string,

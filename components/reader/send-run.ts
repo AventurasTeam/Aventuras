@@ -98,10 +98,10 @@ export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
   return result.outcome === 'aborted' && 'beforeTurn' in result
 }
 
-/** A pass that refused a Send (classifier.md → Failure policy): the hold, or its failure's cause. */
+/** A pass that refused a Send (classifier.md → Failure policy): the hold, or why it failed. */
 export type PassRefusal = { held: true } | { held: false; error: PipelineError | undefined }
 
-/** Send's result only: `failed` with `beforeTurn`, or the CLASSIFIER_HELD rejection. */
+/** Send's result only: a `failed` without `beforeTurn` is the turn's own, not a pass refusal. */
 export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
   if (result.outcome === 'failed' && 'beforeTurn' in result)
     return { held: false, error: result.error }

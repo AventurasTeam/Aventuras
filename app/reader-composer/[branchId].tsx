@@ -1115,7 +1115,7 @@ export default function ReaderComposerRoute() {
     () => void cancelComposerRun(branchId, sendPending),
     [branchId, sendPending],
   )
-  // In Send's gap no run holds the pill, so its Cancel is the composer's: it waits for the next run.
+  // In Send's gap no run holds the pill, so its Cancel is the composer's: it awaits the next run.
   const handleCancelPill = useCallback(() => {
     if (sendGapOpen(generationStore.getTxState(), branchId, sendPending)) handleCancelComposer()
     else void cancelPillRun(branchId)

@@ -9,16 +9,14 @@ import { createSeededUserDataDir, setClassifierCadence } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// The periodic classifier against a REAL provider: cadence 2 over a parked backlog, so the first
-// Send runs a pass over the fixture's own prose before its turn, and the landed turn chains its own.
+// Periodic classifier, REAL provider: the first Send runs a pass before its turn, which chains one.
 // Opt-in — needs a local OpenAI-compatible server, so it skips unless SMOKE_LLM_URL is set:
 //   SMOKE_LLM_URL=http://localhost:5001/v1 SMOKE_LLM_MODEL=<id> pnpm test:e2e classifier-real-provider
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 
-// With no profile timeout, as here, a pass's call expires at PASS_TIMEOUT_DEFAULT_MS
-// (lib/pipeline/definitions/periodic-classifier.ts), which a spec can't import; the margin covers
-// reconcile's embeds and the write burst after it.
+// No profile timeout: a pass's call expires at PASS_TIMEOUT_DEFAULT_MS, which a spec can't import
+// (lib/pipeline/definitions/periodic-classifier.ts); +60 s covers reconcile's embeds and writes.
 const PASS_WAIT_MS = 600_000 + 60_000
 // A settled pass's status leaving `running`.
 const STATUS_SETTLE_MS = 10_000
@@ -28,8 +26,7 @@ const EDITABLE_WAIT_MS = 120_000
 const TURN_SETTLE_MS = 240_000
 // A refused Send's text back in the composer, after its entry's write and reload.
 const DRAFT_RETURN_MS = 30_000
-// A run's row is inserted right after what starts it (a Send's click, a turn's commit); none by
-// then means none started.
+// A run's row lands right after its trigger (a Send's click, a turn's commit); none = none started.
 const ROW_WAIT_MS = 15_000
 const PERIODIC = 'periodic-classifier'
 
@@ -99,10 +96,9 @@ test.describe('periodic classifier — real provider smoke', () => {
     setClassifierCadence(seeded.dbPath, 'story_hero', 2)
     const head = new DatabaseSync(seeded.dbPath)
     try {
-      // The seed parks the watermark at the last prose row. Parked 12 positions below the head
-      // instead, the fixture's own prose is owed at the first Send, which runs its pass over real
-      // narrative before the turn. Driving turns until the cadence comes due instead makes the
-      // smoke hostage to per-turn failures that are not this pass's.
+      // The seed parks the watermark at the last prose row; 12 below the head, the fixture's own
+      // prose is owed at the first Send. Driving turns until cadence is due would make the smoke
+      // hostage to per-turn failures that are not this pass's.
       const { m } = head
         .prepare(
           `SELECT COALESCE(MAX(position), 0) - 12 AS m FROM story_entries WHERE branch_id = ?`,
@@ -151,9 +147,8 @@ test.describe('periodic classifier — real provider smoke', () => {
   })
 
   test('a real model classifies the owed backlog before its turn, then the pass the turn chains', async () => {
-    // Each Send may run its owed pass, then its turn, and a refused one waits for its text back; a
-    // landed turn's commit chains a pass, twice at most (a failed one is owed again at the next
-    // Send); the reports take the rest.
+    // Per Send: owed pass, turn, and a refused one's wait for its text back. A landed turn chains a
+    // pass, twice at most (a failed one is owed again at the next Send); the reports take the rest.
     test.setTimeout(
       COMPOSER_VISIBLE_MS +
         PROMPTS.length *
@@ -193,8 +188,7 @@ test.describe('periodic classifier — real provider smoke', () => {
           ])
         )[0][0] as string,
       )
-    // In insertion order a Send's owed pass lands before its turn's row, and a turn's chained
-    // pass after it.
+    // In insertion order a Send's owed pass lands before its turn's row, a chained pass after it.
     type RunRow = [
       rowid: number,
       kind: string,
@@ -266,9 +260,8 @@ test.describe('periodic classifier — real provider smoke', () => {
     let attempts = 0
     let beforeTurnPasses = 0
     let refusedSends = 0
-    // classifier.md → Failure policy: an owed pass runs first, as its own run, and failing there
-    // fails the Send (a system entry, no turn). Returns the Send's turn row, null when its pass
-    // refused it, and the watermark that turn ran over.
+    // classifier.md → Failure policy: an owed pass runs first, as its own run; failing it fails the
+    // Send (system entry, no turn). turnRow is null then; from is the watermark the turn ran over.
     const sendOnce = async (): Promise<{ turnRow: number | null; from: number }> => {
       // The textarea is editable once hydrated; the Send click below waits for an enabled
       // Send, which is what outlasts a failed turn's reversal sweep.
@@ -283,9 +276,8 @@ test.describe('periodic classifier — real provider smoke', () => {
       await reader.send(app.window).click()
       const turnRow = async () =>
         (await runsAfter(since)).find((r) => r[1] === 'per-turn')?.[0] ?? null
-      // The click's clear of an earlier entry reaches main before the poll's first read: one
-      // renderer's IPC requests are handled in order, and main's db:query/db:transaction handlers
-      // are synchronous. So an entry seen with no turn row is this Send's failure.
+      // The click's clear of an earlier entry hits main before the poll's first read: a renderer's
+      // IPC is handled in order, by synchronous handlers. An entry with no turn row is this Send's.
       const turnlessFailure = async (): Promise<SystemEntry | null> => {
         if ((await turnRow()) !== null) return null
         const entry = await systemEntry()
@@ -300,7 +292,6 @@ test.describe('periodic classifier — real provider smoke', () => {
           message: 'the Send started neither a pass nor a turn',
         })
         .toBe(true)
-      // The owed pass is the one inserted ahead of the Send's turn row.
       const runs = await runsAfter(since)
       const turnAt = runs.findIndex((r) => r[1] === 'per-turn')
       const owed = runs
@@ -333,9 +324,8 @@ test.describe('periodic classifier — real provider smoke', () => {
       return { turnRow: null, from }
     }
 
-    // A real model fails turns (an entity patch restating current state is rejected and takes the
-    // run down), and a failed owed pass fails its Send: send again until a reply lands. Each resend
-    // runs the still-owed pass first again.
+    // A real model fails turns (an entity patch restating current state is rejected and fails the
+    // run), and a failed owed pass fails its Send: resend until a reply lands, pass first again.
     const landTurn = async (label: string): Promise<{ turnRow: number; from: number }> => {
       const target = (await replies()) + 1
       let sent: { turnRow: number | null; from: number } | undefined
@@ -350,8 +340,7 @@ test.describe('periodic classifier — real provider smoke', () => {
       return { turnRow: sent.turnRow, from: sent.from }
     }
 
-    // A standing deferral or a failed chain leaves no pass row; say so here rather than as a hung
-    // pass after the full wait.
+    // A standing deferral or a failed chain leaves no pass row; fail here, not as a hung full wait.
     const chainedPass = async (turn: { turnRow: number; from: number }): Promise<string | null> => {
       await expect
         .poll(async () => (await runsAfter(turn.turnRow)).some((r) => r[1] === PERIODIC), {
