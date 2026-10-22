@@ -5,6 +5,7 @@ mod avt_import;
 mod backup;
 mod db;
 mod db_tx;
+mod image_profiles;
 mod migration_patch;
 mod sync;
 #[cfg(test)]
@@ -277,6 +278,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/041_retire_world_state_delta.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 42,
+            description: "image_profiles",
+            sql: include_str!("../migrations/042_image_profiles.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -324,7 +331,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_generation::init())
         .invoke_handler(tauri::generate_handler![

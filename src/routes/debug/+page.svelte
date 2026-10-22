@@ -28,7 +28,9 @@
       unlistenLogs = await listen('debug-log-added', (event) => {
         console.log('[DebugWin] Received debug-log-added', (event.payload as DebugLogEntry).id)
         const entry = event.payload as DebugLogEntry
-        logs = [...logs, entry]
+        // The store re-emits an entry each time it merges into it.
+        const index = logs.findIndex((log) => log.id === entry.id)
+        logs = index === -1 ? [...logs, entry] : logs.with(index, entry)
         if (logs.length > 100) {
           logs = logs.slice(-100)
         }

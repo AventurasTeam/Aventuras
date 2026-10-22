@@ -6,20 +6,33 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { generateOpenAICompatible } from './openaiCompatible'
-import { specToPixels, formatImageSize, specFromPixels, type ImageSpec } from '#lib/utils/image.ts'
+import { createNanoGPTImage } from './nanogptImage'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
+import {
+  specToPixels,
+  formatImageSize,
+  specFromPixels,
+  specToAspectRatio,
+  type ImageSpec,
+} from '#lib/utils/image.ts'
 
 const DEFAULT_BASE_URL = 'https://api.nano-gpt.com/api/v1'
-// The text provider's default host, copied onto image profiles migrated from an API profile.
-const LEGACY_BASE_URL = 'https://nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
+
+// Keeps `w:h` ratios; the catalogue also lists values like `auto` and `match_input_image`.
+const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 
 // Known img2img capable models/tags
 const IMG2IMG_TAGS = new Set(['image-to-image', 'image-edit'])
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
   const configured = config.baseUrl?.trim().replace(/\/+$/, '')
-  const baseUrl = !configured || configured === LEGACY_BASE_URL ? DEFAULT_BASE_URL : configured
+  const baseUrl = configured || DEFAULT_BASE_URL
+  const nanogpt = createNanoGPTImage({
+    apiKey: config.apiKey,
+    baseURL: baseUrl,
+    fetch: createImageSdkFetch('nanogpt-image'),
+  })
 
   return {
     id: 'nanogpt',
@@ -28,81 +41,66 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, modelInfo, referenceImages, signal } = options
 
-      return generateOpenAICompatible({
-        baseUrl,
-        apiKey: config.apiKey,
-        model,
+      const ratios = modelInfo?.supportedAspectRatios
+
+      return generateSdkImage({
+        model: nanogpt.imageModel(model),
         prompt,
-        size: resolveSize(spec, modelInfo?.supportedResolutions),
         referenceImages,
+        aspectRatio: ratios?.length
+          ? (specToAspectRatio(spec, ratios) as `${number}:${number}`)
+          : undefined,
+        providerOptions: {
+          nanogpt: { resolution: resolveSize(spec, modelInfo?.supportedResolutions) },
+        },
         signal,
-        serviceId: 'nanogpt-image',
       })
     },
 
     async listModels(): Promise<ImageModelInfo[]> {
-      try {
-        const response = await imageGetFetch(MODELS_ENDPOINT)
-        if (!response.ok) return getFallbackModels()
+      const response = await imageGetFetch(MODELS_ENDPOINT)
+      const data = await response.json()
+      const imageModels = data?.models?.image || {}
+      const entries = Object.values(imageModels) as Array<{
+        name?: string
+        model?: string
+        description?: string
+        cost?: Record<string, number>
+        resolutions?: Array<{ value: string; comment?: string }>
+        additionalParams?: { aspect_ratio?: { options?: Array<{ value?: string }> } }
+        tags?: string[]
+        supportsMultipleImg2Img?: boolean
+      }>
 
-        const data = await response.json()
-        const imageModels = data?.models?.image || {}
-        const entries = Object.values(imageModels) as Array<{
-          name?: string
-          model?: string
-          description?: string
-          cost?: Record<string, number>
-          resolutions?: Array<{ value: string; comment?: string }>
-          tags?: string[]
-          supportsMultipleImg2Img?: boolean
-        }>
+      return entries.map((m) => {
+        const supportsImg2Img =
+          m.tags?.some((t) => IMG2IMG_TAGS.has(t)) || m.supportsMultipleImg2Img || false
 
-        if (entries.length === 0) return getFallbackModels()
+        let costPerImage: number | undefined
+        if (m.cost && typeof m.cost === 'object') {
+          const costs = Object.values(m.cost).filter((c) => typeof c === 'number')
+          if (costs.length > 0) costPerImage = costs.reduce((a, b) => a + b, 0) / costs.length
+        }
 
-        return entries.map((m) => {
-          const supportsImg2Img =
-            m.tags?.some((t) => IMG2IMG_TAGS.has(t)) || m.supportsMultipleImg2Img || false
+        const resolutions = m.resolutions?.map((r) => r.value).filter(Boolean) ?? []
+        const aspectRatios =
+          m.additionalParams?.aspect_ratio?.options
+            ?.map((o) => o.value)
+            .filter((v): v is string => !!v && ASPECT_RATIO.test(v)) ?? []
 
-          let costPerImage: number | undefined
-          if (m.cost && typeof m.cost === 'object') {
-            const costs = Object.values(m.cost).filter((c) => typeof c === 'number')
-            if (costs.length > 0) costPerImage = costs.reduce((a, b) => a + b, 0) / costs.length
-          }
-
-          const resolutions = m.resolutions?.map((r) => r.value).filter(Boolean) ?? []
-
-          return {
-            id: m.model || m.name || '',
-            name: m.name || m.model || '',
-            description: m.description,
-            supportsImg2Img,
-            maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
-            costPerImage,
-            supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
-          }
-        })
-      } catch {
-        return getFallbackModels()
-      }
+        return {
+          id: m.model || m.name || '',
+          name: m.name || m.model || '',
+          description: m.description,
+          supportsImg2Img,
+          maxReferenceImages: supportsImg2Img && !m.supportsMultipleImg2Img ? 1 : undefined,
+          costPerImage,
+          supportedResolutions: resolutions.length > 0 ? resolutions : undefined,
+          supportedAspectRatios: aspectRatios.length > 0 ? aspectRatios : undefined,
+        }
+      })
     },
   }
-}
-
-function getFallbackModels(): ImageModelInfo[] {
-  return [
-    {
-      id: 'z-image-turbo',
-      name: 'Image Turbo',
-      description: 'Fast, efficient image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: 'flux-kontext',
-      name: 'Flux Kontext',
-      description: 'Context-aware image generation',
-      supportsImg2Img: true,
-    },
-  ]
 }
 
 /** Symbolic values NanoGPT models use in place of dimensions, and what they mean. */

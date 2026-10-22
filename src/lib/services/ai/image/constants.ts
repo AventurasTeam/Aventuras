@@ -1,6 +1,3 @@
-export const POLLINATIONS_DEFAULT_MODEL_ID = 'zimage'
-export const POLLINATIONS_REFERENCE_MODEL_ID = 'kontext'
-
 export const DEFAULT_AVG_PROMPT_TOKENS = 100
 export const DEFAULT_AVG_IMAGE_TOKENS = 1000
 

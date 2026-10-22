@@ -19,7 +19,7 @@ export function normalizeImageDataUrl(imageData: string | null | undefined): str
  * Image size is stored as an intent — orientation + size tier — not as pixels.
  *
  * The backends disagree on what a size even is: Google takes an aspect ratio from a closed
- * list and has no pixel parameter, OpenRouter takes ratio + `1K`/`2K`/`4K`, NanoGPT
+ * list and has no pixel parameter, OpenRouter takes a ratio + a resolution tier, NanoGPT
  * publishes a per-model list of accepted values, and only ComfyUI/A1111/Pollinations take
  * arbitrary dimensions. There is no pixel size they all accept, so each adapter resolves
  * the intent into whatever its backend takes.
@@ -79,16 +79,15 @@ export function specToPixels(spec: ImageSpec): ImageResolution {
   return rw >= rh ? { width: long, height: short } : { width: short, height: long }
 }
 
-/** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
-export function formatImageSize(res: ImageResolution): string {
-  return `${res.width}x${res.height}`
+/** The dimensions in a `WIDTHxHEIGHT` string. */
+export function parseImageSize(size: string | undefined): ImageResolution | undefined {
+  const match = /^(\d+)x(\d+)$/.exec(size ?? '')
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : undefined
 }
 
-/** MIME type of raw base64 image data, from its magic bytes. Unrecognised data is treated as PNG. */
-export function base64ImageMime(b64: string): 'image/png' | 'image/jpeg' | 'image/webp' {
-  if (b64.startsWith('/9j/')) return 'image/jpeg'
-  if (b64.startsWith('UklGR')) return 'image/webp'
-  return 'image/png'
+/** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
+export function formatImageSize(res: ImageResolution): `${number}x${number}` {
+  return `${res.width}x${res.height}`
 }
 
 export type SniffedImageMime =
@@ -131,7 +130,7 @@ const u32 = (bytes: Uint8Array, pos: number): number =>
 
 /**
  * MIME type of raw base64 image data, from its magic bytes, or `null` when it is not a
- * recognised image. Unlike `base64ImageMime`, nothing is assumed to be PNG.
+ * recognised image. Nothing is assumed to be PNG.
  */
 export function sniffImageMime(b64: string): SniffedImageMime | null {
   let bytes: Uint8Array

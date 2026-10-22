@@ -22,3 +22,6 @@ export const LLM_TIMEOUT_MIN_SECONDS = LLM_TIMEOUT_MIN / 1000
 
 /** Maximum timeout in seconds (for display/input) */
 export const LLM_TIMEOUT_MAX_SECONDS = LLM_TIMEOUT_MAX / 1000
+
+/** Default timeout for image generation requests: 5 minutes */
+export const IMAGE_TIMEOUT_DEFAULT = 300000

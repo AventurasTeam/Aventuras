@@ -17,7 +17,6 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
 }))
 
 vi.mock('./fetchAdapter', () => ({
-  imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
   fetchPublicImageBase64: vi.fn(),
 }))
@@ -42,8 +41,14 @@ import type { ImageModelInfo } from './types'
 import {
   supportsImageGeneration,
   requiresApiKey,
+  takesApiKey,
+  baseUrlMode,
+  IMAGE_PROVIDER_LABELS,
+  IMAGE_PROVIDER_OPTIONS,
   generateImage,
   supportsReferenceImages,
+  listImageModels,
+  listImageModelsByProvider,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageProviderType } from '#lib/types/index.ts'
@@ -60,8 +65,8 @@ describe('Image Provider Registry', () => {
     const ALL_PROVIDERS: Record<ImageProviderType, true> = {
       nanogpt: true,
       openai: true,
+      'openai-compatible': true,
       openrouter: true,
-      chutes: true,
       pollinations: true,
       google: true,
       zhipu: true,
@@ -79,10 +84,14 @@ describe('Image Provider Registry', () => {
     it('returns false for unknown providers', () => {
       expect(supportsImageGeneration('unknown-provider')).toBe(false)
     })
+
+    it('does not mistake an inherited object key for a provider', () => {
+      expect(supportsImageGeneration('constructor')).toBe(false)
+    })
   })
 
   describe('requiresApiKey', () => {
-    it.each(['comfyui', 'a1111'] as ImageProviderType[])(
+    it.each(['comfyui', 'a1111'] satisfies ImageProviderType[])(
       'returns false for the self-hosted provider %s',
       (providerType) => {
         expect(requiresApiKey(providerType)).toBe(false)
@@ -93,17 +102,77 @@ describe('Image Provider Registry', () => {
       'nanogpt',
       'openai',
       'openrouter',
-      'chutes',
       'google',
       'zhipu',
       // Its model list is open, its generation is not.
       'pollinations',
-    ] as ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
+    ] satisfies ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
       expect(requiresApiKey(providerType)).toBe(true)
+    })
+
+    it('does not require a key for OpenAI Compatible, which a proxy may leave open', () => {
+      expect(requiresApiKey('openai-compatible')).toBe(false)
     })
 
     it('assumes an unknown provider needs a key', () => {
       expect(requiresApiKey('unknown-provider')).toBe(true)
+    })
+  })
+
+  describe('takesApiKey', () => {
+    it.each(['comfyui', 'a1111'] satisfies ImageProviderType[])(
+      'is false for the self-hosted provider %s',
+      (providerType) => {
+        expect(takesApiKey(providerType)).toBe(false)
+      },
+    )
+
+    it.each([
+      'openai',
+      'openai-compatible',
+      'google',
+      'pollinations',
+    ] satisfies ImageProviderType[])('is true for %s', (providerType) => {
+      expect(takesApiKey(providerType)).toBe(true)
+    })
+
+    it('assumes an unknown provider takes a key', () => {
+      expect(takesApiKey('unknown-provider')).toBe(true)
+    })
+  })
+
+  describe('IMAGE_PROVIDER_OPTIONS', () => {
+    it('offers every provider once, under its label', () => {
+      expect(IMAGE_PROVIDER_OPTIONS.map((o) => o.value).toSorted()).toEqual(
+        Object.keys(IMAGE_PROVIDER_LABELS).toSorted(),
+      )
+      for (const { value, label } of IMAGE_PROVIDER_OPTIONS) {
+        expect(label).toBe(IMAGE_PROVIDER_LABELS[value])
+      }
+    })
+  })
+
+  describe('baseUrlMode', () => {
+    it('requires one for OpenAI Compatible, which has no endpoint of its own', () => {
+      expect(baseUrlMode('openai-compatible')).toBe('required')
+    })
+
+    it.each(['openai', 'zhipu', 'comfyui', 'a1111'] satisfies ImageProviderType[])(
+      'makes it optional for %s',
+      (providerType) => {
+        expect(baseUrlMode(providerType)).toBe('optional')
+      },
+    )
+
+    it.each(['nanogpt', 'openrouter', 'pollinations', 'google'] satisfies ImageProviderType[])(
+      'offers none for the fixed endpoint of %s',
+      (providerType) => {
+        expect(baseUrlMode(providerType)).toBe('none')
+      },
+    )
+
+    it('offers none for an unknown provider', () => {
+      expect(baseUrlMode('unknown-provider')).toBe('none')
     })
   })
 
@@ -314,6 +383,44 @@ describe('Image Provider Registry', () => {
     it('is false for an unknown profile', async () => {
       vi.mocked(settings.getImageProfile).mockReturnValue(undefined)
       expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+  })
+  describe('model listing failures', () => {
+    function failingProvider() {
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate: vi.fn(),
+        listModels: vi.fn(async () => {
+          throw new Error('Image API error 401: bad key')
+        }),
+      })
+    }
+
+    it('rethrows from listImageModelsByProvider so the profile form can show it', async () => {
+      failingProvider()
+      await expect(listImageModelsByProvider('openai', 'sk-fail-a', true)).rejects.toThrow(
+        'bad key',
+      )
+    })
+
+    it('swallows in listImageModels and does not cache the failure', async () => {
+      failingProvider()
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        providerType: 'openai',
+        apiKey: 'sk-fail-b',
+      } as ReturnType<typeof settings.getImageProfile>)
+      expect(await listImageModels('p')).toEqual([])
+
+      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue({
+        id: 'openai',
+        name: 'openai',
+        generate: vi.fn(),
+        listModels,
+      })
+      expect(await listImageModels('p')).toHaveLength(1)
+      expect(listModels).toHaveBeenCalledTimes(1)
     })
   })
 })

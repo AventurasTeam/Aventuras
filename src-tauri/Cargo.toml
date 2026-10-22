@@ -29,7 +29,6 @@ tauri-plugin-process = "2"
 # Defaults are off so the `cookies` jar stays out; the rest of them are listed again here.
 # unsafe-headers lets httpFetch drop Origin and lifts the forbidden-header filter for every call.
 tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls", "http2", "charset", "system-proxy", "gzip", "brotli", "zstd", "unsafe-headers"] }
-tauri-plugin-websocket = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-generation = { path = "plugins/generation" }
 

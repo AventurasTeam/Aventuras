@@ -21,7 +21,7 @@ import { fetchPublicImageBase64 } from './fetchAdapter'
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
 import { createOpenAIProvider } from './openai'
-import { createChutesProvider } from './chutes'
+import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider } from './google'
 import { createZhipuProvider } from './zhipu'
@@ -40,8 +40,8 @@ type ProviderFactory = (config: ImageProviderConfig) => ImageProvider
 const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   nanogpt: createNanoGPTProvider,
   openai: createOpenAIProvider,
+  'openai-compatible': createOpenAICompatibleProvider,
   openrouter: createOpenRouterProvider,
-  chutes: createChutesProvider,
   pollinations: createPollinationsProvider,
   google: createGoogleProvider,
   zhipu: createZhipuProvider,
@@ -49,34 +49,62 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   a1111: createA1111Provider,
 }
 
+export const IMAGE_PROVIDER_LABELS: Record<ImageProviderType, string> = {
+  nanogpt: 'NanoGPT',
+  openai: 'OpenAI',
+  'openai-compatible': 'OpenAI Compatible',
+  openrouter: 'OpenRouter',
+  pollinations: 'Pollinations',
+  google: 'Google AI Studio',
+  zhipu: 'Z.AI',
+  comfyui: 'ComfyUI',
+  a1111: 'A1111 / SD.cpp / Kobold',
+}
+
+type FieldMode = 'required' | 'optional' | 'none'
+
 /**
- * Whether a provider authenticates with an API key. Only the ones that run on the user's
- * own machine do not. Exhaustive by type, so a new provider has to declare which it is.
+ * How a provider uses an API key: `required` for the hosted ones, `optional` for an endpoint
+ * the user runs or fronts themselves, `none` for the ones that run on the user's own machine.
+ * Exhaustive by type, so a new provider has to declare which it is.
  *
  * Pollinations counts as requiring one: the model list is served without it, but
  * generation is not, and a profile that can list and cannot draw is the worse failure —
  * it looks configured.
  */
-const PROVIDER_REQUIRES_API_KEY: Record<ImageProviderType, boolean> = {
-  nanogpt: true,
-  openai: true,
-  openrouter: true,
-  chutes: true,
-  google: true,
-  zhipu: true,
-  pollinations: true,
-  comfyui: false,
-  a1111: false,
+const PROVIDER_API_KEY: Record<ImageProviderType, FieldMode> = {
+  nanogpt: 'required',
+  openai: 'required',
+  'openai-compatible': 'optional',
+  openrouter: 'required',
+  google: 'required',
+  zhipu: 'required',
+  pollinations: 'required',
+  comfyui: 'none',
+  a1111: 'none',
+}
+
+/** Whether a provider takes a base URL: `required` when it has no endpoint of its own to default to. */
+const PROVIDER_BASE_URL: Record<ImageProviderType, FieldMode> = {
+  nanogpt: 'none',
+  openai: 'optional',
+  'openai-compatible': 'required',
+  openrouter: 'none',
+  google: 'none',
+  zhipu: 'optional',
+  pollinations: 'none',
+  comfyui: 'optional',
+  a1111: 'optional',
 }
 
 /** Whether the adapter sends reference images; the rest would only waste the download. */
 const PROVIDER_READS_REFERENCES: Record<ImageProviderType, boolean> = {
   nanogpt: true,
   openai: true,
+  'openai-compatible': true,
   openrouter: true,
   pollinations: true,
   google: true,
-  chutes: false,
   zhipu: false,
   comfyui: false,
   a1111: false,
@@ -107,13 +135,32 @@ function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?:
 /**
  * Check if a provider type supports image generation.
  */
-export function supportsImageGeneration(providerType: string): boolean {
-  return providerType in PROVIDER_FACTORIES
+export function supportsImageGeneration(providerType: string): providerType is ImageProviderType {
+  return Object.hasOwn(PROVIDER_FACTORIES, providerType)
+}
+
+export const IMAGE_PROVIDER_OPTIONS = Object.entries(IMAGE_PROVIDER_LABELS).flatMap(
+  ([value, label]) => (supportsImageGeneration(value) ? [{ value, label }] : []),
+)
+
+// An unknown provider is assumed to need a key and to take no base URL.
+function apiKeyMode(providerType: string): FieldMode {
+  return supportsImageGeneration(providerType) ? PROVIDER_API_KEY[providerType] : 'required'
 }
 
 /** Whether a profile of this provider needs an API key to be usable. */
 export function requiresApiKey(providerType: string): boolean {
-  return PROVIDER_REQUIRES_API_KEY[providerType as ImageProviderType] ?? true
+  return apiKeyMode(providerType) === 'required'
+}
+
+/** Whether a profile of this provider has an API key field at all. */
+export function takesApiKey(providerType: string): boolean {
+  return apiKeyMode(providerType) !== 'none'
+}
+
+/** Whether a profile of this provider needs, may take, or has no base URL. */
+export function baseUrlMode(providerType: string): FieldMode {
+  return supportsImageGeneration(providerType) ? PROVIDER_BASE_URL[providerType] : 'none'
 }
 
 /**
@@ -239,7 +286,8 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
 
 /**
  * List image models by provider type directly (without needing a profile).
- * Used during profile creation to preview available models.
+ * Used during profile creation to preview available models. A failed fetch rethrows so the
+ * form can show it.
  */
 export async function listImageModelsByProvider(
   providerType: ImageProviderType,
@@ -267,7 +315,7 @@ export async function listImageModelsByProvider(
     return models
   } catch (error) {
     log('Error listing models by provider', { providerType, error })
-    return []
+    throw error
   }
 }
 
@@ -276,7 +324,7 @@ export async function listImageModelsByProvider(
  */
 export async function getProviderSamplerInfo(
   baseUrl?: string,
-  providerType: 'comfyui' | 'a1111' = 'comfyui',
+  providerType: Extract<ImageProviderType, 'comfyui' | 'a1111'> = 'comfyui',
 ): Promise<{ samplers: string[]; schedulers: string[] }> {
   try {
     const config: ImageProviderConfig = {

@@ -34,7 +34,7 @@
     "@ai-sdk/groq": "^4.0.59",
     "@ai-sdk/mistral": "^4.0.62",
     "@ai-sdk/openai": "^4.0.91",
-    "@ai-sdk/openai-compatible": "^3.0.67",
+    "@ai-sdk/openai-compatible": "^3.0.70",
     "@ai-sdk/xai": "^5.0.20",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-liquid": "^6.3.3",
@@ -44,7 +44,6 @@
     "@lezer/highlight": "^1.2.5",
     "@lucide/svelte": "^1.55.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
-    "@saintno/comfyui-sdk": "0.3.1",
     "@tauri-apps/api": "^2.12.3",
     "@tauri-apps/plugin-dialog": "^2.8.2",
     "@tauri-apps/plugin-fs": "^2.7.0",
@@ -54,11 +53,9 @@
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-sql": "^2.5.0",
     "@tauri-apps/plugin-updater": "^2.13.3",
-    "@tauri-apps/plugin-websocket": "^2.5.0",
     "@tutorlatin/svelte-tiny-virtual-list": "^3.0.20",
     "ai": "^7.0.137",
     "ai-sdk-pollinations": "^0.0.2",
-    "buffer": "^6.0.3",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "gpt-tokenizer": "^4.0.0",
@@ -106,9 +103,6 @@
     "vitest": "^5.0.3"
   },
   "overrides": {
-    "@saintno/comfyui-sdk": {
-      "typescript": "$typescript"
-    },
     "runed": {
       "@sveltejs/kit": "$@sveltejs/kit"
     }

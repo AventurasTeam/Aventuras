@@ -1,34 +1,13 @@
-import type { LanguageModelMiddleware } from 'ai'
+import type { ImageModelMiddleware, LanguageModelMiddleware } from 'ai'
+import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
+import { sleep } from '#lib/utils/async.ts'
 
 const RETRY_DELAYS_MS = [10_000, 20_000, 30_000]
 const JITTER_FACTOR = 0.1
 
 function withJitter(ms: number): number {
   return ms * (1 + (Math.random() * 2 - 1) * JITTER_FACTOR)
-}
-
-/**
- * Abort-aware sleep. Resolves after `ms`, or rejects with the signal's reason
- * if the caller cancels the generation mid-backoff. Without this, a 10–30s
- * sleep would block cancellation until the delay elapses.
- */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason)
-      return
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(signal!.reason)
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
 }
 
 function is429(error: unknown): boolean {
@@ -77,10 +56,12 @@ export interface RetryHooks {
   }): void
 }
 
+/** A `Retry-After` longer than `maxRetryAfterMs` (default: the LLM timeout) fails the call at once. */
 async function withRetry<T>(
   fn: () => PromiseLike<T>,
   signal: AbortSignal | undefined,
   hooks: RetryHooks,
+  maxRetryAfterMs?: number,
 ): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
@@ -96,10 +77,10 @@ async function withRetry<T>(
       }
 
       const retryAfterMs = parseRetryAfterMs(error)
-      const maxRetryAfterMs = settings.apiSettings.llmTimeoutMs
-      if (retryAfterMs !== null && retryAfterMs > maxRetryAfterMs) {
+      const cap = maxRetryAfterMs ?? settings.apiSettings.llmTimeoutMs
+      if (retryAfterMs !== null && retryAfterMs > cap) {
         console.warn(
-          `[retryMiddleware] 429 with Retry-After=${Math.round(retryAfterMs / 1000)}s exceeds timeout cap (${maxRetryAfterMs / 1000}s), failing fast`,
+          `[retryMiddleware] 429 with Retry-After=${Math.round(retryAfterMs / 1000)}s exceeds timeout cap (${cap / 1000}s), failing fast`,
         )
         throw error
       }
@@ -136,5 +117,12 @@ export function retryOn429Middleware(hooks: RetryHooks = {}): LanguageModelMiddl
       withRetry(() => doGenerate(), params.abortSignal, hooks),
     wrapStream: async ({ doStream, params }) =>
       withRetry(() => doStream(), params.abortSignal, hooks),
+  }
+}
+
+export function retryOn429ImageMiddleware(hooks: RetryHooks = {}): ImageModelMiddleware {
+  return {
+    wrapGenerate: async ({ doGenerate, params }) =>
+      withRetry(() => doGenerate(), params.abortSignal, hooks, IMAGE_TIMEOUT_DEFAULT),
   }
 }

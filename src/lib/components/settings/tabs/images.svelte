@@ -14,7 +14,10 @@
     getProviderSamplerInfo,
     listLoras,
     generateImage,
-    requiresApiKey,
+    takesApiKey,
+    baseUrlMode,
+    IMAGE_PROVIDER_LABELS,
+    IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
     type ImageModelInfo,
   } from '#lib/services/ai/image/index.ts'
@@ -42,17 +45,8 @@
     { value: 'image-style-photorealistic', label: 'Photorealistic' },
   ] as const
 
-  const providerTypes: { value: ImageProviderType; label: string }[] = [
-    { value: 'nanogpt', label: 'NanoGPT' },
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'openrouter', label: 'OpenRouter' },
-    { value: 'chutes', label: 'Chutes' },
-    { value: 'pollinations', label: 'Pollinations' },
-    { value: 'google', label: 'Google AI Studio' },
-    { value: 'zhipu', label: 'Zhipu CogView' },
-    { value: 'comfyui', label: 'ComfyUI' },
-    { value: 'a1111', label: 'A1111 / SD.cpp / Kobold' },
-  ]
+  const profileOptionLabel = (p: ImageProfile) =>
+    `${p.name} (${IMAGE_PROVIDER_LABELS[p.providerType] ?? p.providerType}${p.model ? ` · ${p.model}` : ''})`
   const profileModes = [
     { value: ComfyMode.CustomWorkflow, label: 'Custom Workflow' },
     { value: ComfyMode.BasicTxt2Img, label: 'Basic Text to Image' },
@@ -240,6 +234,7 @@
       profileModels = models
     } catch (error) {
       if (reqId !== profileModelsReqId) return
+      profileModels = []
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
       if (reqId === profileModelsReqId) isLoadingProfileModels = false
@@ -792,8 +787,7 @@
                       <div class="min-w-0 flex-1">
                         <span class="text-sm font-medium">{profile.name}</span>
                         <p class="text-muted-foreground text-xs">
-                          {providerTypes.find((p) => p.value === profile.providerType)?.label ||
-                            profile.providerType}
+                          {IMAGE_PROVIDER_LABELS[profile.providerType] ?? profile.providerType}
                           {profile.model ? ` · ${profile.model}` : ''}
                           {profile.apiKey ? ' · Key configured' : ' · No API key'}
                         </p>
@@ -851,8 +845,7 @@
                     items={settings.imageProfiles}
                     selected={getSelectedImageProfile('standard')}
                     onSelect={(v) => onProfileChange((v as ImageProfile).id, 'standard')}
-                    itemLabel={(p: ImageProfile) =>
-                      `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+                    itemLabel={profileOptionLabel}
                     itemValue={(p: ImageProfile) => p.id}
                     placeholder="Select an image profile"
                   />
@@ -878,8 +871,7 @@
                     items={settings.imageProfiles}
                     selected={getSelectedImageProfile('reference')}
                     onSelect={(v) => onProfileChange((v as ImageProfile).id, 'reference')}
-                    itemLabel={(p: ImageProfile) =>
-                      `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+                    itemLabel={profileOptionLabel}
                     itemValue={(p: ImageProfile) => p.id}
                     placeholder="Select an image profile"
                   />
@@ -954,8 +946,7 @@
               items={settings.imageProfiles}
               selected={getSelectedImageProfile('portrait')}
               onSelect={(v) => onProfileChange((v as ImageProfile).id, 'portrait')}
-              itemLabel={(p: ImageProfile) =>
-                `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+              itemLabel={profileOptionLabel}
               itemValue={(p: ImageProfile) => p.id}
               placeholder="Select an image profile"
             />
@@ -1008,8 +999,7 @@
               items={settings.imageProfiles}
               selected={getSelectedImageProfile('background')}
               onSelect={(v) => onProfileChange((v as ImageProfile).id, 'background')}
-              itemLabel={(p: ImageProfile) =>
-                `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+              itemLabel={profileOptionLabel}
               itemValue={(p: ImageProfile) => p.id}
               placeholder="Select an image profile"
             />
@@ -1056,8 +1046,7 @@
                 items={settings.imageProfiles}
                 selected={settings.imageProfiles.find((p) => p.id === testProfileId)}
                 onSelect={(v) => (testProfileId = (v as ImageProfile).id)}
-                itemLabel={(p: ImageProfile) =>
-                  `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+                itemLabel={profileOptionLabel}
                 itemValue={(p: ImageProfile) => p.id}
                 placeholder="Select a profile to test"
               />
@@ -1123,18 +1112,18 @@
     <div class="space-y-2">
       <Label>Provider</Label>
       <Autocomplete
-        items={providerTypes}
-        selected={providerTypes.find((p) => p.value === profileProviderType)}
+        items={IMAGE_PROVIDER_OPTIONS}
+        selected={IMAGE_PROVIDER_OPTIONS.find((p) => p.value === profileProviderType)}
         onSelect={(v) => {
-          profileProviderType = (v as { value: ImageProviderType }).value
+          if (v && !Array.isArray(v)) profileProviderType = v.value
         }}
-        itemLabel={(p: { label: string }) => p.label}
-        itemValue={(p: { value: string }) => p.value}
+        itemLabel={(p) => p.label}
+        itemValue={(p) => p.value}
         placeholder="Select provider"
       />
     </div>
 
-    {#if requiresApiKey(profileProviderType)}
+    {#if takesApiKey(profileProviderType)}
       <div class="space-y-2">
         <Label>API Key</Label>
         <div class="flex gap-2">
@@ -1187,9 +1176,11 @@
       </div>
     {/if}
 
-    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'zhipu' || profileProviderType === 'a1111'}
+    {#if baseUrlMode(profileProviderType) !== 'none'}
       <div class="space-y-2">
-        <Label>Base URL (optional)</Label>
+        <Label>
+          {baseUrlMode(profileProviderType) === 'required' ? 'Base URL' : 'Base URL (optional)'}
+        </Label>
         <Input bind:value={profileBaseUrl} placeholder="Custom base URL" />
       </div>
     {/if}

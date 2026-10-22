@@ -24,7 +24,7 @@ state — who is present, where you are, what you carry — is tracked turn by t
   tool-calling assistant that edits them and shows you a diff before anything lands.
 - **Every prompt is editable** — they are Liquid templates, all of them, in an in-app editor.
 - **Images** — inline `<pic>` illustrations, scene backgrounds and character portraits, across
-  nine backends including local ComfyUI and A1111.
+  nine backends including local ComfyUI (0.26.0 or later) and A1111.
 - **Writing tools** — local grammar checking (Harper/WASM), style analysis for repetition,
   suggestions that match how you write.
 - **Yours to keep** — SQLite on your machine, full backup/restore, `.avt` story export, LAN sync

@@ -6,7 +6,6 @@ import type {
   FontSizeOption,
   GenerationPreset,
   ImageProfile,
-  ImageProviderType,
   ProviderType,
   ReasoningEffort,
   TextModel,
@@ -41,7 +40,7 @@ import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
 import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '#lib/constants/layout.ts'
-import { SvelteSet, SvelteMap } from 'svelte/reactivity'
+import { SvelteSet } from 'svelte/reactivity'
 import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
 import { applyIncognitoKeyboard } from '#lib/utils/platform.ts'
 import type { ActivityReporting } from '#lib/services/activity/index.ts'
@@ -1945,9 +1944,6 @@ class SettingsStore {
       // Load image profiles
       await this.loadImageProfiles()
 
-      // Ensure default image generation profiles are set
-      await this.migrateImageProfileDefaults()
-
       this.initialized = true
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -2475,89 +2471,6 @@ class SettingsStore {
       console.log(
         '[Settings] Migrated wizard null/undefined profileIds to default OpenRouter profile',
       )
-    }
-  }
-
-  /**
-   * Auto-migrate existing API Profile references to Image Profiles.
-   * On first load after the rework, if imageProfiles is empty but imageGeneration
-   * settings have API profile IDs, create Image Profiles from those API Profiles.
-   */
-  async migrateImageProfileDefaults() {
-    if (this.imageProfiles.length > 0) return
-
-    const imgSettings = this.systemServicesSettings.imageGeneration
-    // Map each profile field to its corresponding old model field
-    // The old model fields (model, referenceModel, portraitModel, backgroundModel) have been
-    // removed from the type but may still exist in persisted user data
-    const profileFieldMap: Record<string, string> = {
-      profileId: 'model',
-      referenceProfileId: 'referenceModel',
-      portraitProfileId: 'portraitModel',
-      backgroundProfileId: 'backgroundModel',
-    }
-
-    // Map from "apiProfileId:model" → new Image Profile ID
-    const newProfileIds = new SvelteMap<string, string>()
-    let changed = false
-
-    for (const [profileField, modelField] of Object.entries(profileFieldMap)) {
-      const apiProfileId = (imgSettings as unknown as Record<string, unknown>)[profileField] as
-        string | undefined
-      const model = (imgSettings as unknown as Record<string, unknown>)[modelField] as
-        string | undefined
-
-      if (!apiProfileId || !model) continue
-
-      const uniqueKey = `${apiProfileId}:${model}`
-      if (newProfileIds.has(uniqueKey)) {
-        ;(imgSettings as unknown as Record<string, unknown>)[profileField] =
-          newProfileIds.get(uniqueKey)!
-        changed = true
-        continue
-      }
-
-      const apiProfile = this.getProfile(apiProfileId)
-      if (!apiProfile) continue
-
-      // Map ProviderType to ImageProviderType (only for image-capable providers)
-      const providerType = apiProfile.providerType as string
-      const imageProviderTypes = ['nanogpt', 'openai', 'chutes', 'pollinations', 'google', 'zhipu']
-      if (!imageProviderTypes.includes(providerType)) continue
-
-      const newProfile = await this.addImageProfile({
-        name: `${apiProfile.name} (${model})`,
-        providerType: providerType as ImageProviderType,
-        apiKey: apiProfile.apiKey ?? '',
-        baseUrl: apiProfile.baseUrl,
-        model: model,
-        providerOptions: {},
-      })
-
-      newProfileIds.set(uniqueKey, newProfile.id)
-      ;(imgSettings as unknown as Record<string, unknown>)[profileField] = newProfile.id
-      changed = true
-    }
-
-    if (changed) {
-      await this.saveSystemServicesSettings()
-      console.log(
-        '[Settings] Auto-migrated image generation profiles from API Profiles to Image Profiles',
-      )
-    }
-
-    // Ensure all existing image profiles have a model field
-    let profilesUpdated = false
-    for (const profile of this.imageProfiles) {
-      if (!profile.model) {
-        profile.model = 'flux'
-        profilesUpdated = true
-      }
-    }
-    if (profilesUpdated) {
-      this.imageProfiles = [...this.imageProfiles]
-      await this.saveImageProfiles()
-      console.log('[Settings] Migrated image profiles to include model field')
     }
   }
 

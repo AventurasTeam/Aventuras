@@ -10,179 +10,25 @@ import { parseManualBody } from './manualBody'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { httpFetch } from '#lib/utils/http.ts'
+import { logErrorResponse, logStreamResponse, providerMetadataOf, redactHeaders } from './debugLog'
 
-function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
-  if (!headers) return {}
-  if (headers instanceof Headers || Array.isArray(headers)) {
-    return Object.fromEntries(headers)
-  }
-  return headers as Record<string, string>
+interface Usage {
+  input_tokens?: number
+  output_tokens?: number
+  prompt_tokens?: number
+  completion_tokens?: number
 }
 
-async function tauriFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return httpFetch(typeof input === 'string' ? input : input.toString(), {
-    method: init?.method ?? 'GET',
-    headers: init?.headers,
-    body: init?.body as string | undefined,
-    signal: init?.signal,
-  })
-}
-
-function patchResponseJson(json: Record<string, unknown>): Record<string, unknown> {
-  if (!json.usage) {
-    json.usage = { input_tokens: 0, output_tokens: 0 }
-  } else if (typeof json.usage === 'object') {
-    const usage = json.usage as Record<string, unknown>
-    usage.input_tokens ??= usage.prompt_tokens ?? 0
-    usage.output_tokens ??= usage.completion_tokens ?? 0
+function patchResponseJson(json: object): object {
+  const usage = 'usage' in json ? json.usage : undefined
+  if (!usage) {
+    Object.assign(json, { usage: { input_tokens: 0, output_tokens: 0 } })
+  } else if (typeof usage === 'object') {
+    const patched: Usage = usage
+    patched.input_tokens ??= patched.prompt_tokens ?? 0
+    patched.output_tokens ??= patched.completion_tokens ?? 0
   }
   return json
-}
-
-async function logErrorResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): Promise<void> {
-  try {
-    const text = await response.text()
-    let errorPayload
-    try {
-      errorPayload = JSON.parse(text)
-    } catch {
-      errorPayload = text
-    }
-    debug.addDebugResponse(
-      debugId,
-      serviceId,
-      { status: response.status, statusText: response.statusText, error: errorPayload },
-      startTime,
-      text,
-    )
-  } catch (err) {
-    console.warn('[Fetch] Failed to read error response for logging:', err)
-  }
-}
-
-async function logStreamResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): Promise<void> {
-  try {
-    const text = await response.text()
-    let parsedBody: any = text
-    const providerMetadata: Record<string, any> = {}
-    try {
-      const chunks = text.split('\n\n').filter((c) => c.trim())
-      const parsedChunks = chunks.map((chunk) => {
-        if (chunk.startsWith('data: ')) {
-          const dataStr = chunk.slice(6)
-          if (dataStr === '[DONE]') return { done: true }
-          try {
-            const parsed = JSON.parse(dataStr)
-            if (parsed.promptFeedback) providerMetadata.promptFeedback = parsed.promptFeedback
-            if (parsed.candidates?.[0]?.safetyRatings) {
-              providerMetadata.safetyRatings = parsed.candidates[0].safetyRatings
-            }
-            return parsed
-          } catch {
-            return chunk
-          }
-        }
-        return chunk
-      })
-
-      // Aggregation logic for streaming choices...
-      const aggregatedChoices: Record<number, any> = {}
-      let aggregatedId = ''
-      let aggregatedModel = ''
-      let hasAggregation = false
-
-      for (const chunk of parsedChunks) {
-        if (typeof chunk !== 'object' || !chunk || !chunk.choices) continue
-        hasAggregation = true
-        if (chunk.id) aggregatedId = chunk.id
-        if (chunk.model) aggregatedModel = chunk.model
-
-        for (const choice of chunk.choices) {
-          const idx = choice.index
-          aggregatedChoices[idx] ??= {
-            index: idx,
-            message: { role: 'assistant', content: '' },
-            finish_reason: null,
-          }
-          const agg = aggregatedChoices[idx]
-          const delta = choice.delta ?? {}
-          if (delta.role) agg.message.role = delta.role
-          if (delta.content) agg.message.content += delta.content
-          if (delta.reasoning)
-            agg.message.reasoning = (agg.message.reasoning || '') + delta.reasoning
-          if (delta.tool_calls) {
-            agg.message.tool_calls ??= []
-            for (const tc of delta.tool_calls) {
-              const tcIdx = tc.index
-              let aggTc = agg.message.tool_calls.find((t: any) => t.index === tcIdx)
-              if (!aggTc) {
-                aggTc = {
-                  index: tcIdx,
-                  id: '',
-                  type: 'function',
-                  function: { name: '', arguments: '' },
-                }
-                agg.message.tool_calls.push(aggTc)
-              }
-              if (tc.id) aggTc.id = tc.id
-              if (tc.type) aggTc.type = tc.type
-              if (tc.function?.name) aggTc.function.name = tc.function.name
-              if (typeof tc.function?.arguments === 'string')
-                aggTc.function.arguments += tc.function.arguments
-            }
-          }
-          if (choice.finish_reason !== undefined && choice.finish_reason !== null)
-            agg.finish_reason = choice.finish_reason
-        }
-      }
-
-      if (hasAggregation) {
-        const finalChoices = Object.values(aggregatedChoices).map((choice: any) => {
-          if (choice.message.tool_calls) {
-            choice.message.tool_calls = choice.message.tool_calls.map((tc: any) => {
-              try {
-                tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
-              } catch {}
-              return tc
-            })
-          }
-          return choice
-        })
-
-        parsedBody = {
-          _note: 'Aggregated from stream',
-          id: aggregatedId,
-          model: aggregatedModel,
-          choices: finalChoices,
-        }
-      } else if (parsedChunks.length > 0) {
-        parsedBody = parsedChunks
-      }
-    } catch {}
-
-    debug.addDebugResponse(
-      debugId,
-      serviceId,
-      {
-        body: parsedBody,
-        providerMetadata: Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
-        stream: true,
-      },
-      startTime,
-    )
-  } catch (err) {
-    console.warn('[Fetch] Failed to read streaming response for logging:', err)
-  }
 }
 
 export function createTimeoutFetch(
@@ -193,48 +39,31 @@ export function createTimeoutFetch(
 ) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const startTime = Date.now()
-    let parsedBody: any = {}
+    let requestBody: Record<string, unknown> = {}
     if (typeof init?.body === 'string') {
       try {
-        parsedBody = JSON.parse(init.body)
+        requestBody = JSON.parse(init.body)
       } catch {
         throw new Error('Request body is not valid JSON')
       }
     }
 
     const manual = parseManualBody(manualBody)
-    if (manual) {
-      const reservedKeys = new Set(['messages', 'tools', 'tool_choice', 'stream', 'model'])
-      for (const [key, value] of Object.entries(manual)) {
-        if (!reservedKeys.has(key)) {
-          parsedBody[key] = value
-        }
-      }
-    } else if (manualBody.trim()) {
+    const reservedKeys = new Set(['messages', 'tools', 'tool_choice', 'stream', 'model'])
+    const manualEntries = Object.entries(manual ?? {}).filter(([key]) => !reservedKeys.has(key))
+    if (!manual && manualBody.trim()) {
       console.log('[Fetch] Invalid manualBody JSON, skipping')
     }
 
-    if (Object.keys(parsedBody).length === 0) {
-      parsedBody = undefined
-    }
-
-    const rawHeaders = normalizeHeaders(init?.headers)
-    const sanitizedHeaders: Record<string, string> = {}
-    const sensitiveKeys = new Set(['authorization', 'x-api-key', 'api-key'])
-    for (const [key, value] of Object.entries(rawHeaders)) {
-      if (sensitiveKeys.has(key.toLowerCase()) && value.length > 8) {
-        sanitizedHeaders[key] = value.slice(0, 4) + '...' + value.slice(-4)
-      } else {
-        sanitizedHeaders[key] = value
-      }
-    }
+    const merged = { ...requestBody, ...Object.fromEntries(manualEntries) }
+    const parsedBody = Object.keys(merged).length > 0 ? merged : undefined
 
     const debugId = debug.addDebugRequest(
       serviceId,
       {
         url: input.toString(),
         method: init?.method ?? 'GET',
-        headers: sanitizedHeaders,
+        headers: redactHeaders(init?.headers),
         body: parsedBody,
       },
       debugIdExternal,
@@ -243,10 +72,11 @@ export function createTimeoutFetch(
     const guard = createRequestGuard({ timeoutMs, callerSignal: init?.signal })
 
     try {
-      let response = await tauriFetch(input, {
-        ...init,
-        signal: guard.signal,
+      let response = await httpFetch(input.toString(), {
+        method: init?.method,
+        headers: init?.headers,
         body: parsedBody ? JSON.stringify(parsedBody) : undefined,
+        signal: guard.signal,
       })
 
       // Paths A and B hand the body to the caller unread, so it needs its own idle timer.
@@ -284,32 +114,15 @@ export function createTimeoutFetch(
         responsePayload = text
       }
 
-      const providerMetadata: Record<string, any> = {}
-      if (typeof responsePayload === 'object' && responsePayload !== null) {
-        if (responsePayload.promptFeedback)
-          providerMetadata.promptFeedback = responsePayload.promptFeedback
-        if (
-          Array.isArray(responsePayload.candidates) &&
-          responsePayload.candidates[0]?.safetyRatings
-        ) {
-          providerMetadata.safetyRatings = responsePayload.candidates[0].safetyRatings
-        }
-      }
-
       debug.addDebugResponse(
         debugId,
         serviceId,
-        {
-          body: responsePayload,
-          providerMetadata: Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
-        },
+        { body: responsePayload, providerMetadata: providerMetadataOf(responsePayload) },
         startTime,
       )
 
       if (typeof responsePayload === 'object' && responsePayload !== null) {
-        const patched = JSON.stringify(
-          patchResponseJson(responsePayload as Record<string, unknown>),
-        )
+        const patched = JSON.stringify(patchResponseJson(responsePayload))
         return new Response(patched, {
           status: response.status,
           statusText: response.statusText,

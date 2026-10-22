@@ -25,6 +25,10 @@ export {
   getProviderSamplerInfo,
   listLoras,
   requiresApiKey,
+  takesApiKey,
+  baseUrlMode,
+  IMAGE_PROVIDER_LABELS,
+  IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,
 } from './providers/registry'
 
@@ -32,6 +36,9 @@ export {
 export {
   isImageGenerationEnabled,
   hasRequiredCredentials,
+  missingCredential,
+  portraitCredentialError,
+  type MissingCredential,
   type ImageProfileSlot,
   getProviderDisplayName,
   retryImageGeneration,

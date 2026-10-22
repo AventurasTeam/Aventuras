@@ -8,7 +8,10 @@ const state = {
     portraitProfileId: null as string | null,
     referenceProfileId: null as string | null,
   },
-  profiles: {} as Record<string, { id: string; providerType: string; apiKey: string }>,
+  profiles: {} as Record<
+    string,
+    { id: string; providerType: string; apiKey: string; baseUrl?: string }
+  >,
 }
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
@@ -26,11 +29,14 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 }))
 
 vi.mock('./providers/registry', () => ({
+  IMAGE_PROVIDER_LABELS: { openai: 'OpenAI' },
   supportsImageGeneration: (providerType: string) => providerType !== 'no-backend',
   requiresApiKey: (providerType: string) => providerType === 'openai',
+  baseUrlMode: (providerType: string) => (providerType === 'proxy' ? 'required' : 'none'),
 }))
 
-const { isImageGenerationEnabled, hasRequiredCredentials } = await import('./imageUtils')
+const { isImageGenerationEnabled, hasRequiredCredentials, missingCredential } =
+  await import('./imageUtils')
 
 const SLOTS: ImageProfileSlot[] = ['standard', 'background', 'portrait', 'reference']
 
@@ -90,6 +96,45 @@ describe('hasRequiredCredentials', () => {
     state.profiles['p-std'].apiKey = 'sk-test'
 
     expect(hasRequiredCredentials('standard')).toBe(true)
+  })
+
+  it('requires a base URL when the provider has no endpoint of its own', () => {
+    setSlotIds('p-proxy', null, null, null)
+    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'proxy', apiKey: '' }
+
+    expect(hasRequiredCredentials('standard')).toBe(false)
+
+    state.profiles['p-proxy'].baseUrl = '   '
+    expect(hasRequiredCredentials('standard')).toBe(false)
+
+    state.profiles['p-proxy'].baseUrl = 'http://localhost:4000/v1'
+    expect(hasRequiredCredentials('standard')).toBe(true)
+  })
+})
+
+describe('missingCredential', () => {
+  it("names the slot's profile when none is set or the provider is unsupported", () => {
+    setSlotIds('p-std', null, null, null)
+    expect(missingCredential('background')).toBe('profile')
+
+    state.profiles['p-none'] = { id: 'p-none', providerType: 'no-backend', apiKey: 'k' }
+    setSlotIds('p-none', null, null, null)
+    expect(missingCredential()).toBe('profile')
+  })
+
+  it('names the api key or the base URL, whichever is missing', () => {
+    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'proxy', apiKey: '' }
+    setSlotIds('p-proxy', null, null, null)
+    expect(missingCredential()).toBe('baseUrl')
+
+    state.profiles['p-std'].apiKey = ''
+    setSlotIds('p-std', null, null, null)
+    expect(missingCredential()).toBe('apiKey')
+  })
+
+  it('is undefined once the slot is usable', () => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    expect(missingCredential()).toBeUndefined()
   })
 })
 

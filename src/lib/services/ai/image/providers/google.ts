@@ -9,15 +9,19 @@ import type {
   ImageModelInfo,
 } from './types'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateImage } from 'ai'
 import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
 import { createTimeoutFetch } from '../../sdk/providers/fetch'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 
 export function createGoogleProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL
-  const googleSDK = createGoogleGenerativeAI({ apiKey: config.apiKey, baseURL: baseUrl })
+  const googleSDK = createGoogleGenerativeAI({
+    apiKey: config.apiKey,
+    baseURL: baseUrl,
+    fetch: createImageSdkFetch('google-image'),
+  })
 
   return {
     id: 'google',
@@ -26,18 +30,13 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, referenceImages, signal } = options
 
-      const result = await generateImage({
+      return generateSdkImage({
         model: googleSDK.image(model),
-        prompt: referenceImages?.length ? { text: prompt, images: referenceImages } : prompt,
+        prompt,
+        referenceImages,
         aspectRatio: specToAspectRatio(spec, GOOGLE_ASPECT_RATIOS) as `${number}:${number}`,
-        abortSignal: signal,
+        signal,
       })
-
-      if (!result.images[0]?.base64) {
-        throw new Error('No image data in Google response')
-      }
-
-      return { base64: result.images[0].base64 }
     },
 
     async listModels(): Promise<ImageModelInfo[]> {

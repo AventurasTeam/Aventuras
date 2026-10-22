@@ -4,7 +4,13 @@
  * Helper functions for image generation using the standalone provider registry.
  */
 
-import { generateImage, supportsImageGeneration, requiresApiKey } from './providers/registry'
+import {
+  generateImage,
+  supportsImageGeneration,
+  requiresApiKey,
+  baseUrlMode,
+  IMAGE_PROVIDER_LABELS,
+} from './providers/registry'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { EmbeddedImage, StorySettings } from '#lib/types/index.ts'
@@ -62,19 +68,38 @@ export function isImageGenerationEnabled(
   return supportsImageGeneration(profile.providerType)
 }
 
+export type MissingCredential = 'profile' | 'apiKey' | 'baseUrl'
+
+/** What keeps a slot from generating, or `undefined` when it is ready. */
+export function missingCredential(
+  slot: ImageProfileSlot = 'standard',
+): MissingCredential | undefined {
+  const profileId = slotProfileId(slot)
+  if (!profileId) return 'profile'
+
+  const profile = settings.getImageProfile(profileId)
+  if (!profile || !supportsImageGeneration(profile.providerType)) return 'profile'
+
+  if (requiresApiKey(profile.providerType) && !profile.apiKey) return 'apiKey'
+  if (baseUrlMode(profile.providerType) === 'required' && !profile.baseUrl?.trim()) return 'baseUrl'
+  return undefined
+}
+
 /**
  * Check if required credentials are configured for a given image slot.
  */
 export function hasRequiredCredentials(slot: ImageProfileSlot = 'standard'): boolean {
-  const profileId = slotProfileId(slot)
-  if (!profileId) return false
+  return missingCredential(slot) === undefined
+}
 
-  const profile = settings.getImageProfile(profileId)
-  if (!profile) return false
+const PORTRAIT_CREDENTIAL_ERRORS: Record<MissingCredential, (providerName: string) => string> = {
+  profile: () => 'No usable image profile is configured for portrait generation',
+  apiKey: (providerName) => `${providerName} API key required for portrait generation`,
+  baseUrl: (providerName) => `${providerName} base URL required for portrait generation`,
+}
 
-  if (!supportsImageGeneration(profile.providerType)) return false
-
-  return !requiresApiKey(profile.providerType) || !!profile.apiKey
+export function portraitCredentialError(providerName: string, missing: MissingCredential): string {
+  return PORTRAIT_CREDENTIAL_ERRORS[missing](providerName)
 }
 
 /**
@@ -88,18 +113,7 @@ export function getProviderDisplayName(): string {
   const profile = settings.getImageProfile(profileId)
   if (!profile) return 'Unknown'
 
-  const names: Record<string, string> = {
-    openai: 'OpenAI',
-    openrouter: 'OpenRouter',
-    nanogpt: 'NanoGPT',
-    chutes: 'Chutes',
-    pollinations: 'Pollinations.ai',
-    google: 'Google',
-    zhipu: 'Zhipu',
-    comfyui: 'ComfyUI',
-  }
-
-  return names[profile.providerType] || profile.providerType
+  return IMAGE_PROVIDER_LABELS[profile.providerType] ?? profile.providerType
 }
 
 /**
