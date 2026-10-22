@@ -739,3 +739,69 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/reader/regenerate-outcome.ts:39`) and the submission is
   not handed back. Raised 2026-10-22 in the pass failure policy
   slice's branch review.
+
+- **Reconcile's description embeds are neither bounded nor
+  cancellable.** `EmbedDescriptions` (`lib/classifier/reconcile.ts`)
+  takes no signal, so the pass's bound and its Cancel don't reach
+  `embedClassifierDescriptions` (`lib/embedder-swap/app-deps.ts`)
+  between the structured call and the writes: a hung remote embedder
+  holds the pass, and the gate, until it returns. Predates the pass
+  failure policy slice, which noted it as a monitor item; raised
+  2026-10-23 by its slice review.
+
+- **The recovery modal can promise a hold the boot reset already
+  lifted.** `formatFailure` (`lib/recovery/copy.ts`) gives every
+  `periodic-classifier` failure the branch-held copy, but
+  `resetStuckClassifierRunState` (`lib/actions/classifier/deps.ts`)
+  frees a branch whose failed orphan left no deltas (`deps.test.ts`,
+  "reconciles a failed orphan that left no deltas behind"), as after a
+  crash during the pass's call and a failed boot transaction for its
+  marker. Canon's "definitionally stops them"
+  ([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy))
+  misses that case. Predates the pass failure policy slice (the copy
+  said memory was paused); raised 2026-10-23 by its slice review.
+
+- **A pass bound that expires during a retry backoff reports a
+  timeout.** `callWithRetry` (`lib/ai/transport/call-with-retry.ts`)
+  returns `aborted` when the signal fires in its backoff, and
+  `generateStructured` (`lib/ai/generate.ts`) drops the attempts'
+  recoverable errors, so a pass that met a 503 or 429 near its bound
+  records `timeout after Nms` on the entry and in the status. Only the
+  diagnostic is lost: the pass fails either way. Raised 2026-10-23 by
+  the pass failure policy slice review.
+
+- **`TxResult` lets a `failed` outcome carry no error.** `TxResult`
+  (`lib/pipeline/types.ts`) has an optional `error` on every outcome,
+  though every failed run sets one, so readers such as `passRefusalOf`
+  (`components/reader/send-run.ts`) carry `PipelineError | undefined`.
+  A union with `{ outcome: 'failed'; error: PipelineError }` would make
+  it required
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design)).
+  Raised 2026-10-23 by the pass failure policy slice review.
+
+- **The commit-msg hook doesn't check the subject.**
+  `scripts/check-commit-msg.sh` counts only the body's lines, while
+  `CLAUDE.md` caps the subject at 72 characters. Four of the pass
+  failure policy slice's commits ran 73 to 75 (`28950818`, `042c011c`,
+  `0f8086c0`, `21ae1f2f`). Raised 2026-10-23 by its slice review.
+
+- **On Android a profile `timeout` may fail every call.** React
+  Native's global `AbortController` (abort-controller@3) has no
+  `AbortSignal.timeout`, as `lib/abort.ts` notes, yet the AI SDK builds
+  one whenever a call sets `timeout` (`AbortSignal.timeout(totalMs)` in
+  `node_modules/ai/dist/index.mjs`), and `buildCallSettings`
+  (`lib/ai/generate.ts`) sets it from the profile. Read, not run on a
+  device. Nothing writes a profile timeout before M7's settings UI;
+  under the pass failure policy a classifier profile with one would
+  fail every pass, and so every Send at cadence. Raised 2026-10-23 by
+  the pass failure policy slice review.
+
+- **The embed-failure spec builds its system-entry selectors inline.**
+  `e2e/tests/retrieval-embed-failure.spec.ts` (~:104, :108) calls
+  `getByText(t('reader:systemEntry.failure.embed'))` and the
+  `failureMessage` twin in the spec, against
+  [`testing.md → Selector strategy`](../testing.md#selector-strategy)'s
+  "compose from `e2e/locators/`". `reader.systemEntryFailure`
+  (`e2e/locators/reader.ts`) now covers the pass copies; widening its
+  key union takes these too. Predates the pass failure policy slice;
+  raised 2026-10-23 by its slice review.

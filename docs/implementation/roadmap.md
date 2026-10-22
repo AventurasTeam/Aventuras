@@ -404,6 +404,17 @@ DB-backed `openRegionTokens` resolves all of them.
   (`followups.md`), reaches user rows before the close's cluster merge
   does, so the check lands with whichever ships first. Found in 4.2c's
   slice review (2026-10-07).
+- **M5.2 — Send checks only the first run of its owed pass's chain.**
+  `runPipeline` resolves with the origin run's result alone
+  (`lib/pipeline/runtime/orchestrator.ts`), and `submitTurn`
+  (`lib/actions/turns/submit-turn.ts`) starts the turn on it. Once the
+  pass's `chainsTo` returns a catch-up pass or the close while a close
+  is pending
+  ([`chapter-close.md → Phase 0`](../memory/chapter-close.md#phase-0--catch-up-passes)),
+  Send must wait on the whole chain, or a failed catch-up pass or close
+  lets the turn run. A failed close also keeps its `{ close: true }`
+  record, since only a commit clears a deferral. Raised 2026-10-23 by
+  the pass failure policy slice review.
 
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
@@ -1183,6 +1194,30 @@ code before it moved; resolve with the slice it names.
   field means a `CAPTURE_VERSION` bump, which belongs with the
   Selected-tab UI. Raised 2026-10-19 by the entity-state implementation;
   routed by its slice review.
+- **M7.2 — "It runs again before your next turn" isn't always true.**
+  The status block's Failed line
+  ([`classifier.md → Status block`](../memory/classifier.md#status-block))
+  and the failure toast (`chrome.memoryUpdateFailed`, which
+  `hooks/use-memory-run-toasts.ts` raises for a pass that fails outside
+  a Send) both promise it. It is false when nothing is owed: a failed
+  `[Run classifier now]` with the cadence not due, or a chained pass
+  that failed before a reversal (CTRL-Z of the head turn) took the
+  unprocessed count back under the cadence. The status then reads
+  `failed` until some later pass. It is false too on a branch the
+  failure left held: a Cancel whose reversal didn't commit, or a pass
+  whose failure write failed its retry (`onPhaseException` in
+  `lib/pipeline/definitions/periodic-classifier.ts`), where the next
+  Send shows the held entry instead. The panel slice words both from
+  what it can read (a pass owed, the branch held) or drops the promise.
+  Raised 2026-10-23 by the pass failure policy slice review.
+- **M7.2 — `lastError` mixes prefixed and bare causes.** The status
+  block renders `classifier_status.lastError`. The pass's hooks
+  (`onPreflightFailure`, `onPhaseException` in
+  `lib/pipeline/definitions/periodic-classifier.ts`) write it as
+  `classifier: <detail>`, while a failed call writes the bare cause
+  (`passFailure`, e.g. `timeout after 600000ms`). The panel slice picks
+  one form. Predates the pass failure policy slice; raised 2026-10-23
+  by its slice review.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
