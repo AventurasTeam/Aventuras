@@ -1,6 +1,5 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
-import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
@@ -8,9 +7,8 @@ import { generateId } from '@/lib/ids'
 import {
   CLASSIFIER_HELD,
   ensurePerTurnPipelineRegistered,
-  ensurePeriodicClassifierPipelineRegistered,
   owedPassAtSend,
-  runPipeline,
+  runClassifierPass,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
@@ -39,21 +37,6 @@ const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', conver
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
 
-/** Send's owed pass (classifier.md → Failure policy): own run and actionId, committed first. */
-function runOwedPass(
-  ids: { storyId: string; branchId: string },
-  ctx: DbCtx,
-): Promise<TxResult | RejectedStart> {
-  ensurePeriodicClassifierPipelineRegistered()
-  return runPipeline(PERIODIC_CLASSIFIER_KIND, {
-    storyId: ids.storyId,
-    branchId: ids.branchId,
-    beforeTurn: true,
-    db: ctx.db,
-    runInTransaction: ctx.runInTransaction,
-  })
-}
-
 export async function submitTurn(
   ids: { storyId: string; branchId: string },
   meta: SubmitTurnMeta,
@@ -73,7 +56,7 @@ export async function submitTurn(
         const owed = await owedPassAtSend(ids.branchId, ctx)
         if (owed === 'held') return HELD_REJECTION
         if (owed === 'owed') {
-          const pass = await runOwedPass(ids, ctx)
+          const pass = await runClassifierPass(ids, ctx, { beforeTurn: true })
           if (pass.outcome === 'rejected') return { ...pass, converged: true }
           if (pass.outcome === 'aborted') return { ...pass, outcome: 'aborted', beforeTurn: true }
           if (pass.outcome === 'failed') return { ...pass, outcome: 'failed', beforeTurn: true }
