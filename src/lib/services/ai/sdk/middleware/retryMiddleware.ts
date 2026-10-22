@@ -1,35 +1,13 @@
 import type { ImageModelMiddleware, LanguageModelMiddleware } from 'ai'
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
+import { sleep } from '#lib/utils/async.ts'
 
 const RETRY_DELAYS_MS = [10_000, 20_000, 30_000]
 const JITTER_FACTOR = 0.1
 
 function withJitter(ms: number): number {
   return ms * (1 + (Math.random() * 2 - 1) * JITTER_FACTOR)
-}
-
-/**
- * Abort-aware sleep. Resolves after `ms`, or rejects with the signal's reason
- * if the caller cancels the generation mid-backoff. Without this, a 10–30s
- * sleep would block cancellation until the delay elapses.
- */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason)
-      return
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(signal!.reason)
-    }
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
 }
 
 function is429(error: unknown): boolean {
