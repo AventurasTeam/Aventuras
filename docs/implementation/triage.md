@@ -94,11 +94,6 @@ slice-planning gate forces its resolution before that slice is planned.
   no flag that pairs". Raised 2026-10-11 in the
   locations-and-items-from-prose PR.
 
-- **`scoreDescriptions` swallows embedder errors without logging.**
-  `lib/classifier/reconcile.ts` (~line 138) catches in a bare block, so
-  an embedder outage silently turns off item and character matching.
-  Raised 2026-10-11 in the locations-and-items-from-prose PR.
-
 - **A cancel after the last abort check still returns `completed`.**
   In `lib/pipeline/definitions/per-turn.ts` (~line 322) a cancel
   landing during the position SELECT or the yields leaves the phase
@@ -547,22 +542,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`parked.md → An abort waits on its phases, except a thrown parallel branch`](../parked.md#an-abort-waits-on-its-phases-except-a-thrown-parallel-branch).
   Raised 2026-10-21 by the gated classifier slice's task reviews.
 
-- **A user Cancel whose abort reversal fails lets the Send proceed.**
-  `abortRun` turns a cancelled run whose reversal failed into
-  `failed`, and a `failed` outcome clears the run's deferral.
-  `submitTurn` treats a `failed` deferred pass as "go ahead", so the
-  turn then runs over the unreversed orphans that boot recovery will
-  see. Rare: the reversal's SQLite transaction has to fail. The fix
-  belongs in the orchestrator: a user-cancel whose reversal fails ends
-  `aborted` with an error, so the deferral stays and the Send is
-  cancelled. A reversal that commits but whose store sync then fails
-  settles `failed` too, so that Cancel also lets the turn run (over no
-  orphans, but against the user's Cancel). That case is unreachable
-  today and is
-  [`parked.md → A store sync that fails after a committed reversal leaves stores stale`](../parked.md#a-store-sync-that-fails-after-a-committed-reversal-leaves-stores-stale),
-  whose fix lets the Cancel keep its `aborted` outcome. Raised
-  2026-10-21 by the gated classifier slice's task and branch reviews.
-
 - **The head turn's membership test is written out four times.**
   `resolveHeadTurn` in `lib/head-turn` is the one definition of the
   head turn, but the "is this entry its tail or origin" test on top of
@@ -655,30 +634,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (density 300), the whole textarea stayed in view, against 149 of
   its 224 px. Raised 2026-10-21 by the gated classifier slice review's
   R1 probe.
-
-- **`classifier.failure_record_retried` carries no `actionId`.** The
-  periodic classifier's `onPhaseException`
-  (`lib/pipeline/definitions/periodic-classifier.ts`) logs it when its
-  first failure-record write throws, without the run's `actionId`, so
-  the Logs tab can't tie it to its pass
-  ([`observability.md → Record shape`](../observability.md#record-shape):
-  a run-scoped emission carries the run's `actionId`). The hook's
-  context type (`PhaseExceptionHook` in `lib/pipeline/types.ts`) has no
-  `actionId` to pass; the fix widens it, as the slice review did for
-  `onInterrupt`, whose `InterruptHook` context now carries one.
-  Predates the gated classifier slice. Raised 2026-10-21 by the gated
-  classifier slice review.
-
-- **The reader's status pill blanks between Send's deferred pass and
-  its turn.** After the deferred pass commits, `submitTurn`
-  (`lib/actions/turns/submit-turn.ts`) runs two reads and the
-  user_action transaction before the turn registers, holding only the
-  pending mark. The pill picks its run from the registered runs
-  (`pillRunOf` in `components/reader/send-run.ts`), so for that gap it
-  shows nothing, then the turn's phase. The composer's Cancel holds
-  through the gap (`composerShowsCancel`, same file); the pill doesn't.
-  A frame or two on desktop. Read, not probed. Raised 2026-10-21 by the
-  gated classifier slice review.
 
 - **A failed-pass entry can lose the turn's text to an occupied
   draft.** The entry carries the turn's text only when the composer
