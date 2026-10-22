@@ -20,4 +20,4 @@ export {
   type ServiceModelDefaults,
   type ProviderCapabilities,
 } from './config'
-export { createSdkFetch } from './sdkFetch'
+export { createSdkFetch, type Fetch } from './sdkFetch'

@@ -31,6 +31,8 @@ function headersFor(init: RequestInit | undefined): RequestInit['headers'] {
   return headers
 }
 
+export type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
 function logResponse(response: Response, debugId: string, serviceId: string, startTime: number) {
   const contentType = response.headers.get('content-type') ?? ''
   if (!response.ok) {
