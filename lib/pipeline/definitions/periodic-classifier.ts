@@ -217,8 +217,8 @@ export async function* periodicClassifierPhase(
     maxEntries: cfg.classifierWindowMaxEntries,
   })
   if (window.isEmpty) {
-    // Only a truncated window of system rows advances the watermark: past the cut lies prose, as
-    // writeSystemEntry keeps one system row, at the tail. Untruncated, the cadence counts none.
+    // Only a truncated window of system rows advances the watermark, and never onto the tail's
+    // (writeSystemEntry keeps one system row, at the tail). Untruncated, the cadence counts none.
     if (window.coversThrough > (status.processedThrough ?? 0))
       await advanceWatermark(ctx, window.coversThrough)
     return { status: 'completed' }

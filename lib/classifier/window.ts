@@ -59,8 +59,8 @@ export function buildClassifierWindow(args: {
     })
   // classifier.md → Persistence: a system row is no prose to process. A trailing one stays above
   // the watermark: the reader clears it before the next Send, whose user_action takes its position.
-  // A truncated window claims its cut: past it lies prose, as writeSystemEntry keeps one system
-  // row, at the tail.
+  // A truncated window claims its cut: writeSystemEntry's one system row sits at the tail, past
+  // any cut.
   const coversThrough = truncated
     ? (capped.at(-1)?.position ?? floor)
     : (turns.at(-1)?.position ?? floor)
