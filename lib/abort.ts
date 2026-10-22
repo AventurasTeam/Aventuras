@@ -25,7 +25,7 @@ export function boundedSignal(
   }, ms)
   // Clears the timer, not just relays: left armed it can still fire while the
   // aborted call winds down, and `expired` is what tells a cancel from a
-  // timeout — a late fire would burn a retry on a clean cancellation.
+  // timeout — a late fire would record a clean cancellation as a timeout.
   const relay = () => {
     clearTimeout(timer)
     if (outer) causes.set(controller.signal, abortCauseOf(outer))

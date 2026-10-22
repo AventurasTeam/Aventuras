@@ -266,7 +266,8 @@ export async function* periodicClassifierPhase(
   }
   const timeoutMs = passTimeoutMs(modelConfig)
 
-  // Read by the status block; left behind by a crash, it holds the cadence until boot clears it.
+  // Read by the status block; left behind by a crash, it holds the branch (Send and Run now
+  // refuse) until a boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
 
   const bounded = boundedSignal(ctx.abortSignal, timeoutMs)
@@ -282,7 +283,7 @@ export async function* periodicClassifierPhase(
   } finally {
     bounded.dispose()
   }
-  // An interrupt uses no retry and leaves the watermark; onInterrupt restores the pre-run status.
+  // An interrupt leaves the watermark; onInterrupt restores the pre-run status.
   if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
   if (result.status !== 'ok') {
     // An expiry aborts the call as a cancel does, but it is a provider fault: it fails the pass,
@@ -412,7 +413,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         try {
           await writeStatus(ctx, status)
         } catch (e) {
-          // Left running, the cadence stays suspended until the next boot.
+          // Left running, the branch is held (Send refuses) until a boot reverses it.
           logger.warn(
             'classifier.interrupt_restore_retried',
             { branchId: ctx.branchId, error: e instanceof Error ? e.message : String(e) },
