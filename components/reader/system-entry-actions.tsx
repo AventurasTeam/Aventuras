@@ -126,11 +126,13 @@ export function toPassFailureMeta(
 
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
- * a failure, a throw or a hold rewrites it; a cancel leaves it to the deferral toast. A throw from
- * `dismiss` or `rewrite` propagates.
+ * a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't commit; a
+ * cancel leaves it to the deferral toast. A throw from `held`, `dismiss` or `rewrite` propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
+  /** Read once the pass ended: whether the branch is held `running`. */
+  held: () => Promise<boolean>
   dismiss: () => Promise<void>
   rewrite: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
@@ -143,7 +145,8 @@ export async function retryPassEntry(deps: {
     return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
   }
   if (result.outcome === 'completed') return deps.dismiss()
-  if (result.outcome === 'failed') return deps.rewrite({ held: false, error: result.error })
+  if (result.outcome === 'failed')
+    return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
   if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
   deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))

@@ -309,7 +309,7 @@ describe('toPassFailureMeta', () => {
 describe('retryPassEntry', () => {
   const ran = { runId: 'run_pass', actionId: 'act_pass' }
 
-  function harness(result: TxResult | RejectedStart | Error) {
+  function harness(result: TxResult | RejectedStart | Error, heldAfter = false) {
     const calls: string[] = []
     const rewrite = vi.fn(async (_refusal: PassRefusal) => {
       calls.push('rewrite')
@@ -323,7 +323,8 @@ describe('retryPassEntry', () => {
     const runPass = vi.fn(() =>
       result instanceof Error ? Promise.reject(result) : Promise.resolve(result),
     )
-    return { calls, rewrite, notify, runPass, deps: { runPass, dismiss, rewrite, notify } }
+    const held = vi.fn(async () => heldAfter)
+    return { calls, rewrite, notify, runPass, deps: { runPass, held, dismiss, rewrite, notify } }
   }
 
   it('clears the entry once the pass commits, sending nothing', async () => {
@@ -343,6 +344,15 @@ describe('retryPassEntry', () => {
     await retryPassEntry(h.deps)
     expect(h.calls).toEqual(['rewrite'])
     expect(h.rewrite).toHaveBeenCalledWith({ held: false, error })
+  })
+
+  // A cancel during the pass's writes, or a failed write, whose reversal didn't commit.
+  it('rewrites the entry as held when the failed pass left its branch held', async () => {
+    const error: PipelineError = { kind: 'orchestrator', detail: 'reverse-replay failed: locked' }
+    const h = harness({ ...ran, outcome: 'failed', error }, true)
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['rewrite'])
+    expect(h.rewrite).toHaveBeenCalledWith({ held: true })
   })
 
   it('rewrites the entry as held when the branch is held running', async () => {

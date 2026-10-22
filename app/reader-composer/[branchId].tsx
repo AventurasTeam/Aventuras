@@ -119,7 +119,12 @@ import {
   findSuggestionAnchor,
   shouldShowSuggestionStrip,
 } from '@/lib/piggyback'
-import { pipelineEventBus, SUGGESTION_REFRESH_KIND, type PipelineError } from '@/lib/pipeline'
+import {
+  isClassifierHeld,
+  pipelineEventBus,
+  SUGGESTION_REFRESH_KIND,
+  type PipelineError,
+} from '@/lib/pipeline'
 import {
   appSettingsStore,
   awaitRunTerminal,
@@ -935,6 +940,7 @@ export default function ReaderComposerRoute() {
     try {
       await retryPassEntry({
         runPass: () => runClassifierNow(branchId, ctx),
+        held: () => isClassifierHeld(branchId, ctx),
         dismiss: handleDismissSystemEntry,
         rewrite: (refusal) => showPassFailure(refusal, submission),
         notify: (message) => toast.info(message),
