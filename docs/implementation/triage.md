@@ -697,8 +697,12 @@ slice-planning gate forces its resolution before that slice is planned.
   `aborted` arm restores it; the `rejected` arm (the blocked one,
   around `:714`) writes a new failure entry for this Send's text
   instead, so the earlier turn's text, which outlives a restart only
-  on that entry, is gone. Raised 2026-10-22 in the pass failure policy
-  slice's Task 7 review.
+  on that entry, is gone. The pass-refusal arms do the same: a Send
+  whose owed pass fails, or that meets a held branch, clears the
+  earlier failure entry in the tail drop and writes only this Send's
+  text (`:684-700`). The system entry is a branch singleton, so the
+  earlier entry can't simply be put back beside the new one. Raised
+  2026-10-22 in the pass failure policy slice's Task 7 review.
 
 - **The composer wireframe's memory-failure copy differs from the
   shipped string.** The `memory` variant in
@@ -716,3 +720,39 @@ slice-planning gate forces its resolution before that slice is planned.
   timeout. A model failure there doubles the run's worst case, and one
   that passes on the retry reports as flaky rather than failed. Raised
   2026-10-22 in the pass failure policy slice's Task 11 review.
+
+- **The pass and turn failure copy resolvers repeat each other.**
+  `describePassFailure` and `toPassFailureMeta`
+  (`components/reader/system-entry-actions.tsx:89`, `:112`) repeat
+  `describeTurnFailure` and `toSystemFailureMeta`'s four-way
+  config-resolver key ternary (`:49-56`) and the provider detail
+  format. A new `ResolveFailureKind` must be added in both or it
+  silently falls through to the `providerMissing` copy; a
+  per-vocabulary `Record<ResolveFailureKind, key>` would make it
+  exhaustive. Raised 2026-10-22 in the pass failure policy slice's
+  branch review.
+
+- **The seeded hero branch holds six system rows.** `heroKind` in
+  `lib/db/devtools/seed-dataset.ts:246-250` makes every twelfth of the
+  72 hero entries `system`, against
+  [`data-model.md`](../data-model.md)'s system entry as a branch-tail
+  singleton, which `lib/classifier/window.ts:59-61`'s truncated-window
+  argument relies on. Raised 2026-10-22 in the pass failure policy
+  slice's branch review.
+
+- **A completed regenerate drops a cleared failure entry's
+  submission.** `runRegenerate` in `app/reader-composer/[branchId].tsx`
+  clears the system tail before dispatching (`:789`); the throw arm
+  hands `dropped.failure.submission` back (`:807`), but on a completed
+  regenerate `planRegenerateOutcome` returns `'none'`
+  (`components/reader/regenerate-outcome.ts:39`) and the submission is
+  not handed back. Raised 2026-10-22 in the pass failure policy
+  slice's branch review.
+
+- **The `*_dispatch_suppressed` events are not in the observability
+  inventory.** `pipeline.submit_dispatch_suppressed`,
+  `pipeline.regenerate_dispatch_suppressed` and
+  `pipeline.pass_retry_dispatch_suppressed`
+  (`app/reader-composer/[branchId].tsx:671`, `:779`, `:930`) appear
+  nowhere in `docs/observability.md`'s emission inventory. Raised
+  2026-10-22 in the pass failure policy slice's branch review.
