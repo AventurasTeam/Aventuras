@@ -263,7 +263,7 @@ describe('systemFailure', () => {
   })
 
   it('rejects a pass marker it does not know', () => {
-    const systemFailure = { kind: 'provider', pass: 'retrying' }
+    const systemFailure = { kind: 'provider', pass: 'pending' }
     expect(entryMetadataSchema.safeParse({ ...base, systemFailure }).success).toBe(false)
   })
 
