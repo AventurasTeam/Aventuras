@@ -162,4 +162,4 @@ Resolved decisions:
   reconciler. Building it required a new harness helper
   (`parkClassifierWatermarkAtLastReply`) and surfaced a boot-order
   trap now recorded in
-  [lessons-learned](../../../lessons-learned/seed-tip-position-shifts-at-boot.md).
+  [lessons-learned](../../../lessons-learned/seed-tip-position-shifts-at-first-send.md).
