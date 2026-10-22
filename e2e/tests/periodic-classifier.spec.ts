@@ -593,7 +593,11 @@ test.describe('periodic classifier — unassigned agent', () => {
     removeUserDataDir(userDataDir)
   })
 
-  const { classifierStatus } = passProbe(
+  const {
+    branchId: currentBranchId,
+    passOutcomes,
+    classifierStatus,
+  } = passProbe(
     () => app.window,
     () => mock,
   )
@@ -602,21 +606,11 @@ test.describe('periodic classifier — unassigned agent', () => {
     const page = app.window
     await home.openStory(page, 'The Veilstone Courier').click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
-    const branchId = (
-      await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
+    const branchId = await currentBranchId()
     const status = () => classifierStatus(branchId)
     const scalar = async (sql: string, params: unknown[] = []): Promise<unknown> =>
       (await queryApp(page, sql, params))[0][0]
     const turnRuns = () => scalar(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn'`)
-    const passOutcomes = async (): Promise<unknown[]> =>
-      (
-        await queryApp(
-          page,
-          `SELECT outcome FROM pipeline_runs
-           WHERE kind = 'periodic-classifier' AND story_id = 'story_hero' ORDER BY started_at, rowid`,
-        )
-      ).map((r) => r[0])
     const [, , parked] = await status()
 
     // The seed parks the watermark at the last prose row, so this Send owes nothing and takes its turn.
@@ -1290,6 +1284,7 @@ test.describe('periodic classifier — failure policy', () => {
     expect(await classifierStatus(branch)).toEqual(['idle', null, replyAt])
     expect(streamedCalls()).toBe(narratives)
     await expect(reader.composer(page)).toHaveValue(U2)
+    expect(await entryIdByContent(branch, 'E2E-POLICY-U2')).toBeUndefined()
   })
 
   test('Send then lands the turn above the watermark', async () => {
@@ -1316,8 +1311,8 @@ test.describe('periodic classifier — failure policy', () => {
   })
 })
 
-// classifier.md → Failure policy: the deferral mark lives in memory, so after a restart Send finds
-// the pass owed from the persisted watermark alone. Only a relaunch on the same userData shows it.
+// classifier.md → Failure policy: a Cancel's deferral mark lives in memory, so a relaunch on the
+// same userData drops it, and Send finds the pass owed from the persisted watermark alone.
 test.describe('periodic classifier — an owed pass across a restart', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -1404,10 +1399,10 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
     const calls = passCalls()
     await send('E2E-RESTART-U2 I wake before the light.', 'E2E-RESTART-R2 frost on the saddle.')
     const owed = await heldPass(calls)
-    await expect(memoryBanner.updatingBeforeTurn(page)).toBeVisible()
-    // Send's own run: the composer offers Cancel, and the user_action waits for the pass.
-    await expect(reader.cancel(page)).toBeVisible()
+    // Send's own run: the user_action waits for the pass, and the composer offers Cancel.
     expect(await entryIdByContent(branch, 'E2E-RESTART-U2')).toBeUndefined()
+    await expect(memoryBanner.updatingBeforeTurn(page)).toBeVisible()
+    await expect(reader.cancel(page)).toBeVisible()
 
     mock.releaseStructured()
     // The turn's commit chains the next due pass; an inert reply lets it finish untouched.
