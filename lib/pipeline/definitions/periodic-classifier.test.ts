@@ -143,7 +143,6 @@ async function ctxWith(opts: {
       state: 'idle',
       lastSuccessAt: null,
       lastError: null,
-      retryCount: 0,
       processedThrough: opts.processedThrough,
       ...opts.seedStatus,
     }),
@@ -424,7 +423,7 @@ describe('periodicClassifierPhase', () => {
       false,
     )
     // Nothing ran, so the lifecycle keys must not read as a successful pass.
-    expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null, retryCount: 0 })
+    expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null })
   })
 
   it('emits one delta per planned write, each with its own entryId', async () => {
@@ -462,19 +461,18 @@ describe('periodicClassifierPhase', () => {
     const h = await ctxWith({
       processedThrough: 0,
       headPosition: 1,
-      seedStatus: { state: 'retrying', retryCount: 1, lastError: 'rate limited' },
+      seedStatus: { state: 'failed', lastError: 'rate limited' },
     })
     vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
     const { result } = await drain(h.ctx)
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'running', retryCount: 1 })
+    expect(h.status()).toMatchObject({ state: 'running', lastError: 'rate limited' })
 
     await interruptHook()(h.ctx)
     expect(h.status()).toEqual({
-      state: 'retrying',
+      state: 'failed',
       lastSuccessAt: null,
       lastError: 'rate limited',
-      retryCount: 1,
       processedThrough: 0,
     })
   })
@@ -522,16 +520,15 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toMatchObject({
       state: 'idle',
       processedThrough: 2,
-      retryCount: 0,
       lastSuccessAt: expect.any(Number),
     })
   })
 
-  it('clears the retry state and the stale error when a pass recovers', async () => {
+  it('clears the failed state and the stale error when a pass recovers', async () => {
     const h = await ctxWith({
       processedThrough: 0,
       headPosition: 2,
-      seedStatus: { state: 'retrying', retryCount: 2, lastError: 'rate limited' },
+      seedStatus: { state: 'failed', lastError: 'rate limited' },
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -544,18 +541,17 @@ describe('periodicClassifierPhase', () => {
     // status surface would show the user.
     expect(h.status()).toMatchObject({
       state: 'idle',
-      retryCount: 0,
       lastError: null,
       lastSuccessAt: expect.any(Number),
       processedThrough: 2,
     })
   })
 
-  it('returns aborted on a cancel between its writes, keeping its retry state', async () => {
+  it('returns aborted on a cancel between its writes, keeping its last error', async () => {
     const h = await ctxWith({
       processedThrough: 0,
       headPosition: 2,
-      seedStatus: { state: 'retrying', retryCount: 1, lastError: 'rate limited' },
+      seedStatus: { state: 'failed', lastError: 'rate limited' },
     })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -579,7 +575,6 @@ describe('periodicClassifierPhase', () => {
       state: 'running',
       lastSuccessAt: null,
       lastError: 'rate limited',
-      retryCount: 1,
       processedThrough: 0,
     })
   })
@@ -601,7 +596,7 @@ describe('periodicClassifierPhase', () => {
 
     expect(await gen.next()).toEqual({ done: true, value: { status: 'aborted' } })
     expect(h.watermarks).toEqual([])
-    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0, processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', lastError: null, processedThrough: 0 })
   })
 
   it('returns aborted on a cancel after the model call, before its first write', async () => {
@@ -618,7 +613,7 @@ describe('periodicClassifierPhase', () => {
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0, processedThrough: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', lastError: null, processedThrough: 0 })
   })
 
   it('returns aborted with no deltas when the abort lands before parsing', async () => {
@@ -627,8 +622,8 @@ describe('periodicClassifierPhase', () => {
     const { events, result } = await drain(h.ctx)
     expect(events).toEqual([])
     expect(result).toEqual({ status: 'aborted' })
-    // An abort is not a failure: no retry state is burned.
-    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0, processedThrough: 0 })
+    // An abort is not a failure: it records no error.
+    expect(h.status()).toMatchObject({ state: 'running', lastError: null, processedThrough: 0 })
   })
 
   it('returns aborted on a cancel during the character reconciliation, cutting it short', async () => {
@@ -688,14 +683,14 @@ describe('periodicClassifierPhase', () => {
 
       expect(events).toEqual([])
       expect(result).toMatchObject({ status: 'failed', error: { reason: 'timeout' } })
-      expect(h.status()).toMatchObject({ state: 'retrying', retryCount: 1, processedThrough: 0 })
+      expect(h.status()).toMatchObject({ state: 'failed', processedThrough: 0 })
       expect(h.status()?.lastError).toMatch(/timeout/)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('still treats a real cancel as an abort, burning no retry state', async () => {
+  it('still treats a real cancel as an abort, recording no failure', async () => {
     const controller = new AbortController()
     vi.mocked(generateStructured).mockImplementation(
       (...args: unknown[]) =>
@@ -711,12 +706,12 @@ describe('periodicClassifierPhase', () => {
     const { result } = await pass
 
     expect(result).toEqual({ status: 'aborted' })
-    expect(h.status()).toMatchObject({ state: 'running', retryCount: 0 })
+    expect(h.status()).toMatchObject({ state: 'running', lastError: null })
   })
 
   // The timeout timer stayed armed after an outer abort, so a cancel landing near
   // the boundary could still see it fire and be recorded as a provider timeout —
-  // burning a retry on what the user deliberately cancelled.
+  // a failure recorded for what the user deliberately cancelled.
   it('does not reclassify a late-cancel as a timeout once the outer signal aborts', async () => {
     vi.useFakeTimers()
     try {
@@ -740,7 +735,7 @@ describe('periodicClassifierPhase', () => {
       const { result } = await pass
 
       expect(result).toEqual({ status: 'aborted' })
-      expect(h.status()).toMatchObject({ state: 'running', retryCount: 0 })
+      expect(h.status()).toMatchObject({ state: 'running', lastError: null })
     } finally {
       vi.useRealTimers()
     }
@@ -759,8 +754,7 @@ describe('periodicClassifierPhase', () => {
     expect(result).toMatchObject({ status: 'failed' })
     expect(watermarks).toEqual([])
     expect(h.status()).toMatchObject({
-      state: 'retrying',
-      retryCount: 1,
+      state: 'failed',
       lastError: 'rate limited',
       processedThrough: 0,
     })
@@ -1674,11 +1668,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     return row.status
   }
 
-  const RETRYING: ClassifierStatus = {
-    state: 'retrying',
+  const FAILED: ClassifierStatus = {
+    state: 'failed',
     lastSuccessAt: null,
     lastError: 'rate limited',
-    retryCount: 1,
     processedThrough: 0,
   }
 
@@ -1709,7 +1702,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     return inCall
   }
 
-  it('routes a write the action layer rejects to the retry status instead of leaving running stuck', async () => {
+  it('routes a write the action layer rejects to the failed status instead of leaving running stuck', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
 
     // Stands in for any action-layer rejection; the guard must recover from each the same way.
@@ -1719,11 +1712,11 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })).toBe('failed')
 
     const status = await storedStatus(db)
-    expect(status).toMatchObject({ state: 'retrying', retryCount: 1 })
+    expect(status).toMatchObject({ state: 'failed' })
     expect(status?.lastError).toBe('classifier: forced test rejection')
   })
 
-  it('still reaches the retry status when the first failure write fails', async () => {
+  it('still reaches the failed status when the first failure write fails', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     let failNextStatusWrite = false
     rejectCreateHappening(() => {
@@ -1750,17 +1743,19 @@ describe('periodicClassifierPhase via runPipeline', () => {
       'failed',
     )
 
-    expect(await storedStatus(db)).toMatchObject({ state: 'retrying', retryCount: 1 })
+    expect(await storedStatus(db)).toMatchObject({
+      state: 'failed',
+      lastError: 'classifier: forced test rejection',
+    })
   })
 
   it('counts a pass whose watermark write fails as a failure, not a success', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
     await db.run(
       sql`UPDATE branches SET classifier_status = ${JSON.stringify({
-        state: 'retrying',
+        state: 'failed',
         lastSuccessAt: null,
         lastError: 'rate limited',
-        retryCount: 1,
         processedThrough: 0,
       })} WHERE id = 'b1'`,
     )
@@ -1786,9 +1781,10 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(failWatermark).toBe(false)
     expect(outcome).toBe('failed')
 
+    // The seeded error replaced: the failure was recorded, not just left over.
     expect(await storedStatus(db)).toMatchObject({
-      state: 'retrying',
-      retryCount: 2,
+      state: 'failed',
+      lastError: 'classifier: SQLITE_FULL',
       lastSuccessAt: null,
       processedThrough: 0,
     })
@@ -1827,7 +1823,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
       }),
     ).toBe('failed')
 
-    expect(await storedStatus(db)).toMatchObject({ state: 'running', retryCount: 0 })
+    expect(await storedStatus(db)).toMatchObject({ state: 'running', lastError: null })
   })
 
   // cadence.md → User edits and classifier writes.
@@ -1914,14 +1910,13 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await storedStatus(db)).toMatchObject({
       state: 'idle',
       processedThrough: 1,
-      retryCount: 0,
       lastError: null,
     })
   })
 
   it('commits nothing and keeps its pre-run status when interrupted during the model call', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
-    await seedStatus(db, RETRYING)
+    await seedStatus(db, FAILED)
     ensurePeriodicClassifierPipelineRegistered()
     const inCall = holdModelCall()
 
@@ -1931,7 +1926,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     expect(await pass).toBe('aborted')
     expect(await db.select().from(deltas)).toEqual([])
-    expect(await storedStatus(db)).toEqual(RETRYING)
+    expect(await storedStatus(db)).toEqual(FAILED)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
@@ -1940,7 +1935,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const { db, runInTransaction } = await seedApplyTimeHarness()
-    await seedStatus(db, RETRYING)
+    await seedStatus(db, FAILED)
     ensurePeriodicClassifierPipelineRegistered()
     const inCall = holdModelCall()
     let failRestore = false
@@ -1967,7 +1962,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     expect(await pass).toBe('aborted')
     expect(failRestore).toBe(false)
-    expect(await storedStatus(db)).toEqual(RETRYING)
+    expect(await storedStatus(db)).toEqual(FAILED)
     const retried = getDiagnosticsSnapshot().logEntries.filter(
       (e) => e.kind === 'classifier.interrupt_restore_retried',
     )
@@ -1988,7 +1983,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
         metadata: {},
         createdAt: 1,
       } as never)
-    const preRun: ClassifierStatus = { ...RETRYING, processedThrough: 3 }
+    const preRun: ClassifierStatus = { ...FAILED, processedThrough: 3 }
     await seedStatus(db, preRun)
     ensurePeriodicClassifierPipelineRegistered()
     const inCall = holdModelCall()
@@ -2003,9 +1998,9 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(await storedStatus(db)).toEqual({ ...preRun, processedThrough: 2 })
   })
 
-  it('reverses what it wrote when interrupted mid-burst, keeping its status, watermark and retry count', async () => {
+  it('reverses what it wrote when interrupted mid-burst, keeping its status and watermark', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
-    await seedStatus(db, RETRYING)
+    await seedStatus(db, FAILED)
     let interrupted = false
     configurePort(async (args, applyCtx) => {
       const result = await realApplyDeltaAction(args, applyCtx)
@@ -2029,14 +2024,14 @@ describe('periodicClassifierPhase via runPipeline', () => {
     expect(interrupted).toBe(true)
     expect(await db.select().from(happenings)).toEqual([])
     expect(await db.select().from(deltas)).toEqual([])
-    expect(await storedStatus(db)).toEqual(RETRYING)
+    expect(await storedStatus(db)).toEqual(FAILED)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
   // generation-pipeline.md → Recovery-failure policy: the writes stay, so the cadence stays shut.
   it('leaves running when interrupted mid-burst and its reversal cannot commit', async () => {
     const { db, runInTransaction } = await seedApplyTimeHarness()
-    await seedStatus(db, RETRYING)
+    await seedStatus(db, FAILED)
     const fixedActionId = 'act_classifier_poison'
     await db.insert(deltas).values({
       id: 'd_classifier_poison',
@@ -2079,7 +2074,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     ).toBe('failed')
     expect(interrupted).toBe(true)
     expect((await db.select().from(happenings)).map((h) => h.title)).toEqual(['A'])
-    expect(await storedStatus(db)).toEqual({ ...RETRYING, state: 'running' })
+    expect(await storedStatus(db)).toEqual({ ...FAILED, state: 'running' })
     expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
   })
 })

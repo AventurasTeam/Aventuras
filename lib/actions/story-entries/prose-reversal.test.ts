@@ -280,10 +280,9 @@ describe('classifierWatermarkClampOps', () => {
   }
 
   const status = (processedThrough: number | null): ClassifierStatus => ({
-    state: 'failed-persistent',
+    state: 'failed',
     lastSuccessAt: 111,
     lastError: 'boom',
-    retryCount: 3,
     processedThrough,
   })
 

@@ -98,7 +98,7 @@ async function patchStatus(ctx: StatusCtx, keys: SQL): Promise<void> {
 
 function lifecycleKeys(status: ClassifierStatus): SQL {
   return sql`'$.state', ${status.state}, '$.lastSuccessAt', ${status.lastSuccessAt},
-      '$.lastError', ${status.lastError}, '$.retryCount', ${status.retryCount}`
+      '$.lastError', ${status.lastError}`
 }
 
 // MAX-guarded, and never from this run's snapshot of the lifecycle keys.
@@ -313,8 +313,7 @@ export async function* periodicClassifierPhase(
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
-  // One statement: a success recorded without its watermark would reset the retry count on a pass
-  // that then fails and reverses, and retry it from its first attempt forever.
+  // One statement: the status never reports a success whose watermark didn't land.
   await patchStatus(ctx, sql`${lifecycleKeys(next)}, ${watermarkKey(window.coversThrough)}`)
   return { status: 'completed' }
 }

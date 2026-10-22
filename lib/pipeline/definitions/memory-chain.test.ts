@@ -189,17 +189,11 @@ describe('readClassifierStatus', () => {
     const { db, ctx } = await makeHarness()
     expect(await readClassifierStatus('b1', ctx)).toEqual(idleStatus())
 
-    await setStatus(db, {
-      state: 'retrying',
-      retryCount: 2,
-      lastError: 'boom',
-      processedThrough: 4,
-    })
+    await setStatus(db, { state: 'failed', lastError: 'boom', processedThrough: 4 })
 
     expect(await readClassifierStatus('b1', ctx)).toEqual({
       ...idleStatus(),
-      state: 'retrying',
-      retryCount: 2,
+      state: 'failed',
       lastError: 'boom',
       processedThrough: 4,
     })
@@ -262,22 +256,20 @@ describe('nextMemoryRun', () => {
     expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
   })
 
-  it.each([
-    ['failed-persistent', { state: 'failed-persistent', retryCount: 3, lastError: 'boom' }],
-    ['running, as a crash left it', { state: 'running' }],
-  ] as const)('names nothing while the status is %s', async (_label, status) => {
+  it('names nothing while the status is running, as a crash left it', async () => {
     const { db, ctx } = await makeHarness()
     await seedEntries(db, 4)
-    await setStatus(db, status)
+    await setStatus(db, { state: 'running' })
     openStory(1)
 
     expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
   })
 
-  it('retries a retrying pass at the next due commit', async () => {
+  // classifier.md → Failure policy: nothing suspends a failed pass; the next due commit runs it.
+  it('names a pass for a failed status at the next due commit', async () => {
     const { db, ctx } = await makeHarness()
     await seedEntries(db, 2)
-    await setStatus(db, { state: 'retrying', retryCount: 2, lastError: 'rate limited' })
+    await setStatus(db, { state: 'failed', lastError: 'rate limited' })
     openStory(2)
 
     expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
@@ -368,7 +360,8 @@ describe('per-turn chains the pass through the orchestrator', () => {
     ).toEqual([])
   })
 
-  it('retries a failing pass at each due commit, holds it at failed-persistent, and Run now resumes it', async () => {
+  // classifier.md → Failure policy: no attempt counter, no suspension: every due commit runs it.
+  it('runs a failing pass at every due commit, never suspending it, and Run now recovers it', async () => {
     const { ctx } = await makeHarness()
     await hydrateAppSettings(async () => WORKING_CONFIG)
     openStory(2)
@@ -382,16 +375,9 @@ describe('per-turn chains the pass through the orchestrator', () => {
       states.push((await readClassifierStatus('b1', ctx)).state)
     }
 
-    expect(states).toEqual([
-      'retrying',
-      'retrying',
-      'retrying',
-      'failed-persistent',
-      'failed-persistent',
-    ])
-    expect(generateStructured).toHaveBeenCalledTimes(4)
+    expect(states).toEqual(['failed', 'failed', 'failed', 'failed', 'failed'])
+    expect(generateStructured).toHaveBeenCalledTimes(5)
     expect(await readClassifierStatus('b1', ctx)).toMatchObject({
-      retryCount: 3,
       lastError: 'rate limited',
       processedThrough: null,
     })
@@ -402,12 +388,11 @@ describe('per-turn chains the pass through the orchestrator', () => {
     ).toMatchObject({ outcome: 'completed' })
     expect(await readClassifierStatus('b1', ctx)).toMatchObject({
       state: 'idle',
-      retryCount: 0,
       lastError: null,
       processedThrough: 10,
     })
 
     expectRan(await runPipeline(PER_TURN_KIND, ctx))
-    expect(generateStructured).toHaveBeenCalledTimes(6)
+    expect(generateStructured).toHaveBeenCalledTimes(7)
   })
 })

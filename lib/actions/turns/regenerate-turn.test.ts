@@ -161,7 +161,6 @@ async function seedTwoTurnsWithCatchUp(ctx: Awaited<ReturnType<typeof makeHarnes
         state: 'idle',
         lastSuccessAt: 6,
         lastError: null,
-        retryCount: 0,
         processedThrough: 5,
       },
     })

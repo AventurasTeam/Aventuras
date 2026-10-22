@@ -92,7 +92,6 @@ describe('a crashed classifier burst', () => {
       state: 'running',
       lastSuccessAt: null,
       lastError: null,
-      retryCount: 0,
       processedThrough: 4,
     }
     await db.update(branches).set({ classifierStatus: running }).where(eq(branches.id, 'b1'))

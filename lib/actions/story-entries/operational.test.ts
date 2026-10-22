@@ -482,7 +482,6 @@ describe('rollbackToEntry', () => {
           state: 'idle',
           lastSuccessAt: null,
           lastError: null,
-          retryCount: 0,
           processedThrough: 4,
         },
       })
@@ -508,7 +507,6 @@ describe('rollbackToEntry', () => {
           state: 'idle',
           lastSuccessAt: null,
           lastError: null,
-          retryCount: 0,
           processedThrough: 1,
         },
       })
@@ -565,7 +563,6 @@ const classifierStatus = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
   lastSuccessAt: null,
   lastError: null,
-  retryCount: 0,
   processedThrough,
 })
 

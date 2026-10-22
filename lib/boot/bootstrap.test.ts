@@ -223,7 +223,6 @@ describe('runBootstrap', () => {
         state: 'running',
         lastSuccessAt: null,
         lastError: null,
-        retryCount: 0,
         processedThrough: 2,
       },
     })

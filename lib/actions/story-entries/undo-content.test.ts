@@ -36,7 +36,6 @@ const status = (processedThrough: number): ClassifierStatus => ({
   state: 'idle',
   lastSuccessAt: null,
   lastError: null,
-  retryCount: 0,
   processedThrough,
 })
 
