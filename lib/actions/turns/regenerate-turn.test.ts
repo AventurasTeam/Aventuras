@@ -409,7 +409,7 @@ describe('regenerateTurn', () => {
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
 
-  // classifier.md → Failure policy: a branch holding an unfinished pass takes no turns.
+  // generation-pipeline.md → Recovery-failure policy: a branch holding an unfinished pass takes no turns.
   it('refuses a branch held running before it sweeps, starting no run and writing nothing', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
@@ -437,6 +437,7 @@ describe('regenerateTurn', () => {
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
 
+  // A user_action target is refused by a later check, so reaching it proves the live pass wasn't held.
   it('does not treat a branch whose pass is live as held', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
@@ -449,11 +450,29 @@ describe('regenerateTurn', () => {
       .update(branches)
       .set({ classifierStatus: { ...idleStatus(), state: 'running' } })
       .where(eq(branches.id, 'b1'))
-    registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
+    const swept = vi.fn()
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx),
+    )
 
-    expect(regen).toMatchObject({ status: 'rejected', code: 'generation-in-flight' })
+    expect(regen).toMatchObject({ status: 'rejected', code: 'not-an-ai-reply' })
+    expect(swept).not.toHaveBeenCalled()
+    expect(branchEntries('b1').map((e) => e.id)).toEqual([
+      'e_opening',
+      'e_u1',
+      'e_r1',
+      'e_u2',
+      'e_r2',
+    ])
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual([
+      'h_a',
+      'h_b',
+      `hap_${held.actionId}`,
+    ])
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().runs.size).toBe(1)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     held.finish('completed')
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
