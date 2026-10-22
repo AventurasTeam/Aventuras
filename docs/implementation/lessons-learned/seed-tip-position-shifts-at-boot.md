@@ -8,8 +8,8 @@ is gone by the time the spec's first turn commits, and its `position` is
 handed to that turn.
 
 Every seed helper in `e2e/harness/seed.ts` runs against the DB **file, before
-launch**. So a helper that reads `MAX(position)` reads a tip the app will not
-boot with:
+launch**. So a helper that reads `MAX(position)` reads a tip the spec's first
+turn does not build on:
 
 ```ts
 // Returns 72. Once the first Send clears the system tail the real tip is 71, and the spec's own
@@ -29,8 +29,8 @@ anchoring a fact to `t2` silently anchors it somewhere else.
 
 ## How to apply
 
-Anchor a pre-launch position on a row boot recovery cannot remove — the last
-**settled** turn:
+Anchor a pre-launch position on a row neither the first Send nor boot recovery
+removes — the last **settled** turn:
 
 ```sql
 SELECT COALESCE(MAX(position), 0) AS p FROM story_entries
@@ -46,9 +46,11 @@ turns a future fixture change into a loud failure instead of a mis-mapped handle
 ## Why it generalises
 
 Any pre-launch seed write that encodes a **derived** fact about the fixture —
-a max position, an entry id, a row count, a watermark — is asserting that boot
-is a no-op. Boot is not a no-op: recovery reverse-replays orphans, the drain
-clears staleness flags (see
+a max position, an entry id, a row count, a watermark — is asserting that
+nothing between the seed and the spec's first turn changes the rows. Plenty
+does: the first Send clears the branch's system rows, boot recovery
+reverse-replays orphans, the drain clears staleness flags (see
 [Staleness flags are cleared by the drain](./staleness-flags-are-cleared-by-the-drain.md)),
 and hydrate can prune. Seed absolute facts the fixture owns; derive anything
-positional after launch, or anchor it on a row that boot provably leaves alone.
+positional after launch, or anchor it on a row that neither boot nor the first
+Send can remove.
