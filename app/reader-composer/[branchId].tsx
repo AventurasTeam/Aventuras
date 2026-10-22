@@ -20,6 +20,7 @@ import {
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { settlePassFailureCustody } from '@/components/reader/pass-failure-custody'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
@@ -571,6 +572,21 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
+  const showPassFailure = useCallback(
+    async (refusal: PassRefusal, submission: SystemFailureMeta['submission']) => {
+      await writeSystemEntry(
+        {
+          branchId,
+          content: describePassFailure(refusal).content,
+          failure: toPassFailureMeta(refusal, submission),
+        },
+        ctx,
+      )
+      await reload()
+    },
+    [branchId, reload],
+  )
+
   type DroppedSystemEntry = { content: string; failure: SystemFailureMeta | undefined }
 
   // A prior failure leaves a system entry as the branch tail; drop it (and
@@ -667,28 +683,19 @@ export default function ReaderComposerRoute() {
         ).finally(() => setSendPending(false))
         const refusal = passRefusalOf(result)
         if (refusal != null) {
-          // The Send wrote nothing: a failed pass hands its text back to an empty composer, else it
-          // rides on the entry for Dismiss. A held entry advises a restart, which the composer's
-          // text wouldn't survive (reader-composer.md → Custody of the turn's text).
+          // The Send wrote nothing, so its text goes back to the composer or onto the entry.
           setLastSubmission(null)
-          const handBack =
-            !refusal.held &&
-            branchUnchanged(branchId) &&
-            isDraftEmpty(composerRef.current?.getDraft())
-          await writeSystemEntry(
-            {
-              branchId,
-              content: describePassFailure(refusal).content,
-              failure: toPassFailureMeta(refusal, handBack ? undefined : submission),
-            },
-            ctx,
-          )
-          await reload()
-          if (handBack && branchUnchanged(branchId)) {
-            if (isDraftEmpty(composerRef.current?.getDraft()))
-              composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
-            else toast.info(t('reader:failedTurnTextDropped'))
-          }
+          await settlePassFailureCustody({
+            held: refusal.held,
+            custodyNow: () => ({
+              stillOnBranch: branchUnchanged(branchId),
+              draftEmpty: isDraftEmpty(composerRef.current?.getDraft()),
+            }),
+            write: (withSubmission) =>
+              showPassFailure(refusal, withSubmission ? submission : undefined),
+            restoreDraft: () =>
+              composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free'),
+          })
         } else if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected' && !result.converged) {
           // The refused turn's user_action is still in the branch, so a Retry would duplicate
@@ -750,6 +757,7 @@ export default function ReaderComposerRoute() {
       dropSystemTail,
       restoreSystemTail,
       showTurnFailure,
+      showPassFailure,
       beginDispatch,
       endDispatch,
       branchUnchanged,
@@ -921,34 +929,24 @@ export default function ReaderComposerRoute() {
       return
     }
     const submission = systemFailure?.submission
-    const rewrite = async (refusal: PassRefusal) => {
-      await writeSystemEntry(
-        {
-          branchId,
-          content: describePassFailure(refusal).content,
-          failure: toPassFailureMeta(refusal, submission),
-        },
-        ctx,
-      )
-      await reload()
-    }
     try {
       await retryPassEntry({
         runPass: () => runClassifierNow(branchId, ctx),
         dismiss: handleDismissSystemEntry,
-        rewrite,
+        rewrite: (refusal) => showPassFailure(refusal, submission),
         notify: (message) => toast.info(message),
-      })
-    } catch (err) {
-      // A Retry that threw failed too: the entry takes the new cause.
-      await rewrite({
-        held: false,
-        error: { kind: 'orchestrator', detail: err instanceof Error ? err.message : String(err) },
       })
     } finally {
       endDispatch()
     }
-  }, [branchId, systemFailure, reload, handleDismissSystemEntry, beginDispatch, endDispatch])
+  }, [
+    branchId,
+    systemFailure,
+    showPassFailure,
+    handleDismissSystemEntry,
+    beginDispatch,
+    endDispatch,
+  ])
 
   const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
     systemFailure,

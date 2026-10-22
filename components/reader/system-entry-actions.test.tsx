@@ -366,10 +366,22 @@ describe('retryPassEntry', () => {
     expect(h.calls).toEqual([])
   })
 
-  it('lets a throw through without touching the entry', async () => {
+  it('rewrites the entry as a failed pass when the pass throws', async () => {
     const h = harness(new Error('marker insert failed'))
-    await expect(retryPassEntry(h.deps)).rejects.toThrow('marker insert failed')
-    expect(h.calls).toEqual([])
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['rewrite'])
+    expect(h.rewrite).toHaveBeenCalledWith({
+      held: false,
+      error: { kind: 'orchestrator', detail: 'marker insert failed' },
+    })
+  })
+
+  // The pass committed, so its failure copy would be wrong: the throw goes to the caller.
+  it('lets a throw from the clear through without rewriting the entry', async () => {
+    const h = harness({ ...ran, outcome: 'completed' })
+    const dismiss = vi.fn(() => Promise.reject(new Error('reload failed')))
+    await expect(retryPassEntry({ ...h.deps, dismiss })).rejects.toThrow('reload failed')
+    expect(h.rewrite).not.toHaveBeenCalled()
   })
 })
 

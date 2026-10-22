@@ -126,7 +126,8 @@ export function toPassFailureMeta(
 
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit clears the entry through `dismiss`;
- * a failure or a hold rewrites it; a cancel leaves it to the deferral toast. Throws propagate.
+ * a failure, a throw or a hold rewrites it; a cancel leaves it to the deferral toast. A throw from
+ * `dismiss` or `rewrite` propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
@@ -134,7 +135,13 @@ export async function retryPassEntry(deps: {
   rewrite: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
 }): Promise<void> {
-  const result = await deps.runPass()
+  let result: TxResult | RejectedStart
+  try {
+    result = await deps.runPass()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return deps.rewrite({ held: false, error: { kind: 'orchestrator', detail } })
+  }
   if (result.outcome === 'completed') return deps.dismiss()
   if (result.outcome === 'failed') return deps.rewrite({ held: false, error: result.error })
   if (result.outcome !== 'rejected') return
