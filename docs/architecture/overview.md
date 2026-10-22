@@ -138,6 +138,9 @@ handle is tapped, and a close driven from our side never reaches its restore, so
 is released by hand (see `utils/scrollLock`). A tap on the handle therefore takes the fallback
 path above: a busy or dirty sheet closes and comes back, asking when it is dirty.
 
+Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and
+close animations change; a drag's settle keeps `vaul`'s timing, which the guard copies.
+
 A nested sheet (`Drawer.NestedRoot`, through `ActionModal`'s `nested`) finds its parent through
 `vaul`'s Svelte context, which throws when there is none. It has to be rendered inside the parent
 modal's content.
