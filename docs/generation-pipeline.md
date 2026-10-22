@@ -1935,7 +1935,7 @@ const periodicClassifierPipeline: Pipeline = {
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
-  // started by a chain, by Send for deferred work, or by Run now
+  // started by a chain, by Send as its owed pass, or by Run now
 }
 
 const chapterClosePipeline: Pipeline = {
