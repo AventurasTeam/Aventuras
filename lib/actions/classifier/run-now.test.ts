@@ -83,17 +83,20 @@ describe('runClassifierNow', () => {
     expect(runClassifierPass).not.toHaveBeenCalled()
   })
 
-  it('starts the pass on the open story’s branch', async () => {
+  // Exact arguments: a `beforeTurn` anywhere would show Run now's pass as Send's.
+  it('starts the pass on the open story’s branch, never as Send’s', async () => {
     open('b1')
     const { db, runInTransaction } = await createTestDb()
     runClassifierPass.mockResolvedValue({ outcome: 'completed' })
 
     const result = await runClassifierNow('b1', { db, runInTransaction })
 
-    expect(runClassifierPass).toHaveBeenCalledWith(
-      expect.objectContaining({ storyId: 's1', branchId: 'b1' }),
-      expect.objectContaining({ db, runInTransaction }),
-    )
+    expect(runClassifierPass.mock.calls).toStrictEqual([
+      [
+        { storyId: 's1', branchId: 'b1' },
+        { db, runInTransaction },
+      ],
+    ])
     expect(result).toEqual({ outcome: 'completed' })
   })
 
