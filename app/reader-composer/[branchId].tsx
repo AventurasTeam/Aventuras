@@ -689,7 +689,9 @@ export default function ReaderComposerRoute() {
             held: refusal.held,
             custodyNow: () => ({
               stillOnBranch: branchUnchanged(branchId),
-              draftEmpty: isDraftEmpty(composerRef.current?.getDraft()),
+              // An unmounted composer can't take the text back, so the entry keeps it.
+              draftEmpty:
+                composerRef.current != null && isDraftEmpty(composerRef.current.getDraft()),
             }),
             write: (withSubmission) =>
               showPassFailure(refusal, withSubmission ? submission : undefined),
