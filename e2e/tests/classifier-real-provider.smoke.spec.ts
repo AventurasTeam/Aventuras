@@ -384,14 +384,14 @@ test.describe('periodic classifier — real provider smoke', () => {
     }
 
     process.stdout.write('\n### passes\n')
-    const firstChain = await chainedPass(await landTurn('first'))
+    let lastChain = await chainedPass(await landTurn('first'))
     expect(beforeTurnPasses, 'the first Send ran no pass over the parked backlog').toBeGreaterThan(
       0,
     )
     // classifier.md → Failure policy: a failed pass is owed again, and the next Send runs it first.
-    if (firstChain === 'failed') {
+    if (lastChain === 'failed') {
       const passesBefore = beforeTurnPasses
-      await chainedPass(await landTurn('second'))
+      lastChain = await chainedPass(await landTurn('second'))
       expect(
         beforeTurnPasses,
         'the Send after a failed chained pass ran no pass before its turn',
@@ -515,9 +515,8 @@ test.describe('periodic classifier — real provider smoke', () => {
     )
     expect(badSeverity[0][0]).toBe(0)
 
-    const status = (
-      await queryApp(app.window, `SELECT classifier_status FROM branches WHERE id = ?`, [branchId])
-    )[0][0] as string
-    expect(JSON.parse(status).state).not.toBe('failed')
+    // `failed` is ordinary, owed at the next Send (classifier.md → Failure policy); the status may
+    // read it only after a last pass that failed.
+    if (lastChain !== 'failed') expect((await classifierStatus()).state).not.toBe('failed')
   })
 })
