@@ -569,83 +569,54 @@ its own lore management refused.
 ## Images
 
 Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenAI Compatible,
-OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111. Every one
-goes through `generateImage`: NanoGPT, A1111 and ComfyUI as custom `ImageModelV4` objects
-(`nanogptImage.ts`, `a1111Image.ts`, `comfyImage.ts`). The ComfyUI model queues a prepared
-API-format graph over HTTP and polls `GET /api/jobs/{id}` once a second, starting at once, because
-core ComfyUI pushes progress only over `/ws`. A poll that fails is retried, up to ten in a row; a
-4xx other than 408 and 429 is a refusal and a 404 means the server lost the job (on the first poll,
-that the server predates the route), and each ends the generation at once. The queue wait is
-unbounded; the caller's abort ends it. Any failure that leaves a job possibly queued (an abort, a
-poll giving up, an error in a 200 reply) sends `POST /api/jobs/{id}/cancel`. When the
-`POST /prompt` was never answered the cancel is retried for about 15 s with backoff (six attempts),
-since it can overtake the prompt.
+OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111. All of them
+generate through the AI SDK's `generateImage` (`sdkImage.ts`), so retry, abort and the result shape
+are the same everywhere. OpenAI, OpenAI Compatible (a user-supplied proxy), OpenRouter and Google use
+their SDK providers; Pollinations and Z.AI speak the OpenAI image API and reuse the OpenAI
+Compatible helper. Three backends have no usable SDK provider and get a small custom
+`ImageModelV4` each:
 
-**Supported ComfyUI: 0.26.0 and later** (`MIN_COMFYUI_VERSION` in `comfyImage.ts`). 0.26.0 is the first
-release where that cancel route exists. It interrupts a job only if it is still the running one,
-and dequeues it otherwise, so a cancel cannot stop someone else's prompt, which `/interrupt`
-alone can. One route to poll and one to cancel also replaces reading `/history` and `/queue` and
-reconciling them. `generate` reads `/system_stats` once per base URL, with a 5 s timeout, and
-refuses an older server with an update message; a server that cannot be asked, or reports a version that does not parse, is
-let through. The same read supplies the server's OS, which decides the path separator in model
-names for the built-in workflows (ComfyUI lists and matches them with its own).
+- **NanoGPT** (`nanogptImage.ts`): its unified `/images` endpoint covers text-to-image and edits in
+  one request and is not the OpenAI shape.
+- **A1111** (`a1111Image.ts`, also Forge, SD.Next and KoboldCpp): no maintained SDK provider speaks
+  its API, and the community package cannot use the app's HTTP transport.
+- **ComfyUI** (`comfyImage.ts`): ComfyUI only announces a finished job over a WebSocket, so the app
+  submits the workflow and checks on the job over plain HTTP instead. That keeps it on the same
+  transport as every other backend. If the user cancels, or the app gives up on a job it has
+  already queued, it tells ComfyUI to cancel that job so the server is not left generating an
+  image nobody will see.
 
-ComfyUI errors are reported by what they name: validation errors by node and class, execution
-errors by node, and an output node that produced nothing by its id, with any other node that did
-produce an image. The polls and the cancel share one debug entry that updates in place, with the
-number of requests, the last request and its response, and the ones that failed, so a generation
-shows `POST /prompt` → one poll entry → `GET /view`. The pop-out debug window replaces an entry it
-already has by id rather than appending it again.
+**Supported ComfyUI: 0.26.0 and later** (`MIN_COMFYUI_VERSION` in `comfyImage.ts`). That is the first
+release with a single job-status route and a cancel that can only stop the app's own job, never
+someone else's. Older servers are refused with a message asking the user to update; a server that
+cannot be asked its version is let through.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
 steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google, a
-ratio plus a resolution tier matched to the pixel tier for OpenRouter, the model's own published
-resolution list for NanoGPT, real dimensions for ComfyUI/A1111/Pollinations
-(`src/lib/utils/image.ts`). Z.AI's `glm-image` wants each side 1024–2048 and a multiple of 32, so
-the pixels are scaled up to a 1024 short side, capped at a 2048 long side and snapped to the
-grid, keeping the ratio. A backend that is handed pixel dimensions it does not offer answers
+ratio plus a resolution tier for OpenRouter, the model's own published resolution list for NanoGPT,
+real dimensions for ComfyUI/A1111/Pollinations, and a snapped-to-grid size inside Z.AI's limits
+(`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 
-NanoGPT calls its unified `POST /images` through a small custom `ImageModelV4`
-(`nanogptImage.ts`): one JSON request for text-to-image and edits, references as `input_references`
-data URLs, and the model's resolution tier (`1k`, `1344*576`) in `providerOptions.nanogpt` because the
-SDK's `size` takes only `WxH`. Models that list aspect ratios also get one, so orientation survives
-a tier-only resolution. A1111 (and Forge, SD.Next, KoboldCpp, which speak its API) is a second custom
-model (`a1111Image.ts`): `POST /sdapi/v1/txt2img` with the checkpoint as a per-request
-`override_settings` that is restored afterwards, sampler options in `providerOptions.a1111`, no
-references. The community `automatic1111-provider` package is not used: it targets spec v2, takes no
-`fetch` and decodes base64 with `Buffer`. OpenAI
-(`@ai-sdk/openai`), OpenAI Compatible (`@ai-sdk/openai-compatible`, for a proxy: base URL required,
-key optional), OpenRouter (`@openrouter/ai-sdk-provider`, `/images`), Pollinations, Z.AI, NanoGPT, A1111 and Google call
-the SDK through `generateSdkImage` (`sdkImage.ts`), which retries only 429s. Pollinations and Z.AI reuse the OpenAI Compatible helper
-(`generateOpenAICompatibleImage`): Pollinations with its fixed base URL and `safe: false`, Z.AI
-with `api.z.ai` and no references. Z.AI answers `data[].url`; the SDK downloads an OpenAI-compatible `url` reply
-through `createSdkFetch`, sends the key only to the API's own origin, and checks each redirect hop
-itself (`createSdkFetch` has the plugin return a 3xx when the SDK asks for `redirect: 'manual'`).
-NanoGPT's custom model downloads its `url` items through the same injected fetch, without the key.
-A non-2xx on the SDK's own download is an `APICallError` like a generation failure, so a 429 from
-the image host makes `retryOn429ImageMiddleware` re-run the whole call, POST included, and the
-generation is billed again. `generateImage`'s own retry is off (`maxRetries: 0`), so other
-statuses, 5xx included, fail at once. NanoGPT's download and ComfyUI's `/view` download throw a
-plain `Error` to stay out of this.
-Open: the middleware cannot see the endpoint, but a download error carries `requestBodyValues: {}`
-and the original `data[].url` (not a redirect hop), where a generation error carries the request
-body, so that is the field to tell them apart by. Checked for `@ai-sdk/openai-compatible` only.
-The generation POST's own redirects are followed by the plugin (reqwest's default), not the SDK.
-Each adapter keeps its
-own model discovery and size handling; discovery throws on a failed request rather than
-substituting a list. Whether a provider takes an API key or a base URL is declared per provider in
-the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
-`hasRequiredCredentials` read those tables. Migration `042` turned image settings that still named
-an API profile into image profiles, then moved `openai` profiles that point at a proxy, and every
-`chutes` profile (that provider is gone; its generation route no longer exists), over to OpenAI
-Compatible. It also pins `zhipu` API and image profiles with an empty base URL to
-`open.bigmodel.cn`, which they were using before the default became `api.z.ai`. The registry hands references only to the providers
-that send them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to
-base64, so every adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
-from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
-merely resolves to a private address is not caught. A reference that cannot be fetched is dropped
-and the image is generated without it. Google takes them on every image model it lists.
+Only a 429 is retried, because any other failure may already have been billed. The same rule has
+one sharp edge: when a reply gives a URL and the SDK downloads the image itself, a 429 from the
+image host makes the whole generation run again, and it is billed again. The key is sent only to
+the API's own origin, and redirects are checked rather than followed blindly.
+
+Each adapter keeps its own model discovery and size handling; discovery throws on a failed request
+rather than substituting a list. Whether a provider takes an API key or a base URL is declared per
+provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
+`hasRequiredCredentials` read those tables. Migration `042` moved image settings that still named an
+API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
+(that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
+`open.bigmodel.cn`, which they used before the default became `api.z.ai`.
+
+The registry hands references only to the providers that send them, cut to the model's
+`maxReferenceImages` first, and fetches `http(s)` ones to base64, so every adapter receives raw
+base64. A reference URL can come from a discovery card, so it is fetched only from a public host and
+each redirect is checked the same way (`fetchPublicImageBase64`); a name that merely resolves to a
+private address is not caught. A reference that cannot be fetched is dropped and the image is
+generated without it. Google takes them on every image model it lists.
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see
