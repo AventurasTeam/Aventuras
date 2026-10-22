@@ -704,16 +704,6 @@ slice-planning gate forces its resolution before that slice is planned.
   earlier entry can't simply be put back beside the new one. Raised
   2026-10-22 in the pass failure policy slice's Task 7 review.
 
-- **The composer wireframe's memory-failure copy differs from the
-  shipped string.** The `memory` variant in
-  `docs/ui/screens/reader-composer/reader-composer.html:1945` reads
-  "The memory update failed, so your turn didn't start. … Your text is
-  still in the composer. Retry runs the memory update; Send runs it
-  first again.", while `reader:systemEntry.failure.memory`
-  (`locales/en/reader.json:149`) reads "Memory update failed, so your
-  turn didn't start. Retry it, or send again." Raised 2026-10-22 in the
-  pass failure policy slice's Task 7 review.
-
 - **`retries: 1` also applies to the opt-in real-provider smoke.**
   `playwright.config.ts:20` sets it for every spec, and
   `e2e/tests/classifier-real-provider.smoke.spec.ts` sets only a
