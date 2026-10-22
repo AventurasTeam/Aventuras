@@ -192,8 +192,6 @@ or Android build.
   result itself (`open_src`) and takes a lock. A `file://` URL (iOS) is opened with
   security-scoped access that is released afterwards; a `content://` URI (Android) is copied to a
   temp file first. This path is shared with desktop and Android restore.
-- **`src-tauri/src/lib.rs`, `Cargo.toml`, `Cargo.lock`, `capabilities/default.json`** — the
-  `tauri-plugin-websocket` plugin, which the ComfyUI client uses on every platform.
 
 The rest of the regression surface for the five existing platforms is three additive YAML job
 blocks, two additive TS branches guarded by user-agent checks, and the iOS-only files under

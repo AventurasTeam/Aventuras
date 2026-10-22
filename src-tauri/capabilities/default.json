@@ -41,7 +41,6 @@
     "process:allow-restart",
     "process:allow-exit",
     "http:default",
-    "websocket:default",
     {
       "identifier": "http:allow-fetch",
       "allow": [
