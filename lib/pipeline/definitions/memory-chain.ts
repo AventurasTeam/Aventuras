@@ -40,7 +40,7 @@ export async function readClassifierStatus(
   return row?.classifierStatus ?? idleStatus()
 }
 
-// Send's check and per-turn's chain read the cadence through this one path.
+// One read of "due" so Send's check and the chain never disagree.
 async function cadenceDue(
   branchId: string,
   status: ClassifierStatus,

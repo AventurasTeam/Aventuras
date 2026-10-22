@@ -122,16 +122,17 @@ describe('runClassifierNow', () => {
     })
   }
 
+  // b1 is persisted running, so a held check ahead of the open check would report classifier-held.
   it('rejects when the branch is not open', async () => {
     currentStoryStore.set({
       storyId: 's1',
-      branchId: 'b1',
+      branchId: 'b-other',
       definition: DEFINITION,
       settings: SETTINGS,
     })
-    const { db, runInTransaction } = await createTestDb()
+    const { db, runInTransaction } = await seedBranch('running')
 
-    const result = await runClassifierNow('b-other', { db, runInTransaction })
+    const result = await runClassifierNow('b1', { db, runInTransaction })
 
     expect(result).toEqual({ outcome: 'rejected', blockedBy: 'branch-not-open' })
     expect(runPipeline).not.toHaveBeenCalled()
