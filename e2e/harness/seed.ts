@@ -284,7 +284,7 @@ export function enableStoryProbeMode(dbPath: string, storyId: string): void {
 function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: number): void {
   db.prepare(
     `UPDATE branches SET classifier_status = json_set(
-       COALESCE(classifier_status, '{}'), '$.state', 'idle', '$.retryCount', 0,
+       COALESCE(classifier_status, '{}'), '$.state', 'idle',
        '$.lastSuccessAt', NULL, '$.lastError', NULL, '$.processedThrough', ?)
      WHERE id = ?`,
   ).run(processedThrough, branchId)
@@ -328,11 +328,10 @@ export function seedClassifierBacklog(
 
 /**
  * Park the classifier watermark at the last `ai_reply` and return that position, so a pass
- * covers only the turns a spec commits after launch — the fixture seeds
- * `classifier_status = NULL`, which floors the window at 0. Anchors on the last reply rather
- * than MAX(position) because the fixture ends on a dangling in-flight turn that boot recovery
- * reverse-replays, putting the seed-time maximum above the tip the app boots with.
- * Runs before launch.
+ * covers only the turns a spec commits after launch. The seed already parks every branch at its
+ * last non-system entry, the same row on the hero branch; a spec calls this to state the state it
+ * relies on. Not MAX(position): the hero branch ends on a `system` row, which the first Send
+ * deletes, handing its position to that Send's user_action. Runs before launch.
  */
 export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
   const db = new DatabaseSync(dbPath)
