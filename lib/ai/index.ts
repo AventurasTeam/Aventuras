@@ -12,6 +12,7 @@ export type { ProviderInstanceWithStub } from './types'
 export {
   generateStructured,
   parseStructured,
+  profileTimeoutMs,
   streamText,
   type GenerateStructuredResult,
   type PromptHalves,

@@ -105,6 +105,22 @@ describe('buildCallSettings', () => {
   it('maps an empty params object to no options', () => {
     expect(buildCallSettings({}, 'anthropic')).toEqual({})
   })
+
+  // AbortSignal.timeout fires at once on 0 and throws on a negative or non-finite delay.
+  it.each([0, -30, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'drops an invalid timeout (%s)',
+    (timeout) => {
+      expect(buildCallSettings({ temperature: 0.7, timeout }, 'anthropic')).toEqual({
+        temperature: 0.7,
+      })
+    },
+  )
+
+  it("caps a huge timeout at setTimeout's largest delay", () => {
+    expect(buildCallSettings({ timeout: 9_999_999 }, 'anthropic')).toEqual({
+      timeout: { totalMs: 2_147_483_647 },
+    })
+  })
 })
 
 describe('streamText', () => {

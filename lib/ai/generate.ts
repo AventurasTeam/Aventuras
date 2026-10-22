@@ -29,12 +29,22 @@ export type CallSettings = {
   }
 }
 
+// setTimeout's largest delay; a longer one fires at once.
+const MAX_TIMER_DELAY_MS = 2_147_483_647
+
+/** A profile `timeout` (seconds) in ms; `undefined` when unset, non-finite or ≤ 0. */
+export function profileTimeoutMs(seconds: number | undefined): number | undefined {
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return undefined
+  return Math.min(seconds * 1000, MAX_TIMER_DELAY_MS)
+}
+
 // Single owner of the ResolvedParams → SDK call-settings mapping. Thinking is
 // anthropic-only: other provider types would reject the providerOptions key.
 export function buildCallSettings(
   params: ResolvedParams,
   providerType: ProviderInstance['type'] | undefined,
 ): CallSettings {
+  const timeoutMs = profileTimeoutMs(params.timeout)
   return {
     ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
     ...(params.maxOutput !== undefined ? { maxOutputTokens: params.maxOutput } : {}),
@@ -50,7 +60,7 @@ export function buildCallSettings(
           },
         }
       : {}),
-    ...(params.timeout !== undefined ? { timeout: { totalMs: params.timeout * 1000 } } : {}),
+    ...(timeoutMs !== undefined ? { timeout: { totalMs: timeoutMs } } : {}),
   }
 }
 
