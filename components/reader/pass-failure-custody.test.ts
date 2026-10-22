@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { planPassFailureCustody, settlePassFailureCustody } from './pass-failure-custody'
+import {
+  planPassFailureCustody,
+  readPassFailureCustody,
+  settlePassFailureCustody,
+} from './pass-failure-custody'
 
 describe('planPassFailureCustody', () => {
   it('hands a failed pass back to an empty composer on the same branch', () => {
@@ -25,6 +29,37 @@ describe('planPassFailureCustody', () => {
   it('keeps a held refusal on the entry even with an empty composer', () => {
     expect(planPassFailureCustody({ held: true, stillOnBranch: true, draftEmpty: true })).toBe(
       'entry',
+    )
+  })
+})
+
+describe('readPassFailureCustody', () => {
+  const composerHolding = (text: string) => ({ getDraft: () => ({ text }) })
+
+  it('reads an empty draft as free', () => {
+    expect(readPassFailureCustody({ stillOnBranch: true, composer: composerHolding('') })).toEqual({
+      stillOnBranch: true,
+      draftEmpty: true,
+    })
+  })
+
+  it('reads a draft holding text as occupied', () => {
+    expect(
+      readPassFailureCustody({ stillOnBranch: true, composer: composerHolding('I wait.') }),
+    ).toEqual({ stillOnBranch: true, draftEmpty: false })
+  })
+
+  // An unmounted composer can't take the text back, so the entry must keep it.
+  it('reads a missing composer as occupied', () => {
+    expect(readPassFailureCustody({ stillOnBranch: true, composer: null })).toEqual({
+      stillOnBranch: true,
+      draftEmpty: false,
+    })
+  })
+
+  it('carries a branch switch through', () => {
+    expect(readPassFailureCustody({ stillOnBranch: false, composer: composerHolding('') })).toEqual(
+      { stillOnBranch: false, draftEmpty: true },
     )
   })
 })

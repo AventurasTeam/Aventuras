@@ -20,7 +20,10 @@ import {
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
 import { readerPillPhase } from '@/components/reader/generation-phase'
-import { settlePassFailureCustody } from '@/components/reader/pass-failure-custody'
+import {
+  readPassFailureCustody,
+  settlePassFailureCustody,
+} from '@/components/reader/pass-failure-custody'
 import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
@@ -692,12 +695,11 @@ export default function ReaderComposerRoute() {
           setLastSubmission(null)
           await settlePassFailureCustody({
             held: refusal.held,
-            custodyNow: () => ({
-              stillOnBranch: branchUnchanged(branchId),
-              // An unmounted composer can't take the text back, so the entry keeps it.
-              draftEmpty:
-                composerRef.current != null && isDraftEmpty(composerRef.current.getDraft()),
-            }),
+            custodyNow: () =>
+              readPassFailureCustody({
+                stillOnBranch: branchUnchanged(branchId),
+                composer: composerRef.current,
+              }),
             write: (withSubmission) =>
               showPassFailure(refusal, withSubmission ? submission : undefined),
             restoreDraft: () =>

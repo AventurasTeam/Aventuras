@@ -1,8 +1,23 @@
+import { isDraftEmpty } from './composer-draft'
+
 /**
  * Where a Send's text goes when its pass refused it (reader-composer.md → Custody of the turn's
  * text): back to the composer, or onto the entry, which Dismiss hands back from.
  */
 export type PassFailureCustody = 'composer' | 'entry'
+
+type PassFailureCustodyRead = { stillOnBranch: boolean; draftEmpty: boolean }
+
+export function readPassFailureCustody(args: {
+  stillOnBranch: boolean
+  composer: { getDraft(): { text: string } } | null
+}): PassFailureCustodyRead {
+  return {
+    stillOnBranch: args.stillOnBranch,
+    // An unmounted composer can't take the text back, so the entry keeps it.
+    draftEmpty: args.composer != null && isDraftEmpty(args.composer.getDraft()),
+  }
+}
 
 export function planPassFailureCustody(args: {
   held: boolean
@@ -20,7 +35,7 @@ export function planPassFailureCustody(args: {
  */
 export async function settlePassFailureCustody(deps: {
   held: boolean
-  custodyNow: () => { stillOnBranch: boolean; draftEmpty: boolean }
+  custodyNow: () => PassFailureCustodyRead
   write: (withSubmission: boolean) => Promise<void>
   restoreDraft: () => void
 }): Promise<void> {
