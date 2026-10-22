@@ -271,7 +271,7 @@ describe('composerShowsCancel', () => {
     expect(composerShowsCancel(txOf(DEFERRED_PASS), 'br_1', false)).toBe(true)
   })
 
-  // Between Send's deferred pass and its turn, only the pending mark holds.
+  // Between Send's owed pass and its turn, only the pending mark holds.
   it("holds Cancel through the gap while this host's Send has a turn pending", () => {
     expect(composerShowsCancel(pendingOn('br_1'), 'br_1', true)).toBe(true)
   })

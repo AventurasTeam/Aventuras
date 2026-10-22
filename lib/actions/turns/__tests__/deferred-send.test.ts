@@ -371,7 +371,7 @@ describe('Send with deferred work', () => {
   it('fails the Send when its deferred pass fails, keeping the work deferred for the next Send', async () => {
     const { ctx, db, pass } = await setUp(3)
     await deferAPass(ctx, pass, 'cancel')
-    // Past the cadence, so only the kept deferral can owe the next Send its pass.
+    // A cadence of 50 isn't due, so only the kept deferral can owe the next Send its pass.
     setCadence(50)
 
     const failed = send(ctx, 'I wait.')
