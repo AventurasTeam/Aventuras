@@ -88,10 +88,11 @@ turns intact, and a later deep rollback into the chapter spares them by
 the survival-anchor predicate (see
 [`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor)).
 
-**A failed pass doesn't stop the close.** It proceeds with what's
-classified, worse input for the phases after but not catastrophic, and
-the pass is retried at the next turn's commit like any failed pass. A
-`failed-persistent` classifier chains no passes.
+**A failed pass stops the chain.** The close doesn't run over
+unclassified prose: the pass runs before the next turn like any failed
+pass
+([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
+and the close, still owed, follows it.
 
 ## Phase 1 — boundary selection
 
@@ -443,7 +444,7 @@ User edits are blocked; pipeline phase failures cascade as follows:
 
 | Phase                      | Failure mode                                                                                                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** (catch-up passes)    | Proceed with what's classified; the failed pass retries at the next turn's commit. Worse retrieval input for downstream phases but not catastrophic.                          |
+| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                                                      |
 | **1** (boundary selection) | `callWithRetry` same-prompt retry; final fallback uses head-as-end.                                                                                                           |
 | **2** (metadata)           | Placeholder content; chapter row still creates.                                                                                                                               |
 | **3** (lore-mgmt)          | A rejected write is handed back to the loop, which corrects or drops it; accepted ones commit. Phase as a whole may produce zero writes on bad output — chapter still closes. |

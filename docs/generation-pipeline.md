@@ -646,11 +646,9 @@ broken references).
 (per-turn, chapter-close) emits a system-kind entry
 into the affected story per
 [`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
-Pre-flight failure on **the periodic classifier** is a failed pass,
-retried at the next turn's commit, and emits a sticky pill error
-variant per
-[`generation-status-pill.md`](./ui/patterns/generation-status-pill.md)
-rather than a system entry every few turns.
+Pre-flight failure on **the periodic classifier** is a failed pass:
+a toast, and the system entry when it fails a Send
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
 
 **Runtime resolver failure is the safety net.** A race between
 pre-flight pass and the actual LLM call (config changed mid-turn)
@@ -1206,20 +1204,21 @@ observability — visible in the Diagnostics Hub Logs tab.
 
 The modal reports it too. SQLite ROLLBACK undoes the partial
 reverse-replay, not the orphan's own writes: those stay on disk, and
-for a `periodic-classifier` orphan the branch stays held back from
-the cadence (`resetStuckClassifierRunState` skips branches whose
-deltas survived). A story whose memory has silently stopped updating
-is indistinguishable from a healthy one, so this is not an
-observability-only state:
+for a `periodic-classifier` orphan the branch stays `running`
+(`resetStuckClassifierRunState` skips branches whose deltas survived),
+so it can't run a pass, and every Send on it fails until a boot
+reverses the orphan
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+So this is not an observability-only state:
 
 - The title reads _"Recovery incomplete"_ unless every orphan
   reversed. A boot that reversed one orphan and failed another has
   still left writes behind, and _"Story recovered"_ would over-claim
   it.
 - A `periodic-classifier` failure is the one kind that can promise
-  the pause, because it writes `state: 'running'` before any delta
-  and so definitionally causes one. Other kinds describe the fault
-  without promising a pause.
+  the branch's turns stop until then, because it writes
+  `state: 'running'` before any delta and so definitionally stops
+  them. Other kinds describe the fault without promising a stop.
 - Every variant says the story's content is intact. Each also says
   that restarting the app retries automatically, unless the reversal
   was refused as an integrity error (`ReversalIntegrityError`): every
@@ -1241,8 +1240,8 @@ different versions. The third needs a run whose abort's own reversal
 failed: the orchestrator lifts the run's gate even then, so a user
 write can land that the reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
-on each boot. The orphan's writes stay, and so does its branch's
-pause.
+on each boot. The orphan's writes stay, and its branch takes no
+turns; a branch from an entry before the orphan starts idle and can.
 
 ### `chainsTo` on predecessor
 
@@ -1258,8 +1257,8 @@ async function nextMemoryRun(
   if (!story) return null
   const status = await readClassifierStatus(run.branchId, ctx)
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
-  // failed-persistent waits for the user; a persisted 'running' (a pass left unfinished) waits for boot
-  const held = status.state === 'failed-persistent' || status.state === 'running'
+  // a persisted 'running' (a pass left unfinished) waits for boot
+  const held = status.state === 'running'
   const passable = unprocessed > 0 && !held
   if (await closeOwed(run.branchId, story, ctx))
     return passable ? 'periodic-classifier' : 'chapter-close'
@@ -1329,10 +1328,13 @@ catch-up passes as above), then writes the user_action and starts the
 turn. Each is its own run with its own `actionId`, committing before
 the turn's first write. Cancel during them cancels the whole Send; the
 work stays deferred and the composer keeps the user's text. A deferred
-run that fails lets the turn go ahead. A pass or a close that commits
-some other way, Run now or a manual close, clears its record. The record is in memory only:
-after a restart, the next turn's commit finds the pass due or the close
-owed anyway.
+run that fails there fails the Send: the turn doesn't start, the composer
+keeps the text, and the reader shows the failure
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)). A pass or a close that commits
+some other way, Run now or a manual close, clears its record. Send also runs a pass first
+when none is deferred but the cadence is due, as a failed chained pass
+leaves it. The record is in memory only: after a restart, that check
+finds the interrupted pass, and the next turn's commit the owed close.
 
 ### Chained transition — "no user-edit window"
 
@@ -2189,9 +2191,10 @@ branch's `classifier_status` and counts its unprocessed entries in
 SQL while the turn still holds the gate, so nothing moves either
 during the read and no in-memory copy has to be kept in step.
 `[Run classifier now]` calls
-`runPipeline('periodic-classifier')`; deferred work starts from Send. A
-rejected start waits for the next turn — no retry queue, no timers
-([`memory/classifier.md → Auto-retry policy`](./memory/classifier.md#auto-retry-policy)).
+`runPipeline('periodic-classifier')`; deferred and owed work starts from
+Send. A rejected start waits for the next turn — no retry queue, no
+timers
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
 
 ---
 

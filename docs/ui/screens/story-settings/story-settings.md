@@ -508,14 +508,12 @@ capability`), and the **per-turn fallback classifier** covers the
   the story mentions, not only the ones it visits. A change applies
   from the next pass; prose already classified isn't revisited.
 - **Status block** — current state for the active branch, one of
-  _idle / running / retrying / failed-persistent_. Each state
-  carries its own copy and inline actions (retrying reads
-  "retrying after your next turn"); failed-persistent
-  additionally surfaces as a top-bar error pill in the reader,
-  parallel to the cluster-1 staleness pill.
+  _idle / running / failed_. Each state carries its own copy;
+  failed names the reason and reads "runs again before your next
+  turn".
 - **`Run classifier now`** button. Disabled while a run is
-  actively in flight; enabled in idle and retrying states (lets
-  the user retry without taking a turn). The pass it starts holds
+  actively in flight; enabled in idle and failed states (lets the
+  user retry without taking a turn). The pass it starts holds
   the story like any other.
 
 ### Embedder

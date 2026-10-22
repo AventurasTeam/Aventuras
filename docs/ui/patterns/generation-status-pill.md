@@ -56,10 +56,7 @@ type GenerationPhase =
 // `swap-paused` is separate because staging CLEARS embedding_stale as it goes,
 // so a half-finished swap drives the count toward zero — the story most in need
 // of a signal is the one least likely to raise one.
-type ErrorState =
-  | { code: 'memory-incomplete'; pendingRows: number }
-  | { code: 'swap-paused' }
-  | { code: 'classifier-offline' }
+type ErrorState = { code: 'memory-incomplete'; pendingRows: number } | { code: 'swap-paused' }
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
@@ -126,21 +123,19 @@ The compound owns phase → copy and error → copy:
 | `closing-chapter`        | `closing chapter…`                                                               |
 | `refreshing-suggestions` | `refreshing suggestions…`                                                        |
 
-| Error code           | Label                                              |
-| -------------------- | -------------------------------------------------- |
-| `memory-incomplete`  | `Memory incomplete — {{count}} row(s) pending`     |
-| `swap-paused`        | `Embedder switch paused — waiting on you`          |
-| `classifier-offline` | `Classifier offline — retrieval coverage thinning` |
+| Error code          | Label                                          |
+| ------------------- | ---------------------------------------------- |
+| `memory-incomplete` | `Memory incomplete — {{count}} row(s) pending` |
+| `swap-paused`       | `Embedder switch paused — waiting on you`      |
 
 `memory-incomplete` is pluralised (`_one` / `_other`), so the count is
 `{{count}}` rather than a named field.
 
-Periodic-classifier
-[config pre-flight failures](../../generation-pipeline.md#config-pre-flight-validation)
-— a broken provider or profile reference caught when a pass starts
-— currently surface through `classifier-offline` alongside
-transient runtime failures: different cause, same consequence framing.
-Splitting them into their own codes is unbuilt.
+No error code reports the periodic classifier. A failed pass, a
+[config pre-flight failure](../../generation-pipeline.md#config-pre-flight-validation)
+included, shows as a toast, and as the reader's system entry when it
+fails a Send
+([`memory/classifier.md → Failure policy`](../../memory/classifier.md#failure-policy)).
 
 ## Active variant
 
@@ -203,16 +198,10 @@ No popover. Tap fires `onErrorTap(error.code)` directly and the
 consumer decides what a code is worth routing to. Per
 [`reader-composer.md → Persistent state — top-bar status pill error variant`](../screens/reader-composer/reader-composer.md#persistent-state--top-bar-status-pill-error-variant):
 
-| Error code           | Consumer response                 |
-| -------------------- | --------------------------------- |
-| `memory-incomplete`  | Route to Story Settings · Memory. |
-| `swap-paused`        | Route to Story Settings · Memory. |
-| `classifier-offline` | Route to Story Settings · Memory. |
-
-`classifier-offline` reports passes stopped after three failed
-retries, which resume only when the user retries, so it routes to the
-`[Retry]` in
-[`memory/classifier.md → Status block`](../../memory/classifier.md#status-block).
+| Error code          | Consumer response                 |
+| ------------------- | --------------------------------- |
+| `memory-incomplete` | Route to Story Settings · Memory. |
+| `swap-paused`       | Route to Story Settings · Memory. |
 
 ## Tier-aware render
 
@@ -263,11 +252,8 @@ props on every render.
   the pill through `StoryStatusPill`, which reads that hook in a leaf
   of its own, so the stale count's per-batch ticks re-render only the
   pill; the reader reads the hook's swap half again for its composer
-  gate. `classifier-offline` from failed-persistent classifier state
-  per
-  [`memory/classifier.md → Pipeline framing`](../../memory/classifier.md#pipeline-framing)
-  is still unobserved. Consumer collapses simultaneous errors to one
-  (embedder > classifier).
+  gate. Consumer collapses simultaneous errors to one
+  (`swap-paused` > `memory-incomplete`).
 - **Top-bar consumer wiring.** Render the pill on Reader, World,
   Plot, Story Settings, Chapter Timeline per
   [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).

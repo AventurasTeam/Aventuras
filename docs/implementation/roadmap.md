@@ -541,8 +541,8 @@ verified against the code first. Resolve with the slice each names.
   The pill's `Cancel memory update`, the in-story memory banner's
   Cancel and the deferral toast exist; M6.3 builds the navigator's
   paused state and banner to that rule. A
-  pass can hold the story for five minutes or more (`CALL_TIMEOUT_MS`,
-  then apply). Routed from triage 2026-09-27.
+  pass can hold the story for as long as the classifier's timeout
+  allows (ten minutes by default), then apply. Routed from triage 2026-09-27.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
@@ -655,7 +655,7 @@ the underlying configuration surfaces.
   panel
   (cadence in-place
   edit, buffer-aware cadence indicator, status block,
-  `[Run classifier now]`, top-bar error pill routed back) per
+  `[Run classifier now]`) per
   [`memory/classifier.md → Settings · Memory · Classifier panel`](../memory/classifier.md#settings--memory--classifier-panel).
   Pack tab gates on the `templateContextMap.ts` integrity
   validator per
@@ -1146,35 +1146,12 @@ code before it moved; resolve with the slice it names.
   window the window-level accounting entry above lacks, so the two land
   together. A window-free interim (drop retired entities, cap each
   description) is there if a long story reaches a provider's prompt
-  limit first, which today surfaces as a provider failure that spends
-  the retry budget toward `failed-persistent`. Revisit trigger: the
+  limit first, which fails the pass and so every Send on the branch
+  until the prompt fits
+  ([`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
+  Revisit trigger: the
   first long-story prompt-size or cost signal. Routed from triage
   2026-09-27.
-- **M7.2 — A recurring classifier failure reaches `failed-persistent`
-  invisibly.** Retries ride the next turns' commits
-  ([`classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy)):
-  a failed pass leaves the watermark, so the next turn's commit chains
-  it again, and the fourth failure in a row (the attempt plus three
-  retries) leaves the branch `failed-persistent`, which suspends the
-  cadence and survives a restart — boot recovery
-  (`resetStuckClassifierRunState`) resets only `'running'`. Each
-  failing attempt holds the story for up to five minutes
-  (`CALL_TIMEOUT_MS`). Nothing in `app/`, `components/` or `hooks/`
-  reads classifier status, and nothing calls `runClassifierNow`
-  (`lib/actions/classifier/run-now.ts`), the action Settings → Memory's
-  `[Retry]` / `[Run classifier now]` will call
-  ([`story-settings.md → Classifier`](../ui/screens/story-settings/story-settings.md#classifier)),
-  so a branch can stop updating memory with no visible signal until
-  this slice builds them. A branch whose orphan reversal threw at boot
-  stays `'running'` for good, which suspends the cadence just as
-  silently. The top-bar error pill canon promises for
-  `failed-persistent` is unbuilt — the story pill's error slot knows
-  only `swap-paused` and `memory-incomplete`. Reachable on any build
-  whose provider or apply step fails repeatedly. The developer chose
-  not to pull an interim pill forward. `[Run classifier now]` lives on
-  Story Settings, and leaving a dirty pane asks first; the dirty-and-busy
-  two-dialog gap is M5.2's. Routed from triage 2026-09-27; rewritten when
-  the gated classifier replaced the scheduler.
 - **M7.3 — Reader jump-to-entry from a delta row.** The reader route
   takes only `branchId` and `ReaderSurfaceHandle` exposes
   `jumpToBottom`; History rows (4.2b) and the Diagnostics delta log

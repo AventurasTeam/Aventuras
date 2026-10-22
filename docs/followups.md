@@ -44,6 +44,31 @@ for the placement rule.
   error reaches the user is unverified. Raised 2026-10-19 by the
   entity-state design.
 
+- **Implement the pass failure policy.** A pass that comes due must
+  succeed before its branch's next turn: a chained pass that fails
+  runs first at the next Send, and failing there fails the Send
+  ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+  `failed-persistent`, the retry count, the cadence suspension and the
+  `classifier-offline` pill code go. Designed 2026-10-22
+  ([exploration record](./explorations/2026-10-22-pass-failure-policy.md)).
+  The plan must check:
+  - Send's check for an owed pass, which reads the persisted cadence
+    beside the deferral mark, and every reader of the removed states
+    (`shouldCadenceFire`, `nextMemoryRun`, the status schema, and rows
+    stored as `retrying` or `failed-persistent`);
+  - the failure toast, and the system entry for a failed Send with the
+    composer's text kept;
+  - the bound: the classifier profile's `timeout` when set, ten
+    minutes otherwise, replacing `CALL_TIMEOUT_MS`;
+  - a branch held `running` failing Send with the recovery error;
+  - whether reconciliation's transient embeddings fail the pass when
+    the embedder is unavailable;
+  - the triage entries it closes, "A user Cancel whose abort reversal
+    fails lets the Send proceed" among them;
+  - the real-provider smoke, which lands a turn to retry a failed pass
+    and checks for `retrying`;
+  - the E2E decision ([`testing.md`](./testing.md)).
+
 - **Implement the AI writer map.** The per-turn writer and the
   periodic classifier gain the writes the authorship contract gives
   them
@@ -62,8 +87,9 @@ for the placement rule.
   check:
   - that each new update's current value reaches its writer's prompt
     first: standing, threads and happening ids in a pass's lists;
-  - a pass's parse-failure rate under the larger schema, splitting the
-    pass into two calls if it rises;
+  - a pass's parse-failure rate under the larger schema, which now
+    fails a Send rather than costing memory, splitting the pass into two
+    calls if it rises;
   - the translation of a renamed entity and a rewritten field;
   - every reader of a null parent, which now means top-level only (the
     location map, `placeModes`, the state view, World, the merge
@@ -88,7 +114,10 @@ for the placement rule.
   so its call is the user's wait, and at the projected thousands of
   happenings
   ([`retrieval.md → Scale assumptions`](./memory/retrieval.md#scale-assumptions))
-  the lists alone may outgrow a Fast model's window. Bounding them, to
+  the lists alone may outgrow a Fast model's window, and a pass must
+  succeed before its branch's next turn
+  ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
+  so a prompt past the window stops the story's turns. Bounding them, to
   the window's cast and region, say, needs a design: a pass can't link
   what it can't see, and may not update a field it wasn't shown. Raised
   2026-10-20 by the AI writers design.
@@ -115,11 +144,14 @@ for the placement rule.
   - whether a cluster it can't decide gets a review flag (happenings
     have no column for one), and what it does with a row already
     flagged;
-  - its failure policy past phase 0, and how the user reviews what a
-    close changed.
+  - how the user reviews what a close changed.
+
+  Its failure policy is the pass's: a close that fails runs before the
+  next turn and must succeed
+  ([`classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
 
   Promoted from the developer's notes 2026-10-10; write set fixed
-  2026-10-20.
+  2026-10-20, failure policy 2026-10-22.
 
 - **Prompt content pass.** The
   [system and user halves](./architecture.md#system-and-user-halves)

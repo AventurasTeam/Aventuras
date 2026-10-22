@@ -652,7 +652,6 @@
     <button class="rb-btn" data-gen="before-turn">before-turn</button>
     <button class="rb-btn" data-gen="error-swap-paused">error-swap-paused</button>
     <button class="rb-btn" data-gen="error-stale">error-stale</button>
-    <button class="rb-btn" data-gen="error-classifier">error-classifier</button>
   </div>
 
   <div class="rb-group">
@@ -692,6 +691,8 @@
     <button class="rb-btn active" data-err="hidden">hidden</button>
     <button class="rb-btn" data-err="llm">LLM error</button>
     <button class="rb-btn" data-err="embed">embed error</button>
+    <button class="rb-btn" data-err="memory">memory update error</button>
+    <button class="rb-btn" data-pass-failed>pass-failed toast</button>
   </div>
 
   <div class="rb-group">
@@ -858,7 +859,7 @@
   <button class="gen-banner-cancel" id="gen-banner-cancel">Cancel</button>
 </div>
 
-<!-- Info toast — the deferral a Cancel of a pass or a close fires -->
+<!-- Toast — the deferral a Cancel of a pass or a close fires, and a failed pass's notice -->
 <div class="gen-toast" id="gen-toast" role="status" aria-live="polite"></div>
 
 <!-- Layout -->
@@ -1629,10 +1630,9 @@
     'before-turn': 'updating memory before your turn…',
     'error-swap-paused': 'Embedder switch paused — waiting on you',
     'error-stale': 'Memory incomplete — 12 rows pending',
-    'error-classifier': 'Classifier offline — retrieval coverage thinning',
   };
 
-  const errorStates = new Set(['error-swap-paused', 'error-stale', 'error-classifier']);
+  const errorStates = new Set(['error-swap-paused', 'error-stale']);
 
   // No v1 phase is non-blocking: updating-memory and chapter-close hold the gate like the
   // rest, keep the accent fill and the slot, and own the cancel; the banner shows beside them
@@ -1699,7 +1699,7 @@
         sendBtn.classList.remove('hidden');
         cancelBtn.classList.add('hidden');
         banner.classList.remove('visible');
-        cancelAction.textContent = state === 'error-classifier' ? 'Open Memory settings' : 'Open Memory settings';
+        cancelAction.textContent = 'Open Memory settings';
       } else if (memoryRun) {
         // A pass or a close: blocking, accent pill, no streaming surface. The composer stays
         // live with Send waiting; the banner and the pill popover own the cancel.
@@ -1791,6 +1791,14 @@
     deferredWork = true;
     showToast(memoryRun.deferral);
   }
+
+  // A chained pass that fails says so; the next Send runs it first (before-turn).
+  document.querySelectorAll('[data-pass-failed]').forEach(b => {
+    b.addEventListener('click', () => {
+      deferredWork = true;
+      showToast('Memory update failed. It runs again before your next turn.');
+    });
+  });
 
   // Pill click toggles the cancel popover (only meaningful when pill is visible)
   genStatus.addEventListener('click', (e) => {
@@ -1929,6 +1937,12 @@
       kind: '⚠ System · embedding error',
       content: "<b>The embedder failed, so memory retrieval couldn't run.</b> call: embedding request failed: 503 (2 rows). The turn was reverse-replayed, so there is nothing to roll back; the composer stays enabled because a resubmit re-runs the same blocking sync stage.",
       actions: '<span class="err-btn primary">Switch embedder</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    // An owed pass that fails at Send fails the Send (memory/classifier.md -> Failure policy).
+    memory: {
+      kind: '⚠ System · memory update error',
+      content: "<b>The memory update failed, so your turn didn't start.</b> classifier: provider returned 503 after 2 attempts. Your text is still in the composer. Retry runs the memory update; Send runs it first again.",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
   };
   function setErr(state) {

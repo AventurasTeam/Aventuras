@@ -894,10 +894,11 @@ Raised 2026-08-15 by the Slice 3.8 Task 2 review.
 `reverseReplayDeltas` resolves `deltas.target_table` through the
 runtime registry and throws `unknown target_table` when it misses, so
 an orphan written by a build that carried a domain the running build
-does not is unreversible by any retry. Boot then holds that branch
-back from the classifier cadence indefinitely
-(`resetStuckClassifierRunState`), which is the safe direction but a
-permanent one. Reaching it requires running a build older than its own
+does not is unreversible by any retry. Boot then leaves that branch
+`running` indefinitely (`resetStuckClassifierRunState`), so it takes
+no turns: every Send fails with the recovery error
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
+and only a branch from an entry before the orphan continues. Reaching it requires running a build older than its own
 data — a downgrade, or a domain renamed without a migration. Not
 corruption, and not otherwise reachable. Of the other reversal
 failures, only the
@@ -935,9 +936,11 @@ fixed:
   [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
   which boot meets only for a pass's or a close's orphan, whose branch
   it holds back. Either way the branch is reconciled or already held back.
-- **In-session it needs a later successful turn.** The cadence is
-  checked only at a completed turn (per-turn's `chainsTo` runs at its
-  commit), so the failed run does not start a pass.
+- **In-session it needs a later turn or Send.** A pass starts only
+  from a turn's commit (per-turn's `chainsTo`) or before a turn at
+  Send, when one is owed
+  ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
+  so the failed run itself does not start one.
 - **What is stranded is not duplicate material.** A failed reversal
   leaves the aborted run's own entry and its piggyback facts on disk
   _and_ on screen — the patchers never ran either, so the store keeps
@@ -970,21 +973,24 @@ would prune that delete with the create it holds, so it refuses as
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 writes nothing, and leaves the marker open. Every boot refuses again
 while that delete stays in the log: the "Recovery incomplete" modal
-shows at each startup, without promising a retry, and boot keeps the
-branch off the classifier cadence (`resetStuckClassifierRunState`).
-Nothing else is lost, but v1 has no "drop orphan" affordance to clear
+shows at each startup, without promising a retry, and boot leaves the
+branch `running` (`resetStuckClassifierRunState`), so it takes no
+turns: every Send fails with the recovery error
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+Its prose and facts are intact, and a branch from an entry before the
+orphan can continue, but v1 has no "drop orphan" affordance to clear
 it. It takes two faults in one session: a database error during the
 abort's reversal, then that delete.
 
 The remedy is to settle such an orphan at recovery: on an integrity
 refusal, close its `pipeline_runs` row as `failed` and keep its writes
 as ordinary history, which CTRL-Z steps over as it does any pass.
-Memory updates resume, at a cost: the pass's partial facts stay, and
+The branch's turns resume, at a cost: the pass's partial facts stay, and
 the next pass may derive some of them again, so duplicates are
 possible.
 
 Parked 2026-10-05 as too rare to trade for those duplicates; a user
-report of a story whose memory stopped updating, or a "Recovery
+report of a branch whose every Send fails with the recovery error, or a "Recovery
 incomplete" modal that persists across restarts, is the signal to
 revisit.
 

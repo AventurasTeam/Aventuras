@@ -568,14 +568,14 @@ registry, gated like per-turn and chapter-close:
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kind`                          | `'periodic-classifier'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `gateBehavior`                  | `'hard-gate'` — user-source writes wait for it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `concurrencyPolicy`             | `{ blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'] }` — a chain or Run now starts it, never under another run but suggestion refresh                                                                                                                                                                                                                                                                                                                                                                                           |
+| `concurrencyPolicy`             | `{ blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'] }` — a chain, Send or Run now starts it, never under another run but suggestion refresh                                                                                                                                                                                                                                                                                                                                                                                     |
 | `affordance`                    | `'pill-and-banner'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, threads, new character and faction entities with their first profiles and, with the setting on, mentioned places (first-introduction description, keywords, a place's parent or unplaced mark, collision flag with its partner and reason), names, a place's parent and top-level mark, a faction's standing, a character's `state.faction_id`, entity status flips with retired reasons, entity keyword appends (aliases, absorbed candidates, reused places and replaced names), character relationships |
 
 **When it runs.** Per-turn's `chainsTo` starts a pass when the turn's
 commit brings the cadence due — the unprocessed entries reach
-`classifierCadence` — unless the classifier is `failed-persistent` or
-`running`. A persisted `running` is a pass left unfinished: by a crash,
+`classifierCadence` — unless the classifier is `running`. A persisted
+`running` is a pass left unfinished: by a crash,
 or in session by an interrupt whose reversal could not commit or a
 status write that failed its retry. It holds the cadence until boot
 resets it, which boot skips while the branch still holds unreversed
@@ -585,7 +585,8 @@ The pass runs while the user reads the reply. A pass's own `chainsTo`
 returns another pass while a chapter close is pending and entries
 remain unprocessed, then the close
 ([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)).
-`[Run classifier now]` starts one directly.
+`[Run classifier now]` starts one directly, and Send runs one first when
+a pass is owed ([Failure policy](#failure-policy)).
 
 **Interrupted, then deferred.** A head reversal — regenerate, swipe, an
 edit of the head turn, CTRL-Z of the turn, rollback — and the pill's
@@ -599,8 +600,8 @@ update moved to the next turn, and the pass is marked deferred for its
 branch. At the next Send it runs before the turn, as its own run,
 committing before the turn's first write; Cancel then cancels the
 whole Send and keeps the user's text in the composer. The mark lives
-in memory: after a restart, the next turn's commit finds the pass due
-anyway. A pass cancelled before its writes commits nothing; one
+in memory: after a restart, the next Send finds the pass due and runs
+it first anyway ([Failure policy](#failure-policy)). A pass cancelled before its writes commits nothing; one
 cancelled during them reverses its own group, as any aborted run does.
 An interrupted pass uses no retry and leaves the watermark; it restores
 its pre-run status through the pipeline's `onInterrupt` hook, which runs
@@ -623,8 +624,9 @@ Translation retry and chapter close wait for it.
 **Pill.** A pass shows on the generation indicator pill with the
 banner, as chapter close does, reading `Updating memory…`, and
 `Updating memory before your turn…` when it runs deferred. No ETA,
-since run length isn't predictable; the 300-second cap bounds the
-whole structured call, retries included. The pill's popover carries
+since run length isn't predictable; the classifier's timeout bounds
+the whole structured call, retries included
+([Failure policy](#failure-policy)). The pill's popover carries
 Cancel.
 
 ## Settings · Memory · Classifier panel
@@ -647,57 +649,68 @@ Reflects the classifier's current state:
 
 - **Idle** — `Last run N turns ago, processed P happenings + Q awareness rows.`
 - **Running** — `Running... processed N of M turns.` Mirrors the pill.
-- **Retrying** — `⚠ Last run failed (X of 3 attempts), retrying after your next turn.` Visible to users who look in Settings; doesn't escalate elsewhere.
-- **Failed-persistent** — `⚠ Classifier failed after 3 attempts: [reason].` Inline `[Retry]` + `[View error details]`. Also surfaces as a top-bar error pill in the affected story — same visual vocabulary as the cluster-1 staleness pill; tap routes back here. Two different reasons, one UX pattern: error pill is the discovery channel, Settings panel is the resolution channel.
+- **Failed** — `⚠ Last run failed: [reason]. It runs again before your next turn.` Inline `[View error details]`. The reader shows the failure itself: a toast, and a system entry when the pass fails a Send ([Failure policy](#failure-policy)).
 
 ### Manual override
 
 `[Run classifier now]` triggers an immediate pass over unprocessed
 turns, gated like any pass. Disabled while a run is actively in
-flight; enabled in **idle** and **retrying** states (lets the user
-retry without taking a turn). The **failed-persistent** inline
-`[Retry]` is the equivalent action surfaced from the loud-error path.
+flight; enabled in **idle** and **failed** (lets the user retry
+without taking a turn).
 
-### Auto-retry policy
+### Failure policy
 
-A failed pass leaves the watermark where it was, so the next turn's
-commit finds the cadence due and runs it again; a deferred pass that
-fails lets its turn go ahead, and is retried at that turn's commit.
-Retries ride on turns rather than timers: a pass holds the gate, and a
-timer would raise it at a random moment, in the middle of a World
-edit. A user who stops taking turns has nothing new to classify. After
-3 retries exhausted, the classifier enters **failed-persistent**
-state. Cadence-triggered runs suspend in that state — no point
-spamming a broken provider on every turn — until the user explicitly
-retries. Cadence resumes from the next normal trigger after a retry
-succeeds. Each failing attempt holds the story for at most the
-300-second cap.
+A pass that comes due must succeed before its branch's next turn: a
+turn generated over unclassified prose is memory the story has lost.
 
-The retry policy applies to whatever caused the failure (rate
-limit, network drop, provider 5xx). Errors that aren't transient
-(invalid API key, model removed from provider catalog) hit
-failed-persistent on the original failure plus the three retries
-just like any other; the user resolves at the source (re-key,
-swap profile, etc.) rather than waiting for retries to magically
-succeed. A failure while the pass applies its planned writes (a
-rejected write rolls the whole pass back) is a failed run too and
-retries the same way.
+A pass's only retries are the structured call's own provider and parse
+attempts
+([`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry)).
+A chained pass that still fails leaves the watermark where it was,
+records the failure in the status, and shows a warning toast,
+`Memory update failed. It runs again before your next turn.` Nothing
+retries on a timer: a pass holds the gate, and a timer would raise it at
+a random moment, in the middle of a World edit.
+
+At the next Send, a pass that is owed runs before the turn, as deferred
+work does ([Pipeline framing](#pipeline-framing)): its own run,
+committing before the turn's first write. A pass is owed when one is
+deferred for the branch or the cadence is due. The cadence is read from
+the persisted watermark, so a failure, an interrupt, a crash and a
+restart all end the same way. If the pass fails there, the Send fails:
+no user_action is written, the composer keeps the text, and the reader
+shows the failure as a system entry with its cause
+([`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)).
+Its `Retry` runs the pass alone; Send runs it first again. There is no
+attempt counter and no suspension: every Send is a fresh attempt,
+whatever the cause. A cause that isn't transient (an invalid key, a
+model removed from the catalog) stops the branch's turns until the user
+fixes it at the source. A failure while the pass applies its planned
+writes (a rejected write rolls the whole pass back) is a failed run too.
+
+The structured call is bounded by the classifier profile's `timeout`
+when the user set one, longer or shorter, and by ten minutes otherwise,
+so a hung provider ends in an error the user can act on.
+
+A branch held `running`, a pass left unfinished whose reversal hasn't
+committed, can't run a pass, so its Send fails with the recovery error
+until a boot reverses the orphan
+([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy)).
 
 ### Persistence
 
 Per-branch classifier status — current state, last-success-at,
-last-error, retry-attempt count, and **`processedThrough`** — persists in
+last-error, and **`processedThrough`** — persists in
 a `branches.classifier_status` JSON field. `branches` is not delta-logged,
 so the status is operational state outside the reversal log.
 
 `processedThrough` is the highest entry position (`story_entries.position`)
 the classifier has fully processed; the pass range is
 `(processedThrough, head]`. It is the concrete field behind "unprocessed
-entries," read by the cadence trigger, `[Run classifier now]`, and
-chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
+entries," read by the cadence trigger, Send's check for an owed pass,
+`[Run classifier now]`, and chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
 `processedThrough = E` in its commit transaction, in the same write as its
-success status, so a pass that fails to advance the watermark never resets
-the retry count it then fails against. A prose reversal clamps
+success status. A prose reversal clamps
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`
 the earliest removed entry (see
 [`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor))

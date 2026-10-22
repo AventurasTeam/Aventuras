@@ -117,7 +117,7 @@ relationship: "with partial chapter buffer = 10 entries and
 cadence = 8 entries, you have 1 entry of coverage overlap." Drop
 overlap below zero, get a warning chip.
 
-The cadence is checked only after a completed turn, which writes
+The cadence is checked after each completed turn, which writes
 two entries, so a pass can fire one entry past the cadence. An odd
 cadence always does; an even one does after a prose reversal (edit,
 regenerate, rollback) leaves an odd number of entries unprocessed.
@@ -128,8 +128,9 @@ A pass never spans turns: it chains from the turn's commit and holds
 the gate, so no turn starts under it, and one a reversal interrupts
 runs before the next turn instead
 ([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
-So cadence + 1 is the bound while passes succeed; a failed pass is
-retried at the next turn's commit, two entries later.
+So cadence + 1 is the bound, failures included: a failed pass runs at
+the next Send, before the turn adds its entries
+([`classifier.md → Failure policy`](./classifier.md#failure-policy)).
 
 **Full mode suppresses the warning.** Full mode keeps the entire
 current chapter in context, and chapter-close phase 0 catches up

@@ -27,7 +27,8 @@ Used by:
   the `translation-retry` pipeline.
 - [Reader](../screens/reader-composer/reader-composer.md#during-a-memory-update)
   — a pass or a chapter close interrupted and moved to the next turn,
-  info severity, no action.
+  info severity, no action; a pass that failed, warning severity, no
+  action.
 
 Toasts deliberately do **not** cover:
 

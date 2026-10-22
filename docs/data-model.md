@@ -57,7 +57,7 @@ erDiagram
         text fork_entry_id "entry in parent branch the fork diverged from"
         text name
         integer created_at
-        json classifier_status "per-branch periodic-classifier status: lifecycle state, last-success-at, last-error, retry-count, and processedThrough (highest entry position fully processed; pass range is (processedThrough, head]). Operational state — branches is not delta-logged, so reversal clamps processedThrough imperatively. See docs/memory/classifier.md → Persistence"
+        json classifier_status "per-branch periodic-classifier status: lifecycle state, last-success-at, last-error, and processedThrough (highest entry position fully processed; pass range is (processedThrough, head]). Operational state — branches is not delta-logged, so reversal clamps processedThrough imperatively. See docs/memory/classifier.md → Persistence"
     }
 
     story_entries {
@@ -501,8 +501,7 @@ column, not a branch-scoped table. The new branch initializes
 `processedThrough = min(parent.processedThrough, position(N))` (it cannot
 have processed turns it does not contain, and step 2 already copied facts
 about kept entries up to that point); the rest of the status resets to
-idle, so a fresh branch does not inherit a parent's failed-persistent
-state. See
+idle, so a fresh branch does not inherit a parent's failed pass. See
 [classifier.md → Persistence](./memory/classifier.md#persistence).
 
 Reads on the new branch are always fast because state is pre-materialized
@@ -1672,7 +1671,7 @@ app_settings.profiles: Array<{
   temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
   maxOutput?: number
   thinking?: number                          // reasoning slider; conditional on model capability
-  timeout?: number                           // seconds; default 60
+  timeout?: number                           // seconds; unset = no limit, except a classifier pass's ten minutes
   structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
   customJson?: Record<string, unknown>       // advanced — per-field merge over constructed payload
 }>

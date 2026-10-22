@@ -296,10 +296,17 @@ interrupt or the pill's Cancel shows an info
 - `Memory update moved to your next turn.`
 - `Chapter close moved to your next turn.`
 
-At the next Send the deferred work runs first, the banner reading
-`Updating memory before your turn…`, and the turn follows; Cancel then
-cancels the whole Send and keeps the text in the composer
+A pass that fails shows a warning toast,
+`Memory update failed. It runs again before your next turn.`
+
+At the next Send the deferred or failed work runs first, the banner
+reading `Updating memory before your turn…`, and the turn follows;
+Cancel then cancels the whole Send and keeps the text in the composer
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
+If the pass fails there, the Send fails too: the turn doesn't start,
+the composer keeps the text, and the failure shows as a
+[system entry](#transient-pipeline-failures--system-entries-in-chat)
+([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
 
 ### Save and regenerate on a content edit
 
@@ -498,6 +505,7 @@ chrome blip.
 | Failure                                                                                                                                                                                                                | Action buttons                                    |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`              |
+| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `View details` · `Dismiss`              |
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`           |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`        |
@@ -585,10 +593,6 @@ dismissed by the next turn:
   rather than a cause: the trigger is a non-zero stale-row count, which
   an available embedder also produces (a cancelled swap re-flags every
   row).
-- **Failed-persistent classifier** (per
-  [`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
-  Pill copy: `Classifier offline — retrieval coverage thinning`.
-  Tap → routes to Story Settings · Memory · Classifier panel.
 
 Pill state precedence: blocking phase > error state > background
 phase > hidden, per
