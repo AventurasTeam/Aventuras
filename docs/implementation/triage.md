@@ -805,3 +805,12 @@ slice-planning gate forces its resolution before that slice is planned.
   (`e2e/locators/reader.ts`) now covers the pass copies; widening its
   key union takes these too. Predates the pass failure policy slice;
   raised 2026-10-23 by its slice review.
+
+- **E2E specs inline the current-branch query.** About fifteen specs
+  (`periodic-classifier.spec.ts` five times, `turn.spec.ts`,
+  `reader-*.spec.ts`, the real-provider smoke and others) run
+  `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`
+  through `queryApp` beside `currentBranchId` in `e2e/harness/db.ts`,
+  which does the same. Predates the pass failure policy slice; its
+  slice review's simplifier pass moved only the slice's own copy.
+  Raised 2026-10-23.
