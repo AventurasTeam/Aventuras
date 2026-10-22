@@ -1,9 +1,10 @@
 # The seeded branch tip moves at the first Send, so a pre-launch position is not the app's
 
 The dev fixture ends the hero branch on a **`system` row** (position 72:
-`heroKind` makes every twelfth entry one). The reader deletes a branch's
-system rows before every Send (`dropSystemTail` → `clearSystemEntry`), and
-the new `user_action` takes `MAX(position) + 1`, which is 72 again. The row
+`heroKind` makes every twelfth entry one). Before a Send whose loaded tail
+holds a `system` row, the reader deletes every system row on the branch
+(`dropSystemTail` → `clearSystemEntry`; six on the hero branch, 12 through
+72), and the new `user_action` takes `MAX(position) + 1`, which is 72 again. The row
 is gone by the time the spec's first turn commits, and its `position` is
 handed to that turn.
 
@@ -48,7 +49,8 @@ turns a future fixture change into a loud failure instead of a mis-mapped handle
 Any pre-launch seed write that encodes a **derived** fact about the fixture —
 a max position, an entry id, a row count, a watermark — is asserting that
 nothing between the seed and the spec's first turn changes the rows. Plenty
-does: the first Send clears the branch's system rows, boot recovery
+does: a Send whose loaded tail holds a system row clears all of the branch's
+system rows, boot recovery
 reverse-replays orphans, the drain clears staleness flags (see
 [Staleness flags are cleared by the drain](./staleness-flags-are-cleared-by-the-drain.md)),
 and hydrate can prune. Seed absolute facts the fixture owns; derive anything

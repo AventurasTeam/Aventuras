@@ -565,8 +565,8 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
 })
 
 // classifier.md → Failure policy: a pre-flight halt never reaches the phase, so only the pipeline's
-// pre-flight hook records it. Unrecorded, the status would stay idle and the next Send would take
-// its turn over prose no pass classified.
+// pre-flight hook records it. Unrecorded, the status would read idle over a failed pass; the next
+// Send owes the pass either way, since the cadence reads the watermark.
 test.describe('periodic classifier — unassigned agent', () => {
   let app: LaunchedApp
   let mock: MockLlm

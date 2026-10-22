@@ -185,8 +185,9 @@ slice plans when relevant.
   write or the settled end state, never the handoff.
 - [The seeded branch tip moves at the first Send](./seed-tip-position-shifts-at-boot.md)
   — the fixture's hero branch ends on a system row the first Send deletes, so a
-  pre-launch `MAX(position)` sits above the tip the spec's first turn reuses and
-  shifts every classifier window handle; anchor on the last `ai_reply`.
+  pre-launch `MAX(position)` names the position the spec's first user_action
+  reuses, one above the real tip, and shifts every classifier window handle;
+  anchor on the last `ai_reply`.
 - [A literal NUL in a plan file silently rewrites the code it specifies](./plan-file-nul-corruption.md)
   — `file .impl-plans/*.md` should never say `data`; reading tools disagree
   about a raw NUL and each renders a different separator.

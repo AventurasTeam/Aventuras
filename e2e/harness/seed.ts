@@ -328,10 +328,11 @@ export function seedClassifierBacklog(
 
 /**
  * Park the classifier watermark at the last `ai_reply` and return that position, so a pass
- * covers only the turns a spec commits after launch. The seed already parks every branch at its
- * last non-system entry, the same row on the hero branch; a spec calls this to state the state it
- * relies on. Not MAX(position): the hero branch ends on a `system` row, which the first Send
- * deletes, handing its position to that Send's user_action. Runs before launch.
+ * covers only the turns a spec commits after launch. The seed parks every branch at its last
+ * non-system entry, so this matches the seed on a branch that ends on a reply (the hero branch)
+ * and makes it explicit; on one that ends on a user_action (br_hero_fork) it parks a row lower.
+ * Not MAX(position): the hero branch ends on a `system` row, which the first Send deletes,
+ * handing its position to that Send's user_action. Runs before launch.
  */
 export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
   const db = new DatabaseSync(dbPath)
