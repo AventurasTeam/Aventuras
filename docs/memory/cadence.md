@@ -131,7 +131,7 @@ runs before the next turn instead
 So outside a settings change, cadence + 1 is the bound, failures
 included: a failed pass runs at the next Send, before the turn adds its
 entries. A lowered cadence or window max can leave a backlog, which
-drains over the next Sends, one pass each
+drains over the next Sends
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)).
 
 **Full mode suppresses the warning.** Full mode keeps the entire
