@@ -153,7 +153,8 @@
       "memoryProfileMissing": "Memory update failed: the classifier agent's assigned profile is missing.",
       "memoryProviderMissing": "Memory update failed: the classifier model's provider is missing.",
       "memoryOverrideProviderMissing": "Memory update failed: this story's classifier model override names a provider that no longer exists.",
-      "memoryHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer."
+      "memoryHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo. Your text is kept on this entry; Dismiss hands it back to the composer.",
+      "memoryHeldNoText": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo."
     }
   },
   "actions": {

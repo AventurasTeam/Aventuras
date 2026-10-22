@@ -86,8 +86,19 @@ export function toSystemFailureMeta(
 
 // The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
 // agent, which would send the user to fix the wrong profile.
-export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
-  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
+export function describePassFailure(
+  refusal: PassRefusal,
+  /** What the entry stores: the held copy says the text is kept only when it is. */
+  submission: SystemFailureMeta['submission'],
+): { content: string; detail?: string } {
+  if (refusal.held)
+    return {
+      content: t(
+        submission != null
+          ? 'reader:systemEntry.failure.memoryHeld'
+          : 'reader:systemEntry.failure.memoryHeldNoText',
+      ),
+    }
   const { error } = refusal
   if (error?.kind === 'config-resolver') {
     const contentKey =
@@ -111,10 +122,10 @@ export function describePassFailure(refusal: PassRefusal): { content: string; de
 
 export function toPassFailureMeta(
   refusal: PassRefusal,
-  submission: { content: string; composerMode: string } | undefined,
+  submission: SystemFailureMeta['submission'],
 ): SystemFailureMeta {
   const error = refusal.held ? undefined : refusal.error
-  const { detail } = describePassFailure(refusal)
+  const { detail } = describePassFailure(refusal, submission)
   return {
     kind: error?.kind ?? 'orchestrator',
     ...(error?.kind === 'config-resolver' ? { failure: error.failure } : {}),

@@ -797,13 +797,13 @@ export const EmbedderFailure: Story = {
 }
 
 // Composed through the helpers the host writes the entry with, so each bubble shows real copy.
-const HELD_PASS = describePassFailure({ held: true })
+const HELD_PASS = describePassFailure({ held: true }, undefined)
 const FAILED_PASS_ERROR = {
   kind: 'provider',
   reason: 'timeout',
   detail: 'classifier: timeout after 600000ms',
 } as const
-const FAILED_PASS = describePassFailure({ held: false, error: FAILED_PASS_ERROR })
+const FAILED_PASS = describePassFailure({ held: false, error: FAILED_PASS_ERROR }, undefined)
 
 function passFailureRows(content: string, failure: SystemFailureMeta): StoryEntry[] {
   return [

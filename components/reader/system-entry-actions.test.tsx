@@ -148,10 +148,21 @@ describe('toSystemFailureMeta', () => {
 })
 
 describe('describePassFailure', () => {
-  it('names the hold, with no detail line', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it('names the hold and the text it keeps, with no detail line', () => {
     const key = 'reader:systemEntry.failure.memoryHeld'
     expect(hasCopy(key)).toBe(true)
-    expect(describePassFailure({ held: true })).toEqual({ content: t(key) })
+    expect(describePassFailure({ held: true }, SUBMISSION)).toEqual({ content: t(key) })
+  })
+
+  // The text went back to the composer before a Retry came back held: the entry stores none.
+  it('claims no kept text for a held entry that stores none', () => {
+    const key = 'reader:systemEntry.failure.memoryHeldNoText'
+    expect(hasCopy(key)).toBe(true)
+    const out = describePassFailure({ held: true }, undefined)
+    expect(out).toEqual({ content: t(key) })
+    expect(out.content).not.toBe(t('reader:systemEntry.failure.memoryHeld'))
   })
 
   it.each([
@@ -160,16 +171,19 @@ describe('describePassFailure', () => {
     ['provider-missing', 'reader:systemEntry.failure.memoryProviderMissing'],
     ['override-provider-missing', 'reader:systemEntry.failure.memoryOverrideProviderMissing'],
   ] as const)('names the classifier for a %s resolver failure', (failure, key) => {
-    const out = describePassFailure({
-      held: false,
-      error: {
-        kind: 'config-resolver',
-        failure,
-        target: 'classifier',
-        phaseName: 'classify',
-        detail: 'classifier',
+    const out = describePassFailure(
+      {
+        held: false,
+        error: {
+          kind: 'config-resolver',
+          failure,
+          target: 'classifier',
+          phaseName: 'classify',
+          detail: 'classifier',
+        },
       },
-    })
+      undefined,
+    )
     expect(hasCopy(key)).toBe(true)
     expect(out).toEqual({ content: t(key), detail: 'classifier' })
   })
@@ -177,14 +191,17 @@ describe('describePassFailure', () => {
   it('gives a provider failure the pass copy with its reason and detail', () => {
     expect(hasCopy('reader:systemEntry.failure.memory')).toBe(true)
     expect(
-      describePassFailure({
-        held: false,
-        error: {
-          kind: 'provider',
-          reason: 'timeout',
-          detail: 'classifier: timeout after 600000ms',
+      describePassFailure(
+        {
+          held: false,
+          error: {
+            kind: 'provider',
+            reason: 'timeout',
+            detail: 'classifier: timeout after 600000ms',
+          },
         },
-      }),
+        undefined,
+      ),
     ).toEqual({
       content: t('reader:systemEntry.failure.memory'),
       detail: 'timeout: classifier: timeout after 600000ms',
@@ -193,18 +210,24 @@ describe('describePassFailure', () => {
 
   it('falls back to the reason when a provider failure has no detail', () => {
     expect(
-      describePassFailure({ held: false, error: { kind: 'provider', reason: 'network' } }).detail,
+      describePassFailure(
+        { held: false, error: { kind: 'provider', reason: 'network' } },
+        undefined,
+      ).detail,
     ).toBe('network')
   })
 
   it('carries any other cause in the detail line', () => {
     expect(
-      describePassFailure({ held: false, error: { kind: 'phase-logic', detail: 'window read' } }),
+      describePassFailure(
+        { held: false, error: { kind: 'phase-logic', detail: 'window read' } },
+        undefined,
+      ),
     ).toEqual({ content: t('reader:systemEntry.failure.memory'), detail: 'window read' })
   })
 
   it('still names the failure when the run carried no error', () => {
-    expect(describePassFailure({ held: false, error: undefined })).toEqual({
+    expect(describePassFailure({ held: false, error: undefined }, undefined)).toEqual({
       content: t('reader:systemEntry.failure.memory'),
     })
   })
@@ -217,11 +240,12 @@ describe('describePassFailure', () => {
       target: 'classifier',
       phaseName: 'classify',
     } as const
-    expect(describePassFailure({ held: false, error: config }).content).not.toBe(
+    expect(describePassFailure({ held: false, error: config }, undefined).content).not.toBe(
       describeTurnFailure(config).content,
     )
     expect(
-      describePassFailure({ held: false, error: { kind: 'provider', reason: 'auth' } }).content,
+      describePassFailure({ held: false, error: { kind: 'provider', reason: 'auth' } }, undefined)
+        .content,
     ).not.toBe(t('reader:systemEntry.failure.llmCall'))
   })
 })
