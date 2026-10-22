@@ -113,7 +113,9 @@ swipe scrolls the tree and changes no tab and no panel. At the tree's edge the s
 ## Drawer swipes, and the one place we reach into `vaul`
 
 A drawer that holds unsaved work has to answer a swipe with a question rather than a close, and
-`vaul` offers no veto: it decides inside its own release handler. `createDrawerSwipeGuard`
+`vaul` offers no veto: it decides inside its own release handler. `shared/ActionModal.svelte` is
+the one caller: a modal on it passes `dirty`, and the shell wires the guard, the return of a sheet
+`vaul` closed anyway, and the scroll-lock release. `createDrawerSwipeGuard`
 (`ui/drawer/swipe-guard.ts`) takes the one seam there is — `vaul` calls the content's
 `onpointerup` just before it measures the swipe — and, when the caller says the drawer is dirty,
 puts the sheet back at rest so that measurement finds nothing to act on, then animates the settle
@@ -133,7 +135,12 @@ fresh sheet once the old one has released its scroll lock — slower, but not br
 
 Two other `vaul` behaviours the callers have to know: it closes a non-dismissible drawer when its
 handle is tapped, and a close driven from our side never reaches its restore, so the scroll lock
-is released by hand (see `utils/scrollLock`).
+is released by hand (see `utils/scrollLock`). A tap on the handle therefore takes the fallback
+path above: a busy or dirty sheet closes and comes back, asking when it is dirty.
+
+A nested sheet (`Drawer.NestedRoot`, through `ActionModal`'s `nested`) finds its parent through
+`vaul`'s Svelte context, which throws when there is none. It has to be rendered inside the parent
+modal's content.
 
 ## The soft keyboard
 

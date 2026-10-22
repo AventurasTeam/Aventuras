@@ -9,10 +9,9 @@
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { RadioGroup, RadioGroupItem } from '#lib/components/ui/radio-group/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Bookmark, Check, ChevronDown, ChevronRight, TriangleAlert, X } from '@lucide/svelte'
   import ChangeList from './ChangeList.svelte'
-  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
 
   let entry = $state<StoryEntry | null>(null)
   let name = $state('')
@@ -120,7 +119,6 @@
   }
 
   function cancel() {
-    if (saving) return
     entry = null
   }
 </script>
@@ -154,225 +152,196 @@
 {/snippet}
 
 <!-- Modal: the story must not change while the checkpoint is described and taken. -->
-<ResponsiveModal.Root
-  bind:open={
-    () => entry !== null,
-    (next) => {
-      if (!next) cancel()
-    }
-  }
-  dismissible={!saving}
+<ActionModal
+  open={entry !== null}
+  onCancel={cancel}
+  title="Create checkpoint"
+  description={entry ? `Create a new checkpoint at entry ${entryNumber(entry)}` : undefined}
+  action={{
+    label: 'Create Checkpoint',
+    icon: Bookmark,
+    tone: 'checkpoint',
+    disabled: !name.trim() || blocked,
+    onConfirm: create,
+  }}
+  busy={saving}
 >
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
-    interactOutsideBehavior="ignore"
-    escapeKeydownBehavior={saving ? 'ignore' : 'close'}
-  >
-    {#if entry}
-      {@const number = entryNumber(entry)}
-      <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-        <ResponsiveModal.Title>Create checkpoint</ResponsiveModal.Title>
-        <ResponsiveModal.Description
-          >Create a new checkpoint at entry {number}</ResponsiveModal.Description
+  {#if entry}
+    {@const number = entryNumber(entry)}
+    <Input
+      type="text"
+      class="h-9 text-sm"
+      placeholder="Checkpoint name..."
+      bind:value={name}
+      disabled={saving}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') create()
+      }}
+    />
+    <div class="text-muted-foreground space-y-1 text-xs">
+      <p>Checkpoints save the story state and allow branching.</p>
+      <!-- The latest entry is checkpointed from the current state; nothing is rebuilt. -->
+      {#if !isLatestEntry}
+        <button
+          type="button"
+          class="hover:text-foreground flex items-center gap-1 font-medium"
+          onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
+          aria-expanded={!ui.checkpointHelpFolded}
+          aria-controls="past-checkpoint-help"
         >
-      </ResponsiveModal.Header>
-      <!-- The one scroller: the refusal report and the change lists can run long. Buttons scroll
-           with the content, so what they do is read before them. -->
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        <div class="space-y-3 px-6 py-4">
-          <Input
-            type="text"
-            class="h-9 text-sm"
-            placeholder="Checkpoint name..."
-            bind:value={name}
-            disabled={saving}
-            onkeydown={(e) => {
-              if (e.key === 'Enter') create()
-            }}
-          />
-          <div class="text-muted-foreground space-y-1 text-xs">
-            <p>Checkpoints save the story state and allow branching.</p>
-            <!-- The latest entry is checkpointed from the current state; nothing is rebuilt. -->
-            {#if !isLatestEntry}
-              <button
-                type="button"
-                class="hover:text-foreground flex items-center gap-1 font-medium"
-                onclick={() => void ui.setCheckpointHelpFolded(!ui.checkpointHelpFolded)}
-                aria-expanded={!ui.checkpointHelpFolded}
-                aria-controls="past-checkpoint-help"
-              >
-                {#if ui.checkpointHelpFolded}
-                  <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-                {:else}
-                  <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-                {/if}
-                How past checkpoints work
-              </button>
-              {#if !ui.checkpointHelpFolded}
-                <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
-                  Historical checkpoints rely on the state diffs that are recorded alongside the
-                  tracked entries, and calculate past state through the rollback from the nearest
-                  full-state landmark: an automated snapshot, another checkpoint, or current state.
-                </p>
-              {/if}
-            {/if}
-          </div>
+          {#if ui.checkpointHelpFolded}
+            <ChevronRight class="h-3.5 w-3.5 shrink-0" />
+          {:else}
+            <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+          {/if}
+          How past checkpoints work
+        </button>
+        {#if !ui.checkpointHelpFolded}
+          <p id="past-checkpoint-help" class="mt-1 pl-[1.125rem]">
+            Historical checkpoints rely on the state diffs that are recorded alongside the tracked
+            entries, and calculate past state through the rollback from the nearest full-state
+            landmark: an automated snapshot, another checkpoint, or current state.
+          </p>
+        {/if}
+      {/if}
+    </div>
 
-          {#if isLatestEntry}
-            <!-- The latest entry is checkpointed from the current state: nothing to check. -->
-          {:else if pastCheckpoint === null}
-            <p class="text-muted-foreground text-xs italic">
-              Checking the recorded world state changes…
-            </p>
-          {:else if pastCheckpoint.refusal}
-            <!-- The diagnosis below explains a refusal; the warning only heads it. -->
-            <p class="text-xs text-amber-500">
-              {pastCheckpoint.diagnosis
-                ? 'The world state at this entry cannot be guaranteed.'
-                : pastCheckpoint.refusal}
-            </p>
-            {#if pastCheckpoint.diagnosis}
-              {@const diagnosis = pastCheckpoint.diagnosis}
-              <!-- An old record holds part of the history, so it warns rather than fails. -->
-              <ul class="text-muted-foreground space-y-1 text-xs">
-                {@render finding(
-                  diagnosis.target === 'recorded'
-                    ? 'ok'
-                    : diagnosis.target === 'classifierOnly'
-                      ? 'warn'
-                      : 'fail',
-                  diagnosis.target === 'recorded'
-                    ? `World state changes were recorded for entry ${number}.`
-                    : diagnosis.target === 'classifierOnly'
-                      ? `Entry ${number} has an old world state record without the lorebook.`
-                      : `World state changes were not recorded for entry ${number}.`,
-                )}
-                {@render finding(
-                  diagnosis.anchor ? 'ok' : 'fail',
-                  diagnosis.anchor
-                    ? `The nearest full world state is ${anchorText(diagnosis.anchor)}.`
-                    : 'No full world state was saved after this entry.',
-                )}
-                {#each pastCheckpoint.skipped as position, i (i)}
-                  {@render finding('warn', skippedSnapshotText(position))}
-                {/each}
-                {#if diagnosis.anchor}
-                  {#each diagnosis.gaps as gap, i (i)}
-                    {@render finding(
-                      gap.cause === 'classifierOnly' ? 'warn' : 'fail',
-                      gapMessage(gap, (id) => story.entryNumberOf(id)),
-                    )}
-                  {:else}
-                    {@render finding(
-                      'ok',
-                      'World state changes were recorded for every entry in between.',
-                    )}
-                  {/each}
-                {/if}
-              </ul>
+    {#if isLatestEntry}
+      <!-- The latest entry is checkpointed from the current state: nothing to check. -->
+    {:else if pastCheckpoint === null}
+      <p class="text-muted-foreground text-xs italic">Checking the recorded world state changes…</p>
+    {:else if pastCheckpoint.refusal}
+      <!-- The diagnosis below explains a refusal; the warning only heads it. -->
+      <p class="text-xs text-amber-500">
+        {pastCheckpoint.diagnosis
+          ? 'The world state at this entry cannot be guaranteed.'
+          : pastCheckpoint.refusal}
+      </p>
+      {#if pastCheckpoint.diagnosis}
+        {@const diagnosis = pastCheckpoint.diagnosis}
+        <!-- An old record holds part of the history, so it warns rather than fails. -->
+        <ul class="text-muted-foreground space-y-1 text-xs">
+          {@render finding(
+            diagnosis.target === 'recorded'
+              ? 'ok'
+              : diagnosis.target === 'classifierOnly'
+                ? 'warn'
+                : 'fail',
+            diagnosis.target === 'recorded'
+              ? `World state changes were recorded for entry ${number}.`
+              : diagnosis.target === 'classifierOnly'
+                ? `Entry ${number} has an old world state record without the lorebook.`
+                : `World state changes were not recorded for entry ${number}.`,
+          )}
+          {@render finding(
+            diagnosis.anchor ? 'ok' : 'fail',
+            diagnosis.anchor
+              ? `The nearest full world state is ${anchorText(diagnosis.anchor)}.`
+              : 'No full world state was saved after this entry.',
+          )}
+          {#each pastCheckpoint.skipped as position, i (i)}
+            {@render finding('warn', skippedSnapshotText(position))}
+          {/each}
+          {#if diagnosis.anchor}
+            {#each diagnosis.gaps as gap, i (i)}
+              {@render finding(
+                gap.cause === 'classifierOnly' ? 'warn' : 'fail',
+                gapMessage(gap, (id) => story.entryNumberOf(id)),
+              )}
+            {:else}
+              {@render finding(
+                'ok',
+                'World state changes were recorded for every entry in between.',
+              )}
+            {/each}
+          {/if}
+        </ul>
+      {/if}
+      {#if pastCheckpoint.overrides}
+        {@const overrides = pastCheckpoint.overrides}
+        <div class="text-muted-foreground text-xs">
+          <button
+            type="button"
+            class="hover:text-foreground flex items-center gap-1 font-medium"
+            onclick={() => (advancedOpen = !advancedOpen)}
+            aria-expanded={advancedOpen}
+            aria-controls="past-checkpoint-advanced"
+          >
+            {#if advancedOpen}
+              <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+            {:else}
+              <ChevronRight class="h-3.5 w-3.5 shrink-0" />
             {/if}
-            {#if pastCheckpoint.overrides}
-              {@const overrides = pastCheckpoint.overrides}
-              <div class="text-muted-foreground text-xs">
-                <button
-                  type="button"
-                  class="hover:text-foreground flex items-center gap-1 font-medium"
-                  onclick={() => (advancedOpen = !advancedOpen)}
-                  aria-expanded={advancedOpen}
-                  aria-controls="past-checkpoint-advanced"
-                >
-                  {#if advancedOpen}
-                    <ChevronDown class="h-3.5 w-3.5 shrink-0" />
-                  {:else}
-                    <ChevronRight class="h-3.5 w-3.5 shrink-0" />
-                  {/if}
-                  Advanced
-                </button>
-                {#if advancedOpen}
-                  <div id="past-checkpoint-advanced" class="mt-2 space-y-2 pl-[1.125rem]">
-                    <label class="flex items-center gap-2">
-                      <Checkbox
-                        checked={overruleGaps}
-                        onCheckedChange={(checked) => setOverruleGaps(checked === true)}
-                        disabled={saving}
-                      />
-                      Create it anyway:
-                    </label>
-                    <RadioGroup
-                      value={gapOverride}
-                      onValueChange={(v) => (gapOverride = v as GapOverride)}
-                      disabled={!overruleGaps || saving}
-                      class="gap-2 pl-6"
-                    >
-                      {@render option(
-                        'undoRecorded',
-                        'Use a partial rollback from the next full state',
-                        overrides.next,
-                        'Changes that were not recorded stay in.',
-                      )}
-                      {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
-                      {@render option(
-                        'previousAsIs',
-                        'Copy the previous full state',
-                        overrides.previous,
-                      )}
-                    </RadioGroup>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          {:else if pastCheckpoint.source}
-            <div class="text-muted-foreground space-y-1 text-xs">
-              <p>The world state at this entry is known:</p>
-              {#each pastCheckpoint.skipped as position, i (i)}
-                <p class="flex items-start gap-1.5">
-                  <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
-                  {skippedSnapshotText(position)}
-                </p>
-              {/each}
-              <p class="flex items-start gap-1.5">
-                <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
-                {pastCheckpoint.source.position === entry.position
-                  ? `${capitalize(anchorText(pastCheckpoint.source))} exists, so no rollback is needed.`
-                  : `Built by a rollback from ${anchorText(pastCheckpoint.source)}.`}
-              </p>
+            Advanced
+          </button>
+          {#if advancedOpen}
+            <div id="past-checkpoint-advanced" class="mt-2 space-y-2 pl-[1.125rem]">
+              <label class="flex items-center gap-2">
+                <Checkbox
+                  checked={overruleGaps}
+                  onCheckedChange={(checked) => setOverruleGaps(checked === true)}
+                  disabled={saving}
+                />
+                Create it anyway:
+              </label>
+              <RadioGroup
+                value={gapOverride}
+                onValueChange={(v) => (gapOverride = v as GapOverride)}
+                disabled={!overruleGaps || saving}
+                class="gap-2 pl-6"
+              >
+                {@render option(
+                  'undoRecorded',
+                  'Use a partial rollback from the next full state',
+                  overrides.next,
+                  'Changes that were not recorded stay in.',
+                )}
+                {@render option('nextAsIs', 'Copy the next full state', overrides.next)}
+                {@render option('previousAsIs', 'Copy the previous full state', overrides.previous)}
+              </RadioGroup>
             </div>
           {/if}
-          {#if pastCheckpoint && showUndone}
-            {#if pastCheckpoint.manual.length + pastCheckpoint.tidy.length > 0}
-              <div class="space-y-1">
-                {#if pastCheckpoint.manual.length > 0}
-                  <p class="text-muted-foreground text-xs">
-                    Changes you made by hand after this entry will not be in the checkpoint:
-                  </p>
-                  <ChangeList changes={pastCheckpoint.manual} />
-                {/if}
-                {#if pastCheckpoint.tidy.length > 0}
-                  <p class="text-muted-foreground text-xs">
-                    Changes from lore management you ran after this entry will not be in the
-                    checkpoint:
-                  </p>
-                  <ChangeList changes={pastCheckpoint.tidy} />
-                {/if}
-              </div>
-            {/if}
-            {#if pastCheckpoint.source?.position !== entry.position}
-              {#each revertLines(pastCheckpoint.classifier, pastCheckpoint.lore) as line, i (i)}
-                <p class="text-muted-foreground text-xs">{line}</p>
-              {/each}
-            {/if}
-          {/if}
         </div>
-        <ModalActions
-          label="Create Checkpoint"
-          icon={Bookmark}
-          tone="checkpoint"
-          onCancel={cancel}
-          onConfirm={create}
-          busy={saving}
-          disabled={!name.trim() || blocked}
-        />
+      {/if}
+    {:else if pastCheckpoint.source}
+      <div class="text-muted-foreground space-y-1 text-xs">
+        <p>The world state at this entry is known:</p>
+        {#each pastCheckpoint.skipped as position, i (i)}
+          <p class="flex items-start gap-1.5">
+            <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+            {skippedSnapshotText(position)}
+          </p>
+        {/each}
+        <p class="flex items-start gap-1.5">
+          <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
+          {pastCheckpoint.source.position === entry.position
+            ? `${capitalize(anchorText(pastCheckpoint.source))} exists, so no rollback is needed.`
+            : `Built by a rollback from ${anchorText(pastCheckpoint.source)}.`}
+        </p>
       </div>
     {/if}
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+    {#if pastCheckpoint && showUndone}
+      {#if pastCheckpoint.manual.length + pastCheckpoint.tidy.length > 0}
+        <div class="space-y-1">
+          {#if pastCheckpoint.manual.length > 0}
+            <p class="text-muted-foreground text-xs">
+              Changes you made by hand after this entry will not be in the checkpoint:
+            </p>
+            <ChangeList changes={pastCheckpoint.manual} />
+          {/if}
+          {#if pastCheckpoint.tidy.length > 0}
+            <p class="text-muted-foreground text-xs">
+              Changes from lore management you ran after this entry will not be in the checkpoint:
+            </p>
+            <ChangeList changes={pastCheckpoint.tidy} />
+          {/if}
+        </div>
+      {/if}
+      {#if pastCheckpoint.source?.position !== entry.position}
+        {#each revertLines(pastCheckpoint.classifier, pastCheckpoint.lore) as line, i (i)}
+          <p class="text-muted-foreground text-xs">{line}</p>
+        {/each}
+      {/if}
+    {/if}
+  {/if}
+</ActionModal>

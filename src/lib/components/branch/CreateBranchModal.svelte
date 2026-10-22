@@ -5,9 +5,8 @@
   import type { Checkpoint } from '#lib/types/index.ts'
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { GitBranch } from '@lucide/svelte'
-  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
 
   let {
     open = $bindable(false),
@@ -26,7 +25,6 @@
   )
 
   function cancel() {
-    if (saving) return
     open = false
     name = ''
   }
@@ -48,50 +46,31 @@
 </script>
 
 <!-- Modal for the same reason as the checkpoint form: nothing may change while the branch is cut. -->
-<ResponsiveModal.Root
-  bind:open={
-    () => open,
-    (next) => {
-      if (!next) cancel()
-    }
-  }
-  dismissible={!saving}
+<ActionModal
+  bind:open
+  onCancel={cancel}
+  title="Create branch"
+  action={{
+    label: 'Create Branch',
+    icon: GitBranch,
+    tone: 'branch',
+    disabled: !name.trim() || !checkpoint,
+    onConfirm: () => void create(),
+  }}
+  busy={saving}
 >
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
-    interactOutsideBehavior="ignore"
-    escapeKeydownBehavior={saving ? 'ignore' : 'close'}
-  >
-    <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-      <ResponsiveModal.Title>Create branch</ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        Create a new branch from the Checkpoint “{checkpoint?.name}”{#if forkEntry}
-          at Entry {entryNumber(forkEntry)}{/if}
-      </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
-    <!-- Buttons scroll with the content, as in the other confirmation modals. -->
-    <div class="min-h-0 flex-1 overflow-y-auto">
-      <div class="space-y-3 px-6 py-4">
-        <Input
-          type="text"
-          class="h-9 text-sm"
-          placeholder="Branch name..."
-          bind:value={name}
-          disabled={saving}
-          onkeydown={(e) => {
-            if (e.key === 'Enter') void create()
-          }}
-        />
-      </div>
-      <ModalActions
-        label="Create Branch"
-        icon={GitBranch}
-        tone="branch"
-        onCancel={cancel}
-        onConfirm={() => void create()}
-        busy={saving}
-        disabled={!name.trim() || !checkpoint}
-      />
-    </div>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  {#snippet description()}
+    Create a new branch from the Checkpoint “{checkpoint?.name}”{#if forkEntry}
+      at Entry {entryNumber(forkEntry)}{/if}
+  {/snippet}
+  <Input
+    type="text"
+    class="h-9 text-sm"
+    placeholder="Branch name..."
+    bind:value={name}
+    disabled={saving}
+    onkeydown={(e) => {
+      if (e.key === 'Enter') void create()
+    }}
+  />
+</ActionModal>

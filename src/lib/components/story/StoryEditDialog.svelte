@@ -5,19 +5,13 @@
   leaves nothing behind to reset.
 -->
 <script lang="ts">
-  import { onDestroy, untrack } from 'svelte'
+  import { untrack } from 'svelte'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { ChevronDown, Check } from '@lucide/svelte'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
   import TagBadge from '#lib/components/tags/TagBadge.svelte'
   import { cn } from '#lib/utils/cn.ts'
-  import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
-  import { blurFocusedElement, releaseOrphanScrollLock } from '#lib/utils/scrollLock.ts'
-  import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
-  import WizardExitConfirm from '../wizard/WizardExitConfirm.svelte'
-  import { createDrawerSwipeGuard } from '#lib/components/ui/drawer/index.ts'
   import type { Story, StoryDetails } from '#lib/types/index.ts'
   import {
     GENRE_COLORS,
@@ -47,13 +41,6 @@
   let colorsOpen = $state(false)
   let saving = $state(false)
   let isOpen = $state(true)
-  let closing = false
-  let returning = false
-  let timer: ReturnType<typeof setTimeout> | null = null
-  /** Bumped to remount the modal, so a sheet brought back after a swipe starts from clean. */
-  let modalKey = $state(0)
-  let showDiscardConfirm = $state(false)
-  const isMobile = createIsMobile()
 
   const dirty = $derived(
     title.trim() !== initial.title.trim() ||
@@ -70,69 +57,6 @@
   // Derived rather than closed by an effect, so it never disagrees with the genre for a frame.
   const showColors = $derived(colorsOpen && hasGenre)
 
-  // Unmounting skips `vaul`'s own restore, so the lock is released here; see `utils/scrollLock`.
-  function close() {
-    if (closing) return
-    closing = true
-    blurFocusedElement(isMobile.current)
-    isOpen = false
-    timer = setTimeout(() => {
-      releaseOrphanScrollLock()
-      onClose()
-    }, MODAL_CLOSE_TRANSITION_MS)
-  }
-
-  /**
-   * Brings back a sheet `vaul` closed on its own, once it is fully out. Reopening it mid-close
-   * leaves its swipe styles and scroll lock behind, over a sheet that cannot be seen.
-   */
-  function returnSheet(ask: boolean) {
-    returning = true
-    timer = setTimeout(() => {
-      returning = false
-      if (closing) return
-      releaseOrphanScrollLock()
-      modalKey += 1
-      isOpen = true
-      if (ask) showDiscardConfirm = true
-    }, MODAL_CLOSE_TRANSITION_MS)
-  }
-
-  // A pending timer would otherwise close whichever story's dialog has taken this one's place.
-  onDestroy(() => {
-    if (timer) clearTimeout(timer)
-    releaseOrphanScrollLock()
-  })
-
-  /** Only a drawer swipe gets here: Escape and outside clicks are intercepted on the content. */
-  // An edited sheet swiped down stays put and asks, instead of closing.
-  let swipeGuard: ReturnType<typeof createDrawerSwipeGuard> | null = null
-  $effect(() => {
-    const guard = createDrawerSwipeGuard(
-      () => dirty && !saving,
-      () => (showDiscardConfirm = true),
-    )
-    swipeGuard = guard
-    return () => guard.destroy()
-  })
-
-  function handleOpenChange(open: boolean) {
-    if (open || closing || returning) return
-    // `vaul` closes a drawer that is not dismissible when its handle is tapped, so a save in
-    // flight can be interrupted here. The sheet comes back without asking: those edits are being
-    // written, and `save` closes it for good once the write lands.
-    if (saving) return returnSheet(false)
-    if (!dirty) return close()
-    // Only if the swipe guard misjudged `vaul`'s close.
-    returnSheet(true)
-  }
-
-  function requestClose() {
-    if (saving) return
-    if (dirty) showDiscardConfirm = true
-    else close()
-  }
-
   async function save() {
     if (!canSave) return
     saving = true
@@ -143,7 +67,7 @@
     } finally {
       saving = false
     }
-    close()
+    isOpen = false
   }
 
   /** Title and genre are single values that wrap for display; a line break is never stored. */
@@ -173,151 +97,110 @@
   }
 </script>
 
-{#key modalKey}
-  <ResponsiveModal.Root bind:open={isOpen} dismissible={!saving} onOpenChange={handleOpenChange}>
-    <ResponsiveModal.Content
-      class="flex max-h-[85dvh] max-w-lg flex-col gap-0 p-0"
-      onInteractOutside={(e: PointerEvent) => {
-        e.preventDefault()
-        requestClose()
-      }}
-      onpointerup={(e: PointerEvent) => swipeGuard?.release(e)}
-      onpointerout={(e: PointerEvent) => swipeGuard?.release(e)}
-      onEscapeKeydown={(e: KeyboardEvent) => {
-        e.preventDefault()
-        if (showDiscardConfirm) showDiscardConfirm = false
-        else requestClose()
-      }}
+<ActionModal
+  bind:open={isOpen}
+  onClosed={onClose}
+  title="Edit Story"
+  description="Genre and description are used when generating every new entry in this story. Old entries are not affected."
+  action={{ label: 'Save', disabled: !canSave, onConfirm: () => void save() }}
+  busy={saving}
+  {dirty}
+  discardQuestion={{
+    title: 'Discard your changes?',
+    description: 'Your edits to this story will be lost.',
+  }}
+  size="lg"
+>
+  <div class="space-y-1.5">
+    <Label for="story-edit-title">Title</Label>
+    <Textarea
+      id="story-edit-title"
+      rows={1}
+      class="min-h-9"
+      bind:value={title}
+      enterkeyhint="next"
+      oninput={(e) => singleLine(e, (v) => (title = v))}
+      onkeydown={(e) => handleKeydown(e, 'story-edit-genre')}
+    />
+  </div>
+
+  <div class="space-y-1.5">
+    <Label for="story-edit-genre">Genre</Label>
+    <Textarea
+      id="story-edit-genre"
+      rows={1}
+      class="min-h-9"
+      placeholder="e.g. Fantasy"
+      bind:value={genre}
+      enterkeyhint="next"
+      oninput={(e) => singleLine(e, (v) => (genre = v))}
+      onkeydown={(e) => handleKeydown(e, 'story-edit-description')}
+    />
+
+    <button
+      type="button"
+      class="text-muted-foreground hover:text-foreground flex items-center gap-2 pt-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={!hasGenre}
+      aria-expanded={showColors}
+      aria-controls="story-edit-genre-colors"
+      onclick={() => (colorsOpen = !colorsOpen)}
     >
-      <!-- One scroller either way: the fields on desktop, the whole sheet on mobile. -->
+      <span class="text-foreground">Badge colour:</span>
+      {#if hasGenre}
+        <TagBadge name={genre.trim()} color={resolveGenreColor(genre.trim(), genreColor)} />
+      {/if}
+      <ChevronDown class={cn('h-3.5 w-3.5 transition-transform', showColors && 'rotate-180')} />
+    </button>
+
+    {#if showColors}
       <div
-        class={cn('min-h-0 flex-1', isMobile.current ? 'overflow-y-auto' : 'flex flex-col')}
-        inert={showDiscardConfirm}
+        id="story-edit-genre-colors"
+        role="radiogroup"
+        aria-label="Badge colour"
+        class="flex flex-wrap items-center gap-2 pt-1"
       >
-        <ResponsiveModal.Header class="border-b px-4 py-4" closeButton={false}>
-          <ResponsiveModal.Title>Edit Story</ResponsiveModal.Title>
-          <ResponsiveModal.Description>
-            Genre and description are used when generating every new entry in this story. Old
-            entries are not affected.
-          </ResponsiveModal.Description>
-        </ResponsiveModal.Header>
-
-        <div
-          class={cn('space-y-4 px-4 py-4', !isMobile.current && 'min-h-0 flex-1 overflow-y-auto')}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={selectedKey === null}
+          class={cn(
+            'border-border text-muted-foreground hover:text-foreground h-7 rounded-md border px-2 text-xs',
+            selectedKey === null && 'ring-ring ring-2 ring-offset-1',
+          )}
+          onclick={() => (genreColor = null)}
         >
-          <div class="space-y-1.5">
-            <Label for="story-edit-title">Title</Label>
-            <Textarea
-              id="story-edit-title"
-              rows={1}
-              class="max-h-none min-h-9"
-              bind:value={title}
-              enterkeyhint="next"
-              oninput={(e) => singleLine(e, (v) => (title = v))}
-              onkeydown={(e) => handleKeydown(e, 'story-edit-genre')}
-            />
-          </div>
-
-          <div class="space-y-1.5">
-            <Label for="story-edit-genre">Genre</Label>
-            <Textarea
-              id="story-edit-genre"
-              rows={1}
-              class="max-h-none min-h-9"
-              placeholder="e.g. Fantasy"
-              bind:value={genre}
-              enterkeyhint="next"
-              oninput={(e) => singleLine(e, (v) => (genre = v))}
-              onkeydown={(e) => handleKeydown(e, 'story-edit-description')}
-            />
-
-            <button
-              type="button"
-              class="text-muted-foreground hover:text-foreground flex items-center gap-2 pt-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!hasGenre}
-              aria-expanded={showColors}
-              aria-controls="story-edit-genre-colors"
-              onclick={() => (colorsOpen = !colorsOpen)}
-            >
-              <span class="text-foreground">Badge colour:</span>
-              {#if hasGenre}
-                <TagBadge name={genre.trim()} color={resolveGenreColor(genre.trim(), genreColor)} />
-              {/if}
-              <ChevronDown
-                class={cn('h-3.5 w-3.5 transition-transform', showColors && 'rotate-180')}
-              />
-            </button>
-
-            {#if showColors}
-              <div
-                id="story-edit-genre-colors"
-                role="radiogroup"
-                aria-label="Badge colour"
-                class="flex flex-wrap items-center gap-2 pt-1"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selectedKey === null}
-                  class={cn(
-                    'border-border text-muted-foreground hover:text-foreground h-7 rounded-md border px-2 text-xs',
-                    selectedKey === null && 'ring-ring ring-2 ring-offset-1',
-                  )}
-                  onclick={() => (genreColor = null)}
-                >
-                  Default
-                </button>
-                {#each GENRE_COLOR_KEYS as key, i (i)}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={selectedKey === key}
-                    aria-label={GENRE_COLORS[key].label}
-                    title={GENRE_COLORS[key].label}
-                    class={cn(
-                      'flex h-7 w-7 items-center justify-center rounded-full',
-                      GENRE_COLORS[key].swatch,
-                      selectedKey === key && 'ring-ring ring-2 ring-offset-1',
-                    )}
-                    onclick={() => (genreColor = key)}
-                  >
-                    {#if selectedKey === key}
-                      <Check class="h-4 w-4 text-white" />
-                    {/if}
-                  </button>
-                {/each}
-              </div>
+          Default
+        </button>
+        {#each GENRE_COLOR_KEYS as key, i (i)}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={selectedKey === key}
+            aria-label={GENRE_COLORS[key].label}
+            title={GENRE_COLORS[key].label}
+            class={cn(
+              'flex h-7 w-7 items-center justify-center rounded-full',
+              GENRE_COLORS[key].swatch,
+              selectedKey === key && 'ring-ring ring-2 ring-offset-1',
+            )}
+            onclick={() => (genreColor = key)}
+          >
+            {#if selectedKey === key}
+              <Check class="h-4 w-4 text-white" />
             {/if}
-          </div>
-
-          <div class="space-y-1.5">
-            <Label for="story-edit-description">Description</Label>
-            <Textarea
-              id="story-edit-description"
-              class="max-h-none"
-              placeholder="No description"
-              bind:value={description}
-              onkeydown={(e) => handleKeydown(e)}
-            />
-          </div>
-        </div>
-
-        <ResponsiveModal.Footer class="mt-auto border-t px-4 py-4">
-          <Button variant="outline" onclick={requestClose} disabled={saving}>Cancel</Button>
-          <Button onclick={save} disabled={!canSave}>Save</Button>
-        </ResponsiveModal.Footer>
+          </button>
+        {/each}
       </div>
+    {/if}
+  </div>
 
-      <WizardExitConfirm
-        open={showDiscardConfirm}
-        title="Discard your changes?"
-        description="Your edits to this story will be lost."
-        onCancel={() => (showDiscardConfirm = false)}
-        onDiscard={() => {
-          showDiscardConfirm = false
-          close()
-        }}
-      />
-    </ResponsiveModal.Content>
-  </ResponsiveModal.Root>
-{/key}
+  <div class="space-y-1.5">
+    <Label for="story-edit-description">Description</Label>
+    <Textarea
+      id="story-edit-description"
+      placeholder="No description"
+      bind:value={description}
+      onkeydown={(e) => handleKeydown(e)}
+    />
+  </div>
+</ActionModal>

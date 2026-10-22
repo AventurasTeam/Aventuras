@@ -4,8 +4,7 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { cn } from '#lib/utils/cn.ts'
-
-  type Tone = 'danger' | 'default' | 'checkpoint' | 'branch'
+  import { FEATURE_COLORS, type ActionTone } from './featureColors'
 
   /** A confirmation modal's footer: Cancel and the action, side by side on a phone. */
   let {
@@ -17,24 +16,20 @@
     cancelWhileBusy = false,
     disabled = false,
     tone = 'default',
+    cancelLabel = 'Cancel',
   }: {
     label: string
-    icon: Component<{ class?: string }>
+    icon?: Component<{ class?: string }>
     onCancel: () => void
     onConfirm: () => void
     /** The action runs: the action is disabled and its icon spins; Cancel too, unless `cancelWhileBusy`. */
     busy?: boolean
     cancelWhileBusy?: boolean
     disabled?: boolean
-    tone?: Tone
+    tone?: ActionTone
+    /** Only when Cancel ends more than the modal, as "Cancel import" does. */
+    cancelLabel?: string
   } = $props()
-
-  const TONES: Record<Tone, string> = {
-    danger: 'can-hover:text-foreground text-red-500 hover:text-red-500',
-    default: '',
-    checkpoint: 'bg-blue-500 text-white hover:bg-blue-600',
-    branch: 'bg-amber-500 text-white hover:bg-amber-600',
-  }
 </script>
 
 <ResponsiveModal.Footer class="border-t px-6 py-4">
@@ -45,17 +40,17 @@
       onclick={onCancel}
       disabled={busy && !cancelWhileBusy}
     >
-      Cancel
+      {cancelLabel}
     </Button>
     <Button
-      variant={tone === 'danger' ? 'outline' : 'default'}
+      variant={tone === 'default' ? 'default' : 'feature'}
       onclick={onConfirm}
-      class={cn('flex-1 sm:flex-none', TONES[tone])}
+      class={cn('flex-1 sm:flex-none', tone !== 'default' && FEATURE_COLORS[tone].vars)}
       disabled={disabled || busy}
     >
       {#if busy}
         <Loader2 class="h-4 w-4 animate-spin" />
-      {:else}
+      {:else if Icon}
         <Icon class="h-4 w-4" />
       {/if}
       {label}

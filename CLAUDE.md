@@ -131,6 +131,7 @@ that area, and update it in the same commit when behaviour it describes changes.
 | `services/exchange/`, vault export/import, the Aventura lorebook format              | [docs/architecture/exchange-format.md](docs/architecture/exchange-format.md)       |
 | `services/stateTracking/`, `rollbackService`, a store write method, past checkpoints | [docs/architecture/state-tracking.md](docs/architecture/state-tracking.md)         |
 | `utils/narrationClean.ts`, the Style Reviewer's input                                | [docs/architecture/narration-cleaning.md](docs/architecture/narration-cleaning.md) |
+| a modal, a confirmation, a feature colour, `components/shared/`                      | [docs/development/ui-components.md](docs/development/ui-components.md)             |
 | a new JS, CSS or Web API, or the bundle minimums                                     | [docs/development/platform-support.md](docs/development/platform-support.md)       |
 | tests                                                                                | [docs/development/testing.md](docs/development/testing.md)                         |
 | the updater, CI, release scripts, Android builds                                     | [docs/development/release.md](docs/development/release.md)                         |

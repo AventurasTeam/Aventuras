@@ -20,7 +20,7 @@
   } from './st-import-steps'
   import Step6Portraits from './steps/Step6Portraits.svelte'
   import StepPackSelection from './steps/StepPackSelection.svelte'
-  import WizardExitConfirm from './WizardExitConfirm.svelte'
+  import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
 
   interface Props {
     onClose: () => void
@@ -354,7 +354,7 @@
       {/if}
     </div>
 
-    <WizardExitConfirm
+    <DiscardConfirm
       open={showExitConfirm}
       title="Discard this import?"
       onCancel={() => (showExitConfirm = false)}

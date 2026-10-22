@@ -26,15 +26,16 @@ comments stay short and say only what the next reader cannot infer — see
 
 ## Development
 
-| Document                                               | Read it before                                                                        |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [testing.md](development/testing.md)                   | writing a test — the suite has real constraints on what it can import                 |
-| [release.md](development/release.md)                   | cutting a release, or changing the updater, CI or the build scripts                   |
-| [ci-caching.md](development/ci-caching.md)             | changing a CI cache key, what a cache stores, or the Android targets                  |
-| [ios-build-target.md](development/ios-build-target.md) | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`                    |
-| [ios-background-generation.md](development/ios-background-generation.md) | keeping a generation running while the app is in the background on iOS, or the `generation` plugin |
-| [platform-support.md](development/platform-support.md) | using a new JS, CSS or Web API, or changing the bundle targets or minimum OS versions |
-| [shadcn-svelte.md](development/shadcn-svelte.md)       | regenerating `components/ui/` or bringing back the shadcn-svelte generator |
+| Document                                                                 | Read it before                                                                                              |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| [testing.md](development/testing.md)                                     | writing a test — the suite has real constraints on what it can import                                       |
+| [release.md](development/release.md)                                     | cutting a release, or changing the updater, CI or the build scripts                                         |
+| [ci-caching.md](development/ci-caching.md)                               | changing a CI cache key, what a cache stores, or the Android targets                                        |
+| [ios-build-target.md](development/ios-build-target.md)                   | the iOS build target, the unsigned `.ipa` pipeline, or `gen/apple`                                          |
+| [ios-background-generation.md](development/ios-background-generation.md) | keeping a generation running while the app is in the background on iOS, or the `generation` plugin          |
+| [platform-support.md](development/platform-support.md)                   | using a new JS, CSS or Web API, or changing the bundle targets or minimum OS versions                       |
+| [shadcn-svelte.md](development/shadcn-svelte.md)                         | regenerating `components/ui/` or bringing back the shadcn-svelte generator                                  |
+| [ui-components.md](development/ui-components.md)                         | building a modal, a confirmation, or a control in a feature colour — the catalog of components to reach for |
 
 ## Keeping them true
 

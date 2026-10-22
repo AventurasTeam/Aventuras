@@ -17,7 +17,7 @@
   } from '#lib/services/context/index.ts'
   import type { VaultCharacter } from '#lib/types/index.ts'
 
-  import WizardExitConfirm from './WizardExitConfirm.svelte'
+  import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
 
   // Step components
   import {
@@ -561,7 +561,7 @@
       {/if}
     </div>
 
-    <WizardExitConfirm
+    <DiscardConfirm
       open={showExitConfirm}
       onCancel={() => (showExitConfirm = false)}
       onDiscard={() => {

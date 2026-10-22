@@ -6,6 +6,8 @@
     open: boolean
     title?: string
     description?: string
+    keepLabel?: string
+    discardLabel?: string
     onCancel: () => void
     onDiscard: () => void
   }
@@ -14,6 +16,8 @@
     open,
     title = 'Discard this story?',
     description = 'Everything you have filled in so far will be lost.',
+    keepLabel = 'Keep Editing',
+    discardLabel = 'Discard',
     onCancel,
     onDiscard,
   }: Props = $props()
@@ -28,7 +32,7 @@
 </script>
 
 <!--
-  Belongs inside the wizard's own dialog, not in a nested one: a second modal layer would
+  Belongs inside its modal's own content, not in a nested modal: a second modal layer would
   take over the dismissible and escape layers this prompt exists to intercept.
 -->
 {#if open}
@@ -56,8 +60,8 @@
       </div>
 
       <div class="mt-5 flex justify-end gap-2">
-        <Button bind:ref={cancelButton} variant="outline" onclick={onCancel}>Keep Editing</Button>
-        <Button variant="destructive" onclick={onDiscard}>Discard</Button>
+        <Button bind:ref={cancelButton} variant="outline" onclick={onCancel}>{keepLabel}</Button>
+        <Button variant="destructive" onclick={onDiscard}>{discardLabel}</Button>
       </div>
     </div>
   </div>

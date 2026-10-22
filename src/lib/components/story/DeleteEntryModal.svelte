@@ -11,9 +11,8 @@
   import { entryNumber } from '#lib/utils/storyNavigation.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Trash2 } from '@lucide/svelte'
-  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import RevertSummary from './RevertSummary.svelte'
 
   let entry = $state<StoryEntry | null>(null)
@@ -62,7 +61,6 @@
   }
 
   function cancel() {
-    if (deleting) return
     entry = null
   }
 
@@ -85,86 +83,67 @@
 </script>
 
 <!-- Modal: nothing may change while the revert it describes is being decided and run. -->
-<ResponsiveModal.Root
-  bind:open={
-    () => entry !== null,
-    (next) => {
-      if (!next) cancel()
-    }
-  }
-  dismissible={!deleting}
+<ActionModal
+  open={entry !== null}
+  onCancel={cancel}
+  action={{
+    label: 'Delete',
+    icon: Trash2,
+    tone: 'delete',
+    disabled: preview === null,
+    onConfirm: confirm,
+  }}
+  busy={deleting}
+  title={`Delete entry ${number}`}
 >
-  <ResponsiveModal.Content
-    class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0"
-    interactOutsideBehavior="ignore"
-    escapeKeydownBehavior={deleting ? 'ignore' : 'close'}
-  >
-    <ResponsiveModal.Header class="border-b px-6 py-4" closeButton={false}>
-      <ResponsiveModal.Title>Delete entry {number}</ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        {#if revertsOnDelete && number === lastEntryNumber}
-          Revert on Delete is on: deleting this entry will undo the world state changes associated
-          with it.
-        {:else if revertsOnDelete}
-          Revert on Delete is on: deleting an entry will delete every entry after it and undo the
-          world state changes recorded for them.
-        {:else}
-          Revert on Delete is off.
-        {/if}
-      </ResponsiveModal.Description>
-      <!-- Below the description, so what it overrules is read before it is switched. -->
-      {#if revertsOnDelete}
-        <label class="mt-2 flex items-center gap-2 text-sm">
-          <Switch bind:checked={onlyThisEntry} disabled={deleting} />
-          Delete only this entry, without a rollback
-        </label>
-      {/if}
-    </ResponsiveModal.Header>
-    <!-- Buttons scroll with the content, so what they do is read before them. -->
-    <div class="min-h-0 flex-1 overflow-y-auto">
-      <div class="space-y-3 px-6 py-4">
-        <p class="text-muted-foreground text-sm">
-          {#if !rollsBack}
-            Only entry {number} will be deleted. The world state will stay as it is.
-          {:else if number === lastEntryNumber}
-            Entry {number} will be deleted.
-          {:else}
-            Entries {number} to {lastEntryNumber} will be deleted.
-          {/if}
-        </p>
-        {#if !rollsBack}
-          {@const gone = deletedSnapshotsLine(snapshots.here)}
-          {#if gone}
-            <p class="text-muted-foreground text-sm">{gone}</p>
-          {/if}
-        {/if}
-        {#if rollsBack && preview === null}
-          <p class="text-muted-foreground text-xs italic">
-            Checking the recorded world state changes…
-          </p>
-        {:else if rollsBack && preview && entry}
-          <RevertSummary
-            lines={removalLines(
-              story.chaptersRemovedFrom(entry.position),
-              snapshots.fromHere,
-              preview.classifier,
-              preview.lore,
-            )}
-            heading="These changes will be reverted too:"
-            manual={preview.manual}
-            tidy={preview.tidy}
-          />
-        {/if}
-      </div>
-      <ModalActions
-        label="Delete"
-        icon={Trash2}
-        tone="danger"
-        onCancel={cancel}
-        onConfirm={confirm}
-        busy={deleting}
-        disabled={preview === null}
-      />
-    </div>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  {#snippet description()}
+    {#if revertsOnDelete && number === lastEntryNumber}
+      Revert on Delete is on: deleting this entry will undo the world state changes associated with
+      it.
+    {:else if revertsOnDelete}
+      Revert on Delete is on: deleting an entry will delete every entry after it and undo the world
+      state changes recorded for them.
+    {:else}
+      Revert on Delete is off.
+    {/if}
+  {/snippet}
+  {#snippet headerExtra()}
+    <!-- Below the description, so what it overrules is read before it is switched. -->
+    {#if revertsOnDelete}
+      <label class="mt-2 flex items-center gap-2 text-sm">
+        <Switch bind:checked={onlyThisEntry} disabled={deleting} />
+        Delete only this entry, without a rollback
+      </label>
+    {/if}
+  {/snippet}
+  <p class="text-muted-foreground text-sm">
+    {#if !rollsBack}
+      Only entry {number} will be deleted. The world state will stay as it is.
+    {:else if number === lastEntryNumber}
+      Entry {number} will be deleted.
+    {:else}
+      Entries {number} to {lastEntryNumber} will be deleted.
+    {/if}
+  </p>
+  {#if !rollsBack}
+    {@const gone = deletedSnapshotsLine(snapshots.here)}
+    {#if gone}
+      <p class="text-muted-foreground text-sm">{gone}</p>
+    {/if}
+  {/if}
+  {#if rollsBack && preview === null}
+    <p class="text-muted-foreground text-xs italic">Checking the recorded world state changes…</p>
+  {:else if rollsBack && preview && entry}
+    <RevertSummary
+      lines={removalLines(
+        story.chaptersRemovedFrom(entry.position),
+        snapshots.fromHere,
+        preview.classifier,
+        preview.lore,
+      )}
+      heading="These changes will be reverted too:"
+      manual={preview.manual}
+      tidy={preview.tidy}
+    />
+  {/if}
+</ActionModal>

@@ -12,6 +12,8 @@
     onOpenChange?: OnChangeFn<boolean>
     /** Drawer-only: `false` stops the swipe-down gesture. The desktop dialog has no equivalent. */
     dismissible?: boolean
+    /** Drawer-only: opened from inside another modal, so the sheet stacks on that one's. */
+    nested?: boolean
     children: Snippet
     [key: string]: unknown
   }
@@ -20,6 +22,7 @@
     open = $bindable(false),
     onOpenChange,
     dismissible = true,
+    nested = false,
     children,
     ...props
   }: Props = $props()
@@ -33,7 +36,11 @@
   }
 </script>
 
-{#if isMobile.current}
+{#if isMobile.current && nested}
+  <Drawer.NestedRoot bind:open {dismissible} onOpenChange={handleOpenChange} {...props}>
+    {@render children?.()}
+  </Drawer.NestedRoot>
+{:else if isMobile.current}
   <Drawer.Root bind:open {dismissible} onOpenChange={handleOpenChange} {...props}>
     {@render children?.()}
   </Drawer.Root>
