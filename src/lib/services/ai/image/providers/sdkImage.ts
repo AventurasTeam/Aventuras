@@ -2,7 +2,7 @@
 
 import { generateImage, wrapImageModel } from 'ai'
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
-import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { createPollSdkFetch, createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
 import { retryOn429ImageMiddleware } from '#lib/services/ai/sdk/middleware/index.ts'
 import type { ImageGenerateResult } from './types'
 
@@ -14,6 +14,11 @@ type SdkImageModel = Parameters<typeof wrapImageModel>[0]['model']
 
 export function createImageSdkFetch(serviceId: string) {
   return createSdkFetch({ serviceId, timeoutMs: IMAGE_TIMEOUT_DEFAULT, what: 'Image generation' })
+}
+
+/** For polling a backend: the requests share one debug entry, updated in place. */
+export function createPollImageSdkFetch(serviceId: string, timeoutMs: number) {
+  return createPollSdkFetch({ serviceId, timeoutMs, what: 'Image generation' })
 }
 
 export async function generateSdkImage(options: {

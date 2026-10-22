@@ -569,7 +569,33 @@ its own lore management refused.
 ## Images
 
 Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenAI Compatible,
-OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111.
+OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111. Every one
+goes through `generateImage`: NanoGPT, A1111 and ComfyUI as custom `ImageModelV4` objects
+(`nanogptImage.ts`, `a1111Image.ts`, `comfyImage.ts`). The ComfyUI model queues a prepared
+API-format graph over HTTP and polls `GET /api/jobs/{id}` once a second, starting at once, because
+core ComfyUI pushes progress only over `/ws`. A poll that fails is retried, up to ten in a row; a
+4xx other than 408 and 429 is a refusal and a 404 means the server lost the job (on the first poll,
+that the server predates the route), and each ends the generation at once. The queue wait is
+unbounded; the caller's abort ends it. Any failure that leaves a job possibly queued (an abort, a
+poll giving up, an error in a 200 reply) sends `POST /api/jobs/{id}/cancel`. When the
+`POST /prompt` was never answered the cancel is retried for about 15 s with backoff (six attempts),
+since it can overtake the prompt.
+
+**Supported ComfyUI: 0.26.0 and later** (`MIN_COMFYUI_VERSION` in `comfyImage.ts`). 0.26.0 is the first
+release where that cancel route exists. It interrupts a job only if it is still the running one,
+and dequeues it otherwise, so a cancel cannot stop someone else's prompt, which `/interrupt`
+alone can. One route to poll and one to cancel also replaces reading `/history` and `/queue` and
+reconciling them. `generate` reads `/system_stats` once per base URL, with a 5 s timeout, and
+refuses an older server with an update message; a server that cannot be asked, or reports a version that does not parse, is
+let through. The same read supplies the server's OS, which decides the path separator in model
+names for the built-in workflows (ComfyUI lists and matches them with its own).
+
+ComfyUI errors are reported by what they name: validation errors by node and class, execution
+errors by node, and an output node that produced nothing by its id, with any other node that did
+produce an image. The polls and the cancel share one debug entry that updates in place, with the
+number of requests, the last request and its response, and the ones that failed, so a generation
+shows `POST /prompt` → one poll entry → `GET /view`. The pop-out debug window replaces an entry it
+already has by id rather than appending it again.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
 steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google, a
@@ -600,7 +626,8 @@ NanoGPT's custom model downloads its `url` items through the same injected fetch
 A non-2xx on the SDK's own download is an `APICallError` like a generation failure, so a 429 from
 the image host makes `retryOn429ImageMiddleware` re-run the whole call, POST included, and the
 generation is billed again. `generateImage`'s own retry is off (`maxRetries: 0`), so other
-statuses, 5xx included, fail at once. NanoGPT's download throws a plain `Error` to stay out of this.
+statuses, 5xx included, fail at once. NanoGPT's download and ComfyUI's `/view` download throw a
+plain `Error` to stay out of this.
 Open: the middleware cannot see the endpoint, but a download error carries `requestBodyValues: {}`
 and the original `data[].url` (not a redirect hop), where a generation error carries the request
 body, so that is the field to tell them apart by. Checked for `@ai-sdk/openai-compatible` only.
@@ -628,13 +655,8 @@ handled natively in Rust so the payloads never enter the WebView heap — see
 
 App Transport Security blocks the WebView's `fetch` to plaintext `http://` hosts outside the
 local-network exception, and it does so silently. Local backends therefore make every HTTP call
-through Tauri's HTTP plugin (`imageGetFetch`, or the patched `fetchApi` for ComfyUI, whose SDK
-has no injection point), on every platform. `comfy.test.ts` fails if an SDK upgrade renames the
-members that patch replaces.
-
-The ComfyUI SDK also holds a WebSocket, and `CallWrapper` only finishes on events from it, so the
-socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
-`customWebSocketImpl`); the WebView's own `ws://` is subject to the same ATS block.
+through Tauri's HTTP plugin (`imageGetFetch` for discovery, `createSdkFetch` for generation), on
+every platform.
 
 ## Network transport
 
@@ -643,7 +665,9 @@ user-configured, so CORS, Android's cleartext block and iOS ATS (above) would ea
 them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
 any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
 AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI, OpenRouter, NanoGPT and A1111 use it),
+debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI, OpenRouter, NanoGPT, A1111 and
+ComfyUI use it; ComfyUI polls through `createPollSdkFetch`, which keeps them in one entry so they
+do not push the generation POST out of the debug store's last 100 entries),
 `imageGetFetch` / `fetchPublicImageBase64` for model
 discovery and reference fetching, `corsFetch` for discovery.
 
