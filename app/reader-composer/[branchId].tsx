@@ -924,7 +924,8 @@ export default function ReaderComposerRoute() {
     [branchId, reload, handBackSubmission, systemFailure, branchUnchanged],
   )
 
-  // Under the dispatch guard, so neither a second tap nor a Send lands before the pass reserves.
+  // Held until the pass ends: no double tap or Send slips in, head reversals wait;
+  // the pill's Cancel still ends the pass.
   const retryPass = useCallback(async () => {
     if (!beginDispatch()) {
       logger.warn('pipeline.pass_retry_dispatch_suppressed', { branchId })
