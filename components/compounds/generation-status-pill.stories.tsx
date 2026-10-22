@@ -178,16 +178,6 @@ export const ErrorSwapPaused: Story = {
   },
 }
 
-export const ErrorClassifier: Story = {
-  render: () => (
-    <GenerationStatusPill
-      error={{ code: 'classifier-offline' }}
-      onCancel={onCancel}
-      onErrorTap={onErrorTap}
-    />
-  ),
-}
-
 export const ActivePlusError: Story = {
   render: () => (
     <View className="gap-2">

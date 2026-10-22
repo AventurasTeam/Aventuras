@@ -41,10 +41,7 @@ const PHASE_APPEARANCE: Record<
 // CLEARS embedding_stale as it goes: a half-finished swap drives the stale count
 // toward zero, so the story most in need of a signal is the one least likely to
 // raise one. Its cause is the marker, and its remedy is a decision, not waiting.
-type ErrorState =
-  | { code: 'memory-incomplete'; pendingRows: number }
-  | { code: 'swap-paused' }
-  | { code: 'classifier-offline' }
+type ErrorState = { code: 'memory-incomplete'; pendingRows: number } | { code: 'swap-paused' }
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
@@ -85,8 +82,6 @@ function errorCopy(error: ErrorState): string {
       })
     case 'swap-paused':
       return t('chrome.generationStatusPill.error.swapPaused')
-    case 'classifier-offline':
-      return t('chrome.generationStatusPill.error.classifierOffline')
   }
 }
 

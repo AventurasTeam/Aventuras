@@ -36,8 +36,8 @@ const multiReport: RecoveryReport = {
   failures: [],
 }
 
-// Nothing reversed: the orphan's writes survive and the branch is held back from the
-// cadence, so the modal must not title itself "Story recovered".
+// Nothing reversed: the orphan's writes survive and its branch can't take turns, so the
+// modal must not title itself "Story recovered".
 const degradedReport: RecoveryReport = {
   reversed: [],
   failures: [
@@ -102,27 +102,27 @@ export const MultipleRuns: Story = {
   },
 }
 
-export const MemoryPaused: Story = {
+export const BranchHeld: Story = {
   args: {
     report: degradedReport,
     storyNames: { s1: 'Mornstone' },
   },
   play: async () => {
     expect(screen.getByText('Recovery incomplete')).toBeInTheDocument()
-    const description = screen.getByText(/Memory updates for this story are paused/)
+    const description = screen.getByText(/Its branch can't take turns until it is/)
     expect(description.textContent).toContain('Mornstone')
     expect(description.textContent).toContain('restarting the app retries automatically')
   },
 }
 
-export const MemoryPausedRefused: Story = {
+export const BranchHeldRefused: Story = {
   args: {
     report: refusedReport,
     storyNames: { s1: 'Mornstone' },
   },
   play: async () => {
     expect(screen.getByText('Recovery incomplete')).toBeInTheDocument()
-    const description = screen.getByText(/Memory updates for this story stay paused/)
+    const description = screen.getByText(/Its branch can't take turns —/)
     expect(description.textContent).toContain('Mornstone')
     expect(description.textContent).toContain('your story content is intact')
     expect(description.textContent).not.toContain('restart')

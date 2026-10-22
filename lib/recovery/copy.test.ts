@@ -58,13 +58,14 @@ describe('formatRecoveryReport', () => {
     )
   })
 
+  // generation-pipeline.md → Recovery modal: a pass is no longer a background job.
   it('formats a named periodic-classifier recovery', () => {
     expect(
       formatRecoveryReport(report(recovered('periodic-classifier', 'story_1')), {
         story_1: 'Mornstone',
       }),
     ).toBe(
-      'An interrupted shutdown was detected in Mornstone. A background memory update was reverted; your story content is intact.',
+      'An interrupted shutdown was detected in Mornstone. A memory update was reverted; your story content is intact.',
     )
   })
 
@@ -84,7 +85,7 @@ describe('formatRecoveryReport', () => {
         { story_1: 'Mornstone' },
       ),
     ).toBe(
-      'An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent. An interrupted shutdown was detected. A background memory update was reverted; your story content is intact.',
+      'An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent. An interrupted shutdown was detected. A memory update was reverted; your story content is intact.',
     )
   })
 
@@ -100,25 +101,27 @@ describe('formatRecoveryReport', () => {
 })
 
 describe('failure copy', () => {
-  it('promises the pause only for a classifier orphan, which is the kind that causes one', () => {
+  it("promises the branch's turns stop only for a classifier orphan, the kind that holds one", () => {
     expect(
       formatRecoveryReport(failureReport(failed('periodic-classifier', 'story_1')), {
         story_1: 'Mornstone',
       }),
-    ).toContain('Memory updates for this story are paused')
+    ).toBe(
+      "An interrupted memory update in Mornstone could not be undone. Its branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
+    )
   })
 
-  it('describes the fault without promising a pause for other kinds', () => {
+  it('describes the fault without promising the turns stop for other kinds', () => {
     const text = formatRecoveryReport(failureReport(failed('per-turn', 'story_1')), {
       story_1: 'Mornstone',
     })
     expect(text).toContain('Mornstone')
-    expect(text).not.toContain('paused')
+    expect(text).not.toContain("can't take turns")
   })
 
   it('falls back to unnamed copy when the story id resolves to no title', () => {
-    expect(formatRecoveryReport(failureReport(failed('periodic-classifier', null)), {})).toContain(
-      'that story',
+    expect(formatRecoveryReport(failureReport(failed('periodic-classifier', null)), {})).toBe(
+      "An interrupted memory update could not be undone. That story's branch can't take turns until it is — your story content is intact, and restarting the app retries automatically.",
     )
   })
 
@@ -143,13 +146,18 @@ describe('failure copy', () => {
       }
   })
 
-  it('keeps the pause for a classifier refusal, and its story name', () => {
+  it('keeps the hold for a classifier refusal, and its story name', () => {
     expect(
       formatRecoveryReport(failureReport(failed('periodic-classifier', 'story_1', 'write-back')), {
         story_1: 'Mornstone',
       }),
     ).toBe(
-      'An interrupted background memory update in Mornstone could not be undone without breaking later changes. Memory updates for this story stay paused so nothing is duplicated — your story content is intact.',
+      "An interrupted memory update in Mornstone could not be undone without breaking later changes. Its branch can't take turns — your story content is intact.",
+    )
+    expect(
+      formatRecoveryReport(failureReport(failed('periodic-classifier', null, 'write-back')), {}),
+    ).toBe(
+      "An interrupted memory update could not be undone without breaking later changes. That story's branch can't take turns — your story content is intact.",
     )
     expect(
       formatRecoveryReport(failureReport(failed('per-turn', 'story_1', 'write-back')), {
@@ -169,7 +177,7 @@ describe('failure copy', () => {
       { story_1: 'Mornstone' },
     )
     expect(text).toContain('was reverted')
-    expect(text).toContain('are paused')
+    expect(text).toContain("can't take turns")
   })
 })
 
