@@ -365,7 +365,7 @@ export default function ReaderComposerRoute() {
   // turn and take a failure entry for it.
   const swapPending = swapRunning || swapPaused
 
-  // Between Send's pass and its turn no run holds the pill; the pending Send keeps it.
+  // While Send's turn is pending with no run registered, the pending Send keeps the pill.
   const sendGap = generationStore.useGeneration((s) =>
     sendGapOpen(s.txState, branchId, sendPending),
   )
@@ -1115,10 +1115,9 @@ export default function ReaderComposerRoute() {
   )
   // In Send's gap no run holds the pill, so its Cancel is the composer's: it waits for the next run.
   const handleCancelPill = useCallback(() => {
-    if (sendGapOpen(generationStore.getTxState(), branchId, sendPending))
-      void cancelComposerRun(branchId, sendPending)
+    if (sendGapOpen(generationStore.getTxState(), branchId, sendPending)) handleCancelComposer()
     else void cancelPillRun(branchId)
-  }, [branchId, sendPending])
+  }, [branchId, sendPending, handleCancelComposer])
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
