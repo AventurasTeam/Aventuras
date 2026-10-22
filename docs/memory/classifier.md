@@ -603,7 +603,7 @@ whole Send and keeps the user's text in the composer. The mark lives
 in memory: after a restart, the next Send finds the pass due and runs
 it first anyway ([Failure policy](#failure-policy)). A pass cancelled before its writes commits nothing; one
 cancelled during them reverses its own group, as any aborted run does.
-An interrupted pass uses no retry and leaves the watermark; it restores
+An interrupted pass leaves the watermark; it restores
 its pre-run status through the pipeline's `onInterrupt` hook, which runs
 after that reversal has committed. A reversal that cannot commit skips
 the hook and leaves the branch `running` for boot recovery
@@ -708,7 +708,11 @@ so the status is operational state outside the reversal log.
 the classifier has fully processed; the pass range is
 `(processedThrough, head]`. It is the concrete field behind "unprocessed
 entries," read by the cadence trigger, Send's check for an owed pass,
-`[Run classifier now]`, and chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
+`[Run classifier now]`, and chapter-close phase 0. A pass's range excludes
+trailing `system` rows: an untruncated window covers through its last
+non-system entry, so the watermark never lands on a trailing system row
+whose position the next Send's user_action reuses (a truncated window
+still claims its cut). A successful pass over `(processedThrough, E]` sets
 `processedThrough = E` in its commit transaction, in the same write as its
 success status. A prose reversal clamps
 it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`

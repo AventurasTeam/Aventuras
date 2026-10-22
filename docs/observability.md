@@ -294,7 +294,8 @@ convention, and the expectation that subsystems route through
   row's removal) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `undo_failed`, `redo_failed`,
-  `rollback_failed`, `regenerate_failed`
+  `rollback_failed`, `regenerate_failed`, `pass_retry_failed`
+  (a pass-failure entry's Retry, which runs the pass alone)
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log

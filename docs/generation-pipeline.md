@@ -2098,8 +2098,8 @@ run's abort then records it in `txState.deferred` for its branch
 ([Multi-run txState](#multi-run-txstate)), so the next Send runs it
 before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),
 and a toast says the memory update, or the chapter close, moved to
-the next turn. An interrupted pass restores its pre-run status, uses no
-retry and leaves the watermark where it was. The status is restored by
+the next turn. An interrupted pass restores its pre-run status and
+leaves the watermark where it was. The status is restored by
 the pipeline's `onInterrupt` hook, which the orchestrator runs after
 the abort's reversal has committed and before the run releases the
 gate; a reversal that cannot commit skips it and leaves the pass
