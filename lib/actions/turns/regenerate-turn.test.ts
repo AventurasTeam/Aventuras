@@ -17,6 +17,7 @@ import {
 import { logger } from '@/lib/diagnostics'
 import {
   CLASSIFIER_HELD,
+  isClassifierHeld,
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
@@ -33,7 +34,12 @@ import {
 } from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/fixtures'
-import { registerStandInPass, registerStoreOnlyRun, runningPass } from './__tests__/stand-in-pass'
+import {
+  failReversalsOf,
+  registerStandInPass,
+  registerStoreOnlyRun,
+  runningPass,
+} from './__tests__/stand-in-pass'
 import { regenerateTurn } from './regenerate-turn'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
@@ -434,6 +440,42 @@ describe('regenerateTurn', () => {
     expect(entriesStore.getById('e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
     expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // The early check saw a live pass; the interrupt's uncommitted reversal is what holds the branch.
+  it('refuses a branch its interrupt leaves held, sweeping nothing and starting no turn', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const pass = registerStandInPass({ anchorEntryId: 'e_r1', statusLifecycle: true })
+    failReversalsOf(pass)
+    const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    const held = await pass.nextHeld()
+    const swept = vi.fn()
+
+    const regen = await withSweepHook(swept, () =>
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(await start.origin).toMatchObject({ outcome: 'failed', actionId: held.actionId })
+    expect(await isClassifierHeld('b1', ctx)).toBe(true)
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: CLASSIFIER_HELD,
+      reason: 'classifier held',
+    })
+    expect(swept).not.toHaveBeenCalled()
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    const replies = await ctx.db
+      .select({ id: storyEntries.id })
+      .from(storyEntries)
+      .where(eq(storyEntries.kind, 'ai_reply'))
+    expect(replies.map((r) => r.id).sort()).toEqual(['e_r1', 'e_r2'])
+    expect(
+      await ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.kind, PER_TURN_KIND)),
+    ).toEqual([])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
 

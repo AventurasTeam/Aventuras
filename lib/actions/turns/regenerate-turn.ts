@@ -168,15 +168,23 @@ export async function regenerateTurn(
         // opened during them would otherwise throw this one out of its bracket as re-entry.
         if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
-          let swept: { status: 'ok' } | StoryEntryRejection | CountsChangedRejection
+          let swept:
+            | { status: 'ok' }
+            | StoryEntryRejection
+            | CountsChangedRejection
+            | typeof HELD_REJECTION
           try {
-            swept = await bracketProseReversal(ids.branchId, () =>
-              sweepFrom(ids.branchId, replyEntryId, ctx, opts?.expectedCounts),
+            swept = await bracketProseReversal(ids.branchId, async () =>
+              // The interrupt can itself leave the branch held: a pass whose reversal didn't commit.
+              (await isClassifierHeld(ids.branchId, ctx))
+                ? HELD_REJECTION
+                : sweepFrom(ids.branchId, replyEntryId, ctx, opts?.expectedCounts),
             )
           } catch (error) {
             if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
             throw error
           }
+          if (swept === HELD_REJECTION) return swept
           if (swept.status === 'rejected')
             return swept.code === STORY_ENTRY_REJECTION.countsChanged
               ? swept
