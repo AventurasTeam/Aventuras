@@ -78,7 +78,7 @@ type ReaderRowProps = {
   onRequestRollback: (entryId: string) => Promise<void>
   onRegenerate: (entryId: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
-  onRetrySystemEntry: () => Promise<void>
+  onRetrySystemEntry?: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
 }
 
@@ -163,7 +163,7 @@ const ReaderRow = memo(function ReaderRow({
           ? { label: systemFixLabel, onPress: () => void onFixSystemEntry() }
           : undefined
       }
-      onRetry={isSystem ? () => void onRetrySystemEntry() : undefined}
+      onRetry={isSystem && onRetrySystemEntry != null ? () => void onRetrySystemEntry() : undefined}
       onDismiss={isSystem ? () => void onDismissSystemEntry() : undefined}
       worldTimeLabel={worldTimeLabel}
       worldTimeRaw={timeEditable ? worldTimeRaw : undefined}
