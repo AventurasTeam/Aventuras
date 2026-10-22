@@ -64,7 +64,7 @@ interface Pipeline {
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
   // a phase threw; runs once its rollback has committed, before the run releases
   onPhaseException?: (
-    ctx,
+    ctx: { db: DbCtx['db']; branchId: string; actionId: string },
     error: Extract<PipelineError, { kind: 'action-layer' | 'orchestrator' }>,
   ) => Promise<void>
   // a user Cancel or a head reversal ended me; runs once the abort's reversal has committed, before the run releases
@@ -127,6 +127,7 @@ type PipelineEvent =
       runId: string
       kind: string
       actionId: string
+      beforeTurn: boolean // Send's work before the turn (RunState.beforeTurn); false for a chained successor
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError
     }
