@@ -59,6 +59,28 @@ describe('store writes', () => {
   })
 })
 
+describe('a lore management session', () => {
+  const body = () => bodyOf('saveLoreSession')
+
+  it('records its writes', () => {
+    expect(body()).toContain('this.recordContext(opts)')
+  })
+
+  it('plans the merges and deletes after the updates', () => {
+    expect(body().indexOf('for (const entry of writes.updates)')).toBeLessThan(
+      body().indexOf('for (const { sourceIds, merged } of writes.merges)'),
+    )
+  })
+
+  it('commits once, and shows nothing unless that commit lands', () => {
+    expect(body().match(/await this\.commit\(/g)).toHaveLength(1)
+    expect(body()).not.toMatch(/await database\./)
+    // And only on the lorebook still open, not the copy taken before the await.
+    expect(body().indexOf('await this.commit(')).toBeLessThan(body().indexOf('this.isOpen('))
+    expect(body().indexOf('this.isOpen(')).toBeLessThan(body().indexOf('this.lorebookEntries = ['))
+  })
+})
+
 describe('chapter lore', () => {
   it("lands on the chapter's last entry", () => {
     expect(bodyOf('latestChapterEndEntryId')).toContain('newest?.endEntryId')
@@ -135,11 +157,10 @@ describe('past checkpoints', () => {
 })
 
 describe('deleting one entry', () => {
-  it('breaks the run when the entry had records and no rollback is made', () => {
-    expect(bodyOf('deleteEntry')).toContain('records: await this.breakForUnrevertedDelete(')
-    const body = bodyOf('breakForUnrevertedDelete')
-    expect(body).toContain('database.entryHasWorldStateRecords(entry.id)')
-    expect(body).toContain('breakRecord(')
+  it('moves the records to a neighbouring entry when no rollback is made', () => {
+    expect(bodyOf('deleteEntry')).toContain(
+      'recordsTo: recordsHolder(this.entries, existingEntry)?.id',
+    )
   })
 })
 

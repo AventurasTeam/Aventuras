@@ -1,6 +1,13 @@
 import Database from '@tauri-apps/plugin-sql'
 import { invoke } from '@tauri-apps/api/core'
-import { RECORD_COLUMNS, recordToRow, rowToRecord } from './stateTracking'
+import {
+  RECORD_COLUMNS,
+  markRecord,
+  markToRow,
+  recordToRow,
+  rowToMark,
+  rowToRecord,
+} from './stateTracking'
 import type {
   Story,
   StoryEntry,
@@ -31,6 +38,7 @@ import type {
   VaultConversation,
   VisualDescriptors,
   WorldStateSnapshot,
+  WorldStateMark,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 import type {
@@ -87,22 +95,35 @@ function statement(sql: string, params: unknown[]): DbStatement {
   return { sql, params }
 }
 
-/** `DELETE ... IN (...)` split into chunks that stay under SQLite's bound-parameter limit. */
-function deleteInStatements(
-  table: string,
-  column: string,
+/** `branch_id` matching one of `branchIds`, `null` being the main branch; null for none. */
+function branchClause(branchIds: (string | null)[]): { sql: string; params: string[] } | null {
+  const named = branchIds.filter((id): id is string => id !== null)
+  const clauses = [
+    ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
+    ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
+  ]
+  return clauses.length > 0 ? { sql: `(${clauses.join(' OR ')})`, params: named } : null
+}
+
+/** Statements over `ids` in chunks that stay under SQLite's bound-parameter limit. */
+function chunkedStatements(
   ids: string[],
-): { sql: string; params: unknown[] }[] {
+  build: (slice: string[], placeholders: string) => DbStatement[],
+): DbStatement[] {
   const CHUNK = 500
-  const statements: { sql: string; params: unknown[] }[] = []
+  const statements: DbStatement[] = []
   for (let i = 0; i < ids.length; i += CHUNK) {
     const slice = ids.slice(i, i + CHUNK)
-    statements.push({
-      sql: `DELETE FROM ${table} WHERE ${column} IN (${slice.map(() => '?').join(',')})`,
-      params: slice,
-    })
+    statements.push(...build(slice, slice.map(() => '?').join(',')))
   }
   return statements
+}
+
+/** `DELETE ... IN (...)`, chunked. */
+function deleteInStatements(table: string, column: string, ids: string[]): DbStatement[] {
+  return chunkedStatements(ids, (slice, list) => [
+    statement(`DELETE FROM ${table} WHERE ${column} IN (${list})`, slice),
+  ])
 }
 
 /**
@@ -737,8 +758,8 @@ class DatabaseService {
     const db = await this.getDb()
     const now = Date.now()
     await db.execute(
-      `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, world_state_delta, suggested_actions)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, suggested_actions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.storyId,
@@ -753,7 +774,6 @@ class DatabaseService {
         entry.translatedContent || null,
         entry.translationLanguage || null,
         entry.originalInput || null,
-        entry.worldStateDelta ? JSON.stringify(entry.worldStateDelta) : null,
         entry.suggestedActions || null,
       ],
     )
@@ -843,10 +863,6 @@ class DatabaseService {
       setClauses.push('original_input = ?')
       values.push(updates.originalInput || null)
     }
-    if (updates.worldStateDelta !== undefined) {
-      setClauses.push('world_state_delta = ?')
-      values.push(updates.worldStateDelta ? JSON.stringify(updates.worldStateDelta) : null)
-    }
     if (updates.suggestedActions !== undefined) {
       setClauses.push('suggested_actions = ?')
       values.push(updates.suggestedActions || null)
@@ -918,7 +934,7 @@ class DatabaseService {
 
     for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
       const batch = entries.slice(batchStart, batchStart + BATCH_SIZE)
-      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
       const values: unknown[] = []
 
       for (const entry of batch) {
@@ -936,13 +952,12 @@ class DatabaseService {
           entry.translatedContent || null,
           entry.translationLanguage || null,
           entry.originalInput || null,
-          entry.worldStateDelta ? JSON.stringify(entry.worldStateDelta) : null,
           entry.suggestedActions || null,
         )
       }
 
       await db.execute(
-        `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, world_state_delta, suggested_actions)
+        `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, suggested_actions)
          VALUES ${valuePlaceholders}`,
         values,
       )
@@ -1473,9 +1488,9 @@ class DatabaseService {
     return (result[0]?.maxNum ?? 0) + 1
   }
 
-  async addChapter(chapter: Chapter): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
+  /** `mark: false` leaves its mark to the caller, as an import placing the file's does. */
+  async addChapter(chapter: Chapter, opts: { mark?: boolean } = {}): Promise<void> {
+    const insert = statement(
       `INSERT INTO chapters (
         id, story_id, number, title, start_entry_id, end_entry_id, entry_count,
         summary, start_time, end_time, keywords, characters, locations, plot_threads, emotional_tone,
@@ -1501,6 +1516,19 @@ class DatabaseService {
         chapter.createdAt,
       ],
     )
+    const scope = { storyId: chapter.storyId, branchId: chapter.branchId || null }
+    await this.insertMarked(
+      insert,
+      opts.mark === false
+        ? null
+        : markRecord({ ...scope, entryId: chapter.endEntryId }, 'chapter', chapter.id),
+    )
+  }
+
+  /** An insert and, unless `mark` is null, the mark placing it in the write order, together. */
+  private async insertMarked(insert: DbStatement, mark: WorldStateMark | null): Promise<void> {
+    if (!mark) return this.runStatement(insert)
+    await this.transaction([insert, this.worldStateMarkStatement(mark)])
   }
 
   async updateChapter(id: string, updates: Partial<Chapter>): Promise<void> {
@@ -1550,9 +1578,12 @@ class DatabaseService {
     await db.execute(`UPDATE chapters SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
+  deleteChapterStatement(id: string): DbStatement {
+    return statement('DELETE FROM chapters WHERE id = ?', [id])
+  }
+
   async deleteChapter(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM chapters WHERE id = ?', [id])
+    await this.runStatement(this.deleteChapterStatement(id))
   }
 
   // Checkpoint operations
@@ -1598,9 +1629,15 @@ class DatabaseService {
     return results.map(this.mapCheckpointRecord)
   }
 
-  async createCheckpoint(checkpoint: CheckpointRecord): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
+  /**
+   * `mark` places a checkpoint of the live state in the write order, on the branch whose state it
+   * holds. One rebuilt from the records gets none: it holds no state the records lack.
+   */
+  async createCheckpoint(
+    checkpoint: CheckpointRecord,
+    mark?: { branchId: string | null },
+  ): Promise<void> {
+    const insert = statement(
       `INSERT INTO checkpoints (
         id, story_id, name, last_entry_id, last_entry_preview, entry_count,
         entries_snapshot, characters_snapshot, locations_snapshot,
@@ -1627,6 +1664,11 @@ class DatabaseService {
         checkpoint.createdAt,
       ],
     )
+    const scope = { storyId: checkpoint.storyId, entryId: checkpoint.lastEntryId }
+    await this.insertMarked(
+      insert,
+      mark ? markRecord({ ...scope, branchId: mark.branchId }, 'checkpoint', checkpoint.id) : null,
+    )
   }
 
   async renameCheckpoint(id: string, name: string): Promise<void> {
@@ -1651,14 +1693,31 @@ class DatabaseService {
 
   // ===== World State Change Records =====
 
-  /** Appends a record; `seq` continues the story's write order inside the same statement. */
-  worldStateRecordStatement(record: WorldStateRecord): DbStatement {
+  /** Appends a row; `seq` continues the story's write order inside the same statement. */
+  private worldStateRowStatement(storyId: string, row: unknown[]): DbStatement {
     return statement(
       `INSERT INTO world_state_changes (${RECORD_COLUMNS.join(', ')}, seq)
        VALUES (${RECORD_COLUMNS.map(() => '?').join(', ')},
          (SELECT COALESCE(MAX(seq), 0) + 1 FROM world_state_changes WHERE story_id = ?))`,
-      [...recordToRow(record), record.storyId],
+      [...row, storyId],
     )
+  }
+
+  worldStateRecordStatement(record: WorldStateRecord): DbStatement {
+    return this.worldStateRowStatement(record.storyId, recordToRow(record))
+  }
+
+  worldStateMarkStatement(mark: WorldStateMark): DbStatement {
+    return this.worldStateRowStatement(mark.storyId, markToRow(mark))
+  }
+
+  /** Removes rows from the history by id, as when a live revert invalidates them. */
+  deleteWorldStateRecordsStatements(ids: string[]): DbStatement[] {
+    return deleteInStatements('world_state_changes', 'id', ids)
+  }
+
+  deleteWorldStateSnapshotsStatements(ids: string[]): DbStatement[] {
+    return deleteInStatements('world_state_snapshots', 'id', ids)
   }
 
   /** Records written on the given branches, in write order. */
@@ -1668,27 +1727,28 @@ class DatabaseService {
     kinds?: WorldStateRecord['kind'][],
     /** Only records on entries at or after this position, on any branch. */
     fromPosition?: number,
+    /** Only records written after this one. */
+    afterSeq?: number,
   ): Promise<WorldStateRecord[]> {
     const db = await this.getDb()
-    const named = branchIds.filter((id): id is string => id !== null)
-    const clauses = [
-      ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
-      ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
-    ]
-    if (clauses.length === 0) return []
+    const branches = branchClause(branchIds)
+    if (!branches) return []
     const kindClause = kinds ? ` AND kind IN (${kinds.map(() => '?').join(', ')})` : ''
     const positionClause =
       fromPosition === undefined
         ? ''
         : ' AND entry_id IN (SELECT id FROM story_entries WHERE story_id = ? AND position >= ?)'
+    const seqClause = afterSeq === undefined ? '' : ' AND seq > ?'
     const rows = await db.select<Record<string, unknown>[]>(
-      `SELECT * FROM world_state_changes WHERE story_id = ? AND (${clauses.join(' OR ')})${kindClause}${positionClause}
+      `SELECT * FROM world_state_changes WHERE story_id = ? AND kind <> 'mark'
+       AND ${branches.sql}${kindClause}${positionClause}${seqClause}
        ORDER BY seq ASC`,
       [
         storyId,
-        ...named,
+        ...branches.params,
         ...(kinds ?? []),
         ...(fromPosition === undefined ? [] : [storyId, fromPosition]),
+        ...(afterSeq === undefined ? [] : [afterSeq]),
       ],
     )
     return rows.map(rowToRecord)
@@ -1697,19 +1757,35 @@ class DatabaseService {
   async getWorldStateRecordsForStory(storyId: string): Promise<WorldStateRecord[]> {
     const db = await this.getDb()
     const rows = await db.select<Record<string, unknown>[]>(
-      'SELECT * FROM world_state_changes WHERE story_id = ? ORDER BY seq ASC',
+      "SELECT * FROM world_state_changes WHERE story_id = ? AND kind <> 'mark' ORDER BY seq ASC",
       [storyId],
     )
     return rows.map(rowToRecord)
   }
 
-  async entryHasWorldStateRecords(entryId: string): Promise<boolean> {
+  /** The marks on the given branches, in write order. */
+  async getWorldStateMarks(
+    storyId: string,
+    branchIds: (string | null)[],
+  ): Promise<WorldStateMark[]> {
     const db = await this.getDb()
-    const rows = await db.select<{ n: number }[]>(
-      'SELECT COUNT(*) AS n FROM world_state_changes WHERE entry_id = ? LIMIT 1',
-      [entryId],
+    const branches = branchClause(branchIds)
+    if (!branches) return []
+    const rows = await db.select<Record<string, unknown>[]>(
+      `SELECT * FROM world_state_changes WHERE story_id = ? AND kind = 'mark'
+       AND ${branches.sql} ORDER BY seq ASC`,
+      [storyId, ...branches.params],
     )
-    return (rows[0]?.n ?? 0) > 0
+    return rows.map(rowToMark)
+  }
+
+  async getWorldStateMarksForStory(storyId: string): Promise<WorldStateMark[]> {
+    const db = await this.getDb()
+    const rows = await db.select<Record<string, unknown>[]>(
+      "SELECT * FROM world_state_changes WHERE story_id = ? AND kind = 'mark' ORDER BY seq ASC",
+      [storyId],
+    )
+    return rows.map(rowToMark)
   }
 
   /** Branches of any story with a record written at or after `since`. */
@@ -1718,7 +1794,7 @@ class DatabaseService {
   ): Promise<{ storyId: string; branchId: string | null }[]> {
     const db = await this.getDb()
     const rows = await db.select<{ story_id: string; branch_id: string | null }[]>(
-      'SELECT DISTINCT story_id, branch_id FROM world_state_changes WHERE created_at >= ?',
+      "SELECT DISTINCT story_id, branch_id FROM world_state_changes WHERE created_at >= ? AND kind <> 'mark'",
       [since],
     )
     return rows.map((r) => ({ storyId: r.story_id, branchId: r.branch_id ?? null }))
@@ -1767,8 +1843,7 @@ class DatabaseService {
   // ===== World State Snapshots (Phase 1) =====
 
   async createWorldStateSnapshot(snapshot: WorldStateSnapshot): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
+    const insert = statement(
       `INSERT INTO world_state_snapshots (
         id, story_id, branch_id, entry_id, entry_position,
         characters_snapshot, locations_snapshot, items_snapshot,
@@ -1790,6 +1865,12 @@ class DatabaseService {
         snapshot.createdAt,
       ],
     )
+    const scope = {
+      storyId: snapshot.storyId,
+      branchId: snapshot.branchId ?? null,
+      entryId: snapshot.entryId,
+    }
+    await this.insertMarked(insert, markRecord(scope, 'snapshot', snapshot.id))
   }
 
   async getWorldStateSnapshots(
@@ -1827,17 +1908,10 @@ class DatabaseService {
     position: number,
   ): Promise<void> {
     const db = await this.getDb()
-    if (branchId === null) {
-      await db.execute(
-        'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL AND entry_position > ?',
-        [storyId, position],
-      )
-    } else {
-      await db.execute(
-        'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id = ? AND entry_position > ?',
-        [storyId, branchId, position],
-      )
-    }
+    await db.execute(
+      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS ? AND entry_position > ?',
+      [storyId, branchId, position],
+    )
   }
 
   async deleteWorldStateSnapshotsForBranch(branchId: string): Promise<void> {
@@ -2751,16 +2825,31 @@ class DatabaseService {
     entryIds,
     chapterIds = [],
     checkpointIds = [],
-    records = [],
+    recordsTo,
   }: {
     entryIds: string[]
     chapterIds?: string[]
     checkpointIds?: string[]
-    /** Written in the same transaction, on entries that stay. */
-    records?: WorldStateRecord[]
+    /**
+     * The entry the deleted entries' changes and breaks move to, their effects staying live, with
+     * a header that marks a gap or a converted one: it is the only record of the gap, or of the
+     * changes being the classifier's alone. Other headers go with their entry. Without it, every
+     * record goes.
+     */
+    recordsTo?: string
   }): Promise<void> {
+    const moves = recordsTo
+      ? chunkedStatements(entryIds, (slice, list) => [
+          statement(
+            `UPDATE world_state_changes SET entry_id = ?
+             WHERE (kind IN ('change', 'break') OR (kind = 'header' AND continuous = 0))
+               AND entry_id IN (${list})`,
+            [recordsTo, ...slice],
+          ),
+        ])
+      : []
     await this.transaction([
-      ...records.map((r) => this.worldStateRecordStatement(r)),
+      ...moves,
       // Chapters first: `start_entry_id` and `end_entry_id` are foreign keys to story_entries.
       ...deleteInStatements('chapters', 'id', chapterIds),
       ...deleteInStatements('checkpoints', 'id', checkpointIds),
@@ -2984,8 +3073,6 @@ class DatabaseService {
       translatedContent: row.translated_content || null,
       translationLanguage: row.translation_language || null,
       originalInput: row.original_input || null,
-      // Phase 1: World state delta
-      worldStateDelta: row.world_state_delta ? JSON.parse(row.world_state_delta) : null,
       // Persisted action suggestions for time-travel
       suggestedActions: row.suggested_actions || null,
     }

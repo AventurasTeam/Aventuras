@@ -105,6 +105,7 @@
         data.packBinding,
         data.timeAnchors,
         data.worldStateRecords,
+        data.worldStateMarks,
       )
     }, 'Aventuras (.avt)')
   }

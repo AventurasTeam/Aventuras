@@ -55,14 +55,13 @@ describe('ChapterCards', () => {
     expect(notify.mock.calls[0][0]).toContain('no chapter was created')
   })
 
-  it('records incomplete lore with its reason and change count, and warns naming the chapter', () => {
+  it('records incomplete lore with its reason, and warns naming the chapter', () => {
     const { store, card, notify } = cards()
     store.summarized(card.id, chapter)
-    store.loreIncomplete(card.id, 'provider down', 2)
+    store.loreIncomplete(card.id, 'provider down')
     expect(store.get(card.id)).toMatchObject({
       phase: 'lore-incomplete',
       reason: 'provider down',
-      loreChangeCount: 2,
     })
     expect(notify).toHaveBeenCalledTimes(1)
     expect(notify.mock.calls[0][0]).toContain('Chapter 7 was created')
@@ -71,22 +70,13 @@ describe('ChapterCards', () => {
   it('goes back to lore on a restart, and warns again if that run fails too', () => {
     const { store, card, notify } = cards()
     store.summarized(card.id, chapter)
-    store.loreIncomplete(card.id, 'provider down', 0)
+    store.loreIncomplete(card.id, 'provider down')
 
     store.loreRestarted(card.id)
     expect(store.get(card.id)).toMatchObject({ phase: 'lore', reason: null, loreRuns: 2 })
 
-    store.loreIncomplete(card.id, 'still down', 0)
+    store.loreIncomplete(card.id, 'still down')
     expect(notify).toHaveBeenCalledTimes(2)
-  })
-
-  it('keeps counting the lore changes of every incomplete run', () => {
-    const { store, card } = cards()
-    store.summarized(card.id, chapter)
-    store.loreIncomplete(card.id, 'down', 3)
-    store.loreRestarted(card.id)
-    store.loreIncomplete(card.id, 'refused', 0)
-    expect(store.get(card.id)?.loreChangeCount).toBe(3)
   })
 
   it('finds the cards reporting a chapter', () => {
@@ -109,7 +99,7 @@ describe('ChapterCards', () => {
       expect(store.pending('s', 'b')).toBe(true)
       store.summarized(card.id, chapter)
       expect(store.pending('s', 'b')).toBe(true)
-      store.loreIncomplete(card.id, 'down', 0)
+      store.loreIncomplete(card.id, 'down')
       expect(store.pending('s', 'b')).toBe(false)
       store.loreRestarted(card.id)
       expect(store.pending('s', 'b')).toBe(true)

@@ -30,6 +30,7 @@ const db = {
   getChapters: vi.fn(),
   getTimeAnchors: vi.fn(),
   getWorldStateRecordsForStory: vi.fn(),
+  getWorldStateMarksForStory: vi.fn(),
   getStoryPackId: vi.fn(),
   getPack: vi.fn(),
   getPackVariables: vi.fn(),
@@ -62,6 +63,7 @@ function baseline() {
   db.getChapters.mockResolvedValue([])
   db.getTimeAnchors.mockResolvedValue([])
   db.getWorldStateRecordsForStory.mockResolvedValue([])
+  db.getWorldStateMarksForStory.mockResolvedValue([])
   db.getStoryPackId.mockResolvedValue(null)
   db.getPack.mockResolvedValue(null)
   db.getPackVariables.mockResolvedValue([])

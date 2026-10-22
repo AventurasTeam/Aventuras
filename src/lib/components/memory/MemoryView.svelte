@@ -8,6 +8,7 @@
   import MemorySettings from './MemorySettings.svelte'
   import ChapterCard from './ChapterCard.svelte'
   import ManualChapterModal from './ManualChapterModal.svelte'
+  import DeleteChapterModal from './DeleteChapterModal.svelte'
   import ResummarizeModal from './ResummarizeModal.svelte'
   import { BookOpen, ArrowLeft } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -23,14 +24,14 @@
   }
 
   // Handle manual chapter creation
-  async function handleCreateManualChapter(endEntryIndex: number) {
+  async function handleCreateManualChapter(endEntryIndex: number, readAfter: boolean) {
     ui.setMemoryLoading(true)
     try {
       const chapter = await story.createManualChapter(endEntryIndex)
       ui.closeManualChapterModal()
 
       // A refused creation leaves nothing new to read: the pass would be a wasted call.
-      if (chapter) void runManualLoreManagement(chapter)
+      if (chapter) void runManualLoreManagement(chapter, undefined, { readAfterChapter: readAfter })
     } finally {
       ui.setMemoryLoading(false)
     }
@@ -133,6 +134,8 @@
       onClose={() => ui.closeManualChapterModal()}
     />
   {/if}
+
+  <DeleteChapterModal />
 
   {#if ui.resummarizeModalOpen}
     <ResummarizeModal

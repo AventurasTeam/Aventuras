@@ -5,6 +5,8 @@ import type {
   WorldStateBreakRecord,
   WorldStateChangeRecord,
   WorldStateHeaderRecord,
+  WorldStateMark,
+  WorldStateMarkType,
 } from '#lib/types/index.ts'
 import { TRACKED_ENTITY_TYPES, canonicalId, rowsOf, type TrackedState } from './state'
 
@@ -54,6 +56,26 @@ export function headerRecord(
     kind: 'header',
     ...fields,
     coverage: 'full',
+  }
+}
+
+/** A mark's id follows from what it marks: deleting that deletes the mark (migration 041). */
+export function markId(entityType: WorldStateMarkType, entityId: string): string {
+  return `mark:${entityType}:${entityId}`
+}
+
+export function markRecord(
+  scope: RecordScope,
+  entityType: WorldStateMarkType,
+  entityId: string,
+): WorldStateMark {
+  return {
+    id: markId(entityType, entityId),
+    ...scope,
+    seq: 0,
+    entityType,
+    entityId,
+    createdAt: Date.now(),
   }
 }
 

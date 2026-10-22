@@ -2,13 +2,15 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
+  import ModalActions from '#lib/components/shared/ModalActions.svelte'
+  import { BookPlus } from '@lucide/svelte'
   import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
   import { Badge } from '#lib/components/ui/badge/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
-    onConfirm: (endEntryIndex: number) => void
+    onConfirm: (endEntryIndex: number, readAfter: boolean) => void
     onClose: () => void
   }
 
@@ -22,6 +24,9 @@
   })
 
   const entries = $derived(availableEntries())
+
+  // Off by default, so chaining chapters by hand does not read each tail twice.
+  let readAfter = $state(false)
 
   // Selected entry index (relative to available entries)
   let selectedIndex = $derived(Math.max(0, entries.length - 1))
@@ -37,7 +42,7 @@
     if (entries.length === 0) return
     // Convert to absolute index
     const absoluteIndex = story.lastChapterEndIndex + selectedIndex + 1
-    onConfirm(absoluteIndex)
+    onConfirm(absoluteIndex, readAfter)
   }
 </script>
 
@@ -51,13 +56,14 @@
       </ResponsiveModal.Description>
     </ResponsiveModal.Header>
 
-    <div class="min-h-0 flex-1">
+    <!-- Buttons scroll with the content, so a phone reaches the switch above them. -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
       {#if entries.length === 0}
         <div class="text-muted-foreground flex h-40 items-center justify-center">
           No entries available for chapter creation.
         </div>
       {:else}
-        <ScrollArea class="h-[50vh] p-4">
+        <ScrollArea class="h-[50dvh] p-4">
           <div class="space-y-1">
             {#each entries as entry, idx (entry.id)}
               <button
@@ -88,18 +94,21 @@
         <div class="text-muted-foreground bg-muted/20 border-t px-4 py-2 text-xs">
           Chapter will include {selectedIndex + 1} of {entries.length} entries
         </div>
+        <label class="flex items-center gap-2 border-t px-4 py-3 text-sm">
+          <Switch bind:checked={readAfter} disabled={ui.memoryLoading} />
+          Lore management reads the story after this chapter
+        </label>
       {/if}
-    </div>
 
-    <ResponsiveModal.Footer class="mt-auto border-t px-4 py-4">
-      <Button variant="outline" onclick={onClose}>Cancel</Button>
-      <Button onclick={handleConfirm} disabled={entries.length === 0 || ui.memoryLoading}>
-        {#if ui.memoryLoading}
-          Creating...
-        {:else}
-          Create Chapter
-        {/if}
-      </Button>
-    </ResponsiveModal.Footer>
+      <ModalActions
+        label="Create Chapter"
+        icon={BookPlus}
+        onCancel={onClose}
+        onConfirm={handleConfirm}
+        busy={ui.memoryLoading}
+        cancelWhileBusy
+        disabled={entries.length === 0}
+      />
+    </div>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

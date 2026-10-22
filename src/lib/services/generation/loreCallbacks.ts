@@ -56,26 +56,9 @@ export function buildLoreManagementCallbacks(
 ): LoreManagementCallbacks {
   const resolve = typeof recordOrResolve === 'function' ? recordOrResolve : () => recordOrResolve
   return {
-    // `addLorebookEntry` assigns its own id, storyId and timestamps over whatever is
-    // passed, so handing it the entry whole is both shorter and safer than listing the
-    // fields to keep — a field added to `Entry` is carried without touching this.
-    onCreateEntry: async (entry) => {
-      assertScope(scope, `create "${entry.name}"`)
-      await story.addLorebookEntry(entry, resolve())
-    },
-    onUpdateEntry: async (id, updates) => {
-      assertScope(scope, `update entry ${id}`)
-      await story.updateLorebookEntry(id, updates, resolve())
-    },
-    onDeleteEntry: async (id) => {
-      assertScope(scope, `delete entry ${id}`)
-      await story.deleteLorebookEntry(id, resolve())
-    },
-    // Survivor first: deleting first loses every source if the insert then fails.
-    onMergeEntries: async (entryIds, mergedEntry) => {
-      assertScope(scope, `merge into "${mergedEntry.name}"`)
-      await story.addLorebookEntry(mergedEntry, resolve())
-      await story.deleteLorebookEntries(entryIds, resolve())
+    onSaveSession: async (writes) => {
+      assertScope(scope, 'save the lore management session')
+      await story.saveLoreSession(writes, resolve())
     },
     // The user's dismissals and the agent's are the same decision, so they share a table.
     // Addressed by scope directly: no store involved, so there is nothing to be stale.
@@ -126,12 +109,24 @@ export type LoreProgressTarget = 'panel' | { onStatus: (status: string | null) =
 export function buildLoreManagementUICallbacks(
   target: LoreProgressTarget = 'panel',
 ): LoreManagementUICallbacks {
+  const failed: LoreManagementUICallbacks['onError'] = (error, session) =>
+    ui.setLoreManagementError(
+      error,
+      session
+        ? {
+            storyId: session.chapter.storyId,
+            branchId: session.chapter.branchId ?? null,
+            chapterId: session.chapter.id,
+            readAfterChapter: session.readAfterChapter,
+          }
+        : null,
+    )
   if (target === 'panel') {
     return {
       onStart: ui.startLoreManagement.bind(ui),
       onProgress: ui.updateLoreManagementProgress.bind(ui),
       onSummary: ui.setLoreManagementSummary.bind(ui),
-      onError: ui.setLoreManagementError.bind(ui),
+      onError: failed,
       onComplete: ui.finishLoreManagement.bind(ui),
     }
   }
@@ -144,9 +139,9 @@ export function buildLoreManagementUICallbacks(
     // after this, and `onComplete` sets the status back to null in the same tick — so a
     // failure written only there is erased before anyone reads it. The stored error
     // outlives the run and is what the lorebook view shows.
-    onError: (err) => {
+    onError: (err, session) => {
       target.onStatus(`Lore management failed: ${err}`)
-      ui.setLoreManagementError(err)
+      failed(err, session)
     },
     onComplete: () => target.onStatus(null),
   }

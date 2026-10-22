@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Chapter, StoryEntry, TimeTracker, WorldStateDelta } from '#lib/types/index.ts'
+import type { Chapter, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import type { Checkpoint } from '#lib/types/index.ts'
 import {
   planReconciliation,
@@ -14,12 +14,7 @@ function t(hours: number, minutes = 0): TimeTracker {
   return { years: 0, days: 0, hours, minutes }
 }
 
-function entry(
-  id: string,
-  start: TimeTracker,
-  end: TimeTracker,
-  delta?: WorldStateDelta,
-): StoryEntry {
+function entry(id: string, start: TimeTracker, end: TimeTracker): StoryEntry {
   return {
     id,
     storyId: 's1',
@@ -30,27 +25,11 @@ function entry(
     createdAt: 0,
     metadata: { timeStart: start, timeEnd: end, tokenCount: 7 },
     branchId: null,
-    worldStateDelta: delta ?? null,
   } as StoryEntry
 }
 
 function checkpoint(id: string, lastEntryId: string, snapshot: TimeTracker | null): Checkpoint {
   return { id, storyId: 's1', name: id, lastEntryId, timeTrackerSnapshot: snapshot } as Checkpoint
-}
-
-function delta(before: TimeTracker | null): WorldStateDelta {
-  return {
-    classificationResult: { scene: { timeProgression: 'hours' } },
-    previousState: {
-      characters: [{ id: 'c1', name: 'Mira' }],
-      locations: [],
-      items: [],
-      storyBeats: [],
-      currentLocationId: 'loc-1',
-      timeTracker: before,
-    },
-    createdEntities: { characterIds: ['c9'], locationIds: [], itemIds: [], storyBeatIds: [] },
-  } as unknown as WorldStateDelta
 }
 
 function reconciled(id: string, start: TimeTracker, end: TimeTracker): ReconciledTime {
@@ -109,59 +88,6 @@ describe('planReconciliation', () => {
     })
     expect(plan.chapterSpans).toEqual([])
   })
-
-  it('rewrites the clock inside a delta to the reconciled beginning of its entry', () => {
-    const withDelta = [entries[0], entry('B', t(1), t(2), delta(t(1))), entries[2], entries[3]]
-    const plan = planReconciliation({
-      entries: withDelta,
-      chapters: [],
-      times: [reconciled('B', t(4), t(5))],
-    })
-    expect(plan.deltas).toHaveLength(1)
-    expect(plan.deltas[0].delta.previousState.timeTracker).toEqual(t(4))
-  })
-
-  it('preserves everything in a delta except its in-story time', () => {
-    const original = delta(t(1))
-    const withDelta = [entries[0], entry('B', t(1), t(2), original), entries[2], entries[3]]
-    const plan = planReconciliation({
-      entries: withDelta,
-      chapters: [],
-      times: [reconciled('B', t(4), t(5))],
-    })
-
-    const before = JSON.parse(JSON.stringify(original))
-    const after = JSON.parse(JSON.stringify(plan.deltas[0].delta))
-    before.previousState.timeTracker = null
-    after.previousState.timeTracker = null
-    expect(JSON.stringify(after)).toBe(JSON.stringify(before))
-  })
-
-  // The rollback guarantee is scoped to the range. An entry after it keeps the clock recorded
-  // in its own delta, so a rollback starting there restores the old value -- the outer join
-  // a reconciliation deliberately leaves open, not a defect.
-  it('leaves the delta of the entry after the range untouched', () => {
-    const withDeltas = [
-      entry('A', t(0), t(1)),
-      entry('B', t(1), t(2), delta(t(1))),
-      entry('C', t(2), t(3), delta(t(2))),
-      entry('D', t(3), t(4)),
-    ]
-    const plan = planReconciliation({
-      entries: withDeltas,
-      chapters: [],
-      times: [reconciled('B', t(1), t(6))],
-    })
-    expect(plan.deltas.map((d) => d.entryId)).toEqual(['B'])
-    expect(withDeltas[2].worldStateDelta!.previousState.timeTracker).toEqual(t(2))
-  })
-
-  it('does not mutate the entry it read the delta from', () => {
-    const original = delta(t(1))
-    const withDelta = [entry('B', t(1), t(2), original)]
-    planReconciliation({ entries: withDelta, chapters: [], times: [reconciled('B', t(4), t(5))] })
-    expect(original.previousState.timeTracker).toEqual(t(1))
-  })
 })
 
 describe('applyReconciliation', () => {
@@ -191,8 +117,7 @@ describe('applyReconciliation', () => {
     expect(publish).not.toHaveBeenCalled()
   })
 
-  it('writes entry times, spans, deltas and the clock as one batch', () => {
-    const withDelta = [entries[0], entry('B', t(1), t(2), delta(t(1)))]
+  it('writes entry times, spans, snapshot clocks and the clock as one batch', () => {
     const chapter = {
       id: 'ch1',
       number: 1,
@@ -202,16 +127,15 @@ describe('applyReconciliation', () => {
       endTime: t(2),
     } as Chapter
     const plan = planReconciliation({
-      entries: withDelta,
+      entries,
       chapters: [chapter],
       times: [reconciled('B', t(1), t(5))],
     })
-    const statements = reconciliationStatements(plan, withDelta)
+    const statements = reconciliationStatements(plan, entries)
     expect(statements.map((s) => s.sql.split(' ').slice(0, 2).join(' '))).toEqual([
       'UPDATE story_entries',
       'UPDATE chapters',
-      'UPDATE story_entries',
-      'DELETE FROM',
+      'UPDATE world_state_snapshots',
       'UPDATE stories',
     ])
   })
@@ -321,25 +245,34 @@ describe('planReconciliation: the checkpoints on rewritten entries', () => {
   })
 })
 
-describe('planReconciliation: keyframes', () => {
+describe('planReconciliation: world-state snapshots', () => {
   const entries = [entry('A', t(0), t(1)), entry('B', t(1), t(2)), entry('C', t(2), t(3))]
 
-  it('invalidates the keyframes of every reconciled entry', () => {
+  it('gives the snapshots of every reconciled entry its new ending, and deletes none', () => {
     const plan = planReconciliation({
       entries,
       chapters: [],
       times: [reconciled('B', t(1), t(4)), reconciled('C', t(4), t(6))],
     })
-    expect(plan.keyframeEntryIds).toEqual(['B', 'C'])
-    const del = reconciliationStatements(plan, entries).find((s) => s.sql.startsWith('DELETE FROM'))
-    expect(del!.sql).toContain('world_state_snapshots')
-    expect(del!.params).toEqual(['B', 'C'])
+    const statements = reconciliationStatements(plan, entries)
+    expect(statements.some((s) => s.sql.startsWith('DELETE'))).toBe(false)
+    // One statement for the range, matching only the entries that have a snapshot.
+    const updates = statements.filter((s) => s.sql.startsWith('UPDATE world_state_snapshots'))
+    expect(updates).toHaveLength(1)
+    const [b, bEnd, c, cEnd, ...matched] = updates[0].params!
+    expect([b, JSON.parse(String(bEnd)), c, JSON.parse(String(cEnd))]).toEqual([
+      'B',
+      t(4),
+      'C',
+      t(6),
+    ])
+    expect(matched).toEqual(['B', 'C'])
   })
 
-  it('writes no delete when nothing was reconciled', () => {
+  it('writes no snapshot clock when nothing was reconciled', () => {
     const plan = planReconciliation({ entries, chapters: [], times: [] })
     expect(
-      reconciliationStatements(plan, entries).some((s) => s.sql.startsWith('DELETE FROM')),
+      reconciliationStatements(plan, entries).some((s) => s.sql.includes('world_state_snapshots')),
     ).toBe(false)
   })
 })

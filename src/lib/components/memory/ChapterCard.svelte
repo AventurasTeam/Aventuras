@@ -17,7 +17,6 @@
     X,
     MilestoneIcon,
   } from '@lucide/svelte'
-  import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
@@ -96,18 +95,10 @@
   }
 
   const isLast = $derived(story.isLastChapter(chapter.id))
+  const owned = $derived(story.ownsChapter(chapter.id))
 
-  async function handleDelete() {
-    const confirmed = await ask(
-      `Are you sure you want to delete Chapter ${chapter.number}${chapter.title ? `: ${chapter.title}` : ''}? The story entries will remain, but the summary will be lost.`,
-      {
-        title: 'Delete Chapter',
-        kind: 'warning',
-      },
-    )
-    if (confirmed) {
-      await story.deleteChapter(chapter.id)
-    }
+  function handleDelete() {
+    ui.requestChapterDelete(chapter.id)
   }
 </script>
 
@@ -159,8 +150,12 @@
           size="icon"
           class="text-muted-foreground h-7 w-7 hover:text-red-500"
           onclick={handleDelete}
-          disabled={!isLast}
-          title={isLast ? 'Delete chapter' : 'Only the last chapter can be deleted'}
+          disabled={!isLast || !owned}
+          title={!owned
+            ? 'Cut on another branch; it can be deleted there'
+            : isLast
+              ? 'Delete chapter'
+              : 'Only the last chapter can be deleted'}
         >
           <Trash2 class="h-3.5 w-3.5" />
         </Button>

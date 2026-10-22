@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { WorldStateRecord } from '#lib/types/index.ts'
-import { recordEntityIds, remapRecord, type RecordMappers } from './worldStateRecords'
+import type { WorldStateMark, WorldStateRecord } from '#lib/types/index.ts'
+import {
+  inWriteOrder,
+  recordEntityIds,
+  remapMark,
+  remapRecord,
+  type RecordMappers,
+} from './worldStateRecords'
 
 const ids = new Map([
   ['e-old', 'e-new'],
@@ -70,5 +76,73 @@ describe('importing change records', () => {
   it('keeps the inventory sentinel', () => {
     const out = remapRecord({ ...change, before: { id: 'c-old', location: 'inventory' } }, mappers)
     expect(out?.kind === 'change' && out.before?.location).toBe('inventory')
+  })
+})
+
+describe('importing marks', () => {
+  const mark = (entityId: string, seq: number, createdAt: number): WorldStateMark => ({
+    id: `m-${entityId}`,
+    storyId: 'story-old',
+    branchId: null,
+    entryId: 'e-old',
+    seq,
+    entityType: 'checkpoint',
+    entityId,
+    createdAt,
+  })
+  const record = (id: string, seq: number, createdAt: number) =>
+    ({ id, seq, createdAt, kind: 'header' }) as WorldStateRecord
+  const order = (written: ReturnType<typeof inWriteOrder>) =>
+    written.map((w) => ('record' in w ? w.record.id : w.mark.entityId))
+
+  it('re-keys a mark, and drops one whose entry or owner did not come along', () => {
+    const m = {
+      newStoryId: 'story-new',
+      mapEntryId: (id: string) => ids.get(id),
+      mapBranchId: (id: string | null) => id,
+      mapMarkedId: (_type: string, id: string) => (id === 'cp-old' ? 'cp-new' : undefined),
+    }
+    expect(remapMark(mark('cp-old', 1, 1), m)).toMatchObject({
+      storyId: 'story-new',
+      entryId: 'e-new',
+      entityId: 'cp-new',
+    })
+    expect(remapMark(mark('gone', 1, 1), m)).toBeNull()
+    expect(remapMark({ ...mark('cp-old', 1, 1), entryId: 'missing' }, m)).toBeNull()
+  })
+
+  it("keeps the file's marks where they fall among its records", () => {
+    const written = inWriteOrder({
+      converted: [],
+      records: [record('a', 1, 10), record('b', 3, 30)],
+      marks: [mark('cp', 2, 99)],
+      unmarked: [],
+      positionOf: () => 0,
+    })
+    expect(order(written)).toEqual(['a', 'cp', 'b'])
+  })
+
+  it('places an owner without a mark after what was written by the time it was made', () => {
+    const written = inWriteOrder({
+      converted: [],
+      records: [record('a', 1, 10), record('b', 2, 30)],
+      marks: [],
+      unmarked: [mark('late', 0, 50), mark('mid', 0, 20), mark('first', 0, 5)],
+      positionOf: () => 0,
+    })
+    expect(order(written)).toEqual(['first', 'a', 'mid', 'b', 'late'])
+  })
+
+  it('places one among converted records by its entry, whatever their times', () => {
+    // A sync re-created the entries, and so their converted records, after the checkpoint.
+    const on = (id: string, entryId: string) => ({ ...record(id, 0, 1000), entryId })
+    const written = inWriteOrder({
+      converted: [on('h1', 'e1'), on('h2', 'e2'), on('h3', 'e3')],
+      records: [],
+      marks: [],
+      unmarked: [{ ...mark('cp', 0, 10), entryId: 'e2' }],
+      positionOf: (id) => Number(id.slice(1)),
+    })
+    expect(order(written)).toEqual(['h1', 'h2', 'cp', 'h3'])
   })
 })

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { StoryEntry } from '#lib/types/index.ts'
-import { anchorCandidates, pastQuery, skippedSnapshots, type PastSources } from '.'
+import type { StoryEntry, WorldStateMark } from '#lib/types/index.ts'
+import { anchorCandidates, pastQuery, rowToRecord, skippedSnapshots, type PastSources } from '.'
+
+/** Headers as the database returns them. */
+const rowsOf = (rows: Record<string, unknown>[]) =>
+  rows.map((row, i) =>
+    rowToRecord({ story_id: 's', branch_id: null, seq: i + 1, created_at: 1, ...row }),
+  )
 
 // Entry n sits at position n and is created at time 10n.
 const entries = [1, 2, 3, 4].map(
@@ -16,10 +22,19 @@ const entries = [1, 2, 3, 4].map(
     }) as StoryEntry,
 )
 
+const mark = (entityType: 'snapshot' | 'checkpoint', entityId: string, seq: number) =>
+  ({ id: `mark:${entityType}:${entityId}`, entityType, entityId, seq }) as WorldStateMark
+
+/** Every snapshot and checkpoint marked at its creation time, unless `marks` is given. */
 function sources(overrides: Partial<PastSources> = {}): PastSources {
+  const marks = [
+    ...(overrides.snapshots ?? []).map((s) => mark('snapshot', s.id, s.createdAt)),
+    ...(overrides.checkpoints ?? []).map((cp) => mark('checkpoint', cp.id, cp.createdAt)),
+  ]
   return {
     entries,
     records: [],
+    marks,
     snapshots: [],
     checkpoints: [],
     lineBranchIds: [null],
@@ -49,8 +64,33 @@ describe('anchorCandidates', () => {
       kind: 'live',
       id: null,
       position: 4,
+      seq: Infinity,
       takenAt: 1000,
     })
+  })
+
+  it('places a snapshot or checkpoint by its mark, and takes none without one', () => {
+    const candidates = anchorCandidates(
+      sources({
+        snapshots: [
+          {
+            id: 'snap',
+            entryId: 'e3',
+            entryPosition: 3,
+            createdAt: 31,
+            complete: true,
+            closing: false,
+          },
+        ],
+        checkpoints: [checkpoint('marked', 'e2', 15), checkpoint('rebuilt', 'e2', 16)],
+        marks: [mark('snapshot', 'snap', 7), mark('checkpoint', 'marked', 4)],
+      }),
+    )
+    expect(candidates.map((c) => [c.id, c.seq])).toEqual([
+      ['snap', 7],
+      ['marked', 4],
+      [null, Infinity],
+    ])
   })
 
   it('takes a checkpoint made before its entry had a successor, not one made after', () => {
@@ -93,24 +133,15 @@ describe('anchorCandidates', () => {
 })
 
 describe('pastQuery', () => {
-  it('adds an old delta only where the entry has no header of its own', () => {
-    const old = {
-      ...entries[1],
-      worldStateDelta: {
-        previousState: {
-          characters: [],
-          locations: [],
-          items: [],
-          storyBeats: [],
-          currentLocationId: null,
-        },
-        createdEntities: { characterIds: ['x'], locationIds: [], itemIds: [], storyBeatIds: [] },
-      },
-    } as unknown as StoryEntry
-    const query = pastQuery(sources({ entries: [entries[0], old, entries[2], entries[3]] }), 1)
-    expect(query.records.filter((r) => r.entryId === 'e2').map((r) => r.kind)).toEqual([
-      'header',
-      'change',
+  it('reads converted history from the stored records alone', () => {
+    const records = rowsOf([
+      { id: 'e2:header', entry_id: 'e2', kind: 'header', origin: 'legacy', continuous: 0 },
+      { id: 'e3:header', entry_id: 'e3', kind: 'header', origin: null, continuous: 1 },
+    ])
+    const query = pastQuery(sources({ records }), 1)
+    expect(query.records.map((r) => r.kind === 'header' && [r.entryId, r.coverage])).toEqual([
+      ['e2', 'classifier'],
+      ['e3', 'full'],
     ])
   })
 })

@@ -16,6 +16,7 @@ import type {
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
 import * as z from 'zod'
+import type { BranchScope } from '#lib/utils/branchScope.ts'
 import type { ActionChoice } from '#lib/services/ai/sdk/schemas/actionchoices.ts'
 import type { Suggestion } from '#lib/services/ai/sdk/schemas/suggestions.ts'
 import { actionChoiceSchema, suggestionSchema } from '#lib/services/ai/sdk/schemas/index.ts'
@@ -125,6 +126,12 @@ export const NAV_FILTER_SETTING: Record<LandmarkFilterGroup, string> = {
   checkpoints: 'nav_show_checkpoints',
 }
 
+/** A chapter's failed lore management session, to run again as it was. */
+export interface LoreRetry extends BranchScope {
+  chapterId: string
+  readAfterChapter: boolean
+}
+
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
@@ -134,6 +141,7 @@ class UIStore {
   // The story-level entry modals, each opened for one entry at a time.
   checkpointFormEntryId = $state<string | null>(null)
   deleteEntryId = $state<string | null>(null)
+  deleteChapterId = $state<string | null>(null)
   regenerateRequest = $state<{ entryId: string; retry: boolean } | null>(null)
   branchCheckpointId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
@@ -344,6 +352,8 @@ class UIStore {
   lastLoreManagementSummary = $state<string | null>(null)
   lastLoreManagementChanges = $state<number>(0)
   loreManagementError = $state<string | null>(null)
+  /** The chapter whose session failed, which Retry runs again; null to run Tidy. */
+  loreManagementRetry = $state<LoreRetry | null>(null)
 
   // Lorebook activation tracking for stickiness
   // Maps entry ID -> last activation position (story entry index)
@@ -428,6 +438,10 @@ class UIStore {
 
   requestEntryDelete(entryId: string | null) {
     this.deleteEntryId = entryId
+  }
+
+  requestChapterDelete(chapterId: string | null) {
+    this.deleteChapterId = chapterId
   }
 
   /** `retry` restores the backup taken before the last action; otherwise the narration alone. */
@@ -1738,6 +1752,7 @@ class UIStore {
     this.loreManagementProgress = 'Analyzing story content...'
     this.loreManagementChanges = 0
     this.loreManagementError = null
+    this.loreManagementRetry = null
     // The previous run's account stops being true the moment a new one starts writing.
     this.lastLoreManagementSummary = null
     // Close any open modals/edit modes since user can't edit during lore management
@@ -1759,12 +1774,14 @@ class UIStore {
     this.lastLoreManagementChanges = changeCount
   }
 
-  setLoreManagementError(error: string | null) {
+  setLoreManagementError(error: string | null, retry: LoreRetry | null = null) {
     this.loreManagementError = error
+    this.loreManagementRetry = retry
   }
 
   clearLoreManagementError() {
     this.loreManagementError = null
+    this.loreManagementRetry = null
   }
 
   finishLoreManagement() {

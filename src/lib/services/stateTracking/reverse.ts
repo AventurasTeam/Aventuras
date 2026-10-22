@@ -2,7 +2,6 @@ import type {
   TimeTracker,
   TrackedEntityType,
   WorldStateChangeRecord,
-  WorldStateHeaderRecord,
   WorldStateRecord,
 } from '#lib/types/index.ts'
 import {
@@ -48,6 +47,12 @@ export type RevertKeep = { manual: boolean; tidy: boolean }
 
 export const KEEP_ALL: RevertKeep = { manual: true, tidy: true }
 
+/**
+ * What a revert the reader confirms keeps: nothing. A kept change writes back whole field values,
+ * so keeping an edit made over a reverted change would keep that change's text with it.
+ */
+export const KEEP_NONE: RevertKeep = { manual: false, tidy: false }
+
 export interface ReversalPlan {
   state: TrackedState
   ops: ReversalOp[]
@@ -62,8 +67,10 @@ export interface ReversalPlan {
    * state it landed on rather than copied from a record this reversal undid.
    */
   reapplied: WorldStateChangeRecord[]
-  /** The entries carrying chapter lore the range undoes, in story order. */
-  chapterEntryIds: string[]
+  /** The chapter lore the range undoes, in story order. */
+  chapter: WorldStateChangeRecord[]
+  /** Whether the range undoes any change of the classifier's. */
+  classifier: boolean
 }
 
 function byStoryOrder(positions: Map<string, number>) {
@@ -230,7 +237,6 @@ class Workspace {
 export function planReversal(input: ReversalInput): ReversalPlan {
   const ordered = [...input.records].sort(byStoryOrder(input.entryPositions))
   const changes = ordered.filter((r): r is WorldStateChangeRecord => r.kind === 'change')
-  const headers = ordered.filter((r): r is WorldStateHeaderRecord => r.kind === 'header')
 
   const ws = new Workspace(input.state)
   for (const record of [...(input.late ?? [])].sort((a, b) => a.seq - b.seq)) ws.redo(record)
@@ -240,12 +246,6 @@ export function planReversal(input: ReversalInput): ReversalPlan {
     ws.state = { ...ws.state, timeTracker: input.clock ? { ...input.clock } : null }
     ws.ops.push({ kind: 'clock', timeTracker: input.clock })
   }
-  // Classifier-only history recorded the current location apart from the location rows.
-  const earliest = headers[0]
-  if (earliest?.coverage === 'classifier' && earliest.legacyLocationBefore !== undefined) {
-    restoreCurrentLocation(ws, earliest.legacyLocationBefore)
-  }
-
   const manual = changes.filter((r) => r.origin === 'manual')
   const tidy = changes.filter((r) => r.origin === 'tidy')
   const kept = changes.filter(
@@ -258,22 +258,19 @@ export function planReversal(input: ReversalInput): ReversalPlan {
     if (applied) reapplied.push(applied)
     else unkeepable.push(record)
   }
-  const chapterEntryIds = [
-    ...new Set(
-      changes
-        .filter((r) => r.origin === 'chapter')
-        .sort(byStoryOrder(input.entryPositions))
-        .map((r) => r.entryId),
-    ),
-  ]
+  const chapter = changes
+    .filter((r) => r.origin === 'chapter')
+    .sort(byStoryOrder(input.entryPositions))
 
-  return { state: ws.state, ops: ws.ops, manual, tidy, unkeepable, reapplied, chapterEntryIds }
-}
-
-function restoreCurrentLocation(ws: Workspace, locationId: string | null): void {
-  for (const location of ws.state.locations) {
-    const current = location.id === locationId
-    if (location.current !== current) ws.patch('location', location.id, { current })
+  return {
+    state: ws.state,
+    ops: ws.ops,
+    manual,
+    tidy,
+    unkeepable,
+    reapplied,
+    chapter,
+    classifier: changes.some((r) => r.origin === 'classifier'),
   }
 }
 
