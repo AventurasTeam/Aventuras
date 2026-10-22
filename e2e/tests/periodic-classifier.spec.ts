@@ -338,20 +338,25 @@ test.describe('periodic classifier — factions', () => {
     const branchId = (
       await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
     )[0][0] as string
-    // Read before the turn: t1 is the first prose turn above the watermark the pass starts from.
-    const [[firstTurn]] = await queryApp(
+    // The watermark the pass starts from, read before the turn moves it: t1 is the first prose
+    // row above it, this turn's own user_action.
+    const [[watermark]] = await queryApp(
       app.window,
-      `SELECT id FROM story_entries
-       WHERE branch_id = ? AND kind <> 'system' AND position > COALESCE(
-         (SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?), 0)
-       ORDER BY position LIMIT 1`,
-      [branchId, branchId],
+      `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
+      [branchId],
     )
     await reader.composer(app.window).fill('E2E-FACTIONS I watch Ilsabet take the oath.')
     await reader.send(app.window).click()
     await expect(app.window.getByText('E2E-FACTIONS Ilsabet', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
+    // The user_action commits before the turn's run starts, so it is in place once the reply shows.
+    const [[firstTurn]] = await queryApp(
+      app.window,
+      `SELECT id FROM story_entries
+       WHERE branch_id = ? AND kind <> 'system' AND position > ? ORDER BY position LIMIT 1`,
+      [branchId, watermark],
+    )
 
     // The membership is the burst's last write, and each write commits on its own.
     const memberFaction = async () =>
@@ -515,38 +520,53 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
   test('classifies from the watermark, not from the oldest entry the reader holds', async () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    const branchId = (
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+    const watermark = async () =>
+      (
+        await queryApp(
+          app.window,
+          `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
+          [branchId],
+        )
+      )[0][0]
+
+    // The backlog is owed at Send, so its pass runs before the turn (classifier.md → Failure
+    // policy). Held at its narrative call, the turn has chained nothing, so the watermark read
+    // there is that first pass's alone.
+    mock.holdNextNarrative()
     await reader.composer(app.window).fill('E2E-BACKLOG I keep riding.')
     await reader.send(app.window).click()
-    await expect(app.window.getByText('E2E-BACKLOG the road', { exact: false })).toBeVisible({
-      timeout: 30_000,
-    })
+    await expect.poll(() => mock.requests.some((r) => r.streamed), { timeout: 30_000 }).toBe(true)
 
-    await expect
-      .poll(() => mock.requests.some((r) => r.agent === 'periodic-classifier'), { timeout: 20_000 })
-      .toBe(true)
-
-    const pass = mock.requests.find((r) => r.agent === 'periodic-classifier')!
-    const prompt = JSON.stringify(pass.body)
+    const first = mock.requests.findIndex((r) => r.agent === 'periodic-classifier')
+    expect(first, 'a pass ran ahead of the narrative call').toBeGreaterThanOrEqual(0)
+    expect(first).toBeLessThan(mock.requests.findIndex((r) => r.streamed))
+    const prompt = JSON.stringify(mock.requests[first].body)
     // Position 2 is fixture prose, far below both the fillers and the reader's
     // loaded tail — reachable only by a window read from SQLite.
     expect(prompt).toContain('I follow the figure into the alley')
     expect(prompt).not.toContain('FILLER-')
+    // classifierWindowMaxEntries defaults to 20, so one pass claims 2..21, already committed when
+    // the turn's narrative call went out.
+    expect(await watermark()).toBe(21)
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
-    const watermark = await queryApp(
-      app.window,
-      `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
-      [branchId],
-    )
-    // classifierWindowMaxEntries defaults to 20, so one pass claims 2..21.
-    expect(watermark[0][0]).toBe(21)
+    mock.releaseNarrative()
+    await expect(app.window.getByText('E2E-BACKLOG the road', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+    // The turn's commit chains the next twenty, from the watermark the first pass left.
+    await expect.poll(watermark, { timeout: 20_000 }).toBe(41)
+    const passes = mock.requests.filter((r) => r.agent === 'periodic-classifier')
+    expect(passes).toHaveLength(2)
+    expect(JSON.stringify(passes[1].body)).not.toContain('FILLER-')
   })
 })
 
-// A pre-flight halt never reaches the phase, so nothing records the failure: status would stay
-// idle, never counting toward failed-persistent, and every commit would chain the doomed run again.
+// classifier.md → Failure policy: a pre-flight halt never reaches the phase, so only the pipeline's
+// pre-flight hook records it. Unrecorded, the status would stay idle and the next Send would take
+// its turn over prose no pass classified.
 test.describe('periodic classifier — unassigned agent', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -573,46 +593,79 @@ test.describe('periodic classifier — unassigned agent', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('records the pre-flight failure into the retry lifecycle instead of staying idle', async () => {
-    await home.openStory(app.window, 'The Veilstone Courier').click()
-    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
-    await reader.composer(app.window).fill('E2E-NOAGENT I light the lantern.')
-    await reader.send(app.window).click()
-    await expect(app.window.getByText('E2E-NOAGENT the lantern', { exact: false })).toBeVisible({
+  test('records the pre-flight failure as failed, and the next Send fails on it before its turn', async () => {
+    const page = app.window
+    await home.openStory(page, 'The Veilstone Courier').click()
+    await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+    const branchId = (
+      await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+    const status = async (): Promise<unknown[]> =>
+      (
+        await queryApp(
+          page,
+          `SELECT json_extract(classifier_status, '$.state'),
+                  json_extract(classifier_status, '$.lastError'),
+                  json_extract(classifier_status, '$.processedThrough')
+           FROM branches WHERE id = ?`,
+          [branchId],
+        )
+      )[0]
+    const scalar = async (sql: string, params: unknown[] = []): Promise<unknown> =>
+      (await queryApp(page, sql, params))[0][0]
+    const turnRuns = () => scalar(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn'`)
+    const passOutcomes = async (): Promise<unknown[]> =>
+      (
+        await queryApp(
+          page,
+          `SELECT outcome FROM pipeline_runs
+           WHERE kind = 'periodic-classifier' AND story_id = 'story_hero' ORDER BY started_at, rowid`,
+        )
+      ).map((r) => r[0])
+    const [, , parked] = await status()
+
+    // The seed parks the watermark at the last prose row, so this Send owes nothing and takes its turn.
+    await reader.composer(page).fill('E2E-NOAGENT I light the lantern.')
+    await reader.send(page).click()
+    await expect(page.getByText('E2E-NOAGENT the lantern', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
+    // Its commit chains the pass, which halts pre-flight: failed, the watermark where it stood.
+    await expect.poll(async () => (await status())[0], { timeout: 20_000 }).toBe('failed')
+    expect(await status()).toEqual(['failed', 'classifier: no-profile-assigned', parked])
 
-    const branchId = (
-      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
-    )[0][0] as string
-
-    await expect
-      .poll(
-        async () =>
-          (
-            await queryApp(
-              app.window,
-              `SELECT json_extract(classifier_status, '$.state') FROM branches WHERE id = ?`,
-              [branchId],
-            )
-          )[0][0],
-        { timeout: 20_000 },
-      )
-      .toBe('retrying')
-
-    const status = await queryApp(
-      app.window,
-      `SELECT json_extract(classifier_status, '$.retryCount'),
-              json_extract(classifier_status, '$.lastError'),
-              json_extract(classifier_status, '$.processedThrough')
-       FROM branches WHERE id = ?`,
-      [branchId],
-    )
-    expect(status[0][0]).toBe(1)
-    expect(status[0][1]).not.toBeNull()
-    // A run that never reached the phase must not claim any prose.
-    expect(status[0][2] ?? 0).toBe(0)
+    // Now owed, the pass runs first at the next Send and fails it: no user_action, no turn.
+    const action = 'E2E-NOAGENT I trim the wick.'
+    const turnsBefore = await turnRuns()
+    await reader.composer(page).fill(action)
+    await reader.send(page).click()
+    await expect(
+      page.getByText(t('reader:systemEntry.failure.memoryNoProfileAssigned'), { exact: false }),
+    ).toBeVisible({ timeout: 20_000 })
+    await expect(reader.assignProfileFix(page)).toBeVisible()
+    await expect(reader.composer(page)).toHaveValue(action)
+    expect(
+      await scalar(
+        `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-NOAGENT I trim%'`,
+        [branchId],
+      ),
+    ).toBe(0)
+    expect(await turnRuns()).toBe(turnsBefore)
+    // The entry keeps what its Retry runs (the pass alone) and the fix it offers, across a restart.
+    expect(
+      await queryApp(
+        page,
+        `SELECT json_extract(metadata, '$.systemFailure.pass'),
+                json_extract(metadata, '$.systemFailure.failure')
+         FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+        [branchId],
+      ),
+    ).toEqual([['failed', 'no-profile-assigned']])
+    expect(await passOutcomes()).toEqual(['failed', 'failed'])
+    expect(await status()).toEqual(['failed', 'classifier: no-profile-assigned', parked])
+    // Neither pass reached the provider, and the refused Send never reached its narrative call.
     expect(mock.requests.some((r) => r.agent === 'periodic-classifier')).toBe(false)
+    expect(mock.requests.filter((r) => r.streamed)).toHaveLength(1)
   })
 })
 
@@ -780,7 +833,7 @@ test.describe('periodic classifier — the gated pass', () => {
       await queryApp(
         app.window,
         `SELECT json_extract(classifier_status, '$.state'),
-                json_extract(classifier_status, '$.retryCount'),
+                json_extract(classifier_status, '$.lastError'),
                 json_extract(classifier_status, '$.processedThrough')
          FROM branches WHERE id = ?`,
         [branch],

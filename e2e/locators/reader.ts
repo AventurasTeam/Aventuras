@@ -117,6 +117,9 @@ export const reader = {
     page.getByRole('button', { name: t('reader:systemEntry.dismiss') }),
   switchEmbedderFix: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
+  // A config-resolver failure's fix row (system-entry-actions.tsx, useConfigFixAction).
+  assignProfileFix: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:systemEntry.assignProfile') }),
 
   // Undo / Redo live in the chrome Actions menu's contextual group (chrome.ts opens it).
   undoRow: (page: Page): Locator => page.getByText(t('reader:actions.undo'), { exact: true }),
