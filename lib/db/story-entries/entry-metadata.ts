@@ -100,7 +100,7 @@ export const entryMetadataSchema = z.object({
   // failure mirror PipelineError / ResolveFailureKind as open strings — an
   // unknown future pipeline kind must degrade to generic copy, not fail the
   // whole metadata parse. submission keeps the turn's text across an app restart:
-  // a turn's Retry resends it; on a pass entry only Dismiss hands it back.
+  // a turn's Retry resends it; on a pass entry Dismiss or a committed Retry hands it back.
   systemFailure: z
     .object({
       kind: z.string(),

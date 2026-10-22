@@ -678,8 +678,8 @@ committing before the turn's first write. A pass is owed when one is
 deferred for the branch or the cadence is due. The cadence is read from
 the persisted watermark, so a failure, an interrupt, a crash and a
 restart all end the same way. If the pass fails there, the Send fails:
-no user_action is written, the composer keeps the text, and the reader
-shows the failure as a system entry with its cause
+no user_action is written, the text goes back to an empty composer
+(else onto the entry), and the reader shows the failure as a system entry with its cause
 ([`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)).
 Its `Retry` runs the pass alone; Send runs it first again. There is no
 attempt counter and no suspension: every Send is a fresh attempt,
@@ -693,8 +693,8 @@ when the user set one, longer or shorter, and by ten minutes otherwise,
 so a hung provider ends in an error the user can act on.
 
 A branch held `running`, a pass left unfinished whose reversal hasn't
-committed, can't run a pass, so its Send fails with the recovery error
-until a boot reverses the orphan
+committed, can't run a pass, so its Send fails with the recovery error,
+keeping the text on the entry, until a boot reverses the orphan
 ([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy)).
 
 ### Persistence

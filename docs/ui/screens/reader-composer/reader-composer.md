@@ -304,7 +304,8 @@ reading `Updating memory before your turn…`, and the turn follows;
 Cancel then cancels the whole Send and keeps the text in the composer
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
 If the pass fails there, the Send fails too: the turn doesn't start,
-the composer keeps the text, and the failure shows as a
+the text goes back to an empty composer (else onto the entry), and the
+failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
 
@@ -567,16 +568,17 @@ the text was dropped rather than losing it silently.
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. On a held branch it always does,
 since the entry advises a restart and the draft would not survive
-one. On a failed pass it does only when the draft was occupied;
-otherwise the text goes straight back to the composer.
+one. On a failed pass it does only when the composer couldn't take it
+back (the draft was occupied, or the user left the branch); otherwise
+the text goes straight back to the composer.
 
 Restoring the _entry_ is deliberately not the mechanism. A failure
 entry re-appends at the branch tail, so on a path where a partial
 sweep already moved the tail it would park a stale notice over a
 branch it no longer describes — which is why the regenerate rejection
 arm may put the entry back and the throw arm may not. A draft has no
-position, so it is safe on both. A Send cancelled during its deferred
-work has written nothing either, so it puts the entry back too, and
+position, so it is safe on both. A Send cancelled during its owed
+pass has written nothing either, so it puts the entry back too, and
 hands its own text to the draft.
 
 This leaves a failed turn's text under the same custody as any unsent
